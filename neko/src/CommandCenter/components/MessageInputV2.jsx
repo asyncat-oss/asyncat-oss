@@ -38,21 +38,26 @@ export const MessageInputV2 = ({
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
 
   const localModel = useLocalModelStatus();
   const { config: modelConfig } = useModelConfig();
   const textareaRef = useRef(null);
 
-  // Auto-save draft to localStorage
+  // Keep the latest input value available for cleanup-time persistence.
+  const latestValueRef = useRef(value);
+  useEffect(() => {
+    latestValueRef.current = value;
+  }, [value]);
+
+  // Auto-save draft indicator (actual persistence happens on input change)
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
         if (value.trim()) {
-          localStorage.setItem('asyncat_draft_message', value);
           setDraftSaved(true);
           setTimeout(() => setDraftSaved(false), 1500);
         } else {
-          localStorage.removeItem('asyncat_draft_message');
           setDraftSaved(false);
         }
       } catch {
@@ -61,6 +66,22 @@ export const MessageInputV2 = ({
     }, 500); // Debounce 500ms
     return () => clearTimeout(timer);
   }, [value]);
+
+  // Persist the most recent draft on unmount to avoid losing text during view transitions.
+  useEffect(() => {
+    return () => {
+      try {
+        const latestValue = latestValueRef.current || '';
+        if (latestValue.trim()) {
+          localStorage.setItem('asyncat_draft_message', latestValue);
+        } else {
+          localStorage.removeItem('asyncat_draft_message');
+        }
+      } catch {
+        // Ignore localStorage errors
+      }
+    };
+  }, []);
 
   // Token estimation: ~4 chars per token (rough approximation)
   const inputTokens = Math.ceil(value.length / 4);
@@ -86,14 +107,26 @@ export const MessageInputV2 = ({
   }, [disabled]);
 
   const handleInputChange = useCallback((e) => {
-    const newValue = e.target.value.slice(0, maxLength);
+    const newValue = e.target.value;
     setValue(newValue);
+
+    // Persist draft immediately so remounts do not discard recently typed text.
+    try {
+      if (newValue.trim()) {
+        localStorage.setItem('asyncat_draft_message', newValue);
+      } else {
+        localStorage.removeItem('asyncat_draft_message');
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
-  }, [maxLength]);
+  }, []);
 
   const handleSubmit = useCallback(async (e) => {
     if (e) e.preventDefault();
@@ -122,15 +155,14 @@ export const MessageInputV2 = ({
   }, [value, disabled, webSearchEnabled, thinkingEnabled, modelConfig, onSubmit]);
 
   const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    const nativeIsComposing = Boolean(e.nativeEvent?.isComposing);
+
+    // Avoid submitting while composing IME text (Japanese/Chinese/Korean, etc).
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing && !nativeIsComposing) {
       e.preventDefault();
       handleSubmit();
     }
-    if (e.key === 'Escape' && value) {
-      setValue("");
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
-    }
-  }, [handleSubmit, value]);
+  }, [handleSubmit, isComposing]);
 
   const canSubmit = value.trim() && !disabled;
 
@@ -199,8 +231,15 @@ export const MessageInputV2 = ({
                 value={value}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
                 disabled={disabled}
                 placeholder={placeholder}
+                maxLength={maxLength}
+                spellCheck={false}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
                 rows="2"
                 className="w-full resize-none bg-transparent text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-500 focus:outline-none text-base leading-relaxed min-h-[48px] max-h-[180px] disabled:opacity-50"
               />
