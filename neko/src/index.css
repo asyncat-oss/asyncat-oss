@@ -1,0 +1,573 @@
+@import "tailwindcss";
+
+/* ── KaTeX dark/midnight mode overrides ─────────────────────────────────── */
+/* KaTeX renders its own HTML with hardcoded colours; override for dark themes */
+.dark .katex,
+.dark .katex-display,
+.dark .katex * {
+  color: #e2e8f0 !important; /* slate-200 */
+}
+.dark .katex .mord,
+.dark .katex .mbin,
+.dark .katex .mrel,
+.dark .katex .mopen,
+.dark .katex .mclose,
+.dark .katex .mpunct,
+.dark .katex .minner,
+.dark .katex .mop,
+.dark .katex .mfrac,
+.dark .katex .msqrt,
+.dark .katex .mroot,
+.dark .katex .munder,
+.dark .katex .mover,
+.dark .katex .munderover,
+.dark .katex .mtable,
+.dark .katex .base {
+  color: #e2e8f0 !important;
+}
+.dark .katex .rule {
+  border-color: #e2e8f0 !important;
+  background: #e2e8f0 !important;
+}
+.dark .katex .sqrt > .sqrt-sign,
+.dark .katex .sqrt > .vlist-t {
+  color: #e2e8f0 !important;
+}
+
+.midnight .katex,
+.midnight .katex-display,
+.midnight .katex * {
+  color: #cbd5e1 !important; /* slate-300 */
+}
+.midnight .katex .rule {
+  border-color: #cbd5e1 !important;
+  background: #cbd5e1 !important;
+}
+
+/* ── highlight.js theme overrides for dark/midnight ─────────────────────── */
+/* Light mode uses github theme (imported per component) */
+/* Dark mode: override with a dark palette */
+.dark .hljs {
+  background: transparent !important;
+  color: #abb2bf !important;
+}
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-built_in,
+.dark .hljs-name,
+.dark .hljs-tag { color: #c678dd !important; }
+.dark .hljs-string,
+.dark .hljs-title,
+.dark .hljs-section,
+.dark .hljs-attribute,
+.dark .hljs-literal,
+.dark .hljs-template-tag,
+.dark .hljs-template-variable,
+.dark .hljs-type,
+.dark .hljs-addition { color: #98c379 !important; }
+.dark .hljs-deletion,
+.dark .hljs-selector-attr,
+.dark .hljs-selector-pseudo,
+.dark .hljs-meta { color: #e06c75 !important; }
+.dark .hljs-doctag,
+.dark .hljs-attr { color: #e5c07b !important; }
+.dark .hljs-symbol,
+.dark .hljs-bullet,
+.dark .hljs-link,
+.dark .hljs-number,
+.dark .hljs-regexp,
+.dark .hljs-variable { color: #61afef !important; }
+.dark .hljs-comment,
+.dark .hljs-quote { color: #5c6370 !important; font-style: italic; }
+.dark .hljs-emphasis { font-style: italic; }
+.dark .hljs-strong { font-weight: bold; }
+
+.midnight .hljs { background: transparent !important; color: #94a3b8 !important; }
+.midnight .hljs-keyword,
+.midnight .hljs-built_in { color: #a78bfa !important; }
+.midnight .hljs-string,
+.midnight .hljs-title { color: #86efac !important; }
+.midnight .hljs-number,
+.midnight .hljs-variable { color: #7dd3fc !important; }
+.midnight .hljs-comment { color: #475569 !important; font-style: italic; }
+@theme {
+  --font-sora: "Sora", sans-serif;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background: rgba(180, 180, 180, 0.5);
+  border-radius: 10px;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.8);
+}
+
+/* For Firefox */
+html,
+body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 180, 180, 0.5) transparent;
+}
+
+/* Override dark variant to use class instead of media query */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Add midnight variant */
+@custom-variant midnight (&:where(.midnight, .midnight *));
+
+/* Search highlight animation */
+.search-highlight {
+  animation: pulse-highlight 2s;
+  z-index: 10;
+  position: relative;
+}
+
+@keyframes pulse-highlight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(147, 51, 234, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
+  }
+}
+
+/* Dark mode versions */
+.dark .search-highlight {
+  animation: pulse-highlight-dark 2s;
+}
+
+@keyframes pulse-highlight-dark {
+  0% {
+    box-shadow: 0 0 0 0 rgba(192, 132, 252, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(192, 132, 252, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(192, 132, 252, 0);
+  }
+}
+
+/* Midnight mode versions */
+.midnight .search-highlight {
+  animation: pulse-highlight-midnight 2s;
+}
+
+@keyframes pulse-highlight-midnight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(216, 180, 254, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(216, 180, 254, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(216, 180, 254, 0);
+  }
+}
+
+/* Shimmer animation for skeleton loading */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(233, 213, 255, 0.1) 25%,
+    rgba(147, 51, 234, 0.15) 37%,
+    rgba(233, 213, 255, 0.1) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(233, 213, 255, 0.05) 25%,
+    rgba(192, 132, 252, 0.15) 37%,
+    rgba(233, 213, 255, 0.05) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.midnight .animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(233, 213, 255, 0.03) 25%,
+    rgba(216, 180, 254, 0.12) 37%,
+    rgba(233, 213, 255, 0.03) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Shimmer animation for progress bars */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+/* Subtle scale animations for button hovers */
+.animate-scale {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.animate-scale:hover {
+  transform: scale(1.05);
+}
+
+.animate-scale:active {
+  transform: scale(0.95);
+}
+
+/* Subtle entrances */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* Stagger children animation */
+.stagger-children > * {
+  animation: fade-in-up 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  opacity: 0;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.3s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.4s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.5s; }
+.stagger-children > *:nth-child(7) { animation-delay: 0.6s; }
+.stagger-children > *:nth-child(8) { animation-delay: 0.7s; }
+
+/* Add a subtle animation for success feedback */
+@keyframes success-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(147, 51, 234, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
+  }
+}
+
+.animate-success-pulse {
+  animation: success-pulse 2s 1;
+}
+
+/* Soft animations for mode changes */
+.mode-transition {
+  transition: background-color 0.6s ease-out, 
+              color 0.6s ease-out, 
+              border-color 0.6s ease-out, 
+              box-shadow 0.6s ease-out;
+}
+
+.delay-150 {
+  animation-delay: 0.15s;
+}
+
+.delay-200 {
+  animation-delay: 0.2s;
+}
+
+.delay-300 {
+  animation-delay: 0.3s;
+}
+
+/* Bounce animation */
+@keyframes bounce-custom {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-bounce-custom {
+  animation: bounce-custom 1s ease-in-out infinite;
+}
+
+/* Rotate animation for loading states */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 2s linear infinite;
+}
+
+/* Add a focused state animation for form elements */
+@keyframes focus-border-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
+  }
+}
+
+.focus-pulse:focus {
+  animation: focus-border-pulse 2s infinite;
+}
+
+/* Cat cursor animation for special elements */
+.cat-cursor {
+  position: relative;
+}
+
+.cat-cursor::after {
+  content: "🐱";
+  position: absolute;
+  opacity: 0;
+  right: -15px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.cat-cursor:hover::after {
+  opacity: 1;
+  transform: translateX(5px);
+}
+
+/* Add these to your CSS file */
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutDown {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(0, 0, 0, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+  }
+}
+
+/* Apply these classes in your component */
+.cmd-enter {
+  animation: slideInUp 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.cmd-exit {
+  animation: slideOutDown 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.cmd-button-enter {
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.cmd-backdrop-enter {
+  animation: fadeIn 0.15s ease-out forwards;
+}
+
+.cmd-notification {  animation: pulse 2s infinite;
+}
+
+/* For a subtle hover effect on the command button */
+.cmd-button-hover {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.cmd-button-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Message animation */
+.cmd-message-enter {
+  animation: slideInUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Invite notification animations */
+.animate-subtle-bounce {
+  animation: subtle-bounce 2s infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2.5s infinite;
+}
+
+@keyframes subtle-bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-3px);
+  }
+  60% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Smooth page transitions for modern UX */
+@keyframes fadeInContent {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeInContent 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Smooth conversation loading */
+@keyframes conversationSlide {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-conversationSlide {
+  animation: conversationSlide 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Dropdown animations for legend and similar components */
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOutUp {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+.animate-fadeInDown {
+  animation: fadeInDown 0.24s ease-out forwards;
+}
+
+.animate-fadeOutUp {
+  animation: fadeOutUp 0.2s ease-in forwards;
+}

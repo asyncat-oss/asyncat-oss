@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap');
+
+/* Galaxy star twinkling animations */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes twinkle-slow {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes twinkle-fast {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* Galaxy orbit animations */
+@keyframes orbit {
+  0% { transform: rotate(0deg) translateX(40px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateX(40px) rotate(-360deg); }
+}
+
+@keyframes orbit-reverse {
+  0% { transform: rotate(0deg) translateX(60px) rotate(0deg); }
+  100% { transform: rotate(-360deg) translateX(60px) rotate(360deg); }
+}
+
+@keyframes orbit-wide {
+  0% { transform: rotate(0deg) translateX(80px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateX(80px) rotate(-360deg); }
+}
+
+/* Galaxy glow pulse animation */
+@keyframes glow {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(99, 102, 241, 0.4)); }
+  50% { filter: drop-shadow(0 0 15px rgba(99, 102, 241, 0.7)); }
+}
+
+/* Dark mode glow animation */
+.dark .animate-glow {
+  animation: glow-dark 3s ease-in-out infinite;
+}
+
+@keyframes glow-dark {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(129, 140, 248, 0.4)); }
+  50% { filter: drop-shadow(0 0 15px rgba(129, 140, 248, 0.7)); }
+}
+
+/* Midnight mode glow animation */
+.midnight .animate-glow {
+  animation: glow-midnight 3s ease-in-out infinite;
+}
+
+@keyframes glow-midnight {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(165, 180, 252, 0.4)); }
+  50% { filter: drop-shadow(0 0 15px rgba(165, 180, 252, 0.7)); }
+}
+
+.animate-twinkle {
+  animation: twinkle 3s ease-in-out infinite;
+}
+
+.animate-twinkle-slow {
+  animation: twinkle-slow 5s ease-in-out infinite;
+}
+
+.animate-twinkle-fast {
+  animation: twinkle-fast 2s ease-in-out infinite;
+}
+
+.animate-orbit {
+  animation: orbit 12s linear infinite;
+}
+
+.animate-orbit-reverse {
+  animation: orbit-reverse 15s linear infinite;
+}
+
+.animate-orbit-wide {
+  animation: orbit-wide 20s linear infinite;
+}
+
+.animate-glow {
+  animation: glow 3s ease-in-out infinite;
+}
+
+.galaxy-bg {
+  background: radial-gradient(ellipse at bottom, #EBF4FF 0%, #ffffff 100%);
+}
+
+/* Dark mode galaxy background */
+.dark .galaxy-bg {
+  background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+}
+
+/* Midnight mode galaxy background */
+.midnight .galaxy-bg {
+  background: radial-gradient(ellipse at bottom, #0F172A 0%, #020617 100%);
+}

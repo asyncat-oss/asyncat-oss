@@ -1,0 +1,20 @@
+{
+  "name": "asyncat-oss",
+  "version": "0.1.0",
+  "description": "Asyncat — open-source AI-powered workspace for teams",
+  "private": true,
+  "workspaces": [
+    "neko",
+    "den"
+  ],
+  "scripts": {
+    "dev": "npm run dev:backend & npm run dev:frontend",
+    "dev:backend": "cd den && npm run dev",
+    "dev:frontend": "cd neko && npm run dev",
+    "install:all": "npm install --prefix den && npm install --prefix neko",
+    "start": "cd den && npm start"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

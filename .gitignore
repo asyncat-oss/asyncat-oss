@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+den/node_modules/
+neko/node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build output
+dist/
+den/dist/
+neko/dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# SQLite database files
+data/asyncat.db
+data/asyncat.db-shm
+data/asyncat.db-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Local AI model files (large binaries — download separately)
+**/*.gguf
+**/*.ggml
+**/*.bin
+den/data/models/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Claude Code
+.claude/
+
+# Misc
+*.swp
+*.swo
