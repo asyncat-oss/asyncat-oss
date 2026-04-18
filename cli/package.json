@@ -2,6 +2,7 @@
   "name": "@asyncat/asyncat",
   "version": "0.1.0",
   "description": "Asyncat — open-source AI-powered workspace for teams",
+  "type": "module",
   "bin": {
     "asyncat": "bin/asyncat.js"
   },
@@ -15,5 +16,6 @@
     "type": "git",
     "url": "git+https://github.com/asyncat-oss/asyncat-oss.git"
   },
+  "keywords": ["asyncat", "ai", "workspace", "cli", "llm", "local-ai", "self-hosted"],
   "license": "MIT"
 }

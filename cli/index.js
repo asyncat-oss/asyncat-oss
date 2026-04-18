@@ -1,29 +1,38 @@
-'use strict';
+import readline from 'readline';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { c, col, setRl, log, ok, warn, info, banner } from './lib/colors.js';
+import { stopAll } from './lib/procs.js';
 
-const readline = require('readline');
-const fs       = require('fs');
-const os       = require('os');
-const path     = require('path');
-const { c, col, setRl, log, ok, warn, info, banner } = require('./lib/colors');
-const { stopAll } = require('./lib/procs');
+import * as _start   from './commands/start.js';
+import * as _stop    from './commands/stop.js';
+import * as _status  from './commands/status.js';
+import * as _install from './commands/install.js';
+import * as _doctor  from './commands/doctor.js';
+import * as _logs    from './commands/logs.js';
+import * as _models  from './commands/models.js';
+import * as _db      from './commands/db.js';
+import * as _config  from './commands/config.js';
+import * as _update  from './commands/update.js';
+import * as _version from './commands/version.js';
+import * as _open    from './commands/open.js';
 
-// ── lazy-load commands ────────────────────────────────────────────────────────
 const cmds = {
-  start:   () => require('./commands/start'),
-  stop:    () => require('./commands/stop'),
-  status:  () => require('./commands/status'),
-  install: () => require('./commands/install'),
-  doctor:  () => require('./commands/doctor'),
-  logs:    () => require('./commands/logs'),
-  models:  () => require('./commands/models'),
-  db:      () => require('./commands/db'),
-  config:  () => require('./commands/config'),
-  update:  () => require('./commands/update'),
-  version: () => require('./commands/version'),
-  open:    () => require('./commands/open'),
+  start:   () => _start,
+  stop:    () => _stop,
+  status:  () => _status,
+  install: () => _install,
+  doctor:  () => _doctor,
+  logs:    () => _logs,
+  models:  () => _models,
+  db:      () => _db,
+  config:  () => _config,
+  update:  () => _update,
+  version: () => _version,
+  open:    () => _open,
 };
 
-// ── all valid top-level commands (used for tab completion) ────────────────────
 const ALL_CMDS = [
   'start', 'stop', 'status', 'restart',
   'install', 'setup',
@@ -32,7 +41,6 @@ const ALL_CMDS = [
   'clear', 'help', 'exit', 'quit',
 ];
 
-// ── sub-command hints for tab completion ──────────────────────────────────────
 const SUB_CMDS = {
   logs:   ['backend', 'frontend', 'all'],
   models: ['list', 'remove'],
@@ -44,11 +52,9 @@ const SUB_CMDS = {
 function completer(line) {
   const tokens = line.trimStart().split(/\s+/);
   if (tokens.length <= 1) {
-    // completing the main command
     const hits = ALL_CMDS.filter(c => c.startsWith(tokens[0]));
     return [hits.length ? hits : ALL_CMDS, tokens[0]];
   }
-  // completing a sub-command
   const cmd  = tokens[0];
   const stub = tokens[tokens.length - 1];
   const subs = SUB_CMDS[cmd] || [];
@@ -56,7 +62,6 @@ function completer(line) {
   return [hits.length ? hits : subs, stub];
 }
 
-// ── help ──────────────────────────────────────────────────────────────────────
 function cmdHelp() {
   log('');
   log(`  ${col('bold', 'Commands:')}`);
@@ -79,57 +84,51 @@ function cmdHelp() {
   log('');
 }
 
-// ── persistent history ────────────────────────────────────────────────────────
 const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
 const MAX_HISTORY  = 200;
 
 function loadHistory() {
   try {
     const lines = fs.readFileSync(HISTORY_FILE, 'utf8').split('\n').filter(Boolean);
-    // file is stored oldest→newest; readline.history is newest→oldest
     return lines.reverse().slice(0, MAX_HISTORY);
   } catch (_) { return []; }
 }
 
 function saveHistory(rl) {
   try {
-    // rl.history is newest→oldest; write oldest→newest
     const lines = (rl.history || []).slice(0, MAX_HISTORY).reverse().join('\n');
     fs.writeFileSync(HISTORY_FILE, lines + '\n', 'utf8');
   } catch (_) {}
 }
 
-// ── route a command (parsed tokens) ──────────────────────────────────────────
 async function dispatch(tokens) {
   const [cmd, ...args] = tokens;
   if (!cmd) return;
 
   switch (cmd) {
-    case 'start':    cmds.start().run(args); break;
-    case 'stop':     cmds.stop().run();      break;
+    case 'start':    cmds.start().run(args);   break;
+    case 'stop':     cmds.stop().run();         break;
     case 'status':
-    case 'ps':       cmds.status().run();    break;
+    case 'ps':       cmds.status().run();       break;
     case 'restart':
       cmds.stop().run();
       setTimeout(() => cmds.start().run(args), 500);
       break;
     case 'install':
-    case 'setup':
-      await cmds.install().run();
-      break;
+    case 'setup':    await cmds.install().run(); break;
     case 'doctor':   cmds.doctor().run();         break;
     case 'logs':     cmds.logs().run(args);        break;
     case 'models':   await cmds.models().run(args); break;
-    case 'db':       await cmds.db().run(args);    break;
-    case 'config':   cmds.config().run(args);      break;
-    case 'update':   cmds.update().run();           break;
+    case 'db':       await cmds.db().run(args);     break;
+    case 'config':   cmds.config().run(args);       break;
+    case 'update':   cmds.update().run();            break;
     case 'version':
-    case 'v':        cmds.version().run();          break;
+    case 'v':        cmds.version().run();           break;
     case 'open':
-    case 'o':        cmds.open().run();             break;
-    case 'clear':    console.clear(); banner();     break;
+    case 'o':        cmds.open().run();              break;
+    case 'clear':    console.clear(); banner();      break;
     case 'help':
-    case '?':        cmdHelp();                     break;
+    case '?':        cmdHelp();                      break;
     case 'exit':
     case 'quit':
     case 'q':
@@ -145,7 +144,6 @@ async function dispatch(tokens) {
   }
 }
 
-// ── REPL ──────────────────────────────────────────────────────────────────────
 async function startREPL() {
   banner();
   cmds.status().run();
@@ -159,9 +157,7 @@ async function startREPL() {
     completer,
   });
 
-  // restore history from last session
   rl.history = loadHistory();
-
   setRl(rl);
   rl.prompt();
 
@@ -189,25 +185,18 @@ async function startREPL() {
   });
 }
 
-// ── entry point ───────────────────────────────────────────────────────────────
-(async () => {
-  const argv = process.argv.slice(2);
+const argv = process.argv.slice(2);
 
-  if (argv.length > 0) {
-    const first = argv[0];
-    // handle top-level flags before entering REPL or dispatching
-    if (first === '--version' || first === '-v') {
-      cmds.version().run();
-      return;
-    }
-    if (first === '--help' || first === '-h') {
-      banner();
-      cmdHelp();
-      return;
-    }
-    // non-interactive: run command directly
-    await dispatch(argv);
+if (argv.length > 0) {
+  const first = argv[0];
+  if (first === '--version' || first === '-v') {
+    cmds.version().run();
+  } else if (first === '--help' || first === '-h') {
+    banner();
+    cmdHelp();
   } else {
-    await startREPL();
+    await dispatch(argv);
   }
-})();
+} else {
+  await startREPL();
+}

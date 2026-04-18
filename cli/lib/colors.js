@@ -1,7 +1,6 @@
-'use strict';
+import readline from 'readline';
 
-// ── ANSI color constants ──────────────────────────────────────────────────────
-const c = {
+export const c = {
   reset:   '\x1b[0m',
   bold:    '\x1b[1m',
   dim:     '\x1b[2m',
@@ -14,17 +13,13 @@ const c = {
   white:   '\x1b[37m',
 };
 
-const col = (color, str) => `${c[color] || ''}${str}${c.reset}`;
+export const col = (color, str) => `${c[color] || ''}${str}${c.reset}`;
 
-// ── readline interface reference ──────────────────────────────────────────────
 let _rl = null;
-const setRl = (iface) => { _rl = iface; };
-const rlOpen = () => _rl && !_rl.closed;
+export const setRl  = (iface) => { _rl = iface; };
+export const rlOpen = () => _rl && !_rl.closed;
 
-// ── rl-aware print ────────────────────────────────────────────────────────────
-const readline = require('readline');
-
-function log(msg) {
+export function log(msg) {
   if (!rlOpen()) { console.log(msg); return; }
   readline.clearLine(process.stdout, 0);
   readline.cursorTo(process.stdout, 0);
@@ -32,13 +27,12 @@ function log(msg) {
   _rl.prompt(true);
 }
 
-const ok   = (msg) => log(`  ${col('green',  '✔')}  ${msg}`);
-const err  = (msg) => log(`  ${col('red',    '✖')}  ${msg}`);
-const warn = (msg) => log(`  ${col('yellow', '⚠')}  ${msg}`);
-const info = (msg) => log(`  ${col('cyan',   '→')}  ${msg}`);
+export const ok   = (msg) => log(`  ${col('green',  '✔')}  ${msg}`);
+export const err  = (msg) => log(`  ${col('red',    '✖')}  ${msg}`);
+export const warn = (msg) => log(`  ${col('yellow', '⚠')}  ${msg}`);
+export const info = (msg) => log(`  ${col('cyan',   '→')}  ${msg}`);
 
-// ── labeled streaming line ─────────────────────────────────────────────────────
-function line(tag, text, color) {
+export function line(tag, text, color) {
   if (!rlOpen()) {
     process.stdout.write(`${col(color, '[' + tag + ']')} ${text}\n`);
     return;
@@ -49,8 +43,7 @@ function line(tag, text, color) {
   _rl.prompt(true);
 }
 
-// ── banner ─────────────────────────────────────────────────────────────────────
-function banner() {
+export function banner() {
   console.log('');
   console.log(col('magenta', '    /\\_____/\\ '));
   console.log(col('magenta', '   /  o   o  \\ ') + `   ${col('white', col('bold', 'asyncat'))}  ${col('dim', 'open-source AI workspace')}`);
@@ -62,8 +55,7 @@ function banner() {
   console.log('');
 }
 
-// ── spinner ───────────────────────────────────────────────────────────────────
-function spinner(msg) {
+export function spinner(msg) {
   const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   let i = 0;
   const id = setInterval(() => {
@@ -86,5 +78,3 @@ function spinner(msg) {
     },
   };
 }
-
-module.exports = { c, col, setRl, rlOpen, log, ok, err, warn, info, line, banner, spinner };

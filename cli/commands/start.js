@@ -1,12 +1,10 @@
-'use strict';
+import fs from 'fs';
+import path from 'path';
+import { ROOT } from '../lib/env.js';
+import { err, info, col } from '../lib/colors.js';
+import { startProc } from '../lib/procs.js';
 
-const fs   = require('fs');
-const path = require('path');
-const { ROOT } = require('../lib/env');
-const { err, info, col } = require('../lib/colors');
-const { startProc } = require('../lib/procs');
-
-function run(args = []) {
+export function run(args = []) {
   if (!fs.existsSync(path.join(ROOT, 'den/.env'))) {
     err(`den/.env not found — run ${col('cyan', 'install')} first.`); return;
   }
@@ -36,5 +34,3 @@ function run(args = []) {
     startProc('frontend', 'neko', 'npm', ['run', 'dev'], 'magenta');
   }
 }
-
-module.exports = { run };

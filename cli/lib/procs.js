@@ -1,21 +1,17 @@
-'use strict';
+import { spawn, execSync } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+import { line, warn, ok, info } from './colors.js';
+import { ROOT } from './env.js';
 
-const { spawn, execSync } = require('child_process');
-const path  = require('path');
-const fs    = require('fs');
-const { line, warn, ok, info } = require('./colors');
-const { ROOT } = require('./env');
-
-// ── shared process state ──────────────────────────────────────────────────────
-const procs = { backend: null, frontend: null };
+export const procs = { backend: null, frontend: null };
 const watchers = { backend: null, frontend: null };
 const procSpecs = {};
 const procState = {
-  backend: { pendingRestart: false, stopping: false },
+  backend:  { pendingRestart: false, stopping: false },
   frontend: { pendingRestart: false, stopping: false },
 };
 
-// ── ensure logs dir ───────────────────────────────────────────────────────────
 function logsDir() {
   const d = path.join(ROOT, 'logs');
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
@@ -24,23 +20,12 @@ function logsDir() {
 
 function scanWatchPath(target, snapshot) {
   let stat;
-  try {
-    stat = fs.statSync(target);
-  } catch (_) {
-    return;
-  }
+  try { stat = fs.statSync(target); } catch (_) { return; }
 
   if (stat.isDirectory()) {
     let entries = [];
-    try {
-      entries = fs.readdirSync(target, { withFileTypes: true });
-    } catch (_) {
-      return;
-    }
-
-    for (const entry of entries) {
-      scanWatchPath(path.join(target, entry.name), snapshot);
-    }
+    try { entries = fs.readdirSync(target, { withFileTypes: true }); } catch (_) { return; }
+    for (const entry of entries) scanWatchPath(path.join(target, entry.name), snapshot);
     return;
   }
 
@@ -93,7 +78,6 @@ function startPollingWatcher(key, cwd, options) {
   const interval = setInterval(() => {
     const nextSnapshot = buildSnapshot(watchPaths);
     if (snapshotsEqual(lastSnapshot, nextSnapshot)) return;
-
     lastSnapshot = nextSnapshot;
     restartProc(key, options.watchLabel || 'source changes');
   }, options.intervalMs || 1000);
@@ -102,7 +86,6 @@ function startPollingWatcher(key, cwd, options) {
   watchers[key] = { interval };
 }
 
-// ── spawn a service ───────────────────────────────────────────────────────────
 function spawnProc(key) {
   const spec = procSpecs[key];
   if (!spec) return;
@@ -134,23 +117,19 @@ function spawnProc(key) {
 
     const state = procState[key];
     const shouldRestart = state && state.pendingRestart;
-    const wasStopping = state && state.stopping;
+    const wasStopping   = state && state.stopping;
 
     if (state) {
       state.pendingRestart = false;
       state.stopping = false;
     }
 
-    if (shouldRestart) {
-      spawnProc(key);
-      return;
-    }
-
+    if (shouldRestart) { spawnProc(key); return; }
     if (!wasStopping && code !== null && code !== 0) warn(`${key} exited (code ${code})`);
   });
 }
 
-function startProc(key, cwd, cmd, args, color, options = {}) {
+export function startProc(key, cwd, cmd, args, color, options = {}) {
   if (procs[key]) { warn(`${key} is already running.`); return; }
 
   procSpecs[key] = { cwd, cmd, args, color };
@@ -163,8 +142,7 @@ function startProc(key, cwd, cmd, args, color, options = {}) {
   }
 }
 
-// ── stop one process ──────────────────────────────────────────────────────────
-function stopProc(key) {
+export function stopProc(key) {
   const hadWatcher = Boolean(watchers[key]);
   clearWatcher(key);
   if (procs[key]) {
@@ -177,8 +155,7 @@ function stopProc(key) {
   }
 }
 
-// ── stop all processes + port cleanup ─────────────────────────────────────────
-function stopAll() {
+export function stopAll() {
   let stopped = false;
 
   for (const key of Object.keys(procs)) {
@@ -198,15 +175,10 @@ function stopAll() {
     try {
       const pids = execSync(`lsof -ti :${port} 2>/dev/null`).toString().trim().split(/\s+/).filter(Boolean);
       for (const pid of pids) {
-        try {
-          process.kill(Number(pid), 'SIGTERM');
-          stopped = true;
-        } catch (_) {}
+        try { process.kill(Number(pid), 'SIGTERM'); stopped = true; } catch (_) {}
       }
     } catch (_) {}
   }
 
   return stopped;
 }
-
-module.exports = { procs, startProc, stopProc, stopAll };

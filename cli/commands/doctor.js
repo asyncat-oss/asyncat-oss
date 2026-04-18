@@ -1,12 +1,10 @@
-'use strict';
-
-const { execSync } = require('child_process');
-const fs   = require('fs');
-const path = require('path');
-const os   = require('os');
-const { ROOT, readEnv } = require('../lib/env');
-const { log, ok, err, warn, col } = require('../lib/colors');
-const { procs } = require('../lib/procs');
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { ROOT, readEnv } from '../lib/env.js';
+import { log, ok, err, warn, col } from '../lib/colors.js';
+import { procs } from '../lib/procs.js';
 
 function checkCmd(cmd) {
   try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
@@ -21,24 +19,23 @@ function portRunning(port) {
 
 function diskFreeGB(dir) {
   try {
-    // df -k gives 1K blocks; column 4 is available
     const out = execSync(`df -k "${dir}" 2>/dev/null`).toString().split('\n')[1];
     if (!out) return Infinity;
     const avail = parseInt(out.trim().split(/\s+/)[3], 10);
-    return avail / (1024 * 1024); // convert KB → GB
+    return avail / (1024 * 1024);
   } catch (_) { return Infinity; }
 }
 
-function run() {
+export function run() {
   log('');
   log(col('bold', '  asyncat doctor'));
   log('');
 
   let passed = 0, warnings = 0, failures = 0;
 
-  function pass(msg)    { ok(msg);   passed++;   }
-  function fail(msg)    { err(msg);  failures++; }
-  function warnIt(msg)  { warn(msg); warnings++; }
+  const pass   = (msg) => { ok(msg);   passed++;   };
+  const fail   = (msg) => { err(msg);  failures++; };
+  const warnIt = (msg) => { warn(msg); warnings++; };
 
   // 1. Node.js >= 20
   try {
@@ -151,7 +148,6 @@ function run() {
   if (freeGB < 1) warnIt(`Low disk space: ${freeGB.toFixed(2)} GB free (< 1 GB)`);
   else pass(`Disk space: ${freeGB.toFixed(1)} GB free`);
 
-  // Summary
   log('');
   const total = passed + warnings + failures;
   const summaryParts = [
@@ -162,5 +158,3 @@ function run() {
   log(`  ${summaryParts.join(col('dim', ' · '))}  ${col('dim', `(${total} checks)`)}`);
   log('');
 }
-
-module.exports = { run };

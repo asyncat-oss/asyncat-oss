@@ -1,11 +1,7 @@
-'use strict';
+import { stopAll } from '../lib/procs.js';
+import { info } from '../lib/colors.js';
 
-const { stopAll } = require('../lib/procs');
-const { info } = require('../lib/colors');
-
-function run() {
+export function run() {
   const stopped = stopAll();
   if (!stopped) info('Nothing running.');
 }
-
-module.exports = { run };
