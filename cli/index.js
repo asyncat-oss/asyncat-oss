@@ -20,6 +20,7 @@ const cmds = {
   config:  () => require('./commands/config'),
   update:  () => require('./commands/update'),
   version: () => require('./commands/version'),
+  open:    () => require('./commands/open'),
 };
 
 // ── all valid top-level commands (used for tab completion) ────────────────────
@@ -27,7 +28,7 @@ const ALL_CMDS = [
   'start', 'stop', 'status', 'restart',
   'install', 'setup',
   'doctor', 'logs', 'models', 'db', 'config',
-  'update', 'version',
+  'update', 'version', 'open',
   'clear', 'help', 'exit', 'quit',
 ];
 
@@ -71,6 +72,7 @@ function cmdHelp() {
   log(`  ${col('cyan', 'config')}  ${col('dim', '<show|get <KEY>|set KEY=VALUE>')}`);
   log(`  ${col('cyan', 'update')}            Pull latest changes + reinstall`);
   log(`  ${col('cyan', 'version')}           Show version info`);
+  log(`  ${col('cyan', 'open')}    ${col('dim', 'o')}        Open asyncat in the browser`);
   log(`  ${col('cyan', 'clear')}             Clear the screen`);
   log(`  ${col('cyan', 'help')}    ${col('dim', '?')}        Show this help`);
   log(`  ${col('cyan', 'exit')}    ${col('dim', 'quit q')}   Quit (stops all services)`);
@@ -123,6 +125,8 @@ async function dispatch(tokens) {
     case 'update':   cmds.update().run();           break;
     case 'version':
     case 'v':        cmds.version().run();          break;
+    case 'open':
+    case 'o':        cmds.open().run();             break;
     case 'clear':    console.clear(); banner();     break;
     case 'help':
     case '?':        cmdHelp();                     break;

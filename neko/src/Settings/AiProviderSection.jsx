@@ -52,8 +52,9 @@ const GpuBar = ({ used, total, label }) => {
 
 const AiProviderSection = () => {
   // Config state
-  const [providerType, setProviderType] = useState('local'); // 'local' | 'custom'
+  const [providerType, setProviderType] = useState('local'); // 'local' | 'cloud' | 'custom'
   const [selectedProviderId, setSelectedProviderId] = useState('ollama');
+  const [cloudProviderId, setCloudProviderId] = useState('openai');
   const [baseUrl, setBaseUrl] = useState('http://localhost:11434');
   const [selectedModel, setSelectedModel] = useState('');
   const [customApiKey, setCustomApiKey] = useState('');
@@ -86,6 +87,15 @@ const AiProviderSection = () => {
     { id: 'llamacpp', name: 'llama.cpp server', icon: '⚡', defaultUrl: 'http://localhost:8080',  description: 'llama.cpp HTTP server' },
   ];
 
+  const CLOUD_PROVIDERS = [
+    { id: 'openai',     name: 'OpenAI',      icon: '🟢', baseUrl: 'https://api.openai.com/v1',       models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
+    { id: 'anthropic',  name: 'Anthropic',   icon: '🔷', baseUrl: 'https://api.anthropic.com/v1',    models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'] },
+    { id: 'groq',       name: 'Groq',        icon: '⚡', baseUrl: 'https://api.groq.com/openai/v1',  models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'] },
+    { id: 'together',   name: 'Together AI', icon: '🤝', baseUrl: 'https://api.together.xyz/v1',     models: ['meta-llama/Llama-3-70b-chat-hf', 'mistralai/Mixtral-8x7B-Instruct-v0.1'] },
+    { id: 'mistral',    name: 'Mistral',     icon: '🌬️', baseUrl: 'https://api.mistral.ai/v1',      models: ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'] },
+    { id: 'openrouter', name: 'OpenRouter',  icon: '🔀', baseUrl: 'https://openrouter.ai/api/v1',    models: [] },
+  ];
+
   // ── Load saved config on mount ──────────────────────────────────────────────
   useEffect(() => {
     loadConfig();
@@ -98,10 +108,22 @@ const AiProviderSection = () => {
       if (res.success && res.config) {
         const cfg = res.config;
         setSavedConfig(cfg);
-        setProviderType(cfg.providerType === 'cloud' ? 'local' : (cfg.providerType || 'local'));
-        setSelectedProviderId(cfg.providerId || 'ollama');
-        setBaseUrl(cfg.baseUrl || 'http://localhost:11434');
-        setSelectedModel(cfg.model || '');
+        const pType = cfg.providerType || 'local';
+        setProviderType(pType);
+        if (pType === 'cloud') {
+          const cp = CLOUD_PROVIDERS.find(p => p.id === cfg.providerId);
+          setCloudProviderId(cfg.providerId || 'openai');
+          setBaseUrl(cfg.baseUrl || cp?.baseUrl || 'https://api.openai.com/v1');
+          setAvailableModels((cp?.models || []).map(m => ({ id: m, name: m })));
+          setSelectedModel(cfg.model || '');
+        } else if (pType === 'local') {
+          setSelectedProviderId(cfg.providerId || 'ollama');
+          setBaseUrl(cfg.baseUrl || 'http://localhost:11434');
+          setSelectedModel(cfg.model || '');
+        } else {
+          setBaseUrl(cfg.baseUrl || '');
+          setSelectedModel(cfg.model || '');
+        }
       }
     } catch (err) {
       console.warn('Failed to load AI config:', err);
@@ -182,7 +204,9 @@ const AiProviderSection = () => {
     try {
       await aiProviderApi.saveConfig({
         providerType,
-        providerId: providerType === 'local' ? selectedProviderId : null,
+        providerId: providerType === 'local' ? selectedProviderId
+                  : providerType === 'cloud'  ? cloudProviderId
+                  : null,
         baseUrl,
         model: selectedModel,
         apiKey: customApiKey || null,
@@ -234,6 +258,11 @@ const AiProviderSection = () => {
     if (type === 'local') {
       const known = KNOWN_PROVIDERS.find(p => p.id === selectedProviderId);
       setBaseUrl(known?.defaultUrl || 'http://localhost:11434');
+    } else if (type === 'cloud') {
+      const cp = CLOUD_PROVIDERS.find(p => p.id === cloudProviderId);
+      setBaseUrl(cp?.baseUrl || 'https://api.openai.com/v1');
+      setAvailableModels((cp?.models || []).map(m => ({ id: m, name: m })));
+      if (cp?.models?.length) setSelectedModel(cp.models[0]);
     }
   };
 
@@ -246,6 +275,17 @@ const AiProviderSection = () => {
     setTestResult(null);
   };
 
+  const handleCloudProviderChange = (id) => {
+    setCloudProviderId(id);
+    const cp = CLOUD_PROVIDERS.find(p => p.id === id);
+    if (cp) {
+      setBaseUrl(cp.baseUrl);
+      setAvailableModels(cp.models.map(m => ({ id: m, name: m })));
+      setSelectedModel(cp.models[0] || '');
+    }
+    setTestResult(null);
+  };
+
   if (loadingConfig) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -254,7 +294,7 @@ const AiProviderSection = () => {
     );
   }
 
-  const isLocalOrCustom = providerType === 'local' || providerType === 'custom';
+  const isLocalOrCustom = providerType === 'local' || providerType === 'custom' || providerType === 'cloud';
   const detectedProvider = detectedProviders.find(p => p.id === selectedProviderId);
 
   return (
@@ -276,10 +316,11 @@ const AiProviderSection = () => {
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
           AI Provider Type
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {[
             { id: 'local',  label: 'Local',  icon: <Server className="w-4 h-4" />,   desc: 'Ollama, LM Studio…' },
-            { id: 'custom', label: 'Custom', icon: <Settings2 className="w-4 h-4" />, desc: 'Any OpenAI-compatible URL' },
+            { id: 'cloud',  label: 'Cloud',  icon: <Wifi className="w-4 h-4" />,      desc: 'OpenAI, Anthropic…' },
+            { id: 'custom', label: 'Custom', icon: <Settings2 className="w-4 h-4" />, desc: 'Any compatible URL' },
           ].map(opt => (
             <button
               key={opt.id}
@@ -344,6 +385,33 @@ const AiProviderSection = () => {
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Cloud provider picker ── */}
+      {providerType === 'cloud' && (
+        <div>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+            Cloud Provider
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {CLOUD_PROVIDERS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => handleCloudProviderChange(p.id)}
+                className={`flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-all
+                  ${cloudProviderId === p.id
+                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+              >
+                <div className="flex items-center gap-1.5 w-full">
+                  <span className="text-base">{p.icon}</span>
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{p.name}</span>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -431,17 +499,20 @@ const AiProviderSection = () => {
         )}
       </div>
 
-      {/* ── Optional API key (for custom endpoints) ── */}
-      {providerType === 'custom' && (
+      {/* ── API key (required for cloud, optional for custom) ── */}
+      {(providerType === 'cloud' || providerType === 'custom') && (
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-            API Key <span className="text-gray-400 font-normal">(optional override)</span>
+            API Key{' '}
+            <span className="text-gray-400 font-normal">
+              {providerType === 'cloud' ? '(required)' : '(optional override)'}
+            </span>
           </label>
           <input
             type="password"
             value={customApiKey}
             onChange={e => setCustomApiKey(e.target.value)}
-            placeholder={savedConfig?.hasCustomApiKey ? '••••••••••••••••' : 'Leave blank to use server .env key'}
+            placeholder={savedConfig?.hasCustomApiKey ? '••••••••••••••••' : providerType === 'cloud' ? 'sk-...' : 'Leave blank to use server .env key'}
             className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
