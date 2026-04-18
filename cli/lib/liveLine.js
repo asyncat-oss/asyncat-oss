@@ -8,7 +8,7 @@ import path from 'path';
 
 const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
 const MAX_HISTORY  = 200;
-const MAX_SUGG     = 7;
+const MAX_SUGG     = 15;
 
 // ── Command catalogs ───────────────────────────────────────────────────────────
 const TOP_CMDS = [
@@ -31,6 +31,7 @@ const TOP_CMDS = [
   { name: 'theme',    desc: 'Switch color theme' },
   { name: 'version',  desc: 'Show version info' },
   { name: 'open',     desc: 'Open asyncat in the browser' },
+  { name: 'live-logs',desc: 'Toggle streaming of backend/frontend logs' },
   { name: 'help',     desc: 'Show command reference' },
   { name: 'clear',    desc: 'Clear the screen' },
   { name: 'exit',     desc: 'Quit and stop all services' },
@@ -47,10 +48,11 @@ const SLASH_CMDS = [
   { name: '/sessions', desc: 'Browse saved conversations' },
   { name: '/models',   desc: 'Manage AI models' },
   { name: '/provider', desc: 'Configure AI provider' },
-  { name: '/theme',    desc: 'Switch color theme (dark/hacker/ocean/minimal)' },
-  { name: '/help',     desc: 'Show command reference' },
-  { name: '/clear',    desc: 'Clear the screen' },
-  { name: '/exit',     desc: 'Quit and stop all services' },
+  { name: '/theme',     desc: 'Switch color theme (dark/hacker/ocean/minimal)' },
+  { name: '/live-logs', desc: 'Toggle streaming of backend/frontend logs' },
+  { name: '/help',      desc: 'Show command reference' },
+  { name: '/clear',     desc: 'Clear the screen' },
+  { name: '/exit',      desc: 'Quit and stop all services' },
 ];
 
 const SUB_CMDS = {
@@ -100,6 +102,12 @@ const SUB_CMDS = {
     { name: 'get',  desc: 'Get a single config value' },
     { name: 'set',  desc: 'Set a config value' },
   ],
+  'live-logs': [
+    { name: 'on',     desc: 'Enable live log streaming' },
+    { name: 'off',    desc: 'Disable live log streaming' },
+    { name: 'toggle', desc: 'Toggle live logs' },
+    { name: 'status', desc: 'Show live logs status' },
+  ],
   start: [
     { name: '--backend-only',  desc: 'Start backend only' },
     { name: '--frontend-only', desc: 'Start frontend only' },
@@ -125,6 +133,12 @@ const SLASH_SUB = {
     { name: 'list',  desc: 'Show all stashed notes' },
     { name: 'rm',    desc: 'Remove a stash entry by ID' },
     { name: 'clear', desc: 'Clear all stash entries' },
+  ],
+  '/live-logs': [
+    { name: 'on',     desc: 'Enable live log streaming' },
+    { name: 'off',    desc: 'Disable live log streaming' },
+    { name: 'toggle', desc: 'Toggle live logs' },
+    { name: 'status', desc: 'Show live logs status' },
   ],
   '/models': SUB_CMDS.models,
   '/sessions': SUB_CMDS.sessions,
@@ -181,6 +195,8 @@ export class LiveLine extends EventEmitter {
     this.suggestions     = [];
     this.selIdx          = 0;
     this.suggestionLines = 0;
+    this.allSuggestions  = [];  // all matching suggestions
+    this.suggOffset      = 0;   // pagination offset for many suggestions
 
     this.closed = false;
   }
@@ -226,7 +242,17 @@ export class LiveLine extends EventEmitter {
   _draw(atPrompt) {
     const t     = getTheme();
     const W     = process.stdout.columns || 80;
-    const suggs = this._isMain ? getSuggestions(this.buf).slice(0, MAX_SUGG) : [];
+    const allSuggs = this._isMain ? getSuggestions(this.buf) : [];
+
+    // Reset offset if buffer changed and fewer results than before
+    if (this.allSuggestions !== allSuggs && this.suggOffset > 0) {
+      this.suggOffset = 0;
+      this.selIdx = 0;
+    }
+    this.allSuggestions = allSuggs;
+
+    // Get the current page of suggestions
+    const suggs = allSuggs.slice(this.suggOffset, this.suggOffset + MAX_SUGG);
 
     process.stdout.write('\x1b[?25l');  // hide cursor
 
@@ -246,6 +272,7 @@ export class LiveLine extends EventEmitter {
     // ── Suggestions ────────────────────────────────────────────────────────
     if (suggs.length > 0) {
       const colW = Math.max(...suggs.map(s => s.name.length)) + 3;
+      const hasMore = allSuggs.length > this.suggOffset + MAX_SUGG;
       process.stdout.write('\n');
       for (let i = 0; i < suggs.length; i++) {
         const s   = suggs[i];
@@ -258,9 +285,14 @@ export class LiveLine extends EventEmitter {
         }
         if (i < suggs.length - 1) process.stdout.write('\n');
       }
+      // Show "more..." indicator if there are more suggestions
+      if (hasMore) {
+        process.stdout.write(`\n  ${c.dim}↓ ${allSuggs.length - this.suggOffset - MAX_SUGG} more... (arrow keys to scroll)${c.reset}`);
+      }
       // Move cursor back up to prompt line (not rule line)
-      process.stdout.write(`\x1b[${suggs.length}A`);
-      this.suggestionLines = suggs.length;
+      const lineCount = suggs.length + (hasMore ? 1 : 0);
+      process.stdout.write(`\x1b[${lineCount}A`);
+      this.suggestionLines = lineCount;
     } else {
       this.suggestionLines = 0;
     }
@@ -276,10 +308,7 @@ export class LiveLine extends EventEmitter {
     const { name, ctrl, meta } = key;
 
     if (ctrl && name === 'c') {
-      process.stdout.write('\n');
-      process.stdout.write(`  ${c.dim}(ctrl+c again to quit, or type exit)${c.reset}\n`);
-      this.buf = ''; this.pos = 0; this.selIdx = 0;
-      this._draw(false);
+      this.emit('close');
       return;
     }
 
@@ -296,6 +325,13 @@ export class LiveLine extends EventEmitter {
 
     // ── Enter ──────────────────────────────────────────────────────────────────
     if (name === 'return' || name === 'enter') {
+      // If there's a selected suggestion, apply it instead of executing
+      if (this.suggestions.length > 0 && this.selIdx < this.suggestions.length) {
+        this._applyCompletion(this.suggestions[this.selIdx].name);
+        this._draw(true);
+        return;
+      }
+
       const line = this.buf;
 
       // Move up to rule line, clear everything, echo the submitted line
@@ -326,7 +362,12 @@ export class LiveLine extends EventEmitter {
     // ── Arrow keys ─────────────────────────────────────────────────────────────
     if (name === 'up') {
       if (this.suggestions.length > 0 && this._isMain) {
-        this.selIdx = Math.max(0, this.selIdx - 1);
+        if (this.selIdx > 0) {
+          this.selIdx--;
+        } else if (this.suggOffset > 0) {
+          this.suggOffset -= MAX_SUGG;
+          this.selIdx = Math.min(MAX_SUGG - 1, this.allSuggestions.length - this.suggOffset - 1);
+        }
       } else {
         if (this.histIdx === -1) this.histSaved = this.buf;
         if (this.histIdx < this.history.length - 1) {
@@ -341,7 +382,13 @@ export class LiveLine extends EventEmitter {
 
     if (name === 'down') {
       if (this.suggestions.length > 0 && this._isMain) {
-        this.selIdx = Math.min(this.suggestions.length - 1, this.selIdx + 1);
+        const totalSuggs = this.allSuggestions.length;
+        if (this.selIdx < this.suggestions.length - 1) {
+          this.selIdx++;
+        } else if (this.suggOffset + MAX_SUGG < totalSuggs) {
+          this.suggOffset += MAX_SUGG;
+          this.selIdx = 0;
+        }
       } else {
         if (this.histIdx > 0) {
           this.histIdx--;
@@ -393,14 +440,14 @@ export class LiveLine extends EventEmitter {
     if (name === 'backspace') {
       if (this.pos > 0) {
         this.buf = this.buf.slice(0, this.pos - 1) + this.buf.slice(this.pos);
-        this.pos--; this.selIdx = 0;
+        this.pos--; this.selIdx = 0; this.suggOffset = 0;
       }
       this._draw(true); return;
     }
     if (name === 'delete') {
       if (this.pos < this.buf.length) {
         this.buf = this.buf.slice(0, this.pos) + this.buf.slice(this.pos + 1);
-        this.selIdx = 0;
+        this.selIdx = 0; this.suggOffset = 0;
       }
       this._draw(true); return;
     }
@@ -420,7 +467,7 @@ export class LiveLine extends EventEmitter {
     // ── Printable character ─────────────────────────────────────────────────────
     if (str && str.length === 1 && !ctrl && !meta) {
       this.buf = this.buf.slice(0, this.pos) + str + this.buf.slice(this.pos);
-      this.pos++; this.selIdx = 0;
+      this.pos++; this.selIdx = 0; this.suggOffset = 0;
       this._draw(true);
     }
   }
