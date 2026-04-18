@@ -1,12 +1,12 @@
 'use strict';
 
 const readline = require('readline');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const { ROOT } = require('../lib/env');
-const { log, ok, err, warn, info, col } = require('../lib/colors');
+const { log, ok, err, warn, info, col, spinner } = require('../lib/colors');
 
 function checkCmd(cmd) {
   try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
@@ -19,20 +19,26 @@ function setupEnv(target, example) {
     if (!fs.existsSync(e)) { warn(`Example file ${example} not found, skipping.`); return; }
     fs.copyFileSync(e, t);
     ok(`Created ${target}`);
-    warn(`Edit ${col('white', target)} and set JWT_SECRET + AI credentials.`);
+    warn(`Edit ${col('white', target)} and set a strong JWT_SECRET before deploying.`);
   } else {
     ok(`${target} exists`);
   }
 }
 
-function runSync(cmd, cwd, label) {
-  info(`Installing ${label}...`);
-  try {
-    execSync(cmd, { cwd, stdio: 'ignore' });
-    ok(`${label} packages installed`);
-  } catch (_) {
-    err(`Failed to install ${label} packages. Try manually: ${col('dim', 'cd ' + path.relative(ROOT, cwd) + ' && npm install')}`);
-  }
+function runWithSpinner(cmd, args, cwd, label) {
+  return new Promise((resolve) => {
+    const s = spinner(`Installing ${label} packages...`);
+    const proc = spawn(cmd, args, { cwd, shell: true, stdio: 'ignore' });
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        s.stop(`${label} packages installed`);
+        resolve(true);
+      } else {
+        s.fail(`Failed to install ${label} — try: cd ${path.relative(ROOT, cwd)} && npm install`);
+        resolve(false);
+      }
+    });
+  });
 }
 
 function prompt(question) {
@@ -74,11 +80,13 @@ async function checkLlama(python) {
   const choice = await prompt('  Choose [1/2/3]: ');
   if (choice === '1') {
     if (!python) { err('Python not found. Install Python 3.10+ first.'); return; }
-    info('Installing llama-cpp-python...');
+    const s = spinner('Installing llama-cpp-python...');
     try {
-      execSync(`${python} -m pip install "llama-cpp-python[server]"`, { stdio: 'inherit' });
-      ok('llama-cpp-python installed');
-    } catch (_) { err('Installation failed — check pip output above.'); }
+      execSync(`${python} -m pip install "llama-cpp-python[server]"`, { stdio: 'ignore' });
+      s.stop('llama-cpp-python installed');
+    } catch (_) {
+      s.fail('Installation failed — run pip install manually and check output.');
+    }
   } else if (choice === '2') {
     info(`Download llama-server for ${os.platform()}-${os.arch()} from:`);
     info(col('cyan', 'https://github.com/ggml-org/llama.cpp/releases'));
@@ -119,13 +127,15 @@ async function run() {
   setupEnv('den/.env', 'den/.env.example');
   setupEnv('neko/.env', 'neko/.env.example');
 
-  // npm install
+  // npm install (parallel: root, then den + neko together)
   log('');
   log(col('bold', '  Installing packages...'));
   log('');
-  runSync('npm install', ROOT,                     'root');
-  runSync('npm install', path.join(ROOT, 'den'),   'backend');
-  runSync('npm install', path.join(ROOT, 'neko'),  'frontend');
+  await runWithSpinner('npm', ['install'], ROOT, 'root');
+  await Promise.all([
+    runWithSpinner('npm', ['install'], path.join(ROOT, 'den'),  'backend'),
+    runWithSpinner('npm', ['install'], path.join(ROOT, 'neko'), 'frontend'),
+  ]);
 
   // llama-server
   log('');
