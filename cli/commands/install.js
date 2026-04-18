@@ -1,12 +1,14 @@
 'use strict';
 
 const readline = require('readline');
-const { execSync, spawn } = require('child_process');
+const { execFileSync, execSync, spawn } = require('child_process');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const { ROOT } = require('../lib/env');
 const { log, ok, err, warn, info, col, spinner } = require('../lib/colors');
+
+const NPM_CMD = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function checkCmd(cmd) {
   try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
@@ -25,10 +27,19 @@ function setupEnv(target, example) {
   }
 }
 
+function resolveFromWorkspace(pkg, workspaceDir) {
+  try {
+    require.resolve(`${pkg}/package.json`, { paths: [workspaceDir] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function runWithSpinner(cmd, args, cwd, label) {
   return new Promise((resolve) => {
     const s = spinner(`Installing ${label} packages...`);
-    const proc = spawn(cmd, args, { cwd, shell: true, stdio: 'ignore' });
+    const proc = spawn(cmd === 'npm' ? NPM_CMD : cmd, args, { cwd, stdio: 'ignore' });
     proc.on('exit', (code) => {
       if (code === 0) {
         s.stop(`${label} packages installed`);
@@ -51,24 +62,34 @@ function prompt(question) {
 
 function ensureNativeRuntimeDeps() {
   const runtimeInstalls = [];
+  const frontendDir = path.join(ROOT, 'neko');
+  const backendDir = path.join(ROOT, 'den');
 
   // npm 11 can skip platform-specific optional packages on Apple Silicon.
-  // Install the native runtimes explicitly so Vite/Rollup and Sharp boot reliably.
+  // Resolve from the consuming workspace so both hoisted and nested installs count.
   if (process.platform === 'darwin' && process.arch === 'arm64') {
-    const rollupRuntime = path.join(ROOT, 'node_modules/@rollup/rollup-darwin-arm64');
-    if (!fs.existsSync(rollupRuntime)) {
+    if (!resolveFromWorkspace('@rollup/rollup-darwin-arm64', frontendDir)) {
       runtimeInstalls.push({
         label: 'Rollup native runtime',
-        cmd: 'npm install --no-save --no-package-lock @rollup/rollup-darwin-arm64',
+        args: ['install', '--no-save', '--no-package-lock', '--legacy-peer-deps', '@rollup/rollup-darwin-arm64'],
+        cmd: 'npm install --no-save --no-package-lock --legacy-peer-deps @rollup/rollup-darwin-arm64',
       });
     }
 
-    const sharpRuntime = path.join(ROOT, 'node_modules/@img/sharp-darwin-arm64');
-    const sharpLibvips = path.join(ROOT, 'node_modules/@img/sharp-libvips-darwin-arm64');
-    if (!fs.existsSync(sharpRuntime) || !fs.existsSync(sharpLibvips)) {
+    const hasSharpRuntime = resolveFromWorkspace('@img/sharp-darwin-arm64', backendDir);
+    const hasSharpLibvips = resolveFromWorkspace('@img/sharp-libvips-darwin-arm64', backendDir);
+    if (!hasSharpRuntime || !hasSharpLibvips) {
       runtimeInstalls.push({
         label: 'Sharp native runtime',
-        cmd: 'npm install --no-save --no-package-lock @img/sharp-darwin-arm64 @img/sharp-libvips-darwin-arm64',
+        args: [
+          'install',
+          '--no-save',
+          '--no-package-lock',
+          '--legacy-peer-deps',
+          '@img/sharp-darwin-arm64',
+          '@img/sharp-libvips-darwin-arm64',
+        ],
+        cmd: 'npm install --no-save --no-package-lock --legacy-peer-deps @img/sharp-darwin-arm64 @img/sharp-libvips-darwin-arm64',
       });
     }
   }
@@ -82,7 +103,7 @@ function ensureNativeRuntimeDeps() {
   for (const install of runtimeInstalls) {
     info(`Installing ${install.label}...`);
     try {
-      execSync(install.cmd, { cwd: ROOT, stdio: 'ignore' });
+      execFileSync(NPM_CMD, install.args, { cwd: ROOT, stdio: 'ignore' });
       ok(`${install.label} installed`);
     } catch (_) {
       warn(`Could not install ${install.label}. If startup fails, rerun ${col('dim', install.cmd)} from the repo root.`);
