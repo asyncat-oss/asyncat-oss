@@ -1,15 +1,12 @@
-'use strict';
+import { execSync } from 'child_process';
+import os from 'os';
+import { readEnv } from '../lib/env.js';
+import { ok, warn, col } from '../lib/colors.js';
 
-const { execSync } = require('child_process');
-const os   = require('os');
-const path = require('path');
-const { ROOT, readEnv } = require('../lib/env');
-const { ok, warn, col } = require('../lib/colors');
-
-function run() {
-  const env   = readEnv('den/.env');
-  const port  = env.PORT || '8716';
-  const url   = `http://localhost:${port}`;
+export function run() {
+  const env  = readEnv('den/.env');
+  const port = env.PORT || '8716';
+  const url  = `http://localhost:${port}`;
 
   const platform = os.platform();
   try {
@@ -25,5 +22,3 @@ function run() {
     warn(`Could not open browser automatically — visit ${col('cyan', url)} manually`);
   }
 }
-
-module.exports = { run };

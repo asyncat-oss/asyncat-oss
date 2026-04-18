@@ -1,14 +1,12 @@
-'use strict';
+import readline from 'readline';
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { ROOT } from '../lib/env.js';
+import { log, ok, err, warn, info, col } from '../lib/colors.js';
 
-const readline = require('readline');
-const { execSync } = require('child_process');
-const fs   = require('fs');
-const path = require('path');
-const { ROOT } = require('../lib/env');
-const { log, ok, err, warn, info, col } = require('../lib/colors');
-
-const DB_PATH      = path.join(ROOT, 'data/asyncat.db');
-const BACKUPS_DIR  = path.join(ROOT, 'data/backups');
+const DB_PATH     = path.join(ROOT, 'data/asyncat.db');
+const BACKUPS_DIR = path.join(ROOT, 'data/backups');
 
 function prompt(question) {
   return new Promise(resolve => {
@@ -59,7 +57,6 @@ async function reset() {
   try {
     if (fs.existsSync(DB_PATH)) {
       fs.unlinkSync(DB_PATH);
-      // also remove wal/shm files
       for (const ext of ['-shm', '-wal']) {
         const f = DB_PATH + ext;
         if (fs.existsSync(f)) fs.unlinkSync(f);
@@ -87,7 +84,7 @@ function seed() {
   }
 }
 
-async function run(args) {
+export async function run(args) {
   const sub = (args && args[0]) || '';
 
   if (sub === 'backup') {
@@ -101,5 +98,3 @@ async function run(args) {
     log(`  Usage: ${col('cyan', 'db')} ${col('dim', '<backup|reset|seed>')}`);
   }
 }
-
-module.exports = { run };

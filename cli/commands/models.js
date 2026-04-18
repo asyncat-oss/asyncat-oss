@@ -1,10 +1,8 @@
-'use strict';
-
-const readline = require('readline');
-const fs   = require('fs');
-const path = require('path');
-const { ROOT, readEnv } = require('../lib/env');
-const { log, ok, warn, info, err, col } = require('../lib/colors');
+import readline from 'readline';
+import fs from 'fs';
+import path from 'path';
+import { ROOT, readEnv } from '../lib/env.js';
+import { log, ok, warn, info, err, col } from '../lib/colors.js';
 
 const MODELS_DIR = path.join(ROOT, 'den/data/models');
 
@@ -85,7 +83,7 @@ async function removeModel(name) {
   }
 }
 
-async function run(args) {
+export async function run(args) {
   const sub = (args && args[0]) || 'list';
 
   if (sub === 'list') {
@@ -97,5 +95,3 @@ async function run(args) {
     log(`  Usage: ${col('cyan', 'models')} ${col('dim', '[list|remove <name>]')}`);
   }
 }
-
-module.exports = { run };

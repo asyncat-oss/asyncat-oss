@@ -1,8 +1,6 @@
-'use strict';
-
-const path = require('path');
-const { ROOT, readEnv, setKey } = require('../lib/env');
-const { log, ok, err, warn, info, col } = require('../lib/colors');
+import path from 'path';
+import { ROOT, readEnv, setKey } from '../lib/env.js';
+import { log, ok, err, warn, col } from '../lib/colors.js';
 
 const SECRET_KEYS = ['JWT_SECRET', 'API_KEY', 'PASSWORD', 'SECRET'];
 const DEN_ENV = path.join(ROOT, 'den/.env');
@@ -67,7 +65,7 @@ function set(keyval) {
   }
 }
 
-function run(args) {
+export function run(args) {
   const sub = (args && args[0]) || 'show';
 
   if (sub === 'show') {
@@ -81,5 +79,3 @@ function run(args) {
     log(`  Usage: ${col('cyan', 'config')} ${col('dim', '<show|get <KEY>|set KEY=VALUE>')}`);
   }
 }
-
-module.exports = { run };

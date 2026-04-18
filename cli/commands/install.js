@@ -1,13 +1,13 @@
-'use strict';
+import readline from 'readline';
+import { execFileSync, execSync, spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { createRequire } from 'module';
+import { ROOT } from '../lib/env.js';
+import { log, ok, err, warn, info, col, spinner } from '../lib/colors.js';
 
-const readline = require('readline');
-const { execFileSync, execSync, spawn } = require('child_process');
-const fs   = require('fs');
-const path = require('path');
-const os   = require('os');
-const { ROOT } = require('../lib/env');
-const { log, ok, err, warn, info, col, spinner } = require('../lib/colors');
-
+const require = createRequire(import.meta.url);
 const NPM_CMD = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function checkCmd(cmd) {
@@ -63,10 +63,8 @@ function prompt(question) {
 function ensureNativeRuntimeDeps() {
   const runtimeInstalls = [];
   const frontendDir = path.join(ROOT, 'neko');
-  const backendDir = path.join(ROOT, 'den');
+  const backendDir  = path.join(ROOT, 'den');
 
-  // npm 11 can skip platform-specific optional packages on Apple Silicon.
-  // Resolve from the consuming workspace so both hoisted and nested installs count.
   if (process.platform === 'darwin' && process.arch === 'arm64') {
     if (!resolveFromWorkspace('@rollup/rollup-darwin-arm64', frontendDir)) {
       runtimeInstalls.push({
@@ -82,12 +80,8 @@ function ensureNativeRuntimeDeps() {
       runtimeInstalls.push({
         label: 'Sharp native runtime',
         args: [
-          'install',
-          '--no-save',
-          '--no-package-lock',
-          '--legacy-peer-deps',
-          '@img/sharp-darwin-arm64',
-          '@img/sharp-libvips-darwin-arm64',
+          'install', '--no-save', '--no-package-lock', '--legacy-peer-deps',
+          '@img/sharp-darwin-arm64', '@img/sharp-libvips-darwin-arm64',
         ],
         cmd: 'npm install --no-save --no-package-lock --legacy-peer-deps @img/sharp-darwin-arm64 @img/sharp-libvips-darwin-arm64',
       });
@@ -158,12 +152,11 @@ async function checkLlama(python) {
   }
 }
 
-async function run() {
+export async function run() {
   log('');
   log(col('bold', '  Checking dependencies...'));
   log('');
 
-  // Node.js
   if (!checkCmd('node')) { err('Node.js not found — install from https://nodejs.org'); return; }
   const nodeVer = execSync('node --version').toString().trim();
   const nodeMajor = parseInt(nodeVer.replace('v', '').split('.')[0], 10);
@@ -173,23 +166,19 @@ async function run() {
   }
   ok(`Node.js ${nodeVer}`);
 
-  // npm
   if (!checkCmd('npm')) { err('npm not found.'); return; }
   ok(`npm ${execSync('npm --version').toString().trim()}`);
 
-  // Python (optional)
   const python = ['python3', 'python'].find(checkCmd);
   if (python) ok(`Python ${execSync(`${python} --version`).toString().trim().split(' ')[1]}`);
   else warn('Python not found — local AI models need a pre-built llama-server binary.');
 
-  // .env files
   log('');
   log(col('bold', '  Environment files...'));
   log('');
-  setupEnv('den/.env', 'den/.env.example');
+  setupEnv('den/.env',  'den/.env.example');
   setupEnv('neko/.env', 'neko/.env.example');
 
-  // npm install (parallel: root, then den + neko together)
   log('');
   log(col('bold', '  Installing packages...'));
   log('');
@@ -200,7 +189,6 @@ async function run() {
   ]);
   ensureNativeRuntimeDeps();
 
-  // llama-server
   log('');
   log(col('bold', '  Checking llama.cpp (local AI)...'));
   log('');
@@ -210,5 +198,3 @@ async function run() {
   ok(col('bold', 'Setup complete!') + `  Type ${col('cyan', 'start')} to launch asyncat.`);
   log('');
 }
-
-module.exports = { run };

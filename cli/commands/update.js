@@ -1,9 +1,7 @@
-'use strict';
-
-const { execSync } = require('child_process');
-const path = require('path');
-const { ROOT } = require('../lib/env');
-const { log, ok, err, warn, info, col } = require('../lib/colors');
+import { execSync } from 'child_process';
+import path from 'path';
+import { ROOT } from '../lib/env.js';
+import { log, ok, err, warn, info, col } from '../lib/colors.js';
 
 function checkCmd(cmd) {
   try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
@@ -19,7 +17,7 @@ function runInstall(cwd, label) {
   }
 }
 
-function run() {
+export function run() {
   if (!checkCmd('git')) {
     err('git not found — cannot update.');
     return;
@@ -57,5 +55,3 @@ function run() {
   ok('Update complete!');
   log('');
 }
-
-module.exports = { run };

@@ -1,14 +1,12 @@
-'use strict';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const fs   = require('fs');
-const path = require('path');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ── root of the asyncat-oss project ──────────────────────────────────────────
-// cli/lib/env.js is two levels deep, so go up twice
-const ROOT = path.resolve(__dirname, '..', '..');
+export const ROOT = path.resolve(__dirname, '..', '..');
 
-// ── parse a .env file into key/value pairs ────────────────────────────────────
-function readEnv(file) {
+export function readEnv(file) {
   const full = path.isAbsolute(file) ? file : path.join(ROOT, file);
   if (!fs.existsSync(full)) return {};
   const lines = fs.readFileSync(full, 'utf8').split('\n');
@@ -20,7 +18,6 @@ function readEnv(file) {
     if (idx < 0) continue;
     const key = line.slice(0, idx).trim();
     let val = line.slice(idx + 1).trim();
-    // strip surrounding quotes
     if ((val.startsWith('"') && val.endsWith('"')) ||
         (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
@@ -30,8 +27,7 @@ function readEnv(file) {
   return result;
 }
 
-// ── write a key/value object back to .env (preserving comments/blank lines) ──
-function writeEnv(file, obj) {
+export function writeEnv(file, obj) {
   const full = path.isAbsolute(file) ? file : path.join(ROOT, file);
   const existing = fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : '';
   const lines = existing.split('\n');
@@ -50,7 +46,6 @@ function writeEnv(file, obj) {
     return raw;
   });
 
-  // append any new keys not already in the file
   for (const [k, v] of Object.entries(obj)) {
     if (!written.has(k)) updated.push(`${k}=${v}`);
   }
@@ -58,8 +53,7 @@ function writeEnv(file, obj) {
   fs.writeFileSync(full, updated.join('\n'), 'utf8');
 }
 
-// ── update a single key in a .env file ───────────────────────────────────────
-function setKey(file, key, value) {
+export function setKey(file, key, value) {
   const full = path.isAbsolute(file) ? file : path.join(ROOT, file);
   if (!fs.existsSync(full)) {
     fs.writeFileSync(full, `${key}=${value}\n`, 'utf8');
@@ -80,5 +74,3 @@ function setKey(file, key, value) {
   if (!found) updated.push(`${key}=${value}`);
   fs.writeFileSync(full, updated.join('\n'), 'utf8');
 }
-
-module.exports = { ROOT, readEnv, writeEnv, setKey };
