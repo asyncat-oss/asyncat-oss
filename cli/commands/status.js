@@ -23,11 +23,9 @@ export function run() {
 
   log('');
   const checks = [
-    { name: 'Backend  (den)',    port: 8716,             key: 'backend' },
-    { name: 'Frontend (neko)',   port: 8717,             key: 'frontend' },
-    { name: 'llama.cpp built-in', port: builtInLlamaPort, key: null },
-    { name: 'Ollama            ', port: 11434,            key: null },
-    { name: 'llama.cpp server  ', port: 8080,             key: null },
+    { name: 'Backend  (den)',     port: 8716,              key: 'backend'  },
+    { name: 'Frontend (neko)',    port: 8717,              key: 'frontend' },
+    { name: 'llama-server',       port: builtInLlamaPort,  key: null       },
   ];
 
   for (const s of checks) {

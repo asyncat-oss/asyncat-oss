@@ -20,5 +20,5 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish @asyncat/asyncat
-        run: npm publish --provenance --access public
+        run: npm publish --/ic
         working-directory: cli

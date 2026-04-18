@@ -16,10 +16,20 @@ export const c = {
 export const col = (color, str) => `${c[color] || ''}${str}${c.reset}`;
 
 let _rl = null;
+let _ll = null;   // LiveLine instance (replaces readline in interactive mode)
+
 export const setRl  = (iface) => { _rl = iface; };
+export const getRl  = () => _rl;
 export const rlOpen = () => _rl && !_rl.closed;
 
+export const setLl  = (ll) => { _ll = ll; };
+export const getLl  = () => _ll;
+
 export function log(msg) {
+  if (_ll) {
+    _ll.printAbove(msg);
+    return;
+  }
   if (!rlOpen()) { console.log(msg); return; }
   readline.clearLine(process.stdout, 0);
   readline.cursorTo(process.stdout, 0);
