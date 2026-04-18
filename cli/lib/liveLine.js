@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import readline from 'readline';
 import { c } from './colors.js';
+import { getTheme } from './theme.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -9,7 +10,7 @@ const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
 const MAX_HISTORY  = 200;
 const MAX_SUGG     = 7;
 
-// ── Command catalog ────────────────────────────────────────────────────────────
+// ── Command catalogs ───────────────────────────────────────────────────────────
 const TOP_CMDS = [
   { name: 'start',    desc: 'Start backend & frontend services' },
   { name: 'stop',     desc: 'Stop all running services' },
@@ -20,17 +21,36 @@ const TOP_CMDS = [
   { name: 'models',   desc: 'Manage GGUF models' },
   { name: 'provider', desc: 'Configure AI provider (local / cloud)' },
   { name: 'sessions', desc: 'Browse saved conversations' },
+  { name: 'stash',    desc: 'Save or view stashed notes' },
   { name: 'install',  desc: 'Set up dependencies and .env' },
   { name: 'doctor',   desc: 'Full system health check' },
   { name: 'update',   desc: 'Pull latest code and reinstall' },
   { name: 'logs',     desc: 'View service logs' },
   { name: 'db',       desc: 'Database backup / reset / seed' },
   { name: 'config',   desc: 'Get or set configuration values' },
+  { name: 'theme',    desc: 'Switch color theme' },
   { name: 'version',  desc: 'Show version info' },
   { name: 'open',     desc: 'Open asyncat in the browser' },
   { name: 'help',     desc: 'Show command reference' },
   { name: 'clear',    desc: 'Clear the screen' },
   { name: 'exit',     desc: 'Quit and stop all services' },
+];
+
+// Slash commands — shown when input starts with /
+const SLASH_CMDS = [
+  { name: '/chat',     desc: 'Start an interactive AI chat session' },
+  { name: '/run',      desc: 'Direct chat with local llama-server' },
+  { name: '/status',   desc: 'Show running processes' },
+  { name: '/start',    desc: 'Start backend & frontend services' },
+  { name: '/stop',     desc: 'Stop all running services' },
+  { name: '/stash',    desc: 'Save or browse stashed notes' },
+  { name: '/sessions', desc: 'Browse saved conversations' },
+  { name: '/models',   desc: 'Manage AI models' },
+  { name: '/provider', desc: 'Configure AI provider' },
+  { name: '/theme',    desc: 'Switch color theme (dark/hacker/ocean/minimal)' },
+  { name: '/help',     desc: 'Show command reference' },
+  { name: '/clear',    desc: 'Clear the screen' },
+  { name: '/exit',     desc: 'Quit and stop all services' },
 ];
 
 const SUB_CMDS = {
@@ -53,6 +73,17 @@ const SUB_CMDS = {
     { name: 'list',  desc: 'List saved conversations' },
     { name: 'rm',    desc: 'Delete a conversation' },
     { name: 'stats', desc: 'Show conversation statistics' },
+  ],
+  stash: [
+    { name: 'list',  desc: 'Show all stashed notes' },
+    { name: 'rm',    desc: 'Remove a stash entry by ID' },
+    { name: 'clear', desc: 'Clear all stash entries' },
+  ],
+  theme: [
+    { name: 'dark',    desc: 'Default dark theme (magenta)' },
+    { name: 'hacker',  desc: 'Monochrome green hacker style' },
+    { name: 'ocean',   desc: 'Blue and cyan palette' },
+    { name: 'minimal', desc: 'Low-contrast minimal style' },
   ],
   logs: [
     { name: 'backend',  desc: 'Show backend logs' },
@@ -82,8 +113,45 @@ const SUB_CMDS = {
   ],
 };
 
+// Sub-commands for slash mode
+const SLASH_SUB = {
+  '/theme': [
+    { name: 'dark',    desc: 'Default dark theme (magenta)' },
+    { name: 'hacker',  desc: 'Monochrome green hacker style' },
+    { name: 'ocean',   desc: 'Blue and cyan palette' },
+    { name: 'minimal', desc: 'Low-contrast minimal style' },
+  ],
+  '/stash': [
+    { name: 'list',  desc: 'Show all stashed notes' },
+    { name: 'rm',    desc: 'Remove a stash entry by ID' },
+    { name: 'clear', desc: 'Clear all stash entries' },
+  ],
+  '/models': SUB_CMDS.models,
+  '/sessions': SUB_CMDS.sessions,
+};
+
 function getSuggestions(buf) {
   if (!buf) return [];
+
+  // ── Slash mode ───────────────────────────────────────────────────────────────
+  if (buf.startsWith('/')) {
+    const tokens = buf.trimStart().split(/\s+/);
+    const first  = tokens[0];
+
+    if (tokens.length === 1) {
+      // Filtering top-level slash commands
+      const matches = SLASH_CMDS.filter(s => s.name.startsWith(first) && s.name !== first);
+      // If nothing typed yet beyond '/', show all
+      return first === '/' ? SLASH_CMDS.slice(0, MAX_SUGG) : matches;
+    }
+
+    // Sub-command for a slash command
+    const subs = SLASH_SUB[first] || [];
+    const stub = tokens[tokens.length - 1];
+    return stub ? subs.filter(s => s.name.startsWith(stub) && s.name !== stub) : subs;
+  }
+
+  // ── Normal mode ──────────────────────────────────────────────────────────────
   const tokens = buf.trimStart().split(/\s+/);
   const first  = tokens[0];
 
@@ -102,7 +170,7 @@ export class LiveLine extends EventEmitter {
     super();
     this._prompt    = promptStr;
     this._promptLen = promptLen;
-    this._isMain    = true;       // suppress suggestions when chat takes over
+    this._isMain    = true;
 
     this.buf        = '';
     this.pos        = 0;
@@ -110,8 +178,8 @@ export class LiveLine extends EventEmitter {
     this.histIdx    = -1;
     this.histSaved  = '';
 
-    this.suggestions    = [];
-    this.selIdx         = 0;
+    this.suggestions     = [];
+    this.selIdx          = 0;
     this.suggestionLines = 0;
 
     this.closed = false;
@@ -132,33 +200,50 @@ export class LiveLine extends EventEmitter {
     this._isMain    = true;
   }
 
-  prompt() { this._draw(); }
+  // Called by external code (dispatch, command handlers) to redraw after output
+  prompt() { this._draw(false); }
 
-  // ── Start capturing raw input ────────────────────────────────────────────────
+  // ── Start raw input ──────────────────────────────────────────────────────────
   start() {
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
     process.stdin.on('keypress', (str, key) => this._onKey(str, key));
-    this._draw();
+    this._draw(false);
   }
 
-  // ── Print text above the current prompt, then redraw ────────────────────────
+  // ── Print text above the live prompt, then redraw ────────────────────────────
   printAbove(text) {
+    // Cursor is at PROMPT LINE — move up to RULE LINE, clear everything, print text, redraw
+    process.stdout.write('\x1b[1A');   // up to rule line
     process.stdout.write('\r\x1b[J');  // col 0, clear to end of screen
     process.stdout.write(text + '\n');
-    this._draw();
+    this._draw(false);
   }
 
-  // ── Drawing ──────────────────────────────────────────────────────────────────
-  _draw() {
+  // ── Rendering ────────────────────────────────────────────────────────────────
+  // atPrompt=true  → cursor is at the PROMPT LINE; move up 1 to redraw the rule too
+  // atPrompt=false → cursor is on a fresh line; write rule then prompt
+  _draw(atPrompt) {
+    const t     = getTheme();
+    const W     = process.stdout.columns || 80;
     const suggs = this._isMain ? getSuggestions(this.buf).slice(0, MAX_SUGG) : [];
 
     process.stdout.write('\x1b[?25l');  // hide cursor
-    process.stdout.write('\r\x1b[J');   // col 0, clear to end of screen
 
+    if (atPrompt) {
+      process.stdout.write('\x1b[1A');  // move up to rule line
+    }
+
+    process.stdout.write('\r\x1b[J');  // col 0, clear to end of screen
+
+    // ── Rule line ──────────────────────────────────────────────────────────
+    process.stdout.write(`${t.border} ${'─'.repeat(W - 2)}${c.reset}\n`);
+
+    // ── Prompt + buffer ────────────────────────────────────────────────────
     process.stdout.write(this._prompt);
     process.stdout.write(this.buf);
 
+    // ── Suggestions ────────────────────────────────────────────────────────
     if (suggs.length > 0) {
       const colW = Math.max(...suggs.map(s => s.name.length)) + 3;
       process.stdout.write('\n');
@@ -167,13 +252,13 @@ export class LiveLine extends EventEmitter {
         const sel = i === this.selIdx;
         const pad = s.name.padEnd(colW);
         if (sel) {
-          process.stdout.write(`  ${c.bold}${c.cyan}${pad}${c.reset}${s.desc}${c.reset}`);
+          process.stdout.write(`  ${c.bold}${t.sugg}${pad}${c.reset}${s.desc}${c.reset}`);
         } else {
           process.stdout.write(`  ${c.dim}${pad}${c.reset}${c.dim}${s.desc}${c.reset}`);
         }
         if (i < suggs.length - 1) process.stdout.write('\n');
       }
-      // move cursor back up to prompt line
+      // Move cursor back up to prompt line (not rule line)
       process.stdout.write(`\x1b[${suggs.length}A`);
       this.suggestionLines = suggs.length;
     } else {
@@ -194,7 +279,7 @@ export class LiveLine extends EventEmitter {
       process.stdout.write('\n');
       process.stdout.write(`  ${c.dim}(ctrl+c again to quit, or type exit)${c.reset}\n`);
       this.buf = ''; this.pos = 0; this.selIdx = 0;
-      this._draw();
+      this._draw(false);
       return;
     }
 
@@ -205,14 +290,16 @@ export class LiveLine extends EventEmitter {
 
     if (ctrl && name === 'l') {
       console.clear();
-      this._draw();
+      this._draw(false);
       return;
     }
 
-    // ── Enter ──
+    // ── Enter ──────────────────────────────────────────────────────────────────
     if (name === 'return' || name === 'enter') {
       const line = this.buf;
-      // Echo the submitted line then newline
+
+      // Move up to rule line, clear everything, echo the submitted line
+      process.stdout.write('\x1b[1A');
       process.stdout.write('\r\x1b[J');
       process.stdout.write(this._prompt + line + '\n');
 
@@ -228,24 +315,15 @@ export class LiveLine extends EventEmitter {
       return;
     }
 
-    // ── Tab: complete selected suggestion ──
+    // ── Tab — complete selected suggestion ─────────────────────────────────────
     if (name === 'tab') {
       if (this.suggestions.length > 0) {
-        const tokens   = this.buf.trimStart().split(/\s+/);
-        const selected = this.suggestions[this.selIdx].name;
-        if (tokens.length <= 1) {
-          this.buf = selected + ' ';
-        } else {
-          tokens[tokens.length - 1] = selected;
-          this.buf = tokens.join(' ') + ' ';
-        }
-        this.pos = this.buf.length;
-        this.selIdx = 0;
+        this._applyCompletion(this.suggestions[this.selIdx].name);
       }
-      this._draw(); return;
+      this._draw(true); return;
     }
 
-    // ── Arrow keys ──
+    // ── Arrow keys ─────────────────────────────────────────────────────────────
     if (name === 'up') {
       if (this.suggestions.length > 0 && this._isMain) {
         this.selIdx = Math.max(0, this.selIdx - 1);
@@ -258,7 +336,7 @@ export class LiveLine extends EventEmitter {
           this.selIdx = 0;
         }
       }
-      this._draw(); return;
+      this._draw(true); return;
     }
 
     if (name === 'down') {
@@ -277,7 +355,7 @@ export class LiveLine extends EventEmitter {
           this.selIdx = 0;
         }
       }
-      this._draw(); return;
+      this._draw(true); return;
     }
 
     if (name === 'left') {
@@ -289,21 +367,12 @@ export class LiveLine extends EventEmitter {
       } else {
         this.pos = Math.max(0, this.pos - 1);
       }
-      this._draw(); return;
+      this._draw(true); return;
     }
 
     if (name === 'right') {
       if (this.pos === this.buf.length && this.suggestions.length > 0) {
-        // Complete on right-arrow at end of line
-        const tokens   = this.buf.trimStart().split(/\s+/);
-        const selected = this.suggestions[this.selIdx].name;
-        if (tokens.length <= 1) {
-          this.buf = selected + ' ';
-        } else {
-          tokens[tokens.length - 1] = selected;
-          this.buf = tokens.join(' ') + ' ';
-        }
-        this.pos = this.buf.length;
+        this._applyCompletion(this.suggestions[this.selIdx].name);
         this.selIdx = 0;
       } else if (ctrl) {
         let p = this.pos;
@@ -313,49 +382,65 @@ export class LiveLine extends EventEmitter {
       } else {
         this.pos = Math.min(this.buf.length, this.pos + 1);
       }
-      this._draw(); return;
+      this._draw(true); return;
     }
 
-    // ── Home / End ──
-    if (name === 'home' || (ctrl && name === 'a')) { this.pos = 0; this._draw(); return; }
-    if (name === 'end'  || (ctrl && name === 'e')) { this.pos = this.buf.length; this._draw(); return; }
+    // ── Home / End ──────────────────────────────────────────────────────────────
+    if (name === 'home' || (ctrl && name === 'a')) { this.pos = 0; this._draw(true); return; }
+    if (name === 'end'  || (ctrl && name === 'e')) { this.pos = this.buf.length; this._draw(true); return; }
 
-    // ── Backspace / Delete ──
+    // ── Backspace / Delete ──────────────────────────────────────────────────────
     if (name === 'backspace') {
       if (this.pos > 0) {
         this.buf = this.buf.slice(0, this.pos - 1) + this.buf.slice(this.pos);
-        this.pos--;
-        this.selIdx = 0;
+        this.pos--; this.selIdx = 0;
       }
-      this._draw(); return;
+      this._draw(true); return;
     }
     if (name === 'delete') {
       if (this.pos < this.buf.length) {
         this.buf = this.buf.slice(0, this.pos) + this.buf.slice(this.pos + 1);
         this.selIdx = 0;
       }
-      this._draw(); return;
+      this._draw(true); return;
     }
 
-    // ── Ctrl shortcuts ──
-    if (ctrl && name === 'u') { this.buf = this.buf.slice(this.pos); this.pos = 0; this.selIdx = 0; this._draw(); return; }
-    if (ctrl && name === 'k') { this.buf = this.buf.slice(0, this.pos); this.selIdx = 0; this._draw(); return; }
+    // ── Ctrl shortcuts ──────────────────────────────────────────────────────────
+    if (ctrl && name === 'u') { this.buf = this.buf.slice(this.pos); this.pos = 0; this.selIdx = 0; this._draw(true); return; }
+    if (ctrl && name === 'k') { this.buf = this.buf.slice(0, this.pos); this.selIdx = 0; this._draw(true); return; }
     if (ctrl && name === 'w') {
       let p = this.pos;
       while (p > 0 && this.buf[p - 1] === ' ') p--;
       while (p > 0 && this.buf[p - 1] !== ' ') p--;
       this.buf = this.buf.slice(0, p) + this.buf.slice(this.pos);
       this.pos = p; this.selIdx = 0;
-      this._draw(); return;
+      this._draw(true); return;
     }
 
-    // ── Printable character ──
+    // ── Printable character ─────────────────────────────────────────────────────
     if (str && str.length === 1 && !ctrl && !meta) {
       this.buf = this.buf.slice(0, this.pos) + str + this.buf.slice(this.pos);
-      this.pos++;
-      this.selIdx = 0;
-      this._draw();
+      this.pos++; this.selIdx = 0;
+      this._draw(true);
     }
+  }
+
+  // ── Complete the current token with the selected suggestion ───────────────────
+  _applyCompletion(selectedName) {
+    const isSlash  = this.buf.startsWith('/');
+    const trimmed  = this.buf.trimStart();
+    const tokens   = trimmed.split(/\s+/);
+
+    if (isSlash && tokens.length === 1) {
+      // Replace the whole /xyz with the selected /cmd + space
+      this.buf = selectedName + ' ';
+    } else if (tokens.length <= 1) {
+      this.buf = selectedName + ' ';
+    } else {
+      tokens[tokens.length - 1] = selectedName;
+      this.buf = tokens.join(' ') + ' ';
+    }
+    this.pos = this.buf.length;
   }
 
   // ── History persistence ───────────────────────────────────────────────────────

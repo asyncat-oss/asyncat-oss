@@ -1,5 +1,7 @@
 import { c, col, setRl, setLl, log, ok, warn, info, banner } from './lib/colors.js';
 import { LiveLine } from './lib/liveLine.js';
+import { loadTheme, setTheme, getTheme, getThemeName, THEME_NAMES } from './lib/theme.js';
+import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
 import { stopAll } from './lib/procs.js';
 
 import * as _start    from './commands/start.js';
@@ -18,6 +20,8 @@ import * as _chat     from './commands/chat.js';
 import * as _run      from './commands/run.js';
 import * as _provider from './commands/provider.js';
 import * as _sessions from './commands/sessions.js';
+
+loadTheme();
 
 const cmds = {
   start:    () => _start,
@@ -38,7 +42,58 @@ const cmds = {
   sessions: () => _sessions,
 };
 
+// ── /theme handler ─────────────────────────────────────────────────────────────
+function handleTheme(args) {
+  const name = args[0];
+  if (!name) {
+    info(`Current theme: ${col('cyan', getThemeName())}`);
+    info(`Available: ${THEME_NAMES.map(n => col('cyan', n)).join('  ')}`);
+    return;
+  }
+  if (setTheme(name)) {
+    ok(`Theme set to ${col('cyan', name)} — run ${col('cyan', 'clear')} to see it applied`);
+  } else {
+    warn(`Unknown theme "${name}". Available: ${THEME_NAMES.join(', ')}`);
+  }
+}
 
+// ── /stash handler ─────────────────────────────────────────────────────────────
+function handleStash(args) {
+  const sub = args[0];
+
+  if (!sub || sub === 'list') {
+    const items = stashList();
+    if (items.length === 0) { info('Stash is empty.'); return; }
+    log('');
+    for (const it of items) {
+      const date = new Date(it.ts).toLocaleDateString();
+      log(`  ${col('cyan', it.id)}  ${col('dim', date)}  ${it.text}`);
+    }
+    log('');
+    return;
+  }
+
+  if (sub === 'rm') {
+    const id = args[1];
+    if (!id) { warn('Usage: stash rm <id>'); return; }
+    if (stashRm(id)) ok(`Removed stash entry ${col('cyan', id)}`);
+    else warn(`No entry matching "${id}"`);
+    return;
+  }
+
+  if (sub === 'clear') {
+    stashClear();
+    ok('Stash cleared.');
+    return;
+  }
+
+  // Treat everything as text to stash
+  const text = args.join(' ');
+  const id   = stashAdd(text);
+  ok(`Stashed ${col('dim', `[${id}]`)}  ${text}`);
+}
+
+// ── Help ───────────────────────────────────────────────────────────────────────
 function cmdHelp() {
   log('');
   log(`  ${col('bold', 'Services')}`);
@@ -69,10 +124,16 @@ function cmdHelp() {
   log(`  ${col('cyan', 'provider set custom')} ${col('dim', '<url> <key>')} Custom OpenAI-compat endpoint`);
   log(`  ${col('cyan', 'provider stop')}                  Stop the local model server`);
   log('');
-  log(`  ${col('bold', 'Sessions')}`);
+  log(`  ${col('bold', 'Sessions & Stash')}`);
   log(`  ${col('cyan', 'sessions')}       ${col('dim', '[n]')}    List saved conversations (default 20)`);
   log(`  ${col('cyan', 'sessions rm')}    ${col('dim', '<id>')}   Delete a conversation`);
   log(`  ${col('cyan', 'sessions stats')}         Conversation statistics`);
+  log(`  ${col('cyan', 'stash')}          ${col('dim', '[text]')} Save text to stash (no arg = list)`);
+  log(`  ${col('cyan', 'stash rm')}       ${col('dim', '<id>')}   Remove stash entry`);
+  log(`  ${col('cyan', 'stash clear')}            Clear all stash entries`);
+  log('');
+  log(`  ${col('bold', 'Appearance')}`);
+  log(`  ${col('cyan', 'theme')}   ${col('dim', '<dark|hacker|ocean|minimal>')}  Switch color theme`);
   log('');
   log(`  ${col('bold', 'Setup & Maintenance')}`);
   log(`  ${col('cyan', 'install')}            Install deps, set up .env, check llama.cpp`);
@@ -88,10 +149,11 @@ function cmdHelp() {
   log(`  ${col('cyan', 'clear')}              Clear the screen`);
   log(`  ${col('cyan', 'help')}    ${col('dim', '?')}         Show this help`);
   log(`  ${col('cyan', 'exit')}    ${col('dim', 'quit q')}    Quit (stops all services)`);
+  log(`  ${col('dim', 'Tip: press / to browse all commands interactively')}`);
   log('');
 }
 
-
+// ── Dispatch ───────────────────────────────────────────────────────────────────
 async function dispatch(tokens) {
   const [cmd, ...args] = tokens;
   if (!cmd) return;
@@ -117,18 +179,18 @@ async function dispatch(tokens) {
     case 'v':        cmds.version().run();                break;
     case 'open':
     case 'o':        cmds.open().run();                   break;
-
-    // ── New AI commands ─────────────────────────────────────────────────────
     case 'chat':     await cmds.chat().run(args);         break;
     case 'run':      await cmds.run().run(args);          break;
     case 'provider': await cmds.provider().run(args);     break;
     case 'sessions': await cmds.sessions().run(args);     break;
-
-    // ── Aliases ──────────────────────────────────────────────────────────────
+    case 'theme':    handleTheme(args);                   break;
+    case 'stash':    handleStash(args);                   break;
     case 's':        cmds.start().run(args);              break;
     case 'c':        await cmds.chat().run(args);         break;
-
-    case 'clear':    console.clear(); banner();           break;
+    case 'clear':
+      console.clear();
+      banner();
+      break;
     case 'help':
     case '?':        cmdHelp();                           break;
     case 'exit':
@@ -139,32 +201,33 @@ async function dispatch(tokens) {
       process.exit(0);
       break;
     default:
-      warn(`Unknown command: ${col('white', cmd)}  (type ${col('cyan', 'help')})`);
+      warn(`Unknown command: ${col('white', cmd)}  (type ${col('cyan', 'help')} or ${col('cyan', '/')} to browse)`);
   }
 }
 
-const MAIN_PROMPT     = col('magenta', 'asyncat') + col('dim', ' ▸ ') + c.reset;
-const MAIN_PROMPT_LEN = 'asyncat ▸ '.length;
+// ── REPL ───────────────────────────────────────────────────────────────────────
+const PROMPT_LEN = 'asyncat ▸ '.length;
+const makePrompt = () => `${c.bold}${getTheme().accent}asyncat${c.reset}${c.dim} ▸ ${c.reset}`;
 
 async function startREPL() {
   banner();
   cmds.status().run();
 
-  const ll = new LiveLine(MAIN_PROMPT, MAIN_PROMPT_LEN);
-  setRl(ll);   // keep getRl() working for chat.js
-  setLl(ll);   // used by log() / ok() / warn()
+  const ll = new LiveLine(makePrompt(), PROMPT_LEN);
+  setRl(ll);
+  setLl(ll);
 
   ll.on('line', async (input) => {
     const trimmed = input.trim();
     if (!trimmed) { ll.prompt(); return; }
 
-    const tokens = trimmed.split(/\s+/);
+    // Strip leading / (slash-command mode) — same command names underneath
+    const tokens = (trimmed.startsWith('/') ? trimmed.slice(1) : trimmed).split(/\s+/);
     await dispatch(tokens);
 
     const cmd = tokens[0].toLowerCase();
     if (cmd !== 'exit' && cmd !== 'quit' && cmd !== 'q') {
-      // Restore main prompt in case chat mode changed it
-      ll.restoreMainPrompt(MAIN_PROMPT, MAIN_PROMPT_LEN);
+      ll.restoreMainPrompt(makePrompt(), PROMPT_LEN);
       ll.prompt();
     }
   });
@@ -178,6 +241,7 @@ async function startREPL() {
   ll.start();
 }
 
+// ── Entry point ────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
 
 if (argv.length > 0) {
