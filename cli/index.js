@@ -1,4 +1,4 @@
-import { c, col, setRl, setLl, log, ok, warn, info, banner } from './lib/colors.js';
+import { c, col, setRl, setLl, log, ok, warn, info, banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
 import { LiveLine } from './lib/liveLine.js';
 import { loadTheme, setTheme, getTheme, getThemeName, THEME_NAMES } from './lib/theme.js';
 import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
@@ -93,6 +93,38 @@ function handleStash(args) {
   ok(`Stashed ${col('dim', `[${id}]`)}  ${text}`);
 }
 
+// ── /live-logs handler ────────────────────────────────────────────────────────────
+function handleLiveLogs(args) {
+  const sub = args[0];
+  const enabled = getLiveLogsEnabled();
+
+  if (!sub || sub === 'status') {
+    info(`Live logs: ${enabled ? col('green', 'ON') : col('dim', 'off')}`);
+    return;
+  }
+
+  if (sub === 'on' || sub === 'enable') {
+    setLiveLogsEnabled(true);
+    ok('Live logs enabled — backend/frontend output will now stream in REPL');
+    return;
+  }
+
+  if (sub === 'off' || sub === 'disable') {
+    setLiveLogsEnabled(false);
+    ok('Live logs disabled — logs only written to files (use logs command to view)');
+    return;
+  }
+
+  if (sub === 'toggle') {
+    setLiveLogsEnabled(!enabled);
+    ok(`Live logs ${!enabled ? 'enabled' : 'disabled'}`);
+    return;
+  }
+
+  warn(`Unknown live-logs subcommand: ${col('white', sub)}`);
+  log(`  Usage: ${col('cyan', 'live-logs')} ${col('dim', '[on|off|toggle|status]')}`);
+}
+
 // ── Help ───────────────────────────────────────────────────────────────────────
 function cmdHelp() {
   log('');
@@ -133,7 +165,8 @@ function cmdHelp() {
   log(`  ${col('cyan', 'stash clear')}            Clear all stash entries`);
   log('');
   log(`  ${col('bold', 'Appearance')}`);
-  log(`  ${col('cyan', 'theme')}   ${col('dim', '<dark|hacker|ocean|minimal>')}  Switch color theme`);
+  log(`  ${col('cyan', 'theme')}        ${col('dim', '<dark|hacker|ocean|minimal>')} Switch color theme`);
+  log(`  ${col('cyan', 'live-logs')}    ${col('dim', '[on|off|toggle|status]')}     Stream backend/frontend logs`);
   log('');
   log(`  ${col('bold', 'Setup & Maintenance')}`);
   log(`  ${col('cyan', 'install')}            Install deps, set up .env, check llama.cpp`);
@@ -185,6 +218,7 @@ async function dispatch(tokens) {
     case 'sessions': await cmds.sessions().run(args);     break;
     case 'theme':    handleTheme(args);                   break;
     case 'stash':    handleStash(args);                   break;
+    case 'live-logs': handleLiveLogs(args);               break;
     case 's':        cmds.start().run(args);              break;
     case 'c':        await cmds.chat().run(args);         break;
     case 'clear':
