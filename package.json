@@ -4,15 +4,20 @@
   "description": "Asyncat — open-source AI-powered workspace for teams",
   "private": true,
   "workspaces": [
+    "den",
     "neko",
-    "den"
+    "cli"
   ],
   "scripts": {
-    "dev": "npm run dev:backend & npm run dev:frontend",
-    "dev:backend": "cd den && npm run dev",
-    "dev:frontend": "cd neko && npm run dev",
-    "install:all": "npm install --prefix den && npm install --prefix neko",
-    "start": "cd den && npm start"
+    "dev": "npm run dev -w den & npm run dev -w neko",
+    "dev:backend": "npm run dev -w den",
+    "dev:frontend": "npm run dev -w neko",
+    "start": "npm run start -w den",
+    "cli": "node cat",
+    "build": "npm run build -w neko"
+  },
+  "bin": {
+    "asyncat": "cat"
   },
   "engines": {
     "node": ">=20.0.0"

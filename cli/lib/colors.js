@@ -62,4 +62,29 @@ function banner() {
   console.log('');
 }
 
-module.exports = { c, col, setRl, rlOpen, log, ok, err, warn, info, line, banner };
+// ── spinner ───────────────────────────────────────────────────────────────────
+function spinner(msg) {
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  let i = 0;
+  const id = setInterval(() => {
+    readline.clearLine(process.stdout, 0);
+    readline.cursorTo(process.stdout, 0);
+    process.stdout.write(`  ${col('cyan', frames[i++ % frames.length])}  ${msg}`);
+  }, 80);
+  return {
+    stop(successMsg) {
+      clearInterval(id);
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+      if (successMsg !== undefined) ok(successMsg);
+    },
+    fail(failMsg) {
+      clearInterval(id);
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+      if (failMsg !== undefined) err(failMsg);
+    },
+  };
+}
+
+module.exports = { c, col, setRl, rlOpen, log, ok, err, warn, info, line, banner, spinner };
