@@ -26,12 +26,15 @@ const vis = s => s.replace(/\x1b\[[^m]*m/g, '').length;
 // ── RL / LL state ──────────────────────────────────────────────────────────────
 let _rl = null;
 let _ll = null;
+let _liveLogsEnabled = false;
 
 export const setRl  = (iface) => { _rl = iface; };
 export const getRl  = () => _rl;
 export const rlOpen = () => _rl && !_rl.closed;
 export const setLl  = (ll)    => { _ll = ll; };
 export const getLl  = () => _ll;
+export const setLiveLogsEnabled = (enabled) => { _liveLogsEnabled = enabled; };
+export const getLiveLogsEnabled = () => _liveLogsEnabled;
 
 // ── Logging ────────────────────────────────────────────────────────────────────
 export function log(msg) {
@@ -49,14 +52,16 @@ export const warn = (msg) => log(`  ${col('yellow', '⚠')}  ${msg}`);
 export const info = (msg) => log(`  ${col('cyan',   '→')}  ${msg}`);
 
 export function line(tag, text, color) {
+  const formatted = `${col(color, '[' + tag + ']')} ${text}`;
+  if (!_liveLogsEnabled) return;
   if (_ll) {
-    _ll.printAbove(`${col(color, '[' + tag + ']')} ${text}`);
+    _ll.printAbove(formatted);
     return;
   }
-  if (!rlOpen()) { process.stdout.write(`${col(color, '[' + tag + ']')} ${text}\n`); return; }
+  if (!rlOpen()) { process.stdout.write(formatted + '\n'); return; }
   readline.clearLine(process.stdout, 0);
   readline.cursorTo(process.stdout, 0);
-  process.stdout.write(`${col(color, '[' + tag + ']')} ${text}\n`);
+  process.stdout.write(formatted + '\n');
   _rl.prompt(true);
 }
 
