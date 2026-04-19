@@ -35,6 +35,12 @@ import {
 	Search,
 	FlaskConical,
 	Cpu,
+	Code2,
+	RefreshCw,
+	Square,
+	MessageSquare as ChatIcon,
+	FolderOpen as ProjectsIcon,
+	Calendar as CalendarIcon,
 } from "lucide-react";
 
 import ChatExplorer from "./ChatExplorer";
@@ -926,6 +932,38 @@ const DynamicSidebar = ({
 			>
 				{/* Fixed-width inner so content never reflows during animation */}
 				<div className="w-[240px] h-full flex flex-col">
+
+					{/* Mode tab strip */}
+					<div className="flex-shrink-0 flex items-center gap-0.5 px-1.5 pt-2 pb-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+						{/* Collapse toggle */}
+						<button
+							onClick={() => setIsSidebarCollapsed(true)}
+							title="Collapse sidebar (⌘/)"
+							className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 midnight:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300 transition-all duration-150 flex-shrink-0"
+						>
+							<PanelLeft className="w-4 h-4" />
+						</button>
+						{/* Mode tabs */}
+						{[
+							{ mode: 'chat',     Icon: ChatIcon,     label: 'Chat',     path: '/home' },
+							{ mode: 'projects', Icon: ProjectsIcon, label: 'Projects', path: '/projects' },
+							{ mode: 'calendar', Icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
+						].map(({ mode, Icon, label, path }) => (
+							<button
+								key={mode}
+								onClick={() => { setActiveMode(mode); navigate(path); }}
+								title={label}
+								className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-all duration-150 ${
+									activeMode === mode
+										? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
+										: 'text-gray-400 dark:text-gray-500 midnight:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/60 midnight:hover:bg-gray-800/60 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300'
+								}`}
+							>
+								<Icon className="w-4 h-4" />
+								<span className="text-[9px] font-medium leading-none">{label}</span>
+							</button>
+						))}
+					</div>
 
 					{/* Scrollable content area */}
 					<div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">

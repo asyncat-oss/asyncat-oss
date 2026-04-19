@@ -512,63 +512,20 @@ const AppLayout = ({ session, onSignOut }) => {
     );
   }
 
-  // Derive active mode from URL for top bar tabs
-  const getActiveMode = (bp) => {
-    if (bp === 'projects') return 'projects';
-    if (bp === 'storage') return 'projects'; // storage lives within projects panel
-    if (bp === 'calendar') return 'calendar';
-    return 'chat';
-  };
-  const activeMode = getActiveMode(basePage);
-
-  const handleModeNavigate = (mode) => {
-    if (mode === 'chat') navigate('/home');
-    else if (mode === 'projects') navigate('/projects');
-    else if (mode === 'calendar') navigate('/calendar');
-  };
-
   // Normal dashboard when user has workspaces
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
-      {/* Top bar */}
-      <header className="flex-shrink-0 h-10 flex items-center px-2 border-b border-gray-200/70 dark:border-gray-800 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
+    <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
+
+      {/* Floating sidebar-expand button — only visible when sidebar is collapsed */}
+      {isSidebarCollapsed && (
         <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
-          title="Toggle sidebar (⌘/)"
+          onClick={() => setIsSidebarCollapsed(false)}
+          className="fixed top-2 left-2 z-30 p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
+          title="Expand sidebar (⌘/)"
         >
           <PanelLeft className="w-4 h-4" />
         </button>
-
-        <div className="flex-1 flex justify-center">
-          <div className="flex items-center bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800/60 rounded-lg p-0.5 gap-0.5">
-            {[
-              { key: 'chat', label: 'Chat', shortcut: '⌘1' },
-              { key: 'projects', label: 'Projects', shortcut: '⌘2' },
-              { key: 'calendar', label: 'Calendar', shortcut: '⌘3' },
-            ].map(({ key, label, shortcut }) => (
-              <button
-                key={key}
-                onClick={() => handleModeNavigate(key)}
-                title={shortcut}
-                className={`px-3 py-[5px] rounded-md text-[12px] font-medium transition-all duration-200 ${
-                  activeMode === key
-                    ? 'bg-white dark:bg-gray-700 midnight:bg-gray-700 text-gray-900 dark:text-gray-100 midnight:text-gray-100 shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Spacer to keep tabs centered */}
-        <div className="w-8" />
-      </header>
-
-      {/* Content area */}
-      <div className="flex flex-1 overflow-hidden">
+      )}
         <Sidebar
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
@@ -598,7 +555,6 @@ const AppLayout = ({ session, onSignOut }) => {
             }} />
           </div>
         </main>
-      </div>
 
       {/* Create Project Modal */}
       <CreateProjectFlow
