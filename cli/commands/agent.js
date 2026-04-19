@@ -12,6 +12,7 @@ import { col, log, ok, warn, info, getRl } from '../lib/colors.js';
 import { getToken, getBase, streamPost, apiGet } from '../lib/denApi.js';
 import readline from 'readline';
 import path from 'path';
+import { initTui, updateTuiEvent } from '../lib/agentTui.js';
 
 // ── Permission display ──────────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ async function getProviderInfo(base, token) {
 
 // ── Core stream runner ──────────────────────────────────────────────────────
 
-async function runAgent(goal, options = {}) {
+async function runAgent(goal, options = {}, tui = null) {
   // Auth
   let token, base;
   try {
@@ -213,7 +214,10 @@ async function runAgent(goal, options = {}) {
         return;
       }
 
-      const decision = await askPermission(toolName, args, permission);
+      let decision;
+      if (tui) decision = await tui.askPermission(toolName, args, permission);
+      else decision = await askPermission(toolName, args, permission);
+
       if (decision === 'allow_session') sessionApprovals.add(toolName);
 
       await fetch(`${base}/api/agent/permission`, {
@@ -224,126 +228,67 @@ async function runAgent(goal, options = {}) {
       return;
     }
 
-    displayEvent(event, { verbose: options.verbose });
+    if (tui) {
+      updateTuiEvent(tui, event, { verbose: options.verbose });
+    } else {
+      displayEvent(event, { verbose: options.verbose });
+    }
   });
 }
 
 // ── Interactive mode ─────────────────────────────────────────────────────────
 
 async function interactiveMode(options) {
-  log('');
-  log(`  ${col('bold', '🤖 Asyncat Agent')} ${col('dim', '— autonomous AI agent')}`);
-  log(`  ${col('dim', 'Type a goal and press Enter. Commands: /exit /help /auto /clear')}`);
-  log(`  ${col('dim', 'The agent can read files, run code, search the web, and more.')}`);
-  log('');
-
-  // Try to show model info
-  try {
-    const token = await getToken();
-    const base  = getBase();
-    const info = await getProviderInfo(base, token);
-    if (info?.model) {
-      const label = info.provider_type === 'local' ? 'local' : info.provider_type || 'cloud';
-      log(`  ${col('dim', `Model: ${info.model}  [${label}]`)}`);
-      log('');
-    }
-  } catch {}
-
   const mainRl = getRl();
   const savedListeners = mainRl ? mainRl.rawListeners('line') : [];
   const savedPrompt = mainRl ? mainRl._prompt : '';
 
   if (mainRl) {
     mainRl.removeAllListeners('line');
+    mainRl.pause();
   }
 
   return new Promise((resolve) => {
-    let exited = false;
+    let tui;
+    
     const exit = () => {
-      if (exited) return;
-      exited = true;
+      if (tui) tui.destroy();
       if (mainRl) {
-        mainRl.removeAllListeners('line');
-        mainRl.removeListener('escape', exit);
+        mainRl.resume();
         for (const l of savedListeners) mainRl.on('line', l);
         mainRl.setPrompt(savedPrompt);
         info('Back in REPL. Type ' + col('cyan', 'help') + ' for commands.');
+        mainRl.prompt();
       } else {
-        log(`  ${col('dim', 'Agent exited.')}`);
+        console.log(`  ${col('dim', 'Agent exited.')}`);
+        process.exit(0);
       }
       resolve();
     };
 
     let isRunning = false;
 
-    const handleLine = async (input) => {
-      if (isRunning) return; // Ignore input while agent is thinking
-      const goal = input.trim();
-
-      if (!goal) {
-        if (mainRl) { mainRl.setPrompt(`  ${col('cyan', 'agent')} ${col('dim', '▸')} `); mainRl.prompt(); }
-        return;
+    const onSubmit = async (text) => {
+      if (isRunning) return;
+      
+      if (text === '/exit' || text === '/quit') {
+         exit();
+         return;
       }
-
-      if (goal === '/exit' || goal === '/quit' || goal === 'exit' || goal === 'quit') {
-        exit(); return;
-      }
-
-      if (goal === '/help') {
-        log('');
-        log(`  ${col('bold', 'Agent commands:')}`);
-        log(`  ${col('cyan', '/exit')}         Quit agent mode`);
-        log(`  ${col('cyan', '/auto')}         Toggle auto-approve for shell commands`);
-        log(`  ${col('cyan', '/clear')}        Clear screen`);
-        log(`  ${col('cyan', '/verbose')}      Toggle verbose thinking output`);
-        log('');
-        if (mainRl) mainRl.prompt();
-        return;
-      }
-
-      if (goal === '/auto') {
-        options.autoApprove = !options.autoApprove;
-        ok(`  Auto-approve ${options.autoApprove ? col('green', 'ON') : col('dim', 'OFF')}`);
-        if (mainRl) mainRl.prompt();
-        return;
-      }
-
-      if (goal === '/verbose') {
-        options.verbose = !options.verbose;
-        ok(`  Verbose thinking ${options.verbose ? col('green', 'ON') : col('dim', 'OFF')}`);
-        if (mainRl) mainRl.prompt();
-        return;
-      }
-
-      if (goal === '/clear') {
-        console.clear();
-        if (mainRl) mainRl.prompt();
-        return;
-      }
-
+      
+      tui.chat(`{blue-fg}You ▸{/blue-fg} ${text}`);
+      tui.chat('');
+      
       isRunning = true;
       try {
-        await runAgent(goal, { ...options, hideModelInfo: true });
+         await runAgent(text, { ...options, hideModelInfo: true }, tui);
       } finally {
-        isRunning = false;
-        if (mainRl) mainRl.prompt();
+         isRunning = false;
+         tui.focusInput();
       }
     };
 
-    if (mainRl) {
-      mainRl.setPrompt(`  ${col('cyan', 'agent')} ${col('dim', '▸')} `);
-      mainRl.on('line', handleLine);
-      mainRl.once('escape', exit);
-      mainRl.prompt();
-    } else {
-      const tmpRl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: `  ${col('cyan', 'agent')} ${col('dim', '▸')} ` });
-      tmpRl.prompt();
-      tmpRl.on('line', async (line) => {
-        await handleLine(line);
-        if (!isRunning) tmpRl.prompt();
-      });
-      tmpRl.on('close', exit);
-    }
+    tui = initTui(onSubmit, exit);
   });
 }
 

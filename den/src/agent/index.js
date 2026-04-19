@@ -15,10 +15,13 @@ import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
 import { ToolCallFormatter } from './ToolCallFormatter.js';
 
+import { loadMcpTools } from './tools/mcpTools.js';
+import path from 'path';
+
 // ── Register all tools ───────────────────────────────────────────────────────
 let initialized = false;
 
-export function initializeAgent() {
+export async function initializeAgent() {
   if (initialized) return;
 
   toolRegistry.registerAll(fileTools);
@@ -34,6 +37,10 @@ export function initializeAgent() {
   } catch (err) {
     console.warn('[agent] Browser tools not available (puppeteer not installed):', err.message);
   }
+
+  // Load MCP tools
+  const mcpConfigPath = path.resolve(process.cwd(), 'data', 'mcp.json');
+  await loadMcpTools(mcpConfigPath);
 
   initialized = true;
   console.log(`[agent] ${toolRegistry.names().length} tools registered`);

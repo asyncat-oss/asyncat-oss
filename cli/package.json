@@ -25,5 +25,8 @@
     "local-ai",
     "self-hosted"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "neo-blessed": "^0.2.0"
+  }
 }

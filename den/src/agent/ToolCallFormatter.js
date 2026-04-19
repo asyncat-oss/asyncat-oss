@@ -64,7 +64,7 @@ export class ToolCallFormatter {
           arguments: args,
           call_id: tc.id || `tc_${randomUUID().slice(0, 8)}`,
         };
-      }).filter(tc => knownSet.size === 0 || knownSet.has(tc.tool_name));
+      }).filter(tc => tc.tool_name);
     }
 
     if (!text || typeof text !== 'string') return [];
@@ -200,7 +200,7 @@ export class ToolCallFormatter {
         const name = parsed.name || parsed.function || parsed.tool_name || parsed.tool;
         const args = parsed.arguments || parsed.args || parsed.parameters || parsed.params || {};
 
-        if (name && (knownSet.size === 0 || knownSet.has(name))) {
+        if (name) {
           calls.push({
             tool_name: name,
             arguments: typeof args === 'string' ? JSON.parse(args) : args,
@@ -215,7 +215,7 @@ export class ToolCallFormatter {
           let args = {};
           try { args = JSON.parse(argsMatch?.[1] || '{}'); } catch {}
           const name = nameMatch[1];
-          if (knownSet.size === 0 || knownSet.has(name)) {
+          if (name) {
             calls.push({
               tool_name: name,
               arguments: args,
@@ -239,7 +239,7 @@ export class ToolCallFormatter {
       let args = {};
       try { args = JSON.parse(match[2].trim()); } catch {}
 
-      if (knownSet.size === 0 || knownSet.has(name)) {
+      if (name) {
         calls.push({
           tool_name: name,
           arguments: args,
@@ -261,7 +261,7 @@ export class ToolCallFormatter {
       let args = {};
       try { args = JSON.parse(match[2].trim()); } catch {}
 
-      if (knownSet.size === 0 || knownSet.has(name)) {
+      if (name) {
         calls.push({
           tool_name: name,
           arguments: args,
@@ -287,7 +287,7 @@ export class ToolCallFormatter {
           const name = funcMatch[1];
           let args = {};
           try { args = JSON.parse(funcMatch[2]); } catch {}
-          if (knownSet.size === 0 || knownSet.has(name)) {
+          if (name) {
             calls.push({ tool_name: name, arguments: args, call_id: `tc_${randomUUID().slice(0, 8)}` });
           }
           continue;
@@ -298,7 +298,7 @@ export class ToolCallFormatter {
         if (parsed.name) {
           const name = parsed.name;
           const args = parsed.arguments || parsed.parameters || {};
-          if (knownSet.size === 0 || knownSet.has(name)) {
+          if (name) {
             calls.push({
               tool_name: name,
               arguments: typeof args === 'string' ? JSON.parse(args) : args,
@@ -322,7 +322,7 @@ export class ToolCallFormatter {
       let args = {};
       try { args = JSON.parse(match[2]); } catch {}
 
-      if (knownSet.size === 0 || knownSet.has(name)) {
+      if (name) {
         calls.push({
           tool_name: name,
           arguments: args,

@@ -246,6 +246,20 @@ export class LiveLine extends EventEmitter {
 
     this.breadcrumbs     = [];  // command breadcrumb trail
     this.closed = false;
+    this._paused = false;
+    this._keyHandler = null;
+  }
+
+  pause() {
+    this._paused = true;
+    if (this._keyHandler) process.stdin.removeListener('keypress', this._keyHandler);
+  }
+  
+  resume() {
+    this._paused = false;
+    if (this._keyHandler) process.stdin.on('keypress', this._keyHandler);
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
+    this._draw(false);
   }
 
   // Add to breadcrumb trail (show recent commands)
@@ -281,7 +295,8 @@ export class LiveLine extends EventEmitter {
   start() {
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
-    process.stdin.on('keypress', (str, key) => this._onKey(str, key));
+    if (!this._keyHandler) this._keyHandler = (str, key) => this._onKey(str, key);
+    process.stdin.on('keypress', this._keyHandler);
     this._draw(false);
   }
 
@@ -363,7 +378,7 @@ export class LiveLine extends EventEmitter {
 
   // ── Key handler ───────────────────────────────────────────────────────────────
   _onKey(str, key) {
-    if (!key) return;
+    if (this._paused || !key) return;
     const { name, ctrl, meta } = key;
 
     if (ctrl && name === 'c') {

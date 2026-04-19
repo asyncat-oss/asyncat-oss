@@ -140,8 +140,8 @@ export class AgentRuntime {
       if (toolCalls.length === 0) {
         if (!answer) {
           answer = responseText
-            .replace(/\*\*Thought:\*\*[\s\S]*?(?=\*\*(?:Action|Answer):|<tool_call>|$)/i, '')
-            .replace(/\*\*Action:\*\*\s*/i, '')
+            .replace(/(?:\*\*)?Thought:(?:\*\*)?[\s\S]*?(?=(?:\*\*)?(?:Action|Answer):(?:\*\*)?|<tool_call>|<think>|$)/i, '')
+            .replace(/(?:\*\*)?Action:(?:\*\*)?\s*/i, '')
             .trim();
           if (!answer) answer = responseText; // fallback if stripping removes everything
         }

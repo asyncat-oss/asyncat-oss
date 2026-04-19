@@ -11,7 +11,7 @@ import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 const router = express.Router();
 
 // Initialize agent tools on first load
-initializeAgent();
+await initializeAgent();
 
 // Auth middleware
 const authenticate = (req, res, next) => {
