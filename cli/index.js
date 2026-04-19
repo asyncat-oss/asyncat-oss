@@ -28,6 +28,7 @@ import * as _context  from './commands/context.js';
 import * as _snippets from './commands/snippets.js';
 import * as _macros   from './commands/macros.js';
 import * as _history  from './commands/history.js';
+import * as _uninstall from './commands/uninstall.js';
 
 loadTheme();
 
@@ -56,6 +57,7 @@ const cmds = {
   snippets: () => _snippets,
   macros:   () => _macros,
   history:  () => _history,
+  uninstall: () => _uninstall,
 };
 
 // ── /theme handler ─────────────────────────────────────────────────────────────
@@ -198,6 +200,7 @@ function cmdHelp() {
   log(`  ${col('cyan', 'install')}            Install deps, set up .env, check llama.cpp`);
   log(`  ${col('cyan', 'doctor')}             Full system health check`);
   log(`  ${col('cyan', 'update')}             Pull latest changes + reinstall`);
+  log(`  ${col('cyan', 'uninstall')}          Remove asyncat from your system`);
   log(`  ${col('cyan', 'logs')}    ${col('dim', '[backend|frontend|all]')}`);
   log(`  ${col('cyan', 'db')}      ${col('dim', '<backup|reset|seed>')}`);
   log(`  ${col('cyan', 'config')}  ${col('dim', '<show|get <KEY>|set KEY=VALUE>')}`);
@@ -265,6 +268,7 @@ async function dispatch(tokens) {
     case 'snippets': cmds.snippets().run(args);           break;
     case 'macros':   cmds.macros().run(args);             break;
     case 'history':  cmds.history().run(args);            break;
+    case 'uninstall': cmds.uninstall().run();             break;
     case 'theme':    handleTheme(args);                   break;
     case 'stash':    handleStash(args);                   break;
     case 'live-logs': handleLiveLogs(args);               break;

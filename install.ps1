@@ -101,6 +101,8 @@ if ($userPath -notlike "*$BinDir*") {
 
 # ── 8. Desktop launcher (for humans) ──────────────────────────────────────────
 $uiScript = Join-Path $BinDir "asyncat-ui.ps1"
+$iconSrc = Join-Path $InstallDir "neko\public\pwa-192x192.png"
+
 @"
 # Start asyncat if not running
 try { `$null = Invoke-WebRequest http://localhost:8717 -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue } catch {}
@@ -130,6 +132,12 @@ if (`$chrome) {
 }
 "@ | Set-Content $uiScript
 
+# Determine icon path
+$iconPath = "chrome.exe"
+if (Test-Path $iconSrc) {
+    $iconPath = $iconSrc
+}
+
 # Create Desktop shortcut
 $desktop = [Environment]::GetFolderPath("Desktop")
 $desktopShortcut = Join-Path $desktop "Asyncat.lnk"
@@ -137,7 +145,7 @@ $WshShell = New-Object -ComObject WScript.Shell
 $shortcut = $WshShell.CreateShortcut($desktopShortcut)
 $shortcut.TargetPath = "powershell.exe"
 $shortcut.Arguments = "-WindowStyle Hidden -File `"$uiScript`""
-$shortcut.IconLocation = "chrome.exe"
+$shortcut.IconLocation = $iconPath
 $shortcut.Save()
 
 # Create Start Menu shortcut
@@ -146,6 +154,7 @@ $startMenuShortcut = Join-Path $startMenu "Asyncat.lnk"
 $shortcut2 = $WshShell.CreateShortcut($startMenuShortcut)
 $shortcut2.TargetPath = "powershell.exe"
 $shortcut2.Arguments = "-WindowStyle Hidden -File `"$uiScript`""
+$shortcut2.IconLocation = $iconPath
 $shortcut2.Save()
 
 Ok "App shortcuts created on Desktop + Start Menu"

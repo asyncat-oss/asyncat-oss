@@ -97,6 +97,8 @@ fi
 
 # ── 8. Desktop launcher (for humans) ──────────────────────────────────────────
 LAUNCHER="$BIN_DIR/asyncat-ui"
+ICON_SRC="$INSTALL_DIR/neko/public/pwa-192x192.png"
+
 cat > "$LAUNCHER" <<'LAUNCHER_SCRIPT'
 #!/usr/bin/env bash
 # asyncat-ui — start services + open as native app window
@@ -124,11 +126,13 @@ fi
 LAUNCHER_SCRIPT
 chmod +x "$LAUNCHER"
 
-# macOS: create .app bundle for Spotlight + Launchpad
+# macOS: create .app bundle for Spotlight + Launchpad with icon
 if [[ "$OSTYPE" == "darwin"* ]]; then
   APP_DIR="$HOME/Applications/Asyncat.app"
   MACOS_DIR="$APP_DIR/Contents/MacOS"
-  mkdir -p "$MACOS_DIR"
+  RESOURCES_DIR="$APP_DIR/Contents/Resources"
+  mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+
   cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -136,6 +140,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 <dict>
   <key>CFBundleExecutable</key>
   <string>asyncat-launcher</string>
+  <key>CFBundleIconFile</key>
+  <string>asyncat</string>
   <key>CFBundleIdentifier</key>
   <string>com.asyncat.app</string>
   <key>CFBundleName</key>
@@ -150,15 +156,29 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 </plist>
 PLIST
   cp "$LAUNCHER" "$MACOS_DIR/asyncat-launcher"
+
+  # Copy icon if available
+  if [ -f "$ICON_SRC" ]; then
+    cp "$ICON_SRC" "$RESOURCES_DIR/asyncat.png"
+  fi
+
   ok "App created at ~/Applications/Asyncat.app — shows in Spotlight + Launchpad"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
   DESK_DIR="$HOME/.local/share/applications"
-  mkdir -p "$DESK_DIR"
+  ICON_DIR="$HOME/.local/share/icons/hicolor/192x192/apps"
+  mkdir -p "$DESK_DIR" "$ICON_DIR"
+
+  # Copy icon if available
+  if [ -f "$ICON_SRC" ]; then
+    cp "$ICON_SRC" "$ICON_DIR/asyncat.png"
+  fi
+
   cat > "$DESK_DIR/asyncat.desktop" <<'DESKTOP'
 [Desktop Entry]
 Name=Asyncat
 Comment=Open-source AI workspace
 Exec=/home/[USER]/.local/bin/asyncat-ui
+Icon=asyncat
 Type=Application
 Categories=Development;Utility;
 StartupNotify=true
