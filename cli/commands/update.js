@@ -36,12 +36,41 @@ export function run() {
   log('');
   info('Checking for updates...');
 
+  // Check for unstaged changes and stash them if needed
+  let hasStashed = false;
+  try {
+    const status = execSync('git status --porcelain', { cwd: ROOT }).toString().trim();
+    if (status.length > 0) {
+      info('Stashing local changes...');
+      execSync('git stash', { cwd: ROOT, stdio: 'ignore' });
+      hasStashed = true;
+    }
+  } catch (_) {
+    // Ignore stash errors, continue anyway
+  }
+
   let output;
   try {
     output = execSync('git pull', { cwd: ROOT }).toString().trim();
   } catch (e) {
     err(`git pull failed: ${e.message}`);
+    if (hasStashed) {
+      warn('Restoring stashed changes...');
+      try {
+        execSync('git stash pop', { cwd: ROOT, stdio: 'ignore' });
+      } catch (_) {}
+    }
     return;
+  }
+
+  // Restore stashed changes after successful pull
+  if (hasStashed) {
+    try {
+      execSync('git stash pop', { cwd: ROOT, stdio: 'ignore' });
+      ok('Restored local changes.');
+    } catch (e) {
+      warn('Could not restore stashed changes — they are saved in git stash.');
+    }
   }
 
   log(`  ${col('dim', output)}`);
