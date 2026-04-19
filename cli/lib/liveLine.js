@@ -22,6 +22,14 @@ const TOP_CMDS = [
   { name: 'provider', desc: 'Configure AI provider (local / cloud)' },
   { name: 'sessions', desc: 'Browse saved conversations' },
   { name: 'stash',    desc: 'Save or view stashed notes' },
+  { name: 'watch',    desc: 'Auto-rerun a command every N seconds' },
+  { name: 'bench',    desc: 'Time command execution' },
+  { name: 'alias',    desc: 'Create command shortcuts' },
+  { name: 'snippets', desc: 'Save and reuse code blocks' },
+  { name: 'macros',   desc: 'Record & replay command sequences' },
+  { name: 'history',  desc: 'Search command history' },
+  { name: 'recent',   desc: 'Show recent commands' },
+  { name: 'context',  desc: 'Show workspace context' },
   { name: 'install',  desc: 'Set up dependencies and .env' },
   { name: 'doctor',   desc: 'Full system health check' },
   { name: 'update',   desc: 'Pull latest code and reinstall' },
@@ -46,8 +54,16 @@ const SLASH_CMDS = [
   { name: '/stop',     desc: 'Stop all running services' },
   { name: '/stash',    desc: 'Save or browse stashed notes' },
   { name: '/sessions', desc: 'Browse saved conversations' },
-  { name: '/models',   desc: 'Manage AI models' },
-  { name: '/provider', desc: 'Configure AI provider' },
+  { name: '/watch',     desc: 'Auto-rerun a command every N seconds' },
+  { name: '/bench',     desc: 'Time command execution' },
+  { name: '/alias',     desc: 'Create command shortcuts' },
+  { name: '/snippets',  desc: 'Save and reuse code blocks' },
+  { name: '/macros',    desc: 'Record & replay command sequences' },
+  { name: '/history',   desc: 'Search command history' },
+  { name: '/recent',    desc: 'Show recent commands' },
+  { name: '/context',   desc: 'Show workspace context' },
+  { name: '/models',    desc: 'Manage AI models' },
+  { name: '/provider',  desc: 'Configure AI provider' },
   { name: '/theme',     desc: 'Switch color theme (dark/hacker/ocean/minimal)' },
   { name: '/live-logs', desc: 'Toggle streaming of backend/frontend logs' },
   { name: '/help',      desc: 'Show command reference' },
@@ -108,6 +124,27 @@ const SUB_CMDS = {
     { name: 'toggle', desc: 'Toggle live logs' },
     { name: 'status', desc: 'Show live logs status' },
   ],
+  alias: [
+    { name: 'list',   desc: 'Show all aliases' },
+    { name: 'add',    desc: 'Create a new alias' },
+    { name: 'rm',     desc: 'Remove an alias' },
+    { name: 'expand', desc: 'Show what an alias expands to' },
+  ],
+  snippets: [
+    { name: 'list',   desc: 'Show all snippets' },
+    { name: 'add',    desc: 'Save a snippet' },
+    { name: 'show',   desc: 'View a snippet' },
+    { name: 'rm',     desc: 'Delete a snippet' },
+    { name: 'copy',   desc: 'Copy snippet to clipboard' },
+  ],
+  macros: [
+    { name: 'list',   desc: 'Show all macros' },
+    { name: 'record', desc: 'Start recording a macro' },
+    { name: 'stop',   desc: 'Stop recording' },
+    { name: 'play',   desc: 'Execute a macro' },
+    { name: 'show',   desc: 'View macro commands' },
+    { name: 'rm',     desc: 'Delete a macro' },
+  ],
   start: [
     { name: '--backend-only',  desc: 'Start backend only' },
     { name: '--frontend-only', desc: 'Start frontend only' },
@@ -140,6 +177,9 @@ const SLASH_SUB = {
     { name: 'toggle', desc: 'Toggle live logs' },
     { name: 'status', desc: 'Show live logs status' },
   ],
+  '/alias': SUB_CMDS.alias,
+  '/snippets': SUB_CMDS.snippets,
+  '/macros': SUB_CMDS.macros,
   '/models': SUB_CMDS.models,
   '/sessions': SUB_CMDS.sessions,
 };
@@ -198,7 +238,19 @@ export class LiveLine extends EventEmitter {
     this.allSuggestions  = [];  // all matching suggestions
     this.suggOffset      = 0;   // pagination offset for many suggestions
 
+    this.breadcrumbs     = [];  // command breadcrumb trail
     this.closed = false;
+  }
+
+  // Add to breadcrumb trail (show recent commands)
+  addBreadcrumb(cmd) {
+    const mainCmd = cmd.split(/\s+/)[0].replace(/^\//, '');
+    this.breadcrumbs.unshift(mainCmd);
+    if (this.breadcrumbs.length > 5) this.breadcrumbs.pop();
+  }
+
+  getBreadcrumbs() {
+    return this.breadcrumbs.length > 0 ? ` ${c.dim}[${this.breadcrumbs.join(' > ')}]${c.reset}` : '';
   }
 
   // ── readline-compatible API ──────────────────────────────────────────────────
@@ -343,6 +395,7 @@ export class LiveLine extends EventEmitter {
         this.history.unshift(line);
         if (this.history.length > MAX_HISTORY) this.history.pop();
         this._saveHistory();
+        this.addBreadcrumb(line);
       }
       this.buf = ''; this.pos = 0; this.histIdx = -1;
       this.histSaved = ''; this.selIdx = 0; this.suggestionLines = 0;

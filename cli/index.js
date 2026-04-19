@@ -20,6 +20,14 @@ import * as _chat     from './commands/chat.js';
 import * as _run      from './commands/run.js';
 import * as _provider from './commands/provider.js';
 import * as _sessions from './commands/sessions.js';
+import * as _watch    from './commands/watch.js';
+import * as _alias    from './commands/alias.js';
+import * as _recent   from './commands/recent.js';
+import * as _bench    from './commands/bench.js';
+import * as _context  from './commands/context.js';
+import * as _snippets from './commands/snippets.js';
+import * as _macros   from './commands/macros.js';
+import * as _history  from './commands/history.js';
 
 loadTheme();
 
@@ -40,6 +48,14 @@ const cmds = {
   run:      () => _run,
   provider: () => _provider,
   sessions: () => _sessions,
+  watch:    () => _watch,
+  alias:    () => _alias,
+  recent:   () => _recent,
+  bench:    () => _bench,
+  context:  () => _context,
+  snippets: () => _snippets,
+  macros:   () => _macros,
+  history:  () => _history,
 };
 
 // ── /theme handler ─────────────────────────────────────────────────────────────
@@ -164,6 +180,16 @@ function cmdHelp() {
   log(`  ${col('cyan', 'stash rm')}       ${col('dim', '<id>')}   Remove stash entry`);
   log(`  ${col('cyan', 'stash clear')}            Clear all stash entries`);
   log('');
+  log(`  ${col('bold', 'Productivity & Automation')}`);
+  log(`  ${col('cyan', 'watch')}          ${col('dim', '<interval> <cmd>')} Run command every N seconds`);
+  log(`  ${col('cyan', 'bench')}          ${col('dim', '[count] <cmd>')}     Time command execution`);
+  log(`  ${col('cyan', 'alias')}          ${col('dim', '[list|add|rm]')}     Save command shortcuts`);
+  log(`  ${col('cyan', 'snippets')}       ${col('dim', '[list|add|show|rm]')} Save code blocks`);
+  log(`  ${col('cyan', 'macros')}         ${col('dim', '[list|record|play|rm]')} Record command sequences`);
+  log(`  ${col('cyan', 'history')}        ${col('dim', '[query]')}  Search command history`);
+  log(`  ${col('cyan', 'recent')}         ${col('dim', '[n]')}    Show last N commands (default 10)`);
+  log(`  ${col('cyan', 'context')}              Show workspace state`);
+  log('');
   log(`  ${col('bold', 'Appearance')}`);
   log(`  ${col('cyan', 'theme')}        ${col('dim', '<dark|hacker|ocean|minimal>')} Switch color theme`);
   log(`  ${col('cyan', 'live-logs')}    ${col('dim', '[on|off|toggle|status]')}     Stream backend/frontend logs`);
@@ -191,6 +217,21 @@ async function dispatch(tokens) {
   const [cmd, ...args] = tokens;
   if (!cmd) return;
 
+  // Handle macro playback
+  if (cmd === 'macros' && (args[0] === 'play' || args[0] === 'run')) {
+    const result = cmds.macros().run(args);
+    if (result && result._macro) {
+      info(`Playing macro with ${result.commands.length} commands...`);
+      for (const macroCmd of result.commands) {
+        const macroTokens = macroCmd.split(/\s+/);
+        log(`  ${col('cyan', '▶')} ${macroCmd}`);
+        await dispatch(macroTokens);
+      }
+      ok('Macro execution complete!');
+      return;
+    }
+  }
+
   switch (cmd) {
     case 'start':    cmds.start().run(args);              break;
     case 'stop':     cmds.stop().run();                   break;
@@ -216,6 +257,14 @@ async function dispatch(tokens) {
     case 'run':      await cmds.run().run(args);          break;
     case 'provider': await cmds.provider().run(args);     break;
     case 'sessions': await cmds.sessions().run(args);     break;
+    case 'watch':    cmds.watch().run(args);              break;
+    case 'alias':    cmds.alias().run(args);              break;
+    case 'recent':   cmds.recent().run(args);             break;
+    case 'bench':    cmds.bench().run(args);              break;
+    case 'context':  cmds.context().run();                break;
+    case 'snippets': cmds.snippets().run(args);           break;
+    case 'macros':   cmds.macros().run(args);             break;
+    case 'history':  cmds.history().run(args);            break;
     case 'theme':    handleTheme(args);                   break;
     case 'stash':    handleStash(args);                   break;
     case 'live-logs': handleLiveLogs(args);               break;
