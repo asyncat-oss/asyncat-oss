@@ -1,0 +1,48 @@
+// den/src/agent/index.js
+// ─── Agent Module Entry Point ────────────────────────────────────────────────
+// Registers all tools and exports the agent runtime.
+
+import { toolRegistry } from './tools/toolRegistry.js';
+import { fileTools } from './tools/fileTools.js';
+import { shellTools } from './tools/shellTools.js';
+import { searchTools } from './tools/searchTools.js';
+import { memoryTools } from './tools/memoryTools.js';
+import { browserTools } from './tools/browserTools.js';
+import { workspaceTools } from './tools/workspaceTools.js';
+import { agentTools } from './tools/agentTools.js';
+import { AgentRuntime } from './AgentRuntime.js';
+import { AgentSession } from './AgentSession.js';
+import { permissionManager } from './PermissionManager.js';
+import { ToolCallFormatter } from './ToolCallFormatter.js';
+
+// ── Register all tools ───────────────────────────────────────────────────────
+let initialized = false;
+
+export function initializeAgent() {
+  if (initialized) return;
+
+  toolRegistry.registerAll(fileTools);
+  toolRegistry.registerAll(shellTools);
+  toolRegistry.registerAll(searchTools);
+  toolRegistry.registerAll(memoryTools);
+  toolRegistry.registerAll(workspaceTools);
+  toolRegistry.registerAll(agentTools);
+
+  // Browser tools are optional — puppeteer may not be installed
+  try {
+    toolRegistry.registerAll(browserTools);
+  } catch (err) {
+    console.warn('[agent] Browser tools not available (puppeteer not installed):', err.message);
+  }
+
+  initialized = true;
+  console.log(`[agent] ${toolRegistry.names().length} tools registered`);
+}
+
+export {
+  AgentRuntime,
+  AgentSession,
+  toolRegistry,
+  permissionManager,
+  ToolCallFormatter,
+};

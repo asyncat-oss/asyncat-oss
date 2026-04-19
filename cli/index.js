@@ -35,6 +35,7 @@ import * as _history  from './commands/history.js';
 import * as _uninstall from './commands/uninstall.js';
 import * as _git      from './commands/git.js';
 import * as _code     from './commands/code.js';
+import * as _agent    from './commands/agent.js';
 
 loadTheme();
 
@@ -66,6 +67,7 @@ const cmds = {
   uninstall: () => _uninstall,
   git:       () => _git,
   code:      () => _code,
+  agent:     () => _agent,
 };
 
 // ── /theme handler ─────────────────────────────────────────────────────────────
@@ -171,6 +173,7 @@ function handleLiveLogs(args) {
 
 // ── Interactive command menu ───────────────────────────────────────────────────
 const MENU_ITEMS = [
+  { name: 'agent',    desc: 'Autonomous AI agent with tool use',     group: 'AI' },
   { name: 'chat',     desc: 'Interactive AI chat with streaming',    group: 'AI' },
   { name: 'run',      desc: 'Direct chat with local llama-server',   group: 'AI' },
   { name: 'models',   desc: 'List and manage GGUF models',           group: 'AI' },
@@ -213,6 +216,8 @@ function cmdHelp() {
   log(`  ${col('cyan', 'restart')}            Stop then start`);
   log('');
   log(`  ${col('bold', 'AI  ·  the good stuff')}`);
+  log(`  ${col('cyan', 'agent')}    ${col('dim', '[goal] [--auto-approve] [--max-rounds N] [--workspace DIR]')}`);
+  log(`           ${col('dim', 'Autonomous AI agent — reads files, runs code, searches web')}`);
   log(`  ${col('cyan', 'chat')}     ${col('dim', '[--web] [--think] [--style=concise]')}`);
   log(`           ${col('dim', 'Interactive AI chat with streaming (uses your workspace)')}`);
   log(`  ${col('cyan', 'run')}      ${col('dim', '[model]')}`);
@@ -321,6 +326,7 @@ async function dispatch(tokens) {
     case 'v':        cmds.version().run();                break;
     case 'open':
     case 'o':        cmds.open().run();                   break;
+    case 'agent':    await cmds.agent().run(args);        break;
     case 'chat':     await cmds.chat().run(args);         break;
     case 'run':      await cmds.run().run(args);          break;
     case 'provider': await cmds.provider().run(args);     break;
@@ -342,6 +348,7 @@ async function dispatch(tokens) {
     case 'live-logs': handleLiveLogs(args);               break;
     case 's':        cmds.start().run(args);              break;
     case 'c':        await cmds.chat().run(args);         break;
+    case 'a':        await cmds.agent().run(args);        break;
     case 'clear':
       console.clear();
       banner();

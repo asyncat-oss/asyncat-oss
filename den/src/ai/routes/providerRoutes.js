@@ -49,6 +49,20 @@ router.get('/stats', verifyUser, async (req, res) => {
   }
 });
 
+// ── GET /config — get user provider config ──────────────────────────────────
+router.get('/config', verifyUser, (req, res) => {
+  try {
+    const row = db.prepare('SELECT provider_type, provider_id, base_url, model FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
+    if (row) {
+      res.json(row);
+    } else {
+      res.json({ provider_type: 'local', provider_id: 'llamacpp-builtin', base_url: '', model: '' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MODEL MANAGER ROUTES — /api/ai/providers/local-models/*
 // ══════════════════════════════════════════════════════════════════════════════

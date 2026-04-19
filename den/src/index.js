@@ -15,6 +15,7 @@ import authRouter from './auth/authRouter.js';
 import aiRoutes from './ai/routes/aiRoutes.js';
 import labsRoutes from './ai/routes/labsRoutes.js';
 import providerRoutes from './ai/routes/providerRoutes.js';
+import agentRoutes from './ai/routes/agentRoutes.js';
 
 // ─── Users / Projects / Dashboard (from asy_b_users) ─────────────────────────
 import userRoutes from './users/routes/userRoutes.js';
@@ -85,6 +86,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/ai/providers', providerRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/labs', labsRoutes);
+app.use('/api/agent', agentRoutes);
 
 // ─── Routes: Users / Projects ────────────────────────────────────────────────
 app.use('/api/users', userRoutes);
