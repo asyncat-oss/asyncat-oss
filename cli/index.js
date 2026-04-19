@@ -1,8 +1,12 @@
 import { c, col, setRl, setLl, log, ok, warn, info, banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
 import { LiveLine } from './lib/liveLine.js';
-import { loadTheme, setTheme, getTheme, getThemeName, THEME_NAMES } from './lib/theme.js';
+import { loadTheme, setTheme, getTheme, getThemeName, THEME_NAMES, THEMES } from './lib/theme.js';
 import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
-import { stopAll } from './lib/procs.js';
+import { stopAll, procs } from './lib/procs.js';
+import { select } from './lib/select.js';
+import fs from 'fs';
+import path from 'path';
+import { ROOT } from './lib/env.js';
 
 import * as _start    from './commands/start.js';
 import * as _stop     from './commands/stop.js';
@@ -29,6 +33,8 @@ import * as _snippets from './commands/snippets.js';
 import * as _macros   from './commands/macros.js';
 import * as _history  from './commands/history.js';
 import * as _uninstall from './commands/uninstall.js';
+import * as _git      from './commands/git.js';
+import * as _code     from './commands/code.js';
 
 loadTheme();
 
@@ -58,18 +64,38 @@ const cmds = {
   macros:   () => _macros,
   history:  () => _history,
   uninstall: () => _uninstall,
+  git:       () => _git,
+  code:      () => _code,
 };
 
 // ── /theme handler ─────────────────────────────────────────────────────────────
-function handleTheme(args) {
+async function handleTheme(args) {
+  const THEME_DESCS = {
+    dark:    'Default dark theme — magenta accents',
+    hacker:  'Monochrome green — hacker terminal style',
+    ocean:   'Blue and cyan — calm ocean palette',
+    minimal: 'Low-contrast — distraction-free minimal',
+  };
   const name = args[0];
   if (!name) {
-    info(`Current theme: ${col('cyan', getThemeName())}`);
-    info(`Available: ${THEME_NAMES.map(n => col('cyan', n)).join('  ')}`);
+    const current = getThemeName();
+    const chosen = await select({
+      title:      `Theme  ${c.dim}(current: ${current})${c.reset}`,
+      searchable: false,
+      items: THEME_NAMES.map(n => ({
+        name: n,
+        desc: THEME_DESCS[n] || '',
+        tag:  n === current ? 'active' : '',
+      })),
+    });
+    if (!chosen) return;
+    if (setTheme(chosen.name)) {
+      ok(`Theme set to ${col('cyan', chosen.name)} — type ${col('cyan', 'clear')} to see it applied`);
+    }
     return;
   }
   if (setTheme(name)) {
-    ok(`Theme set to ${col('cyan', name)} — run ${col('cyan', 'clear')} to see it applied`);
+    ok(`Theme set to ${col('cyan', name)} — type ${col('cyan', 'clear')} to see it applied`);
   } else {
     warn(`Unknown theme "${name}". Available: ${THEME_NAMES.join(', ')}`);
   }
@@ -143,6 +169,40 @@ function handleLiveLogs(args) {
   log(`  Usage: ${col('cyan', 'live-logs')} ${col('dim', '[on|off|toggle|status]')}`);
 }
 
+// ── Interactive command menu ───────────────────────────────────────────────────
+const MENU_ITEMS = [
+  { name: 'chat',     desc: 'Interactive AI chat with streaming',    group: 'AI' },
+  { name: 'run',      desc: 'Direct chat with local llama-server',   group: 'AI' },
+  { name: 'models',   desc: 'List and manage GGUF models',           group: 'AI' },
+  { name: 'provider', desc: 'Configure AI provider (local/cloud)',   group: 'AI' },
+  { name: 'sessions', desc: 'Browse saved conversations',            group: 'AI' },
+  { name: 'git',      desc: 'Git status, log, diff for the project', group: 'Developer' },
+  { name: 'code',     desc: 'Show file tree of current directory',   group: 'Developer' },
+  { name: 'snippets', desc: 'Save and reuse code snippets',          group: 'Developer' },
+  { name: 'context',  desc: 'Show workspace state and versions',     group: 'Developer' },
+  { name: 'macros',   desc: 'Record and replay command sequences',   group: 'Productivity' },
+  { name: 'alias',    desc: 'Save command shortcuts',                group: 'Productivity' },
+  { name: 'history',  desc: 'Search command history',                group: 'Productivity' },
+  { name: 'start',    desc: 'Start backend and frontend services',   group: 'Services' },
+  { name: 'stop',     desc: 'Stop all running services',             group: 'Services' },
+  { name: 'status',   desc: 'Show running processes',                group: 'Services' },
+  { name: 'install',  desc: 'Install dependencies and set up .env', group: 'Setup' },
+  { name: 'doctor',   desc: 'Full system health check',              group: 'Setup' },
+  { name: 'update',   desc: 'Pull latest changes and reinstall',     group: 'Setup' },
+  { name: 'theme',    desc: 'Switch color theme',                    group: 'Setup' },
+  { name: 'exit',     desc: 'Quit and stop all services',            group: 'Setup' },
+];
+
+async function showMenu() {
+  const chosen = await select({
+    title:      'asyncat  —  open-source AI workspace',
+    searchable: true,
+    items:      MENU_ITEMS,
+  });
+  if (!chosen) return;
+  await dispatch([chosen.name]);
+}
+
 // ── Help ───────────────────────────────────────────────────────────────────────
 function cmdHelp() {
   log('');
@@ -211,7 +271,12 @@ function cmdHelp() {
   log(`  ${col('cyan', 'clear')}              Clear the screen`);
   log(`  ${col('cyan', 'help')}    ${col('dim', '?')}         Show this help`);
   log(`  ${col('cyan', 'exit')}    ${col('dim', 'quit q')}    Quit (stops all services)`);
-  log(`  ${col('dim', 'Tip: press / to browse all commands interactively')}`);
+  log(`  ${col('bold', 'Developer')}`);
+  log(`  ${col('cyan', 'git')}      ${col('dim', '[status|log [n]|diff|branch]')}  Git project info`);
+  log(`  ${col('cyan', 'snippets')} ${col('dim', '[list|add|show|rm|copy]')}       Save code blocks`);
+  log(`  ${col('cyan', 'context')}                        Show workspace state`);
+  log('');
+  log(`  ${col('dim', 'Tip: press / and Enter to open the interactive command menu')}`);
   log('');
 }
 
@@ -265,11 +330,14 @@ async function dispatch(tokens) {
     case 'recent':   cmds.recent().run(args);             break;
     case 'bench':    cmds.bench().run(args);              break;
     case 'context':  cmds.context().run();                break;
-    case 'snippets': cmds.snippets().run(args);           break;
+    case 'snippets': await cmds.snippets().run(args);     break;
+    case 'code':     cmds.code().run(args);               break;
     case 'macros':   cmds.macros().run(args);             break;
     case 'history':  cmds.history().run(args);            break;
     case 'uninstall': cmds.uninstall().run();             break;
-    case 'theme':    handleTheme(args);                   break;
+    case 'git':      cmds.git().run(args);                break;
+    case 'theme':    await handleTheme(args);             break;
+    case 'menu':     await showMenu();                    break;
     case 'stash':    handleStash(args);                   break;
     case 'live-logs': handleLiveLogs(args);               break;
     case 's':        cmds.start().run(args);              break;
@@ -292,12 +360,30 @@ async function dispatch(tokens) {
   }
 }
 
+// ── Auto-start backend ─────────────────────────────────────────────────────────
+async function maybeStartBackend() {
+  if (procs.backend) return;                                          // already in-session
+  if (!fs.existsSync(path.join(ROOT, 'den/.env')))          return;  // not installed
+  if (!fs.existsSync(path.join(ROOT, 'den/node_modules')))  return;
+
+  try {
+    const res = await fetch('http://localhost:8716/api/health', {
+      signal: AbortSignal.timeout(600),
+    });
+    if (res.ok) return;  // already running from a previous session
+  } catch {}
+
+  info('Auto-starting backend…');
+  cmds.start().run(['--backend-only']);
+}
+
 // ── REPL ───────────────────────────────────────────────────────────────────────
 const PROMPT_LEN = 'asyncat ▸ '.length;
 const makePrompt = () => `${c.bold}${getTheme().accent}asyncat${c.reset}${c.dim} ▸ ${c.reset}`;
 
 async function startREPL() {
   banner();
+  await maybeStartBackend();
   cmds.status().run();
 
   const ll = new LiveLine(makePrompt(), PROMPT_LEN);
@@ -307,6 +393,14 @@ async function startREPL() {
   ll.on('line', async (input) => {
     const trimmed = input.trim();
     if (!trimmed) { ll.prompt(); return; }
+
+    // / alone → interactive command menu
+    if (trimmed === '/') {
+      await showMenu();
+      ll.restoreMainPrompt(makePrompt(), PROMPT_LEN);
+      ll.prompt();
+      return;
+    }
 
     // Strip leading / (slash-command mode) — same command names underneath
     const tokens = (trimmed.startsWith('/') ? trimmed.slice(1) : trimmed).split(/\s+/);

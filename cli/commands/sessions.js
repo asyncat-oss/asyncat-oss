@@ -2,6 +2,7 @@
 // List and manage saved AI chat conversations from the den backend.
 
 import { log, ok, warn, err, info, col } from '../lib/colors.js';
+import { select, confirm } from '../lib/select.js';
 import { getToken, apiGet, apiPost, apiDelete } from '../lib/denApi.js';
 
 function relativeTime(iso) {
@@ -27,7 +28,7 @@ function modeIcon(mode) {
 }
 
 async function listSessions(args) {
-  const limit = parseInt(args[0] || '20', 10);
+  const limit = parseInt(args[0] || '50', 10);
 
   let data;
   try {
@@ -40,41 +41,52 @@ async function listSessions(args) {
 
   const convos = data.conversations || [];
 
-  log('');
-  log(`  ${col('bold', 'Saved sessions')}  ${col('dim', `(${convos.length} of ${data.total || convos.length})`)}`);
-  log(col('dim', '  ' + '─'.repeat(60)));
-
   if (convos.length === 0) {
+    log('');
     info('No conversations yet. Start one with: ' + col('cyan', 'chat'));
     log('');
     return;
   }
 
-  for (let i = 0; i < convos.length; i++) {
-    const c   = convos[i];
-    const idx = String(i + 1).padStart(2, ' ');
-    const pin = c.is_pinned ? col('yellow', '⊛ ') : '  ';
-    const arc = c.is_archived ? col('dim', ' [archived]') : '';
-    const ts  = col('dim', relativeTime(c.last_message_at || c.created_at));
-    const cnt = col('dim', `${c.message_count || 0} msgs`);
-    const ttl = truncate(c.title, 40);
+  const chosen = await select({
+    title:      `Sessions  ${col('dim', `(${convos.length} of ${data.total || convos.length})`)}`,
+    searchable: true,
+    items: convos.map(c => ({
+      name: truncate(c.title, 48) + (c.is_pinned ? ' ⊛' : ''),
+      desc: `${relativeTime(c.last_message_at || c.created_at)}  ·  ${c.message_count || 0} msgs  ·  ${c.id.slice(0, 8)}…`,
+      tag:  c.is_archived ? 'archived' : '',
+      _id:  c.id,
+      _title: c.title,
+    })),
+  });
 
-    log(`  ${col('dim', idx)} ${pin}${modeIcon(c.mode)} ${col('white', ttl)}${arc}`);
-    log(`      ${ts}  ·  ${cnt}  ·  ${col('dim', c.id.slice(0, 8))}…`);
+  if (!chosen) return;
+
+  // Action menu for the selected session
+  const action = await select({
+    title:      truncate(chosen._title || chosen.name, 55),
+    searchable: false,
+    items: [
+      { name: 'delete', desc: 'Permanently remove this conversation' },
+      { name: 'cancel', desc: 'Go back' },
+    ],
+  });
+
+  if (!action || action.name === 'cancel') return;
+
+  if (action.name === 'delete') {
+    const yes = await confirm(col('yellow', `Delete "${truncate(chosen._title || chosen.name, 40)}"?`));
+    if (!yes) { info('Cancelled.'); return; }
+    try {
+      await apiDelete(`/api/ai/chats/${chosen._id}`);
+      ok(`Deleted session`);
+    } catch (e) {
+      err(`Failed to delete: ${e.message}`);
+    }
   }
-
-  log('');
-  log(`  ${col('dim', 'Tip: ')}${col('dim', 'sessions rm <id-prefix>')}`);
-  log('');
 }
 
 async function removeSession(idPrefix) {
-  if (!idPrefix) {
-    warn('Usage: sessions rm <id-prefix>');
-    info('Run ' + col('cyan', 'sessions') + ' to list conversation IDs');
-    return;
-  }
-
   let data;
   try {
     await getToken();
@@ -82,12 +94,28 @@ async function removeSession(idPrefix) {
   } catch (e) { err(e.message); return; }
 
   const convos = data.conversations || [];
-  const match  = convos.find(c => c.id.startsWith(idPrefix));
 
-  if (!match) {
-    err(`No session found matching: ${col('white', idPrefix)}`);
-    return;
+  let match;
+  if (idPrefix) {
+    match = convos.find(c => c.id.startsWith(idPrefix));
+    if (!match) { err(`No session found matching: ${col('white', idPrefix)}`); return; }
+  } else {
+    if (convos.length === 0) { info('No conversations to delete.'); return; }
+    const chosen = await select({
+      title:      'Select session to delete',
+      searchable: true,
+      items: convos.map(c => ({
+        name: truncate(c.title, 48),
+        desc: `${relativeTime(c.last_message_at || c.created_at)}  ·  ${c.id.slice(0, 8)}…`,
+        _id: c.id, _title: c.title,
+      })),
+    });
+    if (!chosen) { info('Cancelled.'); return; }
+    match = { id: chosen._id, title: chosen._title };
   }
+
+  const yes = await confirm(col('yellow', `Delete "${truncate(match.title || match.id, 40)}"?`));
+  if (!yes) { info('Cancelled.'); return; }
 
   try {
     await apiDelete(`/api/ai/chats/${match.id}`);

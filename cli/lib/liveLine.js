@@ -37,6 +37,9 @@ const TOP_CMDS = [
   { name: 'db',       desc: 'Database backup / reset / seed' },
   { name: 'config',   desc: 'Get or set configuration values' },
   { name: 'theme',    desc: 'Switch color theme' },
+  { name: 'git',      desc: 'Git status, log, diff for the project' },
+  { name: 'code',     desc: 'Show file tree of current directory' },
+  { name: 'menu',     desc: 'Browse all commands interactively (or press /)' },
   { name: 'version',  desc: 'Show version info' },
   { name: 'open',     desc: 'Open asyncat in the browser' },
   { name: 'live-logs',desc: 'Toggle streaming of backend/frontend logs' },
@@ -65,6 +68,8 @@ const SLASH_CMDS = [
   { name: '/models',    desc: 'Manage AI models' },
   { name: '/provider',  desc: 'Configure AI provider' },
   { name: '/theme',     desc: 'Switch color theme (dark/hacker/ocean/minimal)' },
+  { name: '/git',       desc: 'Git status, log, diff for the project' },
+  { name: '/menu',      desc: 'Browse all commands interactively' },
   { name: '/live-logs', desc: 'Toggle streaming of backend/frontend logs' },
   { name: '/help',      desc: 'Show command reference' },
   { name: '/clear',     desc: 'Clear the screen' },
@@ -235,8 +240,9 @@ export class LiveLine extends EventEmitter {
     this.suggestions     = [];
     this.selIdx          = 0;
     this.suggestionLines = 0;
-    this.allSuggestions  = [];  // all matching suggestions
-    this.suggOffset      = 0;   // pagination offset for many suggestions
+    this.allSuggestions  = [];
+    this.suggOffset      = 0;
+    this._lastSuggBuf    = null;   // tracks buffer for pagination reset
 
     this.breadcrumbs     = [];  // command breadcrumb trail
     this.closed = false;
@@ -296,10 +302,11 @@ export class LiveLine extends EventEmitter {
     const W     = process.stdout.columns || 80;
     const allSuggs = this._isMain ? getSuggestions(this.buf) : [];
 
-    // Reset offset if buffer changed and fewer results than before
-    if (this.allSuggestions !== allSuggs && this.suggOffset > 0) {
-      this.suggOffset = 0;
-      this.selIdx = 0;
+    // Reset pagination only when the buffer content actually changes
+    if (this._lastSuggBuf !== this.buf) {
+      this._lastSuggBuf = this.buf;
+      this.suggOffset   = 0;
+      this.selIdx       = 0;
     }
     this.allSuggestions = allSuggs;
 
@@ -372,6 +379,17 @@ export class LiveLine extends EventEmitter {
     if (ctrl && name === 'l') {
       console.clear();
       this._draw(false);
+      return;
+    }
+
+    // ── ESC — clear buffer in main mode; always emit 'escape' ──────────────────
+    if (name === 'escape') {
+      if (this._isMain && this.buf !== '') {
+        this.buf = ''; this.pos = 0; this.selIdx = 0;
+        this.suggOffset = 0; this._lastSuggBuf = '';
+        this._draw(true);
+      }
+      this.emit('escape');
       return;
     }
 
@@ -471,7 +489,7 @@ export class LiveLine extends EventEmitter {
     }
 
     if (name === 'right') {
-      if (this.pos === this.buf.length && this.suggestions.length > 0) {
+      if (this.pos === this.buf.length && this.selIdx < this.suggestions.length) {
         this._applyCompletion(this.suggestions[this.selIdx].name);
         this.selIdx = 0;
       } else if (ctrl) {

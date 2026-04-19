@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
 import { info, ok, warn, log, col } from '../lib/colors.js';
+import { select } from '../lib/select.js';
 
 const SNIPPETS_FILE = path.join(os.homedir(), '.asyncat_snippets');
 
@@ -20,7 +21,7 @@ function saveSnippets(snippets) {
   }
 }
 
-export function run(args) {
+export async function run(args) {
   const sub = args[0];
   const snippets = loadSnippets();
 
@@ -46,20 +47,47 @@ export function run(args) {
   }
 
   if (sub === 'show' || sub === 'view') {
-    const name = args[1];
+    let name = args[1];
+    const names = Object.keys(snippets);
+    if (!name) {
+      if (names.length === 0) { info('No snippets saved'); return; }
+      const chosen = await select({
+        title:      'Select snippet to view',
+        searchable: true,
+        items: names.map(n => ({
+          name: n,
+          desc: snippets[n].split('\n')[0].substring(0, 60),
+        })),
+      });
+      if (!chosen) return;
+      name = chosen.name;
+    }
     if (!snippets[name]) { warn(`Snippet ${col('white', name)} not found`); return; }
     log('');
-    log(`${col('cyan', name)}:`);
-    log(col('dim', '─'.repeat(60)));
-    log(snippets[name]);
-    log(col('dim', '─'.repeat(60)));
+    log(`  ${col('cyan', col('bold', name))}`);
+    log(col('dim', '  ' + '─'.repeat(60)));
+    for (const l of snippets[name].split('\n')) log(`  ${l}`);
+    log(col('dim', '  ' + '─'.repeat(60)));
     log('');
     return;
   }
 
   if (sub === 'rm' || sub === 'remove' || sub === 'delete') {
-    const name = args[1];
-    if (!name) { warn('Usage: snippets rm <name>'); return; }
+    let name = args[1];
+    const names = Object.keys(snippets);
+    if (!name) {
+      if (names.length === 0) { info('No snippets saved'); return; }
+      const chosen = await select({
+        title:      'Select snippet to delete',
+        searchable: true,
+        items: names.map(n => ({
+          name: n,
+          desc: snippets[n].split('\n')[0].substring(0, 60),
+        })),
+      });
+      if (!chosen) return;
+      name = chosen.name;
+    }
     if (!snippets[name]) { warn(`Snippet ${col('white', name)} not found`); return; }
     delete snippets[name];
     saveSnippets(snippets);
