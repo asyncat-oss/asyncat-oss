@@ -95,13 +95,89 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
   warn "Restart your terminal or run: source $SHELL_RC"
 fi
 
+# ── 8. Desktop launcher (for humans) ──────────────────────────────────────────
+LAUNCHER="$BIN_DIR/asyncat-ui"
+cat > "$LAUNCHER" <<'LAUNCHER_SCRIPT'
+#!/usr/bin/env bash
+# asyncat-ui — start services + open as native app window
+if ! curl -s http://localhost:8717 &>/dev/null 2>&1; then
+  "$HOME/.local/bin/asyncat" start &>/dev/null &
+  disown 2>/dev/null || true
+  for i in $(seq 1 24); do
+    curl -s http://localhost:8717 &>/dev/null 2>&1 && break
+    sleep 0.5
+  done
+fi
+PLATFORM="$(uname -s)"
+URL="http://localhost:8717"
+if [ "$PLATFORM" = "Darwin" ]; then
+  for B in "Google Chrome" "Microsoft Edge" "Chromium"; do
+    [ -d "/Applications/$B.app" ] && { open -na "$B" --args --app="$URL"; exit 0; }
+  done
+  open "$URL"
+else
+  for CMD in google-chrome chromium-browser chromium microsoft-edge-stable; do
+    command -v "$CMD" &>/dev/null && { "$CMD" --app="$URL"; exit 0; }
+  done
+  xdg-open "$URL"
+fi
+LAUNCHER_SCRIPT
+chmod +x "$LAUNCHER"
+
+# macOS: create .app bundle for Spotlight + Launchpad
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  APP_DIR="$HOME/Applications/Asyncat.app"
+  MACOS_DIR="$APP_DIR/Contents/MacOS"
+  mkdir -p "$MACOS_DIR"
+  cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>asyncat-launcher</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.asyncat.app</string>
+  <key>CFBundleName</key>
+  <string>Asyncat</string>
+  <key>CFBundleDisplayName</key>
+  <string>Asyncat</string>
+  <key>CFBundleVersion</key>
+  <string>1.0</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+</dict>
+</plist>
+PLIST
+  cp "$LAUNCHER" "$MACOS_DIR/asyncat-launcher"
+  ok "App created at ~/Applications/Asyncat.app — shows in Spotlight + Launchpad"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  DESK_DIR="$HOME/.local/share/applications"
+  mkdir -p "$DESK_DIR"
+  cat > "$DESK_DIR/asyncat.desktop" <<'DESKTOP'
+[Desktop Entry]
+Name=Asyncat
+Comment=Open-source AI workspace
+Exec=/home/[USER]/.local/bin/asyncat-ui
+Type=Application
+Categories=Development;Utility;
+StartupNotify=true
+DESKTOP
+  sed -i "s|\[USER\]|${USER}|g" "$DESK_DIR/asyncat.desktop"
+  update-desktop-database "$DESK_DIR" 2>/dev/null || true
+  ok "App shortcut created — search 'Asyncat' in your app launcher"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}  ✓  asyncat installed!${NC}"
 echo ""
-echo "  Run it anytime:"
-echo -e "    ${CYAN}asyncat${NC}              open the interactive CLI"
-echo -e "    ${CYAN}asyncat start${NC}        start backend + frontend directly"
+echo "  For humans (UI app):"
+echo -e "    Click ${CYAN}Asyncat${NC} in your app menu / Launchpad / launcher"
+echo ""
+echo "  For terminal gremlins:"
+echo -e "    ${CYAN}asyncat${NC}              open the interactive CLI REPL"
+echo -e "    ${CYAN}asyncat start${NC}        start backend + frontend"
 echo -e "    ${CYAN}asyncat install${NC}      set up .env and check llama.cpp"
 echo -e "    ${CYAN}asyncat --help${NC}       see all commands"
 echo ""
