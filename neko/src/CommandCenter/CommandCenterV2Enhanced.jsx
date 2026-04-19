@@ -891,10 +891,8 @@ const CommandCenterV2Enhanced = ({ session }) => {
         <ModelParamsSidebar onClose={() => setShowParamsSidebar(false)} />
       )}
 
-      {/* Chat column — shrinks when side panel is open */}
-      <div
-        className={`flex flex-col h-full transition-all duration-300 min-w-0 ${sideArtifact || explainPanel ? "w-[40%]" : "flex-1"}`}
-      >
+      {/* Chat column — always flex-1, side panel takes its own fixed width */}
+      <div className="flex flex-col h-full transition-all duration-300 min-w-0 flex-1">
         {isConversationLoading ? (
           <ConversationLoadingSkeleton />
         ) : messages.length === 0 ? (
@@ -1170,7 +1168,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
 
       {/* Center: artifact/explain panel (when open) */}
       {(sideArtifact || explainPanel) && (
-        <div className="w-[40%] border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex flex-col h-full">
+        <div className="w-[45%] max-w-[640px] border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex flex-col h-full">
           {explainPanel ? (
             <ExplainTermPanel
               term={explainPanel.term}

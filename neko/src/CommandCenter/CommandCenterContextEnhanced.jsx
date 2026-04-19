@@ -1,6 +1,5 @@
 // CommandCenterContextEnhanced.jsx - Updated for New Mode System
 import React, { createContext, useState, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import commandCenterApi, { chatApi } from './commandCenterApi';
@@ -703,8 +702,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           const extracted = extractArtifacts(streamedContent);
 
           if (extracted.artifacts.length === 0) {
-            // Artifact is still being created, show placeholder
-            flushSync(() => dispatch({
+            dispatch({
               type: ActionTypes.UPDATE_STREAMING_MESSAGE,
               payload: {
                 messageId: assistantMessageId,
@@ -718,10 +716,9 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
                 }],
                 artifactExplanation: textBefore
               }
-            }));
+            });
           } else {
-            // Artifact(s) complete, show them
-            flushSync(() => dispatch({
+            dispatch({
               type: ActionTypes.UPDATE_STREAMING_MESSAGE,
               payload: {
                 messageId: assistantMessageId,
@@ -729,11 +726,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
                 artifacts: extracted.artifacts,
                 artifactExplanation: extracted.artifactExplanation
               }
-            }));
+            });
           }
         } else {
-          // No artifacts yet, stream content token by token
-          flushSync(() => dispatch({
+          dispatch({
             type: ActionTypes.UPDATE_STREAMING_MESSAGE,
             payload: {
               messageId: assistantMessageId,
@@ -741,7 +737,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
               artifacts: [],
               artifactExplanation: null
             }
-          }));
+          });
         }
       }
 
