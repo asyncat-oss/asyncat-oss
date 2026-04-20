@@ -10,6 +10,7 @@
  * @param {string} opts.toolDescriptions - Formatted tool descriptions
  * @param {object[]} opts.memories - Relevant memories from store
  * @param {string} opts.scratchpad - Current scratchpad state
+ * @param {object[]} opts.skills - Relevant skills from Cerebellum
  * @returns {string}
  */
 export function buildAgentSystemPrompt(opts = {}) {
@@ -19,6 +20,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     toolDescriptions = '',
     memories = [],
     scratchpad = '',
+    skills = [],
     platform = process.platform,
   } = opts;
 
@@ -28,6 +30,10 @@ export function buildAgentSystemPrompt(opts = {}) {
 
   const scratchpadSection = scratchpad
     ? `\n## Scratchpad (your working notes from previous rounds)\n${scratchpad}\n`
+    : '';
+
+  const skillsSection = skills.length > 0
+    ? `\n## Relevant Skills (Cerebellum)\n${skills.map(s => `### ${s.name}\n${s.description || s.body?.slice(0, 200) || ''}`).join('\n\n')}\n`
     : '';
 
   return `You are an autonomous AI agent running locally on the user's machine. You can think, plan, execute tools, and iterate until the task is complete.
@@ -73,6 +79,7 @@ To call a tool, output:
 ${toolDescriptions}
 ${memorySection}
 ${scratchpadSection}
+${skillsSection}
 
 ## Current Task
 ${goal}

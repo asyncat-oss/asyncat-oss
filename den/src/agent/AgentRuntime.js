@@ -15,7 +15,30 @@ import { toolRegistry } from './tools/toolRegistry.js';
 import { permissionManager, PermissionManager } from './PermissionManager.js';
 import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt } from './prompts/agentSystemPrompt.js';
+import path from 'path';
+import fs from 'fs';
 import db from '../db/client.js';
+
+// ── Inline Skills Helper (Cerebellum) ─────────────────────────────────────────────
+function getRelevantSkillsForGoal(goal) {
+  if (!goal || !fs.existsSync) return [];
+  try {
+    const skillsDir = path.resolve(process.cwd(), 'cli', 'skills');
+    if (!fs.existsSync(skillsDir)) return [];
+    const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'));
+    const q = goal.toLowerCase();
+    return files.map(f => {
+      const content = fs.readFileSync(path.join(skillsDir, f), 'utf8');
+      const name = f.replace('.md', '');
+      const desc = content.match(/description:\s*(.+)/)?.[1] || '';
+      const body = content.split('---')[2] || '';
+      return { name, description: desc, body: body.slice(0, 150) };
+    }).filter(s => {
+      const haystack = `${s.name} ${s.description} ${s.body}`.toLowerCase();
+      return haystack.includes(q);
+    }).slice(0, 3);
+  } catch { return []; }
+}
 
 const MAX_ROUNDS_DEFAULT = 25;
 
@@ -74,12 +97,16 @@ export class AgentRuntime {
       toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
     );
 
+    // Get relevant skills based on the goal (Cerebellum)
+    const relevantSkills = getRelevantSkillsForGoal(goal);
+
     const systemPrompt = buildAgentSystemPrompt({
       goal,
       workingDir: this.workingDir,
       toolDescriptions,
       memories,
       scratchpad: '',
+      skills: relevantSkills,
     });
 
     // Build conversation thread (filter out UI system messages)
