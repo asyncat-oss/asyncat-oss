@@ -56,8 +56,10 @@ const AppLayout = ({ session, onSignOut }) => {
         return 'all-chats';
       case 'home':
         return 'home';
+      case 'workspace':
+        return 'workspace';
       case 'projects':
-        return 'projects';
+        return 'workspace';
       case 'calendar':
         return 'calendar';
       case 'teams':
@@ -68,6 +70,8 @@ const AppLayout = ({ session, onSignOut }) => {
         return 'lab';
       case 'models':
         return 'models';
+      case 'agents':
+        return 'agents';
       default:
         return 'home';
     }
@@ -155,7 +159,7 @@ const AppLayout = ({ session, onSignOut }) => {
     if (!workspacesLoading && currentWorkspace && !hasWorkspaceAccess()) {
       const workspaceOnlyRoutes = ['home', 'conversations', 'calendar', 'invites', 'teams'];
       if (workspaceOnlyRoutes.includes(basePage)) {
-        navigate('/projects', { replace: true });
+        navigate('/workspace', { replace: true });
       }
     }
   }, [basePage, currentWorkspace, hasWorkspaceAccess, workspacesLoading, navigate]);
@@ -168,7 +172,7 @@ const AppLayout = ({ session, onSignOut }) => {
     if (hasWorkspaceAccess()) {
       navigate('/home');
     } else {
-      navigate('/projects');
+      navigate('/workspace');
     }
   }, [currentWorkspace, navigate, hasWorkspaceAccess]);
 
@@ -222,7 +226,7 @@ const AppLayout = ({ session, onSignOut }) => {
     if (!project) {
       setSelectedProject(null);
       sessionStorage.removeItem('projectId');
-      navigate('/projects');
+      navigate('/workspace');
       return;
     }
     
@@ -231,11 +235,11 @@ const AppLayout = ({ session, onSignOut }) => {
       // Update state immediately with full project data including metadata
       setSelectedProject(project);
       sessionStorage.setItem('projectId', project.id);
-      navigate(`/projects/${project.id}`);
+      navigate(`/workspace/${project.id}`);
     } else {
       // If we just get an ID, navigate first and let the effect handle loading
       const projectId = project;
-      navigate(`/projects/${projectId}`);
+      navigate(`/workspace/${projectId}`);
     }
   };
 
@@ -257,7 +261,7 @@ const AppLayout = ({ session, onSignOut }) => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === '1') { e.preventDefault(); navigate('/home'); }
-        else if (e.key === '2') { e.preventDefault(); navigate('/projects'); }
+        else if (e.key === '2') { e.preventDefault(); navigate('/workspace'); }
         else if (e.key === '3') { e.preventDefault(); navigate('/calendar'); }
       }
     };
@@ -304,7 +308,7 @@ const AppLayout = ({ session, onSignOut }) => {
 
     // Handle specific navigation cases
     if (page === 'notes' && options.noteId) {
-      navigate(`/projects/${selectedProject?.id}/notes?noteId=${options.noteId}`);
+      navigate(`/workspace/${selectedProject?.id}/notes?noteId=${options.noteId}`);
       return;
     }
 
