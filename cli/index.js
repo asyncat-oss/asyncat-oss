@@ -1,13 +1,14 @@
-import { c, col, setRl, setLl, log, ok, warn, info, banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
-import { LiveLine } from './lib/liveLine.js';
-import { loadTheme, setTheme, getTheme, getThemeName, THEME_NAMES, THEMES } from './lib/theme.js';
-import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
+// Asyncat v2 — TUI Entry Point
+// Premium terminal experience inspired by OpenCode
+import { Tui } from './lib/tui/index.js';
+import { loadTheme, setTheme, getThemeName, THEME_NAMES } from './lib/theme.js';
 import { stopAll, procs } from './lib/procs.js';
-import { select } from './lib/select.js';
+import { readEnv } from './lib/env.js';
 import fs from 'fs';
 import path from 'path';
 import { ROOT } from './lib/env.js';
 
+// ── Legacy imports (command handlers) ───────────────────────────────────────
 import * as _start    from './commands/start.js';
 import * as _stop     from './commands/stop.js';
 import * as _status   from './commands/status.js';
@@ -36,412 +37,553 @@ import * as _uninstall from './commands/uninstall.js';
 import * as _git      from './commands/git.js';
 import * as _code     from './commands/code.js';
 import * as _agent    from './commands/agent.js';
+import * as _mcp      from './commands/mcp.js';
+import { getToken, getBase, apiGet } from './lib/denApi.js';
+import { c, col, setRl, setLl, log, ok, warn, info, banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
+import { LiveLine } from './lib/liveLine.js';
+import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
+import { select } from './lib/select.js';
 
 loadTheme();
 
-const cmds = {
-  start:    () => _start,
-  stop:     () => _stop,
-  status:   () => _status,
-  install:  () => _install,
-  doctor:   () => _doctor,
-  logs:     () => _logs,
-  models:   () => _models,
-  db:       () => _db,
-  config:   () => _config,
-  update:   () => _update,
-  version:  () => _version,
-  open:     () => _open,
-  chat:     () => _chat,
-  run:      () => _run,
-  provider: () => _provider,
-  sessions: () => _sessions,
-  watch:    () => _watch,
-  alias:    () => _alias,
-  recent:   () => _recent,
-  bench:    () => _bench,
-  context:  () => _context,
-  snippets: () => _snippets,
-  macros:   () => _macros,
-  history:  () => _history,
-  uninstall: () => _uninstall,
-  git:       () => _git,
-  code:      () => _code,
-  agent:     () => _agent,
-};
-
-// ── /theme handler ─────────────────────────────────────────────────────────────
-async function handleTheme(args) {
-  const THEME_DESCS = {
-    dark:    'Default dark theme — magenta accents',
-    hacker:  'Monochrome green — hacker terminal style',
-    ocean:   'Blue and cyan — calm ocean palette',
-    minimal: 'Low-contrast — distraction-free minimal',
-  };
-  const name = args[0];
-  if (!name) {
-    const current = getThemeName();
-    const chosen = await select({
-      title:      `Theme  ${c.dim}(current: ${current})${c.reset}`,
-      searchable: false,
-      items: THEME_NAMES.map(n => ({
-        name: n,
-        desc: THEME_DESCS[n] || '',
-        tag:  n === current ? 'active' : '',
-      })),
+// ── Detect model info ───────────────────────────────────────────────────────
+async function detectModel() {
+  try {
+    const token = await getToken();
+    const base  = getBase();
+    const res = await fetch(`${base}/api/ai/providers/config`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(2000),
     });
-    if (!chosen) return;
-    if (setTheme(chosen.name)) {
-      ok(`Theme set to ${col('cyan', chosen.name)} — type ${col('cyan', 'clear')} to see it applied`);
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        model: data.model || 'default',
+        provider: data.provider_type || 'local',
+      };
     }
-    return;
-  }
-  if (setTheme(name)) {
-    ok(`Theme set to ${col('cyan', name)} — type ${col('cyan', 'clear')} to see it applied`);
-  } else {
-    warn(`Unknown theme "${name}". Available: ${THEME_NAMES.join(', ')}`);
-  }
+  } catch {}
+  return { model: '', provider: '' };
 }
 
-// ── /stash handler ─────────────────────────────────────────────────────────────
-function handleStash(args) {
-  const sub = args[0];
-
-  if (!sub || sub === 'list') {
-    const items = stashList();
-    if (items.length === 0) { info('Stash is empty.'); return; }
-    log('');
-    for (const it of items) {
-      const date = new Date(it.ts).toLocaleDateString();
-      log(`  ${col('cyan', it.id)}  ${col('dim', date)}  ${it.text}`);
-    }
-    log('');
-    return;
-  }
-
-  if (sub === 'rm') {
-    const id = args[1];
-    if (!id) { warn('Usage: stash rm <id>'); return; }
-    if (stashRm(id)) ok(`Removed stash entry ${col('cyan', id)}`);
-    else warn(`No entry matching "${id}"`);
-    return;
-  }
-
-  if (sub === 'clear') {
-    stashClear();
-    ok('Stash cleared.');
-    return;
-  }
-
-  // Treat everything as text to stash
-  const text = args.join(' ');
-  const id   = stashAdd(text);
-  ok(`Stashed ${col('dim', `[${id}]`)}  ${text}`);
-}
-
-// ── /live-logs handler ────────────────────────────────────────────────────────────
-function handleLiveLogs(args) {
-  const sub = args[0];
-  const enabled = getLiveLogsEnabled();
-
-  if (!sub || sub === 'status') {
-    info(`Live logs: ${enabled ? col('green', 'ON') : col('dim', 'off')}`);
-    return;
-  }
-
-  if (sub === 'on' || sub === 'enable') {
-    setLiveLogsEnabled(true);
-    ok('Live logs enabled — backend/frontend output will now stream in REPL');
-    return;
-  }
-
-  if (sub === 'off' || sub === 'disable') {
-    setLiveLogsEnabled(false);
-    ok('Live logs disabled — logs only written to files (use logs command to view)');
-    return;
-  }
-
-  if (sub === 'toggle') {
-    setLiveLogsEnabled(!enabled);
-    ok(`Live logs ${!enabled ? 'enabled' : 'disabled'}`);
-    return;
-  }
-
-  warn(`Unknown live-logs subcommand: ${col('white', sub)}`);
-  log(`  Usage: ${col('cyan', 'live-logs')} ${col('dim', '[on|off|toggle|status]')}`);
-}
-
-// ── Interactive command menu ───────────────────────────────────────────────────
-const MENU_ITEMS = [
-  { name: 'agent',    desc: 'Autonomous AI agent with tool use',     group: 'AI' },
-  { name: 'chat',     desc: 'Interactive AI chat with streaming',    group: 'AI' },
-  { name: 'run',      desc: 'Direct chat with local llama-server',   group: 'AI' },
-  { name: 'models',   desc: 'List and manage GGUF models',           group: 'AI' },
-  { name: 'provider', desc: 'Configure AI provider (local/cloud)',   group: 'AI' },
-  { name: 'sessions', desc: 'Browse saved conversations',            group: 'AI' },
-  { name: 'git',      desc: 'Git status, log, diff for the project', group: 'Developer' },
-  { name: 'code',     desc: 'Show file tree of current directory',   group: 'Developer' },
-  { name: 'snippets', desc: 'Save and reuse code snippets',          group: 'Developer' },
-  { name: 'context',  desc: 'Show workspace state and versions',     group: 'Developer' },
-  { name: 'macros',   desc: 'Record and replay command sequences',   group: 'Productivity' },
-  { name: 'alias',    desc: 'Save command shortcuts',                group: 'Productivity' },
-  { name: 'history',  desc: 'Search command history',                group: 'Productivity' },
-  { name: 'start',    desc: 'Start backend and frontend services',   group: 'Services' },
-  { name: 'stop',     desc: 'Stop all running services',             group: 'Services' },
-  { name: 'status',   desc: 'Show running processes',                group: 'Services' },
-  { name: 'install',  desc: 'Install dependencies and set up .env', group: 'Setup' },
-  { name: 'doctor',   desc: 'Full system health check',              group: 'Setup' },
-  { name: 'update',   desc: 'Pull latest changes and reinstall',     group: 'Setup' },
-  { name: 'theme',    desc: 'Switch color theme',                    group: 'Setup' },
-  { name: 'exit',     desc: 'Quit and stop all services',            group: 'Setup' },
-];
-
-async function showMenu() {
-  const chosen = await select({
-    title:      'asyncat  —  open-source AI workspace',
-    searchable: true,
-    items:      MENU_ITEMS,
-  });
-  if (!chosen) return;
-  await dispatch([chosen.name]);
-}
-
-// ── Help ───────────────────────────────────────────────────────────────────────
-function cmdHelp() {
-  log('');
-  log(`  ${col('bold', 'Services')}`);
-  log(`  ${col('cyan', 'start')}    ${col('dim', '[--backend-only] [--frontend-only]')}   Start services`);
-  log(`  ${col('cyan', 'stop')}               Stop all running services`);
-  log(`  ${col('cyan', 'status')}   ${col('dim', 'ps')}        Show what is running`);
-  log(`  ${col('cyan', 'restart')}            Stop then start`);
-  log('');
-  log(`  ${col('bold', 'AI  ·  the good stuff')}`);
-  log(`  ${col('cyan', 'agent')}    ${col('dim', '[goal] [--auto-approve] [--max-rounds N] [--workspace DIR]')}`);
-  log(`           ${col('dim', 'Autonomous AI agent — reads files, runs code, searches web')}`);
-  log(`  ${col('cyan', 'chat')}     ${col('dim', '[--web] [--think] [--style=concise]')}`);
-  log(`           ${col('dim', 'Interactive AI chat with streaming (uses your workspace)')}`);
-  log(`  ${col('cyan', 'run')}      ${col('dim', '[model]')}`);
-  log(`           ${col('dim', 'Direct terminal chat with local llama-server (no den needed)')}`);
-  log('');
-  log(`  ${col('bold', 'Models')}`);
-  log(`  ${col('cyan', 'models list')}                    List downloaded models`);
-  log(`  ${col('cyan', 'models pull')}  ${col('dim', '<url> [file.gguf]')}  Download a GGUF model`);
-  log(`  ${col('cyan', 'models serve')} ${col('dim', '<file.gguf>')}        Load model into llama-server`);
-  log(`  ${col('cyan', 'models stop')}                    Unload & stop llama-server`);
-  log(`  ${col('cyan', 'models ps')}                      Show running models`);
-  log(`  ${col('cyan', 'models rm')}    ${col('dim', '<file.gguf>')}        Delete a model file`);
-  log(`  ${col('cyan', 'models info')}  ${col('dim', '<file.gguf>')}        Show model details`);
-  log('');
-  log(`  ${col('bold', 'Provider')}`);
-  log(`  ${col('cyan', 'provider list')}                  Show current AI provider`);
-  log(`  ${col('cyan', 'provider set local')} ${col('dim', '<file.gguf>')}  Switch to local llama.cpp`);
-  log(`  ${col('cyan', 'provider set cloud')} ${col('dim', '<key> [model]')} Switch to cloud (OpenAI)`);
-  log(`  ${col('cyan', 'provider set custom')} ${col('dim', '<url> <key>')} Custom OpenAI-compat endpoint`);
-  log(`  ${col('cyan', 'provider stop')}                  Stop the local model server`);
-  log('');
-  log(`  ${col('bold', 'Sessions & Stash')}`);
-  log(`  ${col('cyan', 'sessions')}       ${col('dim', '[n]')}    List saved conversations (default 20)`);
-  log(`  ${col('cyan', 'sessions rm')}    ${col('dim', '<id>')}   Delete a conversation`);
-  log(`  ${col('cyan', 'sessions stats')}         Conversation statistics`);
-  log(`  ${col('cyan', 'stash')}          ${col('dim', '[text]')} Save text to stash (no arg = list)`);
-  log(`  ${col('cyan', 'stash rm')}       ${col('dim', '<id>')}   Remove stash entry`);
-  log(`  ${col('cyan', 'stash clear')}            Clear all stash entries`);
-  log('');
-  log(`  ${col('bold', 'Productivity & Automation')}`);
-  log(`  ${col('cyan', 'watch')}          ${col('dim', '<interval> <cmd>')} Run command every N seconds`);
-  log(`  ${col('cyan', 'bench')}          ${col('dim', '[count] <cmd>')}     Time command execution`);
-  log(`  ${col('cyan', 'alias')}          ${col('dim', '[list|add|rm]')}     Save command shortcuts`);
-  log(`  ${col('cyan', 'snippets')}       ${col('dim', '[list|add|show|rm]')} Save code blocks`);
-  log(`  ${col('cyan', 'macros')}         ${col('dim', '[list|record|play|rm]')} Record command sequences`);
-  log(`  ${col('cyan', 'history')}        ${col('dim', '[query]')}  Search command history`);
-  log(`  ${col('cyan', 'recent')}         ${col('dim', '[n]')}    Show last N commands (default 10)`);
-  log(`  ${col('cyan', 'context')}              Show workspace state`);
-  log('');
-  log(`  ${col('bold', 'Appearance')}`);
-  log(`  ${col('cyan', 'theme')}        ${col('dim', '<dark|hacker|ocean|minimal>')} Switch color theme`);
-  log(`  ${col('cyan', 'live-logs')}    ${col('dim', '[on|off|toggle|status]')}     Stream backend/frontend logs`);
-  log('');
-  log(`  ${col('bold', 'Setup & Maintenance')}`);
-  log(`  ${col('cyan', 'install')}            Install deps, set up .env, check llama.cpp`);
-  log(`  ${col('cyan', 'doctor')}             Full system health check`);
-  log(`  ${col('cyan', 'update')}             Pull latest changes + reinstall`);
-  log(`  ${col('cyan', 'uninstall')}          Remove asyncat from your system`);
-  log(`  ${col('cyan', 'logs')}    ${col('dim', '[backend|frontend|all]')}`);
-  log(`  ${col('cyan', 'db')}      ${col('dim', '<backup|reset|seed>')}`);
-  log(`  ${col('cyan', 'config')}  ${col('dim', '<show|get <KEY>|set KEY=VALUE>')}`);
-  log(`  ${col('cyan', 'version')}            Show version info`);
-  log(`  ${col('cyan', 'open')}    ${col('dim', 'o')}         Open asyncat in the browser`);
-  log('');
-  log(`  ${col('bold', 'REPL')}`);
-  log(`  ${col('cyan', 'clear')}              Clear the screen`);
-  log(`  ${col('cyan', 'help')}    ${col('dim', '?')}         Show this help`);
-  log(`  ${col('cyan', 'exit')}    ${col('dim', 'quit q')}    Quit (stops all services)`);
-  log(`  ${col('bold', 'Developer')}`);
-  log(`  ${col('cyan', 'git')}      ${col('dim', '[status|log [n]|diff|branch]')}  Git project info`);
-  log(`  ${col('cyan', 'snippets')} ${col('dim', '[list|add|show|rm|copy]')}       Save code blocks`);
-  log(`  ${col('cyan', 'context')}                        Show workspace state`);
-  log('');
-  log(`  ${col('dim', 'Tip: press / and Enter to open the interactive command menu')}`);
-  log('');
-}
-
-// ── Dispatch ───────────────────────────────────────────────────────────────────
-async function dispatch(tokens) {
-  const [cmd, ...args] = tokens;
-  if (!cmd) return;
-
-  // Handle macro playback
-  if (cmd === 'macros' && (args[0] === 'play' || args[0] === 'run')) {
-    const result = cmds.macros().run(args);
-    if (result && result._macro) {
-      info(`Playing macro with ${result.commands.length} commands...`);
-      for (const macroCmd of result.commands) {
-        const macroTokens = macroCmd.split(/\s+/);
-        log(`  ${col('cyan', '▶')} ${macroCmd}`);
-        await dispatch(macroTokens);
-      }
-      ok('Macro execution complete!');
-      return;
-    }
-  }
-
-  switch (cmd) {
-    case 'start':    cmds.start().run(args);              break;
-    case 'stop':     cmds.stop().run();                   break;
-    case 'status':
-    case 'ps':       cmds.status().run();                 break;
-    case 'restart':
-      cmds.stop().run();
-      setTimeout(() => cmds.start().run(args), 500);
-      break;
-    case 'install':
-    case 'setup':    await cmds.install().run();          break;
-    case 'doctor':   cmds.doctor().run();                 break;
-    case 'logs':     cmds.logs().run(args);               break;
-    case 'models':   await cmds.models().run(args);       break;
-    case 'db':       await cmds.db().run(args);           break;
-    case 'config':   cmds.config().run(args);             break;
-    case 'update':   cmds.update().run();                 break;
-    case 'version':
-    case 'v':        cmds.version().run();                break;
-    case 'open':
-    case 'o':        cmds.open().run();                   break;
-    case 'agent':    await cmds.agent().run(args);        break;
-    case 'chat':     await cmds.chat().run(args);         break;
-    case 'run':      await cmds.run().run(args);          break;
-    case 'provider': await cmds.provider().run(args);     break;
-    case 'sessions': await cmds.sessions().run(args);     break;
-    case 'watch':    cmds.watch().run(args);              break;
-    case 'alias':    cmds.alias().run(args);              break;
-    case 'recent':   cmds.recent().run(args);             break;
-    case 'bench':    cmds.bench().run(args);              break;
-    case 'context':  cmds.context().run();                break;
-    case 'snippets': await cmds.snippets().run(args);     break;
-    case 'code':     cmds.code().run(args);               break;
-    case 'macros':   cmds.macros().run(args);             break;
-    case 'history':  cmds.history().run(args);            break;
-    case 'uninstall': cmds.uninstall().run();             break;
-    case 'git':      cmds.git().run(args);                break;
-    case 'theme':    await handleTheme(args);             break;
-    case 'menu':     await showMenu();                    break;
-    case 'stash':    handleStash(args);                   break;
-    case 'live-logs': handleLiveLogs(args);               break;
-    case 's':        cmds.start().run(args);              break;
-    case 'c':        await cmds.chat().run(args);         break;
-    case 'a':        await cmds.agent().run(args);        break;
-    case 'clear':
-      console.clear();
-      banner();
-      break;
-    case 'help':
-    case '?':        cmdHelp();                           break;
-    case 'exit':
-    case 'quit':
-    case 'q':
-      stopAll();
-      log(col('dim', '  bye ♡'));
-      process.exit(0);
-      break;
-    default:
-      warn(`Unknown command: ${col('white', cmd)}  (type ${col('cyan', 'help')} or ${col('cyan', '/')} to browse)`);
-  }
-}
-
-// ── Auto-start backend ─────────────────────────────────────────────────────────
+// ── Auto-start backend ─────────────────────────────────────────────────────
 async function maybeStartBackend() {
-  if (procs.backend) return;                                          // already in-session
-  if (!fs.existsSync(path.join(ROOT, 'den/.env')))          return;  // not installed
+  if (procs.backend) return;
+  if (!fs.existsSync(path.join(ROOT, 'den/.env')))          return;
   if (!fs.existsSync(path.join(ROOT, 'den/node_modules')))  return;
-
   try {
     const res = await fetch('http://localhost:8716/api/health', {
       signal: AbortSignal.timeout(600),
     });
-    if (res.ok) return;  // already running from a previous session
+    if (res.ok) return;
   } catch {}
-
-  info('Auto-starting backend…');
-  cmds.start().run(['--backend-only']);
+  _start.run(['--backend-only']);
 }
 
-// ── REPL ───────────────────────────────────────────────────────────────────────
-const PROMPT_LEN = 'asyncat ▸ '.length;
-const makePrompt = () => `${c.bold}${getTheme().accent}asyncat${c.reset}${c.dim} ▸ ${c.reset}`;
+// ── TUI Mode (default — interactive) ────────────────────────────────────────
+async function startTui() {
+  // Create TUI first so alternate screen captures backend output
+  const tui = new Tui({
+    modelInfo: '',
+    providerInfo: '',
+    version: '0.3.2',
+  });
+  tui.start();
 
-async function startREPL() {
-  banner();
+  // Suppress console output during backend auto-start
+  const origWrite = process.stdout.write.bind(process.stdout);
+  const origConsoleLog = console.log;
+  process.stdout.write = (s) => { /* swallow during startup */ return true; };
+  console.log = () => {};
+
   await maybeStartBackend();
-  cmds.status().run();
+
+  // Restore and re-render
+  process.stdout.write = origWrite;
+  console.log = origConsoleLog;
+
+  // Detect model after backend is up
+  const { model, provider } = await detectModel();
+  tui.setModel(model, provider);
+
+  // ── Helper: run a command in normal terminal, then return to TUI ───────
+  function runInShell(fn) {
+    return new Promise(async (resolve) => {
+      tui.destroy();
+      // Clear the main screen so old output doesn't stack
+      process.stdout.write('\x1b[2J\x1b[H');
+
+      try {
+        await fn();
+      } catch (e) {
+        console.log(`\n  \x1b[31m✖\x1b[0m  ${e.message}\n`);
+      }
+
+      console.log(`\n  \x1b[2mPress any key to return to asyncat...\x1b[0m`);
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', () => {
+        process.stdin.setRawMode(false);
+        tui.start();
+        resolve();
+      });
+    });
+  }
+
+  // ── Command dispatch ──────────────────────────────────────────────────
+  async function dispatch(cmd, args = []) {
+    tui.lockInput();
+
+    // Commands that need the full terminal
+    const shellCommands = [
+      'install', 'setup', 'doctor', 'provider', 'sessions',
+      'snippets', 'mcp', 'update', 'uninstall', 'logs',
+      'status', 'ps', 'config', 'version', 'v', 'context',
+      'code', 'git',
+    ];
+
+    if (shellCommands.includes(cmd)) {
+      await runInShell(async () => {
+        switch (cmd) {
+          case 'install': case 'setup': await _install.run(); break;
+          case 'doctor':   _doctor.run();  break;
+          case 'provider': await _provider.run(args); break;
+          case 'sessions': await _sessions.run(args); break;
+          case 'snippets': await _snippets.run(args); break;
+          case 'mcp':      await _mcp.run(args); break;
+          case 'update':   _update.run(); break;
+          case 'uninstall': _uninstall.run(); break;
+          case 'logs':     _logs.run(args); break;
+          case 'status': case 'ps': _status.run(); break;
+          case 'config':   _config.run(args); break;
+          case 'version': case 'v': _version.run(); break;
+          case 'context':  _context.run(); break;
+          case 'code':     _code.run(args); break;
+          case 'git':      _git.run(args); break;
+        }
+      });
+      if (['provider'].includes(cmd)) {
+        const { model: m, provider: p } = await detectModel();
+        tui.setModel(m, p);
+      }
+      tui.unlockInput();
+      return;
+    }
+
+    try {
+      switch (cmd) {
+        // ── Models: inline TUI selector ─────────────────────────────────
+        case 'models': {
+          if (args.length > 0) {
+            // Subcommand like 'models serve foo.gguf'
+            await runInShell(() => _models.run(args));
+            const { model: m, provider: p } = await detectModel();
+            tui.setModel(m, p);
+            tui.unlockInput();
+            return;
+          }
+          // Show inline model picker
+          tui.unlockInput();
+          let models = [];
+          try {
+            const token = await getToken();
+            const localModels = await apiGet('/api/ai/providers/local-models');
+            models = (localModels.models || []).map(m => ({
+              name: m.filename,
+              desc: m.sizeFormatted || '',
+              _file: m.filename,
+            }));
+          } catch { }
+          if (models.length === 0) {
+            tui.printWarn('No local models found. Use /models pull <url> to download one.');
+            return;
+          }
+          const chosen = await tui.showSelector('Select Model', models);
+          if (chosen) {
+            tui.printInfo(`Loading ${chosen.name}...`);
+            try {
+              const token = await getToken();
+              const base = getBase();
+              await fetch(`${base}/api/ai/providers/server/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ filename: chosen._file }),
+              });
+              tui.printOk(`Model ${chosen.name} loaded`);
+              setTimeout(async () => {
+                const { model: m, provider: p } = await detectModel();
+                tui.setModel(m, p);
+              }, 1500);
+            } catch (e) {
+              tui.printErr(`Failed to load model: ${e.message}`);
+            }
+          }
+          return;
+        }
+
+        // ── Theme: inline TUI selector ──────────────────────────────────
+        case 'theme': {
+          tui.unlockInput();
+          const themeItems = THEME_NAMES.map(n => ({
+            name: n,
+            desc: n === getThemeName() ? '(current)' : '',
+          }));
+          const chosen = await tui.showSelector('Select Theme', themeItems);
+          if (chosen) {
+            setTheme(chosen.name);
+            tui.printOk(`Theme: ${chosen.name}`);
+          }
+          tui.render();
+          return;
+        }
+
+        // ── Services ────────────────────────────────────────────────────
+        case 'start':
+        case 's':
+          _start.run(args);
+          tui.printOk('Services starting...');
+          break;
+        case 'stop':
+          _stop.run();
+          tui.printOk('Services stopped');
+          break;
+        case 'restart':
+          _stop.run();
+          setTimeout(() => _start.run(args), 500);
+          tui.printOk('Restarting services...');
+          break;
+
+        // ── Quick commands ───────────────────────────────────────────────
+        case 'open':
+        case 'o':
+          _open.run();
+          tui.printOk('Opened in browser');
+          break;
+        case 'db':
+          await _db.run(args);
+          break;
+        case 'watch':
+          _watch.run(args);
+          break;
+        case 'alias':
+          _alias.run(args);
+          break;
+        case 'recent':
+          _recent.run(args);
+          break;
+        case 'bench':
+          _bench.run(args);
+          break;
+        case 'macros':
+          _macros.run(args);
+          break;
+        case 'history':
+          _history.run(args);
+          break;
+        case 'stash':
+          handleStash(args.length ? args : ['list'], tui);
+          break;
+        case 'live-logs':
+          handleLiveLogs(args, tui);
+          break;
+        case 'new':
+          tui.clearMessages();
+          tui.printOk('New session started');
+          break;
+        case 'help':
+        case '?':
+          showTuiHelp(tui);
+          break;
+        case 'clear':
+          tui.clearMessages();
+          break;
+        case 'exit':
+        case 'quit':
+        case 'q':
+          tui.destroy();
+          stopAll();
+          console.log('  bye ♡');
+          process.exit(0);
+          break;
+        default:
+          tui.printWarn(`Unknown: /${cmd}  — press / to browse commands`);
+      }
+    } catch (e) {
+      tui.printErr(e.message);
+    }
+
+    tui.unlockInput();
+
+    if (['start', 'restart', 's'].includes(cmd)) {
+      setTimeout(async () => {
+        const { model: m, provider: p } = await detectModel();
+        tui.setModel(m, p);
+      }, 2000);
+    }
+  }
+
+  // ── Handle AI input (plain text → agent) ──────────────────────────────
+  async function handleAiInput(text) {
+    tui.addMessage('user', text);
+    tui.lockInput();
+    tui.startStreaming('Thinking...');
+
+    try {
+      const token = await getToken();
+      const base  = getBase();
+
+      // Use the agent endpoint for full autonomy
+      const res = await fetch(`${base}/api/agent/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify({
+          goal: text,
+          workingDir: process.cwd(),
+          maxRounds: 25,
+          autoApprove: false,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Agent error: ${res.status}`);
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = '';
+      let fullAnswer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6).trim());
+            handleAgentEvent(tui, event, token, base);
+            if (event.type === 'answer') fullAnswer = event.data?.answer || '';
+          } catch {}
+        }
+      }
+
+      tui.stopStreaming();
+      if (fullAnswer) {
+        tui.addMessage('assistant', fullAnswer);
+      }
+    } catch (e) {
+      tui.stopStreaming();
+      if (e.message.includes('fetch failed') || e.message.includes('ECONNREFUSED')) {
+        tui.printErr('Cannot connect to AI model. Run /models or /start first.');
+      } else {
+        tui.printErr(e.message);
+      }
+    }
+
+    tui.unlockInput();
+  }
+
+  // ── Event wiring ──────────────────────────────────────────────────────
+  tui.on('command', (cmd, args) => dispatch(cmd, args));
+  tui.on('input', (text) => handleAiInput(text));
+  tui.on('exit', () => {
+    tui.destroy();
+    stopAll();
+    console.log('  bye ♡');
+    process.exit(0);
+  });
+
+  tui.start();
+}
+
+// ── Agent event handler ─────────────────────────────────────────────────────
+function handleAgentEvent(tui, event, token, base) {
+  const { type, data } = event;
+  switch (type) {
+    case 'thinking':
+      tui.setStreamMsg(`Thinking (Round ${(data.round || 0) + 1})...`);
+      if (data.thought) {
+        tui.addMessage('thinking', data.thought, { round: (data.round || 0) + 1 });
+      }
+      break;
+    case 'tool_start':
+      tui.setStreamMsg(`Running ${data.tool}...`);
+      tui.addMessage('tool', data.description || '', { tool: data.tool, success: null });
+      break;
+    case 'tool_result':
+      const content = data.result?.content || data.result?.message || '';
+      const preview = typeof content === 'string' ? content.slice(0, 200) : JSON.stringify(content).slice(0, 200);
+      tui.addMessage('tool', preview, { tool: data.tool || 'tool', success: data.result?.success });
+      break;
+    case 'done':
+      tui.stopStreaming();
+      break;
+    case 'error':
+      tui.stopStreaming();
+      tui.printErr(data.message || 'Unknown agent error');
+      break;
+    case 'permission_request':
+      // Auto-allow in TUI mode for now (can add dialog later)
+      fetch(`${base}/api/agent/permission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sessionId: data.sessionId, decision: 'allow' }),
+      }).catch(() => {});
+      break;
+  }
+}
+// ── Help ────────────────────────────────────────────────────────────────────
+function showTuiHelp(tui) {
+  tui.print('');
+  tui.print('━━ asyncat ━━');
+  tui.print('');
+  tui.print('  Just type        Send to AI (auto-agent mode)');
+  tui.print('  /                Browse all commands');
+  tui.print('  esc              Back / Clear / Exit');
+  tui.print('  ctrl+p           Command palette');
+  tui.print('  ↑↓               Scroll / History');
+  tui.print('  enter            (empty) cycle cat message 🐱');
+  tui.print('');
+  tui.print('  /models          Select & load a model');
+  tui.print('  /theme           Pick color theme');
+  tui.print('  /provider        Configure AI provider');
+  tui.print('  /git             Git project info');
+  tui.print('  /doctor          System health check');
+  tui.print('  /new             Clear & start fresh');
+  tui.print('  /exit            Quit');
+  tui.print('');
+}
+
+// ── Stash handler (TUI mode) ────────────────────────────────────────────────
+function handleStash(args, tui) {
+  const sub = args[0];
+  if (!sub || sub === 'list') {
+    const items = stashList();
+    if (items.length === 0) { tui.printInfo('Stash is empty.'); return; }
+    tui.print('');
+    for (const it of items) {
+      const date = new Date(it.ts).toLocaleDateString();
+      tui.print(`  ${it.id}  ${date}  ${it.text}`);
+    }
+    return;
+  }
+  if (sub === 'rm') {
+    const id = args[1];
+    if (!id) { tui.printWarn('Usage: /stash rm <id>'); return; }
+    if (stashRm(id)) tui.printOk(`Removed stash entry ${id}`);
+    else tui.printWarn(`No entry matching "${id}"`);
+    return;
+  }
+  if (sub === 'clear') {
+    stashClear();
+    tui.printOk('Stash cleared.');
+    return;
+  }
+  const text = args.join(' ');
+  const id = stashAdd(text);
+  tui.printOk(`Stashed [${id}]  ${text}`);
+}
+
+// ── Live-logs handler (TUI mode) ────────────────────────────────────────────
+function handleLiveLogs(args, tui) {
+  const sub = args[0];
+  const enabled = getLiveLogsEnabled();
+  if (!sub || sub === 'status') {
+    tui.printInfo(`Live logs: ${enabled ? 'ON' : 'off'}`);
+    return;
+  }
+  if (sub === 'on' || sub === 'enable') {
+    setLiveLogsEnabled(true);
+    tui.printOk('Live logs enabled');
+    return;
+  }
+  if (sub === 'off' || sub === 'disable') {
+    setLiveLogsEnabled(false);
+    tui.printOk('Live logs disabled');
+    return;
+  }
+  if (sub === 'toggle') {
+    setLiveLogsEnabled(!enabled);
+    tui.printOk(`Live logs ${!enabled ? 'enabled' : 'disabled'}`);
+    return;
+  }
+  tui.printWarn(`Unknown: /live-logs ${sub}. Use on|off|toggle|status`);
+}
+
+// ── Legacy REPL mode (for interactive commands) ─────────────────────────────
+async function runLegacyCommand(cmd, args) {
+  const PROMPT_LEN = 'asyncat ▸ '.length;
+  const makePrompt = () => `\x1b[1m\x1b[35masyncat\x1b[0m\x1b[2m ▸ \x1b[0m`;
+
+  banner();
 
   const ll = new LiveLine(makePrompt(), PROMPT_LEN);
   setRl(ll);
   setLl(ll);
 
-  ll.on('line', async (input) => {
-    const trimmed = input.trim();
-    if (!trimmed) { ll.prompt(); return; }
+  switch (cmd) {
+    case 'chat':  await _chat.run(args);  break;
+    case 'run':   await _run.run(args);   break;
+    case 'agent': await _agent.run(args); break;
+  }
 
-    // / alone → interactive command menu
-    if (trimmed === '/') {
-      await showMenu();
-      ll.restoreMainPrompt(makePrompt(), PROMPT_LEN);
-      ll.prompt();
-      return;
-    }
-
-    // Strip leading / (slash-command mode) — same command names underneath
-    const tokens = (trimmed.startsWith('/') ? trimmed.slice(1) : trimmed).split(/\s+/);
-    await dispatch(tokens);
-
-    const cmd = tokens[0].toLowerCase();
-    if (cmd !== 'exit' && cmd !== 'quit' && cmd !== 'q') {
-      ll.restoreMainPrompt(makePrompt(), PROMPT_LEN);
-      ll.prompt();
-    }
-  });
-
-  ll.on('close', () => {
-    ll.close();
-    stopAll();
-    process.exit(0);
-  });
-
-  ll.start();
+  ll.close();
+  setRl(null);
+  setLl(null);
+  // Return to caller instead of exiting — TUI will resume
 }
 
-// ── Entry point ────────────────────────────────────────────────────────────────
+// ── CLI mode (non-interactive, single command) ──────────────────────────────
+async function runSingleCommand(argv) {
+  const [first, ...rest] = argv;
+
+  if (first === '--version' || first === '-v') {
+    _version.run(); return;
+  }
+  if (first === '--help' || first === '-h') {
+    banner();
+    console.log('  Usage: asyncat [command] [args]');
+    console.log('  Run without arguments for interactive TUI.');
+    console.log('  Commands: agent, chat, run, models, provider, start, stop, status, ...');
+    console.log('  Use asyncat help for full reference.');
+    return;
+  }
+
+  // Direct command execution
+  const cmd = first.replace(/^\//, '');
+  switch (cmd) {
+    case 'agent': await _agent.run(rest); break;
+    case 'chat':  await _chat.run(rest);  break;
+    case 'run':   await _run.run(rest);   break;
+    case 'models': await _models.run(rest); break;
+    case 'provider': await _provider.run(rest); break;
+    case 'start': _start.run(rest); break;
+    case 'stop':  _stop.run(); break;
+    case 'status': _status.run(); break;
+    case 'install': await _install.run(); break;
+    case 'doctor': _doctor.run(); break;
+    case 'version': _version.run(); break;
+    case 'help': banner(); console.log('  Run asyncat without arguments for interactive TUI.'); break;
+    default:
+      // Try to handle as goal text for agent
+      if (!cmd.startsWith('-')) {
+        await _agent.run(argv);
+      } else {
+        console.log(`  Unknown command: ${cmd}`);
+      }
+  }
+}
+
+// ── Entry point ─────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
 
 if (argv.length > 0) {
-  const first = argv[0];
-  if (first === '--version' || first === '-v') {
-    cmds.version().run();
-  } else if (first === '--help' || first === '-h') {
-    banner();
-    cmdHelp();
-  } else {
-    await dispatch(argv);
-  }
+  await runSingleCommand(argv);
 } else {
-  await startREPL();
+  await startTui();
 }

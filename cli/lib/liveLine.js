@@ -39,6 +39,7 @@ const TOP_CMDS = [
   { name: 'theme',    desc: 'Switch color theme' },
   { name: 'git',      desc: 'Git status, log, diff for the project' },
   { name: 'code',     desc: 'Show file tree of current directory' },
+  { name: 'mcp',      desc: 'Manage Model Context Protocol servers' },
   { name: 'menu',     desc: 'Browse all commands interactively (or press /)' },
   { name: 'version',  desc: 'Show version info' },
   { name: 'open',     desc: 'Open asyncat in the browser' },
@@ -69,6 +70,7 @@ const SLASH_CMDS = [
   { name: '/provider',  desc: 'Configure AI provider' },
   { name: '/theme',     desc: 'Switch color theme (dark/hacker/ocean/minimal)' },
   { name: '/git',       desc: 'Git status, log, diff for the project' },
+  { name: '/mcp',       desc: 'Manage Model Context Protocol servers' },
   { name: '/menu',      desc: 'Browse all commands interactively' },
   { name: '/live-logs', desc: 'Toggle streaming of backend/frontend logs' },
   { name: '/help',      desc: 'Show command reference' },
@@ -150,6 +152,11 @@ const SUB_CMDS = {
     { name: 'show',   desc: 'View macro commands' },
     { name: 'rm',     desc: 'Delete a macro' },
   ],
+  mcp: [
+    { name: 'list',   desc: 'List configured MCP servers' },
+    { name: 'add',    desc: 'Add a new MCP server' },
+    { name: 'rm',     desc: 'Remove an MCP server' },
+  ],
   start: [
     { name: '--backend-only',  desc: 'Start backend only' },
     { name: '--frontend-only', desc: 'Start frontend only' },
@@ -187,6 +194,7 @@ const SLASH_SUB = {
   '/macros': SUB_CMDS.macros,
   '/models': SUB_CMDS.models,
   '/sessions': SUB_CMDS.sessions,
+  '/mcp': SUB_CMDS.mcp,
 };
 
 function getSuggestions(buf) {
