@@ -4,13 +4,16 @@ import readline from 'readline';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import net from 'net';
+import { PassThrough } from 'stream';
 import { ansi, strip, vis, w, h, write, at, clearRow } from './ansi.js';
 import {
   renderZen, renderChat, renderPalette, renderStatusBar,
   renderStreamingIndicator, renderSelector, filterPalette,
-  spinnerFrame, nextCatMsg,
+  spinnerFrame, nextCatMsg, setServiceStatus, renderModelSetup,
 } from './views.js';
 import { getTheme } from '../theme.js';
+import { getLiveLogsEnabled } from '../colors.js';
 
 const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
 const MAX_HISTORY  = 200;
@@ -21,9 +24,11 @@ export class Tui extends EventEmitter {
     // Modes: zen | chat | palette | selector
     this.mode        = 'zen';
     this.messages    = [];
+    this.logs        = [];
     this.scrollOff   = 0;
     this.buf         = '';
     this.pos         = 0;
+    this.conversationId = null;
     this.history     = this._loadHistory();
     this.histIdx     = -1;
     this.histSaved   = '';
@@ -41,12 +46,18 @@ export class Tui extends EventEmitter {
     this._destroyed   = false;
     this._inputLocked = false;
     this._catMsg      = null;
+    this._origLog     = null;
+    this._inputStream = new PassThrough();
 
     // Selector state (for model/theme pickers)
     this._selTitle    = '';
     this._selItems    = [];
     this._selIdx      = 0;
     this._selResolve  = null;
+
+    // Model setup state
+    this._setupModel  = null;
+    this._setupResolve = null;
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -59,22 +70,64 @@ export class Tui extends EventEmitter {
     write(ansi.hide);
     write(ansi.clear + ansi.home);
 
+    // Intercept console.log to push to sidebar instead of corrupting TUI
+    if (!this._origLog) {
+      this._origLog = console.log;
+      console.log = (...args) => {
+        const text = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+        text.split('\n').forEach(line => {
+          this.logs.push(line);
+          if (this.logs.length > 500) this.logs.shift();
+        });
+        if (getLiveLogsEnabled()) this.render();
+      };
+    }
+
+    // Enable mouse tracking
+    write('\x1b[?1000h'); // button events
+    write('\x1b[?1006h'); // SGR extended mode
+
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
       process.stdin.resume();
     }
 
-    // Only set up keypress once
+    // Only set up keypress once on our filtered stream
     if (!this._keypressSetup) {
-      readline.emitKeypressEvents(process.stdin);
+      readline.emitKeypressEvents(this._inputStream);
       this._keypressSetup = true;
     }
 
     this._keyHandler = (str, key) => this._onKey(str, key);
-    process.stdin.on('keypress', this._keyHandler);
+    this._inputStream.on('keypress', this._keyHandler);
 
+    // Mouse click handling (raw data intercept)
+    this._mouseHandler = (data) => {
+      const s = data.toString();
+      // Parse mouse SGR sequences: \x1b[<btn;col;rowM or \x1b[<btn;col;rowm
+      const mouseRegex = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
+      let match;
+      while ((match = mouseRegex.exec(s)) !== null) {
+        const btn = parseInt(match[1]);
+        const col = parseInt(match[2]);
+        const row = parseInt(match[3]);
+        const press = match[4] === 'M';
+        if (press && btn === 0) this._onMouseClick(col, row);
+      }
+      
+      // Filter out all mouse SGR sequences before passing to readline
+      const clean = s.replace(/\x1b\[<[0-9;]+[mM]/g, '');
+      if (clean) {
+        this._inputStream.write(Buffer.from(clean));
+      }
+    };
+    process.stdin.on('data', this._mouseHandler);
     this._resizeHandler = () => this.render();
     process.stdout.on('resize', this._resizeHandler);
+
+    // Start service status polling
+    this._pollStatus();
+    this._statusTimer = setInterval(() => this._pollStatus(), 8000);
 
     this.render();
   }
@@ -84,17 +137,30 @@ export class Tui extends EventEmitter {
     this._destroyed = true;
     this._started = false;
     if (this._streamTimer) clearInterval(this._streamTimer);
+    if (this._statusTimer) clearInterval(this._statusTimer);
     if (this._keyHandler) {
-      process.stdin.removeListener('keypress', this._keyHandler);
+      this._inputStream.removeListener('keypress', this._keyHandler);
       this._keyHandler = null;
+    }
+    if (this._mouseHandler) {
+      process.stdin.removeListener('data', this._mouseHandler);
+      this._mouseHandler = null;
     }
     if (this._resizeHandler) {
       process.stdout.removeListener('resize', this._resizeHandler);
       this._resizeHandler = null;
     }
+    // Disable mouse tracking
+    write('\x1b[?1000l');
+    write('\x1b[?1006l');
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
     write(ansi.show);
     write(ansi.mainScreen);
+    if (this._origLog) {
+      console.log = this._origLog;
+      this._origLog = null;
+    }
+
     this._saveHistory();
   }
 
@@ -103,8 +169,13 @@ export class Tui extends EventEmitter {
     if (this._destroyed) return;
     write(ansi.hide);
 
+    // Render status bar first so the cursor is not left at the bottom
+    renderStatusBar(this.version);
+
     if (this.mode === 'selector') {
       renderSelector(this._selTitle, this._selItems, this._selIdx, 1);
+    } else if (this.mode === 'model-setup') {
+      renderModelSetup(this._setupModel, this.buf, this.pos, true);
     } else if (this.mode === 'palette') {
       this.paletteItems = filterPalette(this.buf);
       if (this.paletteIdx >= this.paletteItems.length) {
@@ -112,13 +183,13 @@ export class Tui extends EventEmitter {
       }
       renderPalette(this.paletteItems, this.paletteIdx, this.buf, this.pos);
     } else if (this.mode === 'chat') {
-      renderChat(this.messages, this.scrollOff, this.buf, this.pos, this.modelInfo, this.providerInfo);
+      const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
+      renderChat(msgs, this.scrollOff, this.buf, this.pos, this.modelInfo, this.providerInfo, this.logs);
     } else {
       // zen
-      renderZen(this.buf, this.pos, this.modelInfo, this.providerInfo, this._catMsg);
+      renderZen(this.buf, this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs);
     }
 
-    renderStatusBar(this.version);
     write(ansi.show);
   }
 
@@ -139,6 +210,7 @@ export class Tui extends EventEmitter {
 
   clearMessages() {
     this.messages = [];
+    this.conversationId = null;
     this.mode = 'zen';
     this._catMsg = nextCatMsg();
     this.render();
@@ -168,10 +240,37 @@ export class Tui extends EventEmitter {
     });
   }
 
+  // ── Model Setup Wizard ────────────────────────────────────────────────────
+  showModelSetup(model) {
+    return new Promise((resolve) => {
+      this.mode = 'model-setup';
+      this._setupModel = model;
+      this._setupResolve = resolve;
+      this.buf = String(model.contextLength || 8192);
+      this.pos = this.buf.length;
+      this.render();
+    });
+  }
+
   // ── Streaming ─────────────────────────────────────────────────────────────
-  startStreaming(msg) {
+  setStreamMsg(msg) {
+    this._streamMsg = msg;
+    this.render();
+  }
+
+  appendStreamContent(delta) {
+    this._streamContent = (this._streamContent || '') + delta;
+    this.render();
+  }
+
+  clearStreamContent() {
+    this._streamContent = '';
+    this.render();
+  }
+
+  startStreaming(msg = 'Thinking...') {
     this.streaming = true;
-    this._streamMsg = msg || 'Thinking...';
+    this._streamMsg = msg;
     if (this.mode !== 'chat') this.mode = 'chat';
     this._streamTimer = setInterval(() => {
       if (this._destroyed) return;
@@ -204,6 +303,29 @@ export class Tui extends EventEmitter {
     if (this.mode === 'selector') {
       this._onKeySelector(name, ctrl, str, key);
       return;
+    }
+
+    // ── Model Setup mode ─────────────────────────────────────────────────
+    if (this.mode === 'model-setup') {
+      if (name === 'escape') {
+        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+        if (this._setupResolve) { this._setupResolve(null); this._setupResolve = null; }
+        this.buf = ''; this.pos = 0;
+        this.render();
+        return;
+      }
+      if (name === 'return') {
+        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+        const ctxSize = this.buf.trim() || '8192';
+        if (this._setupResolve) { this._setupResolve(ctxSize); this._setupResolve = null; }
+        this.buf = ''; this.pos = 0;
+        this.render();
+        return;
+      }
+      // Allow only numbers and backspace/nav for context size
+      if (str && !/^[0-9]$/.test(str) && name !== 'backspace' && name !== 'delete' && name !== 'left' && name !== 'right') {
+        return; 
+      }
     }
 
     // ── ESC ──────────────────────────────────────────────────────────────
@@ -377,6 +499,31 @@ export class Tui extends EventEmitter {
     }
   }
 
+  // ── Mouse click handler ────────────────────────────────────────────────────
+  _onMouseClick(col, row) {
+    if (this._destroyed || this._inputLocked) return;
+    const H = h();
+    const W = w();
+
+    if (this.mode === 'zen') {
+      // Cat area: top half of screen (roughly rows 2-6 in a centered layout)
+      const centerY = Math.floor(H / 2) - 4;
+      if (row >= centerY && row <= centerY + 5) {
+        // Clicked the cat!
+        this._catMsg = nextCatMsg();
+        this.render();
+        return;
+      }
+    }
+
+    // Status bar click → command palette
+    if (row === H) {
+      this.mode = 'palette';
+      this.buf = '/'; this.pos = 1; this.paletteIdx = 0;
+      this.render();
+    }
+  }
+
   // ── Selector key handler ──────────────────────────────────────────────────
   _onKeySelector(name, ctrl, str, key) {
     if (name === 'escape') {
@@ -411,5 +558,21 @@ export class Tui extends EventEmitter {
     try { fs.writeFileSync(HISTORY_FILE, this.history.slice(0, MAX_HISTORY).join('\n') + '\n'); }
     catch {}
   }
-}
 
+  // ── Service status polling ────────────────────────────────────────────────
+  _pollStatus() {
+    const checkPort = (port) => new Promise((resolve) => {
+      const socket = new net.Socket();
+      socket.setTimeout(500);
+      socket.on('connect', () => { socket.destroy(); resolve(true); });
+      socket.on('timeout', () => { socket.destroy(); resolve(false); });
+      socket.on('error', () => { socket.destroy(); resolve(false); });
+      socket.connect(port, '127.0.0.1');
+    });
+
+    Promise.all([checkPort(8716), checkPort(8717)]).then(([be, fe]) => {
+      setServiceStatus(be, fe);
+      if (!this._destroyed) this.render();
+    });
+  }
+}
