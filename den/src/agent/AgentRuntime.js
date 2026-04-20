@@ -17,6 +17,7 @@ import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt } from './prompts/agentSystemPrompt.js';
 import path from 'path';
 import fs from 'fs';
+import { basalGanglia } from './BasalGanglia.js';
 import db from '../db/client.js';
 
 // ── Inline Skills Helper (Cerebellum) ─────────────────────────────────────────────
@@ -161,6 +162,7 @@ export class AgentRuntime {
       if (finalAnswer && toolCalls.length === 0) {
         answer = finalAnswer;
         this.onEvent({ type: 'answer', data: { answer, round } });
+        this._trackWorkflow(goal);
         break;
       }
 
@@ -221,6 +223,9 @@ export class AgentRuntime {
 
     this.session.setScratchpad('finalAnswer', answer);
     this.session.complete();
+
+    this._trackWorkflow(goal);
+
     return { answer, session: this.session, toolCalls: this.session.toolHistory };
   }
 
@@ -335,6 +340,19 @@ export class AgentRuntime {
       return rows || [];
     } catch {
       return [];
+    }
+  }
+
+  _trackWorkflow(goal) {
+    if (this.session?.toolHistory?.length > 0) {
+      const tools = this.session.toolHistory.map(t => t.tool);
+      basalGanglia.trackWorkflow({
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        goal,
+        tools,
+        success: true,
+      }).catch(err => console.error('[basal-ganglia] Track error:', err.message));
     }
   }
 }
