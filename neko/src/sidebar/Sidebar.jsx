@@ -62,7 +62,7 @@ const ModelSection = memo(() => {
 	const [showParams, setShowParams] = useState(false);
 	return (
 		<>
-			<div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-2 py-1.5 flex items-center gap-1">
+			<div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-2 py-1.5 flex items-center gap-1">
 				<div className="flex-1 min-w-0">
 					<ModelPickerDropdown />
 				</div>
@@ -1022,10 +1022,14 @@ const DynamicSidebar = ({
 		<>
 			{/* Sidebar */}
 			<aside
-				className={`h-full flex-shrink-0 bg-white dark:bg-gray-900 midnight:bg-gray-950 border-r border-gray-200/70 dark:border-gray-800 midnight:border-gray-800 transition-[width] duration-300 ease-in-out ${isSidebarCollapsed ? 'w-0 overflow-hidden' : 'w-[240px] overflow-visible relative z-20'} ${className}`}
+				className={`h-full flex-shrink-0 bg-white dark:bg-gray-900 midnight:bg-gray-950 border-r border-gray-200/70 dark:border-gray-800 midnight:border-gray-800 transition-all duration-500 ${isSidebarCollapsed ? 'w-0 overflow-hidden border-transparent' : 'w-[240px] overflow-visible relative z-20'} ${className}`}
+				style={{ transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' }}
 			>
 				{/* Fixed-width inner so content never reflows during animation */}
-				<div className="w-[240px] h-full flex flex-col">
+				<div 
+					className={`w-[240px] h-full flex flex-col transition-all duration-500 ${isSidebarCollapsed ? 'opacity-0 -translate-x-10 pointer-events-none' : 'opacity-100 translate-x-0'}`}
+					style={{ transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' }}
+				>
 
 					{/* Mode tab strip */}
 					<div className="flex-shrink-0 flex items-center gap-0.5 px-1.5 pt-2 pb-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800">
@@ -1057,6 +1061,12 @@ const DynamicSidebar = ({
 							</button>
 						))}
 					</div>
+
+					{/* Model picker — persistent, accessible from all modes */}
+					<ModelSection />
+
+					{/* Hardware widget — only shown when using a local/custom AI provider */}
+					<HardwareWidget />
 
 					{/* Scrollable content area */}
 					<div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
@@ -1220,12 +1230,6 @@ const DynamicSidebar = ({
 						</div>
 
 					</div>
-
-					{/* Hardware widget — only shown when using a local/custom AI provider */}
-					<HardwareWidget />
-
-					{/* Model picker — persistent, accessible from all modes */}
-					<ModelSection />
 
 					{/* Profile bar */}
 					<div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-2 py-2 flex items-center gap-1.5">

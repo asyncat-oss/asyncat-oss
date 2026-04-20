@@ -8,7 +8,6 @@ import GeneralSection from './GeneralSection';
 import SecuritySection from './SecuritySection';
 import AppearanceSection from './AppearanceSection';
 import WebSearchSection from './WebSearchSection';
-import AiProviderSection from './AiProviderSection';
 
 const SettingsPage = () => {
   const { tab } = useParams();
@@ -113,11 +112,6 @@ const SettingsPage = () => {
       label: 'Web Search',
       icon: <Search className="w-4 h-4" />,
     },
-    {
-      id: 'ai',
-      label: 'AI Provider',
-      icon: <Bot className="w-4 h-4" />,
-    },
   ], [theme]);
 
   const activeTabInfo = allTabs.find((t) => t.id === activeTab) || allTabs[0];
@@ -138,7 +132,6 @@ const SettingsPage = () => {
       case 'security':    return <SecuritySection />;
       case 'appearance':  return <AppearanceSection theme={theme} setThemeMode={setThemeMode} />;
       case 'web-search':  return <WebSearchSection />;
-      case 'ai':          return <AiProviderSection />;
       default:
         return (
           <GeneralSection

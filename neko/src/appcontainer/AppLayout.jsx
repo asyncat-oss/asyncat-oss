@@ -521,15 +521,16 @@ const AppLayout = ({ session, onSignOut }) => {
     <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
 
       {/* Floating sidebar-expand button — only visible when sidebar is collapsed */}
-      {isSidebarCollapsed && (
-        <button
-          onClick={() => setIsSidebarCollapsed(false)}
-          className="fixed top-2 left-2 z-30 p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
-          title="Expand sidebar (⌘/)"
-        >
-          <PanelLeft className="w-4 h-4" />
-        </button>
-      )}
+      <button
+        onClick={() => setIsSidebarCollapsed(false)}
+        className={`fixed top-2.5 left-2.5 z-30 p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-lg border border-gray-200/50 dark:border-gray-700/50 transition-all duration-500 ${
+          isSidebarCollapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
+        }`}
+        style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+        title="Expand sidebar (⌘/)"
+      >
+        <PanelLeft className="w-4 h-4" />
+      </button>
         <Sidebar
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
