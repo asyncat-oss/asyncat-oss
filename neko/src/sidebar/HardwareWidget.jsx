@@ -76,7 +76,7 @@ const HardwareWidget = () => {
   const modelShort = llamaStatus.model?.replace(/\.(gguf|bin)$/, '') || 'local';
 
   return (
-    <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+    <div className="border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800">
       {/* Compact header row */}
       <button
         onClick={() => setExpanded(v => !v)}

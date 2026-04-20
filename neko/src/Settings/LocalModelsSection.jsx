@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Download, Trash2, RefreshCw, HardDrive,
   CheckCircle, X, Plus, Search,
-  ChevronDown, ChevronUp, AlertCircle, Loader2,
+  ChevronDown, ChevronUp, AlertCircle, Loader2, Database
 } from 'lucide-react';
 import { localModelsApi } from './settingApi.js';
 
@@ -142,12 +142,8 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
-const LocalModelsSection = () => {
-  const [models, setModels] = useState([]);
-  const [storage, setStorage] = useState(null);
-  const [loading, setLoading] = useState(true);
+const LocalModelsSection = ({ storage, onRefresh }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
-  const [deletingModel, setDeletingModel] = useState(null);
   const [showCustomUrl, setShowCustomUrl] = useState(false);
   const [customUrl, setCustomUrl] = useState('');
   const [customFilename, setCustomFilename] = useState('');
@@ -159,22 +155,7 @@ const LocalModelsSection = () => {
 
   const cleanupFnsRef = useRef({});
 
-  const loadModels = useCallback(async () => {
-    try {
-      const res = await localModelsApi.listModels();
-      if (res.success) {
-        setModels(res.models || []);
-        setStorage(res.storage || null);
-      }
-    } catch (err) {
-      console.warn('Failed to load local models:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadModels();
     localModelsApi.listDownloads().then(res => {
       if (res.success && res.downloads?.length > 0) {
         res.downloads.forEach(dl => {
@@ -243,7 +224,7 @@ const LocalModelsSection = () => {
       }),
       (data) => {
         setActiveDownloads(prev => { const n = { ...prev }; delete n[filename]; return n; });
-        if (data.status === 'complete') loadModels();
+        if (data.status === 'complete' && onRefresh) onRefresh();
         delete cleanupFnsRef.current[filename];
       },
       () => {
@@ -276,17 +257,7 @@ const LocalModelsSection = () => {
     }
   };
 
-  const handleDelete = async (filename) => {
-    setDeletingModel(filename);
-    try {
-      await localModelsApi.deleteModel(filename);
-      await loadModels();
-    } catch (err) {
-      console.error('Failed to delete model:', err);
-    } finally {
-      setDeletingModel(null);
-    }
-  };
+
 
   const handleCustomDownload = async () => {
     setCustomUrlError('');
@@ -308,16 +279,8 @@ const LocalModelsSection = () => {
     handleDownload(url, filename);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <RefreshCw className="w-5 h-5 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 w-full">
 
       {/* ── Active downloads — always visible ── */}
       {Object.keys(activeDownloads).length > 0 && (
@@ -326,9 +289,9 @@ const LocalModelsSection = () => {
           {Object.entries(activeDownloads).map(([filename, dl]) => {
             const pct = dl.progress || 0;
             return (
-              <div key={filename} className="px-3 py-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+              <div key={filename} className="px-3 py-3 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-xl shadow-sm">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-sm font-medium text-indigo-800 dark:text-indigo-200 truncate max-w-[80%] font-mono text-xs">{filename}</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[80%] font-mono text-xs">{filename}</span>
                   <button
                     onClick={() => handleCancelDownload(filename)}
                     className="text-indigo-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2"
@@ -337,16 +300,16 @@ const LocalModelsSection = () => {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="flex items-center justify-between text-xs text-indigo-600 dark:text-indigo-400 mb-1">
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
                   <span>{dl.downloadedFormatted || '0 B'} / {dl.totalFormatted || '?'}</span>
                   {dl.speedFormatted && dl.etaFormatted && (
                     <span className="opacity-80">{dl.speedFormatted} • {dl.etaFormatted}</span>
                   )}
-                  <span className="font-mono font-medium">{pct}%</span>
+                  <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{pct}%</span>
                 </div>
-                <div className="h-1.5 bg-indigo-200 dark:bg-indigo-900/50 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                    className="h-full bg-gray-600 dark:bg-gray-400 midnight:bg-gray-500 rounded-full transition-all duration-300"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -358,56 +321,25 @@ const LocalModelsSection = () => {
 
       {/* ── Storage info bar ── */}
       {storage && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
-          <HardDrive className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {storage.modelCount} model{storage.modelCount !== 1 ? 's' : ''} · {storage.totalFormatted} used
+        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-300">
+              <Database className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-white">Storage</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {storage.modelCount} model{storage.modelCount !== 1 ? 's' : ''}
+              </div>
             </div>
           </div>
-          <button
-            onClick={loadModels}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {storage.totalFormatted}
+          </div>
         </div>
       )}
 
-      {/* ── Downloaded models ── */}
-      {models.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Downloaded</h3>
-          <div className="space-y-2">
-            {models.map(model => (
-              <div
-                key={model.filename}
-                className="flex items-center justify-between px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{model.name}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{model.sizeFormatted}</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDelete(model.filename)}
-                  disabled={deletingModel === model.filename}
-                  className="flex-shrink-0 p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors disabled:opacity-50"
-                  title="Delete model"
-                >
-                  {deletingModel === model.filename
-                    ? <RefreshCw className="w-4 h-4 animate-spin" />
-                    : <Trash2 className="w-4 h-4" />
-                  }
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* ── HuggingFace live search ── */}
       <div>
@@ -422,7 +354,7 @@ const LocalModelsSection = () => {
             value={query}
             onChange={e => handleQueryChange(e.target.value)}
             placeholder="Search models… e.g. llama, gemma, qwen"
-            className="w-full pl-9 pr-9 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-lg bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 midnight:focus:ring-gray-700 focus:border-gray-300 dark:focus:border-gray-600 midnight:focus:border-gray-700 transition-shadow"
           />
           {query && (
             <button
@@ -463,10 +395,10 @@ const LocalModelsSection = () => {
                     </div>
                     <button
                       onClick={() => setExpandedRepo(isExpanded ? null : repoId)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 midnight:bg-gray-800 midnight:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 shadow-sm"
                     >
                       <Download className="w-3 h-3" />
-                      {isExpanded ? 'Hide files' : 'Select file'}
+                      {isExpanded ? 'Hide' : 'Select'}
                     </button>
                   </div>
                   {isExpanded && (
@@ -489,10 +421,10 @@ const LocalModelsSection = () => {
       </div>
 
       {/* ── Custom URL download ── */}
-      <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-xl overflow-hidden">
         <button
           onClick={() => setShowCustomUrl(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300"
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300"
         >
           <div className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
@@ -502,9 +434,9 @@ const LocalModelsSection = () => {
         </button>
 
         {showCustomUrl && (
-          <div className="p-4 space-y-3">
+          <div className="p-4 space-y-3 bg-white dark:bg-gray-800 midnight:bg-gray-900">
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-400 mb-1">
                 Model URL (HuggingFace or direct link)
               </label>
               <input
@@ -512,11 +444,11 @@ const LocalModelsSection = () => {
                 value={customUrl}
                 onChange={e => setCustomUrl(e.target.value)}
                 placeholder="https://huggingface.co/.../model.gguf"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-lg bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 midnight:focus:ring-gray-700 focus:border-gray-300 dark:focus:border-gray-600 midnight:focus:border-gray-700 transition-shadow"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-400 mb-1">
                 Save as filename
               </label>
               <input
@@ -524,7 +456,7 @@ const LocalModelsSection = () => {
                 value={customFilename}
                 onChange={e => setCustomFilename(e.target.value)}
                 placeholder="my-model.gguf"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-lg bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 midnight:focus:ring-gray-700 focus:border-gray-300 dark:focus:border-gray-600 midnight:focus:border-gray-700 transition-shadow"
               />
             </div>
             {customUrlError && (
@@ -534,7 +466,7 @@ const LocalModelsSection = () => {
             )}
             <button
               onClick={handleCustomDownload}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="flex items-center justify-center w-full gap-2 px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 midnight:bg-gray-800 midnight:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
             >
               <Download className="w-4 h-4" />
               Start Download

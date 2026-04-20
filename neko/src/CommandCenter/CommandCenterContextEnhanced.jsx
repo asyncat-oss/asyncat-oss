@@ -1,6 +1,5 @@
 // CommandCenterContextEnhanced.jsx - Updated for New Mode System
 import React, { createContext, useState, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import commandCenterApi, { chatApi } from './commandCenterApi';
@@ -88,8 +87,7 @@ const ActionTypes = {
   // Conversation summarization actions
   ADD_CONVERSATION_SUMMARY: 'ADD_CONVERSATION_SUMMARY',
   SET_CONVERSATION_SUMMARIES: 'SET_CONVERSATION_SUMMARIES',
-  SET_NEEDS_SUMMARIZATION: 'SET_NEEDS_SUMMARIZATION',
-  
+
   // Streaming actions
   UPDATE_STREAMING_MESSAGE: 'UPDATE_STREAMING_MESSAGE',
   SET_IS_STREAMING: 'SET_IS_STREAMING',
@@ -123,8 +121,7 @@ const initialState = {
   conversationFileContent: '',
   
   // Conversation summarization state
-  conversationSummaries: [], // Array of {messageIndex, summary, timestamp}
-  needsSummarization: false,
+  conversationSummaries: [],
   
   // Streaming state
   isStreaming: false,
@@ -209,16 +206,12 @@ function commandCenterReducer(state, action) {
     case ActionTypes.ADD_CONVERSATION_SUMMARY:
       return { 
         ...state, 
-        conversationSummaries: [...state.conversationSummaries, action.payload],
-        needsSummarization: false
+        conversationSummaries: [...state.conversationSummaries, action.payload]
       };
       
     case ActionTypes.SET_CONVERSATION_SUMMARIES:
       return { ...state, conversationSummaries: action.payload };
-      
-    case ActionTypes.SET_NEEDS_SUMMARIZATION:
-      return { ...state, needsSummarization: action.payload };
-      
+
     // Conversation file cases
     case ActionTypes.ADD_CONVERSATION_FILES:
       const newFiles = action.payload;
@@ -329,60 +322,6 @@ const generateInstantTitle = (message) => {
   return title;
 };
 
-// Helper function to estimate token count for conversation
-const estimateConversationTokens = (messages, summaries = []) => {
-  // Rough estimation: 4 characters ≈ 1 token
-  let totalTokens = 0;
-  
-  // Count tokens from messages
-  messages.forEach(msg => {
-    totalTokens += Math.ceil((msg.content || '').length / 4);
-  });
-  
-  // Count tokens from summaries (they replace original messages, so subtract those)
-  summaries.forEach(summary => {
-    totalTokens += Math.ceil((summary.summary || '').length / 4);
-  });
-  
-  return totalTokens;
-};
-
-// Helper function to create conversation summary using AI
-const createConversationSummary = async (messages, startIndex, endIndex, mode = 'chat') => {
-  try {
-    const messagesToSummarize = messages.slice(startIndex, endIndex);
-    
-    // Format messages for summarization
-    const conversationText = messagesToSummarize.map((msg, idx) => {
-      const speaker = msg.type === 'user' ? 'User' : 'Assistant';
-      return `${speaker}: ${msg.content}`;
-    }).join('\n\n');
-    
-    // Call API to summarize
-    const response = await chatApi.summarizeConversation({
-      conversation: conversationText,
-      messageCount: messagesToSummarize.length,
-      mode: mode
-    });
-    
-    return {
-      messageIndex: endIndex,
-      summary: response.summary,
-      timestamp: new Date().toISOString(),
-      messageRange: { start: startIndex, end: endIndex }
-    };
-  } catch (error) {
-    console.error('Failed to create conversation summary:', error);
-    // Fallback to simple summary
-    return {
-      messageIndex: endIndex,
-      summary: `[Summary of ${endIndex - startIndex} messages from the conversation]`,
-      timestamp: new Date().toISOString(),
-      messageRange: { start: startIndex, end: endIndex }
-    };
-  }
-};
-
 const CommandCenterContext = createContext();
 
 export function useCommandCenter() {
@@ -424,156 +363,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const shouldSaveConversations = useCallback(() => {
     return !state.isGhostMode;
   }, [state.isGhostMode]);
-
-  // Enhanced message handler with mode-specific behavior
-  const handleNewMessage = useCallback(async (content, selectedProjectIds = []) => {
-    let messageContent, editProject, imageData, uploadedFiles, fileContentsForAI;
-    
-    if (typeof content === 'object' && content.content) {
-      messageContent = content.content;
-      editProject = content.editProject;
-      uploadedFiles = content.uploadedFiles;
-      fileContentsForAI = content.fileContentsForAI;
-    } else {
-      messageContent = content;
-    }
-    
-    if (!messageContent || !messageContent.trim()) return;
-    if (state.isProcessing) return;
-    
-    if (!currentWorkspace?.id) {
-      dispatch({ type: ActionTypes.SET_ERROR, payload: 'No workspace selected. Please select a workspace first.' });
-      return;
-    }
-    
-    // Check context size and trigger summarization if needed
-    const summarizationThreshold = 80000;
-    const estimatedTokens = estimateConversationTokens(state.messages, state.conversationSummaries);
-    
-    if (estimatedTokens > summarizationThreshold) {
-      console.log(`📊 Context size: ${estimatedTokens} tokens - triggering summarization`);
-      dispatch({ type: ActionTypes.SET_NEEDS_SUMMARIZATION, payload: true });
-      // Continue with message sending - summarization will happen in background
-    }
-
-    // Handle new file uploads
-    if (uploadedFiles && uploadedFiles.length > 0) {
-      const currentFileCount = (state.conversationFiles || []).length;
-      const newFileCount = uploadedFiles.length;
-      
-      if (currentFileCount + newFileCount > 3) {
-        dispatch({ 
-          type: ActionTypes.SET_ERROR, 
-          payload: `Cannot upload ${newFileCount} more files. You already have ${currentFileCount} files in this conversation. Maximum 3 files per conversation.` 
-        });
-        dispatch({ type: ActionTypes.SET_PROCESSING, payload: false });
-        return;
-      }
-      
-      dispatch({ type: ActionTypes.ADD_CONVERSATION_FILES, payload: uploadedFiles });
-    }
-    
-    dispatch({ type: ActionTypes.CLEAR_ERROR });
-    dispatch({ type: ActionTypes.SET_PROCESSING, payload: true });
-
-    const effectiveProjectIds = selectedProjectIds.length > 0 ? selectedProjectIds : state.selectedProjects;
-    
-    // Instant title generation (only for saveable modes)
-    if (shouldSaveConversations() && !state.currentConversationId && state.messages.length === 0) {
-      const instantTitle = state.isGhostMode 
-        ? '👻 Ghost Chat'
-        : generateInstantTitle(messageContent);
-      dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: instantTitle });
-    }
-
-    // Add user message immediately
-    const userMessage = {
-      content: messageContent.trim(),
-      type: "user",
-      projectIds: effectiveProjectIds,
-      workspaceId: currentWorkspace.id,
-      responseStyle: state.responseStyle,
-      timestamp: new Date().toISOString(),
-      ...(uploadedFiles && { uploadedFiles })
-    };
-    
-    dispatch({ type: ActionTypes.ADD_MESSAGE, payload: userMessage });
-
-    try {
-      let data;
-
-      {
-        const conversationFileContent = state.conversationFileContent || '';
-
-        data = await chatApi.sendMessage(
-          messageContent.trim(),
-          state.conversationHistory,
-          effectiveProjectIds,
-          'chat',
-          state.responseStyle,
-          state.conversationFiles,
-          conversationFileContent
-        );
-        
-        if (data.success) {
-          const responseContent = data.content || data.message || data.response || data.text || data.result;
-
-
-
-          if (data.conversationHistory) {
-            dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: data.conversationHistory });
-          }
-
-          // suggestion debug removed
-          dispatch({ type: ActionTypes.ADD_MESSAGE, payload: {
-            type: "assistant",
-            content: responseContent,
-            suggestions: data.suggestions || [],
-            blocks: data.blocks || null,
-            artifacts: data.artifacts || null,
-            artifactExplanation: data.artifactExplanation || null,
-            toolCalls: (data.toolCalls || []).map(tc => ({
-              id: tc.id,
-              name: tc.name,
-              args: tc.args,
-              result: tc.result,
-              status: tc.result?.success ? 'done' : 'error'
-            }))
-          }});
-        } else {
-          throw new Error(data.error || 'Chat request failed');
-        }
-      }
-
-      // Update conversation history for projects
-      if (effectiveProjectIds.length > 0 && onProjectsChange) {
-        onProjectsChange(effectiveProjectIds);
-      }
-      
-    } catch (error) {
-      console.error('API Error:', error);
-      
-      let errorMessage = "I'm having trouble connecting right now. Please check your connection and try again!";
-      
-      if (commandCenterApi.utils.isWorkspaceError(error)) {
-        errorMessage = "I'm having trouble accessing your workspace. Please check your workspace permissions and try again.";
-      } else if (commandCenterApi.utils.isAuthError(error)) {
-        errorMessage = "Your session has expired. Please sign in again.";
-      } else if (commandCenterApi.utils.isNetworkError(error)) {
-        errorMessage = "Connection error. Please check your internet connection and try again.";
-      }
-      
-      dispatch({ type: ActionTypes.ADD_MESSAGE, payload: {
-        type: "assistant",
-        content: errorMessage,
-        isError: true
-      }});
-      
-      dispatch({ type: ActionTypes.SET_ERROR, payload: error.message });
-    } finally {
-      dispatch({ type: ActionTypes.SET_PROCESSING, payload: false });
-    }
-  }, [state.conversationHistory, state.selectedProjects, state.currentConversationId, state.responseStyle, onProjectsChange, currentWorkspace?.id, state.isProcessing, state.messages.length, state.isGhostMode, state.conversationFiles, state.conversationFileContent, shouldSaveConversations]);
 
   // Streaming message handler with smooth buffered updates
   const handleStreamingMessage = useCallback(async (content, selectedProjectIds = []) => {
@@ -703,8 +492,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           const extracted = extractArtifacts(streamedContent);
 
           if (extracted.artifacts.length === 0) {
-            // Artifact is still being created, show placeholder
-            flushSync(() => dispatch({
+            dispatch({
               type: ActionTypes.UPDATE_STREAMING_MESSAGE,
               payload: {
                 messageId: assistantMessageId,
@@ -718,10 +506,9 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
                 }],
                 artifactExplanation: textBefore
               }
-            }));
+            });
           } else {
-            // Artifact(s) complete, show them
-            flushSync(() => dispatch({
+            dispatch({
               type: ActionTypes.UPDATE_STREAMING_MESSAGE,
               payload: {
                 messageId: assistantMessageId,
@@ -729,11 +516,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
                 artifacts: extracted.artifacts,
                 artifactExplanation: extracted.artifactExplanation
               }
-            }));
+            });
           }
         } else {
-          // No artifacts yet, stream content token by token
-          flushSync(() => dispatch({
+          dispatch({
             type: ActionTypes.UPDATE_STREAMING_MESSAGE,
             payload: {
               messageId: assistantMessageId,
@@ -741,7 +527,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
               artifacts: [],
               artifactExplanation: null
             }
-          }));
+          });
         }
       }
 
@@ -1212,7 +998,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     responseStyle: state.responseStyle,
     isGhostMode: state.isGhostMode,
     conversationSummaries: state.conversationSummaries,
-    needsSummarization: state.needsSummarization,
     conversationFiles: state.conversationFiles || [],
     conversationFileCount: (state.conversationFiles || []).length,
 
@@ -1220,7 +1005,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     shouldSaveConversations,
 
     // Actions
-    handleNewMessage,
     handleStreamingMessage,
     handleRegenerate,
     handleClearConversation,

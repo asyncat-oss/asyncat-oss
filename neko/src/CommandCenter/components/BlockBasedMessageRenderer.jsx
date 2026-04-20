@@ -1088,7 +1088,7 @@ const BlockBasedMessageRenderer = memo(({
       {content && blocks && (
         <div className="space-y-1">
           {blocks.map((block, idx) => (
-            <div key={block.id} className={isStreaming ? 'cc-block-fade' : ''}>
+            <div key={`${block.type}-${idx}`} className={isStreaming && idx === blocks.length - 1 ? 'cc-block-fade' : ''}>
               <BlockRenderer
                 block={block}
                 onTermClick={onTermClick}
@@ -1101,8 +1101,8 @@ const BlockBasedMessageRenderer = memo(({
         </div>
       )}
 
-      {/* Artifacts - Use ArtifactViewer for inline display with preview/code toggle */}
-      {hasArtifacts && (
+      {/* Artifacts — only show inline card when no side panel handler exists */}
+      {hasArtifacts && !onArtifactOpen && (
         <div className="artifacts-section">
           <ArtifactViewer
             artifacts={artifacts}

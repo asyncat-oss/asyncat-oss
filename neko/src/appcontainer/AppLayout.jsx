@@ -56,8 +56,10 @@ const AppLayout = ({ session, onSignOut }) => {
         return 'all-chats';
       case 'home':
         return 'home';
+      case 'workspace':
+        return 'workspace';
       case 'projects':
-        return 'projects';
+        return 'workspace';
       case 'calendar':
         return 'calendar';
       case 'teams':
@@ -68,6 +70,8 @@ const AppLayout = ({ session, onSignOut }) => {
         return 'lab';
       case 'models':
         return 'models';
+      case 'agents':
+        return 'agents';
       default:
         return 'home';
     }
@@ -155,7 +159,7 @@ const AppLayout = ({ session, onSignOut }) => {
     if (!workspacesLoading && currentWorkspace && !hasWorkspaceAccess()) {
       const workspaceOnlyRoutes = ['home', 'conversations', 'calendar', 'invites', 'teams'];
       if (workspaceOnlyRoutes.includes(basePage)) {
-        navigate('/projects', { replace: true });
+        navigate('/workspace', { replace: true });
       }
     }
   }, [basePage, currentWorkspace, hasWorkspaceAccess, workspacesLoading, navigate]);
@@ -168,7 +172,7 @@ const AppLayout = ({ session, onSignOut }) => {
     if (hasWorkspaceAccess()) {
       navigate('/home');
     } else {
-      navigate('/projects');
+      navigate('/workspace');
     }
   }, [currentWorkspace, navigate, hasWorkspaceAccess]);
 
@@ -222,7 +226,7 @@ const AppLayout = ({ session, onSignOut }) => {
     if (!project) {
       setSelectedProject(null);
       sessionStorage.removeItem('projectId');
-      navigate('/projects');
+      navigate('/workspace');
       return;
     }
     
@@ -231,11 +235,11 @@ const AppLayout = ({ session, onSignOut }) => {
       // Update state immediately with full project data including metadata
       setSelectedProject(project);
       sessionStorage.setItem('projectId', project.id);
-      navigate(`/projects/${project.id}`);
+      navigate(`/workspace/${project.id}`);
     } else {
       // If we just get an ID, navigate first and let the effect handle loading
       const projectId = project;
-      navigate(`/projects/${projectId}`);
+      navigate(`/workspace/${projectId}`);
     }
   };
 
@@ -257,7 +261,7 @@ const AppLayout = ({ session, onSignOut }) => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === '1') { e.preventDefault(); navigate('/home'); }
-        else if (e.key === '2') { e.preventDefault(); navigate('/projects'); }
+        else if (e.key === '2') { e.preventDefault(); navigate('/workspace'); }
         else if (e.key === '3') { e.preventDefault(); navigate('/calendar'); }
       }
     };
@@ -304,7 +308,7 @@ const AppLayout = ({ session, onSignOut }) => {
 
     // Handle specific navigation cases
     if (page === 'notes' && options.noteId) {
-      navigate(`/projects/${selectedProject?.id}/notes?noteId=${options.noteId}`);
+      navigate(`/workspace/${selectedProject?.id}/notes?noteId=${options.noteId}`);
       return;
     }
 
@@ -512,63 +516,21 @@ const AppLayout = ({ session, onSignOut }) => {
     );
   }
 
-  // Derive active mode from URL for top bar tabs
-  const getActiveMode = (bp) => {
-    if (bp === 'projects') return 'projects';
-    if (bp === 'storage') return 'projects'; // storage lives within projects panel
-    if (bp === 'calendar') return 'calendar';
-    return 'chat';
-  };
-  const activeMode = getActiveMode(basePage);
-
-  const handleModeNavigate = (mode) => {
-    if (mode === 'chat') navigate('/home');
-    else if (mode === 'projects') navigate('/projects');
-    else if (mode === 'calendar') navigate('/calendar');
-  };
-
   // Normal dashboard when user has workspaces
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
-      {/* Top bar */}
-      <header className="flex-shrink-0 h-10 flex items-center px-2 border-b border-gray-200/70 dark:border-gray-800 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
-        <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
-          title="Toggle sidebar (⌘/)"
-        >
-          <PanelLeft className="w-4 h-4" />
-        </button>
+    <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
 
-        <div className="flex-1 flex justify-center">
-          <div className="flex items-center bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800/60 rounded-lg p-0.5 gap-0.5">
-            {[
-              { key: 'chat', label: 'Chat', shortcut: '⌘1' },
-              { key: 'projects', label: 'Projects', shortcut: '⌘2' },
-              { key: 'calendar', label: 'Calendar', shortcut: '⌘3' },
-            ].map(({ key, label, shortcut }) => (
-              <button
-                key={key}
-                onClick={() => handleModeNavigate(key)}
-                title={shortcut}
-                className={`px-3 py-[5px] rounded-md text-[12px] font-medium transition-all duration-200 ${
-                  activeMode === key
-                    ? 'bg-white dark:bg-gray-700 midnight:bg-gray-700 text-gray-900 dark:text-gray-100 midnight:text-gray-100 shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Spacer to keep tabs centered */}
-        <div className="w-8" />
-      </header>
-
-      {/* Content area */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Floating sidebar-expand button — only visible when sidebar is collapsed */}
+      <button
+        onClick={() => setIsSidebarCollapsed(false)}
+        className={`fixed top-2.5 left-2.5 z-30 p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-lg border border-gray-200/50 dark:border-gray-700/50 transition-all duration-500 ${
+          isSidebarCollapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
+        }`}
+        style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+        title="Expand sidebar (⌘/)"
+      >
+        <PanelLeft className="w-4 h-4" />
+      </button>
         <Sidebar
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
@@ -598,7 +560,6 @@ const AppLayout = ({ session, onSignOut }) => {
             }} />
           </div>
         </main>
-      </div>
 
       {/* Create Project Modal */}
       <CreateProjectFlow

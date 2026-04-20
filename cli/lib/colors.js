@@ -2,6 +2,7 @@ import readline from 'readline';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { execSync } from 'child_process';
 import { getTheme, getThemeName } from './theme.js';
 
 // ── Base ANSI codes ────────────────────────────────────────────────────────────
@@ -69,8 +70,8 @@ export function line(tag, text, color) {
 export function banner() {
   const t   = getTheme();
   const W   = Math.min(Math.max(process.stdout.columns || 80, 66), 90);
-  const L   = 42;        // left column content width (between outer │ and sep │)
-  const R   = W - 3 - L; // right column content width
+  const L   = 42;
+  const R   = W - 3 - L;
 
   const bord  = s => `${t.border}${s}${c.reset}`;
   const acc   = s => `${t.accent}${s}${c.reset}`;
@@ -79,17 +80,15 @@ export function banner() {
   const bold  = s => `${c.bold}${s}${c.reset}`;
   const pad   = (s, n) => s + ' '.repeat(Math.max(0, n - vis(s)));
 
-  // Normal content row
   const row = (left, right = '') =>
     console.log(bord('│') + pad(left, L) + bord('│') + pad(right, R) + bord('│'));
 
-  // Horizontal rule spanning only the right column (section divider)
   const sepRow = (left) =>
     console.log(bord('│') + pad(left, L) + bord('├') + bord('─'.repeat(R)) + bord('┤'));
 
   const themeName = getThemeName();
 
-  // Recent history (last 3 unique commands for the right panel)
+  // Recent history
   let recent = [];
   try {
     recent = fs.readFileSync(path.join(os.homedir(), '.asyncat_history'), 'utf8')
@@ -97,6 +96,14 @@ export function banner() {
       .map(l => l.split(/\s+/)[0])
       .filter((v, i, a) => a.indexOf(v) === i)
       .slice(0, 2);
+  } catch {}
+
+  // Git branch (best-effort)
+  let gitBranch = '';
+  try {
+    gitBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+      encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
   } catch {}
 
   // ── Top border ────────────────────────────────────────────────────────────
@@ -109,30 +116,30 @@ export function banner() {
   row('', '');
   row(
     `  ${acc('   /\\_____/\\ ')}   ${bold(acc('asyncat'))}`,
-    ` ${acc2(bold('Getting started'))}`
+    ` ${acc2(bold('Quick start'))}`
   );
   row(
-    `  ${acc('  /  o   o  \\ ')}  open-source AI`,
-    ` ${dim('type / for commands')}`
+    `  ${acc('  /  o   o  \\ ')}  open-source AI workspace`,
+    ` ${dim('press / for menu')}`
   );
   row(
-    `  ${acc(' ( ==  ^  == )')}  workspace for teams`,
-    ` ${dim('/help  for reference')}`
+    `  ${acc(' ( ==  ^  == )')}  `,
+    ` ${dim('chat  start an AI session')}`
   );
   sepRow(
     `  ${acc('  )         ( ')}  ${dim('─'.repeat(17))}`
   );
   row(
-    `  ${acc(' (           )')}  theme · ${dim(themeName)}`,
-    ` ${dim('/chat  AI session')}`
+    `  ${acc(' (           )')}  theme  ${dim(themeName)}`,
+    ` ${dim('git   project status')}`
   );
   row(
-    `  ${acc('( (  )   (  ) )')}`,
-    ` ${dim('/theme change colors')}`
+    `  ${acc('( (  )   (  ) )')}  ` + (gitBranch ? `branch ${dim(gitBranch)}` : ''),
+    ` ${dim('help  command reference')}`
   );
   row(
     `  ${acc('(__(__)___(__)__)')}`,
-    ` ${dim('/stash save notes')}`
+    ` ${dim('exit  quit asyncat')}`
   );
   row('', recent.length > 0 ? ` ${dim('recent: ' + recent.join(', '))}` : '');
 

@@ -450,7 +450,7 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
 
   const handleTabChange = useCallback((tab, projectId) => {
     const pid = projectId || currentProjectId;
-    if (pid) navigate(`/projects/${pid}/${tab}`);
+    if (pid) navigate(`/workspace/${pid}/${tab}`);
   }, [navigate, currentProjectId]);
   const [projects, setProjects] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -604,10 +604,10 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
     if (String(project.id) === String(currentProjectId)) return;
     try {
       setLoadingProjectId(project.id);
-      navigate(`/projects/${project.id}`);
+      navigate(`/workspace/${project.id}`);
     } catch (err) {
       console.error('Failed to navigate to project:', err);
-      navigate('/projects');
+      navigate('/workspace');
     } finally {
       setTimeout(() => setLoadingProjectId(null), 800);
     }

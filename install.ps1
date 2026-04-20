@@ -99,12 +99,75 @@ if ($userPath -notlike "*$BinDir*") {
     Warn "Added $BinDir to PATH — restart your terminal for it to take effect."
 }
 
+# ── 8. Desktop launcher (for humans) ──────────────────────────────────────────
+$uiScript = Join-Path $BinDir "asyncat-ui.ps1"
+$iconSrc = Join-Path $InstallDir "neko\public\pwa-192x192.png"
+
+@"
+# Start asyncat if not running
+try { `$null = Invoke-WebRequest http://localhost:8717 -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue } catch {}
+if (`$Error.Count -gt 0) {
+    Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd `'$InstallDir`' ; node cat start`"" -NoNewWindow
+    Start-Sleep 3
+}
+
+# Open in Chrome/Edge with --app flag (app mode = no address bar)
+`$chrome = @(
+    "C:\Program Files\Google\Chrome\Application\chrome.exe",
+    "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    "`$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+) | Where-Object { Test-Path `$_ } | Select-Object -First 1
+
+`$edge = @(
+    "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+) | Where-Object { Test-Path `$_ } | Select-Object -First 1
+
+if (`$chrome) {
+    Start-Process `$chrome "--app=http://localhost:8717"
+} elseif (`$edge) {
+    Start-Process `$edge "--app=http://localhost:8717"
+} else {
+    Start-Process "http://localhost:8717"
+}
+"@ | Set-Content $uiScript
+
+# Determine icon path
+$iconPath = "chrome.exe"
+if (Test-Path $iconSrc) {
+    $iconPath = $iconSrc
+}
+
+# Create Desktop shortcut
+$desktop = [Environment]::GetFolderPath("Desktop")
+$desktopShortcut = Join-Path $desktop "Asyncat.lnk"
+$WshShell = New-Object -ComObject WScript.Shell
+$shortcut = $WshShell.CreateShortcut($desktopShortcut)
+$shortcut.TargetPath = "powershell.exe"
+$shortcut.Arguments = "-WindowStyle Hidden -File `"$uiScript`""
+$shortcut.IconLocation = $iconPath
+$shortcut.Save()
+
+# Create Start Menu shortcut
+$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+$startMenuShortcut = Join-Path $startMenu "Asyncat.lnk"
+$shortcut2 = $WshShell.CreateShortcut($startMenuShortcut)
+$shortcut2.TargetPath = "powershell.exe"
+$shortcut2.Arguments = "-WindowStyle Hidden -File `"$uiScript`""
+$shortcut2.IconLocation = $iconPath
+$shortcut2.Save()
+
+Ok "App shortcuts created on Desktop + Start Menu"
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  $([char]0x2713)  asyncat installed!" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Run it anytime:"
-Write-Host "    asyncat              " -NoNewline; Write-Host "open the interactive CLI" -ForegroundColor Cyan
+Write-Host "  For humans (UI app):"
+Write-Host "    Click " -NoNewline; Write-Host "Asyncat" -ForegroundColor Cyan -NoNewline; Write-Host " on your Desktop or Start Menu"
+Write-Host ""
+Write-Host "  For terminal gremlins:"
+Write-Host "    asyncat              " -NoNewline; Write-Host "open the interactive CLI REPL" -ForegroundColor Cyan
 Write-Host "    asyncat start        " -NoNewline; Write-Host "start backend + frontend directly" -ForegroundColor Cyan
 Write-Host "    asyncat install      " -NoNewline; Write-Host "set up .env and check llama.cpp" -ForegroundColor Cyan
 Write-Host "    asyncat --help       " -NoNewline; Write-Host "see all commands" -ForegroundColor Cyan

@@ -24,7 +24,7 @@ function chatHelp() {
 function printHeader(webSearch, thinking, style) {
   console.log('');
   console.log(`  ${col('magenta', col('bold', 'asyncat chat'))}  ${col('dim', '─'.repeat(36))}`);
-  console.log(`  ${col('dim', 'type a message · /help for commands · /exit to quit')}`);
+  console.log(`  ${col('dim', 'type a message · /help for commands · /exit or esc to quit')}`);
 
   const flags = [];
   if (webSearch) flags.push(col('cyan',   '⊕ web'));
@@ -174,9 +174,13 @@ export async function run(args = []) {
   }
 
   return new Promise((resolve) => {
+    let exited = false;
     const exit = () => {
+      if (exited) return;
+      exited = true;
       if (mainRl) {
         mainRl.removeAllListeners('line');
+        mainRl.removeListener('escape', exit);
         for (const l of savedListeners) mainRl.on('line', l);
         mainRl.setPrompt(savedPrompt);
       }
@@ -284,6 +288,7 @@ export async function run(args = []) {
 
     if (mainRl) {
       mainRl.on('line', handleLine);
+      mainRl.once('escape', exit);
     } else {
       // Fallback: no main REPL (invoked directly from CLI args)
       const tmpRl = readline.createInterface({

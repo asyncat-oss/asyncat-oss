@@ -29,6 +29,15 @@ export function run() {
   const npmVer = tryExec('npm --version');
   log(`  ${col('cyan', 'npm            ')} ${npmVer ? col('white', 'v' + npmVer) : col('dim', 'not found')}`);
 
+  const pnpmVer = tryExec('pnpm --version');
+  if (pnpmVer) log(`  ${col('cyan', 'pnpm           ')} ${col('white', 'v' + pnpmVer)}`);
+
+  const yarnVer = tryExec('yarn --version');
+  if (yarnVer) log(`  ${col('cyan', 'yarn           ')} ${col('white', 'v' + yarnVer)}`);
+
+  const bunVer = tryExec('bun --version');
+  if (bunVer) log(`  ${col('cyan', 'bun            ')} ${col('white', 'v' + bunVer)}`);
+
   const python = ['python3', 'python'].find(c => checkCmd(c));
   if (python) {
     const pyVer = tryExec(`${python} --version`);

@@ -37,7 +37,7 @@ function SearchImageGrid({ images }) {
               className={`group relative overflow-hidden bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 focus:outline-none ${
                 isFeatured ? 'col-span-2 row-span-2' : ''
               }`}
-              style={{ aspectRatio: isFeatured ? '4/3' : '1/1' }}
+              style={isFeatured ? undefined : { aspectRatio: '1/1' }}
             >
               <img
                 src={img.thumbnail || img.image}
@@ -228,9 +228,9 @@ const MessageComponent = ({
   onTermClick = null // NEW: Opens explain panel for annotated terms
 }) => {
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
