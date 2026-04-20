@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { SlidersHorizontal, Lock, Moon, Sun, Search, Bot } from 'lucide-react';
+import { SlidersHorizontal, Lock, Moon, Sun, Search, Bot, Server } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 
 // Import our components
@@ -8,6 +8,7 @@ import GeneralSection from './GeneralSection';
 import SecuritySection from './SecuritySection';
 import AppearanceSection from './AppearanceSection';
 import WebSearchSection from './WebSearchSection';
+import ServerSection from './ServerSection';
 
 const SettingsPage = () => {
   const { tab } = useParams();
@@ -112,6 +113,11 @@ const SettingsPage = () => {
       label: 'Web Search',
       icon: <Search className="w-4 h-4" />,
     },
+    {
+      id: 'server',
+      label: 'Server',
+      icon: <Server className="w-4 h-4" />,
+    },
   ], [theme]);
 
   const activeTabInfo = allTabs.find((t) => t.id === activeTab) || allTabs[0];
@@ -132,6 +138,7 @@ const SettingsPage = () => {
       case 'security':    return <SecuritySection />;
       case 'appearance':  return <AppearanceSection theme={theme} setThemeMode={setThemeMode} />;
       case 'web-search':  return <WebSearchSection />;
+      case 'server':     return <ServerSection session={session} />;
       default:
         return (
           <GeneralSection

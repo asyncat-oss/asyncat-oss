@@ -140,4 +140,15 @@ router.post('/logout', (_req, res) => {
   res.json({ success: true, message: 'Logged out' });
 });
 
+// ─── GET /api/auth/status ────────────────────────────────────────────────────
+// Returns app mode (solo/server) for the auth UI
+
+router.get('/status', (_req, res) => {
+  res.json({
+    success: true,
+    mode: SOLO_MODE ? 'solo' : 'server',
+    soloEmail: SOLO_MODE ? process.env.SOLO_EMAIL : null,
+  });
+});
+
 export default router;

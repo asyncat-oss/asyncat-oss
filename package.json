@@ -2,6 +2,7 @@
   "name": "asyncat-oss",
   "version": "0.1.0",
   "description": "Asyncat — open-source AI-powered workspace for teams",
+  "type": "module",
   "private": true,
   "workspaces": [
     "den",
@@ -9,6 +10,7 @@
     "cli"
   ],
   "scripts": {
+    "postinstall": "node scripts/postinstall.js",
     "dev": "npm run dev -w den & npm run dev -w neko",
     "dev:backend": "npm run dev -w den",
     "dev:frontend": "npm run dev -w neko",

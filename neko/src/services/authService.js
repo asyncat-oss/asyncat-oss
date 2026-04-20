@@ -1,8 +1,9 @@
 // services/authService.js — JWT-based auth for OSS self-hosted build
-import { getToken, setToken, clearToken } from '../auth/supabaseClient';
+import { getToken, setToken, clearToken } from '../auth/tokenStore';
 import { performCompleteLogout } from '../utils/logoutUtils';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8716';
+let authMode = 'solo'; // default, fetched on init
 
 class AuthService {
   constructor() {
@@ -14,6 +15,25 @@ class AuthService {
     window.addEventListener('offline', () => { this.isOnline = false; });
 
     this.initializeSession();
+    this.fetchAuthStatus();
+  }
+
+  // ── Auth status ──────────────────────────────────────────────────────
+
+  async fetchAuthStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/status`);
+      if (res.ok) {
+        const data = await res.json();
+        authMode = data.mode || 'solo';
+      }
+    } catch {
+      // Default to solo mode on error
+    }
+  }
+
+  getAuthMode() {
+    return authMode;
   }
 
   // ── Session bootstrap ──────────────────────────────────────────────────────

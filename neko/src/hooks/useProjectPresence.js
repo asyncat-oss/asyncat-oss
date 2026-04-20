@@ -1,6 +1,6 @@
 // useProjectPresence.js - Updated to use Supabase Realtime Presence
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../auth/supabaseClient'; // Use the same client as auth
+import { supabase } from '../auth/tokenStore';
 
 // Fallback local presence tracking for when Supabase isn't available
 const LOCAL_PRESENCE_KEY = 'asyncat_project_presence';

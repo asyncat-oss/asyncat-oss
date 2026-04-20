@@ -414,6 +414,38 @@ export const llamaServerApi = {
 };
 
 // ===========================================
+// CONFIG API FUNCTIONS
+// ===========================================
+
+export const configApi = {
+  // Get all config (secrets masked)
+  getConfig: async () => {
+    return apiCall(`${MAIN_URL}/api/config`);
+  },
+
+  // Update a config value
+  updateConfig: async (key, value, restart = false) => {
+    return apiCall(`${MAIN_URL}/api/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ key, value, restart }),
+    });
+  },
+
+  // Get secrets (returns unmasked for authenticated user)
+  getSecrets: async () => {
+    return apiCall(`${MAIN_URL}/api/config/secrets`);
+  },
+
+  // Update a secret
+  updateSecret: async (key, value) => {
+    return apiCall(`${MAIN_URL}/api/config/secrets`, {
+      method: 'PUT',
+      body: JSON.stringify({ key, value }),
+    });
+  },
+};
+
+// ===========================================
 // ERROR HANDLING UTILITIES
 // ===========================================
 
