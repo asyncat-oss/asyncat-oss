@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import SignIn from './SignIn';
 import SignUp from './SignUp';
 import { initializeTheme, setupThemeListener } from './utils';
+import authService from '../services/authService';
 
 const soraFontBase = "font-sora";
 
@@ -103,7 +104,19 @@ const AuthContainer = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [currentQuote, setCurrentQuote] = useState(motivationalQuotes[0]);
-  
+  const [authMode, setAuthMode] = useState('solo');
+
+  // Fetch auth mode on mount
+  useEffect(() => {
+    const mode = authService.getAuthMode() || 'solo';
+    setAuthMode(mode);
+
+    // Redirect /signup to /auth in solo mode
+    if (mode === 'solo' && location.pathname === '/signup') {
+      navigate('/auth');
+    }
+  }, [location.pathname, navigate]);
+
   // Determine current page from location
   const getCurrentPage = () => {
     const path = location.pathname;
@@ -168,6 +181,17 @@ const AuthContainer = () => {
   };
 
   const getNavigationLinks = () => {
+    // In solo mode (default), sign-up is disabled - only one user allowed
+    if (authMode === 'solo') {
+      // Solo mode - only show sign in, with help text about default credentials
+      return (
+        <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500 text-center">
+          Solo mode: one user only. Use default credentials or change password in Settings.
+        </p>
+      );
+    }
+
+    // Server mode - allow sign-up
     switch (currentPage) {
       case 'signup':
         return (

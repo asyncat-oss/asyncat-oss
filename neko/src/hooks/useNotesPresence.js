@@ -1,6 +1,6 @@
 // useNotesPresence.js - Back to original working structure with minimal additions
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../auth/supabaseClient'; // Use the same client as auth
+import { supabase } from '../auth/tokenStore';
 
 // Generate a unique user color based on user ID
 const generateUserColor = (userId) => {

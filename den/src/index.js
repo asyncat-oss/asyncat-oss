@@ -41,6 +41,9 @@ import noteRoutes from './notes/routes/noteRoutes.js';
 import attachmentRoutes from './notes/routes/attachmentRoutes.js';
 import sharedAttachmentRoutes from './notes/routes/sharedAttachmentRoutes.js';
 
+// ─── Config ────────────────────────────────────────────────────────────────────
+import configRouter from './config/configRouter.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
@@ -111,6 +114,9 @@ app.use('/api', timeRoutes); // timeRoutes defines its own sub-paths under /api
 app.use('/api/notes', noteRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/shared-attachments', sharedAttachmentRoutes);
+
+// ─── Routes: Config ──────────────────────────────────────────────────────────
+app.use('/api/config', configRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

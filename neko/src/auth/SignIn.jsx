@@ -1,18 +1,21 @@
 // auth/SignIn.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, KeyRound } from 'lucide-react';
 import FormInput from './FormInput';
 import useAuth from '../hooks/useAuth';
 
 const soraFontBase = "font-sora";
 
+const DEFAULT_EMAIL = 'admin@local';
+const DEFAULT_PASSWORD = 'changeme';
+
 const SignIn = ({ navigateToSignUp }) => {
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(DEFAULT_EMAIL);
+  const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -26,6 +29,31 @@ const SignIn = ({ navigateToSignUp }) => {
       navigate('/');
     } catch (err) {
       console.error('Sign in error:', err);
+      let errorMessage = 'Sign in failed. Please check your credentials and try again.';
+      if (err.message?.includes('Invalid email or password') || err.message?.includes('Invalid login credentials')) {
+        errorMessage = 'Invalid email or password. Please try again.';
+      } else if (err.message?.includes('Too many requests')) {
+        errorMessage = 'Too many login attempts. Please try again in a few minutes.';
+      } else if (err.message?.includes('fetch') || err.message?.includes('network')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUseDefault = async (e) => {
+    e.preventDefault();
+    setEmail(DEFAULT_EMAIL);
+    setPassword(DEFAULT_PASSWORD);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await signIn(DEFAULT_EMAIL, DEFAULT_PASSWORD);
+      navigate('/');
+    } catch (err) {
       let errorMessage = 'Sign in failed. Please check your credentials and try again.';
       if (err.message?.includes('Invalid email or password') || err.message?.includes('Invalid login credentials')) {
         errorMessage = 'Invalid email or password. Please try again.';
@@ -97,6 +125,32 @@ const SignIn = ({ navigateToSignUp }) => {
             </div>
           )}
         </button>
+
+        {/* Default credentials button */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-500 dark:text-gray-400">
+              or
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleUseDefault}
+          disabled={isLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
+        >
+          <KeyRound className="w-4 h-4" />
+          <span>Use default credentials</span>
+        </button>
+
+        <p className="text-xs text-center text-gray-400 dark:text-gray-500 midnight:text-gray-500">
+          Default: {DEFAULT_EMAIL} / {DEFAULT_PASSWORD}
+        </p>
       </form>
     </div>
   );
