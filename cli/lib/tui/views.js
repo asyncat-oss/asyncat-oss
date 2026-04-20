@@ -1,6 +1,7 @@
 // Asyncat v2 — Views: Zen screen, chat, palette, input, status bar
 import { ansi, strip, vis, w, h, write, at, clearRow, center } from './ansi.js';
 import { getTheme, getThemeName } from '../theme.js';
+import { getLiveLogsEnabled } from '../colors.js';
 import { execSync } from 'child_process';
 
 // ── Cat personality ─────────────────────────────────────────────────────────
@@ -30,14 +31,39 @@ export function nextCatMsg() {
 }
 
 // ── Zen Home Screen (single centered input — no bottom bar) ─────────────────
-export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg) {
+export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, logs = []) {
   const t = getTheme();
   const W = w();
   const H = h();
   const R = ansi.reset;
 
+  const liveLogs = getLiveLogsEnabled();
+  const mainW = liveLogs ? Math.floor(W * 0.65) : W;
+  const logW = W - mainW - 1; // 1 for the border
+
   // Clear full screen
   for (let r = 1; r <= H - 1; r++) clearRow(r);
+
+  // ── Render logs sidebar if enabled ─────────────────────────────────────
+  if (liveLogs) {
+    for (let r = 1; r <= H - 1; r++) {
+      at(r, mainW + 1, `${t.dimBorder}│${R}`);
+    }
+    const logStartRow = 1;
+    const logH = H - 2;
+    const maxLogLen = logW - 2;
+    const logLines = [];
+    for (const l of logs) {
+      logLines.push(...wrapText(l, maxLogLen));
+    }
+    const startIdx = Math.max(0, logLines.length - logH);
+    const visibleLogs = logLines.slice(startIdx);
+    
+    at(1, mainW + 3, `${ansi.bold}Live Logs${R}`);
+    for (let i = 0; i < visibleLogs.length; i++) {
+      at(i + 3, mainW + 3, `${ansi.dim}${visibleLogs[i]}${R}`);
+    }
+  }
 
   const blockH = 14;
   const startY = Math.max(2, Math.floor((H - blockH) / 2));
@@ -45,21 +71,21 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg) 
 
   // Cat logo
   for (const line of CAT_FACE) {
-    at(y++, 1, center(`${t.logoDim}${line}${R}`, W));
+    at(y++, 1, center(`${t.logoDim}${line}${R}`, mainW));
   }
 
   // Brand name: "async" dim + "cat" bright
   const brand = `${t.logoDim}async${R}${t.logoBright}cat${R}`;
-  at(y++, 1, center(brand, W));
+  at(y++, 1, center(brand, mainW));
 
   // Cat message
   const msg = catMsg || CAT_MSGS[_catMsgIdx];
-  at(y++, 1, center(`${ansi.dim}${ansi.italic}${msg}${R}`, W));
+  at(y++, 1, center(`${ansi.dim}${ansi.italic}${msg}${R}`, mainW));
   y++;
 
   // ── Centered input box ──────────────────────────────────────────────────
-  const boxW = Math.min(56, W - 6);
-  const boxL = Math.floor((W - boxW) / 2);
+  const boxW = Math.min(56, mainW - 6);
+  const boxL = Math.floor((mainW - boxW) / 2);
   const inner = boxW - 4;
 
   // Top border
@@ -70,22 +96,23 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg) 
   const displayBuf = inputBuf || '';
   const placeholder = displayBuf
     ? `${t.inputFg}${displayBuf}${R}`
-    : `${ansi.dim}Ask anything... or press / for commands${R}`;
+    : `${ansi.dim}Ask the agent anything...${R}`;
   const phVis = vis(placeholder);
   const pad = Math.max(0, inner - phVis);
   at(y, boxL, `${t.dimBorder}│${R} ${placeholder}${' '.repeat(pad)} ${t.dimBorder}│${R}`);
 
   // Place cursor inside the box
+  const cursorRow = y;
   const cursorCol = boxL + 2 + (displayBuf ? cursorPos : 0);
-  write(ansi.to(y, cursorCol));
   y++;
 
   // Model info inside box
-  const mName = modelInfo || 'no model';
-  const pName = providerInfo || '';
-  const mLine = pName
-    ? `${t.accent2}${mName}${R} ${ansi.dim}· ${pName}${R}`
-    : `${ansi.dim}${mName}${R}`;
+  const hasModel = modelInfo && modelInfo !== 'no model' && modelInfo.trim();
+  const mLine = hasModel
+    ? (providerInfo
+        ? `${t.accent2}${modelInfo}${R} ${ansi.dim}· ${providerInfo}${R}`
+        : `${t.accent2}${modelInfo}${R}`)
+    : `${ansi.dim}no model  ${t.accent}→ type /models to pick one${R}`;
   const mPad = Math.max(0, inner - vis(mLine));
   at(y, boxL, `${t.dimBorder}│${R} ${mLine}${' '.repeat(mPad)} ${t.dimBorder}│${R}`);
   y++;
@@ -95,16 +122,47 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg) 
   y += 2;
 
   // Shortcuts
-  const sc = `${ansi.bold}/${R} ${ansi.dim}commands${R}    ${ansi.bold}@${R} ${ansi.dim}files${R}    ${ansi.bold}esc${R} ${ansi.dim}exit${R}`;
+  const sc = `${ansi.bold}/${R} ${ansi.dim}commands${R}    ${ansi.bold}/tools${R} ${ansi.dim}skills${R}    ${ansi.bold}esc${R} ${ansi.dim}exit${R}`;
   at(y, 1, center(sc, W));
+
+  // Finally, position the hardware cursor
+  write(ansi.to(cursorRow, cursorCol));
 }
 
 // ── Chat View (messages + centered input at bottom) ─────────────────────────
-export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInfo, providerInfo) {
+export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInfo, providerInfo, logs = []) {
   const t = getTheme();
   const W = w();
   const H = h();
   const R = ansi.reset;
+
+  const liveLogs = getLiveLogsEnabled();
+  const mainW = liveLogs ? Math.floor(W * 0.65) : W;
+  const logW = W - mainW - 1;
+
+  // Clear full screen to ensure clean layout
+  for (let r = 1; r <= H - 1; r++) clearRow(r);
+
+  // ── Render logs sidebar if enabled ─────────────────────────────────────
+  if (liveLogs) {
+    for (let r = 1; r <= H - 1; r++) {
+      at(r, mainW + 1, `${t.dimBorder}│${R}`);
+    }
+    const logStartRow = 1;
+    const logH = H - 2;
+    const maxLogLen = logW - 2;
+    const logLines = [];
+    for (const l of logs) {
+      logLines.push(...wrapText(l, maxLogLen));
+    }
+    const startIdx = Math.max(0, logLines.length - logH);
+    const visibleLogs = logLines.slice(startIdx);
+    
+    at(1, mainW + 3, `${ansi.bold}Live Logs${R}`);
+    for (let i = 0; i < visibleLogs.length; i++) {
+      at(i + 3, mainW + 3, `${ansi.dim}${visibleLogs[i]}${R}`);
+    }
+  }
 
   // Layout: content takes most space, input box at bottom
   const inputAreaH = 5; // border + input + model + border + gap
@@ -114,7 +172,7 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   // ── Render messages ────────────────────────────────────────────────────
   const allLines = [];
   for (const msg of messages) {
-    allLines.push(...formatMessage(msg, W - 6, t));
+    allLines.push(...formatMessage(msg, mainW - 6, t));
   }
 
   const totalLines = allLines.length;
@@ -123,7 +181,6 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   const visible = allLines.slice(start, end);
 
   for (let i = 0; i < contentH; i++) {
-    clearRow(i + 1);
     if (i < visible.length) {
       at(i + 1, 3, visible[i]);
     }
@@ -132,12 +189,12 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   // Scroll indicator
   if (totalLines > contentH && scrollOffset > 0) {
     const pct = Math.round(((totalLines - scrollOffset) / totalLines) * 100);
-    at(1, W - 6, `${ansi.dim}${pct}%${R}`);
+    at(1, mainW - 6, `${ansi.dim}${pct}%${R}`);
   }
 
   // ── Centered input box ─────────────────────────────────────────────────
-  const boxW = Math.min(56, W - 6);
-  const boxL = Math.floor((W - boxW) / 2);
+  const boxW = Math.min(56, mainW - 6);
+  const boxL = Math.floor((mainW - boxW) / 2);
   const inner = boxW - 4;
   const boxTop = H - inputAreaH;
 
@@ -232,6 +289,7 @@ export const PALETTE_CMDS = [
   { cmd: '/code',     desc: 'Show file tree',                      group: 'Dev' },
   { cmd: '/context',  desc: 'Show workspace state',                group: 'Dev' },
   { cmd: '/snippets', desc: 'Save and reuse code blocks',          group: 'Dev' },
+  { cmd: '/tools',    desc: 'View agent skills & tools',           group: 'AI' },
   { cmd: '/start',    desc: 'Start backend & frontend',            group: 'Services' },
   { cmd: '/stop',     desc: 'Stop all services',                   group: 'Services' },
   { cmd: '/restart',  desc: 'Restart all services',                group: 'Services' },
@@ -365,8 +423,80 @@ export function renderSelector(title, items, selIdx, contentStartRow) {
   }
 }
 
+// ── Model Setup Wizard ────────────────────────────────────────────────────────
+export function renderModelSetup(model, ctxBuf, cursorPos, isFocused) {
+  const t = getTheme();
+  const W = w();
+  const H = h();
+  const R = ansi.reset;
+
+  // Clear full screen
+  for (let r = 1; r <= H - 1; r++) clearRow(r);
+
+  const boxW = Math.min(60, W - 6);
+  const boxL = Math.floor((W - boxW) / 2);
+  const inner = boxW - 4;
+
+  const blockH = 16;
+  const startY = Math.max(2, Math.floor((H - blockH) / 2));
+  let y = startY;
+
+  // Title
+  at(y++, boxL, `${t.accentBold}Model Setup${R}`);
+  at(y++, boxL, `${t.dimBorder}${'─'.repeat(boxW)}${R}`);
+  y++;
+
+  // Model Info
+  at(y++, boxL, ` ${ansi.bold}Name:${R} ${model.name}`);
+  at(y++, boxL, ` ${ansi.bold}Size:${R} ${model.sizeFormatted || 'Unknown'}`);
+  if (model.architecture && model.architecture !== 'unknown') {
+    at(y++, boxL, ` ${ansi.bold}Arch:${R} ${model.architecture} ${model.parameterCount ? `(${model.parameterCount})` : ''}`);
+  }
+
+  // Guess capabilities from name
+  const nameL = (model.name || '').toLowerCase();
+  let tools = 'Unknown';
+  if (nameL.includes('qwen') || nameL.includes('hermes') || nameL.includes('llama-3') || nameL.includes('tool')) {
+    tools = `${t.success}Supported${R}`;
+  } else {
+    tools = `${ansi.dim}Not explicitly supported${R}`;
+  }
+  at(y++, boxL, ` ${ansi.bold}Tools:${R} ${tools}`);
+  y++;
+
+  at(y++, boxL, `${t.dimBorder}${'─'.repeat(boxW)}${R}`);
+  y++;
+
+  // Config fields
+  at(y++, boxL, ` ${ansi.bold}Hyperparameters${R}`);
+
+  // Context Size Input
+  const label = " Context Size: ";
+  const ctxStr = ctxBuf || '';
+  const bufPad = Math.max(0, 10 - vis(ctxStr));
+
+  const bg = isFocused ? t.paletteSel : '';
+  at(y, boxL, `${bg}${label}${isFocused ? t.inputFg : ''}${ctxStr}${R}${bg}${' '.repeat(bufPad)}${R}`);
+
+  const cursorRow = y;
+  const cursorCol = boxL + vis(label) + cursorPos;
+  y += 2;
+
+  at(y++, boxL, center(`${ansi.dim}enter start model  ·  esc cancel${R}`, boxW));
+
+  if (isFocused) {
+    write(ansi.to(cursorRow, cursorCol));
+  }
+}
+
 // ── Status bar ──────────────────────────────────────────────────────────────
-export function renderStatusBar(version) {
+let _statusCache = { backend: false, frontend: false, ts: 0 };
+
+export function setServiceStatus(backend, frontend) {
+  _statusCache = { backend, frontend, ts: Date.now() };
+}
+
+export function renderStatusBar(version, modelInfo) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -380,11 +510,34 @@ export function renderStatusBar(version) {
   } catch {}
 
   const cwd = process.cwd().replace(process.env.HOME || '', '~');
-  const left = branch ? `${cwd}:${branch}` : cwd;
-  const right = version || '0.3.2';
+  const loc = branch ? `${cwd}:${branch}` : cwd;
+
+  // Service status dots
+  const be = _statusCache.backend
+    ? `${t.success}●${R}${ansi.dim} api${R}`
+    : `${ansi.dim}○ api${R}`;
+  const fe = _statusCache.frontend
+    ? `${t.success}●${R}${ansi.dim} web${R}`
+    : `${ansi.dim}○ web${R}`;
+
+  const left = ` ${loc}`;
+  const mid = `${be}  ${fe}`;
+  const right = `${version || '0.3.2'} `;
+
+  // Calculate spacing
+  const leftVis = vis(left);
+  const midVis = vis(mid);
+  const rightVis = vis(right);
+  const totalContent = leftVis + midVis + rightVis;
+  const spaceBefore = Math.max(1, Math.floor((W - totalContent) / 2) - leftVis + leftVis);
+  const spaceAfter = Math.max(1, W - leftVis - midVis - rightVis - spaceBefore + leftVis);
+
+  // Simpler approach: left | center-ish | right
+  const gap1 = Math.max(1, Math.floor((W - totalContent) / 2));
+  const gap2 = Math.max(1, W - leftVis - gap1 - midVis - rightVis);
 
   clearRow(H);
-  at(H, 1, `${t.statusBg}${t.statusFg} ${left}${' '.repeat(Math.max(0, W - vis(left) - vis(right) - 2))}${right} ${R}`);
+  at(H, 1, `${t.statusBg}${t.statusFg}${left}${' '.repeat(gap1)}${mid}${' '.repeat(gap2)}${right}${R}`);
 }
 
 // ── Streaming indicator ─────────────────────────────────────────────────────

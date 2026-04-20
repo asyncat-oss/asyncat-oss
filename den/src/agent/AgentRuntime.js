@@ -82,9 +82,10 @@ export class AgentRuntime {
       scratchpad: '',
     });
 
-    // Build conversation thread
+    // Build conversation thread (filter out UI system messages)
+    const validHistory = conversationHistory.filter(m => m.role === 'user' || m.role === 'assistant');
     const messages = [
-      ...conversationHistory.slice(-4).map(m => ({ role: m.role, content: m.content })),
+      ...validHistory.slice(-4).map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: goal },
     ];
 
@@ -225,6 +226,7 @@ export class AgentRuntime {
       model: this.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       max_tokens: this.isLocal ? 2048 : 4096,
+      stream: true,
     };
 
     // For cloud models with native tool support, pass tool definitions via API
@@ -235,13 +237,41 @@ export class AgentRuntime {
       delete params.max_tokens;
     }
 
-    const response = await this.aiClient.client.chat.completions.create(params);
-    const choice = response.choices?.[0];
+    const stream = await this.aiClient.client.chat.completions.create(params);
+    let fullText = '';
+    const toolCalls = {};
+    let finishReason = null;
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (!delta) continue;
+      
+      finishReason = chunk.choices[0]?.finish_reason || finishReason;
+
+      if (delta.content) {
+        fullText += delta.content;
+        // Emit delta event for real-time streaming
+        this.onEvent({ type: 'delta', data: { content: delta.content } });
+      }
+
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          if (!toolCalls[tc.index]) {
+            toolCalls[tc.index] = { id: tc.id || '', type: 'function', function: { name: '', arguments: '' } };
+          }
+          if (tc.id) toolCalls[tc.index].id = tc.id;
+          if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+          if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+        }
+      }
+    }
+
+    const apiToolCalls = Object.values(toolCalls).length > 0 ? Object.values(toolCalls) : null;
 
     return {
-      text: choice?.message?.content || '',
-      toolCalls: choice?.message?.tool_calls || null,
-      finishReason: choice?.finish_reason,
+      text: fullText,
+      toolCalls: apiToolCalls,
+      finishReason: finishReason,
     };
   }
 

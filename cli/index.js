@@ -200,14 +200,20 @@ async function startTui() {
           }
           const chosen = await tui.showSelector('Select Model', models);
           if (chosen) {
-            tui.printInfo(`Loading ${chosen.name}...`);
+            const ctxSize = await tui.showModelSetup(chosen);
+            if (!ctxSize) {
+              tui.printInfo('Model load cancelled.');
+              return;
+            }
+
+            tui.printInfo(`Loading ${chosen.name} (ctx: ${ctxSize})...`);
             try {
               const token = await getToken();
               const base = getBase();
               await fetch(`${base}/api/ai/providers/server/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ filename: chosen._file }),
+                body: JSON.stringify({ filename: chosen._file, ctxSize: parseInt(ctxSize, 10) || 8192 }),
               });
               tui.printOk(`Model ${chosen.name} loaded`);
               setTimeout(async () => {
@@ -286,6 +292,36 @@ async function startTui() {
         case 'live-logs':
           handleLiveLogs(args, tui);
           break;
+        case 'tools': {
+          tui.printInfo('Agent Skills & Tools:');
+          try {
+            const token = await getToken();
+            const base = getBase();
+            // Fetch tool info from backend
+            const res = await fetch(`${base}/api/health`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const health = await res.json();
+              const toolCount = health.toolCount || '?';
+              tui.print(`  ${toolCount} tools registered`);
+            }
+          } catch {}
+          // Show known tool categories
+          tui.print('');
+          tui.print('  📁 File Tools       read, write, edit, delete, list, search files');
+          tui.print('  🖥  Shell Tools      run commands, scripts, package managers');
+          tui.print('  🔍 Search Tools     grep, find, semantic search, web search');
+          tui.print('  🧠 Memory Tools     remember, recall, context management');
+          tui.print('  🌐 Browser Tools    fetch pages, screenshots, web scraping');
+          tui.print('  📂 Workspace Tools  project structure, deps, git operations');
+          tui.print('  🤖 Agent Tools      sub-tasks, planning, self-reflection');
+          tui.print('  🔌 MCP Tools        external tool servers (configurable)');
+          tui.print('');
+          tui.print('  All tools are available when you type a message.');
+          tui.print('  The agent automatically selects which tools to use.');
+          break;
+        }
         case 'new':
           tui.clearMessages();
           tui.printOk('New session started');
@@ -324,15 +360,75 @@ async function startTui() {
 
   // ── Handle AI input (plain text → agent) ──────────────────────────────
   async function handleAiInput(text) {
+    // Guard: check if model/backend is available
+    if (!tui.modelInfo || tui.modelInfo === 'no model' || !tui.modelInfo.trim()) {
+      tui.addMessage('system', '⚠  No model loaded. Let\'s pick one!');
+
+      // Try to get available models
+      let models = [];
+      try {
+        await getToken();
+        const localModels = await apiGet('/api/ai/providers/local-models');
+        models = (localModels.models || []).map(m => ({
+          name: m.filename,
+          desc: m.sizeFormatted || '',
+          _file: m.filename,
+        }));
+      } catch {
+        tui.printErr('Backend not running. Starting it...');
+        _start.run(['--backend-only']);
+        tui.printInfo('Waiting for backend... try again in a few seconds.');
+        return;
+      }
+
+      if (models.length === 0) {
+        tui.printWarn('No local models found.');
+        tui.printInfo('Download one:  /models pull <url> <name.gguf>');
+        tui.printInfo('Or configure cloud:  /provider');
+        return;
+      }
+
+      const chosen = await tui.showSelector('Select a Model to Start', models);
+      if (!chosen) { tui.printInfo('Cancelled. Type /models for more options.'); return; }
+
+      const ctxSize = await tui.showModelSetup(chosen);
+      if (!ctxSize) { tui.printInfo('Model load cancelled.'); return; }
+
+      tui.printInfo(`Loading ${chosen.name} (ctx: ${ctxSize})...`);
+      try {
+        const token = await getToken();
+        const base = getBase();
+        await fetch(`${base}/api/ai/providers/server/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ filename: chosen._file, ctxSize: parseInt(ctxSize, 10) || 8192 }),
+        });
+        tui.printOk(`Model ${chosen.name} loaded!`);
+        // Wait for model to be ready
+        await new Promise(r => setTimeout(r, 2000));
+        const { model: m, provider: p } = await detectModel();
+        tui.setModel(m, p);
+      } catch (e) {
+        tui.printErr(`Failed: ${e.message}`);
+        return;
+      }
+    }
+
+    // Now send the message
     tui.addMessage('user', text);
     tui.lockInput();
-    tui.startStreaming('Thinking...');
+    tui.startStreaming('Agent thinking...');
 
     try {
       const token = await getToken();
       const base  = getBase();
 
-      // Use the agent endpoint for full autonomy
+      // Prepare conversation history (exclude the current goal)
+      const history = tui.messages.slice(0, -1).map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+      }));
+
       const res = await fetch(`${base}/api/agent/run`, {
         method: 'POST',
         headers: {
@@ -342,13 +438,17 @@ async function startTui() {
         },
         body: JSON.stringify({
           goal: text,
+          conversationHistory: history,
           workingDir: process.cwd(),
           maxRounds: 25,
           autoApprove: false,
         }),
       });
 
-      if (!res.ok) throw new Error(`Agent error: ${res.status}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Agent ${res.status}: ${body.slice(0, 100)}`);
+      }
 
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
@@ -373,13 +473,32 @@ async function startTui() {
       }
 
       tui.stopStreaming();
+      tui.clearStreamContent();
+      
       if (fullAnswer) {
         tui.addMessage('assistant', fullAnswer);
+
+        // Auto-save session
+        try {
+          fetch(`${base}/api/chats/autosave`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              messages: tui.messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) })),
+              mode: 'agent',
+              conversationId: tui.conversationId || null,
+            })
+          }).then(r => r.json()).then(data => {
+            if (data.success && data.conversation) {
+              tui.conversationId = data.conversation.id;
+            }
+          }).catch(() => {});
+        } catch (e) {}
       }
     } catch (e) {
       tui.stopStreaming();
       if (e.message.includes('fetch failed') || e.message.includes('ECONNREFUSED')) {
-        tui.printErr('Cannot connect to AI model. Run /models or /start first.');
+        tui.printErr('Backend not reachable. Try /start or /doctor');
       } else {
         tui.printErr(e.message);
       }
@@ -409,6 +528,11 @@ function handleAgentEvent(tui, event, token, base) {
       tui.setStreamMsg(`Thinking (Round ${(data.round || 0) + 1})...`);
       if (data.thought) {
         tui.addMessage('thinking', data.thought, { round: (data.round || 0) + 1 });
+      }
+      break;
+    case 'delta':
+      if (data.content) {
+        tui.appendStreamContent(data.content);
       }
       break;
     case 'tool_start':
