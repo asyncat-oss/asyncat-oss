@@ -221,41 +221,86 @@ All automated. No manual `.env` editing required.
 | Feature | Hermes | OpenClaw | Asyncat (ours) |
 |---------|--------|-----------|---------------|
 | Self-improving | ✅ | ✅ | ✅ (Basal Ganglia) |
-| Skills | 118 | 100+ | 15 (start) → grows |
-| Memory | 3-layer | 2-layer | 4-layer (Spatial added) |
+| Skills | 118 | 100+ | **45 → grows** |
+| Memory | 3-layer | 2-layer | **5-layer (Spatial + Episodic)** |
 | Channels | 15+ | 20+ | CLI + Web (for now) |
 | Brain-inspired | ❌ | ❌ | ✅ |
 | Local-first | ✅ | ✅ | ✅ |
 | Runs locally | ✅ | ✅ | ✅ |
+| FTS5 Search | ❌ | ❌ | ✅ |
+| Feedback Learning | ❌ | ❌ | ✅ |
+
+---
+
+## What We've Built
+
+### Brain Architecture
+- **Prefrontal** — Planning, prioritization, code review
+- **Cortex** — Agent loop, tool execution, ReAct reasoning
+- **Amygdala** — Safety, permissions, error handling
+- **Hippocampus** — Memory (semantic + episodic + spatial)
+- **Cerebellum** — 45 bundled skills (muscle memory)
+- **Basal Ganglia** — Auto-learns from your workflows
+
+### Skills (45)
+```
+Cerebellum:  docker, kubernetes, ci-cd, monitoring, nginx, apache,
+            ssl, backup, cron, log-analysis, tdd, debugging,
+            git, testing, refactoring, deployment, database-migrations
+
+Prefrontal: code-review, api-design, ui-ux, visual-design,
+            competitive-analysis, data-interpretation,
+            cloud-architecture, charting, statistics
+
+Hippocampus: web-research, content-writing, report-writing,
+            logging, documentation, meeting-notes
+
+Amygdala:    error-handling, security, stakeholder-update,
+            time-blocking, meeting-scheduler, inbox-zero,
+            email-drafting, user-manual, sql-queries,
+            spreadsheet-analysis
+```
+
+### Episodic Memory (FTS5)
+- Full-text search through all past sessions
+- BM25 ranking for relevance
+- Memory search with ranking
+- Automatic FTS5 sync via triggers
+
+### Feedback Learning
+- Rate sessions 1-5 stars
+- Provide corrections
+- Track was_helpful
+- Negative patterns ranked lower in Basal Ganglia
 
 ---
 
 ## Roadmap
 
-### Phase 1: Foundation
-- [ ] First-run detection
-- [ ] Onboard wizard
-- [ ] Brain architecture in agent code
+### Phase 1: Foundation ✅
+- [x] First-run detection
+- [x] Onboard wizard
+- [x] Brain architecture in agent code
 
-### Phase 2: Core Skills
-- [ ] Skill file format + loader
-- [ ] 15 bundled skills
-- [ ] `/skills` command
+### Phase 2: Core Skills ✅
+- [x] Skill file format + loader
+- [x] **45 bundled skills** (exceeded 15!)
+- [x] `/skills` command
 
-### Phase 3: Memory
-- [ ] Short-term memory (session)
-- [ ] Long-term memory (memory.md + user.md)
-- [ ] Episodic search (FTS5)
-- [ ] Spatial memory (project context)
+### Phase 3: Memory ✅
+- [x] Short-term memory (session)
+- [x] Long-term memory (agent_memory table)
+- [x] **Episodic search (FTS5)** — now with BM25 ranking!
+- [ ] Spatial memory (project context) — future
 
-### Phase 4: Self-Improvement
-- [ ] Pattern tracking
-- [ ] Auto-skill creation
-- [ ] Feedback learning
+### Phase 4: Self-Improvement ✅
+- [x] Pattern tracking
+- [x] Auto-skill creation
+- [x] **Feedback learning** — with corrections!
 
-### Phase 5: Polishing
-- [ ] More skills
-- [ ] Skills hub
+### Phase 5: Polishing (Ongoing)
+- [x] More skills → 45
+- [ ] Skills hub (download community skills)
 - [ ] Messaging gateway (future)
 
 ---
