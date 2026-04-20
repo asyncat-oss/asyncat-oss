@@ -28,7 +28,9 @@ class BasalGanglia {
         pattern_summary TEXT NOT NULL,
         tool_sequence TEXT NOT NULL,
         success_count INTEGER DEFAULT 1,
+        failure_count INTEGER DEFAULT 0,
         last_seen_at TEXT NOT NULL,
+        last_failure_at TEXT,
         created_at TEXT NOT NULL,
         auto_skill_created INTEGER DEFAULT 0
       )
@@ -54,36 +56,98 @@ class BasalGanglia {
     return hash.toString(16);
   }
 
-  async trackWorkflow({ userId, workspaceId, goal, tools, success }) {
-    if (!success || !goal || !tools?.length) return;
+  async trackWorkflow({ userId, workspaceId, goal, tools, success, correction }) {
+    if (!goal || !tools?.length) return;
 
     await this.initialize();
 
     const patternHash = this.hashPattern(tools, goal);
     const patternSummary = `${goal.slice(0, 50)} → ${tools.slice(0, 3).join(' → ')}`;
 
+    if (success) {
+      const existing = db.prepare(`
+        SELECT id, success_count, failure_count FROM agent_patterns
+        WHERE user_id = ? AND pattern_hash = ?
+      `).get(userId, patternHash);
+
+      if (existing) {
+        db.prepare(`
+          UPDATE agent_patterns
+          SET success_count = success_count + 1,
+              last_seen_at = datetime('now')
+          WHERE id = ?
+        `).run(existing.id);
+
+        const totalAttempts = existing.success_count + existing.failure_count + 1;
+        if (existing.success_count + 1 >= MIN_PATTERN_COUNT && totalAttempts >= 3 && !existing.auto_skill_created) {
+          await this.maybeCreateSkill({ userId, workspaceId, patternHash, patternSummary, tools });
+        }
+      } else {
+        db.prepare(`
+          INSERT INTO agent_patterns (id, user_id, workspace_id, pattern_hash, pattern_summary, tool_sequence, last_seen_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(randomUUID(), userId, workspaceId, patternHash, patternSummary, JSON.stringify(tools.slice(0, 10)));
+      }
+    } else {
+      const existing = db.prepare(`
+        SELECT id, failure_count FROM agent_patterns
+        WHERE user_id = ? AND pattern_hash = ?
+      `).get(userId, patternHash);
+
+      if (existing) {
+        db.prepare(`
+          UPDATE agent_patterns
+          SET failure_count = failure_count + 1,
+              last_failure_at = datetime('now'),
+              last_seen_at = datetime('now')
+          WHERE id = ?
+        `).run(existing.id);
+      }
+    }
+
+    if (correction) {
+      await this.storeCorrection(userId, patternHash, correction);
+    }
+  }
+
+  async trackFailure({ userId, workspaceId, goal, tools, error }) {
+    await this.trackWorkflow({ userId, workspaceId, goal, tools, success: false });
+  }
+
+  async storeCorrection(userId, patternHash, correction) {
     const existing = db.prepare(`
-      SELECT id, success_count FROM agent_patterns
+      SELECT corrections FROM agent_patterns
       WHERE user_id = ? AND pattern_hash = ?
     `).get(userId, patternHash);
 
-    if (existing) {
-      db.prepare(`
-        UPDATE agent_patterns
-        SET success_count = success_count + 1,
-            last_seen_at = datetime('now')
-        WHERE id = ?
-      `).run(existing.id);
+    const corrections = existing?.corrections ? JSON.parse(existing.corrections) : [];
+    corrections.push({ ...correction, timestamp: new Date().toISOString() });
 
-      if (existing.success_count + 1 >= MIN_PATTERN_COUNT && !existing.auto_skill_created) {
-        await this.maybeCreateSkill({ userId, workspaceId, patternHash, patternSummary, tools });
-      }
-    } else {
-      db.prepare(`
-        INSERT INTO agent_patterns (id, user_id, workspace_id, pattern_hash, pattern_summary, tool_sequence, last_seen_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-      `).run(randomUUID(), userId, workspaceId, patternHash, patternSummary, JSON.stringify(tools.slice(0, 10)));
-    }
+    db.prepare(`
+      UPDATE agent_patterns
+      SET corrections = ?
+      WHERE user_id = ? AND pattern_hash = ?
+    `).run(JSON.stringify(corrections.slice(-10)), userId, patternHash);
+  }
+
+  getQualityScore(patternId) {
+    const p = db.prepare(`
+      SELECT success_count, failure_count FROM agent_patterns WHERE id = ?
+    `).get(patternId);
+    if (!p) return 0;
+    return p.success_count - (p.failure_count * 2);
+  }
+
+  getPatternsForGoal(userId, goalContext) {
+    const patterns = db.prepare(`
+      SELECT pattern_summary, tool_sequence, success_count, failure_count,
+        (success_count - failure_count * 2) as quality_score
+      FROM agent_patterns
+      WHERE user_id = ? AND pattern_summary LIKE ?
+      ORDER BY quality_score DESC
+      LIMIT 5
+    `).all(userId, `%${goalContext.slice(0, 20)}%`);
+    return patterns;
   }
 
   async maybeCreateSkill({ userId, workspaceId, patternHash, patternSummary, tools }) {

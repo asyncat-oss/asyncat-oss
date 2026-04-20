@@ -19,6 +19,11 @@ export class AgentSession {
     this.toolHistory = [];   // all tool calls made: { tool, args, result, timestamp }
     this.messages = [];      // conversation messages for this session
     this.totalRounds = 0;
+    // Feedback fields
+    this.feedbackRating = null;
+    this.feedbackComment = null;
+    this.wasHelpful = null;
+    this.corrections = [];
     this.createdAt = new Date().toISOString();
     this.updatedAt = new Date().toISOString();
   }
@@ -80,27 +85,49 @@ export class AgentSession {
         db.prepare(`
           UPDATE agent_sessions SET
             status = ?, goal = ?, plan = ?, scratchpad = ?,
-            tool_history = ?, total_rounds = ?, updated_at = ?
+            tool_history = ?, total_rounds = ?, updated_at = ?,
+            feedback_rating = ?, feedback_comment = ?, was_helpful = ?, corrections = ?
           WHERE id = ?
         `).run(
           this.status, this.goal, JSON.stringify(this.plan),
           JSON.stringify(this.scratchpad), JSON.stringify(this.toolHistory),
-          this.totalRounds, this.updatedAt, this.id
+          this.totalRounds, this.updatedAt,
+          this.feedbackRating, this.feedbackComment, this.wasHelpful,
+          JSON.stringify(this.corrections || []), this.id
         );
       } else {
         db.prepare(`
-          INSERT INTO agent_sessions (id, user_id, workspace_id, status, goal, plan, scratchpad, tool_history, total_rounds, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO agent_sessions (id, user_id, workspace_id, status, goal, plan, scratchpad, tool_history, total_rounds, created_at, updated_at, feedback_rating, feedback_comment, was_helpful, corrections)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           this.id, this.userId, this.workspaceId, this.status,
           this.goal, JSON.stringify(this.plan), JSON.stringify(this.scratchpad),
           JSON.stringify(this.toolHistory), this.totalRounds,
-          this.createdAt, this.updatedAt
+          this.createdAt, this.updatedAt,
+          this.feedbackRating, this.feedbackComment, this.wasHelpful,
+          JSON.stringify(this.corrections || [])
         );
       }
     } catch (err) {
       console.error('Failed to persist agent session:', err.message);
     }
+  }
+
+  setFeedback(rating, comment, wasHelpful) {
+    this.feedbackRating = rating;
+    this.feedbackComment = comment;
+    this.wasHelpful = wasHelpful !== undefined ? (wasHelpful ? 1 : 0) : null;
+    this._persist();
+  }
+
+  addCorrection(correction) {
+    this.corrections = this.corrections || [];
+    this.corrections.push({ ...correction, timestamp: new Date().toISOString() });
+    this._persist();
+  }
+
+  getCorrection() {
+    return this.corrections || [];
   }
 
   /** Save current state. Call periodically during long runs. */

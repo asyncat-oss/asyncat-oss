@@ -141,6 +141,107 @@ router.delete('/sessions/:id', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/agent/sessions/search?q=term
+ * FTS5 search through agent sessions (episodic memory).
+ */
+router.get('/sessions/search', authenticate, async (req, res) => {
+  try {
+    const q = req.query.q?.trim();
+    if (!q) {
+      return res.status(400).json({ success: false, error: 'q parameter required' });
+    }
+
+    const { default: db } = await import('../../db/client.js');
+
+    const rows = db.prepare(`
+      SELECT s.id, s.goal, s.status, s.total_rounds, s.created_at, s.updated_at,
+             bm25(agent_sessions_fts) as rank
+      FROM agent_sessions_fts fts
+      JOIN agent_sessions s ON s.id = fts.session_id
+      WHERE fts.agent_sessions_fts MATCH ? AND s.user_id = ?
+      ORDER BY rank
+      LIMIT 20
+    `).all(`${q}*`, req.user.id);
+
+    res.json({ success: true, count: rows.length, sessions: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/agent/sessions/:id/feedback
+ * Rate a session and provide feedback.
+ * Body: { rating: 1-5, comment?: string, was_helpful?: boolean }
+ */
+router.post('/sessions/:id/feedback', authenticate, async (req, res) => {
+  try {
+    const { rating, comment, was_helpful } = req.body;
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, error: 'rating 1-5 required' });
+    }
+
+    const { default: db } = await import('../../db/client.js');
+    const session = db.prepare(
+      'SELECT id FROM agent_sessions WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id);
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+
+    db.prepare(`
+      UPDATE agent_sessions
+      SET feedback_rating = ?, feedback_comment = ?, was_helpful = ?
+      WHERE id = ?
+    `).run(rating, comment || null, was_helpful !== undefined ? (was_helpful ? 1 : 0) : null, req.params.id);
+
+    res.json({ success: true, message: 'Feedback recorded' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/agent/sessions/:id/correct
+ * Provide a correction for a session.
+ * Body: { tool?: string, correction: string, explanation?: string }
+ */
+router.post('/sessions/:id/correct', authenticate, async (req, res) => {
+  try {
+    const { tool, correction, explanation } = req.body;
+    if (!correction) {
+      return res.status(400).json({ success: false, error: 'correction text required' });
+    }
+
+    const { default: db } = await import('../../db/client.js');
+    const session = db.prepare(
+      'SELECT id, corrections FROM agent_sessions WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id);
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+
+    const corrections = session.corrections ? JSON.parse(session.corrections) : [];
+    corrections.push({
+      tool: tool || 'general',
+      correction,
+      explanation: explanation || '',
+      timestamp: new Date().toISOString()
+    });
+
+    db.prepare(`
+      UPDATE agent_sessions SET corrections = ? WHERE id = ?
+    `).run(JSON.stringify(corrections.slice(-10)), req.params.id);
+
+    res.json({ success: true, message: 'Correction recorded' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/agent/memory
  * List or search stored memories for the current user's workspace.
  * Query: ?q=search+term
@@ -154,11 +255,23 @@ router.get('/memory', authenticate, async (req, res) => {
     const q = req.query.q?.trim();
     let rows;
     if (q) {
-      rows = db.prepare(
-        `SELECT key, content, memory_type, updated_at FROM agent_memory
-         WHERE user_id = ? AND workspace_id = ? AND (key LIKE ? OR content LIKE ?)
-         ORDER BY updated_at DESC LIMIT 50`
-      ).all(req.user.id, workspaceId, `%${q}%`, `%${q}%`);
+      try {
+        rows = db.prepare(`
+          SELECT m.id, m.key, m.content, m.memory_type, m.updated_at,
+                 bm25(agent_memory_fts) as rank
+          FROM agent_memory_fts fts
+          JOIN agent_memory m ON m.id = fts.memory_id
+          WHERE fts.agent_memory_fts MATCH ? AND m.user_id = ? AND m.workspace_id = ?
+          ORDER BY rank
+          LIMIT 20
+        `).all(`${q}*`, req.user.id, workspaceId);
+      } catch {
+        rows = db.prepare(
+          `SELECT key, content, memory_type, updated_at FROM agent_memory
+           WHERE user_id = ? AND workspace_id = ? AND (key LIKE ? OR content LIKE ?)
+           ORDER BY updated_at DESC LIMIT 50`
+        ).all(req.user.id, workspaceId, `%${q}%`, `%${q}%`);
+      }
     } else {
       rows = db.prepare(
         'SELECT key, content, memory_type, updated_at FROM agent_memory WHERE user_id = ? AND workspace_id = ? ORDER BY updated_at DESC LIMIT 50'

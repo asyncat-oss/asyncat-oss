@@ -490,3 +490,75 @@ CREATE INDEX IF NOT EXISTS idx_agent_memory_workspace  ON agent_memory(workspace
 CREATE INDEX IF NOT EXISTS idx_agent_memory_key        ON agent_memory(user_id, workspace_id, key);
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_user     ON agent_sessions(user_id);
 
+-- =============================================
+-- EPISODIC MEMORY (FTS5) - Full-Text Search
+-- =============================================
+
+-- FTS5 virtual table for agent sessions
+CREATE VIRTUAL TABLE IF NOT EXISTS agent_sessions_fts USING fts5(
+  session_id UNINDEXED,
+  goal,
+  scratchpad,
+  tool_names,
+  tokenize='unicode61'
+);
+
+-- FTS5 virtual table for agent memory
+CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_fts USING fts5(
+  memory_id UNINDEXED,
+  key,
+  content,
+  tokenize='unicode61'
+);
+
+-- Triggers to keep FTS5 in sync with agent_sessions
+CREATE TRIGGER IF NOT EXISTS agent_sessions_ai AFTER INSERT ON agent_sessions BEGIN
+  INSERT INTO agent_sessions_fts(session_id, goal, scratchpad, tool_names)
+  VALUES (new.id, new.goal, new.scratchpad,
+    (SELECT group_concat(json_each.value->>'tool', ' ') FROM json_each(new.tool_history)));
+END;
+
+CREATE TRIGGER IF NOT EXISTS agent_sessions_ad AFTER DELETE ON agent_sessions BEGIN
+  DELETE FROM agent_sessions_fts WHERE session_id = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS agent_sessions_au AFTER UPDATE ON agent_sessions BEGIN
+  DELETE FROM agent_sessions_fts WHERE session_id = old.id;
+  INSERT INTO agent_sessions_fts(session_id, goal, scratchpad, tool_names)
+  VALUES (new.id, new.goal, new.scratchpad,
+    (SELECT group_concat(json_each.value->>'tool', ' ') FROM json_each(new.tool_history)));
+END;
+
+-- Triggers to keep FTS5 in sync with agent_memory
+CREATE TRIGGER IF NOT EXISTS agent_memory_ai AFTER INSERT ON agent_memory BEGIN
+  INSERT INTO agent_memory_fts(memory_id, key, content)
+  VALUES (new.id, new.key, new.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS agent_memory_ad AFTER DELETE ON agent_memory BEGIN
+  DELETE FROM agent_memory_fts WHERE memory_id = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS agent_memory_au AFTER UPDATE ON agent_memory BEGIN
+  DELETE FROM agent_memory_fts WHERE memory_id = old.id;
+  INSERT INTO agent_memory_fts(memory_id, key, content)
+  VALUES (new.id, new.key, new.content);
+END;
+
+-- =============================================
+-- FEEDBACK LEARNING
+-- =============================================
+
+-- Add feedback fields to agent_sessions
+ALTER TABLE agent_sessions ADD COLUMN feedback_rating INTEGER CHECK (feedback_rating BETWEEN 1 AND 5);
+ALTER TABLE agent_sessions ADD COLUMN feedback_comment TEXT;
+ALTER TABLE agent_sessions ADD COLUMN was_helpful INTEGER CHECK (was_helpful IN (0, 1));
+ALTER TABLE agent_sessions ADD COLUMN corrections TEXT NOT NULL DEFAULT '[]';
+
+-- Add failure tracking to agent_patterns
+ALTER TABLE agent_patterns ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE agent_patterns ADD COLUMN last_failure_at TEXT;
+
+-- Pattern quality score (positive - negative, higher = better)
+-- Will be computed as: success_count - failure_count
+
