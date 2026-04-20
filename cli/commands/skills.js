@@ -1,8 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import { log, info, col, ok, err } from '../lib/colors.js';
+import { log, info, col, ok, err, warn } from '../lib/colors.js';
 
-const SKILLS_DIR = path.join(process.cwd(), 'cli', 'skills');
+function getSkillsDir() {
+  const cwd = process.cwd();
+  const fromCwd = path.join(cwd, 'cli', 'skills');
+  if (fs.existsSync(fromCwd)) return fromCwd;
+  const fromParent = path.join(cwd, '..', 'cli', 'skills');
+  if (fs.existsSync(fromParent)) return fromParent;
+  return path.join(__dirname, '..', 'cli', 'skills');
+}
+
+const SKILLS_DIR = getSkillsDir();
 
 function loadSkill(name) {
   const skillPath = path.join(SKILLS_DIR, name + '.md');

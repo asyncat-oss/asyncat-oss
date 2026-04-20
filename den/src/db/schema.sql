@@ -548,17 +548,6 @@ END;
 -- =============================================
 -- FEEDBACK LEARNING
 -- =============================================
-
--- Add feedback fields to agent_sessions
-ALTER TABLE agent_sessions ADD COLUMN feedback_rating INTEGER CHECK (feedback_rating BETWEEN 1 AND 5);
-ALTER TABLE agent_sessions ADD COLUMN feedback_comment TEXT;
-ALTER TABLE agent_sessions ADD COLUMN was_helpful INTEGER CHECK (was_helpful IN (0, 1));
-ALTER TABLE agent_sessions ADD COLUMN corrections TEXT NOT NULL DEFAULT '[]';
-
--- Add failure tracking to agent_patterns
-ALTER TABLE agent_patterns ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE agent_patterns ADD COLUMN last_failure_at TEXT;
-
--- Pattern quality score (positive - negative, higher = better)
--- Will be computed as: success_count - failure_count
+-- Feedback columns added via migration in BasalGanglia.js and AgentSession.js
+-- instead of schema to avoid duplicate column errors
 
