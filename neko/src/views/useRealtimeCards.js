@@ -1,6 +1,6 @@
 // hooks/useRealtimeCards.js - Production ready real-time functionality
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { supabase } from '../auth/supabaseClient'; // Use the same client as auth
+import { supabase } from '../auth/tokenStore';
 
 export const useRealtimeCards = (projectId, currentUser, onCardUpdate, onColumnUpdate) => {
   const [editingSessions, setEditingSessions] = useState({});

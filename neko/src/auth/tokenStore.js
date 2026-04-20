@@ -1,4 +1,4 @@
-// auth/supabaseClient.js — JWT token store + no-op realtime shim (local build)
+// auth/tokenStore.js — JWT token storage + no-op realtime shim (local build)
 const TOKEN_KEY = 'asyncat_token';
 
 export const getToken   = () => localStorage.getItem(TOKEN_KEY);
@@ -21,7 +21,7 @@ const noopChannel = () => {
   return ch;
 };
 
-// ── No-op Supabase shim ────────────────────────────────────────────────────────
+// ── No-op realtime shim ────────────────────────────────────────────────────────
 // Presence hooks import { supabase } from this file. In the local build these
 // channels do nothing — all realtime is silently dropped.
 export const supabase = {
