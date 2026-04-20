@@ -1,6 +1,6 @@
 {
   "name": "@asyncat/asyncat",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Asyncat — open-source AI-powered workspace for teams",
   "type": "module",
   "bin": {

@@ -21,6 +21,7 @@ if (isInsideRepo) {
   await import(pathToFileURL(path.join(repoRoot, 'cli', 'index.js')).href);
 } else {
   if (!fs.existsSync(path.join(ASYNCAT_HOME, 'cat'))) {
+    // ── First run: clone ────────────────────────────────────────────────
     console.log('\n[asyncat] First run — installing asyncat to ' + ASYNCAT_HOME + '...\n');
 
     if (!gitInstalled()) {
@@ -35,6 +36,19 @@ if (isInsideRepo) {
     } catch (e) {
       console.error('\n[asyncat] Installation failed:', e.message);
       process.exit(1);
+    }
+  } else if (gitInstalled()) {
+    // ── Subsequent runs: pull updates silently in background ────────────
+    try {
+      const before = execSync('git -C "' + ASYNCAT_HOME + '" rev-parse HEAD', { stdio: 'pipe' }).toString().trim();
+      execSync('git -C "' + ASYNCAT_HOME + '" pull --ff-only --quiet', { stdio: 'ignore', timeout: 8000 });
+      const after = execSync('git -C "' + ASYNCAT_HOME + '" rev-parse HEAD', { stdio: 'pipe' }).toString().trim();
+      if (before !== after) {
+        execSync('npm install --silent', { cwd: ASYNCAT_HOME, stdio: 'ignore' });
+        console.log('[asyncat] ✓ Updated to latest version');
+      }
+    } catch {
+      // Network unavailable or not ff-only — silently continue with current version
     }
   }
 
