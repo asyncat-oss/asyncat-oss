@@ -10,6 +10,7 @@ import { memoryTools } from './tools/memoryTools.js';
 import { browserTools } from './tools/browserTools.js';
 import { workspaceTools } from './tools/workspaceTools.js';
 import { agentTools } from './tools/agentTools.js';
+import { systemTools } from './tools/systemTools.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -30,6 +31,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(memoryTools);
   toolRegistry.registerAll(workspaceTools);
   toolRegistry.registerAll(agentTools);
+  toolRegistry.registerAll(systemTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {
@@ -37,6 +39,7 @@ export async function initializeAgent() {
   } catch (err) {
     console.warn('[agent] Browser tools not available (puppeteer not installed):', err.message);
   }
+
 
   // Load MCP tools
   const mcpConfigPath = path.resolve(process.cwd(), 'data', 'mcp.json');

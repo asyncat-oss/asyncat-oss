@@ -6,6 +6,7 @@ import os from 'os';
 import path from 'path';
 import net from 'net';
 import { PassThrough } from 'stream';
+import { spawn } from 'child_process';
 import { ansi, strip, vis, w, h, write, at, clearRow } from './ansi.js';
 import {
   renderZen, renderChat, renderPalette, renderStatusBar,
@@ -102,6 +103,7 @@ export class Tui extends EventEmitter {
     this._inputStream.on('keypress', this._keyHandler);
 
     // Mouse click handling (raw data intercept)
+    this._mouseEnabled = true;
     this._mouseHandler = (data) => {
       const s = data.toString();
       // Parse mouse SGR sequences: \x1b[<btn;col;rowM or \x1b[<btn;col;rowm
@@ -112,7 +114,9 @@ export class Tui extends EventEmitter {
         const col = parseInt(match[2]);
         const row = parseInt(match[3]);
         const press = match[4] === 'M';
-        if (press && btn === 0) this._onMouseClick(col, row);
+        if (press && btn === 0)   this._onMouseClick(col, row);
+        if (press && btn === 64)  this._onMouseScroll(-3);   // wheel up
+        if (press && btn === 65)  this._onMouseScroll(+3);   // wheel down
       }
       
       // Filter out all mouse SGR sequences before passing to readline
@@ -125,9 +129,14 @@ export class Tui extends EventEmitter {
     this._resizeHandler = () => this.render();
     process.stdout.on('resize', this._resizeHandler);
 
-    // Start service status polling
+    // Start service status polling — poll rapidly after startup to catch services coming up
     this._pollStatus();
-    this._statusTimer = setInterval(() => this._pollStatus(), 8000);
+    setTimeout(() => this._pollStatus(), 1000);
+    setTimeout(() => this._pollStatus(), 3000);
+    setTimeout(() => this._pollStatus(), 6000);
+    setTimeout(() => this._pollStatus(), 10000);
+    setTimeout(() => this._pollStatus(), 16000);
+    this._statusTimer = setInterval(() => this._pollStatus(), 4000);
 
     this.render();
   }
@@ -295,9 +304,38 @@ export class Tui extends EventEmitter {
     if (this._inputLocked && !(key.ctrl && key.name === 'c')) return;
     const { name, ctrl, meta } = key;
 
-    // ── Global ───────────────────────────────────────────────────────────
+    // ── Global shortcuts (always active) ─────────────────────────────────
     if (ctrl && name === 'c') { this.emit('exit'); return; }
     if (ctrl && name === 'l') { write(ansi.clear); this.render(); return; }
+
+    // Ctrl+M — toggle mouse tracking (off lets native terminal selection work)
+    if (ctrl && name === 'm') {
+      this._mouseEnabled = !this._mouseEnabled;
+      if (this._mouseEnabled) {
+        write('\x1b[?1000h'); write('\x1b[?1006h');
+        this.print('🖱  Mouse on  — wheel scrolls, click status bar for palette');
+      } else {
+        write('\x1b[?1000l'); write('\x1b[?1006l');
+        this.print('✂  Mouse off — drag to select & copy now works. Ctrl+M to re-enable.');
+      }
+      return;
+    }
+
+    // Ctrl+Y — yank (copy) last assistant message to clipboard
+    if (ctrl && name === 'y') {
+      const lastAi = [...this.messages].reverse().find(m => m.role === 'assistant');
+      if (!lastAi) { this.print('  Nothing to copy yet.'); return; }
+      const text = typeof lastAi.content === 'string' ? lastAi.content : JSON.stringify(lastAi.content);
+      try {
+        let proc;
+        const platform = os.platform();
+        if (platform === 'linux') proc = spawn('sh', ['-c', 'xclip -selection clipboard 2>/dev/null || xsel --clipboard --input 2>/dev/null || wl-copy 2>/dev/null']);
+        else if (platform === 'darwin') proc = spawn('pbcopy');
+        if (proc) { proc.stdin.write(text); proc.stdin.end(); }
+      } catch {}
+      this.print(`✔  Copied ${text.length} chars to clipboard  (Ctrl+M then drag to select manually)`);
+      return;
+    }
 
     // ── Selector mode ────────────────────────────────────────────────────
     if (this.mode === 'selector') {
@@ -393,16 +431,26 @@ export class Tui extends EventEmitter {
       return;
     }
 
+    // ── PageUp/PageDown — scroll messages ─────────────────────────────
+    if (name === 'pageup') {
+      const half = Math.max(3, Math.floor(h() / 2));
+      this.scrollOff += half;
+      if (this.mode !== 'chat') this.mode = 'chat';
+      this.render(); return;
+    }
+    if (name === 'pagedown') {
+      const half = Math.max(3, Math.floor(h() / 2));
+      this.scrollOff = Math.max(0, this.scrollOff - half);
+      this.render(); return;
+    }
+
     // ── Arrows ───────────────────────────────────────────────────────────
     if (name === 'up') {
       if (this.mode === 'palette') {
         this.paletteIdx = Math.max(0, this.paletteIdx - 1);
         this.render(); return;
       }
-      if (this.mode === 'chat' && !this.buf) {
-        this.scrollOff++;
-        this.render(); return;
-      }
+      // Up = history navigation, always (bash behavior)
       if (this.histIdx === -1) this.histSaved = this.buf;
       if (this.histIdx < this.history.length - 1) {
         this.histIdx++;
@@ -418,10 +466,7 @@ export class Tui extends EventEmitter {
         this.paletteIdx = Math.min(this.paletteItems.length - 1, this.paletteIdx + 1);
         this.render(); return;
       }
-      if (this.mode === 'chat' && this.scrollOff > 0 && !this.buf) {
-        this.scrollOff--;
-        this.render(); return;
-      }
+      // Down = walk forward through history back to current
       if (this.histIdx > 0) {
         this.histIdx--;
         this.buf = this.history[this.histIdx];
@@ -506,10 +551,9 @@ export class Tui extends EventEmitter {
     const W = w();
 
     if (this.mode === 'zen') {
-      // Cat area: top half of screen (roughly rows 2-6 in a centered layout)
+      // Cat area: top half of screen
       const centerY = Math.floor(H / 2) - 4;
       if (row >= centerY && row <= centerY + 5) {
-        // Clicked the cat!
         this._catMsg = nextCatMsg();
         this.render();
         return;
@@ -522,6 +566,15 @@ export class Tui extends EventEmitter {
       this.buf = '/'; this.pos = 1; this.paletteIdx = 0;
       this.render();
     }
+  }
+
+  // ── Mouse scroll handler ──────────────────────────────────────────────────
+  // delta > 0 = scroll down (toward newer messages), delta < 0 = scroll up (toward older)
+  _onMouseScroll(delta) {
+    if (this._destroyed || this._inputLocked) return;
+    if (this.mode !== 'chat') return;
+    this.scrollOff = Math.max(0, this.scrollOff - delta);
+    this.render();
   }
 
   // ── Selector key handler ──────────────────────────────────────────────────
@@ -561,16 +614,24 @@ export class Tui extends EventEmitter {
 
   // ── Service status polling ────────────────────────────────────────────────
   _pollStatus() {
-    const checkPort = (port) => new Promise((resolve) => {
+    const checkTcp = (port) => new Promise((resolve) => {
       const socket = new net.Socket();
-      socket.setTimeout(500);
+      socket.setTimeout(800);
       socket.on('connect', () => { socket.destroy(); resolve(true); });
       socket.on('timeout', () => { socket.destroy(); resolve(false); });
       socket.on('error', () => { socket.destroy(); resolve(false); });
       socket.connect(port, '127.0.0.1');
     });
 
-    Promise.all([checkPort(8716), checkPort(8717)]).then(([be, fe]) => {
+    // Vite dev server is more reliably checked via HTTP than raw TCP
+    const checkHttp = (url) => fetch(url, {
+      signal: AbortSignal.timeout(1200),
+    }).then(() => true).catch(() => false);
+
+    Promise.all([
+      checkTcp(8716),
+      checkHttp('http://localhost:8717'),
+    ]).then(([be, fe]) => {
       setServiceStatus(be, fe);
       if (!this._destroyed) this.render();
     });

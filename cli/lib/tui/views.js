@@ -122,7 +122,7 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
   y += 2;
 
   // Shortcuts
-  const sc = `${ansi.bold}/${R} ${ansi.dim}commands${R}    ${ansi.bold}/tools${R} ${ansi.dim}skills${R}    ${ansi.bold}esc${R} ${ansi.dim}exit${R}`;
+  const sc = `${ansi.bold}/${R} ${ansi.dim}commands${R}    ${ansi.bold}/open${R} ${ansi.dim}web UI${R}    ${ansi.bold}/tools${R} ${ansi.dim}skills${R}    ${ansi.bold}esc${R} ${ansi.dim}exit${R}`;
   at(y, 1, center(sc, W));
 
   // Finally, position the hardware cursor
@@ -282,17 +282,17 @@ function wrapText(text, maxW) {
 export const PALETTE_CMDS = [
   { cmd: '/models',   desc: 'Switch model / serve / pull',         group: 'AI' },
   { cmd: '/provider', desc: 'Connect provider (local/cloud)',      group: 'AI' },
+  { cmd: '/tools',    desc: 'View agent skills & tools',           group: 'AI' },
+  { cmd: '/memory',   desc: 'View, search & delete agent memories', group: 'AI' },
+  { cmd: '/cron',     desc: 'Schedule recurring agent tasks',       group: 'AI' },
   { cmd: '/sessions', desc: 'Browse saved conversations',          group: 'AI' },
   { cmd: '/new',      desc: 'New session',                         group: 'AI' },
   { cmd: '/mcp',      desc: 'Manage MCP servers',                  group: 'AI' },
+  { cmd: '/open',     desc: 'Open web UI in browser  (localhost:8717)', group: 'Web' },
   { cmd: '/git',      desc: 'Git status, log, diff, branch',      group: 'Dev' },
   { cmd: '/code',     desc: 'Show file tree',                      group: 'Dev' },
   { cmd: '/context',  desc: 'Show workspace state',                group: 'Dev' },
   { cmd: '/snippets', desc: 'Save and reuse code blocks',          group: 'Dev' },
-  { cmd: '/tools',    desc: 'View agent skills & tools',           group: 'AI' },
-  { cmd: '/start',    desc: 'Start backend & frontend',            group: 'Services' },
-  { cmd: '/stop',     desc: 'Stop all services',                   group: 'Services' },
-  { cmd: '/restart',  desc: 'Restart all services',                group: 'Services' },
   { cmd: '/status',   desc: 'Show running processes',              group: 'Services' },
   { cmd: '/logs',     desc: 'View service logs',                   group: 'Services' },
   { cmd: '/doctor',   desc: 'System health check',                 group: 'Services' },
@@ -301,7 +301,6 @@ export const PALETTE_CMDS = [
   { cmd: '/install',  desc: 'Install dependencies',                group: 'Settings' },
   { cmd: '/stash',    desc: 'Save or view notes',                  group: 'Tools' },
   { cmd: '/live-logs',desc: 'Toggle streaming logs',               group: 'Tools' },
-  { cmd: '/alias',    desc: 'Create command shortcuts',            group: 'Tools' },
   { cmd: '/history',  desc: 'Search command history',              group: 'Tools' },
   { cmd: '/clear',    desc: 'Clear screen',                        group: 'Help' },
   { cmd: '/help',     desc: 'Command reference',                   group: 'Help' },
@@ -514,10 +513,10 @@ export function renderStatusBar(version, modelInfo) {
 
   // Service status dots
   const be = _statusCache.backend
-    ? `${t.success}●${R}${ansi.dim} api${R}`
+    ? `${t.success}●${R}${ansi.dim} api :8716${R}`
     : `${ansi.dim}○ api${R}`;
   const fe = _statusCache.frontend
-    ? `${t.success}●${R}${ansi.dim} web${R}`
+    ? `${t.success}●${R}${ansi.dim} web :8717${R}`
     : `${ansi.dim}○ web${R}`;
 
   const left = ` ${loc}`;

@@ -3,17 +3,21 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 import AgentRunFeed from './components/AgentRunFeed';
 import {
-  Bot, Send, Square, Loader2,
-  CornerDownLeft, Zap
+  Bot, Send, Square, Loader2, CornerDownLeft, Zap,
+  Trash2, RotateCcw, Clock, CheckCircle2, AlertCircle,
+  ChevronDown, Sparkles
 } from 'lucide-react';
 
 const EXAMPLE_GOALS = [
-  { label: 'Search & summarize', prompt: 'Search the web for the latest news on AI agents and summarize the top 3 stories.' },
-  { label: 'Plan my week', prompt: 'Check my tasks and calendar events this week and suggest a prioritized daily plan.' },
-  { label: 'Research & save notes', prompt: 'Research the key differences between REST and GraphQL APIs, then save a concise note to my workspace.' },
-  { label: 'Find overdue tasks', prompt: 'Find all my overdue tasks across projects and draft a catch-up plan with realistic new deadlines.' },
+  { label: '🔍 Research & summarize', prompt: 'Search the web for the latest AI agent frameworks in 2025 and write a concise comparison.' },
+  { label: '📋 Plan my week', prompt: 'Review my tasks and calendar, then build a prioritized daily plan for the week ahead.' },
+  { label: '📝 Save a note', prompt: 'Research the key differences between REST and GraphQL APIs and save a concise reference note.' },
+  { label: '⚙️ Shell task', prompt: 'List all files larger than 10MB in the current directory and show their sizes.' },
+  { label: '🧠 Remember context', prompt: 'Remember that I prefer TypeScript over JavaScript and concise, commented code style.' },
+  { label: '🌐 Browse & extract', prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
 ];
 
+// ── Goal input ────────────────────────────────────────────────────────────────
 function GoalInput({ value, onChange, onSubmit, isRunning, autoFocus = false, compact = false }) {
   const ref = useRef(null);
 
@@ -60,6 +64,34 @@ function GoalInput({ value, onChange, onSubmit, isRunning, autoFocus = false, co
   );
 }
 
+// ── Session status badge ──────────────────────────────────────────────────────
+function SessionBadge({ session }) {
+  if (!session) return null;
+  const hasAnswer = session.scratchpad?.finalAnswer || session.status === 'complete';
+  const hasError  = session.status === 'error' || session.status === 'failed';
+
+  if (hasError) {
+    return (
+      <span className="flex items-center gap-1 text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800/50">
+        <AlertCircle className="w-3 h-3" /> Failed
+      </span>
+    );
+  }
+  if (!hasAnswer) {
+    return (
+      <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/50">
+        <Clock className="w-3 h-3" /> Incomplete
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/50">
+      <CheckCircle2 className="w-3 h-3" /> Complete
+    </span>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AgentPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -70,7 +102,10 @@ export default function AgentPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [currentGoal, setCurrentGoal] = useState('');
   const [loadingSession, setLoadingSession] = useState(false);
+  const [currentSession, setCurrentSession] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const feedEndRef = useRef(null);
+  const abortRef = useRef(null);
 
   // Load a specific session when URL changes
   useEffect(() => {
@@ -78,14 +113,17 @@ export default function AgentPage() {
       if (!isRunning) {
         setEvents([]);
         setCurrentGoal('');
+        setCurrentSession(null);
       }
       return;
     }
     setLoadingSession(true);
+    setCurrentSession(null);
     agentApi.getSession(sessionId).then(res => {
       const session = res?.session;
       if (session) {
         setCurrentGoal(session.goal || '');
+        setCurrentSession(session);
         // Reconstruct events from persisted tool history + final answer
         const toolEvents = (session.toolHistory || []).map(tc => ({
           type: 'tool_start',
@@ -96,7 +134,10 @@ export default function AgentPage() {
         const answerEvents = finalAnswer
           ? [{ type: 'answer', data: { answer: finalAnswer, round: session.totalRounds } }]
           : [];
-        setEvents([...toolEvents, ...answerEvents]);
+        const errorEvents = (session.status === 'error' || session.status === 'failed')
+          ? [{ type: 'error', data: { message: session.error || 'This run encountered an error.' } }]
+          : [];
+        setEvents([...toolEvents, ...answerEvents, ...errorEvents]);
       }
     }).catch(() => {}).finally(() => setLoadingSession(false));
   }, [sessionId]);
@@ -105,6 +146,36 @@ export default function AgentPage() {
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [events, streamingText]);
+
+  // Stop running — abort the fetch stream
+  const handleStop = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsRunning(false);
+    setStreamingText('');
+  }, []);
+
+  // Delete the currently-viewed session
+  const handleDeleteSession = useCallback(async () => {
+    if (!sessionId || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await agentApi.deleteSession(sessionId);
+      window.dispatchEvent(new CustomEvent('agent-run-complete'));
+      navigate('/agents');
+    } catch {}
+    setIsDeleting(false);
+  }, [sessionId, isDeleting, navigate]);
+
+  // Retry — prefill goal from history session
+  const handleRetry = useCallback(() => {
+    if (currentSession?.goal) {
+      setGoal(currentSession.goal);
+      navigate('/agents');
+    }
+  }, [currentSession, navigate]);
 
   const handleRun = useCallback(async () => {
     if (!goal.trim() || isRunning) return;
@@ -115,18 +186,25 @@ export default function AgentPage() {
     setEvents([]);
     setStreamingText('');
     setIsRunning(true);
+    setCurrentSession(null);
 
-    // Navigate off any loaded session URL so there's no conflict
+    // Navigate off any loaded session URL
     if (sessionId) navigate('/agents');
+
+    // Create a real AbortController so Stop actually cancels the stream
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       for await (const event of agentApi.runStream(submittedGoal)) {
+        // Check abort between events
+        if (controller.signal.aborted) break;
+
         if (event.type === 'delta') {
           setStreamingText(prev => prev + (event.data?.content || ''));
           continue;
         }
 
-        // Structured event arriving — clear live preview for this round
         if (event.type === 'thinking' || event.type === 'tool_start' || event.type === 'answer') {
           setStreamingText('');
         }
@@ -152,12 +230,14 @@ export default function AgentPage() {
         setEvents(prev => [...prev, event]);
       }
     } catch (err) {
-      setStreamingText('');
-      setEvents(prev => [...prev, { type: 'error', data: { message: err.message } }]);
+      if (!controller.signal.aborted) {
+        setStreamingText('');
+        setEvents(prev => [...prev, { type: 'error', data: { message: err.message } }]);
+      }
     } finally {
       setStreamingText('');
       setIsRunning(false);
-      // Tell the sidebar to refresh its session list
+      abortRef.current = null;
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
   }, [goal, isRunning, sessionId, navigate]);
@@ -167,20 +247,53 @@ export default function AgentPage() {
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
-      {/* Header — shown when there's content */}
+
+      {/* Header — shown when there's a run active or history loaded */}
       {(hasEvents || isRunning || loadingSession) && (
-        <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-6 py-3 flex items-center gap-3">
+        <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2.5 flex items-center gap-2.5">
           <Bot className="w-4 h-4 text-indigo-500 flex-shrink-0" />
           <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex-1 truncate">
             {currentGoal || 'Agent run'}
           </span>
+
+          {/* Status badge for history sessions */}
+          {isViewingHistory && !loadingSession && currentSession && (
+            <SessionBadge session={currentSession} />
+          )}
+
+          {/* Retry button for history view */}
+          {isViewingHistory && currentSession?.goal && (
+            <button
+              onClick={handleRetry}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+              title="Re-run this goal"
+            >
+              <RotateCcw className="w-3 h-3" /> Retry
+            </button>
+          )}
+
+          {/* Delete button for history view */}
+          {isViewingHistory && sessionId && (
+            <button
+              onClick={handleDeleteSession}
+              disabled={isDeleting}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/60 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+              title="Delete this session"
+            >
+              {isDeleting
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <Trash2 className="w-3 h-3" />}
+              Delete
+            </button>
+          )}
+
+          {/* Stop button when running */}
           {isRunning && (
             <button
-              onClick={() => setIsRunning(false)}
+              onClick={handleStop}
               className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/60 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
-              <Square className="w-3 h-3" />
-              Stop
+              <Square className="w-3 h-3" /> Stop
             </button>
           )}
         </div>
@@ -189,19 +302,16 @@ export default function AgentPage() {
       {/* Main content */}
       {!hasEvents && !isRunning && !loadingSession ? (
         // Empty state / new run
-        <div className="flex flex-col items-center justify-center flex-1 px-8 py-12">
-          <div className="max-w-lg w-full">
-            <div className="flex items-center gap-3 mb-8 justify-center">
-              <div className="w-11 h-11 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 midnight:bg-indigo-900/20 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        <div className="flex flex-col items-center justify-center flex-1 px-6 py-10 overflow-y-auto">
+          <div className="max-w-xl w-full">
+            {/* Title */}
+            <div className="flex items-center gap-3 mb-7 justify-center">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-white midnight:text-slate-100">
-                  Agent
-                </h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-                  Give it a goal — it figures out the steps
-                </p>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Agent</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Give it a goal — it figures out the steps</p>
               </div>
             </div>
 
@@ -213,33 +323,30 @@ export default function AgentPage() {
               autoFocus
             />
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              {EXAMPLE_GOALS.map((eg, i) => (
-                <button
-                  key={i}
-                  onClick={() => setGoal(eg.prompt)}
-                  className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600/60 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-all group"
-                >
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Zap className="w-3 h-3 text-indigo-400 group-hover:text-indigo-500 flex-shrink-0" />
-                    <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                      {eg.label}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-500 line-clamp-2 leading-snug">
-                    {eg.prompt}
-                  </p>
-                </button>
-              ))}
+            {/* Example goals */}
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 dark:text-gray-600 mb-2 text-center">Try one of these</p>
+              <div className="grid grid-cols-2 gap-2">
+                {EXAMPLE_GOALS.map((eg, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setGoal(eg.prompt)}
+                    className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600/60 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-all"
+                  >
+                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">{eg.label}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-snug">{eg.prompt}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       ) : (
         // Event feed
         <>
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex-1 overflow-y-auto px-5 py-4">
             {loadingSession ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+              <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Loading session…
               </div>
@@ -249,18 +356,21 @@ export default function AgentPage() {
             <div ref={feedEndRef} />
           </div>
 
-          {/* Goal input at bottom — not shown when viewing saved history */}
-          {!isViewingHistory && (
-            <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-6 py-3">
-              <GoalInput
-                value={goal}
-                onChange={setGoal}
-                onSubmit={handleRun}
-                isRunning={isRunning}
-                compact
-              />
-            </div>
-          )}
+          {/* Always-visible goal input at bottom — even for history (allows new run) */}
+          <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-3 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+            {isViewingHistory && (
+              <p className="text-[11px] text-gray-400 dark:text-gray-600 mb-1.5 text-center">
+                Viewing history — start a new run below
+              </p>
+            )}
+            <GoalInput
+              value={goal}
+              onChange={setGoal}
+              onSubmit={handleRun}
+              isRunning={isRunning}
+              compact
+            />
+          </div>
         </>
       )}
     </div>

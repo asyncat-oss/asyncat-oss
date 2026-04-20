@@ -3,12 +3,11 @@
 import { Tui } from './lib/tui/index.js';
 import { loadTheme, setTheme, getThemeName, THEME_NAMES } from './lib/theme.js';
 import { stopAll, procs } from './lib/procs.js';
-import { readEnv } from './lib/env.js';
 import fs from 'fs';
 import path from 'path';
 import { ROOT } from './lib/env.js';
 
-// ── Legacy imports (command handlers) ───────────────────────────────────────
+// ── Command imports ──────────────────────────────────────────────────────────
 import * as _start    from './commands/start.js';
 import * as _stop     from './commands/stop.js';
 import * as _status   from './commands/status.js';
@@ -25,24 +24,17 @@ import * as _chat     from './commands/chat.js';
 import * as _run      from './commands/run.js';
 import * as _provider from './commands/provider.js';
 import * as _sessions from './commands/sessions.js';
-import * as _watch    from './commands/watch.js';
-import * as _alias    from './commands/alias.js';
-import * as _recent   from './commands/recent.js';
-import * as _bench    from './commands/bench.js';
-import * as _context  from './commands/context.js';
 import * as _snippets from './commands/snippets.js';
-import * as _macros   from './commands/macros.js';
 import * as _history  from './commands/history.js';
 import * as _uninstall from './commands/uninstall.js';
 import * as _git      from './commands/git.js';
 import * as _code     from './commands/code.js';
 import * as _agent    from './commands/agent.js';
 import * as _mcp      from './commands/mcp.js';
+import * as _context  from './commands/context.js';
 import { getToken, getBase, apiGet } from './lib/denApi.js';
-import { c, col, setRl, setLl, log, ok, warn, info, banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
-import { LiveLine } from './lib/liveLine.js';
+import { banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
 import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
-import { select } from './lib/select.js';
 
 loadTheme();
 
@@ -66,23 +58,33 @@ async function detectModel() {
   return { model: '', provider: '' };
 }
 
-// ── Auto-start backend ─────────────────────────────────────────────────────
-async function maybeStartBackend() {
-  if (procs.backend) return;
+// ── Auto-start all services on TUI launch ──────────────────────────────────
+async function autoStartServices() {
   if (!fs.existsSync(path.join(ROOT, 'den/.env')))          return;
   if (!fs.existsSync(path.join(ROOT, 'den/node_modules')))  return;
+
+  // Check if backend is already up
+  let backendUp = false;
   try {
     const res = await fetch('http://localhost:8716/api/health', {
       signal: AbortSignal.timeout(600),
     });
-    if (res.ok) return;
+    backendUp = res.ok;
   } catch {}
-  _start.run(['--backend-only']);
+
+  if (!backendUp && !procs.backend) {
+    _start.run(['--backend-only']);
+  }
+
+  // Start frontend if not already running
+  if (!procs.frontend) {
+    _start.run(['--frontend-only']);
+  }
 }
 
 // ── TUI Mode (default — interactive) ────────────────────────────────────────
 async function startTui() {
-  // Create TUI first so alternate screen captures backend output
+  // Create TUI first so alternate screen captures service output
   const tui = new Tui({
     modelInfo: '',
     providerInfo: '',
@@ -90,13 +92,13 @@ async function startTui() {
   });
   tui.start();
 
-  // Suppress console output during backend auto-start
+  // Suppress console output during auto-start
   const origWrite = process.stdout.write.bind(process.stdout);
   const origConsoleLog = console.log;
   process.stdout.write = (s) => { /* swallow during startup */ return true; };
   console.log = () => {};
 
-  await maybeStartBackend();
+  await autoStartServices();
 
   // Restore and re-render
   process.stdout.write = origWrite;
@@ -243,45 +245,14 @@ async function startTui() {
           return;
         }
 
-        // ── Services ────────────────────────────────────────────────────
-        case 'start':
-        case 's':
-          _start.run(args);
-          tui.printOk('Services starting...');
-          break;
-        case 'stop':
-          _stop.run();
-          tui.printOk('Services stopped');
-          break;
-        case 'restart':
-          _stop.run();
-          setTimeout(() => _start.run(args), 500);
-          tui.printOk('Restarting services...');
-          break;
-
         // ── Quick commands ───────────────────────────────────────────────
         case 'open':
         case 'o':
           _open.run();
-          tui.printOk('Opened in browser');
+          tui.printOk('Opening web UI → http://localhost:8717');
           break;
         case 'db':
           await _db.run(args);
-          break;
-        case 'watch':
-          _watch.run(args);
-          break;
-        case 'alias':
-          _alias.run(args);
-          break;
-        case 'recent':
-          _recent.run(args);
-          break;
-        case 'bench':
-          _bench.run(args);
-          break;
-        case 'macros':
-          _macros.run(args);
           break;
         case 'history':
           _history.run(args);
@@ -293,39 +264,224 @@ async function startTui() {
           handleLiveLogs(args, tui);
           break;
         case 'tools': {
-          tui.printInfo('Agent Skills & Tools:');
-          try {
-            const token = await getToken();
-            const base = getBase();
-            // Fetch tool info from backend
-            const res = await fetch(`${base}/api/health`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-              const health = await res.json();
-              const toolCount = health.toolCount || '?';
-              tui.print(`  ${toolCount} tools registered`);
-            }
-          } catch {}
-          // Show known tool categories
+          tui.unlockInput();
+
+          // ── Agent Tools (direct function calls the LLM can invoke) ─────
           tui.print('');
-          tui.print('  📁 File Tools       read, write, edit, delete, list, search files');
-          tui.print('  🖥  Shell Tools      run commands, scripts, package managers');
-          tui.print('  🔍 Search Tools     grep, find, semantic search, web search');
-          tui.print('  🧠 Memory Tools     remember, recall, context management');
-          tui.print('  🌐 Browser Tools    fetch pages, screenshots, web scraping');
-          tui.print('  📂 Workspace Tools  project structure, deps, git operations');
-          tui.print('  🤖 Agent Tools      sub-tasks, planning, self-reflection');
-          tui.print('  🔌 MCP Tools        external tool servers (configurable)');
+          tui.print('━━ Agent Tools  (functions the LLM calls directly) ━━');
           tui.print('');
-          tui.print('  All tools are available when you type a message.');
-          tui.print('  The agent automatically selects which tools to use.');
-          break;
+          tui.print('  📁  read_file          Read any file from disk');
+          tui.print('  ✏️   write_file         Write or overwrite a file');
+          tui.print('  📝  edit_file          Patch specific lines in a file');
+          tui.print('  🗑️   delete_file        Delete files or directories');
+          tui.print('  📂  list_dir           List directory contents');
+          tui.print('  🔍  grep_search        Regex/literal search across files');
+          tui.print('  🖥️   run_command        Execute any shell command');
+          tui.print('  🐍  run_python         Run Python code in a temp sandbox');
+          tui.print('  🟨  run_node           Run JavaScript code in a temp file');
+          tui.print('  🌐  web_search         Search the web (DuckDuckGo/SearXNG)');
+          tui.print('  🔗  fetch_url          Read any webpage (reader mode)');
+          tui.print('  🔌  http_request       Full HTTP client — POST/PUT/DELETE + headers');
+          tui.print('  🖥️   sys_info           CPU, RAM, disk, uptime, OS info');
+          tui.print('  📋  ps_list            Running processes — sort by CPU/mem');
+          tui.print('  🔑  env_get            Read environment variables (secrets masked)');
+          tui.print('  🔔  notify             Send a desktop system notification');
+          tui.print('  🧪  run_tests          Auto-detect & run Jest/Vitest/Mocha tests');
+          tui.print('  📎  clipboard_read     Read clipboard contents');
+          tui.print('  📎  clipboard_write    Write text to clipboard');
+          tui.print('  🧠  store_memory       Persist facts/preferences across sessions');
+          tui.print('  🧠  recall_memory      Search stored memories by query');
+          tui.print('  🧠  list_memories      Browse all stored memories');
+          tui.print('  🤖  delegate_task      Spawn a specialized sub-agent for a sub-task');
+          tui.print('  🔌  mcp_call           Invoke external MCP tool servers');
+          tui.print('');
+
+          // ── Agent Skills (higher-level built-in behaviours) ────────────
+          tui.print('━━ Agent Skills  (built-in reasoning capabilities) ━━');
+          tui.print('');
+          tui.print('  🤖  Multi-step planning    Break goals into sub-tasks');
+          tui.print('  🔄  Self-reflection         Review & correct its own output');
+          tui.print('  📋  Task decomposition      Delegate sub-tasks autonomously');
+          tui.print('  🛡️   Permission gating       Ask before destructive actions');
+          tui.print('  💾  Auto-session save       Persist conversations to DB');
+          tui.print('  📜  Conversation history    Pass context across rounds');
+          tui.print('  🌊  Streaming output        Token-by-token TUI rendering');
+          tui.print('');
+          tui.print('  Type a message to use all of these automatically.');
+          tui.print('  /mcp to connect additional tool servers.');
+          return;
         }
         case 'new':
           tui.clearMessages();
           tui.printOk('New session started');
           break;
+        case 'memory': {
+          tui.unlockInput();
+          const sub  = args[0];
+          const rest = args.slice(1).join(' ');
+
+          if (sub === 'rm' || sub === 'delete' || sub === 'forget') {
+            // /memory rm <key>
+            if (!rest) { tui.printWarn('Usage: /memory rm <key>'); return; }
+            try {
+              await getToken();
+              const base = getBase();
+              const token = await getToken();
+              const res = await fetch(`${base}/api/agent/memory`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ key: rest }),
+              });
+              if (res.ok) tui.printOk(`Forgotten: ${rest}`);
+              else tui.printWarn(`Could not delete: ${rest}`);
+            } catch { tui.printWarn('Backend not reachable'); }
+            return;
+          }
+
+          // /memory [search query] or /memory alone = list all
+          try {
+            const token = await getToken();
+            const base = getBase();
+            const url = sub
+              ? `${base}/api/agent/memory?q=${encodeURIComponent(args.join(' '))}`
+              : `${base}/api/agent/memory`;
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) { tui.printWarn('Could not fetch memories'); return; }
+            const data = await res.json();
+            const mems = data.memories || data;
+            if (!mems || mems.length === 0) {
+              tui.print('');
+              tui.print('  No memories stored yet.');
+              tui.print('  The agent stores memories automatically as you work.');
+              tui.print('  You can also ask: "remember that I prefer TypeScript"');
+              tui.print('');
+              return;
+            }
+            tui.print('');
+            tui.print(`━━ Stored Memories  (${mems.length}) ━━`);
+            tui.print('');
+            for (const m of mems) {
+              const tag = m.memory_type ? `${ansi?.dim || ''}[${m.memory_type}]` : '';
+              tui.print(`  ${m.key || '–'}  ${tag}`);
+              tui.print(`    ${(m.content || '').slice(0, 120)}`);
+            }
+            tui.print('');
+            tui.print('  /memory rm <key>   to delete a memory');
+            tui.print('  /memory <query>    to search memories');
+            tui.print('');
+          } catch { tui.printWarn('Backend not reachable'); }
+          return;
+        }
+        case 'cron':
+        case 'schedule': {
+          tui.unlockInput();
+          const cronSub  = args[0];
+          const cronRest = args.slice(1).join(' ');
+
+          try {
+            const token = await getToken();
+            const base  = getBase();
+
+            if (cronSub === 'ls' || cronSub === 'list' || !cronSub) {
+              const data = await apiGet('/api/agent/schedule');
+              const jobs = data.jobs || [];
+              if (jobs.length === 0) {
+                tui.print('');
+                tui.print('  No scheduled jobs yet.');
+                tui.print('  Create one:  /cron add "name" "goal" interval:3600000');
+                tui.print('  Formats: interval:<ms>  once:<ms>  daily:HH:MM  hourly  at:<ISO>');
+                tui.print('');
+              } else {
+                tui.print('');
+                tui.print(`━━ Scheduled Jobs (${jobs.length}) ━━`);
+                for (const j of jobs) {
+                  const status = j.enabled ? '▶' : '⏸';
+                  const next   = j.next_run_at ? new Date(j.next_run_at).toLocaleString() : '—';
+                  tui.print(`  ${status} [${j.id.slice(0,8)}]  ${j.name}`);
+                  tui.print(`       goal: ${j.goal.slice(0, 60)}`);
+                  tui.print(`       schedule: ${j.schedule}  next: ${next}  runs: ${j.run_count}`);
+                }
+                tui.print('');
+                tui.print('  /cron rm <id>      delete job');
+                tui.print('  /cron off <id>     disable');
+                tui.print('  /cron on <id>      enable');
+                tui.print('');
+              }
+            } else if (cronSub === 'add' || cronSub === 'new' || cronSub === 'create') {
+              // /cron add "name" "goal text here" interval:3600000
+              const match = cronRest.match(/^"([^"]+)"\s+"([^"]+)"\s+(\S+)/) || cronRest.match(/^(\S+)\s+"([^"]+)"\s+(\S+)/);
+              if (!match) {
+                tui.printWarn('Usage: /cron add "name" "goal" <schedule>');
+                tui.printInfo('  schedule: interval:<ms> | once:<ms> | daily:HH:MM | hourly | at:<ISO>');
+              } else {
+                const [, jobName, jobGoal, jobSchedule] = match;
+                const res = await fetch(`${base}/api/agent/schedule`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ name: jobName, goal: jobGoal, schedule: jobSchedule }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                  tui.printOk(`Scheduled "${jobName}" (${data.job.id.slice(0,8)}) — ${jobSchedule}`);
+                } else {
+                  tui.printErr(data.error || 'Failed to create job');
+                }
+              }
+            } else if (cronSub === 'rm' || cronSub === 'delete' || cronSub === 'del') {
+              const id = cronRest.trim();
+              if (!id) { tui.printWarn('Usage: /cron rm <job-id>'); } else {
+                const res = await fetch(`${base}/api/agent/schedule/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+                const data = await res.json();
+                data.success ? tui.printOk(`Deleted job ${id}`) : tui.printErr(data.error);
+              }
+            } else if (cronSub === 'off' || cronSub === 'disable') {
+              const id = cronRest.trim();
+              await fetch(`${base}/api/agent/schedule/${id}/disable`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+              tui.printOk(`Job ${id} paused`);
+            } else if (cronSub === 'on' || cronSub === 'enable') {
+              const id = cronRest.trim();
+              await fetch(`${base}/api/agent/schedule/${id}/enable`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+              tui.printOk(`Job ${id} enabled`);
+            } else {
+              tui.printWarn(`Unknown subcommand. Try: /cron list | add | rm | on | off`);
+            }
+          } catch (e) { tui.printErr(e.message); }
+          return;
+        }
+
+        case 'screen': {
+          tui.unlockInput();
+          const screenSub = args[0];
+          try {
+            const token = await getToken();
+            const base  = getBase();
+
+            if (!screenSub || screenSub === 'help') {
+              tui.print('');
+              tui.print('━━ Screen Controller ━━');
+              tui.print('  The agent can see and control your screen.');
+              tui.print('  Required tools: scrot + xdotool + tesseract-ocr (Linux)');
+              tui.print('');
+              tui.print('  Ask the agent:');
+              tui.print('    "Take a screenshot and tell me what you see"');
+              tui.print('    "Click on the button at position 500, 300"');
+              tui.print('    "Type hello world in the current window"');
+              tui.print('    "Press Ctrl+S to save"');
+              tui.print('    "Find the terminal window"');
+              tui.print('');
+              tui.print('  Or install tools:');
+              tui.print('    sudo apt install scrot xdotool tesseract-ocr');
+              tui.print('');
+            } else if (screenSub === 'shot' || screenSub === 'screenshot') {
+              tui.printInfo('Taking screenshot via agent...');
+              tui.emit('input', 'Take a screenshot of the current screen and tell me what you see');
+            } else {
+              tui.emit('input', args.join(' '));
+            }
+          } catch (e) { tui.printErr(e.message); }
+          return;
+        }
+
         case 'help':
         case '?':
           showTuiHelp(tui);
@@ -349,13 +505,6 @@ async function startTui() {
     }
 
     tui.unlockInput();
-
-    if (['start', 'restart', 's'].includes(cmd)) {
-      setTimeout(async () => {
-        const { model: m, provider: p } = await detectModel();
-        tui.setModel(m, p);
-      }, 2000);
-    }
   }
 
   // ── Handle AI input (plain text → agent) ──────────────────────────────
@@ -372,6 +521,10 @@ async function startTui() {
         models = (localModels.models || []).map(m => ({
           name: m.filename,
           desc: m.sizeFormatted || '',
+          sizeFormatted: m.sizeFormatted || 'Unknown',
+          architecture: m.architecture || 'unknown',
+          parameterCount: m.parameterCount || '',
+          contextLength: m.contextLength || 8192,
           _file: m.filename,
         }));
       } catch {
@@ -525,6 +678,8 @@ function handleAgentEvent(tui, event, token, base) {
   const { type, data } = event;
   switch (type) {
     case 'thinking':
+      // Clear any leftover delta from previous round
+      tui.clearStreamContent();
       tui.setStreamMsg(`Thinking (Round ${(data.round || 0) + 1})...`);
       if (data.thought) {
         tui.addMessage('thinking', data.thought, { round: (data.round || 0) + 1 });
@@ -532,6 +687,7 @@ function handleAgentEvent(tui, event, token, base) {
       break;
     case 'delta':
       if (data.content) {
+        // Show all tokens including <think> content — users want to see generation
         tui.appendStreamContent(data.content);
       }
       break;
@@ -564,22 +720,46 @@ function handleAgentEvent(tui, event, token, base) {
 // ── Help ────────────────────────────────────────────────────────────────────
 function showTuiHelp(tui) {
   tui.print('');
-  tui.print('━━ asyncat ━━');
+  tui.print('━━ asyncat — keyboard reference ━━');
   tui.print('');
-  tui.print('  Just type        Send to AI (auto-agent mode)');
-  tui.print('  /                Browse all commands');
-  tui.print('  esc              Back / Clear / Exit');
-  tui.print('  ctrl+p           Command palette');
-  tui.print('  ↑↓               Scroll / History');
-  tui.print('  enter            (empty) cycle cat message 🐱');
+  tui.print('  Just type          Send to AI (auto-agent mode)');
+  tui.print('  /                  Browse all commands (palette)');
+  tui.print('  esc                Back / Clear input / Exit');
   tui.print('');
-  tui.print('  /models          Select & load a model');
-  tui.print('  /theme           Pick color theme');
-  tui.print('  /provider        Configure AI provider');
-  tui.print('  /git             Git project info');
-  tui.print('  /doctor          System health check');
-  tui.print('  /new             Clear & start fresh');
-  tui.print('  /exit            Quit');
+  tui.print('  ── Navigation ───────────────────────────────');
+  tui.print('  ↑ / ↓              Scroll through prompt history');
+  tui.print('  PgUp / PgDn        Scroll messages up/down (half page)');
+  tui.print('  Mouse wheel        Scroll messages');
+  tui.print('  Home / End         Jump to start/end of input');
+  tui.print('');
+  tui.print('  ── Text & Clipboard ─────────────────────────');
+  tui.print('  Ctrl+Y             Copy last AI response to clipboard');
+  tui.print('  Ctrl+M             Toggle mouse off → drag to select text');
+  tui.print('                     (Ctrl+M again to re-enable scroll/click)');
+  tui.print('');
+  tui.print('  ── Editing ──────────────────────────────────');
+  tui.print('  Ctrl+U             Delete to start of line');
+  tui.print('  Ctrl+K             Delete to end of line');
+  tui.print('  Ctrl+W             Delete word back');
+  tui.print('  Ctrl+L             Refresh screen');
+  tui.print('  Ctrl+P             Open command palette');
+  tui.print('');
+  tui.print('  ── Commands ─────────────────────────────────');
+  tui.print('  /models            Select & load a model');
+  tui.print('  /memory            View/search/delete agent memories');
+  tui.print('  /cron              Schedule recurring agent tasks');
+  tui.print('    /cron add "name" "goal" interval:<ms>');
+  tui.print('    /cron add "name" "goal" daily:09:00');
+  tui.print('    /cron list | rm <id> | on <id> | off <id>');
+  tui.print('  /screen            Desktop capture & control info');
+  tui.print('  /provider          Configure AI provider');
+  tui.print('  /tools             List all agent tools & skills');
+  tui.print('  /theme             Pick color theme');
+  tui.print('  /git               Git project info');
+  tui.print('  /doctor            System health check');
+  tui.print('  /open              Open web UI in browser (:8717)');
+  tui.print('  /new               Clear & start fresh');
+  tui.print('  /exit              Quit');
   tui.print('');
 }
 
@@ -639,28 +819,6 @@ function handleLiveLogs(args, tui) {
   tui.printWarn(`Unknown: /live-logs ${sub}. Use on|off|toggle|status`);
 }
 
-// ── Legacy REPL mode (for interactive commands) ─────────────────────────────
-async function runLegacyCommand(cmd, args) {
-  const PROMPT_LEN = 'asyncat ▸ '.length;
-  const makePrompt = () => `\x1b[1m\x1b[35masyncat\x1b[0m\x1b[2m ▸ \x1b[0m`;
-
-  banner();
-
-  const ll = new LiveLine(makePrompt(), PROMPT_LEN);
-  setRl(ll);
-  setLl(ll);
-
-  switch (cmd) {
-    case 'chat':  await _chat.run(args);  break;
-    case 'run':   await _run.run(args);   break;
-    case 'agent': await _agent.run(args); break;
-  }
-
-  ll.close();
-  setRl(null);
-  setLl(null);
-  // Return to caller instead of exiting — TUI will resume
-}
 
 // ── CLI mode (non-interactive, single command) ──────────────────────────────
 async function runSingleCommand(argv) {

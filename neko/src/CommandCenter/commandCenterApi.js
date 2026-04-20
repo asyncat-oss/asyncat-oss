@@ -1149,7 +1149,16 @@ export const agentApi = {
 
   getSession: async (sessionId) => {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}`);
-  }
+  },
+
+  deleteSession: async (sessionId) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token?.access_token}` },
+    });
+    return res.json();
+  },
 };
 
 // Export default object with all APIs

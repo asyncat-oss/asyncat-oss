@@ -110,5 +110,78 @@ export const fetchUrlTool = {
   },
 };
 
-export const searchTools = [webSearchTool, fetchUrlTool];
+
+// ── http_request ─────────────────────────────────────────────────────────────
+export const httpRequestTool = {
+  name: 'http_request',
+  description: 'Make a full HTTP request (GET, POST, PUT, PATCH, DELETE) to any URL. Supports custom headers, JSON/text body, Bearer auth, and returns status code + response body. Use for calling APIs, submitting data, or any interaction beyond reading a page.',
+  category: 'search',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      url:     { type: 'string',  description: 'The URL to call' },
+      method:  { type: 'string',  enum: ['GET','POST','PUT','PATCH','DELETE','HEAD'], description: 'HTTP method (default: GET)' },
+      headers: { type: 'object',  description: 'Optional key-value headers, e.g. { "Authorization": "Bearer ..." }' },
+      body:    { type: 'object',  description: 'Request body (will be JSON-serialised). Only for POST/PUT/PATCH.' },
+      body_text: { type: 'string', description: 'Raw string body. Use instead of body when sending non-JSON.' },
+      auth_token: { type: 'string', description: 'Bearer token — sets Authorization: Bearer <token> header.' },
+      timeout: { type: 'number',  description: 'Timeout in seconds (default: 15)' },
+    },
+    required: ['url'],
+  },
+  execute: async (args) => {
+    try {
+      const method  = (args.method || 'GET').toUpperCase();
+      const timeout = (args.timeout || 15) * 1000;
+      const headers = { ...(args.headers || {}) };
+
+      if (args.auth_token) {
+        headers['Authorization'] = `Bearer ${args.auth_token}`;
+      }
+
+      let bodyContent;
+      if (args.body && method !== 'GET' && method !== 'HEAD') {
+        headers['Content-Type'] = 'application/json';
+        bodyContent = JSON.stringify(args.body);
+      } else if (args.body_text) {
+        bodyContent = args.body_text;
+      }
+
+      const res = await fetch(args.url, {
+        method,
+        headers,
+        body: bodyContent,
+        signal: AbortSignal.timeout(timeout),
+        redirect: 'follow',
+      });
+
+      const ct = res.headers.get('content-type') || '';
+      let responseBody;
+      if (ct.includes('application/json')) {
+        const json = await res.json().catch(() => null);
+        responseBody = json;
+      } else {
+        const text = await res.text();
+        responseBody = text.slice(0, 8000);
+      }
+
+      // Collect response headers
+      const responseHeaders = {};
+      res.headers.forEach((v, k) => { responseHeaders[k] = v; });
+
+      return {
+        success: res.ok,
+        status:  res.status,
+        status_text: res.statusText,
+        headers: responseHeaders,
+        body: responseBody,
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const searchTools = [webSearchTool, fetchUrlTool, httpRequestTool];
 export default searchTools;
