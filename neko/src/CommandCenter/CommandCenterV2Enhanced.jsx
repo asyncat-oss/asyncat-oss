@@ -15,10 +15,7 @@ import ArtifactSidePanel from "./components/artifacts/ArtifactSidePanel";
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import ExplainTermPanel from "./components/ExplainTermPanel";
 import GlossaryGallery from "./components/GlossaryGallery";
-import ModelPickerDropdown from "./components/ModelPickerDropdown";
-import ModelParamsSidebar from "./components/ModelParamsSidebar";
 import ConversationNavigation from "./components/ConversationNavigation";
-import { useLocalModelStatus } from "./hooks/useLocalModelStatus.js";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
 import { chatApi } from "./commandCenterApi";
 import { useUser } from "../contexts/UserContext";
@@ -32,12 +29,10 @@ import {
   Sparkles,
   ArrowLeft,
   Grid3x3,
-  Cpu,
   LayoutList,
   Calendar,
   FileText,
   Search,
-  Zap,
   MessageSquare,
   BookOpen,
   PenLine,
@@ -46,8 +41,6 @@ import {
   Download,
   Library,
   Menu,
-  ChevronDown,
-  SlidersHorizontal,
 } from "lucide-react";
 
 const CommandCenterV2Enhanced = ({ session }) => {
@@ -121,15 +114,6 @@ const CommandCenterV2Enhanced = ({ session }) => {
   const [showGlossary, setShowGlossary] = useState(false);
   const [showNavigation, setShowNavigation] = useState(true);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [showParamsSidebar, setShowParamsSidebar] = useState(false);
-  const localModel = useLocalModelStatus();
-
-  // Auto-open the params/logs sidebar when the model crashes (e.g. OOM)
-  useEffect(() => {
-    if (localModel.status === "error" && localModel.model) {
-      setShowParamsSidebar(true);
-    }
-  }, [localModel.status]);
 
   // Count total artifacts in conversation - memoized for performance
   const totalArtifacts = useMemo(() => {
@@ -203,7 +187,6 @@ const CommandCenterV2Enhanced = ({ session }) => {
     }
   }, [messages, scrollToBottom]);
 
-  const shouldAutoSave = true;
 
   // Handler for saving artifacts to notes - opens modal
   const handleSaveArtifactToNotes = useCallback(async (artifact) => {
@@ -241,13 +224,11 @@ const CommandCenterV2Enhanced = ({ session }) => {
 
   // Chat management handlers (only for chat/image modes)
   const handleStartRename = useCallback(() => {
-    if (!shouldAutoSave) return;
     setEditTitle(conversationTitle || "");
     setIsEditingTitle(true);
-  }, [conversationTitle, shouldAutoSave]);
+  }, [conversationTitle]);
 
   const handleSaveRename = useCallback(async () => {
-    if (!shouldAutoSave) return;
     if (
       editTitle.trim() &&
       editTitle.trim() !== conversationTitle &&
@@ -270,7 +251,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
     currentConversationId,
     setConversationTitle,
     triggerConversationRefresh,
-    shouldAutoSave,
+    true,
   ]);
 
   const handleCancelRename = useCallback(() => {
@@ -279,7 +260,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
   }, [conversationTitle]);
 
   const handleDeleteConversation = useCallback(async () => {
-    if (!shouldAutoSave || !currentConversationId) return;
+    if (!true || !currentConversationId) return;
     try {
       await chatApi.deleteConversation(currentConversationId);
       handleClearConversation();
@@ -292,7 +273,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
     currentConversationId,
     handleClearConversation,
     triggerConversationRefresh,
-    shouldAutoSave,
+    true,
   ]);
 
   const handleKeyDown = useCallback(
@@ -764,28 +745,14 @@ const CommandCenterV2Enhanced = ({ session }) => {
   const welcomeScreenJSX =
     messages.length === 0 ? (
       <div className="flex flex-col min-h-full p-8 relative">
-        {/* Top bar: model picker left, ghost right */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1">
-            <ModelPickerDropdown />
-            {localModel.isReady && (
-              <button
-                onClick={() => setShowParamsSidebar((v) => !v)}
-                className={`p-1 rounded transition-colors ${showParamsSidebar ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" : "text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-                title="Model parameters"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+        {/* Top bar: ghost mode toggle */}
+        <div className="flex items-center justify-end mb-2">
           <button
             onClick={toggleGhostMode}
             className="p-2 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50"
-            title={
-              isGhostMode ? "Exit Ghost Mode" : "Ghost Mode — no history saved"
-            }
+            title={isGhostMode ? "Exit Ghost Mode" : "Ghost Mode — no history saved"}
           >
-            <Ghostshrink-0
+            <Ghost
               className={`w-5 h-5 transition-colors ${isGhostMode ? "text-gray-600 dark:text-gray-400" : "text-gray-300 dark:text-gray-600"}`}
             />
           </button>
@@ -886,58 +853,23 @@ const CommandCenterV2Enhanced = ({ session }) => {
   // Chat Layout
   return (
     <div className="flex h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
-      {/* Model params sidebar — left panel, shown whenever a model is active/errored */}
-      {showParamsSidebar && localModel.model && (
-        <ModelParamsSidebar onClose={() => setShowParamsSidebar(false)} />
-      )}
-
-      {/* Chat column — shrinks when side panel is open */}
-      <div
-        className={`flex flex-col h-full transition-all duration-300 min-w-0 ${sideArtifact || explainPanel ? "w-[40%]" : "flex-1"}`}
-      >
+      {/* Chat column — always flex-1, side panel takes its own fixed width */}
+      <div className="flex flex-col h-full transition-all duration-300 min-w-0 flex-1">
         {isConversationLoading ? (
           <ConversationLoadingSkeleton />
         ) : messages.length === 0 ? (
           welcomeScreenJSX
         ) : (
           <>
-            {/* Header with Mode Selector */}
+            {/* Header */}
             <div className="shrink-0 bg-white dark:bg-gray-900 midnight:bg-slate-950">
               <div className="max-w-5xl mx-auto px-4 md:px-8 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {/* Model picker + params toggle */}
-                    <div className="flex items-center gap-1">
-                      <ModelPickerDropdown />
-                      {localModel.model && (
-                        <button
-                          onClick={() => setShowParamsSidebar((v) => !v)}
-                          className={`relative p-1 rounded transition-colors ${
-                            showParamsSidebar
-                              ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                              : localModel.status === "error"
-                                ? "text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                : "text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                          }`}
-                          title={
-                            localModel.status === "error"
-                              ? "Model error — click to view logs"
-                              : "Model parameters"
-                          }
-                        >
-                          <SlidersHorizontal className="w-3.5 h-3.5" />
-                          {localModel.status === "error" &&
-                            !showParamsSidebar && (
-                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
-                            )}
-                        </button>
-                      )}
-                    </div>
-
                     <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" />
 
                     <div className="flex items-center gap-2">
-                      {shouldAutoSave &&
+                      {true &&
                       currentConversationId &&
                       conversationTitle &&
                       !isEditingTitle ? (
@@ -1071,7 +1003,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
                       </button>
                     )}
 
-                    {shouldAutoSave &&
+                    {true &&
                       currentConversationId &&
                       conversationTitle && (
                         <div className="flex items-center gap-1">
@@ -1170,7 +1102,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
 
       {/* Center: artifact/explain panel (when open) */}
       {(sideArtifact || explainPanel) && (
-        <div className="w-[40%] border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex flex-col h-full">
+        <div className="w-[45%] max-w-[640px] border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex flex-col h-full">
           {explainPanel ? (
             <ExplainTermPanel
               term={explainPanel.term}

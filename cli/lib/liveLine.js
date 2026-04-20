@@ -22,6 +22,14 @@ const TOP_CMDS = [
   { name: 'provider', desc: 'Configure AI provider (local / cloud)' },
   { name: 'sessions', desc: 'Browse saved conversations' },
   { name: 'stash',    desc: 'Save or view stashed notes' },
+  { name: 'watch',    desc: 'Auto-rerun a command every N seconds' },
+  { name: 'bench',    desc: 'Time command execution' },
+  { name: 'alias',    desc: 'Create command shortcuts' },
+  { name: 'snippets', desc: 'Save and reuse code blocks' },
+  { name: 'macros',   desc: 'Record & replay command sequences' },
+  { name: 'history',  desc: 'Search command history' },
+  { name: 'recent',   desc: 'Show recent commands' },
+  { name: 'context',  desc: 'Show workspace context' },
   { name: 'install',  desc: 'Set up dependencies and .env' },
   { name: 'doctor',   desc: 'Full system health check' },
   { name: 'update',   desc: 'Pull latest code and reinstall' },
@@ -29,6 +37,10 @@ const TOP_CMDS = [
   { name: 'db',       desc: 'Database backup / reset / seed' },
   { name: 'config',   desc: 'Get or set configuration values' },
   { name: 'theme',    desc: 'Switch color theme' },
+  { name: 'git',      desc: 'Git status, log, diff for the project' },
+  { name: 'code',     desc: 'Show file tree of current directory' },
+  { name: 'mcp',      desc: 'Manage Model Context Protocol servers' },
+  { name: 'menu',     desc: 'Browse all commands interactively (or press /)' },
   { name: 'version',  desc: 'Show version info' },
   { name: 'open',     desc: 'Open asyncat in the browser' },
   { name: 'live-logs',desc: 'Toggle streaming of backend/frontend logs' },
@@ -46,9 +58,20 @@ const SLASH_CMDS = [
   { name: '/stop',     desc: 'Stop all running services' },
   { name: '/stash',    desc: 'Save or browse stashed notes' },
   { name: '/sessions', desc: 'Browse saved conversations' },
-  { name: '/models',   desc: 'Manage AI models' },
-  { name: '/provider', desc: 'Configure AI provider' },
+  { name: '/watch',     desc: 'Auto-rerun a command every N seconds' },
+  { name: '/bench',     desc: 'Time command execution' },
+  { name: '/alias',     desc: 'Create command shortcuts' },
+  { name: '/snippets',  desc: 'Save and reuse code blocks' },
+  { name: '/macros',    desc: 'Record & replay command sequences' },
+  { name: '/history',   desc: 'Search command history' },
+  { name: '/recent',    desc: 'Show recent commands' },
+  { name: '/context',   desc: 'Show workspace context' },
+  { name: '/models',    desc: 'Manage AI models' },
+  { name: '/provider',  desc: 'Configure AI provider' },
   { name: '/theme',     desc: 'Switch color theme (dark/hacker/ocean/minimal)' },
+  { name: '/git',       desc: 'Git status, log, diff for the project' },
+  { name: '/mcp',       desc: 'Manage Model Context Protocol servers' },
+  { name: '/menu',      desc: 'Browse all commands interactively' },
   { name: '/live-logs', desc: 'Toggle streaming of backend/frontend logs' },
   { name: '/help',      desc: 'Show command reference' },
   { name: '/clear',     desc: 'Clear the screen' },
@@ -108,6 +131,32 @@ const SUB_CMDS = {
     { name: 'toggle', desc: 'Toggle live logs' },
     { name: 'status', desc: 'Show live logs status' },
   ],
+  alias: [
+    { name: 'list',   desc: 'Show all aliases' },
+    { name: 'add',    desc: 'Create a new alias' },
+    { name: 'rm',     desc: 'Remove an alias' },
+    { name: 'expand', desc: 'Show what an alias expands to' },
+  ],
+  snippets: [
+    { name: 'list',   desc: 'Show all snippets' },
+    { name: 'add',    desc: 'Save a snippet' },
+    { name: 'show',   desc: 'View a snippet' },
+    { name: 'rm',     desc: 'Delete a snippet' },
+    { name: 'copy',   desc: 'Copy snippet to clipboard' },
+  ],
+  macros: [
+    { name: 'list',   desc: 'Show all macros' },
+    { name: 'record', desc: 'Start recording a macro' },
+    { name: 'stop',   desc: 'Stop recording' },
+    { name: 'play',   desc: 'Execute a macro' },
+    { name: 'show',   desc: 'View macro commands' },
+    { name: 'rm',     desc: 'Delete a macro' },
+  ],
+  mcp: [
+    { name: 'list',   desc: 'List configured MCP servers' },
+    { name: 'add',    desc: 'Add a new MCP server' },
+    { name: 'rm',     desc: 'Remove an MCP server' },
+  ],
   start: [
     { name: '--backend-only',  desc: 'Start backend only' },
     { name: '--frontend-only', desc: 'Start frontend only' },
@@ -140,8 +189,12 @@ const SLASH_SUB = {
     { name: 'toggle', desc: 'Toggle live logs' },
     { name: 'status', desc: 'Show live logs status' },
   ],
+  '/alias': SUB_CMDS.alias,
+  '/snippets': SUB_CMDS.snippets,
+  '/macros': SUB_CMDS.macros,
   '/models': SUB_CMDS.models,
   '/sessions': SUB_CMDS.sessions,
+  '/mcp': SUB_CMDS.mcp,
 };
 
 function getSuggestions(buf) {
@@ -195,10 +248,37 @@ export class LiveLine extends EventEmitter {
     this.suggestions     = [];
     this.selIdx          = 0;
     this.suggestionLines = 0;
-    this.allSuggestions  = [];  // all matching suggestions
-    this.suggOffset      = 0;   // pagination offset for many suggestions
+    this.allSuggestions  = [];
+    this.suggOffset      = 0;
+    this._lastSuggBuf    = null;   // tracks buffer for pagination reset
 
+    this.breadcrumbs     = [];  // command breadcrumb trail
     this.closed = false;
+    this._paused = false;
+    this._keyHandler = null;
+  }
+
+  pause() {
+    this._paused = true;
+    if (this._keyHandler) process.stdin.removeListener('keypress', this._keyHandler);
+  }
+  
+  resume() {
+    this._paused = false;
+    if (this._keyHandler) process.stdin.on('keypress', this._keyHandler);
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
+    this._draw(false);
+  }
+
+  // Add to breadcrumb trail (show recent commands)
+  addBreadcrumb(cmd) {
+    const mainCmd = cmd.split(/\s+/)[0].replace(/^\//, '');
+    this.breadcrumbs.unshift(mainCmd);
+    if (this.breadcrumbs.length > 5) this.breadcrumbs.pop();
+  }
+
+  getBreadcrumbs() {
+    return this.breadcrumbs.length > 0 ? ` ${c.dim}[${this.breadcrumbs.join(' > ')}]${c.reset}` : '';
   }
 
   // ── readline-compatible API ──────────────────────────────────────────────────
@@ -223,7 +303,8 @@ export class LiveLine extends EventEmitter {
   start() {
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
-    process.stdin.on('keypress', (str, key) => this._onKey(str, key));
+    if (!this._keyHandler) this._keyHandler = (str, key) => this._onKey(str, key);
+    process.stdin.on('keypress', this._keyHandler);
     this._draw(false);
   }
 
@@ -244,10 +325,11 @@ export class LiveLine extends EventEmitter {
     const W     = process.stdout.columns || 80;
     const allSuggs = this._isMain ? getSuggestions(this.buf) : [];
 
-    // Reset offset if buffer changed and fewer results than before
-    if (this.allSuggestions !== allSuggs && this.suggOffset > 0) {
-      this.suggOffset = 0;
-      this.selIdx = 0;
+    // Reset pagination only when the buffer content actually changes
+    if (this._lastSuggBuf !== this.buf) {
+      this._lastSuggBuf = this.buf;
+      this.suggOffset   = 0;
+      this.selIdx       = 0;
     }
     this.allSuggestions = allSuggs;
 
@@ -304,7 +386,7 @@ export class LiveLine extends EventEmitter {
 
   // ── Key handler ───────────────────────────────────────────────────────────────
   _onKey(str, key) {
-    if (!key) return;
+    if (this._paused || !key) return;
     const { name, ctrl, meta } = key;
 
     if (ctrl && name === 'c') {
@@ -320,6 +402,17 @@ export class LiveLine extends EventEmitter {
     if (ctrl && name === 'l') {
       console.clear();
       this._draw(false);
+      return;
+    }
+
+    // ── ESC — clear buffer in main mode; always emit 'escape' ──────────────────
+    if (name === 'escape') {
+      if (this._isMain && this.buf !== '') {
+        this.buf = ''; this.pos = 0; this.selIdx = 0;
+        this.suggOffset = 0; this._lastSuggBuf = '';
+        this._draw(true);
+      }
+      this.emit('escape');
       return;
     }
 
@@ -343,6 +436,7 @@ export class LiveLine extends EventEmitter {
         this.history.unshift(line);
         if (this.history.length > MAX_HISTORY) this.history.pop();
         this._saveHistory();
+        this.addBreadcrumb(line);
       }
       this.buf = ''; this.pos = 0; this.histIdx = -1;
       this.histSaved = ''; this.selIdx = 0; this.suggestionLines = 0;
@@ -418,7 +512,7 @@ export class LiveLine extends EventEmitter {
     }
 
     if (name === 'right') {
-      if (this.pos === this.buf.length && this.suggestions.length > 0) {
+      if (this.pos === this.buf.length && this.selIdx < this.suggestions.length) {
         this._applyCompletion(this.suggestions[this.selIdx].name);
         this.selIdx = 0;
       } else if (ctrl) {

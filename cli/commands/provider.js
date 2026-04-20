@@ -5,6 +5,7 @@
 import path from 'path';
 import { ROOT, readEnv, setKey } from '../lib/env.js';
 import { log, ok, warn, err, info, col } from '../lib/colors.js';
+import { select } from '../lib/select.js';
 import { getToken, apiGet, apiPost, getBase } from '../lib/denApi.js';
 
 const DEN_ENV = path.join(ROOT, 'den/.env');
@@ -85,7 +86,7 @@ async function listProviders() {
 // ── set ───────────────────────────────────────────────────────────────────────
 
 async function setLocal(args) {
-  const modelFile = args[0];
+  let modelFile = args[0];
 
   // Ensure den is reachable
   try { await getToken(); } catch (e) { err(e.message); return; }
@@ -99,14 +100,16 @@ async function setLocal(args) {
       info(`Download one: ${col('cyan', 'models pull <url> <filename.gguf>')}`);
       return;
     }
-    log('');
-    log(`  ${col('bold', 'Available local models:')}`);
-    for (const m of models) {
-      log(`    ${col('cyan', '•')} ${col('white', m.filename)}  ${col('dim', m.sizeFormatted)}`);
-    }
-    log('');
-    warn(`Specify a model: ${col('cyan', 'provider set local <filename.gguf>')}`);
-    return;
+    const chosen = await select({
+      title:      'Select local model',
+      searchable: true,
+      items: models.map(m => ({
+        name: m.filename,
+        desc: m.sizeFormatted || '',
+      })),
+    });
+    if (!chosen) { info('Cancelled.'); return; }
+    modelFile = chosen.name;
   }
 
   // Find the model
@@ -199,14 +202,27 @@ export async function run(args = []) {
       break;
 
     case 'set': {
-      const type = (rest[0] || '').toLowerCase();
+      let type = (rest[0] || '').toLowerCase();
+      if (!type) {
+        const chosen = await select({
+          title:      'Choose provider type',
+          searchable: false,
+          items: [
+            { name: 'local',  desc: 'Local GGUF model via llama.cpp' },
+            { name: 'cloud',  desc: 'OpenAI-compatible cloud API' },
+            { name: 'custom', desc: 'Custom OpenAI-compatible endpoint' },
+          ],
+        });
+        if (!chosen) { info('Cancelled.'); return; }
+        type = chosen.name;
+      }
       switch (type) {
         case 'local':  await setLocal(rest.slice(1));  break;
         case 'cloud':  await setCloud(rest.slice(1));  break;
         case 'custom': await setCustom(rest.slice(1)); break;
         case 'stop':   await stopLocal();              break;
         default:
-          warn(`Unknown provider type: ${col('white', type || '(none)')}`);
+          warn(`Unknown provider type: ${col('white', type)}`);
           log(`  Usage: ${col('cyan', 'provider set')} ${col('dim', '<local|cloud|custom|stop>')}`);
       }
       break;

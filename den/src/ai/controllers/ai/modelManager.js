@@ -24,6 +24,99 @@ const MODELS_DIR = process.env.MODELS_PATH
 // Ensure models directory exists
 fs.mkdirSync(MODELS_DIR, { recursive: true });
 
+/**
+ * Lightweight pure-JS GGUF metadata parser.
+ * Reads just enough of the binary header to extract key metadata like context_length.
+ */
+function extractGgufMetadata(filePath) {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(1024 * 512); // read first 512KB
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    fs.closeSync(fd);
+
+    if (bytesRead < 4 || buffer.toString('utf8', 0, 4) !== 'GGUF') {
+      return null;
+    }
+
+    let offset = 4;
+    const version = buffer.readUInt32LE(offset);
+    offset += 4;
+    
+    const tensorCount = Number(buffer.readBigUInt64LE(offset));
+    offset += 8;
+    
+    const kvCount = Number(buffer.readBigUInt64LE(offset));
+    offset += 8;
+
+    const metadata = {};
+
+    for (let i = 0; i < kvCount; i++) {
+      if (offset + 8 > bytesRead) break;
+      const keyLen = Number(buffer.readBigUInt64LE(offset));
+      offset += 8;
+      
+      if (offset + keyLen > bytesRead) break;
+      const key = buffer.toString('utf8', offset, offset + keyLen);
+      offset += keyLen;
+
+      if (offset + 4 > bytesRead) break;
+      const valueType = buffer.readUInt32LE(offset);
+      offset += 4;
+
+      let value = null;
+      switch (valueType) {
+        case 0: value = buffer.readUInt8(offset); offset += 1; break;
+        case 1: value = buffer.readInt8(offset); offset += 1; break;
+        case 2: value = buffer.readUInt16LE(offset); offset += 2; break;
+        case 3: value = buffer.readInt16LE(offset); offset += 2; break;
+        case 4: value = buffer.readUInt32LE(offset); offset += 4; break;
+        case 5: value = buffer.readInt32LE(offset); offset += 4; break;
+        case 6: value = buffer.readFloatLE(offset); offset += 4; break;
+        case 7: value = buffer.readUInt8(offset) === 1; offset += 1; break;
+        case 8: // string
+          const strLen = Number(buffer.readBigUInt64LE(offset));
+          offset += 8;
+          if (offset + strLen <= bytesRead) {
+            value = buffer.toString('utf8', offset, offset + strLen);
+          }
+          offset += strLen;
+          break;
+        case 9: // array
+          const arrType = buffer.readUInt32LE(offset);
+          offset += 4;
+          const arrLen = Number(buffer.readBigUInt64LE(offset));
+          offset += 8;
+          if (arrType < 8) {
+            let itemSize = 1;
+            if (arrType === 2 || arrType === 3) itemSize = 2;
+            if (arrType >= 4 && arrType <= 6) itemSize = 4;
+            if (arrType >= 10) itemSize = 8;
+            offset += arrLen * itemSize;
+          } else if (arrType === 8) {
+            for (let j = 0; j < arrLen; j++) {
+              if (offset + 8 > bytesRead) break;
+              const slen = Number(buffer.readBigUInt64LE(offset));
+              offset += 8 + slen;
+            }
+          }
+          break;
+        case 10: value = Number(buffer.readBigUInt64LE(offset)); offset += 8; break;
+        case 11: value = Number(buffer.readBigInt64LE(offset)); offset += 8; break;
+        case 12: value = buffer.readDoubleLE(offset); offset += 8; break;
+        default: break;
+      }
+      
+      if (value !== null) {
+        metadata[key] = value;
+      }
+    }
+    return metadata;
+  } catch (err) {
+    return null;
+  }
+}
+
 // Active downloads map: { downloadId -> { progress, total, status, abortController } }
 const activeDownloads = new Map();
 
@@ -38,6 +131,7 @@ export function listModels() {
       .map(filename => {
         const filePath = path.join(MODELS_DIR, filename);
         const stat = fs.statSync(filePath);
+        const meta = extractGgufMetadata(filePath) || {};
         return {
           id: filename,
           name: filename.replace(/\.(gguf|bin)$/, ''),
@@ -46,6 +140,9 @@ export function listModels() {
           sizeBytes: stat.size,
           sizeGb: +(stat.size / 1024 ** 3).toFixed(2),
           sizeFormatted: formatBytes(stat.size),
+          contextLength: meta['llama.context_length'] || meta['qwen2.context_length'] || meta['phi3.context_length'] || 8192,
+          architecture: meta['general.architecture'] || 'unknown',
+          parameterCount: meta['general.parameter_count'] ? formatBytes(meta['general.parameter_count']).replace(/B/g, '') + ' Params' : '',
           createdAt: stat.birthtime.toISOString(),
           modifiedAt: stat.mtime.toISOString(),
         };
@@ -64,6 +161,7 @@ export function getModel(filename) {
   const filePath = path.join(MODELS_DIR, path.basename(filename));
   if (!fs.existsSync(filePath)) return null;
   const stat = fs.statSync(filePath);
+  const meta = extractGgufMetadata(filePath) || {};
   return {
     id: filename,
     name: filename.replace(/\.(gguf|bin)$/, ''),
@@ -72,6 +170,9 @@ export function getModel(filename) {
     sizeBytes: stat.size,
     sizeGb: +(stat.size / 1024 ** 3).toFixed(2),
     sizeFormatted: formatBytes(stat.size),
+    contextLength: meta['llama.context_length'] || meta['qwen2.context_length'] || meta['phi3.context_length'] || 8192,
+    architecture: meta['general.architecture'] || 'unknown',
+    parameterCount: meta['general.parameter_count'] ? formatBytes(meta['general.parameter_count']).replace(/B/g, '') + ' Params' : '',
     createdAt: stat.birthtime.toISOString(),
     modifiedAt: stat.mtime.toISOString(),
   };

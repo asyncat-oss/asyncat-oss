@@ -4,9 +4,11 @@ An AI-powered all-in-one workspace for teams and individuals.
 
 > The workspace where AI doesn't just answer — it acts.
 
-Asyncat combines a deeply integrated AI assistant with project management, collaborative notes, kanban boards, a calendar, habit tracking, file storage, and a Study Lab — all in one product. The AI knows your projects, tasks, notes, and calendar, and can take direct actions across all of them from a single chat.
+Asyncat combines a deeply integrated AI assistant with project management, collaborative notes, kanban boards, a calendar, habit tracking and Laba — all in one product. The AI knows your projects, tasks, notes, and calendar, and can take direct actions across all of them from a single chat.
 
-**Live hosted version:** [app.asyncat.com](https://app.asyncat.com)
+**Features:** AI chat, kanban boards, notes, calendar, habit tracking, file storage, study lab, MCP integration
+
+**Self-host or develop locally** — this is the open-source repo. A managed cloud version may be available separately.
 
 ---
 
@@ -73,14 +75,29 @@ Opens backend at `http://localhost:8716` and frontend at `http://localhost:8717`
 
 ## The `cat` CLI
 
-All commands run from the `asyncat-oss` root:
+All commands run from the `asyncat-oss` root. Type `./cat` or `./cat /` to see all commands.
 
+**Core commands:**
 | Command | What it does |
 |---|---|
 | `./cat install` | Check deps, set up `.env` files, install packages, detect/install llama.cpp |
-| `./cat start` | Start backend + frontend together in dev mode |
-| `./cat stop` | Stop all running services (ports 8716, 8717, 8765) |
-| `./cat status` | Show what's currently running |
+| `./cat start` | Start backend + frontend (auto-detects pnpm/yarn/bun) |
+| `./cat stop` | Stop all running services |
+| `./cat status` | Show what's running |
+| `./cat update` | Pull latest, auto-detect package manager, reinstall deps |
+
+**Productivity:**
+| Command | What it does |
+|---|---|
+| `./cat watch <interval> <cmd>` | Auto-rerun a command every N seconds |
+| `./cat bench [count] <cmd>` | Time command execution (avg/min/max) |
+| `./cat history [search]` | Search command history (regex supported) |
+| `./cat alias [add\|list\|rm]` | Save command shortcuts |
+| `./cat snippets [add\|show\|rm]` | Save code blocks |
+| `./cat macros [record\|play\|list\|rm]` | Record & playback command sequences |
+| `./cat recent [n]` | Show last N commands |
+| `./cat context` | Show workspace state (git, env, deps) |
+| `./cat version` | Show versions (node, npm, pnpm, yarn, bun, python, llama.cpp, git) |
 
 ---
 

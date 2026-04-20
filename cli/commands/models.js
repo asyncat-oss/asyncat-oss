@@ -1,11 +1,11 @@
 // asyncat models [list|pull|rm|serve|stop|ps|info]
 // Manage local GGUF model files and the built-in llama.cpp server.
 
-import readline from 'readline';
 import fs from 'fs';
 import path from 'path';
 import { ROOT, readEnv } from '../lib/env.js';
 import { log, ok, warn, err, info, col, spinner } from '../lib/colors.js';
+import { select, confirm } from '../lib/select.js';
 import { getToken, apiGet, apiPost, apiDelete } from '../lib/denApi.js';
 
 const MODELS_DIR = path.join(ROOT, 'den/data/models');
@@ -31,13 +31,6 @@ function getLocalModels() {
     .sort((a, b) => b.mtime - a.mtime);
 }
 
-function prompt(question) {
-  return new Promise(resolve => {
-    const tmp = readline.createInterface({ input: process.stdin, output: process.stdout });
-    process.stdout.write(question);
-    tmp.once('line', ans => { tmp.close(); resolve(ans.trim()); });
-  });
-}
 
 async function getLlamaStatus() {
   try {
@@ -127,8 +120,8 @@ async function pullModel(args) {
   const destPath = path.join(MODELS_DIR, filename);
   if (fs.existsSync(destPath)) {
     warn(`File already exists: ${col('white', filename)}`);
-    const ans = await prompt(`  ${col('yellow', 'Overwrite?')} [y/N]: `);
-    if (ans.toLowerCase() !== 'y') { info('Cancelled.'); return; }
+    const yes = await confirm(col('yellow', 'Overwrite?'));
+    if (!yes) { info('Cancelled.'); return; }
     fs.unlinkSync(destPath);
   }
 
@@ -221,15 +214,32 @@ async function pullModel(args) {
 // ── remove ────────────────────────────────────────────────────────────────────
 
 async function removeModel(name) {
-  if (!name) { warn('Usage: models rm <filename>'); return; }
   const models = getLocalModels();
-  const found  = models.find(m => m.name === name || m.name === name + '.gguf');
+
+  if (!name) {
+    if (models.length === 0) {
+      warn(`No models found in ${col('dim', 'den/data/models/')}`);
+      return;
+    }
+    const chosen = await select({
+      title:      'Select model to delete',
+      searchable: true,
+      items: models.map(m => ({
+        name: m.name,
+        desc: humanSize(m.size),
+      })),
+    });
+    if (!chosen) { info('Cancelled.'); return; }
+    name = chosen.name;
+  }
+
+  const found = models.find(m => m.name === name || m.name === name + '.gguf');
   if (!found) { err(`Model not found: ${col('white', name)}`); return; }
 
   log('');
   warn(`Permanently delete: ${col('white', found.name)}  (${humanSize(found.size)})`);
-  const ans = await prompt(`  ${col('yellow', 'Confirm?')} [y/N]: `);
-  if (ans.toLowerCase() !== 'y') { info('Cancelled.'); return; }
+  const yes = await confirm(col('yellow', 'Confirm?'));
+  if (!yes) { info('Cancelled.'); return; }
 
   try {
     fs.unlinkSync(found.path);
@@ -242,23 +252,24 @@ async function removeModel(name) {
 // ── serve ─────────────────────────────────────────────────────────────────────
 
 async function serveModel(args) {
-  const filename = args[0];
+  let filename = args[0];
 
   if (!filename) {
-    // Show list and hint
     const models = getLocalModels();
     if (models.length === 0) {
       warn('No models found. Pull one with: ' + col('cyan', 'models pull <url>'));
       return;
     }
-    log('');
-    log(`  ${col('bold', 'Available models:')}`);
-    for (const m of models) {
-      log(`    ${col('cyan', '•')} ${col('white', m.name)}  ${col('dim', humanSize(m.size))}`);
-    }
-    log('');
-    warn(`Specify a model: ${col('cyan', 'models serve <filename.gguf>')}`);
-    return;
+    const chosen = await select({
+      title:      'Select model to serve',
+      searchable: true,
+      items: models.map(m => ({
+        name: m.name,
+        desc: humanSize(m.size),
+      })),
+    });
+    if (!chosen) { info('Cancelled.'); return; }
+    filename = chosen.name;
   }
 
   try { await getToken(); } catch (e) { err(e.message); return; }

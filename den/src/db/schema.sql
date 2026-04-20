@@ -454,3 +454,39 @@ CREATE TABLE IF NOT EXISTS mcp_access_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_mcp_auth_codes_code       ON mcp_auth_codes(code);
 CREATE INDEX IF NOT EXISTS idx_mcp_access_tokens_hash    ON mcp_access_tokens(token_hash);
+
+-- ─── Agent Memory & Sessions ─────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS agent_memory (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  memory_type  TEXT NOT NULL DEFAULT 'fact'
+                 CHECK (memory_type IN ('fact','preference','context','task_state')),
+  key          TEXT,
+  content      TEXT NOT NULL,
+  relevance    REAL NOT NULL DEFAULT 1.0,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  status        TEXT NOT NULL DEFAULT 'active'
+                  CHECK (status IN ('active','paused','completed','failed')),
+  goal          TEXT NOT NULL,
+  plan          TEXT NOT NULL DEFAULT '[]',
+  scratchpad    TEXT NOT NULL DEFAULT '{}',
+  tool_history  TEXT NOT NULL DEFAULT '[]',
+  total_rounds  INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_memory_user       ON agent_memory(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_workspace  ON agent_memory(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_key        ON agent_memory(user_id, workspace_id, key);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_user     ON agent_sessions(user_id);
+

@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import { ROOT } from '../lib/env.js';
 import { log, ok, err, warn, info, col } from '../lib/colors.js';
 
@@ -7,13 +8,22 @@ function checkCmd(cmd) {
   try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
 }
 
+function detectPackageManager(cwd = ROOT) {
+  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm';
+  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn';
+  if (fs.existsSync(path.join(cwd, 'bun.lockb'))) return 'bun';
+  return 'npm';
+}
+
 function runInstall(cwd, label) {
-  info(`Reinstalling ${label} packages...`);
+  const pm = detectPackageManager(cwd);
+  const cmd = `${pm} install`;
+  info(`Reinstalling ${label} packages with ${col('cyan', pm)}...`);
   try {
-    execSync('npm install', { cwd, stdio: 'ignore' });
-    ok(`${label} packages updated`);
+    execSync(cmd, { cwd, stdio: 'ignore' });
+    ok(`${label} packages updated (${pm})`);
   } catch (_) {
-    warn(`Failed to reinstall ${label} packages — try manually`);
+    warn(`Failed to reinstall ${label} packages — try manually with: ${cmd}`);
   }
 }
 
@@ -26,12 +36,41 @@ export function run() {
   log('');
   info('Checking for updates...');
 
+  // Check for unstaged changes and stash them if needed
+  let hasStashed = false;
+  try {
+    const status = execSync('git status --porcelain', { cwd: ROOT }).toString().trim();
+    if (status.length > 0) {
+      info('Stashing local changes...');
+      execSync('git stash', { cwd: ROOT, stdio: 'ignore' });
+      hasStashed = true;
+    }
+  } catch (_) {
+    // Ignore stash errors, continue anyway
+  }
+
   let output;
   try {
     output = execSync('git pull', { cwd: ROOT }).toString().trim();
   } catch (e) {
     err(`git pull failed: ${e.message}`);
+    if (hasStashed) {
+      warn('Restoring stashed changes...');
+      try {
+        execSync('git stash pop', { cwd: ROOT, stdio: 'ignore' });
+      } catch (_) {}
+    }
     return;
+  }
+
+  // Restore stashed changes after successful pull
+  if (hasStashed) {
+    try {
+      execSync('git stash pop', { cwd: ROOT, stdio: 'ignore' });
+      ok('Restored local changes.');
+    } catch (e) {
+      warn('Could not restore stashed changes — they are saved in git stash.');
+    }
   }
 
   log(`  ${col('dim', output)}`);
@@ -44,7 +83,9 @@ export function run() {
 
   ok('Changes pulled.');
   log('');
-  log(col('bold', '  Reinstalling dependencies...'));
+
+  const pm = detectPackageManager();
+  log(col('bold', `  Reinstalling dependencies (detected: ${col('cyan', pm)})...`));
   log('');
 
   runInstall(ROOT,                    'root');
