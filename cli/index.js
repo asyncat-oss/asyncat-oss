@@ -267,12 +267,12 @@ async function startTui() {
         case 'live-logs':
           handleLiveLogs(args, tui);
           break;
-        case 'tools': {
+case 'tools': {
           tui.unlockInput();
 
           // ── Agent Tools (direct function calls the LLM can invoke) ─────
           tui.print('');
-          tui.print('━━ Agent Tools  (functions the LLM calls directly) ━━');
+          tui.print('━━ 🛠️  Agent Tools  (functions the LLM calls directly) ━━');
           tui.print('');
           tui.print('  📁  read_file          Read any file from disk');
           tui.print('  ✏️   write_file         Write or overwrite a file');
@@ -289,30 +289,25 @@ async function startTui() {
           tui.print('  🖥️   sys_info           CPU, RAM, disk, uptime, OS info');
           tui.print('  📋  ps_list            Running processes — sort by CPU/mem');
           tui.print('  🔑  env_get            Read environment variables (secrets masked)');
-          tui.print('  🔔  notify             Send a desktop system notification');
-          tui.print('  🧪  run_tests          Auto-detect & run Jest/Vitest/Mocha tests');
           tui.print('  📎  clipboard_read     Read clipboard contents');
           tui.print('  📎  clipboard_write    Write text to clipboard');
           tui.print('  🧠  store_memory       Persist facts/preferences across sessions');
           tui.print('  🧠  recall_memory      Search stored memories by query');
-          tui.print('  🧠  list_memories      Browse all stored memories');
-          tui.print('  🤖  delegate_task      Spawn a specialized sub-agent for a sub-task');
+          tui.print('  🤖  delegate_task      Spawn a specialized sub-agent');
           tui.print('  🔌  mcp_call           Invoke external MCP tool servers');
           tui.print('');
 
-          // ── Agent Skills (higher-level built-in behaviours) ────────────
-          tui.print('━━ Agent Skills  (built-in reasoning capabilities) ━━');
+          // ── Agent Skills (brain-inspired capabilities) ────────────
+          tui.print('━━ 🧠  Brain Skills  (45 bundled in Cerebellum) ━━');
           tui.print('');
-          tui.print('  🤖  Multi-step planning    Break goals into sub-tasks');
-          tui.print('  🔄  Self-reflection         Review & correct its own output');
-          tui.print('  📋  Task decomposition      Delegate sub-tasks autonomously');
-          tui.print('  🛡️   Permission gating       Ask before destructive actions');
-          tui.print('  💾  Auto-session save       Persist conversations to DB');
-          tui.print('  📜  Conversation history    Pass context across rounds');
-          tui.print('  🌊  Streaming output        Token-by-token TUI rendering');
+          tui.print('  🧠  use /skills to browse 45 brain skills');
+          tui.print('  📂  Skills auto-match when you describe tasks');
+          tui.print('  🔄  Agent learns your patterns (Basal Ganglia)');
+          tui.print('  🧮  Episodic memory with FTS5 search');
           tui.print('');
-          tui.print('  Type a message to use all of these automatically.');
-          tui.print('  /mcp to connect additional tool servers.');
+          tui.print('  Type: "debug an error" → finds debugging skill');
+          tui.print('  Type: "deploy to production" → finds deployment skill');
+          tui.print('  /skills list  — browse all 45 skills');
           return;
         }
         case 'new':
@@ -724,46 +719,44 @@ function handleAgentEvent(tui, event, token, base) {
 // ── Help ────────────────────────────────────────────────────────────────────
 function showTuiHelp(tui) {
   tui.print('');
-  tui.print('━━ asyncat — keyboard reference ━━');
+  tui.print('━━ 🐱 asyncat — keyboard reference ━━');
   tui.print('');
   tui.print('  Just type          Send to AI (auto-agent mode)');
   tui.print('  /                  Browse all commands (palette)');
   tui.print('  esc                Back / Clear input / Exit');
   tui.print('');
-  tui.print('  ── Navigation ───────────────────────────────');
-  tui.print('  ↑ / ↓              Scroll through prompt history');
-  tui.print('  PgUp / PgDn        Scroll messages up/down (half page)');
-  tui.print('  Mouse wheel        Scroll messages');
-  tui.print('  Home / End         Jump to start/end of input');
+  tui.print('  ── 🧠 Brain Regions ───────────────────────');
+  tui.print('  Prefrontal         Planning, code review, decisions');
+  tui.print('  Cerebellum         45 bundled skills (muscle memory)');
+  tui.print('  Hippocampus       Memory (semantic + episodic)');
+  tui.print('  Amygdala          Safety, permissions, errors');
+  tui.print('  Basal Ganglia     Auto-learns from your patterns');
   tui.print('');
-  tui.print('  ── Text & Clipboard ─────────────────────────');
-  tui.print('  Ctrl+Y             Copy last AI response to clipboard');
-  tui.print('  Ctrl+M             Toggle mouse off → drag to select text');
-  tui.print('                     (Ctrl+M again to re-enable scroll/click)');
+  tui.print('  ── Navigation ─────────────────────────');
+  tui.print('  ↑ / ↓              Scroll prompt history');
+  tui.print('  PgUp / PgDn        Scroll messages');
+  tui.print('  Mouse wheel        Scroll');
   tui.print('');
-  tui.print('  ── Editing ──────────────────────────────────');
+  tui.print('  ── Clipboard ───────────────────────────');
+  tui.print('  Ctrl+Y             Copy last AI response');
+  tui.print('  Ctrl+M             Toggle mouse (drag to select)');
+  tui.print('');
+  tui.print('  ── Editing ─────────────────────────────');
   tui.print('  Ctrl+U             Delete to start of line');
   tui.print('  Ctrl+K             Delete to end of line');
-  tui.print('  Ctrl+W             Delete word back');
   tui.print('  Ctrl+L             Refresh screen');
   tui.print('  Ctrl+P             Open command palette');
   tui.print('');
-  tui.print('  ── Commands ─────────────────────────────────');
-  tui.print('  /models            Select & load a model');
-  tui.print('  /memory            View/search/delete agent memories');
-  tui.print('  /cron              Schedule recurring agent tasks');
-  tui.print('    /cron add "name" "goal" interval:<ms>');
-  tui.print('    /cron add "name" "goal" daily:09:00');
-  tui.print('    /cron list | rm <id> | on <id> | off <id>');
-  tui.print('  /screen            Desktop capture & control info');
-  tui.print('  /provider          Configure AI provider');
-  tui.print('  /tools             List all agent tools & skills');
-  tui.print('  /theme             Pick color theme');
-  tui.print('  /git               Git project info');
-  tui.print('  /doctor            System health check');
-  tui.print('  /open              Open web UI in browser (:8717)');
-  tui.print('  /new               Clear & start fresh');
-  tui.print('  /exit              Quit');
+  tui.print('  ── Key Commands ───────────────────────────');
+  tui.print('  /skills      Browse 45 brain skills');
+  tui.print('  /tools      List agent tools');
+  tui.print('  /memory     Search agent memories');
+  tui.print('  /models    Select AI model');
+  tui.print('  /provider  Configure AI provider');
+  tui.print('  /theme     Switch color theme');
+  tui.print('  /open      Open web UI (localhost:8717)');
+  tui.print('  /new      Start fresh session');
+  tui.print('  /help     Show this');
   tui.print('');
 }
 
