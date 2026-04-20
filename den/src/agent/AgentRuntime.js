@@ -192,6 +192,7 @@ export class AgentRuntime {
       this.onEvent({ type: 'answer', data: { answer, round: this.maxRounds } });
     }
 
+    this.session.setScratchpad('finalAnswer', answer);
     this.session.complete();
     return { answer, session: this.session, toolCalls: this.session.toolHistory };
   }

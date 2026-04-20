@@ -1080,6 +1080,78 @@ eventBus.on('workspaceChanged', ({ workspace } = {}) => {
   }
 });
 
+// =====================================================
+// AGENT API
+// =====================================================
+
+export const agentApi = {
+  /**
+   * Run an agent with a goal — returns an async generator of SSE events.
+   * Event types: thinking, tool_start, tool_result, delta, answer, error, done
+   */
+  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25) {
+    const workspaceId = getCurrentWorkspaceId();
+    const token = await authService.getSession();
+
+    const response = await fetch(`${API_BASE_URL}/agent/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token?.access_token}`
+      },
+      body: JSON.stringify({ goal, conversationHistory, workingDir, maxRounds, workspaceId })
+    });
+
+    if (!response.ok) {
+      try {
+        const errData = await response.json();
+        const err = new Error(errData.message || errData.error || `Agent failed: ${response.statusText}`);
+        throw err;
+      } catch (parseErr) {
+        if (parseErr.message && !parseErr.message.startsWith('Agent failed')) throw parseErr;
+        throw new Error(`Agent failed: ${response.statusText}`);
+      }
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const parsed = JSON.parse(line.slice(6));
+              if (parsed.type === 'done') return;
+              yield parsed;
+            } catch (e) {
+              console.warn('Failed to parse agent SSE:', e);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
+  getSessions: async (limit = 30) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions?limit=${limit}`);
+  },
+
+  getSession: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}`);
+  }
+};
+
 // Export default object with all APIs
 export default {
   // Core APIs
@@ -1093,6 +1165,7 @@ export default {
   packs: packsApi,
   trash: trashApi,
   labs: labsApi,
+  agent: agentApi,
 
   // Utilities
   utils: apiUtils,

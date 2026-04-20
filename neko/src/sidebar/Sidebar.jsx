@@ -38,6 +38,8 @@ import {
 	Code2,
 	RefreshCw,
 	Square,
+	Bot,
+	SlidersHorizontal,
 	MessageSquare as ChatIcon,
 	FolderOpen as ProjectsIcon,
 	Calendar as CalendarIcon,
@@ -51,16 +53,108 @@ import UniversalSearch from "./UniversalSearch";
 import HardwareWidget from "./HardwareWidget";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { usePermissions } from "../utils/permissions";
+import { agentApi } from "../CommandCenter/commandCenterApi";
+import ModelPickerDropdown from "../CommandCenter/components/ModelPickerDropdown";
+import ModelParamsSidebar from "../CommandCenter/components/ModelParamsSidebar";
+
+// ── Persistent model section (all modes) ─────────────────────────────────────
+const ModelSection = memo(() => {
+	const [showParams, setShowParams] = useState(false);
+	return (
+		<>
+			<div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-2 py-1.5 flex items-center gap-1">
+				<div className="flex-1 min-w-0">
+					<ModelPickerDropdown />
+				</div>
+				<button
+					onClick={() => setShowParams(v => !v)}
+					className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${showParams
+							? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+							: 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+						}`}
+					title="Model parameters & logs"
+				>
+					<SlidersHorizontal className="w-3.5 h-3.5" />
+				</button>
+			</div>
+			{showParams && (
+				<ModelParamsSidebar onClose={() => setShowParams(false)} />
+			)}
+		</>
+	);
+});
+ModelSection.displayName = 'ModelSection';
+
+// ── Agents sidebar panel ──────────────────────────────────────────────────────
+const AgentsSidebarContent = memo(({ navigate, currentPage }) => {
+	const [sessions, setSessions] = useState([]);
+
+	const loadSessions = useCallback(() => {
+		agentApi.getSessions(20).then(res => {
+			if (res?.sessions) setSessions(res.sessions);
+		}).catch(() => { });
+	}, []);
+
+	useEffect(() => {
+		loadSessions();
+		window.addEventListener('agent-run-complete', loadSessions);
+		return () => window.removeEventListener('agent-run-complete', loadSessions);
+	}, [loadSessions]);
+
+	const isActive = (path) => typeof window !== 'undefined' && window.location.pathname.startsWith(path);
+
+	return (
+		<div className="px-2 pt-2 pb-1 space-y-0.5">
+			<button
+				onClick={() => navigate('/agents')}
+				className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left group"
+			>
+				<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
+				New Run
+			</button>
+
+			{sessions.length > 0 && (
+				<>
+					<div className="mx-1 mt-2 mb-1 h-px bg-gray-100 dark:bg-gray-800" />
+					<div className="space-y-0.5">
+						{sessions.slice(0, 15).map(s => (
+							<button
+								key={s.id}
+								onClick={() => navigate(`/agents/${s.id}`)}
+								className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors ${isActive(`/agents/${s.id}`)
+										? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+										: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-700 dark:hover:text-gray-300'
+									}`}
+							>
+								<div className="flex items-center gap-1.5">
+									<Bot className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+									<span className="truncate">{s.goal || 'Agent run'}</span>
+								</div>
+							</button>
+						))}
+					</div>
+				</>
+			)}
+
+			{sessions.length === 0 && (
+				<p className="text-xs text-gray-400 dark:text-gray-600 text-center py-6 px-2">
+					No runs yet. Give the agent a goal!
+				</p>
+			)}
+		</div>
+	);
+});
+AgentsSidebarContent.displayName = 'AgentsSidebarContent';
+
 // Clean Navigation Item Component
 const NavItem = memo(
 	({ icon: Icon, label, onClick, isActive, badge, className = "" }) => (
 		<button
 			onClick={onClick}
-			className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 relative active:scale-95 ${
-				isActive
+			className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 relative active:scale-95 ${isActive
 					? "bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100"
 					: "text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200"
-			} ${className}`}
+				} ${className}`}
 			title={label}
 		>
 			<Icon className="w-5 h-5" />
@@ -432,11 +526,11 @@ const UserProfile = memo(
 											{(currentWorkspace?.owner_id &&
 												session?.user?.id &&
 												currentWorkspace.owner_id === session.user.id) ||
-											currentWorkspace?.user_role === "owner"
+												currentWorkspace?.user_role === "owner"
 												? "Owner"
 												: hasWorkspaceAccess()
-												? "Member"
-												: "Guest"}
+													? "Member"
+													: "Guest"}
 										</div>
 									</div>
 								</div>
@@ -745,87 +839,85 @@ const WelcomeModal = memo(({ isOpen, onClose }) => {
 				onClick={onClose}
 				style={{ opacity: modalVisible ? 1 : 0 }}
 			>
-			<div
-				className="bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-2xl shadow-2xl max-w-md w-full mx-4 border border-gray-100 dark:border-gray-800 midnight:border-gray-800 overflow-hidden"
-				onClick={(e) => e.stopPropagation()}
-				style={{
-					opacity: modalVisible ? 1 : 0,
-					transform: modalVisible ? "scale(1) translateY(0)" : "scale(0.94) translateY(20px)",
-					transition: "opacity 0.35s ease, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1)",
-				}}
-			>
-				{/* Slide content */}
-				<div className="p-8 min-h-[380px] flex flex-col">
-					{/* Header */}
-					<div
-						className="text-center mb-8"
-						style={{
-							opacity: contentVisible ? 1 : 0,
-							transform: contentVisible ? "translateY(0)" : `translateY(${slideDirection * -8}px)`,
-							transition: "opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-						}}
-					>
-						<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-1">
-							{slides[currentSlide].title}
-						</h2>
-						<p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
-							{slides[currentSlide].subtitle}
-						</p>
+				<div
+					className="bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-2xl shadow-2xl max-w-md w-full mx-4 border border-gray-100 dark:border-gray-800 midnight:border-gray-800 overflow-hidden"
+					onClick={(e) => e.stopPropagation()}
+					style={{
+						opacity: modalVisible ? 1 : 0,
+						transform: modalVisible ? "scale(1) translateY(0)" : "scale(0.94) translateY(20px)",
+						transition: "opacity 0.35s ease, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1)",
+					}}
+				>
+					{/* Slide content */}
+					<div className="p-8 min-h-[380px] flex flex-col">
+						{/* Header */}
+						<div
+							className="text-center mb-8"
+							style={{
+								opacity: contentVisible ? 1 : 0,
+								transform: contentVisible ? "translateY(0)" : `translateY(${slideDirection * -8}px)`,
+								transition: "opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+							}}
+						>
+							<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-1">
+								{slides[currentSlide].title}
+							</h2>
+							<p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
+								{slides[currentSlide].subtitle}
+							</p>
+						</div>
+
+						{/* Content — slides in from direction of navigation */}
+						<div
+							className="flex-1 flex items-center justify-center"
+							style={{
+								opacity: contentVisible ? 1 : 0,
+								transform: contentVisible ? "translateX(0)" : `translateX(${slideDirection * 28}px)`,
+								transition: "opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+							}}
+						>
+							{slides[currentSlide].content}
+						</div>
 					</div>
 
-					{/* Content — slides in from direction of navigation */}
-					<div
-						className="flex-1 flex items-center justify-center"
-						style={{
-							opacity: contentVisible ? 1 : 0,
-							transform: contentVisible ? "translateX(0)" : `translateX(${slideDirection * 28}px)`,
-							transition: "opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-						}}
-					>
-						{slides[currentSlide].content}
-					</div>
-				</div>
+					{/* Footer */}
+					<div className="px-8 pb-8">
+						{/* Progress dots — active dot uses slide accent color */}
+						<div className="flex items-center justify-center gap-2 mb-6">
+							{slides.map((_, i) => (
+								<button
+									key={i}
+									onClick={() => goToSlide(i)}
+									className={`h-1.5 rounded-full transition-all duration-300 ${i === currentSlide
+											? "w-6 bg-gray-900 dark:bg-gray-100 midnight:bg-gray-100"
+											: "w-1.5 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
+										}`}
+									aria-label={`Go to slide ${i + 1}`}
+								/>
+							))}
+						</div>
 
-				{/* Footer */}
-				<div className="px-8 pb-8">
-					{/* Progress dots — active dot uses slide accent color */}
-					<div className="flex items-center justify-center gap-2 mb-6">
-						{slides.map((_, i) => (
+						{/* Navigation buttons */}
+						<div className="flex items-center justify-between">
 							<button
-								key={i}
-								onClick={() => goToSlide(i)}
-								className={`h-1.5 rounded-full transition-all duration-300 ${
-									i === currentSlide
-										? "w-6 bg-gray-900 dark:bg-gray-100 midnight:bg-gray-100"
-										: "w-1.5 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
-								}`}
-								aria-label={`Go to slide ${i + 1}`}
-							/>
-						))}
-					</div>
-
-					{/* Navigation buttons */}
-					<div className="flex items-center justify-between">
-						<button
-							onClick={prevSlide}
-							className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
-								currentSlide === 0
-									? "text-transparent cursor-default"
-									: "text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 midnight:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800"
-							}`}
-							disabled={currentSlide === 0}
-						>
-							Back
-						</button>
-						<button
-							onClick={nextSlide}
-							className="px-6 py-2.5 bg-gray-900 dark:bg-gray-100 midnight:bg-gray-100 text-white dark:text-gray-900 midnight:text-gray-900 text-sm font-semibold rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 midnight:hover:bg-gray-200 transition-all duration-200 hover:shadow-md active:scale-[0.97]"
-						>
-							{currentSlide === slides.length - 1 ? "Get Started" : "Continue"}
-						</button>
+								onClick={prevSlide}
+								className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${currentSlide === 0
+										? "text-transparent cursor-default"
+										: "text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 midnight:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800"
+									}`}
+								disabled={currentSlide === 0}
+							>
+								Back
+							</button>
+							<button
+								onClick={nextSlide}
+								className="px-6 py-2.5 bg-gray-900 dark:bg-gray-100 midnight:bg-gray-100 text-white dark:text-gray-900 midnight:text-gray-900 text-sm font-semibold rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 midnight:hover:bg-gray-200 transition-all duration-200 hover:shadow-md active:scale-[0.97]"
+							>
+								{currentSlide === slides.length - 1 ? "Get Started" : "Continue"}
+							</button>
+						</div>
 					</div>
 				</div>
-			</div>
 			</div>
 		</>
 	);
@@ -873,18 +965,20 @@ const DynamicSidebar = ({
 	) || [];
 	const hasReachedWorkspaceLimit = ownedWorkspaces.length >= 1;
 
-	const currentProjectId = (basePage === 'projects' && pathSegments?.[1])
+	const currentProjectId = ((basePage === 'projects' || basePage === 'workspace') && pathSegments?.[1])
 		? pathSegments[1]
 		: null;
 
 
 	// Active mode derived from URL
 	const getMode = (bp) => {
-		if (bp === 'projects') return 'projects';
-		if (bp === 'calendar') return 'calendar';
+		if (bp === 'projects' || bp === 'workspace' || bp === 'calendar') return 'workspace';
+		if (bp === 'agents') return 'agents';
 		return 'chat';
 	};
 	const [activeMode, setActiveMode] = useState(() => getMode(basePage));
+
+	const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
 
 	useEffect(() => {
 		const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -945,19 +1039,18 @@ const DynamicSidebar = ({
 						</button>
 						{/* Mode tabs */}
 						{[
-							{ mode: 'chat',     Icon: ChatIcon,     label: 'Chat',     path: '/home' },
-							{ mode: 'projects', Icon: ProjectsIcon, label: 'Projects', path: '/projects' },
-							{ mode: 'calendar', Icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
+							{ mode: 'chat', Icon: ChatIcon, label: 'Chat', path: '/home' },
+							{ mode: 'workspace', Icon: Compass, label: 'Workspace', path: '/workspace' },
+							{ mode: 'agents', Icon: Bot, label: 'Agents', path: '/agents' },
 						].map(({ mode, Icon, label, path }) => (
 							<button
 								key={mode}
 								onClick={() => { setActiveMode(mode); navigate(path); }}
 								title={label}
-								className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-all duration-150 ${
-									activeMode === mode
+								className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-all duration-150 ${activeMode === mode
 										? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
 										: 'text-gray-400 dark:text-gray-500 midnight:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/60 midnight:hover:bg-gray-800/60 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300'
-								}`}
+									}`}
 							>
 								<Icon className="w-4 h-4" />
 								<span className="text-[9px] font-medium leading-none">{label}</span>
@@ -970,93 +1063,119 @@ const DynamicSidebar = ({
 
 						{/* Chat mode */}
 						<div className={`${activeMode !== 'chat' ? 'hidden' : ''}`}>
-								{hasWorkspaceAccess() ? (
-									<>
-										<div className="px-2 pt-2 pb-1 space-y-0.5">
-											<button
-												onClick={handleNewChat}
-												className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left group"
-											>
-												<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
-												New Chat
-												<span className="ml-auto font-mono text-[10px] text-gray-300 dark:text-gray-600">⌘N</span>
-											</button>
-											<button
-												onClick={() => setIsSearchOpen(true)}
-												className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-left"
-											>
-												<Search className="w-3.5 h-3.5" />
-												Search
-												<span className="ml-auto font-mono text-[10px] text-gray-300 dark:text-gray-600">⌘K</span>
-											</button>
-											<button
-												onClick={() => onPageChange('all-chats')}
-												className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${
-													currentPage === 'all-chats'
-														? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-														: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+							{hasWorkspaceAccess() ? (
+								<>
+									<div className="px-2 pt-2 pb-1 space-y-0.5">
+										<button
+											onClick={handleNewChat}
+											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left group"
+										>
+											<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
+											New Chat
+											<span className="ml-auto font-mono text-[10px] text-gray-300 dark:text-gray-600">⌘N</span>
+										</button>
+										<button
+											onClick={() => setIsSearchOpen(true)}
+											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-left"
+										>
+											<Search className="w-3.5 h-3.5" />
+											Search
+											<span className="ml-auto font-mono text-[10px] text-gray-300 dark:text-gray-600">⌘K</span>
+										</button>
+										<button
+											onClick={() => onPageChange('all-chats')}
+											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${currentPage === 'all-chats'
+													? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
 												}`}
-											>
-												<div className="flex items-center gap-2.5">
-													<MessageSquare className="w-3.5 h-3.5" />
-													Chats
-												</div>
-											</button>
-											<button
-												onClick={() => navigate('/packs')}
-												className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${
-													basePage === 'packs'
-														? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-														: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+										>
+											<div className="flex items-center gap-2.5">
+												<MessageSquare className="w-3.5 h-3.5" />
+												Chats
+											</div>
+										</button>
+										<button
+											onClick={() => navigate('/packs')}
+											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'packs'
+													? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
 												}`}
-											>
-												<div className="flex items-center gap-2.5">
-													<Library className="w-3.5 h-3.5" />
-													Packs
-												</div>
-											</button>
-											<button
-												onClick={() => navigate('/lab')}
-												className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${
-													basePage === 'lab'
-														? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-														: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+										>
+											<div className="flex items-center gap-2.5">
+												<Library className="w-3.5 h-3.5" />
+												Packs
+											</div>
+										</button>
+										<button
+											onClick={() => navigate('/lab')}
+											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'lab'
+													? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
 												}`}
-											>
-												<div className="flex items-center gap-2.5">
-													<FlaskConical className="w-3.5 h-3.5" />
-													Labs
-												</div>
-											</button>
-											<button
-												onClick={() => navigate('/models')}
-												className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${
-													basePage === 'models'
-														? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-														: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+										>
+											<div className="flex items-center gap-2.5">
+												<FlaskConical className="w-3.5 h-3.5" />
+												Labs
+											</div>
+										</button>
+										<button
+											onClick={() => navigate('/models')}
+											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'models'
+													? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
 												}`}
-											>
-												<div className="flex items-center gap-2.5">
-													<Cpu className="w-3.5 h-3.5" />
-													Models
-												</div>
-											</button>
-										</div>
-										<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 mb-1" />
-										<div className="px-1">
-											<ChatExplorer isChatMode={isChatMode} isCollapsed={false} onNewChat={handleNewChat} showNewChatButton={false} />
-										</div>
-									</>
-								) : (
-									<p className="text-xs text-gray-400 dark:text-gray-500 text-center px-3 py-8">
-										Chat is available to workspace members.
-									</p>
+										>
+											<div className="flex items-center gap-2.5">
+												<Cpu className="w-3.5 h-3.5" />
+												Models
+											</div>
+										</button>
+									</div>
+									<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 mb-1" />
+									<div className="px-1">
+										<ChatExplorer isChatMode={isChatMode} isCollapsed={false} onNewChat={handleNewChat} showNewChatButton={false} />
+									</div>
+								</>
+							) : (
+								<p className="text-xs text-gray-400 dark:text-gray-500 text-center px-3 py-8">
+									Chat is available to workspace members.
+								</p>
+							)}
+						</div>
+
+						{/* Workspace mode (Combined Projects & Calendar) */}
+						<div className={`${activeMode !== 'workspace' ? 'hidden' : ''} flex flex-col h-full`}>
+							{/* Expandable Calendar Section */}
+							<div className="px-2 pt-2">
+								<button
+									onClick={() => setIsCalendarExpanded(!isCalendarExpanded)}
+									className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium"
+								>
+									<div className="flex items-center gap-2.5 text-gray-600 dark:text-gray-300">
+										<CalendarIcon className="w-3.5 h-3.5" />
+										Calendar
+									</div>
+									<ChevronRight className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCalendarExpanded ? 'rotate-90' : ''}`} />
+								</button>
+
+								{isCalendarExpanded && (
+									<div className="mt-1 px-1 pb-2 border-b border-gray-100 dark:border-gray-800">
+										{hasWorkspaceAccess() ? (
+											<CalendarContent
+												onCreateEvent={() => navigate('/calendar')}
+												onNavigateToCalendar={() => navigate('/calendar')}
+											/>
+										) : (
+											<p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">
+												Calendar is available to workspace members.
+											</p>
+										)}
+									</div>
 								)}
 							</div>
 
-						{/* Projects mode */}
-						<div className={`${activeMode !== 'projects' ? 'hidden' : ''}`}>
-								{/* Projects actions */}
+							{/* Projects Section */}
+							<div className="flex-1 overflow-y-auto">
 								<div className="px-2 pt-2 pb-1 space-y-0.5">
 									{permissions?.canCreateProject && (
 										<button
@@ -1068,19 +1187,18 @@ const DynamicSidebar = ({
 										</button>
 									)}
 									<button
-										onClick={() => navigate('/projects')}
-										className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${
-											basePage === 'projects' && !pathSegments?.[1]
+										onClick={() => navigate('/workspace')}
+										className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${(basePage === 'workspace' || basePage === 'projects') && !pathSegments?.[1]
 												? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
 												: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
-										}`}
+											}`}
 									>
 										<FolderOpen className="w-3.5 h-3.5" />
 										All Projects
 									</button>
-												</div>
+								</div>
 								<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 mb-1" />
-								<div className="px-1">
+								<div className="px-1 pb-4">
 									<ProjectExplorer
 										isCollapsed={false}
 										onCreateProject={permissions?.canCreateProject ? () => setIsCreateProjectModalOpen(true) : null}
@@ -1089,26 +1207,25 @@ const DynamicSidebar = ({
 										session={session}
 									/>
 								</div>
+							</div>
 						</div>
 
-						{/* Calendar mode */}
-						<div className={`px-3 pt-2 ${activeMode !== 'calendar' ? 'hidden' : ''}`}>
-							{hasWorkspaceAccess() ? (
-								<CalendarContent
-									onCreateEvent={() => navigate('/calendar')}
-									onNavigateToCalendar={() => navigate('/calendar')}
-								/>
-							) : (
-								<p className="text-xs text-gray-400 dark:text-gray-500 text-center px-3 py-8">
-									Calendar is available to workspace members.
-								</p>
-							)}
+						{/* Agents mode */}
+						<div className={`${activeMode !== 'agents' ? 'hidden' : ''}`}>
+							<AgentsSidebarContent
+								basePage={basePage}
+								navigate={navigate}
+								currentPage={currentPage}
+							/>
 						</div>
 
 					</div>
 
 					{/* Hardware widget — only shown when using a local/custom AI provider */}
 					<HardwareWidget />
+
+					{/* Model picker — persistent, accessible from all modes */}
+					<ModelSection />
 
 					{/* Profile bar */}
 					<div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-2 py-2 flex items-center gap-1.5">

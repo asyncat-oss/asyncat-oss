@@ -26,6 +26,7 @@ import FlashcardReview from '../Labs/FlashcardReview';
 import RecallPage from '../Labs/RecallPage';
 import MindMapPage from '../Labs/MindMapPage';
 import ModelsPage from '../Settings/ModelsPage';
+import AgentPage from '../Agent/AgentPage';
 
 
 const loadingMessages = [
@@ -163,6 +164,21 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
+        path: "workspace",
+        element: <ProjectsPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "workspace/:projectId",
+        element: <ProjectOverview />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "workspace/:projectId/:tab",
+        element: <ProjectOverview />,
+        errorElement: <RouteErrorElement />
+      },
+      {
         path: "projects",
         element: <ProjectsPage />,
         errorElement: <RouteErrorElement />
@@ -225,6 +241,16 @@ const createRouter = () => createBrowserRouter([
       {
         path: "models",
         element: <ModelsPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agents",
+        element: <AgentPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agents/:sessionId",
+        element: <AgentPage />,
         errorElement: <RouteErrorElement />
       }
     ]
