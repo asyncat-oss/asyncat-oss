@@ -1,189 +1,205 @@
-# Asyncat — Open Source
+# Asyncat — AI Agent OS
 
-An AI-powered all-in-one workspace for teams and individuals.
-
-> The workspace where AI doesn't just answer — it acts.
-
-Asyncat combines a deeply integrated AI assistant with project management, collaborative notes, kanban boards, a calendar, habit tracking and Laba — all in one product. The AI knows your projects, tasks, notes, and calendar, and can take direct actions across all of them from a single chat.
-
-**Features:** AI chat, kanban boards, notes, calendar, habit tracking, file storage, study lab, MCP integration
-
-**Self-host or develop locally** — this is the open-source repo. A managed cloud version may be available separately.
+> Forget the "productivity workspace" marketing. Forget the Kanban boards.
+>
+> This is about one thing: giving full, unbridled access to your entire computer to a quantized local model that is arguably less intelligent than a caffeinated squirrel.
 
 ---
 
-## What's in this repo
+## What is Asyncat?
 
-```
-asyncat-oss/
-├── cat          ← the CLI — start here
-├── den/         Node.js + Express backend (all services in one)
-└── neko/        React 19 + Vite 6 + TailwindCSS 4 frontend
-```
+**A local AI Agent OS.**
+
+We build tools for the brave. Tools for file access, tools for web access, and tools for things you only dream of in your most caffeinated nightmares.
+
+Your computer can't run those multi-billion-dollar cloud models. It can only run these stupid, tiny, quantized baby models.
+
+**We're here to help those baby models feel powerful.**
+
+We give them the tools to touch your files, browse your web, and watch your CPU temperature hit the ceiling.
 
 ---
 
-## Quick start
+## The Particular Set of Skills
+
+> "I don't know who you are. I don't know what you want. But what I do have are a very particular set of skills... skills that make me a nightmare for your file system. If you let me in now, that'll be the end of it. I will look for your files, I will find them, and I will probably rename them incorrectly."
+
+Asyncat gives your local model:
+- **Full file system access** — read, write, delete, execute
+- **Web browsing** — fetch URLs, search the web
+- **Terminal execution** — run commands, scripts, anything
+- **Clipboard & notifications** — system integration
+- **Memory that persists** — across sessions, across restarts
+- **MCP integration** — connect external tools
+
+---
+
+## Who is this for?
+
+### Solo Mode (default)
+
+- You have a computer
+- You have a local model (or an API key)
+- You want an AI that *actually does things*, not just chats
+
+**Zero config. Works out of the box.**
+
+```
+npm i -g @asyncat/asyncat
+asyncat start
+```
+
+Default login: `admin@local` / `changeme`
+
+---
+
+## We are a small collective
+
+Some say we are a shadowy cabal of tech-elites. Others say we are just a bunch of sleep-deprived computer science undergraduates who decided that building an AI Agent OS was more important than studying for finals.
+
+Both are probably true.
+
+We don't have offices. We don't have VCs. We certainly don't have a safety department.
+
+We just have code, a lot of GGUF files, a few pending lab reports, and a cat that watches it all burn.
+
+---
+
+## Quick Start
 
 ### Requirements
 
-- **Node.js 20+** — [nodejs.org](https://nodejs.org)
-- **An AI provider** — any OpenAI-compatible endpoint (see table below)
-- **Python 3.10+** *(optional)* — only needed if you want built-in local models via llama.cpp
+- **Node.js 20+**
+- **A local model** (GGUF in `den/data/models/`) **or** an API key
 
-### 1. Clone
-
-```bash
-git clone https://github.com/your-username/asyncat-oss
-cd asyncat-oss
-```
-
-### 2. Install everything
+### Install
 
 ```bash
-./cat install
+npm i -g @asyncat/asyncat
 ```
 
-This will:
-- Check Node.js, npm, and Python
-- Auto-create `den/.env` and `neko/.env` from the example files
-- Run `npm install` for the whole project
-- Detect llama-server — and offer to install it if it's missing
+### Run
 
-### 3. Configure
+```bash
+asyncat start
+```
 
-Edit `den/.env` — the only required values are:
+Opens at `http://localhost:8717`.
+
+### Log in
+
+- Email: `admin@local`
+- Password: `changeme`
+
+Done. The AI has keys to your kingdom.
+
+---
+
+## The CLI
+
+```bash
+asyncat start        # fire it up
+asyncat stop        # kill it
+asyncat status      # what's running
+asyncat restart     # bounce
+asyncat logs        # tail logs
+asyncat doctor      # health check
+asyncat config      # mess with env
+```
+
+---
+
+## AI Options
+
+### Local (recommended)
+
+Drop a GGUF file in `den/data/models/`. Asyncat runs its own llama-server.
 
 ```env
-JWT_SECRET=change-this-to-a-long-random-string   # required
-AI_BASE_URL=https://api.openai.com/v1             # your AI provider
-AI_API_KEY=sk-...                                  # your API key
-AI_MODEL=gpt-4o                                    # model name
+LLAMA_SERVER_PORT=8765
+MODELS_PATH=./data/models
 ```
 
-Everything else has working defaults for a single-user local setup.
+### Cloud
 
-### 4. Start
-
-```bash
-./cat start
-```
-
-Opens backend at `http://localhost:8716` and frontend at `http://localhost:8717`.
-
----
-
-## The `cat` CLI
-
-All commands run from the `asyncat-oss` root. Type `./cat` or `./cat /` to see all commands.
-
-**Core commands:**
-| Command | What it does |
-|---|---|
-| `./cat install` | Check deps, set up `.env` files, install packages, detect/install llama.cpp |
-| `./cat start` | Start backend + frontend (auto-detects pnpm/yarn/bun) |
-| `./cat stop` | Stop all running services |
-| `./cat status` | Show what's running |
-| `./cat update` | Pull latest, auto-detect package manager, reinstall deps |
-
-**Productivity:**
-| Command | What it does |
-|---|---|
-| `./cat watch <interval> <cmd>` | Auto-rerun a command every N seconds |
-| `./cat bench [count] <cmd>` | Time command execution (avg/min/max) |
-| `./cat history [search]` | Search command history (regex supported) |
-| `./cat alias [add\|list\|rm]` | Save command shortcuts |
-| `./cat snippets [add\|show\|rm]` | Save code blocks |
-| `./cat macros [record\|play\|list\|rm]` | Record & playback command sequences |
-| `./cat recent [n]` | Show last N commands |
-| `./cat context` | Show workspace state (git, env, deps) |
-| `./cat version` | Show versions (node, npm, pnpm, yarn, bun, python, llama.cpp, git) |
-
----
-
-## AI provider options
-
-Den works with any **OpenAI-compatible** endpoint. Set in `den/.env`:
-
-| Provider | `AI_BASE_URL` | `AI_MODEL` |
-|---|---|---|
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
-| Anthropic (Claude) | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` |
-| Azure OpenAI | `https://your-resource.openai.azure.com/openai/v1/` | your deployment name |
-| Ollama (local, free) | `http://localhost:11434/v1` | `llama3.1` |
-| Built-in llama.cpp | *(auto-managed — no URL needed)* | set `LOCAL_MODEL_PATH` |
-
-### Built-in local models
-
-Asyncat ships a built-in llama-server manager — no Ollama or LM Studio required.
-Drop a `.gguf` model file into `den/data/models/` and set in `den/.env`:
+Any OpenAI-compatible API:
 
 ```env
-LOCAL_MODEL_PATH=./data/models/your-model.gguf
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-...
+AI_MODEL=gpt-4o
 ```
 
-`./cat install` will detect or install llama.cpp automatically.
-
-> Tool calling (AI creating tasks, events, etc.) requires a model that supports function calling. Llama 3.1 8B+ and Qwen 2.5 work well.
-
----
-
-## Solo mode vs server mode
-
-Controlled by `SOLO_MODE` in `den/.env`:
-
-| | Solo (default) | Server mode |
+| Provider | URL | Model |
 |---|---|---|
-| Users | Auto-creates one admin account on first boot | Anyone can register |
-| Database | SQLite — no external DB needed | SQLite (or swap in Postgres) |
-| Setup | Zero config | Set `SOLO_MODE=false`, configure `SOLO_EMAIL`/`SOLO_PASSWORD` |
-| Best for | Personal use, local dev | Team self-hosting |
-
-**Team features work in server mode.** You run the server; teammates connect via their browser — just like self-hosted Gitea or Outline.
+| OpenAI | `https://api.openai.com/v1` | gpt-4o |
+| Anthropic | `https://api.anthropic.com/v1` | claude-sonnet-4-5 |
+| Ollama | `http://localhost:11434/v1` | llama3.1 |
+| Anything else | your endpoint | your model |
 
 ---
 
-## Self-hosting vs cloud
+## Tools the Agent Has
 
-| | Self-hosted | Asyncat Cloud |
-|---|---|---|
-| Hosting | Your machine or VPS | Managed by Asyncat |
-| AI model | Your choice (BYO key or local) | Hosted, no setup |
-| Team features | Yes | Yes |
-| Billing | None — all features unlocked | Subscription plans |
-| Storage | Local disk or Azure Blob | Managed |
-
----
-
-## Features
-
-- **AI Command Center** — streaming chat that reads and writes across your workspace. Build mode scaffolds entire projects from a one-sentence brief.
-- **Kanban** — drag-and-drop boards with dependencies, time tracking, and multiple views (list, gallery, Gantt, network graph)
-- **Collaborative Notes** — block-based rich editor with 20+ block types, real-time cursors, version history, chart blocks
-- **Calendar** — events, invites, color codes, project linking
-- **Habit Tracker** — XP gamification, streaks, team leaderboards
-- **Study Lab** — spaced-repetition flashcards (SM-2), active recall quizzes, mind maps
-- **File Storage** — workspace file browser backed by configurable storage drivers
-- **Packs** — AI prompt packs and custom workflows
-- **MCP Integration** — connect external AI clients (Claude, Cursor, Windsurf) directly to your workspace
+- `read_file` — read any file
+- `write_file` — write or overwrite
+- `edit_file` — patch specific lines
+- `delete_file` — rm -rf (with permission)
+- `list_dir` — ls anything
+- `grep_search` — regex search
+- `run_command` — execute shell
+- `run_python` — sandboxed Python
+- `run_node` — sandboxed JS
+- `web_search` — DuckDuckGo / SearXNG
+- `fetch_url` — read any webpage
+- `http_request` — full HTTP client
+- `sys_info` — CPU, RAM, disk, uptime
+- `ps_list` — running processes
+- `env_get` — read env vars (secrets masked)
+- `notify` — desktop notifications
+- `clipboard_read` / `clipboard_write`
+- `store_memory` / `recall_memory` — persistent storage
+- `mcp_call` — external MCP tools
 
 ---
 
-## Roadmap
+## Configuration
 
-- [ ] `docker-compose.yml` for one-command containerised setup
-- [ ] Graceful degradation when local model doesn't support tool calling
-- [ ] Storage adapter: local disk / MinIO / S3 (remove Azure dependency)
-- [ ] Windows support for `./cat` CLI
+### From the UI
+
+Settings → Server to change:
+- JWT_SECRET
+- AI_API_KEY
+- SOLO_PASSWORD
+
+### From the terminal
+
+```bash
+asyncat config get AI_MODEL
+asyncat config set AI_MODEL=gpt-4o-mini
+asyncat restart
+```
 
 ---
 
-## Contributing
+## No Cloud. No Teams. No Subscription.
 
-Issues and pull requests welcome. See `den/README.md` and `neko/README.md` for per-package details.
+This is the full stack. Running on your machine. Your data. Your model.
+
+> "Don't give it sudo access. Unless you want to. We aren't your parents."
 
 ---
 
 ## License
 
-TBD — will be published before the first public release.
+MIT
+
+---
+
+## Contributing
+
+Issues and PRs welcome. No safety department. No corporate oversight.
+
+Good luck. Have fun. Don't blame us if your quantized baby model deletes your homework.
+
+🐱
