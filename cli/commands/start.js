@@ -1,10 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 import { ROOT } from '../lib/env.js';
-import { err, info, col } from '../lib/colors.js';
+import { err, info, warn, col } from '../lib/colors.js';
 import { startProc } from '../lib/procs.js';
+import { run as runOnboard } from './onboard.js';
 
-export function run(args = []) {
+function isFirstRun() {
+  const home = process.env.ASYNCAT_HOME || path.join(process.env.HOME || process.env.USERPROFILE, '.asyncat');
+  return !fs.existsSync(path.join(home, '.first-run'));
+}
+
+export async function run(args = []) {
+  // Auto-trigger onboard on first run
+  if (isFirstRun()) {
+    warn('First run detected. Running onboard wizard...');
+    await runOnboard();
+  }
+
   if (!fs.existsSync(path.join(ROOT, 'den/.env'))) {
     err(`den/.env not found — run ${col('cyan', 'install')} first.`); return;
   }

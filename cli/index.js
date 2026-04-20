@@ -12,11 +12,13 @@ import * as _start    from './commands/start.js';
 import * as _stop     from './commands/stop.js';
 import * as _status   from './commands/status.js';
 import * as _install  from './commands/install.js';
+import * as _onboard  from './commands/onboard.js';
 import * as _doctor   from './commands/doctor.js';
 import * as _logs     from './commands/logs.js';
 import * as _models   from './commands/models.js';
 import * as _db       from './commands/db.js';
 import * as _config   from './commands/config.js';
+import * as _skills   from './commands/skills.js';
 import * as _update   from './commands/update.js';
 import * as _version  from './commands/version.js';
 import * as _open     from './commands/open.js';
@@ -138,16 +140,17 @@ async function startTui() {
 
     // Commands that need the full terminal
     const shellCommands = [
-      'install', 'setup', 'doctor', 'provider', 'sessions',
+      'install', 'setup', 'onboard', 'doctor', 'provider', 'sessions',
       'snippets', 'mcp', 'update', 'uninstall', 'logs',
       'status', 'ps', 'config', 'version', 'v', 'context',
-      'code', 'git',
+      'code', 'git', 'skills',
     ];
 
     if (shellCommands.includes(cmd)) {
       await runInShell(async () => {
         switch (cmd) {
           case 'install': case 'setup': await _install.run(); break;
+          case 'onboard': await _onboard.run(); break;
           case 'doctor':   _doctor.run();  break;
           case 'provider': await _provider.run(args); break;
           case 'sessions': await _sessions.run(args); break;
@@ -162,6 +165,7 @@ async function startTui() {
           case 'context':  _context.run(); break;
           case 'code':     _code.run(args); break;
           case 'git':      _git.run(args); break;
+          case 'skills':   _skills.run(args); break;
         }
       });
       if (['provider'].includes(cmd)) {
