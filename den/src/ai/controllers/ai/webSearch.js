@@ -1,7 +1,7 @@
-// webSearch.js — Web search via SearXNG (fallback to DuckDuckGo) + full page content extraction
+// webSearch.js — Web search via DuckDuckGo + full page content extraction
 //
 // Flow:
-//   1. Search SearXNG or DDG for URLs + snippets + images
+//   1. Search DuckDuckGo for URLs + snippets + images
 //   2. Fetch top N pages in parallel, extract readable body text (reader-mode style)
 //   3. Format with a prompt-injection safety warning before the content
 //
@@ -16,56 +16,37 @@ const MAX_CHARS_PAGE  = 4_000;   // chars of body text to extract per page (~100
 const PAGES_TO_FETCH  = 3;       // fetch full content from top N results
 const MAX_IMAGES     = 6;        // max image results to return
 
-// Default SearXNG instance (public, free)
-const DEFAULT_SEARXNG_INSTANCES = [
-  'https://searx.be',
-  'https://search.sapti.me',
-  'https://searx.tiekoetter.com'
-];
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Search the web and fetch full page content from top results.
- * Tries SearXNG first, falls back to DuckDuckGo if unavailable.
  *
  * @param {string} query
  * @param {number} maxResults  How many search results to surface (default 5)
  * @param {boolean} includeImages  Whether to fetch image results (default false)
- * @param {string|null} searxngUrl  Custom SearXNG instance URL (optional)
  * @returns {{ query, results: Array<{title,url,snippet,content,fetchError,source}>, images?: Array, engine: string }}
  */
-export async function searchWeb(query, maxResults = 5, includeImages = false, searxngUrl = null) {
+export async function searchWeb(query, maxResults = 5, includeImages = false) {
   let searchResults = [];
   let images = [];
   let engine = 'unknown';
 
   // Step 1 — Try SearXNG first
   try {
-    const searxData = await searchSearXNG(query, maxResults, includeImages, searxngUrl);
-    searchResults = searxData.results;
-    images = searxData.images || [];
-    engine = 'searxng';
-    console.log(`[webSearch] SearXNG returned ${searchResults.length} results, ${images.length} images`);
-  } catch (searxErr) {
-    console.warn('[webSearch] SearXNG failed, falling back to DuckDuckGo:', searxErr.message);
+    searchResults = await getDDGResults(query, maxResults);
+    engine = 'duckduckgo';
 
-    // Fallback to DuckDuckGo
-    try {
-      searchResults = await getDDGResults(query, maxResults);
-      engine = 'duckduckgo';
-
-      // Fetch DDG images separately if needed
-      if (includeImages) {
-        try {
-          images = await getDDGImages(query, MAX_IMAGES);
-        } catch (imgErr) {
-          console.warn('[webSearch] DDG image search failed:', imgErr.message);
-        }
+    if (includeImages) {
+      try {
+        images = await getDDGImages(query, MAX_IMAGES);
+      } catch (imgErr) {
+        console.warn('[webSearch] DDG image search failed:', imgErr.message);
       }
-    } catch (ddgErr) {
-      throw new Error(`All search engines failed. SearXNG: ${searxErr.message}, DDG: ${ddgErr.message}`);
     }
+
+    console.log(`[webSearch] DuckDuckGo returned ${searchResults.length} results, ${images.length} images`);
+  } catch (ddgErr) {
+    throw new Error(`Search failed: ${ddgErr.message}`);
   }
 
   if (searchResults.length === 0) {
@@ -145,93 +126,6 @@ export function formatSearchResults({ query, results }) {
   lines.push('════════════════════════════════════════════════════');
 
   return lines.join('\n');
-}
-
-// ── SearXNG search ────────────────────────────────────────────────────────────
-
-/**
- * Search using SearXNG instance.
- * Returns unified results from multiple search engines.
- */
-async function searchSearXNG(query, maxResults, includeImages, customUrl = null) {
-  // Pick instance: custom > env var > default public instances
-  const instanceUrl = customUrl
-    || process.env.SEARXNG_URL
-    || DEFAULT_SEARXNG_INSTANCES[0];
-
-  // Try primary instance, fallback to other public instances
-  const instancesToTry = customUrl
-    ? [customUrl]
-    : (process.env.SEARXNG_URL ? [process.env.SEARXNG_URL] : DEFAULT_SEARXNG_INSTANCES);
-
-  let lastError = null;
-
-  for (const baseUrl of instancesToTry) {
-    try {
-      const url = new URL('/search', baseUrl);
-      url.searchParams.set('q', query);
-      url.searchParams.set('format', 'json');
-      url.searchParams.set('pageno', '1');
-
-      // Request both general + images
-      if (includeImages) {
-        url.searchParams.set('categories', 'general,images');
-      }
-
-      const res = await fetch(url.toString(), {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(SEARCH_TIMEOUT),
-      });
-
-      if (!res.ok) throw new Error(`SearXNG HTTP ${res.status}`);
-
-      const data = await res.json();
-
-      // Parse general results
-      const results = (data.results || [])
-        .filter(r => r.category !== 'images') // filter out images from general results
-        .slice(0, maxResults)
-        .map(r => ({
-          title: cleanText(r.title || 'Untitled'),
-          url: r.url || '',
-          snippet: cleanText(r.content || ''),
-          source: 'SearXNG',
-        }));
-
-      // Parse image results
-      const images = includeImages
-        ? (data.results || [])
-            .filter(r => r.category === 'images')
-            .slice(0, MAX_IMAGES)
-            .map(r => ({
-              thumbnail: r.thumbnail_src || r.img_src || r.url,
-              image: r.img_src || r.url,
-              title: cleanText(r.title || 'Image'),
-              url: r.url || r.img_src,
-              source: cleanText(r.engine || 'Unknown'),
-              width: r.img_width || null,
-              height: r.img_height || null,
-            }))
-        : [];
-
-      if (results.length > 0 || images.length > 0) {
-        console.log(`[webSearch] SearXNG (${baseUrl}) success: ${results.length} results, ${images.length} images`);
-        return { results, images };
-      }
-
-      throw new Error('No results returned');
-
-    } catch (err) {
-      lastError = err;
-      console.warn(`[webSearch] SearXNG instance ${baseUrl} failed:`, err.message);
-      continue; // Try next instance
-    }
-  }
-
-  throw new Error(`All SearXNG instances failed. Last error: ${lastError?.message}`);
 }
 
 // ── DDG search ────────────────────────────────────────────────────────────────

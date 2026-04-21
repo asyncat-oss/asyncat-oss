@@ -204,21 +204,6 @@ export const chatApi = {
       ...(modelConfig ? { modelConfig } : {}),
     };
 
-    // Add searxngUrl from localStorage settings if web search is enabled
-    if (webSearch) {
-      try {
-        const searchSettings = localStorage.getItem('asyncat_web_search_settings');
-        if (searchSettings) {
-          const settings = JSON.parse(searchSettings);
-          if (settings.engine === 'searxng' && settings.useCustom && settings.customUrl) {
-            payload.searxngUrl = settings.customUrl;
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to load web search settings:', err);
-      }
-    }
-
     const token = await authService.getSession();
     const response = await fetch(`${API_BASE_URL}/ai/unified-stream`, {
       method: 'POST',

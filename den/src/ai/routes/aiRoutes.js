@@ -85,10 +85,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
       try {
         res.write(`data: ${JSON.stringify({ type: 'search_start', query: message.trim() })}\n\n`);
 
-        // Get user's search engine preference (if any)
-        const searxngUrl = req.body.searxngUrl || null;
-
-        const searchData = await searchWeb(message.trim(), 5, true, searxngUrl); // includeImages = true
+        const searchData = await searchWeb(message.trim(), 5, true); // includeImages = true
         searchContext = formatSearchResults(searchData);
         const pagesRead = searchData.results.filter(r => r.content).length;
         // Send lightweight source list to frontend (no full content — that stays server-side)

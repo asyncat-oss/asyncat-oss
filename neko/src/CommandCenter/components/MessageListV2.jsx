@@ -379,7 +379,7 @@ const MessageComponent = ({
                   </span>
                   {message.searchEvent.engine && (
                     <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
-                      {message.searchEvent.engine === 'searxng' ? 'SearXNG' : 'DuckDuckGo'}
+                      DuckDuckGo
                     </span>
                   )}
                 </div>
