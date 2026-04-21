@@ -50,7 +50,6 @@ import {
 	ProjectDetailsWidget,
 } from "./widgets";
 import { projectMembersApi, projectApi, projectViewsApi } from "./projectApi";
-import { useProjectPresence } from "../hooks/useProjectPresence";
 
 // Create a mapping object for easier lookup
 const profilePictureMapping = {
@@ -208,14 +207,7 @@ const ProjectOverview = React.memo(({
 				profile_picture: session.user.profile_picture,
 		  }
 		: null;
-	const {
-		viewers,
-	} = useProjectPresence(
-		selectedProject?.id,
-		currentTab,
-		isPresenceActive,
-		currentUserInfo
-	);
+	
 
 	const { getUserRole } = useUser();
 	const getCurrentUserRole = () => {
@@ -267,7 +259,7 @@ const ProjectOverview = React.memo(({
 		};
 		return labels[viewKey] || viewKey;
 	};
-	const onlineUserIds = new Set(viewers.map((viewer) => viewer.user_id));
+	const onlineUserIds = new Set();
 
 	useEffect(() => {
 		const loadProjectData = async () => {
@@ -520,36 +512,12 @@ const ProjectOverview = React.memo(({
 
 	const deadlines = [];
 
-	// Enhanced team member display with online status and current view
+	// Team member display (solo mode - no presence)
 	const renderTeamMember = (member, index) => {
 		const memberName =
 			member.name || member.email?.split("@")[0] || "Unknown";
 		const memberRole = member.role || "Member";
-		const isOnline = onlineUserIds.has(member.id);
 
-		// Find which view this user is currently on
-		const userViewer = viewers.find(
-			(viewer) => viewer.user_id === member.id
-		);
-		const currentUserView = userViewer?.current_tab;
-		const isOnSameView = currentUserView === currentTab;
-
-		// Get view label for display
-		const getViewLabel = (viewKey) => {
-			const labels = {
-				kanban: "Kanban",
-				list: "List",
-				timeline: "Timeline",
-				gantt: "Gantt",
-				network: "Network",
-				notes: "Notes",
-				habits: "Habits",
-				gallery: "Gallery",
-			};
-			return labels[viewKey] || viewKey;
-		};
-
-		// Get profile picture source (existing logic)
 		const getProfilePicture = () => {
 			const profilePicId = member.profile_picture;
 			if (!profilePicId) return null;
@@ -564,19 +532,11 @@ const ProjectOverview = React.memo(({
 		const profilePictureSrc = getProfilePicture();
 		const hasProfilePicture = profilePictureSrc !== null;
 
-		const viewInfo =
-			isOnline && currentUserView
-				? ` - on ${getViewLabel(currentUserView)}`
-				: "";
-		const sameViewInfo = isOnline && isOnSameView ? " (same view)" : "";
-
 		return (
 			<div
 				key={member.id || index}
 				className="relative group"
-				title={`${memberName} (${memberRole})${
-					isOnline ? viewInfo + sameViewInfo : ""
-				}`}
+				title={`${memberName} (${memberRole})`}
 			>
 				<div
 					className={`w-8 h-8 rounded-full border-2 border-white/70 dark:border-gray-800/50 midnight:border-slate-800/50
@@ -586,11 +546,6 @@ const ProjectOverview = React.memo(({
 				hasProfilePicture
 					? "bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700"
 					: "bg-gradient-to-br from-indigo-400 to-purple-500 text-white"
-			}
-          ${
-				isOnline
-					? "ring-2 ring-green-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800 midnight:ring-offset-gray-950"
-					: ""
 			}`}
 				>
 					{hasProfilePicture ? (
@@ -611,24 +566,6 @@ const ProjectOverview = React.memo(({
 					>
 						{memberName.charAt(0).toUpperCase()}
 					</div>
-				</div>
-
-				{/* Online indicator dot */}
-				{isOnline && (
-					<div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white dark:border-gray-800 midnight:border-gray-950 rounded-full animate-pulse bg-green-400" />
-				)}
-
-				{/* Enhanced tooltip on hover */}
-				<div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 dark:bg-gray-700 midnight:bg-gray-800 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20">
-					{memberName} ({memberRole})
-					{isOnline && (
-						<div className="text-xs text-green-300">
-							●{" "}
-							{isOnSameView
-								? `Here on ${getViewLabel(currentUserView)}`
-								: `On ${getViewLabel(currentUserView)}`}
-						</div>
-					)}
 				</div>
 			</div>
 		);

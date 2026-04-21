@@ -27,7 +27,6 @@ import {
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
 import Block from "./components/Block";
-import CollaborativeBlock from "./components/CollaborativeBlock";
 import SlashCommandMenu from "./components/SlashCommandMenu";
 import FloatingToolbar from "./components/FloatingToolbar";
 import EditorStats from "./components/EditorStats";
@@ -8445,24 +8444,10 @@ const ModernBlockEditor = forwardRef(
                           }
                         >
                           {collaborationTracking ? (
-                            <CollaborativeBlock
+                            <Block
                               ref={(el) => (blockRefs.current[block.id] = el)}
                               block={block}
                               collaborationTracking={collaborationTracking}
-                              collaborators={collaborators}
-                              blockLocks={blockLocks}
-                              onStartEditingBlock={
-                                collaborationTracking.startEditingBlock
-                              }
-                              onStopEditingBlock={
-                                collaborationTracking.stopEditingBlock
-                              }
-                              isBlockLocked={
-                                collaborationTracking.isBlockLocked
-                              }
-                              getBlockLockInfo={
-                                collaborationTracking.getBlockLockInfo
-                              }
                               onChange={handleBlockChange}
                               onKeyDown={handleKeyDown}
                               onFocus={handleBlockFocus}
@@ -8573,15 +8558,9 @@ const ModernBlockEditor = forwardRef(
                     className="group relative"
                   >
                     {collaborationTracking ? (
-                      <CollaborativeBlock
+                      <Block
                         block={draggedBlock}
                         collaborationTracking={collaborationTracking}
-                        collaborators={collaborators}
-                        blockLocks={blockLocks}
-                        onStartEditingBlock={() => {}}
-                        onStopEditingBlock={() => {}}
-                        isBlockLocked={() => false}
-                        getBlockLockInfo={() => null}
                         onChange={() => {}}
                         onKeyDown={() => {}}
                         onFocus={() => {}}

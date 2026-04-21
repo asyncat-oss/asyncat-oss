@@ -29,14 +29,11 @@ import { useUser } from "../../contexts/UserContext";
 import { notesApi } from "../noteApi";
 import ModernBlockEditor from "./ModernBlockEditor";
 import NoteBanner from "./components/NoteBanner";
-import CollaborationToolbar from "./components/CollaborationToolbar";
-import CollaborativeCursors from "./components/CollaborativeCursors";
 import KeyboardShortcutsDropdown from "./components/KeyboardShortcutsDropdown";
 // import VersionHistoryPanel from "./components/VersionHistory/VersionHistoryPanel";
 // import DiffViewer from "./components/VersionHistory/DiffViewer";
 import { blocksToHtml, htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
-import { useNotesPresence } from "../../hooks/useNotesPresence";
 // import { versionHistoryApi } from "../noteApi";
 import authService from "../../services/authService";
 
@@ -107,57 +104,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
     return 0;
   });
 
-  // User info for collaboration - Enhanced to fetch from users table
-  const [userProfileData, setUserProfileData] = useState(null);
-  const [userInfo, setUserInfo] = useState({
-    userId: user?.id || "anonymous",
-    user_id: user?.id || "anonymous",
-    name:
-      userName || user?.name || user?.user_metadata?.full_name || "Anonymous",
-    email: userEmail || user?.email || "",
-    profile_picture:
-      user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null,
-  });
-
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      if (!user?.id) return;
-
-      try {
-        const response = await authService.authenticatedFetch(
-          `${import.meta.env.VITE_USER_URL}/api/users/${user.id}`,
-          { method: "GET" }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          setUserProfileData(data.data);
-
-          // Update userInfo with fetched profile data
-          setUserInfo({
-            userId: user.id,
-            user_id: user.id,
-            name:
-              data.data?.name ||
-              userName ||
-              user?.name ||
-              user?.user_metadata?.full_name ||
-              "Anonymous",
-            email: data.data?.email || userEmail || user?.email || "",
-            profile_picture:
-              data.data?.profile_picture ||
-              user?.user_metadata?.avatar_url ||
-              user?.user_metadata?.picture ||
-              null,
-          });
-        }
-      } catch (error) {
-        console.warn("Failed to fetch user profile:", error);
-      }
-    };
-
-    fetchUserProfile();
-  }, [user?.id, userName, userEmail]);
   const noteId = note?.id || null;
   const hasBanner = Boolean(note?.metadata?.banner);
 
@@ -220,114 +166,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
   //   setDiffViewerData(null);
   // }, [noteId]);
 
-  // References for accessing current collaborators state
-  const collaboratorsRef = useRef([]);
 
-  // NEW: Handle remote content updates
-  const handleRemoteContentUpdate = useCallback(
-    async (changeData, fromUserId) => {
-      if (isApplyingRemoteChanges) return; // Prevent recursive updates
-
-      const now = Date.now();
-
-      // Debounce rapid updates
-      if (now - lastRemoteUpdateRef.current < 500) return;
-      lastRemoteUpdateRef.current = now;
-
-      try {
-        setIsApplyingRemoteChanges(true);
-
-        if (changeData.type === "database_update") {
-          // Handle direct database updates
-          const updatedNote = changeData.noteData;
-
-          if (updatedNote.metadata) {
-            const metadata =
-              typeof updatedNote.metadata === "string"
-                ? JSON.parse(updatedNote.metadata)
-                : updatedNote.metadata;
-
-            if (metadata.blocks && metadata.version === 2) {
-              setTitle(updatedNote.title || "Untitled Note");
-              setBlocks(metadata.blocks);
-
-              // Update editor baseline
-              if (editorRef.current?.resetDeltaBaseline) {
-                setTimeout(() => {
-                  editorRef.current.resetDeltaBaseline();
-                }, 100);
-              }
-            }
-          }
-        } else if (changeData.operations) {
-          // Handle delta changeset from another user
-          if (editorRef.current?.applyRemoteChanges) {
-            const result = editorRef.current.applyRemoteChanges(changeData);
-            if (result && result.merged.length > 0) {
-              // Get updated state from editor
-              const currentState = editorRef.current.getCurrentState?.();
-              if (currentState) {
-                setTitle(currentState.title);
-                setBlocks(currentState.blocks);
-              }
-            }
-          }
-        }
-
-        // Show notification about remote changes
-        if (fromUserId) {
-          // Use ref to access current collaborators to avoid dependency cycle
-          const currentCollaborators = collaboratorsRef.current;
-          const collaborator = currentCollaborators.find(
-            (c) => c.userId === fromUserId
-          );
-          const userName = collaborator?.name || "Another user";
-
-          setNotification({
-            message: `${userName} updated this note`,
-            type: "info",
-          });
-        }
-      } catch (error) {
-        console.error("Failed to apply remote content update:", error);
-        setNotification({
-          message: "Failed to sync changes from other users",
-          type: "error",
-        });
-      } finally {
-        setIsApplyingRemoteChanges(false);
-      }
-    },
-    [isApplyingRemoteChanges]
-  );
-
-  // Initialize collaborative presence with content update handler
-  const {
-    collaborators,
-    loading: collaborationLoading,
-    error: collaborationError,
-    isConnected: collaborationConnected,
-    blockLocks,
-    trackCursor,
-    trackSelection,
-    trackTyping,
-    trackActiveBlock,
-    startEditingBlock,
-    stopEditingBlock,
-    isBlockLocked,
-    getBlockLockInfo,
-    broadcastContentChange,
-  } = useNotesPresence(
-    noteId,
-    userInfo,
-    true,
-    handleRemoteContentUpdate // Pass the content update handler
-  );
-
-  // Update collaborators ref when collaborators change
-  useEffect(() => {
-    collaboratorsRef.current = collaborators;
-  }, [collaborators]);
 
   /*
   const handleShowDiff = useCallback((diffPayload) => {
@@ -399,14 +238,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
           setLastSaveError(null);
 
           if (content.changeset && !isApplyingRemoteChanges) {
-            // Broadcast changes to other users first (but don't wait)
-            if (broadcastContentChange) {
-              broadcastContentChange(content.changeset).catch((err) =>
-                console.warn("Failed to broadcast changes:", err)
-              );
-            }
-
-            // Then save to database
+            // Save to database
             const result = await applyDeltaChanges(note.id, content.changeset, {
               title: content.title,
               blocks: content.blocks,
@@ -473,13 +305,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
               ],
               baselineVersion: lastSyncVersion,
             };
-
-            // Broadcast the full update (but don't wait)
-            if (broadcastContentChange && !isApplyingRemoteChanges) {
-              broadcastContentChange(changeset).catch((err) =>
-                console.warn("Failed to broadcast changes:", err)
-              );
-            }
 
             const result = await applyDeltaChanges(note.id, changeset, {
               title: content.title,
@@ -1594,13 +1419,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Collaboration Toolbar */}
-          <CollaborationToolbar
-            collaborators={collaborators}
-            isConnected={collaborationConnected}
-            error={collaborationError}
-            loading={collaborationLoading}
-          />
 
           <div className="flex items-center gap-2">
             {/* Status Indicator */}
@@ -1819,19 +1637,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
                 onContentChange={handleContentChange}
                 onDeltaChange={handleDeltaChange}
                 placeholder="Type '/' for commands..."
-                noteId={note?.id} // Add noteId for persistent history storage
-                collaborationTracking={{
-                  trackCursor,
-                  trackSelection,
-                  trackTyping,
-                  trackActiveBlock,
-                  startEditingBlock,
-                  stopEditingBlock,
-                  isBlockLocked,
-                  getBlockLockInfo,
-                }}
-                collaborators={collaborators}
-                blockLocks={blockLocks}
+                noteId={note?.id}
               />
             </div>
             {/* Diff viewer temporarily disabled */}
@@ -1999,11 +1805,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
         }
       `}</style>
 
-      {/* Collaborative Cursors Overlay */}
-      <CollaborativeCursors
-        collaborators={collaborators}
-        blockRefs={editorRef.current?.blockRefs || { current: {} }}
-      />
+     
     </div>
   );
 };

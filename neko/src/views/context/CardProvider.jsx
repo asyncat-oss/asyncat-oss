@@ -1,11 +1,8 @@
-// context/CardProvider.jsx - Enhanced with real-time updates and edit locking
+// context/CardProvider.jsx - Card context provider
 import React, { useState, useCallback, useEffect } from "react";
 import CardContext from "./CardContext";
 import CardDetailModal from "../tasks/carddetail/CardDetailModal";
 import { useColumnContext } from "./ColumnContext";
-
-// Import the real-time hook (you'll need to create this file)
-import { useRealtimeCards } from "../useRealtimeCards";
 
 export const CardProvider = ({ children, session, selectedProject }) => {
 	const [selectedCard, setSelectedCard] = useState(null);
@@ -233,21 +230,14 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 		});
 	}, [setColumns]);
 
-	// Real-time card management - now using memoized callbacks
-	const {
-		isConnected,
-		editingSessions,
-		startEditingCard,
-		stopEditingCard,
-		canEditCard,
-		getEditingUser,
-		broadcastCardUpdate,
-	} = useRealtimeCards(
-		projectId,
-		currentUser,
-		handleRealtimeCardUpdate,
-		handleRealtimeColumnUpdate
-	);
+	// Real-time card management - solo mode (no realtime)
+	const isConnected = false;
+	const editingSessions = new Map();
+	const startEditingCard = async (cardId) => true;
+	const stopEditingCard = async (cardId) => {};
+	const canEditCard = (cardId) => true;
+	const getEditingUser = (cardId) => null;
+	const broadcastCardUpdate = async (cardId, updates) => {};
 
 	// Periodic cleanup to prevent ghost cards (every 30 seconds)
 	useEffect(() => {
