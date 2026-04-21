@@ -200,27 +200,6 @@ export const projectViewsApi = {
 };
 
 
-// Component Data Management APIs
-export const componentDataApi = {
-  // Get wipeable components for a project
-  async getWipeableComponents(projectId) {
-    return apiFetch(`${API_URL}/api/projects/${projectId}/components/wipeable`);
-  },
-
-  // Get component summary data
-  async getComponentSummary(projectId, componentName) {
-    return apiFetch(`${API_URL}/api/projects/${projectId}/components/${componentName}/summary`);
-  },
-
-  // Wipe component data
-  async wipeComponentData(projectId, componentName, confirmationData) {
-    return apiFetch(`${API_URL}/api/projects/${projectId}/components/${componentName}/wipe`, {
-      method: 'DELETE',
-      body: JSON.stringify(confirmationData),
-    });
-  }
-};
-
 // AI APIs
 export const aiApi = {
   // Create project with AI assistance
@@ -350,7 +329,6 @@ export default {
   project: projectApi,
   members: projectMembersApi,
   views: projectViewsApi,
-  components: componentDataApi,
   ai: aiApi,
   viewAccess: viewAccessUtils,
   utils: {

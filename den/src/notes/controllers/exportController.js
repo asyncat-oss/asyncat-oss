@@ -10,7 +10,7 @@ export async function exportDocx(req, res) {
     const { id } = req.params;
     const userId = req.user?.id;
     const blobServiceClient = req.blobServiceClient;
-    const supabase = req.db;
+    const db = req.db;
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -19,10 +19,10 @@ export async function exportDocx(req, res) {
     console.log(`[ExportController] Exporting note ${id} as DOCX for user ${userId}`);
 
     // Generate DOCX
-    const docxBuffer = await exportNoteAsDocx(id, userId, blobServiceClient, supabase);
+    const docxBuffer = await exportNoteAsDocx(id, userId, blobServiceClient, db);
 
     // Get note title for filename
-    const { data: note } = await supabase
+    const { data: note } = await db
       .from('notes')
       .select('title')
       .eq('id', id)
@@ -65,7 +65,7 @@ export async function exportPdf(req, res) {
     const { id } = req.params;
     const userId = req.user?.id;
     const blobServiceClient = req.blobServiceClient;
-    const supabase = req.db;
+    const db = req.db;
 
     console.log('[ExportController] Request params:', { id, userId: userId ? 'present' : 'missing' });
 
@@ -96,7 +96,7 @@ export async function exportPdf(req, res) {
       id,
       userId,
       blobServiceClient,
-      supabase,
+      db,
       { attachmentBaseUrl }
     );
 
@@ -108,7 +108,7 @@ export async function exportPdf(req, res) {
     }
 
     // Get note title for filename
-    const { data: note } = await supabase
+    const { data: note } = await db
       .from('notes')
       .select('title')
       .eq('id', id)

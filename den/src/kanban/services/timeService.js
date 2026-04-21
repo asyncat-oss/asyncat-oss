@@ -6,13 +6,13 @@ const isValidUUID = (uuid) => {
 };
 
 // Get active timer for a user
-const getActiveTimer = async (userId, supabase) => {
+const getActiveTimer = async (userId, db) => {
   try {
     if (!isValidUUID(userId)) {
       throw new Error("Invalid user ID format");
     }
 
-    const { data: timeEntry, error } = await supabase
+    const { data: timeEntry, error } = await db
       .schema('kanban')
       .from('TimeEntries')
       .select('*')
@@ -35,13 +35,13 @@ const getActiveTimer = async (userId, supabase) => {
 };
 
 // Start a timer
-const startTimer = async (cardId, userId, supabase) => {
+const startTimer = async (cardId, userId, db) => {
   try {
     if (!isValidUUID(cardId) || !isValidUUID(userId)) {
       throw new Error("Invalid card ID or user ID format");
     }
 
-    const { data: timeEntry, error } = await supabase
+    const { data: timeEntry, error } = await db
       .schema('kanban')
       .from('TimeEntries')
       .insert([{
@@ -64,14 +64,14 @@ const startTimer = async (cardId, userId, supabase) => {
 };
 
 // Stop a timer
-const stopTimer = async (cardId, userId, description = "", supabase) => {
+const stopTimer = async (cardId, userId, description = "", db) => {
   try {
     if (!isValidUUID(cardId) || !isValidUUID(userId)) {
       throw new Error("Invalid card ID or user ID format");
     }
 
     // Find the active timer
-    const { data: timeEntry, error: findError } = await supabase
+    const { data: timeEntry, error: findError } = await db
       .schema('kanban')
       .from('TimeEntries')
       .select('*')
@@ -95,7 +95,7 @@ const stopTimer = async (cardId, userId, description = "", supabase) => {
     const durationSeconds = Math.floor((endTime - startTime) / 1000);
 
     // Update the time entry
-    const { data: updatedTimeEntry, error: updateError } = await supabase
+    const { data: updatedTimeEntry, error: updateError } = await db
       .schema('kanban')
       .from('TimeEntries')
       .update({
@@ -110,7 +110,7 @@ const stopTimer = async (cardId, userId, description = "", supabase) => {
     if (updateError) throw updateError;
 
     // Update the total time spent on the card
-    const { data: card, error: cardFetchError } = await supabase
+    const { data: card, error: cardFetchError } = await db
       .schema('kanban')
       .from('Cards')
       .select('timeSpent')
@@ -121,7 +121,7 @@ const stopTimer = async (cardId, userId, description = "", supabase) => {
 
     const newTimeSpent = (card.timeSpent || 0) + durationSeconds;
 
-    const { error: cardUpdateError } = await supabase
+    const { error: cardUpdateError } = await db
       .schema('kanban')
       .from('Cards')
       .update({ 
@@ -140,13 +140,13 @@ const stopTimer = async (cardId, userId, description = "", supabase) => {
 };
 
 // Get all time entries for a card
-const getTimeEntries = async (cardId, supabase) => {
+const getTimeEntries = async (cardId, db) => {
   try {
     if (!isValidUUID(cardId)) {
       throw new Error("Invalid card ID format");
     }
 
-    const { data: timeEntries, error } = await supabase
+    const { data: timeEntries, error } = await db
       .schema('kanban')
       .from('TimeEntries')
       .select('*')
@@ -163,13 +163,13 @@ const getTimeEntries = async (cardId, supabase) => {
 };
 
 // Get time entry by ID
-const getTimeEntryById = async (id, supabase) => {
+const getTimeEntryById = async (id, db) => {
   try {
     if (!isValidUUID(id)) {
       throw new Error("Invalid time entry ID format");
     }
 
-    const { data: timeEntry, error } = await supabase
+    const { data: timeEntry, error } = await db
       .schema('kanban')
       .from('TimeEntries')
       .select('*')
@@ -191,14 +191,14 @@ const getTimeEntryById = async (id, supabase) => {
 };
 
 // Delete a time entry
-const deleteTimeEntry = async (id, supabase) => {
+const deleteTimeEntry = async (id, db) => {
   try {
     if (!isValidUUID(id)) {
       throw new Error("Invalid time entry ID format");
     }
 
     // Get the time entry to calculate duration
-    const timeEntry = await getTimeEntryById(id, supabase);
+    const timeEntry = await getTimeEntryById(id, db);
     
     if (!timeEntry) return false;
 
@@ -209,7 +209,7 @@ const deleteTimeEntry = async (id, supabase) => {
       );
 
       // Get current timeSpent from card
-      const { data: card, error: cardFetchError } = await supabase
+      const { data: card, error: cardFetchError } = await db
         .schema('kanban')
         .from('Cards')
         .select('timeSpent')
@@ -221,7 +221,7 @@ const deleteTimeEntry = async (id, supabase) => {
       const newTimeSpent = Math.max((card.timeSpent || 0) - duration, 0);
 
       // Update card timeSpent
-      const { error: cardUpdateError } = await supabase
+      const { error: cardUpdateError } = await db
         .schema('kanban')
         .from('Cards')
         .update({ 
@@ -234,7 +234,7 @@ const deleteTimeEntry = async (id, supabase) => {
     }
 
     // Delete the time entry
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
       .schema('kanban')
       .from('TimeEntries')
       .delete()
@@ -250,14 +250,14 @@ const deleteTimeEntry = async (id, supabase) => {
 };
 
 // Update a time entry
-const updateTimeEntry = async (id, updateData, supabase) => {
+const updateTimeEntry = async (id, updateData, db) => {
   try {
     if (!isValidUUID(id)) {
       throw new Error("Invalid time entry ID format");
     }
 
     // Get the existing time entry
-    const timeEntry = await getTimeEntryById(id, supabase);
+    const timeEntry = await getTimeEntryById(id, db);
     
     if (!timeEntry) return null;
 
@@ -272,7 +272,7 @@ const updateTimeEntry = async (id, updateData, supabase) => {
       const durationDiff = newDuration - oldDuration;
 
       // Get current timeSpent from card
-      const { data: card, error: cardFetchError } = await supabase
+      const { data: card, error: cardFetchError } = await db
         .schema('kanban')
         .from('Cards')
         .select('timeSpent')
@@ -284,7 +284,7 @@ const updateTimeEntry = async (id, updateData, supabase) => {
       const newTimeSpent = Math.max((card.timeSpent || 0) + durationDiff, 0);
 
       // Update card's total time
-      const { error: cardUpdateError } = await supabase
+      const { error: cardUpdateError } = await db
         .schema('kanban')
         .from('Cards')
         .update({ 
@@ -297,7 +297,7 @@ const updateTimeEntry = async (id, updateData, supabase) => {
     }
 
     // Update the time entry
-    const { data: updatedTimeEntry, error } = await supabase
+    const { data: updatedTimeEntry, error } = await db
       .schema('kanban')
       .from('TimeEntries')
       .update({

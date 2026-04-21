@@ -8,13 +8,13 @@ import * as noteService from './noteService.js';
  * @param {string} noteId - Note ID to export
  * @param {string} userId - User ID making the request
  * @param {object} blobServiceClient - Azure blob service client
- * @param {object} supabase - Supabase client
+ * @param {object} db - Supabase client
  * @returns {Promise<Buffer>} DOCX file buffer
  */
-async function exportNoteAsDocx(noteId, userId, blobServiceClient, supabase) {
+async function exportNoteAsDocx(noteId, userId, blobServiceClient, db) {
   try {
     // Fetch note with full content
-    const note = await noteService.getNoteById(noteId, userId, supabase);
+    const note = await noteService.getNoteById(noteId, userId, db);
 
     if (!note) {
       throw new Error('Note not found or access denied');
@@ -65,19 +65,19 @@ async function exportNoteAsDocx(noteId, userId, blobServiceClient, supabase) {
  * @param {string} noteId - Note ID to export
  * @param {string} userId - User ID making the request
  * @param {object} blobServiceClient - Azure blob service client
- * @param {object} supabase - Supabase client
+ * @param {object} db - Supabase client
  * @returns {Promise<Buffer>} PDF file buffer
  */
 async function exportNoteAsPdf(
   noteId,
   userId,
   blobServiceClient,
-  supabase,
+  db,
   options = {}
 ) {
   try {
     // Fetch note with full content
-    const note = await noteService.getNoteById(noteId, userId, supabase);
+    const note = await noteService.getNoteById(noteId, userId, db);
 
     if (!note) {
       throw new Error('Note not found or access denied');

@@ -19,10 +19,10 @@ class ChatService {
   }
 
   // Helper to get user's current team ID (workspace)
-  async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, authenticatedSupabase = null) {
+  async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, authenticatedDb = null) {
     try {
       // Use authenticated client if provided, otherwise fall back to base client
-      const supabaseClient = authenticatedSupabase || db;
+      const supabaseClient = authenticatedDb || db;
 
       await this.setUserContext(userId);
 
@@ -247,7 +247,7 @@ class ChatService {
       conversationId = null,
       workspaceId = null,
       fileAttachments = null,
-      authenticatedSupabase = null
+      authenticatedDb = null
     } = options;
 
     // Map visual mode to chat mode for database compatibility
@@ -255,7 +255,7 @@ class ChatService {
     const dbMode = mode === 'visual' ? 'chat' : mode;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedSupabase || db;
+    const supabaseClient = authenticatedDb || db;
 
     try {
       // Validation
@@ -265,7 +265,7 @@ class ChatService {
       }
 
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       let finalConversationId = conversationId;
 
@@ -356,13 +356,13 @@ class ChatService {
   }
 
   // Simplified get conversation using Supabase
-  async getConversation(userId, conversationId, workspaceId = null, authenticatedSupabase = null) {
+  async getConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     const cacheKey = `conversation_${conversationId}_${userId}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedSupabase || db;
+    const supabaseClient = authenticatedDb || db;
 
     try {
       await this.setUserContext(userId);
@@ -641,17 +641,17 @@ class ChatService {
       includeArchived = false,
       searchTerm = null,
       workspaceId = null,
-      authenticatedSupabase = null
+      authenticatedDb = null
     } = options;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedSupabase || db;
+    const supabaseClient = authenticatedDb || db;
 
     try {
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
-      // Create cache key without the authenticatedSupabase client to avoid circular reference
+      // Create cache key without the authenticatedDb client to avoid circular reference
       const cacheOptions = {
         mode,
         limit,
@@ -742,13 +742,13 @@ class ChatService {
   }
 
   // Update conversation with workspace validation
-  async updateConversation(userId, conversationId, updates, workspaceId = null, authenticatedSupabase = null) {
+  async updateConversation(userId, conversationId, updates, workspaceId = null, authenticatedDb = null) {
     try {
       // Use authenticated client if provided, otherwise fall back to base client
-      const supabaseClient = authenticatedSupabase || db;
+      const supabaseClient = authenticatedDb || db;
 
       // Get effective workspace ID
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       const allowedFields = ['title', 'is_pinned', 'is_archived', 'metadata'];
       const updateData = { updated_at: new Date().toISOString() };
@@ -790,10 +790,10 @@ class ChatService {
 
   // Delete conversation with workspace validation (also revokes public access)
   // Soft-delete (move to trash)
-  async deleteConversation(userId, conversationId, workspaceId = null, authenticatedSupabase = null) {
+  async deleteConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedSupabase || db;
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const supabaseClient = authenticatedDb || db;
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       // First verify the conversation exists and belongs to this user/workspace.
       // We do this as a separate SELECT so the soft-delete UPDATE doesn't have to
@@ -829,10 +829,10 @@ class ChatService {
   }
 
   // Restore from trash
-  async restoreConversation(userId, conversationId, workspaceId = null, authenticatedSupabase = null) {
+  async restoreConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedSupabase || db;
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const supabaseClient = authenticatedDb || db;
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       const { data, error } = await supabaseClient
         .schema('aichats')
@@ -857,10 +857,10 @@ class ChatService {
   }
 
   // Permanent delete (from trash only)
-  async permanentDeleteConversation(userId, conversationId, workspaceId = null, authenticatedSupabase = null) {
+  async permanentDeleteConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedSupabase || db;
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const supabaseClient = authenticatedDb || db;
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       const { data, error } = await supabaseClient
         .schema('aichats')
@@ -886,11 +886,11 @@ class ChatService {
   }
 
   // Get trashed conversations
-  async getTrashConversations(userId, workspaceId = null, authenticatedSupabase = null) {
+  async getTrashConversations(userId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedSupabase || db;
+      const supabaseClient = authenticatedDb || db;
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       const { data, error } = await supabaseClient
         .schema('aichats')
@@ -910,11 +910,11 @@ class ChatService {
   }
 
   // Empty trash (permanently delete all trashed conversations)
-  async emptyTrash(userId, workspaceId = null, authenticatedSupabase = null) {
+  async emptyTrash(userId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedSupabase || db;
+      const supabaseClient = authenticatedDb || db;
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       const { error } = await supabaseClient
         .schema('aichats')

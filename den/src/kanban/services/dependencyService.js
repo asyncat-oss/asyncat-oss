@@ -6,13 +6,13 @@ const isValidUUID = (uuid) => {
 };
 
 // Get dependencies for a card using the TaskDependencies table
-const getCardDependencies = async (cardId, supabase) => {
+const getCardDependencies = async (cardId, db) => {
   try {
     if (!isValidUUID(cardId)) {
       throw new Error("Invalid card ID format");
     }
 
-    const { data: dependencies, error } = await supabase
+    const { data: dependencies, error } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .select('*')
@@ -28,13 +28,13 @@ const getCardDependencies = async (cardId, supabase) => {
 };
 
 // Get cards that depend on this card
-const getDependentCards = async (cardId, supabase) => {
+const getDependentCards = async (cardId, db) => {
   try {
     if (!isValidUUID(cardId)) {
       throw new Error("Invalid card ID format");
     }
 
-    const { data: dependentCards, error } = await supabase
+    const { data: dependentCards, error } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .select('*')
@@ -50,7 +50,7 @@ const getDependentCards = async (cardId, supabase) => {
 };
 
 // Check for circular dependencies
-const hasCircularDependency = async (sourceCardId, targetCardId, supabase, visited = new Set()) => {
+const hasCircularDependency = async (sourceCardId, targetCardId, db, visited = new Set()) => {
   if (visited.has(sourceCardId)) {
     return true; // Circular dependency detected
   }
@@ -63,7 +63,7 @@ const hasCircularDependency = async (sourceCardId, targetCardId, supabase, visit
 
   try {
     // Find all cards that this source card depends on
-    const { data: dependencies, error } = await supabase
+    const { data: dependencies, error } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .select('targetCardId')
@@ -73,7 +73,7 @@ const hasCircularDependency = async (sourceCardId, targetCardId, supabase, visit
 
     if (dependencies && dependencies.length > 0) {
       for (const dep of dependencies) {
-        if (await hasCircularDependency(dep.targetCardId, targetCardId, supabase, new Set(visited))) {
+        if (await hasCircularDependency(dep.targetCardId, targetCardId, db, new Set(visited))) {
           return true;
         }
       }
@@ -87,14 +87,14 @@ const hasCircularDependency = async (sourceCardId, targetCardId, supabase, visit
 };
 
 // Create a new dependency relationship
-const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0, supabase) => {
+const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0, db) => {
   try {
     if (!isValidUUID(sourceCardId) || !isValidUUID(targetCardId)) {
       throw new Error("Invalid card ID format");
     }
 
     // Validate both cards exist
-    const { data: sourceCard, error: sourceError } = await supabase
+    const { data: sourceCard, error: sourceError } = await db
       .schema('kanban')
       .from('Cards')
       .select('id')
@@ -108,7 +108,7 @@ const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0
       throw sourceError;
     }
 
-    const { data: targetCard, error: targetError } = await supabase
+    const { data: targetCard, error: targetError } = await db
       .schema('kanban')
       .from('Cards')
       .select('id')
@@ -128,7 +128,7 @@ const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0
     }
 
     // Check if dependency already exists
-    const { data: existingDep, error: existingError } = await supabase
+    const { data: existingDep, error: existingError } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .select('*')
@@ -138,7 +138,7 @@ const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0
 
     if (existingDep && !existingError) {
       // Update the existing dependency with new type/lag
-      const { data: updatedDep, error: updateError } = await supabase
+      const { data: updatedDep, error: updateError } = await db
         .schema('kanban')
         .from('TaskDependencies')
         .update({ 
@@ -155,12 +155,12 @@ const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0
     }
 
     // Check for circular dependencies
-    if (await hasCircularDependency(targetCardId, sourceCardId, supabase)) {
+    if (await hasCircularDependency(targetCardId, sourceCardId, db)) {
       throw new Error("Cannot create circular dependency");
     }
 
     // Check if there's at least one completion column in the system
-    const { data: completionColumn, error: columnError } = await supabase
+    const { data: completionColumn, error: columnError } = await db
       .schema('kanban')
       .from('Columns')
       .select('id')
@@ -177,7 +177,7 @@ const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0
     }
 
     // Create the new dependency
-    const { data: dependency, error } = await supabase
+    const { data: dependency, error } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .insert([{
@@ -201,13 +201,13 @@ const createDependency = async (sourceCardId, targetCardId, type = "FS", lag = 0
 };
 
 // Remove a dependency
-const deleteDependency = async (sourceCardId, targetCardId, supabase) => {
+const deleteDependency = async (sourceCardId, targetCardId, db) => {
   try {
     if (!isValidUUID(sourceCardId) || !isValidUUID(targetCardId)) {
       throw new Error("Invalid card ID format");
     }
 
-    const { data: deletedDep, error } = await supabase
+    const { data: deletedDep, error } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .delete()
@@ -225,14 +225,14 @@ const deleteDependency = async (sourceCardId, targetCardId, supabase) => {
 };
 
 // Check if all dependencies are met for a card
-const areDependenciesMet = async (cardId, supabase) => {
+const areDependenciesMet = async (cardId, db) => {
   try {
     if (!isValidUUID(cardId)) {
       throw new Error("Invalid card ID format");
     }
 
     // Get all dependencies for this card
-    const { data: dependencies, error: depsError } = await supabase
+    const { data: dependencies, error: depsError } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .select('*')
@@ -251,7 +251,7 @@ const areDependenciesMet = async (cardId, supabase) => {
       return true; // No dependencies to meet
     }
     
-    const { data: targetCards, error: cardsError } = await supabase
+    const { data: targetCards, error: cardsError } = await db
       .schema('kanban')
       .from('Cards')
       .select('*')
@@ -261,7 +261,7 @@ const areDependenciesMet = async (cardId, supabase) => {
 
     // Get columns for target cards
     const columnIds = [...new Set((targetCards || []).map(card => card.columnId))];
-    const { data: columns, error: columnsError } = await supabase
+    const { data: columns, error: columnsError } = await db
       .schema('kanban')
       .from('Columns')
       .select('*')
@@ -344,14 +344,14 @@ const areDependenciesMet = async (cardId, supabase) => {
 };
 
 // Get cards that would be unblocked if a dependency card is completed
-const getUnlockedCardsByDependency = async (cardId, supabase) => {
+const getUnlockedCardsByDependency = async (cardId, db) => {
   try {
     if (!isValidUUID(cardId)) {
       throw new Error("Invalid card ID format");
     }
 
     // Get all cards that depend on this card
-    const { data: dependentCards, error: depsError } = await supabase
+    const { data: dependentCards, error: depsError } = await db
       .schema('kanban')
       .from('TaskDependencies')
       .select('*')
@@ -366,7 +366,7 @@ const getUnlockedCardsByDependency = async (cardId, supabase) => {
     // Get the source cards
     const sourceCardIds = dependentCards.map(dep => dep.sourceCardId);
     
-    const { data: sourceCards, error: cardsError } = await supabase
+    const { data: sourceCards, error: cardsError } = await db
       .schema('kanban')
       .from('Cards')
       .select('*')
@@ -376,7 +376,7 @@ const getUnlockedCardsByDependency = async (cardId, supabase) => {
 
     // Get columns for source cards
     const columnIds = [...new Set((sourceCards || []).map(card => card.columnId))];
-    const { data: columns, error: columnsError } = await supabase
+    const { data: columns, error: columnsError } = await db
       .schema('kanban')
       .from('Columns')
       .select('*')
@@ -409,7 +409,7 @@ const getUnlockedCardsByDependency = async (cardId, supabase) => {
       // For FS and FF types, this card's completion would unblock the dependent card
       if (dep.type === "FS" || dep.type === "FF") {
         // But we need to check if all other dependencies are also met
-        const allDependenciesMet = await areDependenciesMet(sourceCard.id, supabase);
+        const allDependenciesMet = await areDependenciesMet(sourceCard.id, db);
 
         // If this is the last dependency to be met, the card is unblocked
         if (allDependenciesMet) {

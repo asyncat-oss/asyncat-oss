@@ -596,7 +596,7 @@ router.post('/chats/save', addAuthenticatedClient, async (req, res) => {
       conversationId,
       workspaceId: req.workspaceId,
       fileAttachments,
-      authenticatedSupabase: req.db
+      authenticatedDb: req.db
     });
     
     res.json({ success: true, ...result });
@@ -630,7 +630,7 @@ router.post('/chats/autosave', addAuthenticatedClient, async (req, res) => {
       conversationId,
       workspaceId: req.workspaceId,
       fileAttachments,
-      authenticatedSupabase: req.db
+      authenticatedDb: req.db
     });
     
     res.json({ success: true, ...result });
@@ -657,7 +657,7 @@ router.get('/chats', addAuthenticatedClient, async (req, res) => {
       includeArchived: includeArchived === 'true',
       searchTerm: search || null,
       workspaceId: req.workspaceId,
-      authenticatedSupabase: req.db // Pass authenticated client
+      authenticatedDb: req.db // Pass authenticated client
     };
 
     const result = await chatService.getUserConversations(req.user.id, options);

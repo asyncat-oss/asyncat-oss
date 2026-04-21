@@ -9,7 +9,7 @@ const isValidUUID = (uuid) => {
 };
 
 // Helper function to add dependency counts to cards - simplified version
-const addDependencyCountsToCards = async (cards, supabase) => {
+const addDependencyCountsToCards = async (cards, db) => {
 	if (!cards || cards.length === 0) return;
 
 	const cardIds = cards.map((card) => card.id);
@@ -18,14 +18,14 @@ const addDependencyCountsToCards = async (cards, supabase) => {
 		// Get dependency counts
 		const [dependencyCounts, dependentCounts] = await Promise.all([
 			// Count dependencies (cards these cards depend on)
-			supabase
+			db
 				.schema("kanban")
 				.from("TaskDependencies")
 				.select("sourceCardId")
 				.in("sourceCardId", cardIds),
 
 			// Count dependent cards (cards that depend on these cards)
-			supabase
+			db
 				.schema("kanban")
 				.from("TaskDependencies")
 				.select("targetCardId")
@@ -75,11 +75,11 @@ const addDependencyCountsToCards = async (cards, supabase) => {
 	}
 };
 
-const getColumns = async (projectId, supabase) => {
+const getColumns = async (projectId, db) => {
 	try {
 		console.log(`Getting columns with projectId: ${projectId}`);
 
-		let query = supabase.schema("kanban").from("Columns").select("*");
+		let query = db.schema("kanban").from("Columns").select("*");
 
 		if (projectId && projectId !== "undefined" && projectId !== "null") {
 			if (!isValidUUID(projectId)) {
@@ -101,7 +101,7 @@ const getColumns = async (projectId, supabase) => {
 		// Fetch cards separately for each column
 		if (columns && columns.length > 0) {
 			for (const column of columns) {
-				const { data: cards, error: cardsError } = await supabase
+				const { data: cards, error: cardsError } = await db
 					.schema("kanban")
 					.from("Cards")
 					.select("*")
@@ -122,7 +122,7 @@ const getColumns = async (projectId, supabase) => {
 			// Add dependency counts to all cards
 			await addDependencyCountsToCards(
 				columns.flatMap((col) => col.Cards),
-				supabase
+				db
 			);
 		}
 
@@ -133,9 +133,9 @@ const getColumns = async (projectId, supabase) => {
 	}
 };
 
-const getAllColumnsWithCards = async (supabase) => {
+const getAllColumnsWithCards = async (db) => {
 	try {
-		const { data: columns, error } = await supabase
+		const { data: columns, error } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -146,7 +146,7 @@ const getAllColumnsWithCards = async (supabase) => {
 		// Fetch cards separately for each column
 		if (columns && columns.length > 0) {
 			for (const column of columns) {
-				const { data: cards, error: cardsError } = await supabase
+				const { data: cards, error: cardsError } = await db
 					.schema("kanban")
 					.from("Cards")
 					.select("*")
@@ -166,7 +166,7 @@ const getAllColumnsWithCards = async (supabase) => {
 
 			await addDependencyCountsToCards(
 				columns.flatMap((col) => col.Cards),
-				supabase
+				db
 			);
 		}
 
@@ -177,13 +177,13 @@ const getAllColumnsWithCards = async (supabase) => {
 	}
 };
 
-const getColumnById = async (id, supabase) => {
+const getColumnById = async (id, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid column ID format");
 		}
 
-		const { data: column, error } = await supabase
+		const { data: column, error } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -204,7 +204,7 @@ const getColumnById = async (id, supabase) => {
 	}
 };
 
-const createColumn = async (columnData, supabase) => {
+const createColumn = async (columnData, db) => {
 	try {
 		const {
 			projectId,
@@ -230,7 +230,7 @@ const createColumn = async (columnData, supabase) => {
 
 		// Simple order calculation - get all columns for project and add 1
 		console.log("📊 Calculating column order...");
-		const { data: existingColumns, error: countError } = await supabase
+		const { data: existingColumns, error: countError } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select('order')
@@ -261,7 +261,7 @@ const createColumn = async (columnData, supabase) => {
 
 		console.log("💾 Inserting column:", columnToCreate);
 
-		const { data: column, error } = await supabase
+		const { data: column, error } = await db
 			.schema("kanban")
 			.from("Columns")
 			.insert(columnToCreate)
@@ -285,7 +285,7 @@ const createColumn = async (columnData, supabase) => {
 	}
 };
 
-const updateColumn = async (id, projectId, columnData, supabase) => {
+const updateColumn = async (id, projectId, columnData, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid column ID format");
@@ -296,7 +296,7 @@ const updateColumn = async (id, projectId, columnData, supabase) => {
 		}
 
 		// First check if column exists
-		let query = supabase
+		let query = db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -321,7 +321,7 @@ const updateColumn = async (id, projectId, columnData, supabase) => {
 			updatedAt: new Date().toISOString(),
 		};
 
-		const { data: updatedColumn, error } = await supabase
+		const { data: updatedColumn, error } = await db
 			.schema("kanban")
 			.from("Columns")
 			.update(updateData)
@@ -343,7 +343,7 @@ const updateColumn = async (id, projectId, columnData, supabase) => {
 	}
 };
 
-const deleteColumn = async (id, projectId, supabase) => {
+const deleteColumn = async (id, projectId, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid column ID format");
@@ -353,7 +353,7 @@ const deleteColumn = async (id, projectId, supabase) => {
 			throw new Error("Invalid project ID format");
 		}
 
-		let query = supabase
+		let query = db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -374,7 +374,7 @@ const deleteColumn = async (id, projectId, supabase) => {
 		}
 
 		// Check if column has any cards
-		const { data: cards, error: cardsCheckError } = await supabase
+		const { data: cards, error: cardsCheckError } = await db
 			.schema("kanban")
 			.from("Cards")
 			.select("id")
@@ -391,7 +391,7 @@ const deleteColumn = async (id, projectId, supabase) => {
 		}
 
 		// Delete the column (only if it has no cards)
-		const { error: columnDeleteError } = await supabase
+		const { error: columnDeleteError } = await db
 			.schema("kanban")
 			.from("Columns")
 			.delete()
@@ -406,7 +406,7 @@ const deleteColumn = async (id, projectId, supabase) => {
 	}
 };
 
-const updateColumnOrder = async (projectId, orderData, supabase) => {
+const updateColumnOrder = async (projectId, orderData, db) => {
 	try {
 		console.log("Update column order called with:", {
 			projectId,
@@ -422,7 +422,7 @@ const updateColumnOrder = async (projectId, orderData, supabase) => {
 		}
 
 		// Important: First fetch ALL columns that exist for this project
-		let query = supabase
+		let query = db
 			.schema("kanban")
 			.from("Columns")
 			.select("id, order, title");
@@ -477,7 +477,7 @@ const updateColumnOrder = async (projectId, orderData, supabase) => {
 
 		// Update all columns in batch
 		for (const update of updates) {
-			const { error: updateError } = await supabase
+			const { error: updateError } = await db
 				.schema("kanban")
 				.from("Columns")
 				.update({ order: update.order, updatedAt: update.updatedAt })
@@ -495,7 +495,7 @@ const updateColumnOrder = async (projectId, orderData, supabase) => {
 		console.log("Column order updates completed successfully");
 
 		// Return the updated columns in the correct order
-		const { data: updatedColumns, error: finalFetchError } = await supabase
+		const { data: updatedColumns, error: finalFetchError } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -507,7 +507,7 @@ const updateColumnOrder = async (projectId, orderData, supabase) => {
 		// Fetch cards for each column separately
 		if (updatedColumns && updatedColumns.length > 0) {
 			for (const column of updatedColumns) {
-				const { data: cards, error: cardsError } = await supabase
+				const { data: cards, error: cardsError } = await db
 					.schema("kanban")
 					.from("Cards")
 					.select("*")
@@ -536,13 +536,13 @@ const updateColumnOrder = async (projectId, orderData, supabase) => {
 	}
 };
 
-const getUserColumns = async (userId, supabase) => {
+const getUserColumns = async (userId, db) => {
 	try {
 		if (!isValidUUID(userId)) {
 			throw new Error("Invalid user ID format");
 		}
 
-		const { data: columns, error } = await supabase
+		const { data: columns, error } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -554,7 +554,7 @@ const getUserColumns = async (userId, supabase) => {
 		// Fetch cards for each column separately, filtering by user
 		if (columns && columns.length > 0) {
 			for (const column of columns) {
-				const { data: cards, error: cardsError } = await supabase
+				const { data: cards, error: cardsError } = await db
 					.schema("kanban")
 					.from("Cards")
 					.select("*")
@@ -581,10 +581,10 @@ const getUserColumns = async (userId, supabase) => {
 	}
 };
 
-const diagnosticColumnCheck = async (supabase) => {
+const diagnosticColumnCheck = async (db) => {
 	try {
 		// Attempt to find columns with different projectId possibilities
-		const { data: allColumns, error } = await supabase
+		const { data: allColumns, error } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select("id, title, projectId, order, createdBy");

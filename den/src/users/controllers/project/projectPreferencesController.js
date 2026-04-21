@@ -12,8 +12,8 @@ import {
 } from './projectPermissionHelpers.js';
 
 // Helper: get project and verify ownership
-async function getOwnedProject(supabase, projectId, userId) {
-  const { data: project, error } = await supabase
+async function getOwnedProject(db, projectId, userId) {
+  const { data: project, error } = await db
     .from('projects')
     .select('id, owner_id, enabled_views')
     .eq('id', projectId)
@@ -31,9 +31,9 @@ async function updateUserViewPreferences(req, res) {
   try {
     const { id: projectId } = req.params;
     const { view_preferences } = req.body;
-    const { user, supabase } = await verifyUser(req);
+    const { user, db } = await verifyUser(req);
 
-    const project = await getOwnedProject(supabase, projectId, user.id);
+    const project = await getOwnedProject(db, projectId, user.id);
     if (!project) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
@@ -66,9 +66,9 @@ async function updateUserViewPreferences(req, res) {
 async function resetUserViewPreferences(req, res) {
   try {
     const { id: projectId } = req.params;
-    const { user, supabase } = await verifyUser(req);
+    const { user, db } = await verifyUser(req);
 
-    const project = await getOwnedProject(supabase, projectId, user.id);
+    const project = await getOwnedProject(db, projectId, user.id);
     if (!project) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
@@ -96,13 +96,13 @@ async function toggleProjectStarred(req, res) {
   try {
     const { id: projectId } = req.params;
     const { starred } = req.body;
-    const { user, supabase } = await verifyUser(req);
+    const { user, db } = await verifyUser(req);
 
     if (typeof starred !== 'boolean') {
       return res.status(400).json({ success: false, error: 'Starred must be a boolean value' });
     }
 
-    const project = await getOwnedProject(supabase, projectId, user.id);
+    const project = await getOwnedProject(db, projectId, user.id);
     if (!project) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
@@ -124,10 +124,10 @@ async function toggleProjectStarred(req, res) {
 // Get user's starred projects
 async function getUserStarredProjects(req, res) {
   try {
-    const { user, supabase } = await verifyUser(req);
+    const { user, db } = await verifyUser(req);
 
     // In single-user mode, return all owned projects (no starred concept without project_members)
-    const { data: projects, error } = await supabase
+    const { data: projects, error } = await db
       .from('projects')
       .select('id, name, description, emoji, created_at, updated_at, due_date, enabled_views, team_id')
       .eq('owner_id', user.id)
@@ -157,9 +157,9 @@ async function getUserStarredProjects(req, res) {
 async function getUserViewPermissions(req, res) {
   try {
     const { id: projectId } = req.params;
-    const { user, supabase } = await verifyUser(req);
+    const { user, db } = await verifyUser(req);
 
-    const project = await getOwnedProject(supabase, projectId, user.id);
+    const project = await getOwnedProject(db, projectId, user.id);
     if (!project) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }

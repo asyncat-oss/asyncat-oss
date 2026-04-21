@@ -51,8 +51,6 @@ import owlDP from "../../assets/dp/OWL.webp";
 import penguinDP from "../../assets/dp/PENGUIN.webp";
 import wolfDP from "../../assets/dp/WOLF.webp";
 
-import ComponentDataSection from "./ComponentDataSection";
-
 // Mapping for profile picture lookup
 const profilePictureMapping = {
 	CAT: catDP,
@@ -656,13 +654,7 @@ const ComponentsSection = ({
 						</div>
 					</div>
 
-					{/* Data Management Component */}
-					<ComponentDataSection
-						project={project}
-						permissions={permissions}
-						onSuccess={onSuccess}
-						onError={onError}
-					/>
+					
 				</div>
 			)}
 		</div>

@@ -19,12 +19,6 @@ import {
   toggleProjectStarred,
 } from '../controllers/project/projectPreferencesController.js';
 
-import {
-  getComponentDataSummary,
-  wipeComponentData,
-  getWipeableComponents,
-} from '../controllers/project/projectComponentController.js';
-
 const router = express.Router();
 
 // ─── Project CRUD ─────────────────────────────────────────────────────────────
@@ -82,12 +76,6 @@ router.put('/:id/members', auth, memberNotAvailable);
 router.get('/members/batch', auth, memberNotAvailable);
 router.get('/invites', auth, memberNotAvailable);
 router.post('/:id/respond', auth, memberNotAvailable);
-
-// ─── Component data management ────────────────────────────────────────────────
-
-router.get('/:id/components/wipeable', auth, getWipeableComponents);
-router.get('/:id/components/:componentName/summary', auth, getComponentDataSummary);
-router.delete('/:id/components/:componentName/wipe', auth, wipeComponentData);
 
 // ─── Project folders ──────────────────────────────────────────────────────────
 

@@ -5,45 +5,45 @@ import { v4 as uuidv4 } from 'uuid';
  * Execute a named tool with given args
  * @param {string} toolName
  * @param {object} args
- * @param {{ userId: string, supabase: object, workspaceId: string }} context
+ * @param {{ userId: string, db: object, workspaceId: string }} context
  */
 export async function executeTool(toolName, args, context) {
-  const { userId, supabase, workspaceId } = context;
+  const { userId, db, workspaceId } = context;
 
   try {
     switch (toolName) {
       case 'create_task':
-        return await createTask(args, userId, supabase);
+        return await createTask(args, userId, db);
       case 'list_tasks':
-        return await listTasks(args, supabase);
+        return await listTasks(args, db);
       case 'update_task':
-        return await updateTask(args, userId, supabase);
+        return await updateTask(args, userId, db);
       case 'create_event':
-        return await createEvent(args, userId, supabase);
+        return await createEvent(args, userId, db);
       case 'list_events':
-        return await listEvents(args, userId, supabase);
+        return await listEvents(args, userId, db);
       case 'create_note':
-        return await createNote(args, userId, supabase);
+        return await createNote(args, userId, db);
       case 'search_tasks':
-        return await searchTasks(args, supabase);
+        return await searchTasks(args, db);
       case 'complete_task':
-        return await completeTask(args, userId, supabase);
+        return await completeTask(args, userId, db);
       case 'delete_task':
-        return await deleteTask(args, supabase);
+        return await deleteTask(args, db);
       case 'list_projects':
-        return await listProjects(userId, supabase, workspaceId);
+        return await listProjects(userId, db, workspaceId);
       case 'delete_event':
-        return await deleteEvent(args, supabase);
+        return await deleteEvent(args, db);
       case 'delete_note':
-        return await deleteNote(args, supabase);
+        return await deleteNote(args, db);
       case 'update_note':
-        return await updateNote(args, userId, supabase);
+        return await updateNote(args, userId, db);
       case 'update_event':
-        return await updateEvent(args, userId, supabase);
+        return await updateEvent(args, userId, db);
       case 'list_notes':
-        return await listNotes(args, supabase);
+        return await listNotes(args, db);
       case 'search_notes':
-        return await searchNotes(args, supabase);
+        return await searchNotes(args, db);
       default:
         return { success: false, error: `Unknown tool: ${toolName}` };
     }
@@ -55,11 +55,11 @@ export async function executeTool(toolName, args, context) {
 
 // ─── create_task ─────────────────────────────────────────────────────────────
 
-async function createTask(args, userId, supabase) {
+async function createTask(args, userId, db) {
   const { project_id, title, description, priority, due_date, column_name } = args;
 
   // Get columns for this project ordered by position
-  const { data: columns, error: colError } = await supabase
+  const { data: columns, error: colError } = await db
     .schema('kanban')
     .from('Columns')
     .select('id, title, order')
@@ -84,7 +84,7 @@ async function createTask(args, userId, supabase) {
   }
 
   // Get current max order in that column so we append to the end
-  const { data: existingCards } = await supabase
+  const { data: existingCards } = await db
     .schema('kanban')
     .from('Cards')
     .select('order')
@@ -106,7 +106,7 @@ async function createTask(args, userId, supabase) {
     updatedBy: userId
   };
 
-  const { data: card, error } = await supabase
+  const { data: card, error } = await db
     .schema('kanban')
     .from('Cards')
     .insert(cardData)
@@ -130,11 +130,11 @@ async function createTask(args, userId, supabase) {
 
 // ─── list_tasks ───────────────────────────────────────────────────────────────
 
-async function listTasks(args, supabase) {
+async function listTasks(args, db) {
   const { project_id, column_name, limit = 20 } = args;
 
   // Get all columns for this project
-  const { data: columns, error: colError } = await supabase
+  const { data: columns, error: colError } = await db
     .schema('kanban')
     .from('Columns')
     .select('id, title')
@@ -152,7 +152,7 @@ async function listTasks(args, supabase) {
     if (matched.length > 0) targetColumnIds = matched.map(c => c.id);
   }
 
-  const { data: cards, error } = await supabase
+  const { data: cards, error } = await db
     .schema('kanban')
     .from('Cards')
     .select('id, title, description, priority, dueDate, columnId')
@@ -179,7 +179,7 @@ async function listTasks(args, supabase) {
 
 // ─── update_task ──────────────────────────────────────────────────────────────
 
-async function updateTask(args, userId, supabase) {
+async function updateTask(args, userId, db) {
   const { task_id, title, description, priority, due_date, column_name, project_id } = args;
 
   const updates = {
@@ -194,7 +194,7 @@ async function updateTask(args, userId, supabase) {
 
   // Move to different column if requested
   if (column_name && project_id) {
-    const { data: columns } = await supabase
+    const { data: columns } = await db
       .schema('kanban')
       .from('Columns')
       .select('id, title')
@@ -207,7 +207,7 @@ async function updateTask(args, userId, supabase) {
     }
   }
 
-  const { data: card, error } = await supabase
+  const { data: card, error } = await db
     .schema('kanban')
     .from('Cards')
     .update(updates)
@@ -226,7 +226,7 @@ async function updateTask(args, userId, supabase) {
 
 // ─── create_event ─────────────────────────────────────────────────────────────
 
-async function createEvent(args, userId, supabase) {
+async function createEvent(args, userId, db) {
   const { title, start_time, end_time, description, project_id, is_all_day, color } = args;
 
   const eventData = {
@@ -246,7 +246,7 @@ async function createEvent(args, userId, supabase) {
     updatedAt: new Date().toISOString()
   };
 
-  const { data: event, error } = await supabase
+  const { data: event, error } = await db
     .from('Events')
     .insert(eventData)
     .select('id, title, startTime, endTime')
@@ -268,13 +268,13 @@ async function createEvent(args, userId, supabase) {
 
 // ─── list_events ──────────────────────────────────────────────────────────────
 
-async function listEvents(args, userId, supabase) {
+async function listEvents(args, userId, db) {
   const { from_date, to_date, project_id } = args;
 
   const fromDate = from_date ? new Date(from_date) : new Date();
   const toDate = to_date ? new Date(to_date) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
-  let query = supabase
+  let query = db
     .from('Events')
     .select('id, title, startTime, endTime, isAllDay, projectId')
     .gte('startTime', fromDate.toISOString())
@@ -303,7 +303,7 @@ async function listEvents(args, userId, supabase) {
 
 // ─── create_note ──────────────────────────────────────────────────────────────
 
-async function createNote(args, userId, supabase) {
+async function createNote(args, userId, db) {
   const { project_id, title, content } = args;
 
   const noteData = {
@@ -316,7 +316,7 @@ async function createNote(args, userId, supabase) {
     metadata: {}
   };
 
-  const { data: note, error } = await supabase
+  const { data: note, error } = await db
     .from('notes')
     .insert(noteData)
     .select('id, title')
@@ -333,11 +333,11 @@ async function createNote(args, userId, supabase) {
 
 // ─── search_tasks ─────────────────────────────────────────────────────────────
 
-async function searchTasks(args, supabase) {
+async function searchTasks(args, db) {
   const { project_id, query, limit = 10 } = args;
 
   // Get all columns for this project
-  const { data: columns } = await supabase
+  const { data: columns } = await db
     .schema('kanban')
     .from('Columns')
     .select('id, title')
@@ -351,7 +351,7 @@ async function searchTasks(args, supabase) {
   const columnMap = Object.fromEntries(columns.map(c => [c.id, c.title]));
 
   // Full-text search via ilike on title and description
-  const { data: cards, error } = await supabase
+  const { data: cards, error } = await db
     .schema('kanban')
     .from('Cards')
     .select('id, title, description, priority, dueDate, columnId')
@@ -385,11 +385,11 @@ async function searchTasks(args, supabase) {
 
 // ─── complete_task ────────────────────────────────────────────────────────────
 
-async function completeTask(args, userId, supabase) {
+async function completeTask(args, userId, db) {
   const { task_id, project_id } = args;
 
   // Find the completion/done column for this project
-  const { data: columns } = await supabase
+  const { data: columns } = await db
     .schema('kanban')
     .from('Columns')
     .select('id, title, isCompletionColumn')
@@ -405,7 +405,7 @@ async function completeTask(args, userId, supabase) {
     columns.find(c => /done|complete|finished|closed/i.test(c.title)) ||
     columns[columns.length - 1]; // last column as fallback
 
-  const { data: card, error } = await supabase
+  const { data: card, error } = await db
     .schema('kanban')
     .from('Cards')
     .update({
@@ -429,18 +429,18 @@ async function completeTask(args, userId, supabase) {
 
 // ─── delete_task ──────────────────────────────────────────────────────────────
 
-async function deleteTask(args, supabase) {
+async function deleteTask(args, db) {
   const { task_id } = args;
 
   // Fetch title first for confirmation message
-  const { data: card } = await supabase
+  const { data: card } = await db
     .schema('kanban')
     .from('Cards')
     .select('id, title')
     .eq('id', task_id)
     .single();
 
-  const { error } = await supabase
+  const { error } = await db
     .schema('kanban')
     .from('Cards')
     .delete()
@@ -456,8 +456,8 @@ async function deleteTask(args, supabase) {
 
 // ─── list_projects ────────────────────────────────────────────────────────────
 
-async function listProjects(userId, supabase, workspaceId) {
-  let query = supabase
+async function listProjects(userId, db, workspaceId) {
+  let query = db
     .from('projects')
     .select('id, name, emoji, description, due_date')
     .eq('is_archived', false);
@@ -482,16 +482,16 @@ async function listProjects(userId, supabase, workspaceId) {
 
 // ─── delete_event ─────────────────────────────────────────────────────────────
 
-async function deleteEvent(args, supabase) {
+async function deleteEvent(args, db) {
   const { event_id } = args;
 
-  const { data: event } = await supabase
+  const { data: event } = await db
     .from('Events')
     .select('id, title')
     .eq('id', event_id)
     .single();
 
-  const { error } = await supabase
+  const { error } = await db
     .from('Events')
     .delete()
     .eq('id', event_id);
@@ -506,16 +506,16 @@ async function deleteEvent(args, supabase) {
 
 // ─── delete_note ──────────────────────────────────────────────────────────────
 
-async function deleteNote(args, supabase) {
+async function deleteNote(args, db) {
   const { note_id } = args;
 
-  const { data: note } = await supabase
+  const { data: note } = await db
     .from('notes')
     .select('id, title')
     .eq('id', note_id)
     .single();
 
-  const { error } = await supabase
+  const { error } = await db
     .from('notes')
     .delete()
     .eq('id', note_id);
@@ -530,14 +530,14 @@ async function deleteNote(args, supabase) {
 
 // ─── update_note ──────────────────────────────────────────────────────────────
 
-async function updateNote(args, userId, supabase) {
+async function updateNote(args, userId, db) {
   const { note_id, title, content } = args;
 
   const updates = { updated_by: userId };
   if (title !== undefined) updates.title = title;
   if (content !== undefined) updates.content = content;
 
-  const { data: note, error } = await supabase
+  const { data: note, error } = await db
     .from('notes')
     .update(updates)
     .eq('id', note_id)
@@ -555,11 +555,11 @@ async function updateNote(args, userId, supabase) {
 
 // ─── update_event ─────────────────────────────────────────────────────────────
 
-async function updateEvent(args, userId, supabase) {
+async function updateEvent(args, userId, db) {
   const { event_id, title, start_time, end_time, description, color, is_all_day } = args;
 
   // Fetch current event for confirmation message
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('Events')
     .select('id, title')
     .eq('id', event_id)
@@ -576,7 +576,7 @@ async function updateEvent(args, userId, supabase) {
   if (start_time !== undefined) updates.startTime = new Date(start_time).toISOString();
   if (end_time !== undefined) updates.endTime = new Date(end_time).toISOString();
 
-  const { data: event, error } = await supabase
+  const { data: event, error } = await db
     .from('Events')
     .update(updates)
     .eq('id', event_id)
@@ -599,10 +599,10 @@ async function updateEvent(args, userId, supabase) {
 
 // ─── list_notes ───────────────────────────────────────────────────────────────
 
-async function listNotes(args, supabase) {
+async function listNotes(args, db) {
   const { project_id, limit = 10 } = args;
 
-  const { data: notes, error } = await supabase
+  const { data: notes, error } = await db
     .from('notes')
     .select('id, title, content, created_at')
     .eq('projectid', project_id)
@@ -626,10 +626,10 @@ async function listNotes(args, supabase) {
 
 // ─── search_notes ─────────────────────────────────────────────────────────────
 
-async function searchNotes(args, supabase) {
+async function searchNotes(args, db) {
   const { project_id, query, limit = 10 } = args;
 
-  const { data: notes, error } = await supabase
+  const { data: notes, error } = await db
     .from('notes')
     .select('id, title, content, created_at')
     .eq('projectid', project_id)

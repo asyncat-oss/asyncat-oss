@@ -14,14 +14,14 @@ export const deleteGroupName = async () => disabledResponse();
 /*
 
 // Get all group names for a note
-export const getGroupNames = async (noteId, userId, supabase) => {
+export const getGroupNames = async (noteId, userId, db) => {
   try {
     console.log("VersionGroupService - getGroupNames:", { noteId, userId });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("note_version_groups")
       .select("group_key, name, created_at, updated_at")
       .eq("note_id", noteId)
@@ -51,7 +51,7 @@ export const updateGroupName = async (
   groupKey,
   name,
   userId,
-  supabase
+  db
 ) => {
   try {
     console.log("VersionGroupService - updateGroupName:", {
@@ -62,7 +62,7 @@ export const updateGroupName = async (
     });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
     // Validate group key format (should be like "2025-9-group-0")
     if (!groupKey || typeof groupKey !== "string") {
@@ -75,7 +75,7 @@ export const updateGroupName = async (
     }
 
     // Upsert the group name
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("note_version_groups")
       .upsert(
         {
@@ -108,7 +108,7 @@ export const updateGroupName = async (
 };
 
 // Delete a group name
-export const deleteGroupName = async (noteId, groupKey, userId, supabase) => {
+export const deleteGroupName = async (noteId, groupKey, userId, db) => {
   try {
     console.log("VersionGroupService - deleteGroupName:", {
       noteId,
@@ -117,9 +117,9 @@ export const deleteGroupName = async (noteId, groupKey, userId, supabase) => {
     });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
-    const { error } = await supabase
+    const { error } = await db
       .from("note_version_groups")
       .delete()
       .eq("note_id", noteId)

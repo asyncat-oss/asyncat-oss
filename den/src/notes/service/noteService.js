@@ -14,8 +14,8 @@ const isValidUUID = (uuid) => {
  */
 const checkProjectAccess = async (projectId, userId, _role = null, db = null) => {
   try {
-    const supabaseClient = db || getSupabase();
-    const { data: project, error } = await supabaseClient
+    const dbClient = db || getSupabase();
+    const { data: project, error } = await dbClient
       .from("projects")
       .select("owner_id")
       .eq("id", projectId)
@@ -32,8 +32,8 @@ const checkProjectAccess = async (projectId, userId, _role = null, db = null) =>
 // Helper to get user's project IDs (projects owned by the user)
 const getUserProjectIds = async (userId, db = null) => {
   try {
-    const supabaseClient = db || getSupabase();
-    const { data, error } = await supabaseClient
+    const dbClient = db || getSupabase();
+    const { data, error } = await dbClient
       .from("projects")
       .select("id")
       .eq("owner_id", userId);
@@ -53,8 +53,8 @@ const getUserProjectIds = async (userId, db = null) => {
 const getUserById = async (userId, db = null) => {
   if (!userId) return null;
   try {
-    const supabaseClient = db || getSupabase();
-    const { data } = await supabaseClient
+    const dbClient = db || getSupabase();
+    const { data } = await dbClient
       .from("users")
       .select("id, name, email, profile_picture")
       .eq("id", userId)
@@ -79,8 +79,8 @@ const attachCreators = async (notes, db) => {
   const creatorIds = [...new Set(notes.map((n) => n.createdby).filter(Boolean))];
   if (creatorIds.length === 0) return notes.map((n) => ({ ...n, users: null }));
 
-  const supabaseClient = db || getSupabase();
-  const { data: users } = await supabaseClient
+  const dbClient = db || getSupabase();
+  const { data: users } = await dbClient
     .from("users")
     .select("id, name, email, profile_picture")
     .in("id", creatorIds);
@@ -97,17 +97,17 @@ const getNotes = async (
   db = null
 ) => {
   try {
-    const supabaseClient = db || getSupabase();
+    const dbClient = db || getSupabase();
 
     // Build select columns (no join syntax — compat layer doesn't support it)
     const cols = excludeContent
       ? "id, title, projectid, createdby, createdat, updatedat, isstarred, isarchived, metadata"
       : "*";
 
-    let query = supabaseClient.from("notes").select(cols);
+    let query = dbClient.from("notes").select(cols);
 
     if (projectId === "all") {
-      const userProjectIds = await getUserProjectIds(userId, supabaseClient);
+      const userProjectIds = await getUserProjectIds(userId, dbClient);
       if (userProjectIds.length === 0) {
         query = query.eq("createdby", userId);
       } else {
@@ -122,7 +122,7 @@ const getNotes = async (
         throw new Error("Invalid project ID format");
       }
 
-      const hasAccess = await checkProjectAccess(projectId, userId, null, supabaseClient);
+      const hasAccess = await checkProjectAccess(projectId, userId, null, dbClient);
       if (!hasAccess) {
         throw new Error("You do not have permission to access notes for this project");
       }
@@ -137,7 +137,7 @@ const getNotes = async (
     }
 
     // Attach creator info separately (compat layer has no join support)
-    return await attachCreators(notes || [], supabaseClient);
+    return await attachCreators(notes || [], dbClient);
   } catch (error) {
     throw error;
   }
@@ -156,8 +156,8 @@ const createNote = async (noteData, userId, db = null) => {
       throw new Error("Invalid project ID format");
     }
 
-    const supabaseClient = db || getSupabase();
-    const hasAccess = await checkProjectAccess(projectId, userId, null, supabaseClient);
+    const dbClient = db || getSupabase();
+    const hasAccess = await checkProjectAccess(projectId, userId, null, dbClient);
     if (!hasAccess) {
       throw new Error("You do not have permission to create notes in this project");
     }
@@ -173,7 +173,7 @@ const createNote = async (noteData, userId, db = null) => {
       updatedat: new Date().toISOString(),
     };
 
-    const { data: newNote, error } = await supabaseClient
+    const { data: newNote, error } = await dbClient
       .from("notes")
       .insert([noteToCreate])
       .select()
@@ -183,7 +183,7 @@ const createNote = async (noteData, userId, db = null) => {
       throw new Error(`Failed to create note: ${error.message}`);
     }
 
-    return await attachCreator(newNote, supabaseClient);
+    return await attachCreator(newNote, dbClient);
   } catch (error) {
     throw error;
   }
@@ -196,8 +196,8 @@ const getNoteById = async (id, userId, db = null) => {
       throw new Error("Invalid note ID format");
     }
 
-    const supabaseClient = db || getSupabase();
-    const { data: note, error } = await supabaseClient
+    const dbClient = db || getSupabase();
+    const { data: note, error } = await dbClient
       .from("notes")
       .select("*")
       .eq("id", id)
@@ -215,12 +215,12 @@ const getNoteById = async (id, userId, db = null) => {
     }
 
     // Single-user: check project ownership
-    const hasAccess = await checkProjectAccess(note.projectid, userId, null, supabaseClient);
+    const hasAccess = await checkProjectAccess(note.projectid, userId, null, dbClient);
     if (!hasAccess) {
       throw new Error("You do not have permission to access this note");
     }
 
-    return await attachCreator(note, supabaseClient);
+    return await attachCreator(note, dbClient);
   } catch (error) {
     throw error;
   }
@@ -239,10 +239,10 @@ const updateNote = async (
       throw new Error("Invalid note ID format");
     }
 
-    const supabaseClient = db || getSupabase();
+    const dbClient = db || getSupabase();
 
     // Fetch existing note
-    const { data: note, error: fetchError } = await supabaseClient
+    const { data: note, error: fetchError } = await dbClient
       .from("notes")
       .select("*")
       .eq("id", id)
@@ -256,7 +256,7 @@ const updateNote = async (
     if (!note) throw new Error("Note not found");
 
     // Single-user: check project ownership
-    const hasAccess = await checkProjectAccess(note.projectid, userId, null, supabaseClient);
+    const hasAccess = await checkProjectAccess(note.projectid, userId, null, dbClient);
     if (!hasAccess) {
       throw new Error("You do not have permission to update this note");
     }
@@ -266,7 +266,7 @@ const updateNote = async (
       if (!updates.projectId) {
         throw new Error("Project ID is required and cannot be empty");
       } else if (isValidUUID(updates.projectId)) {
-        const targetAccess = await checkProjectAccess(updates.projectId, userId, null, supabaseClient);
+        const targetAccess = await checkProjectAccess(updates.projectId, userId, null, dbClient);
         if (!targetAccess) {
           throw new Error("You do not have permission to move note to this project");
         }
@@ -298,7 +298,7 @@ const updateNote = async (
     }
 
     // Perform the update
-    const { data: updatedNote, error: updateError } = await supabaseClient
+    const { data: updatedNote, error: updateError } = await dbClient
       .from("notes")
       .update({
         ...updates,
@@ -316,7 +316,7 @@ const updateNote = async (
       throw new Error("Note update failed - possible concurrent modification");
     }
 
-    return await attachCreator(updatedNote, supabaseClient);
+    return await attachCreator(updatedNote, dbClient);
   } catch (error) {
     throw error;
   }
@@ -345,9 +345,9 @@ const deleteNote = async (
       throw new Error("Invalid note ID format");
     }
 
-    const supabaseClient = db || getSupabase();
+    const dbClient = db || getSupabase();
 
-    const { data: note, error: fetchError } = await supabaseClient
+    const { data: note, error: fetchError } = await dbClient
       .from("notes")
       .select("*")
       .eq("id", id)
@@ -361,12 +361,12 @@ const deleteNote = async (
     if (!note) throw new Error("Note not found");
 
     // Single-user: check project ownership
-    const hasAccess = await checkProjectAccess(note.projectid, userId, null, supabaseClient);
+    const hasAccess = await checkProjectAccess(note.projectid, userId, null, dbClient);
     if (!hasAccess) {
       throw new Error("You do not have permission to delete this note");
     }
 
-    const { error: deleteError } = await supabaseClient
+    const { error: deleteError } = await dbClient
       .from("notes")
       .delete()
       .eq("id", id);

@@ -13,10 +13,10 @@ const verifyNoteAccess = async (
   noteId,
   userId,
   requiredPermission = "read",
-  supabase
+  db
 ) => {
   try {
-    const note = await noteService.getNoteById(noteId, userId, supabase);
+    const note = await noteService.getNoteById(noteId, userId, db);
     if (!note) {
       throw new Error("Note not found");
     }

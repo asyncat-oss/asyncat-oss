@@ -287,13 +287,13 @@ export const getWorkspaceContext = (req) => {
  * Helper to get user's current workspace ID (from teams table)
  * @param {string} userId - User ID
  * @param {string|null} preferredWorkspaceId - Preferred workspace ID
- * @param {Object} authenticatedSupabase - Authenticated Supabase client
+ * @param {Object} authenticatedDb - Authenticated Supabase client
  * @returns {Promise<string>} Workspace ID
  */
-export const getCurrentWorkspaceId = async (userId, preferredWorkspaceId = null, authenticatedSupabase) => {
+export const getCurrentWorkspaceId = async (userId, preferredWorkspaceId = null, authenticatedDb) => {
   try {
     if (preferredWorkspaceId) {
-      const { data: ws } = await authenticatedSupabase
+      const { data: ws } = await authenticatedDb
         .from('workspaces')
         .select('id')
         .eq('id', preferredWorkspaceId)
@@ -304,7 +304,7 @@ export const getCurrentWorkspaceId = async (userId, preferredWorkspaceId = null,
     }
 
     // Get user's first workspace
-    const { data: userWorkspaces } = await authenticatedSupabase
+    const { data: userWorkspaces } = await authenticatedDb
       .from('workspaces')
       .select('id')
       .eq('owner_id', userId)

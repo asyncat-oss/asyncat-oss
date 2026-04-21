@@ -181,7 +181,7 @@ export const enhancedRouter = async (req, res) => {
     console.log(`🤖 Using model: ${AI_MODEL}${isLocal ? ' (local)' : ''}`);
 
     // Get authenticated Supabase client
-    const authenticatedSupabase = req.db;
+    const authenticatedDb = req.db;
 
     // Extract actual message content
     let actualMessage = message;
@@ -230,7 +230,7 @@ export const enhancedRouter = async (req, res) => {
 
     // Get user context and data
     const hasSelectedProjects = projectIds && projectIds.length > 0;
-    const contextData = await dataLayer.getUserContext(user.id, projectIds, workspaceId, authenticatedSupabase);
+    const contextData = await dataLayer.getUserContext(user.id, projectIds, workspaceId, authenticatedDb);
     const contextPrompt = formatContext(contextData);
 
     const timezone = userTimezone || 'UTC';
@@ -313,7 +313,7 @@ export const enhancedRouter = async (req, res) => {
 
     const toolContext = {
       userId: user.id,
-      supabase: authenticatedSupabase,
+      db: authenticatedDb,
       workspaceId
     };
 
