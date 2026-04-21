@@ -83,6 +83,16 @@ export async function apiDelete(path) {
   return res.json().catch(() => ({}));
 }
 
+export async function apiGetNoTimeout(path) {
+  const base  = getBase();
+  const token = await getToken();
+  const res = await fetch(`${base}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
+  return res.json();
+}
+
 // Stream SSE from den. onEvent receives each parsed JSON event object.
 export async function streamPost(path, body, onEvent) {
   const base  = getBase();

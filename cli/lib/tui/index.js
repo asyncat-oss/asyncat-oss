@@ -12,7 +12,7 @@ import {
   renderZen, renderChat, renderPalette, renderStatusBar,
   renderStreamingIndicator, renderSelector, filterPalette,
   spinnerFrame, nextCatMsg, setServiceStatus, renderModelSetup,
-  renderResult,
+  renderResult, renderModelsPage,
 } from './views.js';
 import { getTheme } from '../theme.js';
 import { getLiveLogsEnabled } from '../colors.js';
@@ -38,7 +38,7 @@ export class Tui extends EventEmitter {
     this.paletteItems = [];
     this.modelInfo    = opts.modelInfo || '';
     this.providerInfo = opts.providerInfo || '';
-    this.version      = opts.version || '0.3.2';
+    this.version = opts.version || 'unknown';
     this.streaming    = false;
     this._streamTimer = null;
     this._streamMsg   = '';
@@ -60,6 +60,20 @@ export class Tui extends EventEmitter {
     // Model setup state
     this._setupModel  = null;
     this._setupResolve = null;
+
+    // Models page state
+    this._modelsTab       = 0;   // 0=downloaded, 1=recommended, 2=search
+    this._modelsSearchQuery = '';
+    this._modelsResults    = [];
+    this._modelsLoading    = false;
+    this._modelsResolve    = null;
+    this._modelsSelectedIdx = 0;
+    this._localModels      = [];
+    this._recommendedModels = [];
+
+    // Active downloads tracking
+    this._activeDownloads = [];  // { downloadId, filename, progress, total, speed, status }
+    this._downloadPollTimer = null;
 
     // Result popup state
     this._resultTitle  = '';
@@ -161,6 +175,7 @@ export class Tui extends EventEmitter {
     this._started = false;
     if (this._streamTimer) clearInterval(this._streamTimer);
     if (this._statusTimer) clearInterval(this._statusTimer);
+    if (this._downloadPollTimer) clearTimeout(this._downloadPollTimer);
     if (this._keyHandler) {
       this._inputStream.removeListener('keypress', this._keyHandler);
       this._keyHandler = null;
@@ -191,13 +206,26 @@ export class Tui extends EventEmitter {
   render() {
     if (this._destroyed) return;
     write(ansi.hide);
-    renderStatusBar(this.version);
+    renderStatusBar(this.version, this.streaming ? this._streamMsg : null, this.modelInfo);
 
     const isOverlay = this.mode === 'palette' || this.mode === 'selector' || this.mode === 'model-setup' || this.mode === 'result';
 
+    // Models page — standalone overlay, no base screen
+    if (this.mode === 'models') {
+      renderModelsPage(
+        this._modelsTab,
+        this.buf,
+        this._getModelsItems(),
+        this._modelsSelectedIdx,
+        this._activeDownloads,
+        this._modelsLoading
+      );
+      write(ansi.show);
+      return;
+    }
+
     // Always render base screen first so overlays float on top of it
-    // Pass actual buf so the typed text shows through (like OpenCode's zen input behind palette)
-    if (this.mode === 'chat' || (isOverlay && this.messages.length > 0)) {
+    if ((this.mode === 'chat') || (isOverlay && this.messages.length > 0)) {
       const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
       renderChat(msgs, this.scrollOff, this.mode === 'model-setup' ? '' : this.buf, this.mode === 'model-setup' ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs);
     } else {
@@ -287,6 +315,67 @@ export class Tui extends EventEmitter {
     });
   }
 
+  // ── Models Page ─────────────────────────────────────────────────────────
+  showModelsPage() {
+    return new Promise((resolve) => {
+      this.mode = 'models';
+      this._modelsTab = 0;
+      this._modelsSearchQuery = '';
+      this._modelsResults = [];
+      this._modelsSelectedIdx = 0;
+      this._modelsResolve = resolve;
+      this._modelsLoading = false;
+      this._activeDownloads = [];
+      this.buf = '';
+      this.pos = 0;
+      this.render();
+      this._pollDownloads();
+      this._loadModelsData();
+    });
+  }
+
+  async _loadModelsData() {
+    try {
+      const { apiGet } = await import('../denApi.js');
+      const [localData, recData] = await Promise.all([
+        apiGet('/api/ai/providers/local-models').catch(() => ({ models: [], storage: {} })),
+        apiGet('/api/ai/providers/recommended-models').catch(() => ({ models: [] })),
+      ]);
+      this._localModels = localData.models || [];
+      this._recommendedModels = recData.models || [];
+      this.render();
+    } catch {
+      this._localModels = [];
+      this._recommendedModels = [];
+      this.render();
+    }
+  }
+
+  async _pollDownloads() {
+    if (this._destroyed || this.mode !== 'models') return;
+    try {
+      const { apiGet } = await import('../denApi.js');
+      const data = await apiGet('/api/ai/providers/local-models/downloads').catch(() => ({ downloads: [] }));
+      this._activeDownloads = data.downloads || [];
+      this.render();
+    } catch {}
+    if (this.mode === 'models' && !this._destroyed) {
+      this._downloadPollTimer = setTimeout(() => this._pollDownloads(), 800);
+    }
+  }
+
+  async _startDownload(repoId, filename, url) {
+    try {
+      const { apiPost } = await import('../denApi.js');
+      await apiPost('/api/ai/providers/local-models/download', { url, filename });
+      this._modelsLoading = true;
+      this.render();
+      setTimeout(() => this._pollDownloads(), 200);
+    } catch (e) {
+      this.printErr(`Download failed: ${e.message}`);
+    }
+  }
+
   // ── Result popup ──────────────────────────────────────────────────────────
   showResult(title, lines) {
     this._resultTitle  = title;
@@ -330,8 +419,7 @@ export class Tui extends EventEmitter {
     if (this.mode !== 'chat') this.mode = 'chat';
     this._streamTimer = setInterval(() => {
       if (this._destroyed) return;
-      const contentH = h() - 7;
-      renderStreamingIndicator(contentH, this._streamMsg);
+      renderStatusBar(this.version, this._streamMsg, this.modelInfo);
     }, 80);
   }
 
@@ -431,6 +519,72 @@ export class Tui extends EventEmitter {
     if (str && !/^[0-9]$/.test(str) && name !== 'backspace' && name !== 'delete' && name !== 'left' && name !== 'right') {
       return;
     }
+  }
+
+  // ── Models page mode ─────────────────────────────────────────────────
+  if (this.mode === 'models') {
+    if (name === 'escape' || str === 'q') {
+      if (this._downloadPollTimer) { clearTimeout(this._downloadPollTimer); this._downloadPollTimer = null; }
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      if (this._modelsResolve) { this._modelsResolve(null); this._modelsResolve = null; }
+      this.buf = ''; this.pos = 0;
+      this.render();
+      return;
+    }
+    if (name === 'tab') {
+      this._modelsTab = (this._modelsTab + 1) % 3;
+      this._modelsSelectedIdx = 0;
+      this.buf = '';
+      this.pos = 0;
+      this.render();
+      return;
+    }
+    if (name === 'left') {
+      this._modelsTab = (this._modelsTab + 2) % 3;
+      this._modelsSelectedIdx = 0;
+      this.buf = ''; this.pos = 0;
+      this.render();
+      return;
+    }
+    if (name === 'right') {
+      this._modelsTab = (this._modelsTab + 1) % 3;
+      this._modelsSelectedIdx = 0;
+      this.buf = ''; this.pos = 0;
+      this.render();
+      return;
+    }
+    if (name === 'up') {
+      this._modelsSelectedIdx = Math.max(0, this._modelsSelectedIdx - 1);
+      this.render();
+      return;
+    }
+    if (name === 'down') {
+      const items = this._getModelsItems();
+      this._modelsSelectedIdx = Math.min(items.length - 1, this._modelsSelectedIdx + 1);
+      this.render();
+      return;
+    }
+    if (name === 'return') {
+      this._onModelsSelect();
+      return;
+    }
+    if (name === 'backspace') {
+      if (this.buf.length > 0) {
+        this.buf = this.buf.slice(0, -1);
+        this.pos = this.buf.length;
+        if (this._modelsTab === 2) this._doModelsSearch();
+        else this.render();
+      }
+      return;
+    }
+    if (str && str.length === 1 && !ctrl && !meta) {
+      this.buf += str;
+      this.pos = this.buf.length;
+      if (this._modelsTab === 2) this._doModelsSearch();
+      else this.render();
+      return;
+    }
+    return;
   }
 
   // ── ESC ──────────────────────────────────────────────────────────────
@@ -838,5 +992,118 @@ export class Tui extends EventEmitter {
       setServiceStatus(be, fe);
       if (!this._destroyed) this.render();
     });
+  }
+
+  // ── Models page helpers ──────────────────────────────────────────────────
+  _getModelsItems() {
+    if (this._modelsTab === 0) {
+      return (this._localModels || []).map(m => ({ ...m, _type: 'local' }));
+    } else if (this._modelsTab === 1) {
+      return (this._recommendedModels || []).map(m => ({ ...m, _type: 'recommended' }));
+    } else {
+      return this._modelsResults.map(m => ({ ...m, _type: 'search' }));
+    }
+  }
+
+  _doModelsSearch() {
+    this._modelsLoading = true;
+    this.render();
+    clearTimeout(this._searchTimer);
+    this._searchTimer = setTimeout(async () => {
+      try {
+        const { apiGet } = await import('../denApi.js');
+        const q = this.buf.trim();
+        if (!q) { this._modelsResults = []; this._modelsLoading = false; this.render(); return; }
+        const data = await apiGet(`/api/ai/providers/hf-search?q=${encodeURIComponent(q)}`);
+        this._modelsResults = data.models || [];
+        this._modelsSelectedIdx = 0;
+      } catch {
+        this._modelsResults = [];
+      }
+      this._modelsLoading = false;
+      this.render();
+    }, 400);
+  }
+
+  async _onModelsSelect() {
+    const items = this._getModelsItems();
+    const item = items[this._modelsSelectedIdx];
+    if (!item) return;
+
+    if (this._modelsTab === 0) {
+      // Close the models page, then load with default context
+      if (this._downloadPollTimer) { clearTimeout(this._downloadPollTimer); this._downloadPollTimer = null; }
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      if (this._modelsResolve) { this._modelsResolve(null); this._modelsResolve = null; }
+      this.buf = ''; this.pos = 0;
+      this.render();
+      this._loadSelectedModel(item.filename, item.contextLength || 8192);
+      return;
+    }
+
+    this._modelsLoading = true;
+    this.render();
+
+    try {
+      const { apiGet } = await import('../denApi.js');
+      const repoId = item.repoId;
+      const defaultFilename = item.defaultFilename || (item.quantizations || []).includes(item.defaultQuant || 'Q4_K_M')
+        ? `${item.name.replace(/\s+/g, '-').toLowerCase()}-${item.defaultQuant || 'Q4_K_M'}.gguf`
+        : null;
+
+      let filename = defaultFilename;
+      let downloadUrl = null;
+
+      if (item._type === 'recommended') {
+        const urlData = await apiGet(`/api/ai/providers/hf-download-url?repoId=${encodeURIComponent(repoId)}&filename=${encodeURIComponent(filename || item.defaultFilename || '')}`).catch(() => null);
+        if (urlData?.url) {
+          downloadUrl = urlData.url;
+          filename = urlData.filename;
+        } else {
+          const filesData = await apiGet(`/api/ai/providers/hf-repo/${encodeURIComponent(repoId)}/files`).catch(() => ({ files: [] }));
+          const ggufFile = (filesData.files || []).find(f => f.filename.includes(item.defaultQuant || 'Q4_K_M'));
+          if (ggufFile) {
+            const urlData2 = await apiGet(`/api/ai/providers/hf-download-url?repoId=${encodeURIComponent(repoId)}&filename=${encodeURIComponent(ggufFile.filename)}`).catch(() => null);
+            if (urlData2?.url) {
+              downloadUrl = urlData2.url;
+              filename = ggufFile.filename;
+            }
+          }
+        }
+      }
+
+      if (downloadUrl && filename) {
+        await this._startDownload(repoId, filename, downloadUrl);
+        this._modelsLoading = false;
+        this.render();
+      } else {
+        this.printErr('Could not resolve download URL for this model');
+        this._modelsLoading = false;
+        this.render();
+      }
+    } catch (e) {
+      this.printErr(`Failed: ${e.message}`);
+      this._modelsLoading = false;
+      this.render();
+    }
+  }
+
+  async _loadSelectedModel(filename, ctxSize) {
+    try {
+      const { apiPost } = await import('../denApi.js');
+      await apiPost('/api/ai/providers/server/start', { filename, ctxSize: parseInt(ctxSize, 10) || 8192 });
+      this.printOk(`Loading ${filename}...`);
+      setTimeout(async () => {
+        const { apiGet } = await import('../denApi.js');
+        try {
+          const data = await apiGet('/api/ai/providers/server/status');
+          if (data.model_file || data.model) {
+            this.setModel(data.model_file || data.model, 'local');
+          }
+        } catch {}
+      }, 3000);
+    } catch (e) {
+      this.printErr(`Failed to load model: ${e.message}`);
+    }
   }
 }

@@ -548,12 +548,28 @@ export function setServiceStatus(backend, frontend) {
   _statusCache = { backend, frontend, ts: Date.now() };
 }
 
-export function renderStatusBar(version, modelInfo) {
+export function renderStatusBar(version, streamingMsg, modelInfo) {
   const t = getTheme();
   const W = w();
   const H = h();
   const R = ansi.reset;
 
+  clearRow(H);
+
+  // ── Streaming mode: OpenCode-style animated bottom bar ────────────────
+  if (streamingMsg) {
+    const spin = spinnerFrame();
+    const modelStr = modelInfo ? `${t.accent2}${modelInfo}${R}  ` : '';
+    const right = `${ansi.dim}esc stop${R}  ${modelStr}${ansi.dim}${version || ''}${R} `;
+    const left = ` ${t.accent}${spin}${R} ${ansi.dim}${streamingMsg}${R}`;
+    const leftVis = vis(` ${spin} ${streamingMsg}`);
+    const rightVis = vis(`esc stop  ${modelInfo ? modelInfo + '  ' : ''}${version || ''} `);
+    const gap = Math.max(1, W - leftVis - rightVis);
+    at(H, 1, `${t.statusFg}${left}${' '.repeat(gap)}${right}${R}`);
+    return;
+  }
+
+  // ── Normal status bar ─────────────────────────────────────────────────
   let branch = '';
   try {
     branch = execSync('git rev-parse --abbrev-ref HEAD', {
@@ -564,7 +580,6 @@ export function renderStatusBar(version, modelInfo) {
   const cwd = process.cwd().replace(process.env.HOME || '', '~');
   const loc = branch ? `${cwd}:${branch}` : cwd;
 
-  // Service status dots
   const be = _statusCache.backend
     ? `${t.success}●${R}${ansi.dim} api :8716${R}`
     : `${ansi.dim}○ api${R}`;
@@ -574,21 +589,14 @@ export function renderStatusBar(version, modelInfo) {
 
   const left = ` ${loc}`;
   const mid = `${be}  ${fe}`;
-  const right = `${version || '0.3.2'} `;
+  const right = `${version || 'unknown'} `;
 
-  // Calculate spacing
   const leftVis = vis(left);
   const midVis = vis(mid);
   const rightVis = vis(right);
-  const totalContent = leftVis + midVis + rightVis;
-  const spaceBefore = Math.max(1, Math.floor((W - totalContent) / 2) - leftVis + leftVis);
-  const spaceAfter = Math.max(1, W - leftVis - midVis - rightVis - spaceBefore + leftVis);
-
-  // Simpler approach: left | center-ish | right
-  const gap1 = Math.max(1, Math.floor((W - totalContent) / 2));
+  const gap1 = Math.max(1, Math.floor((W - leftVis - midVis - rightVis) / 2));
   const gap2 = Math.max(1, W - leftVis - gap1 - midVis - rightVis);
 
-  clearRow(H);
   at(H, 1, `${t.statusFg}${left}${' '.repeat(gap1)}${mid}${' '.repeat(gap2)}${right}${R}`);
 }
 
@@ -626,6 +634,111 @@ export function renderResult(title, lines, scrollOff = 0) {
   const hint = `  ↑↓ scroll  ·  esc close`;
   const hintPad = Math.max(0, panelW - vis(hint) - vis(pct));
   at(panelTop + 3 + contentH, panelL, `${panelBg}${ansi.dim}${hint}${' '.repeat(hintPad)}${pct}${R}`);
+}
+
+// ── Models Page — 3-tab floating panel (Downloaded / Recommended / Search) ───
+export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownloads, loading) {
+  const t = getTheme();
+  const W = w();
+  const H = h();
+  const R = ansi.reset;
+
+  // Clear full screen so old content never bleeds through when panel size changes
+  for (let r = 1; r <= H - 1; r++) clearRow(r);
+
+  const TAB_NAMES = ['Downloaded', 'Recommended', 'Search'];
+  const panelBg = ansi.bgRgb(18, 18, 24);
+  const panelW = Math.min(Math.floor(W * 0.72), 88);
+  const panelL = Math.floor((W - panelW) / 2) + 1;
+
+  const maxShow = Math.min(items.length, H - 14);
+  const panelH = maxShow + 8; // title + tabs + divider + items + dl_section + hint
+  const panelTop = Math.max(2, Math.floor((H - panelH) / 2));
+
+  // Draw panel background
+  for (let r = panelTop; r <= panelTop + panelH; r++) {
+    at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
+  }
+
+  // Title row + esc hint
+  const titleStr = 'Models';
+  const escPad = Math.max(0, panelW - vis(titleStr) - 3);
+  at(panelTop, panelL, `${panelBg}${ansi.bold}${t.accent}${titleStr}${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
+
+  // Tabs row
+  const tabsStr = TAB_NAMES.map((name, i) => {
+    const sel = i === tab;
+    return sel ? `${ansi.bold}${t.accent}[${name}]${R}` : `${ansi.dim}${name}`;
+  }).join(`  ${ansi.dim}|${R}  `);
+  at(panelTop + 1, panelL, `${panelBg}${tabsStr}${R}`);
+
+  at(panelTop + 2, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
+
+  // Item list
+  if (items.length === 0) {
+    if (loading) {
+      at(panelTop + 3, panelL, `${panelBg}  ${ansi.dim}Loading...${R}`);
+    } else {
+      const emptyMsg = tab === 0
+        ? 'No models downloaded yet.'
+        : tab === 1
+          ? 'Select a recommended model below to download.'
+          : 'Type to search HuggingFace GGUF models';
+      at(panelTop + 3, panelL, `${panelBg}  ${ansi.dim}${emptyMsg}${R}`);
+    }
+  } else {
+    const scrollOff = selectedIdx >= maxShow ? selectedIdx - maxShow + 1 : 0;
+    const visible = items.slice(scrollOff, scrollOff + maxShow);
+
+    for (let i = 0; i < visible.length; i++) {
+      const item = visible[i];
+      const realIdx = i + scrollOff;
+      const sel = realIdx === selectedIdx;
+      const row = panelTop + 3 + i;
+      const bg = sel ? t.paletteSel : panelBg;
+      const nameStyle = sel ? `${ansi.bold}${t.paletteCmd}` : '';
+      const name = item.name || item.id || item.repoId || '';
+      const desc = item.description
+        ? item.description.slice(0, panelW - vis(name) - 6)
+        : item.vram ? item.vram : (item.params || '');
+
+      const namePad = Math.max(0, panelW - vis(name) - vis(desc) - 4);
+      at(row, panelL, `${bg}  ${nameStyle}${name}${R}${bg}${desc ? `  ${ansi.dim}${desc}${R}${bg}` : ''}${' '.repeat(namePad)}${R}`);
+    }
+  }
+
+  // Active downloads section
+  const dlTop = panelTop + 3 + maxShow;
+  at(dlTop, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
+
+  if (activeDownloads && activeDownloads.length > 0) {
+    at(dlTop + 1, panelL, `${panelBg}${ansi.bold}  Downloading:${R}`);
+    for (let di = 0; di < activeDownloads.length; di++) {
+      const dl = activeDownloads[di];
+      const dlRow = dlTop + 2 + di;
+      if (dlRow >= panelTop + panelH - 1) break;
+
+      const pct = dl.progress || 0;
+      const barW = Math.min(20, panelW - 30);
+      const filled = Math.round((pct / 100) * barW);
+      const bar = `${t.accent}${'█'.repeat(filled)}${ansi.dim}${'░'.repeat(barW - filled)}`;
+      const pctStr = `${String(pct).padStart(3)}%`;
+      const dlStr = dl.downloadedFormatted || '?';
+      const totStr = dl.totalFormatted || '?';
+      const filename = dl.filename || '…';
+      const dlLine = `  ${ansi.dim}⟳${R} ${bar} ${pctStr}  ${ansi.dim}${dlStr}/${totStr}${R}  ${ansi.dim}${filename}${R}`;
+      at(dlRow, panelL, dlLine);
+    }
+  }
+
+  // Hint row
+  const hintRow = panelTop + panelH - 1;
+  at(hintRow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  · Enter select/download  · Tab switch tabs  · Esc close${R}`);
+
+  // Cursor at search buf position for search tab
+  if (tab === 2) {
+    write(ansi.to(panelTop + 1, panelL + vis(searchBuf || '') + 2));
+  }
 }
 
 // ── Streaming indicator ─────────────────────────────────────────────────────

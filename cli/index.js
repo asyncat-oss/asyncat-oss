@@ -40,6 +40,13 @@ import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
 
 loadTheme();
 
+function getVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'cli/package.json'), 'utf8'));
+    return pkg.version || '0.4.0';
+  } catch { return '0.4.0'; }
+}
+
 // ── Detect model info ───────────────────────────────────────────────────────
 async function detectModel() {
   try {
@@ -90,7 +97,7 @@ async function startTui() {
   const tui = new Tui({
     modelInfo: '',
     providerInfo: '',
-    version: '0.3.2',
+    version: getVersion(),
   });
   tui.start();
 
@@ -188,58 +195,17 @@ async function startTui() {
 
     try {
       switch (cmd) {
-        // ── Models: inline TUI selector ─────────────────────────────────
+        // ── Models: TUI models page ────────────────────────────────────────────
         case 'models': {
           if (args.length > 0) {
-            // Subcommand like 'models serve foo.gguf'
             await runInShell(() => _models.run(args));
             const { model: m, provider: p } = await detectModel();
             tui.setModel(m, p);
             tui.unlockInput();
             return;
           }
-          // Show inline model picker
           tui.unlockInput();
-          let models = [];
-          try {
-            const token = await getToken();
-            const localModels = await apiGet('/api/ai/providers/local-models');
-            models = (localModels.models || []).map(m => ({
-              name: m.filename,
-              desc: m.sizeFormatted || '',
-              _file: m.filename,
-            }));
-          } catch { }
-          if (models.length === 0) {
-            tui.printWarn('No local models found. Use /models pull <url> to download one.');
-            return;
-          }
-          const chosen = await tui.showSelector('Select Model', models);
-          if (chosen) {
-            const ctxSize = await tui.showModelSetup(chosen);
-            if (!ctxSize) {
-              tui.printInfo('Model load cancelled.');
-              return;
-            }
-
-            tui.printInfo(`Loading ${chosen.name} (ctx: ${ctxSize})...`);
-            try {
-              const token = await getToken();
-              const base = getBase();
-              await fetch(`${base}/api/ai/providers/server/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ filename: chosen._file, ctxSize: parseInt(ctxSize, 10) || 8192 }),
-              });
-              tui.printOk(`Model ${chosen.name} loaded`);
-              setTimeout(async () => {
-                const { model: m, provider: p } = await detectModel();
-                tui.setModel(m, p);
-              }, 1500);
-            } catch (e) {
-              tui.printErr(`Failed to load model: ${e.message}`);
-            }
-          }
+          await tui.showModelsPage();
           return;
         }
 
