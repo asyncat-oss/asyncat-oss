@@ -238,6 +238,7 @@ export class AgentRuntime {
     this.onEvent = (event) => {
       try {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
+        res.flush();
       } catch {}
       originalOnEvent(event);
     };

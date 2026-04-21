@@ -3,18 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 import AgentRunFeed from './components/AgentRunFeed';
 import {
-  Bot, Send, Square, Loader2, CornerDownLeft, Zap,
-  Trash2, RotateCcw, Clock, CheckCircle2, AlertCircle,
-  ChevronDown, Sparkles
+  Send, Square, Loader2, Trash2, RotateCcw, Clock, CheckCircle2, AlertCircle,
+  ChevronDown
 } from 'lucide-react';
 
 const EXAMPLE_GOALS = [
-  { label: '🔍 Research & summarize', prompt: 'Search the web for the latest AI agent frameworks in 2025 and write a concise comparison.' },
-  { label: '📋 Plan my week', prompt: 'Review my tasks and calendar, then build a prioritized daily plan for the week ahead.' },
-  { label: '📝 Save a note', prompt: 'Research the key differences between REST and GraphQL APIs and save a concise reference note.' },
-  { label: '⚙️ Shell task', prompt: 'List all files larger than 10MB in the current directory and show their sizes.' },
-  { label: '🧠 Remember context', prompt: 'Remember that I prefer TypeScript over JavaScript and concise, commented code style.' },
-  { label: '🌐 Browse & extract', prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
+  { label: 'Research & summarize', prompt: 'Search the web for the latest AI agent frameworks in 2025 and write a concise comparison.' },
+  { label: 'Plan my week', prompt: 'Review my tasks and calendar, then build a prioritized daily plan for the week ahead.' },
+  { label: 'Save a note', prompt: 'Research the key differences between REST and GraphQL APIs and save a concise reference note.' },
+  { label: 'Shell task', prompt: 'List all files larger than 10MB in the current directory and show their sizes.' },
+  { label: 'Remember context', prompt: 'Remember that I prefer TypeScript over JavaScript and concise, commented code style.' },
+  { label: 'Browse & extract', prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
 ];
 
 // ── Goal input ────────────────────────────────────────────────────────────────
@@ -26,7 +25,7 @@ function GoalInput({ value, onChange, onSubmit, isRunning, autoFocus = false, co
   }, [autoFocus]);
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit();
     }
@@ -40,15 +39,15 @@ function GoalInput({ value, onChange, onSubmit, isRunning, autoFocus = false, co
         onChange={e => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Give the agent a goal…"
-        rows={compact ? 2 : 3}
+        rows={compact ? 1 : 2}
         disabled={isRunning}
-        className={`w-full resize-none rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-800 midnight:bg-slate-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400 dark:focus:border-indigo-500 transition-all disabled:opacity-50 pr-12 ${compact ? 'px-3 py-2' : 'px-4 py-3'}`}
+        className={`w-full resize-none rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-800 midnight:bg-slate-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 focus:border-gray-400 dark:focus:border-gray-500 transition-all disabled:opacity-50 pr-12 ${compact ? 'px-3 py-2' : 'px-4 py-3'}`}
       />
       <button
         onClick={onSubmit}
         disabled={isRunning || !value.trim()}
-        className="absolute bottom-2.5 right-2.5 p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 dark:disabled:bg-gray-700 text-white disabled:text-gray-400 transition-colors"
-        title="Run agent (⌘↵)"
+        className="absolute bottom-2.5 right-2.5 p-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 disabled:bg-gray-200 dark:disabled:bg-gray-700 text-white disabled:text-gray-400 transition-colors"
+        title="Run agent (Enter)"
       >
         {isRunning
           ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -56,8 +55,7 @@ function GoalInput({ value, onChange, onSubmit, isRunning, autoFocus = false, co
       </button>
       {!compact && (
         <div className="absolute bottom-2.5 right-10 text-[10px] text-gray-300 dark:text-gray-700 hidden sm:flex items-center gap-0.5">
-          <CornerDownLeft className="w-2.5 h-2.5" />
-          <span>⌘↵</span>
+          <span>Enter to send · Shift+Enter for newline</span>
         </div>
       )}
     </div>
@@ -251,7 +249,6 @@ export default function AgentPage() {
       {/* Header — shown when there's a run active or history loaded */}
       {(hasEvents || isRunning || loadingSession) && (
         <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2.5 flex items-center gap-2.5">
-          <Bot className="w-4 h-4 text-indigo-500 flex-shrink-0" />
           <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex-1 truncate">
             {currentGoal || 'Agent run'}
           </span>
@@ -305,14 +302,9 @@ export default function AgentPage() {
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-10 overflow-y-auto">
           <div className="max-w-xl w-full">
             {/* Title */}
-            <div className="flex items-center gap-3 mb-7 justify-center">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Agent</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Give it a goal — it figures out the steps</p>
-              </div>
+            <div className="mb-7 justify-center">
+              <h1 className="text-lg font-medium text-gray-900 dark:text-white text-center">Agent</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-1">Give it a goal — it figures out the steps</p>
             </div>
 
             <GoalInput
@@ -331,7 +323,7 @@ export default function AgentPage() {
                   <button
                     key={i}
                     onClick={() => setGoal(eg.prompt)}
-                    className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600/60 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-all"
+                    className="text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 hover:bg-gray-50 dark:hover:bg-gray-800/60 midnight:hover:bg-slate-800/60 transition-colors"
                   >
                     <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">{eg.label}</p>
                     <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-snug">{eg.prompt}</p>

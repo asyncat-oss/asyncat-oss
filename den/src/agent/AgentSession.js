@@ -85,27 +85,22 @@ export class AgentSession {
         db.prepare(`
           UPDATE agent_sessions SET
             status = ?, goal = ?, plan = ?, scratchpad = ?,
-            tool_history = ?, total_rounds = ?, updated_at = ?,
-            feedback_rating = ?, feedback_comment = ?, was_helpful = ?, corrections = ?
+            tool_history = ?, total_rounds = ?, updated_at = ?
           WHERE id = ?
         `).run(
           this.status, this.goal, JSON.stringify(this.plan),
           JSON.stringify(this.scratchpad), JSON.stringify(this.toolHistory),
-          this.totalRounds, this.updatedAt,
-          this.feedbackRating, this.feedbackComment, this.wasHelpful,
-          JSON.stringify(this.corrections || []), this.id
+          this.totalRounds, this.updatedAt, this.id
         );
       } else {
         db.prepare(`
-          INSERT INTO agent_sessions (id, user_id, workspace_id, status, goal, plan, scratchpad, tool_history, total_rounds, created_at, updated_at, feedback_rating, feedback_comment, was_helpful, corrections)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO agent_sessions (id, user_id, workspace_id, status, goal, plan, scratchpad, tool_history, total_rounds, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           this.id, this.userId, this.workspaceId, this.status,
           this.goal, JSON.stringify(this.plan), JSON.stringify(this.scratchpad),
           JSON.stringify(this.toolHistory), this.totalRounds,
-          this.createdAt, this.updatedAt,
-          this.feedbackRating, this.feedbackComment, this.wasHelpful,
-          JSON.stringify(this.corrections || [])
+          this.createdAt, this.updatedAt
         );
       }
     } catch (err) {

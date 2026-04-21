@@ -61,22 +61,22 @@ function ThinkingEvent({ data }) {
   const words = thought.trim().split(/\s+/).length;
 
   return (
-    <div className="rounded-lg border border-purple-200 dark:border-purple-800/60 overflow-hidden mb-2">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 overflow-hidden mb-2">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors text-left"
       >
-        <Brain className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
-        <span className="text-xs font-medium text-purple-700 dark:text-purple-300 flex-1">
+        <Brain className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 flex-1">
           Reasoning · Round {data?.round}
         </span>
-        <span className="text-xs text-purple-400 mr-1">{words}w</span>
+        <span className="text-xs text-gray-400 mr-1">{words}w</span>
         {expanded
-          ? <ChevronDown className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-          : <ChevronRight className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
+          ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
       </button>
       {expanded && (
-        <div className="px-3 py-3 bg-purple-50/40 dark:bg-purple-950/20 border-t border-purple-100 dark:border-purple-800/50">
+        <div className="px-3 py-3 bg-gray-50/50 dark:bg-gray-800/20 border-t border-gray-100 dark:border-gray-700/50">
           <pre className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap font-mono leading-relaxed max-h-72 overflow-y-auto">
             {thought}
           </pre>
@@ -158,8 +158,8 @@ function AnswerEvent({ data }) {
     <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 overflow-hidden mb-3">
       {/* Subtle header */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/60 dark:bg-gray-800/60">
-        <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
-          <CheckCircle2 className="w-3 h-3 text-indigo-500" />
+        <div className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+          <CheckCircle2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
         </div>
         <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Agent response</span>
         {data?.round && data.round > 1 && (
@@ -201,9 +201,8 @@ function StreamingPreview({ text }) {
     .trim();
 
   if (!clean) {
-    // Still generating thinking/action — show pulsing indicator
     return (
-      <div className="flex items-center gap-2 text-xs text-purple-500 dark:text-purple-400 py-1 pl-1 mb-1 animate-pulse">
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-600 py-1 pl-1 mb-1 animate-pulse">
         <Brain className="w-3.5 h-3.5 flex-shrink-0" />
         Reasoning…
       </div>
