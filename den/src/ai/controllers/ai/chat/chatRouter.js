@@ -181,7 +181,7 @@ export const enhancedRouter = async (req, res) => {
     console.log(`🤖 Using model: ${AI_MODEL}${isLocal ? ' (local)' : ''}`);
 
     // Get authenticated Supabase client
-    const authenticatedSupabase = req.supabase;
+    const authenticatedSupabase = req.db;
 
     // Extract actual message content
     let actualMessage = message;

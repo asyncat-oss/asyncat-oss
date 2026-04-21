@@ -86,7 +86,7 @@ export const uploadAttachment = async (req, res) => {
     }
 
     // Verify note access - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "write", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "write", req.db);
 
     const filename = req.file.originalname;
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -157,7 +157,7 @@ export const uploadAttachment = async (req, res) => {
         };
 
         // UPDATED: Use authenticated client instead of getSupabase()
-        await req.supabase
+        await req.db
           .from("notes")
           .update({ metadata: updatedMetadata })
           .eq("id", noteId);
@@ -204,7 +204,7 @@ export const listAttachments = async (req, res) => {
     const userId = req.user.id;
 
     // Verify note access - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "read", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "read", req.db);
 
     const attachmentPrefix = getAttachmentPath(note.projectid, noteId, "");
     const containerClient = req.blobServiceClient.getContainerClient(
@@ -262,7 +262,7 @@ export const downloadAttachment = async (req, res) => {
     const userId = req.user.id;
 
     // Verify note access - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "read", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "read", req.db);
 
     const attachmentPath = getAttachmentPath(note.projectid, noteId, filename);
     const containerClient = req.blobServiceClient.getContainerClient(
@@ -440,7 +440,7 @@ export const deleteAttachment = async (req, res) => {
     const userId = req.user.id;
 
     // Verify note access (write permission required) - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "write", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "write", req.db);
 
     const attachmentPath = getAttachmentPath(note.projectid, noteId, filename);
     const containerClient = req.blobServiceClient.getContainerClient(
@@ -487,7 +487,7 @@ export const getAttachmentMetadata = async (req, res) => {
     const userId = req.user.id;
 
     // Verify note access - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "read", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "read", req.db);
 
     const attachmentPath = getAttachmentPath(note.projectid, noteId, filename);
     const containerClient = req.blobServiceClient.getContainerClient(
@@ -550,7 +550,7 @@ export const updateAttachmentMetadata = async (req, res) => {
     }
 
     // Verify note access (write permission required) - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "write", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "write", req.db);
 
     const attachmentPath = getAttachmentPath(note.projectid, noteId, filename);
     const containerClient = req.blobServiceClient.getContainerClient(
@@ -605,7 +605,7 @@ export const setBanner = async (req, res) => {
     const userId = req.user.id;
 
     // Verify note access - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "write", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "write", req.db);
 
     // Get current metadata
     const existingMetadata = note.metadata || {};
@@ -633,7 +633,7 @@ export const setBanner = async (req, res) => {
     };
 
     // UPDATED: Use authenticated client instead of getSupabase()
-    const { error } = await req.supabase
+    const { error } = await req.db
       .from("notes")
       .update({ metadata: updatedMetadata })
       .eq("id", noteId);
@@ -670,7 +670,7 @@ export const removeBanner = async (req, res) => {
     const userId = req.user.id;
 
     // Verify note access - UPDATED to pass authenticated client
-    const note = await verifyNoteAccess(noteId, userId, "write", req.supabase);
+    const note = await verifyNoteAccess(noteId, userId, "write", req.db);
 
     // Get current metadata
     const existingMetadata = note.metadata || {};
@@ -702,7 +702,7 @@ export const removeBanner = async (req, res) => {
     const { banner, ...metadataWithoutBanner } = existingMetadata;
 
     // UPDATED: Use authenticated client instead of getSupabase()
-    const { error } = await req.supabase
+    const { error } = await req.db
       .from("notes")
       .update({ metadata: metadataWithoutBanner })
       .eq("id", noteId);

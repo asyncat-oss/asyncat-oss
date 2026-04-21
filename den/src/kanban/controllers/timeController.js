@@ -27,7 +27,7 @@ const startTimer = async (req, res) => {
     const userId = req.user.id;
 
     // Check if there's already an active timer for this user
-    const activeTimer = await timeService.getActiveTimer(userId, req.supabase);
+    const activeTimer = await timeService.getActiveTimer(userId, req.db);
     if (activeTimer) {
       return res.status(400).json({
         error: "You already have an active timer on another card. Please stop it first.",
@@ -35,7 +35,7 @@ const startTimer = async (req, res) => {
     }
 
     // Check if card exists
-    const { data: card, error: cardError } = await req.supabase
+    const { data: card, error: cardError } = await req.db
       .schema('kanban')
       .from('Cards')
       .select('id, title')
@@ -49,7 +49,7 @@ const startTimer = async (req, res) => {
       throw cardError;
     }
 
-    const timeEntry = await timeService.startTimer(cardId, userId, req.supabase);
+    const timeEntry = await timeService.startTimer(cardId, userId, req.db);
 
     res.status(201).json(timeEntry);
   } catch (error) {
@@ -66,7 +66,7 @@ const stopTimer = async (req, res) => {
     const { description } = req.body;
 
     // Check if card exists
-    const { data: card, error: cardError } = await req.supabase
+    const { data: card, error: cardError } = await req.db
       .schema('kanban')
       .from('Cards')
       .select('id, title')
@@ -80,7 +80,7 @@ const stopTimer = async (req, res) => {
       throw cardError;
     }
 
-    const timeEntry = await timeService.stopTimer(cardId, userId, description, req.supabase);
+    const timeEntry = await timeService.stopTimer(cardId, userId, description, req.db);
     if (!timeEntry) {
       return res.status(404).json({ error: "No active timer found" });
     }
@@ -96,7 +96,7 @@ const stopTimer = async (req, res) => {
 const getTimeEntries = async (req, res) => {
   try {
     const { id: cardId } = req.params;
-    const timeEntries = await timeService.getTimeEntries(cardId, req.supabase);
+    const timeEntries = await timeService.getTimeEntries(cardId, req.db);
     res.status(200).json(timeEntries);
   } catch (error) {
     console.error("Error getting time entries:", error);
@@ -110,7 +110,7 @@ const deleteTimeEntry = async (req, res) => {
     const { id } = req.params;
 
     // Check if the user owns this time entry
-    const timeEntry = await timeService.getTimeEntryById(id, req.supabase);
+    const timeEntry = await timeService.getTimeEntryById(id, req.db);
     if (!timeEntry) {
       return res.status(404).json({ error: "Time entry not found" });
     }
@@ -121,7 +121,7 @@ const deleteTimeEntry = async (req, res) => {
         .json({ error: "Not authorized to delete this time entry" });
     }
 
-    const success = await timeService.deleteTimeEntry(id, req.supabase);
+    const success = await timeService.deleteTimeEntry(id, req.db);
     if (!success) {
       return res.status(404).json({ error: "Time entry not found" });
     }
@@ -140,7 +140,7 @@ const updateTimeEntry = async (req, res) => {
     const { startTime, endTime, description } = req.body;
 
     // Check if the user owns this time entry
-    const timeEntry = await timeService.getTimeEntryById(id, req.supabase);
+    const timeEntry = await timeService.getTimeEntryById(id, req.db);
     if (!timeEntry) {
       return res.status(404).json({ error: "Time entry not found" });
     }
@@ -155,7 +155,7 @@ const updateTimeEntry = async (req, res) => {
       startTime,
       endTime,
       description,
-    }, req.supabase);
+    }, req.db);
 
     if (!updatedTimeEntry) {
       return res.status(404).json({ error: "Time entry not found" });

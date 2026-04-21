@@ -5,7 +5,7 @@ import dependencyService from "../services/dependencyService.js";
 const getCardDependencies = async (req, res) => {
   try {
     const { cardId } = req.params;
-    const dependencies = await dependencyService.getCardDependencies(cardId, req.supabase);
+    const dependencies = await dependencyService.getCardDependencies(cardId, req.db);
     res.status(200).json(dependencies);
   } catch (error) {
     console.error("Error getting dependencies:", error);
@@ -17,7 +17,7 @@ const getCardDependencies = async (req, res) => {
 const getDependentCards = async (req, res) => {
   try {
     const { cardId } = req.params;
-    const dependentCards = await dependencyService.getDependentCards(cardId, req.supabase);
+    const dependentCards = await dependencyService.getDependentCards(cardId, req.db);
     res.status(200).json(dependentCards);
   } catch (error) {
     console.error("Error getting dependent cards:", error);
@@ -41,7 +41,7 @@ const createDependency = async (req, res) => {
       targetCardId,
       type || "FS",
       lag || 0,
-      req.supabase
+      req.db
     );
 
     res.status(201).json(dependency);
@@ -61,7 +61,7 @@ const deleteDependency = async (req, res) => {
     const result = await dependencyService.deleteDependency(
       cardId,
       targetCardId,
-      req.supabase
+      req.db
     );
 
     res.status(200).json({ message: "Dependency deleted successfully" });
@@ -75,7 +75,7 @@ const deleteDependency = async (req, res) => {
 const checkDependenciesStatus = async (req, res) => {
   try {
     const { cardId } = req.params;
-    const areMet = await dependencyService.areDependenciesMet(cardId, req.supabase);
+    const areMet = await dependencyService.areDependenciesMet(cardId, req.db);
     
     res.status(200).json({
       areDependenciesMet: areMet,
@@ -91,7 +91,7 @@ const checkDependenciesStatus = async (req, res) => {
 const getUnlockedCards = async (req, res) => {
   try {
     const { cardId } = req.params;
-    const unlockedCards = await dependencyService.getUnlockedCardsByDependency(cardId, req.supabase);
+    const unlockedCards = await dependencyService.getUnlockedCardsByDependency(cardId, req.db);
     res.status(200).json(unlockedCards);
   } catch (error) {
     console.error("Error getting unlocked cards:", error);

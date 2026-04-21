@@ -103,8 +103,8 @@ const validateHabitInput = (data, isUpdate = false) => {
  * Single-user access check: verify the project belongs to the requesting user.
  * Replaces the old project_members-based verifyProjectAccess.
  */
-const verifyProjectAccess = async (user, supabase, projectId) => {
-  const { data: project, error } = await supabase
+const verifyProjectAccess = async (user, db, projectId) => {
+  const { data: project, error } = await db
     .from('projects')
     .select('owner_id')
     .eq('id', projectId)
@@ -119,8 +119,8 @@ const verifyProjectAccess = async (user, supabase, projectId) => {
 /**
  * Get all project IDs owned by the user.
  */
-const getUserProjects = async (user, supabase) => {
-  const { data: projects, error } = await supabase
+const getUserProjects = async (user, db) => {
+  const { data: projects, error } = await db
     .from('projects')
     .select('id')
     .eq('owner_id', user.id);
@@ -237,9 +237,9 @@ function calculateMonthlyStreak(completions, today) {
   return { currentStreak, longestStreak: Math.max(currentStreak, completionMonths.length > 0 ? 1 : 0) };
 }
 
-async function recalculateStreak(supabase, habitId, userId) {
+async function recalculateStreak(db, habitId, userId) {
   try {
-    const { data: habit } = await supabase
+    const { data: habit } = await db
       .from('habits')
       .select('frequency, tracking_type, target_value')
       .eq('id', habitId)
@@ -247,7 +247,7 @@ async function recalculateStreak(supabase, habitId, userId) {
 
     if (!habit) return;
 
-    const { data: completions } = await supabase
+    const { data: completions } = await db
       .from('habit_completions')
       .select('completed_date, value')
       .eq('habit_id', habitId)
@@ -255,7 +255,7 @@ async function recalculateStreak(supabase, habitId, userId) {
       .order('completed_date', { ascending: false });
 
     if (!completions || completions.length === 0) {
-      await supabase.from('habit_streaks').upsert({
+      await db.from('habit_streaks').upsert({
         habit_id: habitId, user_id: userId,
         current_streak: 0, longest_streak: 0,
         last_completion_date: null,
@@ -267,7 +267,7 @@ async function recalculateStreak(supabase, habitId, userId) {
     const successfulCompletions = completions.filter(c => isCompletionSuccessful(habit, c.value));
 
     if (successfulCompletions.length === 0) {
-      await supabase.from('habit_streaks').upsert({
+      await db.from('habit_streaks').upsert({
         habit_id: habitId, user_id: userId,
         current_streak: 0, longest_streak: 0,
         last_completion_date: completions[0]?.completed_date || null,
@@ -291,7 +291,7 @@ async function recalculateStreak(supabase, habitId, userId) {
       ({ currentStreak, longestStreak } = calculateMonthlyStreak(successfulCompletions, today));
     }
 
-    await supabase.from('habit_streaks').upsert({
+    await db.from('habit_streaks').upsert({
       habit_id: habitId, user_id: userId,
       current_streak: currentStreak,
       longest_streak: longestStreak,
@@ -313,22 +313,22 @@ async function recalculateStreak(supabase, habitId, userId) {
 async function getWorkspaceHabits(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { project_id, limit = 100, offset = 0 } = req.query;
 
     let projectIds;
     if (project_id) {
-      await verifyProjectAccess(user, supabase, project_id);
+      await verifyProjectAccess(user, db, project_id);
       projectIds = [project_id];
     } else {
-      projectIds = await getUserProjects(user, supabase);
+      projectIds = await getUserProjects(user, db);
     }
 
     if (projectIds.length === 0) {
       return res.json({ success: true, data: [], total: 0 });
     }
 
-    const { data: habits, error, count } = await supabase
+    const { data: habits, error, count } = await db
       .from('habits')
       .select('*', { count: 'exact' })
       .in('project_id', projectIds)
@@ -348,7 +348,7 @@ async function getWorkspaceHabits(req, res) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     // Batch fetch today's completions
-    const { data: todayCompletions } = await supabase
+    const { data: todayCompletions } = await db
       .from('habit_completions')
       .select('*')
       .in('habit_id', habitIds)
@@ -356,14 +356,14 @@ async function getWorkspaceHabits(req, res) {
       .eq('completed_date', today);
 
     // Batch fetch streak data
-    const { data: streakData } = await supabase
+    const { data: streakData } = await db
       .from('habit_streaks')
       .select('*')
       .in('habit_id', habitIds)
       .eq('user_id', user.id);
 
     // Batch fetch recent completions (last 7 days)
-    const { data: recentCompletions } = await supabase
+    const { data: recentCompletions } = await db
       .from('habit_completions')
       .select('habit_id, completed_date, value, notes, user_id')
       .in('habit_id', habitIds)
@@ -435,7 +435,7 @@ async function getWorkspaceHabits(req, res) {
 async function createHabit(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
 
     const {
       project_id,
@@ -459,9 +459,9 @@ async function createHabit(req, res) {
       return res.status(400).json({ success: false, error: validationErrors.join(', ') });
     }
 
-    await verifyProjectAccess(user, supabase, project_id);
+    await verifyProjectAccess(user, db, project_id);
 
-    const { data: habit, error } = await supabase
+    const { data: habit, error } = await db
       .from('habits')
       .insert({
         id: randomUUID(),
@@ -498,7 +498,7 @@ async function createHabit(req, res) {
 async function updateHabit(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
 
     const validationErrors = validateHabitInput(req.body, true);
@@ -506,7 +506,7 @@ async function updateHabit(req, res) {
       return res.status(400).json({ success: false, error: validationErrors.join(', ') });
     }
 
-    const { data: existingHabit, error: checkError } = await supabase
+    const { data: existingHabit, error: checkError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -516,7 +516,7 @@ async function updateHabit(req, res) {
       return res.status(404).json({ success: false, error: 'Habit not found' });
     }
 
-    await verifyProjectAccess(user, supabase, existingHabit.project_id);
+    await verifyProjectAccess(user, db, existingHabit.project_id);
 
     const { name, description, frequency, tracking_type, target_value, unit, category, color, icon, is_active } = req.body;
 
@@ -533,7 +533,7 @@ async function updateHabit(req, res) {
     if (is_active !== undefined) updateData.is_active = is_active;
     updateData.updated_at = new Date().toISOString();
 
-    const { data: habit, error } = await supabase
+    const { data: habit, error } = await db
       .from('habits')
       .update(updateData)
       .eq('id', habitId)
@@ -558,10 +558,10 @@ async function updateHabit(req, res) {
 async function deleteHabit(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
 
-    const { data: existingHabit, error: checkError } = await supabase
+    const { data: existingHabit, error: checkError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -571,9 +571,9 @@ async function deleteHabit(req, res) {
       return res.status(404).json({ success: false, error: 'Habit not found' });
     }
 
-    await verifyProjectAccess(user, supabase, existingHabit.project_id);
+    await verifyProjectAccess(user, db, existingHabit.project_id);
 
-    const { error } = await supabase.from('habits').delete().eq('id', habitId);
+    const { error } = await db.from('habits').delete().eq('id', habitId);
     if (error) throw error;
 
     res.json({ success: true, message: 'Habit deleted successfully' });
@@ -592,11 +592,11 @@ async function deleteHabit(req, res) {
 async function completeHabit(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
     const { value = 1, notes } = req.body;
 
-    const { data: habit, error: habitError } = await supabase
+    const { data: habit, error: habitError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -607,11 +607,11 @@ async function completeHabit(req, res) {
       return res.status(404).json({ success: false, error: 'Habit not found' });
     }
 
-    await verifyProjectAccess(user, supabase, habit.project_id);
+    await verifyProjectAccess(user, db, habit.project_id);
 
     const today = new Date().toISOString().split('T')[0];
 
-    const { data: existingCompletion } = await supabase
+    const { data: existingCompletion } = await db
       .from('habit_completions')
       .select('*')
       .eq('habit_id', habitId)
@@ -632,7 +632,7 @@ async function completeHabit(req, res) {
         updatedNotes = updatedNotes ? `${updatedNotes}\n---\n${notes.trim()}` : notes.trim();
       }
 
-      const { data: completion, error } = await supabase
+      const { data: completion, error } = await db
         .from('habit_completions')
         .update({ value: newValue, notes: updatedNotes })
         .eq('id', existingCompletion.id)
@@ -640,12 +640,12 @@ async function completeHabit(req, res) {
         .single();
 
       if (error) throw error;
-      await recalculateStreak(supabase, habitId, user.id);
+      await recalculateStreak(db, habitId, user.id);
       return res.json({ success: true, data: completion, updated: true });
     } else {
       const initialValue = habit.tracking_type === 'boolean' ? 1 : Math.max(0, value);
 
-      const { data: completion, error } = await supabase
+      const { data: completion, error } = await db
         .from('habit_completions')
         .insert({
           id: randomUUID(),
@@ -659,7 +659,7 @@ async function completeHabit(req, res) {
         .single();
 
       if (error) throw error;
-      await recalculateStreak(supabase, habitId, user.id);
+      await recalculateStreak(db, habitId, user.id);
       res.json({ success: true, data: completion, updated: false });
     }
   } catch (error) {
@@ -677,11 +677,11 @@ async function completeHabit(req, res) {
 async function updateHabitProgress(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
     const { value = 0, notes } = req.body;
 
-    const { data: habit, error: habitError } = await supabase
+    const { data: habit, error: habitError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -696,11 +696,11 @@ async function updateHabitProgress(req, res) {
       return res.status(400).json({ success: false, error: 'Cannot update progress for boolean habits' });
     }
 
-    await verifyProjectAccess(user, supabase, habit.project_id);
+    await verifyProjectAccess(user, db, habit.project_id);
 
     const today = new Date().toISOString().split('T')[0];
 
-    const { data: existingCompletion } = await supabase
+    const { data: existingCompletion } = await db
       .from('habit_completions')
       .select('*')
       .eq('habit_id', habitId)
@@ -715,7 +715,7 @@ async function updateHabitProgress(req, res) {
         updatedNotes = updatedNotes ? `${updatedNotes}\n---\n${notes.trim()}` : notes.trim();
       }
 
-      const { data: completion, error } = await supabase
+      const { data: completion, error } = await db
         .from('habit_completions')
         .update({ value: newValue, notes: updatedNotes })
         .eq('id', existingCompletion.id)
@@ -723,10 +723,10 @@ async function updateHabitProgress(req, res) {
         .single();
 
       if (error) throw error;
-      await recalculateStreak(supabase, habitId, user.id);
+      await recalculateStreak(db, habitId, user.id);
       return res.json({ success: true, data: completion, updated: true });
     } else {
-      const { data: completion, error } = await supabase
+      const { data: completion, error } = await db
         .from('habit_completions')
         .insert({
           id: randomUUID(),
@@ -740,7 +740,7 @@ async function updateHabitProgress(req, res) {
         .single();
 
       if (error) throw error;
-      await recalculateStreak(supabase, habitId, user.id);
+      await recalculateStreak(db, habitId, user.id);
       res.json({ success: true, data: completion, updated: false });
     }
   } catch (error) {
@@ -758,11 +758,11 @@ async function updateHabitProgress(req, res) {
 async function uncompleteHabit(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
     const today = new Date().toISOString().split('T')[0];
 
-    const { data: habit, error: habitError } = await supabase
+    const { data: habit, error: habitError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -772,9 +772,9 @@ async function uncompleteHabit(req, res) {
       return res.status(404).json({ success: false, error: 'Habit not found' });
     }
 
-    await verifyProjectAccess(user, supabase, habit.project_id);
+    await verifyProjectAccess(user, db, habit.project_id);
 
-    const { error } = await supabase
+    const { error } = await db
       .from('habit_completions')
       .delete()
       .eq('habit_id', habitId)
@@ -783,7 +783,7 @@ async function uncompleteHabit(req, res) {
 
     if (error) throw error;
 
-    await recalculateStreak(supabase, habitId, user.id);
+    await recalculateStreak(db, habitId, user.id);
     res.json({ success: true, message: 'Habit uncompleted successfully' });
   } catch (error) {
     console.error('Uncomplete habit error:', error);
@@ -800,22 +800,22 @@ async function uncompleteHabit(req, res) {
 async function getHabitAnalytics(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { project_id } = req.query;
 
     let projectIds;
     if (project_id) {
-      await verifyProjectAccess(user, supabase, project_id);
+      await verifyProjectAccess(user, db, project_id);
       projectIds = [project_id];
     } else {
-      projectIds = await getUserProjects(user, supabase);
+      projectIds = await getUserProjects(user, db);
     }
 
     if (projectIds.length === 0) {
       return res.json({ success: true, data: emptyAnalytics() });
     }
 
-    const { data: habits, error: habitsError } = await supabase
+    const { data: habits, error: habitsError } = await db
       .from('habits')
       .select('*')
       .in('project_id', projectIds)
@@ -839,27 +839,27 @@ async function getHabitAnalytics(req, res) {
     }, {});
 
     // Fetch all completions for the user
-    const { data: allCompletionsData } = await supabase
+    const { data: allCompletionsData } = await db
       .from('habit_completions')
       .select('*')
       .in('habit_id', habitIds)
       .eq('user_id', user.id);
 
-    const { data: todayData } = await supabase
+    const { data: todayData } = await db
       .from('habit_completions')
       .select('*')
       .in('habit_id', habitIds)
       .eq('user_id', user.id)
       .eq('completed_date', today);
 
-    const { data: weekData } = await supabase
+    const { data: weekData } = await db
       .from('habit_completions')
       .select('*')
       .in('habit_id', habitIds)
       .eq('user_id', user.id)
       .gte('completed_date', weekAgoStr);
 
-    const { data: streakData } = await supabase
+    const { data: streakData } = await db
       .from('habit_streaks')
       .select('*')
       .in('habit_id', habitIds)
@@ -987,12 +987,12 @@ function emptyAnalytics() {
 async function getTeamCompletions(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
     const { date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    const { data: habit, error: habitError } = await supabase
+    const { data: habit, error: habitError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -1002,9 +1002,9 @@ async function getTeamCompletions(req, res) {
       return res.status(404).json({ success: false, error: 'Habit not found' });
     }
 
-    await verifyProjectAccess(user, supabase, habit.project_id);
+    await verifyProjectAccess(user, db, habit.project_id);
 
-    const { data: completions, error } = await supabase
+    const { data: completions, error } = await db
       .from('habit_completions')
       .select('*')
       .eq('habit_id', habitId)
@@ -1026,16 +1026,16 @@ async function getTeamCompletions(req, res) {
 async function getPerformerDetails(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { project_id } = req.query;
 
     if (!project_id) {
       return res.status(400).json({ success: false, error: 'Project ID is required' });
     }
 
-    await verifyProjectAccess(user, supabase, project_id);
+    await verifyProjectAccess(user, db, project_id);
 
-    const { data: habits } = await supabase
+    const { data: habits } = await db
       .from('habits')
       .select('id, name, icon, color, category, tracking_type, target_value, frequency')
       .eq('project_id', project_id)
@@ -1049,26 +1049,26 @@ async function getPerformerDetails(req, res) {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const { data: weekCompletions } = await supabase
+    const { data: weekCompletions } = await db
       .from('habit_completions')
       .select('*')
       .in('habit_id', habitIds)
       .eq('user_id', user.id)
       .gte('completed_date', weekAgo.toISOString().split('T')[0]);
 
-    const { data: allCompletions } = await supabase
+    const { data: allCompletions } = await db
       .from('habit_completions')
       .select('*')
       .in('habit_id', habitIds)
       .eq('user_id', user.id);
 
-    const { data: streaks } = await supabase
+    const { data: streaks } = await db
       .from('habit_streaks')
       .select('*')
       .in('habit_id', habitIds)
       .eq('user_id', user.id);
 
-    const { data: recentCompletions } = await supabase
+    const { data: recentCompletions } = await db
       .from('habit_completions')
       .select('habit_id, completed_date, value')
       .in('habit_id', habitIds)
@@ -1128,7 +1128,7 @@ async function getPerformerDetails(req, res) {
 async function addHabitNote(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
     const { notes } = req.body;
 
@@ -1136,7 +1136,7 @@ async function addHabitNote(req, res) {
       return res.status(400).json({ success: false, error: 'Note content is required' });
     }
 
-    const { data: habit, error: habitError } = await supabase
+    const { data: habit, error: habitError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -1147,11 +1147,11 @@ async function addHabitNote(req, res) {
       return res.status(404).json({ success: false, error: 'Habit not found' });
     }
 
-    await verifyProjectAccess(user, supabase, habit.project_id);
+    await verifyProjectAccess(user, db, habit.project_id);
 
     const today = new Date().toISOString().split('T')[0];
 
-    const { data: existingCompletion } = await supabase
+    const { data: existingCompletion } = await db
       .from('habit_completions')
       .select('*')
       .eq('habit_id', habitId)
@@ -1163,7 +1163,7 @@ async function addHabitNote(req, res) {
       const existingNotes = (existingCompletion.notes || '').trim();
       const newNotes = existingNotes ? `${existingNotes}\n---\n${notes.trim()}` : notes.trim();
 
-      const { data: completion, error } = await supabase
+      const { data: completion, error } = await db
         .from('habit_completions')
         .update({ notes: newNotes })
         .eq('id', existingCompletion.id)
@@ -1173,7 +1173,7 @@ async function addHabitNote(req, res) {
       if (error) throw error;
       return res.json({ success: true, data: completion, updated: true });
     } else {
-      const { data: completion, error } = await supabase
+      const { data: completion, error } = await db
         .from('habit_completions')
         .insert({
           id: randomUUID(),
@@ -1204,7 +1204,7 @@ async function addHabitNote(req, res) {
 async function deleteHabitNote(req, res) {
   try {
     const user = req.user;
-    const supabase = req.supabase;
+    const db = req.db;
     const { habitId } = req.params;
     const { date, note_index } = req.body;
 
@@ -1212,7 +1212,7 @@ async function deleteHabitNote(req, res) {
       return res.status(400).json({ success: false, error: 'Note index is required' });
     }
 
-    const { data: habit, error: habitError } = await supabase
+    const { data: habit, error: habitError } = await db
       .from('habits')
       .select('*')
       .eq('id', habitId)
@@ -1223,11 +1223,11 @@ async function deleteHabitNote(req, res) {
       return res.status(404).json({ success: false, error: 'Habit not found' });
     }
 
-    await verifyProjectAccess(user, supabase, habit.project_id);
+    await verifyProjectAccess(user, db, habit.project_id);
 
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    const { data: completion, error: completionError } = await supabase
+    const { data: completion, error: completionError } = await db
       .from('habit_completions')
       .select('*')
       .eq('habit_id', habitId)
@@ -1253,7 +1253,7 @@ async function deleteHabitNote(req, res) {
     const updatedNotes = notesArray.length > 0 ? notesArray.join('\n---\n') : null;
 
     if (!updatedNotes && completion.value === 0) {
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await db
         .from('habit_completions')
         .delete()
         .eq('id', completion.id);
@@ -1264,7 +1264,7 @@ async function deleteHabitNote(req, res) {
       return res.json({ success: true, message: 'Note deleted and completion removed', deleted_completion: true, data: null });
     }
 
-    const { data: updatedCompletion, error: updateError } = await supabase
+    const { data: updatedCompletion, error: updateError } = await db
       .from('habit_completions')
       .update({ notes: updatedNotes })
       .eq('id', completion.id)

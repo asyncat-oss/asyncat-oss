@@ -10,7 +10,7 @@ export async function exportDocx(req, res) {
     const { id } = req.params;
     const userId = req.user?.id;
     const blobServiceClient = req.blobServiceClient;
-    const supabase = req.supabase;
+    const supabase = req.db;
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -65,7 +65,7 @@ export async function exportPdf(req, res) {
     const { id } = req.params;
     const userId = req.user?.id;
     const blobServiceClient = req.blobServiceClient;
-    const supabase = req.supabase;
+    const supabase = req.db;
 
     console.log('[ExportController] Request params:', { id, userId: userId ? 'present' : 'missing' });
 

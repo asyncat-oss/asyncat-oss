@@ -68,7 +68,7 @@ export const getVersionHistory = async (req, res) => {
       limitNum,
       offsetNum,
       majorOnlyBool,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: result });
@@ -94,7 +94,7 @@ export const getVersion = async (req, res) => {
       noteId,
       versionId,
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: version });
@@ -129,7 +129,7 @@ export const createNamedVersion = async (req, res) => {
       name.trim(),
       description || '',
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.status(201).json({ success: true, data: version });
@@ -157,7 +157,7 @@ export const createAutoVersion = async (req, res) => {
       noteId,
       triggerType,
       req.user.id,
-      req.supabase,
+      req.db,
       { forceCreate, timestamp, restoredFrom }
     );
 
@@ -186,7 +186,7 @@ export const restoreVersion = async (req, res) => {
       versionId,
       createCheckpoint,
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: result });
@@ -221,7 +221,7 @@ export const compareVersions = async (req, res) => {
       versionA,
       versionB,
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: comparison });
@@ -257,7 +257,7 @@ export const getOperationHistory = async (req, res) => {
       noteId,
       req.user.id,
       { limit: limitNum, offset: offsetNum, since, versionId },
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: operations });
@@ -284,7 +284,7 @@ export const cleanupVersions = async (req, res) => {
       noteId,
       keepVersions,
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: result });
@@ -319,7 +319,7 @@ export const updateVersionName = async (req, res) => {
       versionId,
       name.trim(),
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: result });

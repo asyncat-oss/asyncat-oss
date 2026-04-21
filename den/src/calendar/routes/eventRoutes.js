@@ -2,18 +2,18 @@ import express from "express";
 import { randomUUID } from "crypto";
 const router = express.Router();
 import { verifyUser } from "../auth.js";
-import { attachCompat } from "../../db/compat.js";
+import { attachDb } from "../../db/sqlite.js";
 
 // Apply verification middleware to all routes
-router.use(verifyUser, attachCompat);
+router.use(verifyUser, attachDb);
 
 /**
  * Helper function to check if a user has access to a project
  */
 // Single-user mode: access granted if user owns the project
-const hasProjectAccess = async (userId, projectId, supabase) => {
+const hasProjectAccess = async (userId, projectId, db) => {
 	try {
-		const { data: project, error: projectError } = await supabase
+		const { data: project, error: projectError } = await db
 			.from("projects")
 			.select("created_by, owner_id")
 			.eq("id", projectId)
@@ -30,11 +30,11 @@ const hasProjectAccess = async (userId, projectId, supabase) => {
 /**
  * Helper function to fetch attendees for events from event_attendees table
  */
-const fetchEventAttendees = async (eventIds, supabase) => {
+const fetchEventAttendees = async (eventIds, db) => {
 	if (!eventIds || eventIds.length === 0) return {};
 
 	try {
-		const { data: attendees, error } = await supabase
+		const { data: attendees, error } = await db
 			.from("event_attendees")
 			.select("event_id, user_id, status, responded_at")
 			.in("event_id", eventIds);
@@ -66,11 +66,11 @@ const checkForConflicts = async (
 	startTime,
 	endTime,
 	excludeEventId,
-	supabase
+	db
 ) => {
 	try {
 		// Fetch all events that overlap with the given time range
-		let query = supabase
+		let query = db
 			.from("Events")
 			.select("id, title, startTime, endTime, createdBy")
 			.lt("startTime", endTime)
@@ -86,7 +86,7 @@ const checkForConflicts = async (
 
 		// Fetch attendees for all events
 		const eventIds = (events || []).map((e) => e.id);
-		const attendeesByEvent = await fetchEventAttendees(eventIds, supabase);
+		const attendeesByEvent = await fetchEventAttendees(eventIds, db);
 
 		// Filter events where user is involved (creator or attendee with accepted/maybe/creator status)
 		const conflicts = (events || []).filter((event) => {
@@ -126,7 +126,7 @@ const isAssignedToSubtask = (checklist, userId) => {
 //  Check if user is assigned to any subtask in a card's checklist
 const getCardsWithDueDates = async (
 	req,
-	supabase,
+	db,
 	projectId = null,
 	dateRange = null
 ) => {
@@ -138,7 +138,7 @@ const getCardsWithDueDates = async (
 			const hasAccess = await hasProjectAccess(
 				userId,
 				projectId,
-				supabase
+				db
 			);
 			if (!hasAccess) {
 				throw new Error("Unauthorized access to project");
@@ -149,7 +149,7 @@ const getCardsWithDueDates = async (
 
 		if (!projectId) {
 			// Get all cards with due dates — fetch columns separately for join
-			let cardsQ = supabase
+			let cardsQ = db
 				.from("Cards")
 				.select("id, title, description, priority, dueDate, columnId, tasks, progress, tags, createdBy, administrator_id, checklist")
 				.not("dueDate", "is", null);
@@ -165,7 +165,7 @@ const getCardsWithDueDates = async (
 			const colIds = [...new Set((allCards || []).map(c => c.columnId))];
 			let colMap = {};
 			if (colIds.length > 0) {
-				const { data: cols } = await supabase.from("Columns").select("id, title, projectId, isCompletionColumn").in("id", colIds);
+				const { data: cols } = await db.from("Columns").select("id, title, projectId, isCompletionColumn").in("id", colIds);
 				(cols || []).forEach(c => { colMap[c.id] = c; });
 			}
 
@@ -181,13 +181,13 @@ const getCardsWithDueDates = async (
 			return accessibleCards;
 		} else {
 			// For a specific project — get columns first, then cards
-			const { data: projCols } = await supabase.from("Columns").select("id, title, projectId, isCompletionColumn").eq("projectId", projectId);
+			const { data: projCols } = await db.from("Columns").select("id, title, projectId, isCompletionColumn").eq("projectId", projectId);
 			const projColIds = (projCols || []).map(c => c.id);
 			const colMap = (projCols || []).reduce((acc, c) => { acc[c.id] = c; return acc; }, {});
 
 			if (projColIds.length === 0) return [];
 
-			let cardsQ = supabase
+			let cardsQ = db
 				.from("Cards")
 				.select("id, title, description, priority, dueDate, columnId, tasks, progress, tags, createdBy, administrator_id, checklist")
 				.not("dueDate", "is", null)
@@ -225,7 +225,7 @@ const getCardsWithDueDates = async (
  */
 const getCardsWithDueDatesByWorkspace = async (
 	req,
-	supabase,
+	db,
 	workspaceId,
 	dateRange = null
 ) => {
@@ -233,7 +233,7 @@ const getCardsWithDueDatesByWorkspace = async (
 		const userId = req.user.id;
 
 		// First, get all projects in the workspace that the user has access to
-		const { data: workspaceProjects, error: projectsError } = await supabase
+		const { data: workspaceProjects, error: projectsError } = await db
 			.from("projects")
 			.select("id")
 			.eq("team_id", workspaceId);
@@ -250,7 +250,7 @@ const getCardsWithDueDatesByWorkspace = async (
 		const accessibleProjectIds = projectIds;
 
 		// Get columns for accessible projects first, then query cards
-		const { data: wsCols } = await supabase
+		const { data: wsCols } = await db
 			.from("Columns")
 			.select("id, title, projectId, isCompletionColumn")
 			.in("projectId", accessibleProjectIds);
@@ -260,7 +260,7 @@ const getCardsWithDueDatesByWorkspace = async (
 
 		if (wsColIds.length === 0) return [];
 
-		let cardsQ = supabase
+		let cardsQ = db
 			.from("Cards")
 			.select("id, title, description, priority, dueDate, columnId, tasks, progress, tags, createdBy, administrator_id, checklist")
 			.not("dueDate", "is", null)
@@ -304,14 +304,14 @@ router.get("/calendar-cards", verifyUser, async (req, res) => {
 		const { projectId, workspaceId, startDate, endDate } = req.query;
 		const userId = req.user.id;
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// If projectId is provided, verify access
 		if (projectId) {
 			const hasAccess = await hasProjectAccess(
 				userId,
 				projectId,
-				supabase
+				db
 			);
 			if (!hasAccess) {
 				return res.status(403).json({
@@ -328,14 +328,14 @@ router.get("/calendar-cards", verifyUser, async (req, res) => {
 		if (workspaceId) {
 			cards = await getCardsWithDueDatesByWorkspace(
 				req,
-				supabase,
+				db,
 				workspaceId,
 				dateRange
 			);
 		} else {
 			cards = await getCardsWithDueDates(
 				req,
-				supabase,
+				db,
 				projectId,
 				dateRange
 			);
@@ -415,9 +415,9 @@ router.put("/cards/:id/due-date", verifyUser, async (req, res) => {
 			return res.status(400).json({ error: "Due date is required" });
 		}
 
-		const supabase = req.supabase;
+		const db = req.db;
 		// Check if the user has permission to update this card
-		const { data: card, error: cardError } = await supabase
+		const { data: card, error: cardError } = await db
 			.from("Cards")
 			.select("createdBy, administrator_id, checklist, columnId")
 			.eq("id", id)
@@ -428,7 +428,7 @@ router.put("/cards/:id/due-date", verifyUser, async (req, res) => {
 		}
 
 		// Get column info separately
-		const { data: cardColumn } = await supabase
+		const { data: cardColumn } = await db
 			.from("Columns")
 			.select("projectId")
 			.eq("id", card.columnId)
@@ -452,7 +452,7 @@ router.put("/cards/:id/due-date", verifyUser, async (req, res) => {
 			const hasAccess = await hasProjectAccess(
 				userId,
 				cardColumn?.projectId,
-				supabase
+				db
 			);
 			if (!hasAccess) {
 				return res.status(403).json({
@@ -462,7 +462,7 @@ router.put("/cards/:id/due-date", verifyUser, async (req, res) => {
 		}
 
 		// Update the card due date
-		const { data: updatedCard, error } = await supabase
+		const { data: updatedCard, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.update({ dueDate: new Date(dueDate).toISOString() })
@@ -516,14 +516,14 @@ router.post("/", async (req, res) => {
 			finalProjectId = null;
 		}
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// If projectId is provided and it's not a personal event, check user access
 		if (finalProjectId && !isPersonalEvent) {
 			const hasAccess = await hasProjectAccess(
 				userId,
 				finalProjectId,
-				supabase
+				db
 			);
 			if (!hasAccess) {
 				return res
@@ -726,7 +726,7 @@ router.post("/", async (req, res) => {
 			startDateTime.toISOString(),
 			endDateTime.toISOString(),
 			null,
-			supabase
+			db
 		);
 
 		// Extract attendees from request body before creating event
@@ -747,7 +747,7 @@ router.post("/", async (req, res) => {
 		};
 
 		// Insert event into Supabase
-		const { data: event, error: insertError } = await supabase
+		const { data: event, error: insertError } = await db
 			.from("Events")
 			.insert([eventData])
 			.select()
@@ -776,7 +776,7 @@ router.post("/", async (req, res) => {
 
 			if (attendeeRecords.length > 0) {
 				const { data: insertedAttendees, error: attendeeError } =
-					await supabase
+					await db
 						.from("event_attendees")
 						.insert(attendeeRecords)
 						.select();
@@ -828,9 +828,9 @@ router.get("/", async (req, res) => {
 		}
 
 		// Check if user has access to this project
-		const supabase = req.supabase;
+		const db = req.db;
 
-		const hasAccess = await hasProjectAccess(userId, projectId, supabase);
+		const hasAccess = await hasProjectAccess(userId, projectId, db);
 		if (!hasAccess) {
 			return res
 				.status(403)
@@ -838,7 +838,7 @@ router.get("/", async (req, res) => {
 		}
 
 		// Get all events for the project
-		const { data: events, error: eventsError } = await supabase
+		const { data: events, error: eventsError } = await db
 			.from("Events")
 			.select(
 				`
@@ -860,7 +860,7 @@ router.get("/", async (req, res) => {
 
 		// Fetch attendees for all events
 		const eventIds = (events || []).map((e) => e.id);
-		const attendeesByEvent = await fetchEventAttendees(eventIds, supabase);
+		const attendeesByEvent = await fetchEventAttendees(eventIds, db);
 
 		// Filter events where user is creator or attendee
 		const userEvents = (events || []).filter((event) => {
@@ -877,7 +877,7 @@ router.get("/", async (req, res) => {
 		});
 
 		// Get project information
-		const { data: project, error: projectError } = await supabase
+		const { data: project, error: projectError } = await db
 			.from("projects")
 			.select("id, name")
 			.eq("id", projectId)
@@ -928,10 +928,10 @@ router.get("/my/events", async (req, res) => {
 		} = req.query;
 		const userId = req.user.id;
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// Build the base query
-		let query = supabase
+		let query = db
 			.from("Events")
 			.select(
 				"id, title, startTime, endTime, color, description, isAllDay, createdBy, projectId",
@@ -950,7 +950,7 @@ router.get("/my/events", async (req, res) => {
 		if (workspaceId) {
 			// Get all projects in the workspace
 			const { data: workspaceProjects, error: projectsError } =
-				await supabase
+				await db
 					.from("projects")
 					.select("id")
 					.eq("team_id", workspaceId);
@@ -988,7 +988,7 @@ router.get("/my/events", async (req, res) => {
 
 		// Fetch attendees for all events
 		const eventIds = (allEvents || []).map((e) => e.id);
-		const attendeesByEvent = await fetchEventAttendees(eventIds, supabase);
+		const attendeesByEvent = await fetchEventAttendees(eventIds, db);
 
 		// Filter events where user is creator or attendee
 		const events = (allEvents || []).filter((event) => {
@@ -1012,7 +1012,7 @@ router.get("/my/events", async (req, res) => {
 		// Fetch project information for all projects
 		let projectsMap = {};
 		if (projectIds.length > 0) {
-			const { data: projects, error: projectsError } = await supabase
+			const { data: projects, error: projectsError } = await db
 				.from("projects")
 				.select("id, name")
 				.in("id", projectIds);
@@ -1076,7 +1076,7 @@ router.get("/combined-data", verifyUser, async (req, res) => {
 			req.query;
 		const userId = req.user.id;
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// Prepare date range filter
 		const dateRange = startDate && endDate ? { startDate, endDate } : null;
@@ -1087,7 +1087,7 @@ router.get("/combined-data", verifyUser, async (req, res) => {
 			(async () => {
 				try {
 					// Build Supabase query
-					let query = supabase
+					let query = db
 						.from("Events")
 						.select(
 							"id, title, startTime, endTime, color, description, isAllDay, createdBy, projectId"
@@ -1098,7 +1098,7 @@ router.get("/combined-data", verifyUser, async (req, res) => {
 					if (personal === "true") {
 						query = query.is("projectId", null);
 					} else if (workspaceId) {
-						const { data: workspaceProjects } = await supabase
+						const { data: workspaceProjects } = await db
 							.from("projects")
 							.select("id")
 							.eq("team_id", workspaceId);
@@ -1137,7 +1137,7 @@ router.get("/combined-data", verifyUser, async (req, res) => {
 					const eventIds = (allEvents || []).map((e) => e.id);
 					const attendeesByEvent = await fetchEventAttendees(
 						eventIds,
-						supabase
+						db
 					);
 
 					// Filter events where user is creator or attendee
@@ -1168,7 +1168,7 @@ router.get("/combined-data", verifyUser, async (req, res) => {
 					let projectsMap = {};
 					if (projectIds.length > 0) {
 						const { data: projects, error: projectsError } =
-							await supabase
+							await db
 								.from("projects")
 								.select("id, name")
 								.in("id", projectIds);
@@ -1225,14 +1225,14 @@ router.get("/combined-data", verifyUser, async (req, res) => {
 					if (workspaceId) {
 						cards = await getCardsWithDueDatesByWorkspace(
 							req,
-							supabase,
+							db,
 							workspaceId,
 							dateRange
 						);
 					} else {
 						cards = await getCardsWithDueDates(
 							req,
-							supabase,
+							db,
 							projectId,
 							dateRange
 						);
@@ -1327,10 +1327,10 @@ router.get("/:id", async (req, res) => {
 		const eventId = req.params.id;
 		const userId = req.user.id;
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// Get the event
-		const { data: event, error: eventError } = await supabase
+		const { data: event, error: eventError } = await db
 			.from("Events")
 			.select(
 				`
@@ -1355,7 +1355,7 @@ router.get("/:id", async (req, res) => {
 		// Fetch attendees for this event
 		const attendeesByEvent = await fetchEventAttendees(
 			[event.id],
-			supabase
+			db
 		);
 		const eventAttendees = attendeesByEvent[event.id] || [];
 
@@ -1371,7 +1371,7 @@ router.get("/:id", async (req, res) => {
 				const hasAccess = await hasProjectAccess(
 					userId,
 					event.projectId,
-					supabase
+					db
 				);
 				if (!hasAccess) {
 					return res.status(403).json({
@@ -1388,7 +1388,7 @@ router.get("/:id", async (req, res) => {
 		// Get project information if event has a projectId
 		let projectName = null;
 		if (event.projectId) {
-			const { data: project, error: projectError } = await supabase
+			const { data: project, error: projectError } = await db
 				.from("projects")
 				.select("id, name")
 				.eq("id", event.projectId)
@@ -1448,10 +1448,10 @@ router.get("/dashboard", async (req, res) => {
 			}
 		}
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// Fetch only the necessary fields for dashboard display
-		const { data: allEvents, error: eventsError } = await supabase
+		const { data: allEvents, error: eventsError } = await db
 			.from("Events")
 			.select(
 				"id, title, startTime, endTime, color, createdBy, attendees"
@@ -1523,10 +1523,10 @@ router.put("/:id", async (req, res) => {
 		const eventId = req.params.id;
 		const userId = req.user.id;
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// Fetch the existing event
-		const { data: event, error: eventError } = await supabase
+		const { data: event, error: eventError } = await db
 			.from("Events")
 			.select("*")
 			.eq("id", eventId)
@@ -1537,7 +1537,7 @@ router.put("/:id", async (req, res) => {
 		}
 
 		// Fetch existing attendees from event_attendees table
-		const attendeesByEvent = await fetchEventAttendees([eventId], supabase);
+		const attendeesByEvent = await fetchEventAttendees([eventId], db);
 		const originalAttendees = attendeesByEvent[eventId] || [];
 
 		// Store original event data for comparison
@@ -1550,7 +1550,7 @@ router.put("/:id", async (req, res) => {
 
 		// If not the event creator, check if user is project admin
 		if (!isCreator && event.projectId) {
-			const { data: project } = await supabase
+			const { data: project } = await db
 				.from("projects")
 				.select("created_by")
 				.eq("id", event.projectId)
@@ -1878,7 +1878,7 @@ router.put("/:id", async (req, res) => {
 		updateData.updatedAt = new Date().toISOString();
 
 		// Update the event in Supabase (without attendees)
-		const { data: updated, error: updateError } = await supabase
+		const { data: updated, error: updateError } = await db
 			.from("Events")
 			.update(updateData)
 			.eq("id", eventId)
@@ -1924,7 +1924,7 @@ router.put("/:id", async (req, res) => {
 					updated_at: new Date().toISOString(),
 				}));
 
-				const { error: insertError } = await supabase
+				const { error: insertError } = await db
 					.from("event_attendees")
 					.insert(attendeeRecords);
 
@@ -1939,7 +1939,7 @@ router.put("/:id", async (req, res) => {
 			// Remove deleted attendees
 			if (removedAttendees.length > 0) {
 				const removedIds = removedAttendees.map((a) => a.user_id);
-				const { error: deleteError } = await supabase
+				const { error: deleteError } = await db
 					.from("event_attendees")
 					.delete()
 					.eq("event_id", eventId)
@@ -1953,7 +1953,7 @@ router.put("/:id", async (req, res) => {
 			// Fetch updated attendees list
 			const updatedAttendeesByEvent = await fetchEventAttendees(
 				[eventId],
-				supabase
+				db
 			);
 			newAttendees = updatedAttendeesByEvent[eventId] || [];
 		} else {
@@ -1991,10 +1991,10 @@ router.delete("/:id", async (req, res) => {
 		const eventId = req.params.id;
 		const userId = req.user.id;
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// Fetch the event
-		const { data: event, error: eventError } = await supabase
+		const { data: event, error: eventError } = await db
 			.from("Events")
 			.select("*")
 			.eq("id", eventId)
@@ -2012,7 +2012,7 @@ router.delete("/:id", async (req, res) => {
 
 		// If not the event creator, check if user is project admin
 		if (!isCreator && event.projectId) {
-			const { data: project } = await supabase
+			const { data: project } = await db
 				.from("projects")
 				.select("created_by")
 				.eq("id", event.projectId)
@@ -2032,7 +2032,7 @@ router.delete("/:id", async (req, res) => {
 		}
 
 		// Delete the event from Supabase
-		const { error: deleteError } = await supabase
+		const { error: deleteError } = await db
 			.from("Events")
 			.delete()
 			.eq("id", eventId);
@@ -2085,14 +2085,14 @@ router.post("/check-availability", verifyUser, async (req, res) => {
 			});
 		}
 
-		const supabase = req.supabase;
+		const db = req.db;
 
 		// Get all workspaces that each user is part of
 		const availabilityResults = await Promise.all(
 			userIds.map(async (checkUserId) => {
 				try {
 					// Single-user mode: get workspaces owned by this user
-					const { data: workspaceOwnership, error: wsError } = await supabase
+					const { data: workspaceOwnership, error: wsError } = await db
 						.from("workspaces")
 						.select("id")
 						.eq("owner_id", checkUserId);
@@ -2105,7 +2105,7 @@ router.post("/check-availability", verifyUser, async (req, res) => {
 					const conflicts = [];
 
 					// Check personal events (events with no projectId)
-					let personalQuery = supabase
+					let personalQuery = db
 						.from("Events")
 						.select(
 							"id, title, startTime, endTime, projectId, createdBy, attendees"
@@ -2154,7 +2154,7 @@ router.post("/check-availability", verifyUser, async (req, res) => {
 					// Check events in each workspace
 					for (const workspaceId of workspaceIdArray) {
 						// Get all projects in this workspace
-						const { data: workspaceProjects } = await supabase
+						const { data: workspaceProjects } = await db
 							.from("projects")
 							.select("id")
 							.eq("team_id", workspaceId);
@@ -2165,7 +2165,7 @@ router.post("/check-availability", verifyUser, async (req, res) => {
 							);
 
 							// Check for conflicting events in this workspace
-							let workspaceQuery = supabase
+							let workspaceQuery = db
 								.from("Events")
 								.select(
 									"id, title, startTime, endTime, projectId, createdBy, attendees"
@@ -2210,7 +2210,7 @@ router.post("/check-availability", verifyUser, async (req, res) => {
 							});
 
 							// Get workspace name
-							const { data: workspace } = await supabase
+							const { data: workspace } = await db
 								.from("workspaces")
 								.select("name")
 								.eq("id", workspaceId)

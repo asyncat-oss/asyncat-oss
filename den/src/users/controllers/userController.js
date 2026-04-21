@@ -1,4 +1,4 @@
-import { supabaseCompat } from "../../db/compat.js";
+import { sqliteDb } from "../../db/sqlite.js";
 
 /**
  * Get current user's profile
@@ -6,10 +6,10 @@ import { supabaseCompat } from "../../db/compat.js";
 export async function getCurrentUserProfile(req, res) {
   try {
     // Use middleware-provided authentication data
-    const { user, supabase } = req;
+    const { user, db } = req;
     
     // Get user details from the database
-    const { data: profile, error } = await supabase
+    const { data: profile, error } = await db
       .from("users")
       .select("id, email, name, profile_picture, created_at, updated_at")
       .eq("id", user.id)
@@ -35,7 +35,7 @@ export async function updateUserProfile(req, res) {
 
   try {
     // Use middleware-provided authentication data
-    const { user, supabase } = req;
+    const { user, db } = req;
 
     // Make sure we have an update to perform
     const updateData = {};
@@ -55,7 +55,7 @@ export async function updateUserProfile(req, res) {
     updateData.updated_at = new Date();
 
     // Perform the update - use select().maybeSingle() for safer operation
-    const { data: updatedProfile, error: updateError } = await supabase
+    const { data: updatedProfile, error: updateError } = await db
       .from("users")
       .update(updateData)
       .eq("id", user.id)
@@ -70,7 +70,7 @@ export async function updateUserProfile(req, res) {
     // Check if the update actually affected any rows
     if (!updatedProfile) {
       // Try to get the current user to see if it exists
-      const { data: existingUser, error: checkError } = await supabase
+      const { data: existingUser, error: checkError } = await db
         .from("users")
         .select("id")
         .eq("id", user.id)
@@ -131,11 +131,11 @@ export async function getUserById(req, res) {
       `getUserById called for ${id} - Internal: ${isInternalCall}, NoAuth: ${hasNoAuth}, Internal Header: ${hasInternalHeader}, Localhost: ${isLocalhost}`
     );
 
-    // Use req.supabase if available (authenticated), otherwise fall back to compat singleton
-    const supabase = req.supabase || supabaseCompat;
+    // Use req.db if available (authenticated), otherwise fall back to compat singleton
+    const db = req.db || sqliteDb;
     console.log("🔍 Using compat client for userId:", id);
 
-    const { data: profile, error } = await supabase
+    const { data: profile, error } = await db
       .from("users")
       .select("id, name, profile_picture, email") // Include email for internal calls
       .eq("id", id); // Remove .single() to get all matching rows
@@ -187,17 +187,14 @@ export async function getUsersByIds(req, res) {
 
   try {
     // Use middleware-provided authentication data (might be null for optionalAuth)
-    let { user, supabase } = req;
+    let { user, db } = req;
     
-    // If no supabase client from middleware (no auth), create anonymous client
-    if (!supabase) {
-      supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY
-      );
+    // If no db client from middleware, use the singleton SQLite client
+    if (!db) {
+      db = sqliteDb;
     }
 
-    const { data: profiles, error } = await supabase
+    const { data: profiles, error } = await db
       .from("users")
       .select("id, name, profile_picture")
       .in("id", ids);
@@ -232,18 +229,15 @@ export async function searchUsers(req, res) {
 
   try {
     // Use middleware-provided authentication data (might be null for optionalAuth)
-    let { user, supabase } = req;
+    let { user, db } = req;
     
-    // If no supabase client from middleware (no auth), create anonymous client
-    if (!supabase) {
-      supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY
-      );
+    // If no db client from middleware, use the singleton SQLite client
+    if (!db) {
+      db = sqliteDb;
     }
 
     // Search by name or email, excluding the current user (if authenticated)
-    let query_builder = supabase
+    let query_builder = db
       .from("users")
       .select("id, name, email, profile_picture")
       .or(`name.ilike.%${query}%,email.ilike.%${query}%`);

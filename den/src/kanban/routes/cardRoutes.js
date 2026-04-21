@@ -3,7 +3,7 @@ import express from "express";
 import multer from "multer";
 import cardController from "../controllers/cardController.js";
 import { verifyUser } from "../auth.js";
-import { attachCompat } from "../../db/compat.js";
+import { attachDb } from "../../db/sqlite.js";
 
 const router = express.Router();
 
@@ -64,7 +64,7 @@ const upload = multer({
 });
 
 // Apply authentication middleware to all routes
-router.use(verifyUser, attachCompat);
+router.use(verifyUser, attachDb);
 
 // Basic card routes
 router.get("/column/:columnId", cardController.getCards);

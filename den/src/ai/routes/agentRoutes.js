@@ -4,7 +4,7 @@
 
 import express from 'express';
 import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
-import { attachCompat } from '../../db/compat.js';
+import { attachDb } from '../../db/sqlite.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
@@ -34,7 +34,7 @@ initScheduler(async ({ goal, userId, workspaceId, workingDir }) => {
 const authenticate = (req, res, next) => {
   jwtVerify(req, res, (err) => {
     if (err) return;
-    attachCompat(req, res, () => {
+    attachDb(req, res, () => {
       req.workspaceId = req.query?.workspaceId || req.body?.workspaceId || null;
       next();
     });

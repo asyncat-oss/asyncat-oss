@@ -42,10 +42,10 @@ router.post('/:id/transfer-ownership', auth, transferOwnership);
 router.get('/:id/user/view-preferences', auth, async (req, res) => {
   try {
     const { id: projectId } = req.params;
-    const { user, supabase } = req;
+    const { user, db } = req;
 
     // In single-user mode, just return all enabled views as preferences
-    const { data: project, error } = await supabase
+    const { data: project, error } = await db
       .from('projects')
       .select('enabled_views, owner_id')
       .eq('id', projectId)
@@ -96,7 +96,7 @@ router.get('/folders', auth, async (req, res) => {
     const { workspaceId } = req.query;
     if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
 
-    const { data: folders, error } = await req.supabase
+    const { data: folders, error } = await req.db
       .from('project_folders')
       .select('*')
       .eq('user_id', req.user.id)
@@ -109,7 +109,7 @@ router.get('/folders', auth, async (req, res) => {
     const folderIds = (folders || []).map(f => f.id);
     let itemsByFolder = {};
     if (folderIds.length > 0) {
-      const { data: items } = await req.supabase
+      const { data: items } = await req.db
         .from('project_folder_items')
         .select('folder_id, project_id')
         .in('folder_id', folderIds);
@@ -137,7 +137,7 @@ router.post('/folders', auth, async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name required' });
     if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.db
       .from('project_folders')
       .insert({ id: randomUUID(), user_id: req.user.id, workspace_id: workspaceId, name: name.trim(), color: color || null })
       .select()
@@ -160,7 +160,7 @@ router.patch('/folders/:folderId', auth, async (req, res) => {
     if (color !== undefined) updates.color = color;
     if (sort_order !== undefined) updates.sort_order = sort_order;
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.db
       .from('project_folders')
       .update(updates)
       .eq('id', folderId)
@@ -180,7 +180,7 @@ router.patch('/folders/:folderId', auth, async (req, res) => {
 router.delete('/folders/:folderId', auth, async (req, res) => {
   try {
     const { folderId } = req.params;
-    const { error } = await req.supabase
+    const { error } = await req.db
       .from('project_folders')
       .delete()
       .eq('id', folderId)
@@ -200,7 +200,7 @@ router.post('/folders/:folderId/items', auth, async (req, res) => {
     const { projectId } = req.body;
     if (!projectId) return res.status(400).json({ success: false, error: 'projectId required' });
 
-    const { data: folder, error: folderError } = await req.supabase
+    const { data: folder, error: folderError } = await req.db
       .from('project_folders')
       .select('id')
       .eq('id', folderId)
@@ -210,13 +210,13 @@ router.post('/folders/:folderId/items', auth, async (req, res) => {
     if (folderError || !folder) return res.status(404).json({ success: false, error: 'Folder not found' });
 
     // Remove project from any existing folder first
-    await req.supabase
+    await req.db
       .from('project_folder_items')
       .delete()
       .eq('project_id', projectId)
       .eq('user_id', req.user.id);
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.db
       .from('project_folder_items')
       .insert({ id: randomUUID(), folder_id: folderId, project_id: projectId, user_id: req.user.id })
       .select()
@@ -233,7 +233,7 @@ router.post('/folders/:folderId/items', auth, async (req, res) => {
 router.delete('/folders/:folderId/items/:projectId', auth, async (req, res) => {
   try {
     const { folderId, projectId } = req.params;
-    const { error } = await req.supabase
+    const { error } = await req.db
       .from('project_folder_items')
       .delete()
       .eq('folder_id', folderId)

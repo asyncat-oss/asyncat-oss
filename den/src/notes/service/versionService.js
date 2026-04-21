@@ -41,7 +41,7 @@ export const getVersionHistory = async (
   limit,
   offset,
   majorOnly,
-  supabase
+  db
 ) => {
   try {
     console.log("VersionService - getVersionHistory:", {
@@ -53,10 +53,10 @@ export const getVersionHistory = async (
     });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
     // Build query
-    let query = supabase
+    let query = db
       .from("note_versions")
       .select(
         `
@@ -95,7 +95,7 @@ export const getVersionHistory = async (
     }
 
     // Get total count for pagination
-    const { count: totalCount, error: countError } = await supabase
+    const { count: totalCount, error: countError } = await db
       .from("note_versions")
       .select("*", { count: "exact", head: true })
       .eq("note_id", noteId);
@@ -116,14 +116,14 @@ export const getVersionHistory = async (
 };
 
 // Get specific version
-export const getVersion = async (noteId, versionId, userId, supabase) => {
+export const getVersion = async (noteId, versionId, userId, db) => {
   try {
     console.log("VersionService - getVersion:", { noteId, versionId, userId });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
-    const { data: version, error } = await supabase
+    const { data: version, error } = await db
       .from("note_versions")
       .select(
         `
@@ -161,7 +161,7 @@ export const createNamedVersion = async (
   name,
   description,
   userId,
-  supabase
+  db
 ) => {
   try {
     console.log("VersionService - createNamedVersion:", {
@@ -172,7 +172,7 @@ export const createNamedVersion = async (
     });
 
     // Get current note content
-    const currentNote = await noteService.getNoteById(noteId, userId, supabase);
+    const currentNote = await noteService.getNoteById(noteId, userId, db);
 
     // Extract blocks from metadata if they exist
     let blocks = { blocks: [] }; // Default to empty blocks array structure
@@ -188,7 +188,7 @@ export const createNamedVersion = async (
     }
 
     // Create version snapshot
-    const { data: version, error } = await supabase
+    const { data: version, error } = await db
       .from("note_versions")
       .insert({
         note_id: noteId,
@@ -235,7 +235,7 @@ export const createAutoVersion = async (
   noteId,
   triggerType,
   userId,
-  supabase,
+  db,
   options = {}
 ) => {
   try {
@@ -248,11 +248,11 @@ export const createAutoVersion = async (
       timestamp,
       restoredFrom,
     });
-    console.log("Supabase client provided:", !!supabase);
-    console.log("Supabase client type:", supabase?.constructor?.name);
+    console.log("Supabase client provided:", !!db);
+    console.log("Supabase client type:", db?.constructor?.name);
 
     // Get current note content first (needed for both time check and content comparison)
-    const currentNote = await noteService.getNoteById(noteId, userId, supabase);
+    const currentNote = await noteService.getNoteById(noteId, userId, db);
 
     console.log("Creating version from note:", {
       noteId,
@@ -278,7 +278,7 @@ export const createAutoVersion = async (
     }
 
     // Get the last version for comparison
-    const { data: lastVersion } = await supabase
+    const { data: lastVersion } = await db
       .from("note_versions")
       .select("created_at, title, blocks")
       .eq("note_id", noteId)
@@ -333,7 +333,7 @@ export const createAutoVersion = async (
     }
 
     // Get the next version number manually
-    const { data: lastVersionData } = await supabase
+    const { data: lastVersionData } = await db
       .from("note_versions")
       .select("version_number")
       .eq("note_id", noteId)
@@ -355,7 +355,7 @@ export const createAutoVersion = async (
     if (restoredFrom) versionMetadata.restored_from = restoredFrom;
     if (forceCreate) versionMetadata.forced_creation = true;
 
-    const { data: version, error } = await supabase
+    const { data: version, error } = await db
       .from("note_versions")
       .insert({
         note_id: noteId,
@@ -411,7 +411,7 @@ export const restoreVersion = async (
   versionId,
   createCheckpoint,
   userId,
-  supabase
+  db
 ) => {
   try {
     console.log("VersionService - restoreVersion:", {
@@ -422,7 +422,7 @@ export const restoreVersion = async (
     });
 
     // Get version to restore
-    const version = await getVersion(noteId, versionId, userId, supabase);
+    const version = await getVersion(noteId, versionId, userId, db);
 
     // Create checkpoint of current state if requested
     let checkpointCreated = false;
@@ -431,7 +431,7 @@ export const restoreVersion = async (
         const currentNote = await noteService.getNoteById(
           noteId,
           userId,
-          supabase
+          db
         );
 
         // Extract blocks from metadata if they exist
@@ -447,7 +447,7 @@ export const restoreVersion = async (
           }
         }
 
-        await supabase.from("note_versions").insert({
+        await db.from("note_versions").insert({
           note_id: noteId,
           title: `Before restore to v${version.version_number}`,
           content: currentNote.content || "",
@@ -496,7 +496,7 @@ export const restoreVersion = async (
     }
 
     // Update the note with version content
-    const { data: updatedNote, error: updateError } = await supabase
+    const { data: updatedNote, error: updateError } = await db
       .from("notes")
       .update({
         title: version.title,
@@ -535,7 +535,7 @@ export const compareVersions = async (
   versionAId,
   versionBId,
   userId,
-  supabase
+  db
 ) => {
   try {
     console.log("VersionService - compareVersions:", {
@@ -547,8 +547,8 @@ export const compareVersions = async (
 
     // Get both versions
     const [versionA, versionB] = await Promise.all([
-      getVersion(noteId, versionAId, userId, supabase),
-      getVersion(noteId, versionBId, userId, supabase),
+      getVersion(noteId, versionAId, userId, db),
+      getVersion(noteId, versionBId, userId, db),
     ]);
 
     // Simple diff calculation (you can enhance this with more sophisticated diffing)
@@ -587,7 +587,7 @@ export const compareVersions = async (
 };
 
 // Track individual operations for detailed history
-export const trackOperations = async (noteId, operations, userId, supabase) => {
+export const trackOperations = async (noteId, operations, userId, db) => {
   try {
     console.log("VersionService - trackOperations:", {
       noteId,
@@ -600,7 +600,7 @@ export const trackOperations = async (noteId, operations, userId, supabase) => {
     }
 
     // Get current version ID if available
-    const { data: latestVersion } = await supabase
+    const { data: latestVersion } = await db
       .from("note_versions")
       .select("id")
       .eq("note_id", noteId)
@@ -625,7 +625,7 @@ export const trackOperations = async (noteId, operations, userId, supabase) => {
     }));
 
     // Insert operations
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("note_operations")
       .insert(operationsToInsert)
       .select("id");
@@ -650,7 +650,7 @@ export const getOperationHistory = async (
   noteId,
   userId,
   options = {},
-  supabase
+  db
 ) => {
   try {
     const { limit = 100, offset = 0, since, versionId } = options;
@@ -664,10 +664,10 @@ export const getOperationHistory = async (
     });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
     // Build query
-    let query = supabase
+    let query = db
       .from("note_operations")
       .select(
         `
@@ -719,7 +719,7 @@ export const cleanupVersions = async (
   noteId,
   keepVersions,
   userId,
-  supabase
+  db
 ) => {
   try {
     console.log("VersionService - cleanupVersions:", {
@@ -729,10 +729,10 @@ export const cleanupVersions = async (
     });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
     // Call the cleanup function
-    const { data, error } = await supabase.rpc("cleanup_old_versions", {
+    const { data, error } = await db.rpc("cleanup_old_versions", {
       p_note_id: noteId,
       p_keep_versions: keepVersions,
     });
@@ -759,7 +759,7 @@ export const updateVersionName = async (
   versionId,
   name,
   userId,
-  supabase
+  db
 ) => {
   try {
     console.log("VersionService - updateVersionName:", {
@@ -770,10 +770,10 @@ export const updateVersionName = async (
     });
 
     // First check if user has access to this note
-    await noteService.getNoteById(noteId, userId, supabase);
+    await noteService.getNoteById(noteId, userId, db);
 
     // Get the current version to preserve other metadata
-    const { data: currentVersion, error: fetchError } = await supabase
+    const { data: currentVersion, error: fetchError } = await db
       .from("note_versions")
       .select("metadata")
       .eq("id", versionId)
@@ -791,7 +791,7 @@ export const updateVersionName = async (
       checkpoint_name: name,
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("note_versions")
       .update({
         metadata: updatedMetadata,

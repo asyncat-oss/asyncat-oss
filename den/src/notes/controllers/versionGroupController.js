@@ -31,7 +31,7 @@ export const getGroupNames = async (req, res) => {
     const groupNames = await versionGroupService.getGroupNames(
       noteId,
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: groupNames });
@@ -70,7 +70,7 @@ export const updateGroupName = async (req, res) => {
       groupKey,
       name.trim(),
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: result });
@@ -100,7 +100,7 @@ export const deleteGroupName = async (req, res) => {
       noteId,
       groupKey,
       req.user.id,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, message: "Group name deleted successfully" });

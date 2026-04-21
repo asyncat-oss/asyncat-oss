@@ -1,10 +1,11 @@
-// Replaced: calendar/config/database.js — now re-exports the SQLite compat layer.
+// den/src/calendar/config/database.js — re-exports the SQLite client.
 export {
-  supabaseCompat as supabase,
-  supabaseCompat as supabaseAuth,
-  supabaseCompat as mainDb,
-  createCompatClient as createAuthenticatedClient,
-} from '../../db/compat.js';
+  sqliteDb as db,
+  sqliteDb as supabase,
+  sqliteDb as supabaseAuth,
+  sqliteDb as mainDb,
+  createDbClient as createAuthenticatedClient,
+} from '../../db/sqlite.js';
 
 export const testConnection = async () => {
   console.log('Database: SQLite (connection always ready)');

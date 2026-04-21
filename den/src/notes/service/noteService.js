@@ -12,9 +12,9 @@ const isValidUUID = (uuid) => {
  * Single-user access check: verify the project belongs to the requesting user.
  * Replaces the old project_members-based checkProjectAccess.
  */
-const checkProjectAccess = async (projectId, userId, _role = null, supabase = null) => {
+const checkProjectAccess = async (projectId, userId, _role = null, db = null) => {
   try {
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
     const { data: project, error } = await supabaseClient
       .from("projects")
       .select("owner_id")
@@ -30,9 +30,9 @@ const checkProjectAccess = async (projectId, userId, _role = null, supabase = nu
 };
 
 // Helper to get user's project IDs (projects owned by the user)
-const getUserProjectIds = async (userId, supabase = null) => {
+const getUserProjectIds = async (userId, db = null) => {
   try {
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
     const { data, error } = await supabaseClient
       .from("projects")
       .select("id")
@@ -50,10 +50,10 @@ const getUserProjectIds = async (userId, supabase = null) => {
 };
 
 // Helper to fetch user info by id (replaces Supabase join syntax)
-const getUserById = async (userId, supabase = null) => {
+const getUserById = async (userId, db = null) => {
   if (!userId) return null;
   try {
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
     const { data } = await supabaseClient
       .from("users")
       .select("id, name, email, profile_picture")
@@ -66,20 +66,20 @@ const getUserById = async (userId, supabase = null) => {
 };
 
 // Attach creator user info to a note (replaces join syntax)
-const attachCreator = async (note, supabase) => {
+const attachCreator = async (note, db) => {
   if (!note) return note;
-  const creator = await getUserById(note.createdby, supabase);
+  const creator = await getUserById(note.createdby, db);
   return { ...note, users: creator };
 };
 
 // Attach creator user info to multiple notes
-const attachCreators = async (notes, supabase) => {
+const attachCreators = async (notes, db) => {
   if (!notes || notes.length === 0) return notes;
   // Collect unique creator IDs
   const creatorIds = [...new Set(notes.map((n) => n.createdby).filter(Boolean))];
   if (creatorIds.length === 0) return notes.map((n) => ({ ...n, users: null }));
 
-  const supabaseClient = supabase || getSupabase();
+  const supabaseClient = db || getSupabase();
   const { data: users } = await supabaseClient
     .from("users")
     .select("id, name, email, profile_picture")
@@ -94,10 +94,10 @@ const getNotes = async (
   userId,
   projectId = null,
   excludeContent = false,
-  supabase = null
+  db = null
 ) => {
   try {
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
 
     // Build select columns (no join syntax — compat layer doesn't support it)
     const cols = excludeContent
@@ -144,7 +144,7 @@ const getNotes = async (
 };
 
 // Enhanced create note with proper project handling
-const createNote = async (noteData, userId, supabase = null) => {
+const createNote = async (noteData, userId, db = null) => {
   try {
     const { title, content, projectId, metadata } = noteData;
 
@@ -156,7 +156,7 @@ const createNote = async (noteData, userId, supabase = null) => {
       throw new Error("Invalid project ID format");
     }
 
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
     const hasAccess = await checkProjectAccess(projectId, userId, null, supabaseClient);
     if (!hasAccess) {
       throw new Error("You do not have permission to create notes in this project");
@@ -190,13 +190,13 @@ const createNote = async (noteData, userId, supabase = null) => {
 };
 
 // Get note by ID with improved error handling
-const getNoteById = async (id, userId, supabase = null) => {
+const getNoteById = async (id, userId, db = null) => {
   try {
     if (!isValidUUID(id)) {
       throw new Error("Invalid note ID format");
     }
 
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
     const { data: note, error } = await supabaseClient
       .from("notes")
       .select("*")
@@ -232,14 +232,14 @@ const updateNote = async (
   updates,
   userId,
   blobServiceClient = null,
-  supabase = null
+  db = null
 ) => {
   try {
     if (!isValidUUID(id)) {
       throw new Error("Invalid note ID format");
     }
 
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
 
     // Fetch existing note
     const { data: note, error: fetchError } = await supabaseClient
@@ -328,9 +328,9 @@ const updateNoteDelta = async (
   updates,
   userId,
   blobServiceClient = null,
-  supabase = null
+  db = null
 ) => {
-  return updateNote(id, updates, userId, blobServiceClient, supabase);
+  return updateNote(id, updates, userId, blobServiceClient, db);
 };
 
 // Enhanced delete note
@@ -338,14 +338,14 @@ const deleteNote = async (
   id,
   userId,
   blobServiceClient = null,
-  supabase = null
+  db = null
 ) => {
   try {
     if (!isValidUUID(id)) {
       throw new Error("Invalid note ID format");
     }
 
-    const supabaseClient = supabase || getSupabase();
+    const supabaseClient = db || getSupabase();
 
     const { data: note, error: fetchError } = await supabaseClient
       .from("notes")

@@ -386,7 +386,7 @@ export const applyDeltaChanges = async (req, res) => {
       const existing = await noteService.getNoteById(
         id,
         req.user.id,
-        req.supabase
+        req.db
       );
       if (existing?.metadata) {
         const meta =
@@ -420,7 +420,7 @@ export const applyDeltaChanges = async (req, res) => {
       console.log("DeltaController - No operations to apply");
       return res.json({
         success: true,
-        data: await noteService.getNoteById(id, req.user.id, req.supabase),
+        data: await noteService.getNoteById(id, req.user.id, req.db),
         operationsApplied: [],
         operationsRejected: [],
         conflicts: false,
@@ -454,7 +454,7 @@ export const applyDeltaChanges = async (req, res) => {
       updates,
       req.user.id,
       req.blobServiceClient,
-      req.supabase
+      req.db
     );
 
     // Check if we should create an automatic version
@@ -469,7 +469,7 @@ export const applyDeltaChanges = async (req, res) => {
     //     id,
     //     changeset.operations,
     //     req.user.id,
-    //     req.supabase
+    //     req.db
     //   );
     // } catch (opsError) {
     //   console.warn(
@@ -521,7 +521,7 @@ export const getNotes = async (req, res) => {
       req.user.id,
       projectId,
       shouldExcludeContent,
-      req.supabase
+      req.db
     );
 
     res.json({ success: true, data: notes });
@@ -537,7 +537,7 @@ export const getNotes = async (req, res) => {
 export const getNoteById = async (req, res) => {
   try {
     const { id } = req.params;
-    const note = await noteService.getNoteById(id, req.user.id, req.supabase);
+    const note = await noteService.getNoteById(id, req.user.id, req.db);
     res.json({ success: true, data: note });
   } catch (error) {
     console.error("Note fetch error:", error);
@@ -560,7 +560,7 @@ export const createNote = async (req, res) => {
     const newNote = await noteService.createNote(
       noteData,
       req.user.id,
-      req.supabase
+      req.db
     );
     res.status(201).json({ success: true, data: newNote });
   } catch (error) {
@@ -584,7 +584,7 @@ export const deleteNote = async (req, res) => {
       id,
       req.user.id,
       req.blobServiceClient,
-      req.supabase
+      req.db
     );
     res.json({ success: true, data: deletedNote });
   } catch (error) {
@@ -609,7 +609,7 @@ export const getNotesByProject = async (req, res) => {
       req.user.id,
       projectId,
       false,
-      req.supabase
+      req.db
     );
     res.json({ success: true, data: notes });
   } catch (error) {

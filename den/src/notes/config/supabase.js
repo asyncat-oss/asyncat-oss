@@ -1,11 +1,9 @@
-// Replaced: notes/config/supabase.js — now re-exports the SQLite compat layer.
+// den/src/notes/config/supabase.js — re-exports the SQLite client.
 export {
-  supabaseCompat as default,
-  supabaseCompat as supabase,
-} from '../../db/compat.js';
+  sqliteDb as default,
+  sqliteDb as supabase,
+} from '../../db/sqlite.js';
 
-export const initializeSupabase = () => supabaseCompat;
-export const getSupabase        = () => supabaseCompat;
-export const createAuthenticatedSupabaseClient = (_token) => supabaseCompat;
-
-import { supabaseCompat } from '../../db/compat.js';
+export const initializeSupabase = () => sqliteDb;
+export const getSupabase        = () => sqliteDb;
+export const createAuthenticatedSupabaseClient = (_token) => sqliteDb;

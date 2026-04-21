@@ -22,7 +22,7 @@ const asyncHandler = (fn) => async (req, res, next) => {
 
 const getColumns = asyncHandler(async (req, res) => {
 	const { projectId } = req.query;
-	const columns = await columnService.getColumns(projectId, req.supabase);
+	const columns = await columnService.getColumns(projectId, req.db);
 	res.json(columns);
 });
 
@@ -42,7 +42,7 @@ const createColumn = asyncHandler(async (req, res) => {
 	try {
 		const column = await columnService.createColumn(
 			columnData,
-			req.supabase
+			req.db
 		);
 		console.log("✅ Column created successfully:", column.id);
 		res.status(201).json(column);
@@ -59,7 +59,7 @@ const updateColumn = asyncHandler(async (req, res) => {
 
 	console.log("Updating column with:", { id, projectId, body: req.body });
 
-	const existingColumn = await columnService.getColumnById(id, req.supabase);
+	const existingColumn = await columnService.getColumnById(id, req.db);
 	if (!existingColumn) {
 		return res.status(404).json({ error: "Column not found" });
 	}
@@ -70,7 +70,7 @@ const updateColumn = asyncHandler(async (req, res) => {
 	// Single-user mode: check project ownership via owner_id
 	let isProjectOwner = false;
 	if (existingColumn.projectId) {
-		const { data: proj } = await req.supabase
+		const { data: proj } = await req.db
 			.from("projects")
 			.select("owner_id")
 			.eq("id", existingColumn.projectId)
@@ -88,7 +88,7 @@ const updateColumn = asyncHandler(async (req, res) => {
 		id,
 		projectId,
 		req.body,
-		req.supabase
+		req.db
 	);
 
 	res.json(column);
@@ -96,7 +96,7 @@ const updateColumn = asyncHandler(async (req, res) => {
 
 const deleteColumn = asyncHandler(async (req, res) => {
 	const { id } = req.params;
-	const existingColumn = await columnService.getColumnById(id, req.supabase);
+	const existingColumn = await columnService.getColumnById(id, req.db);
 
 	if (!existingColumn) {
 		return res.status(404).json({ error: "Column not found" });
@@ -108,7 +108,7 @@ const deleteColumn = asyncHandler(async (req, res) => {
 	// Single-user mode: check project ownership via owner_id
 	let isProjectOwner = false;
 	if (existingColumn.projectId) {
-		const { data: proj } = await req.supabase
+		const { data: proj } = await req.db
 			.from("projects")
 			.select("owner_id")
 			.eq("id", existingColumn.projectId)
@@ -126,7 +126,7 @@ const deleteColumn = asyncHandler(async (req, res) => {
 	await columnService.deleteColumn(
 		id,
 		existingColumn.projectId,
-		req.supabase
+		req.db
 	);
 
 	res.json({ message: "Column deleted successfully" });
@@ -146,7 +146,7 @@ const updateColumnOrder = asyncHandler(async (req, res) => {
 		const result = await columnService.updateColumnOrder(
 			projectId,
 			order,
-			req.supabase
+			req.db
 		);
 
 		res.json(result);
@@ -159,7 +159,7 @@ const updateColumnOrder = asyncHandler(async (req, res) => {
 const getUserColumns = asyncHandler(async (req, res) => {
 	// Use the authenticated user's ID from the request
 	const userId = req.user.id;
-	const columns = await columnService.getUserColumns(userId, req.supabase);
+	const columns = await columnService.getUserColumns(userId, req.db);
 	res.json(columns);
 });
 
@@ -174,7 +174,7 @@ const updateColumnCompletionStatus = asyncHandler(async (req, res) => {
 			.json({ error: "isCompletionColumn must be a boolean value" });
 	}
 
-	const existingColumn = await columnService.getColumnById(id, req.supabase);
+	const existingColumn = await columnService.getColumnById(id, req.db);
 	if (!existingColumn) {
 		return res.status(404).json({ error: "Column not found" });
 	}
@@ -185,7 +185,7 @@ const updateColumnCompletionStatus = asyncHandler(async (req, res) => {
 	// Single-user mode: check project ownership via owner_id
 	let isProjectOwner = false;
 	if (existingColumn.projectId) {
-		const { data: proj } = await req.supabase
+		const { data: proj } = await req.db
 			.from("projects")
 			.select("owner_id")
 			.eq("id", existingColumn.projectId)
@@ -203,7 +203,7 @@ const updateColumnCompletionStatus = asyncHandler(async (req, res) => {
 		id,
 		existingColumn.projectId,
 		{ isCompletionColumn },
-		req.supabase
+		req.db
 	);
 
 	res.json(column);

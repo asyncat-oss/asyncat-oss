@@ -6,7 +6,7 @@ import dependencyService from "../services/dependencyService.js";
 const getCards = async (req, res) => {
 	try {
 		const { columnId } = req.params;
-		const cards = await cardService.getCards(columnId, req.supabase);
+		const cards = await cardService.getCards(columnId, req.db);
 		res.status(200).json(cards);
 	} catch (error) {
 		console.error("Error getting cards:", error);
@@ -18,7 +18,7 @@ const getCards = async (req, res) => {
 const getCard = async (req, res) => {
 	try {
 		const { id } = req.params;
-		const card = await cardService.getCardById(id, req.supabase);
+		const card = await cardService.getCardById(id, req.db);
 
 		if (!card) {
 			return res.status(404).json({ error: "Card not found" });
@@ -73,7 +73,7 @@ const createCard = async (req, res) => {
 		// Pass files to the service
 		const newCard = await cardService.createCard(
 			cardData,
-			req.supabase,
+			req.db,
 			files
 		);
 
@@ -99,7 +99,7 @@ const updateCard = async (req, res) => {
 		const updatedCard = await cardService.updateCard(
 			id,
 			cardData,
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json(updatedCard);
@@ -115,7 +115,7 @@ const deleteCard = async (req, res) => {
 	try {
 		const { id } = req.params;
 
-		await cardService.deleteCard(id, req.supabase);
+		await cardService.deleteCard(id, req.db);
 
 		res.status(200).json({ message: "Card deleted successfully" });
 	} catch (error) {
@@ -135,7 +135,7 @@ const moveCard = async (req, res) => {
 			sourceColumnId,
 			destinationColumnId,
 			newOrder,
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json(result);
@@ -154,7 +154,7 @@ const updateChecklist = async (req, res) => {
 		const updatedCard = await cardService.updateChecklist(
 			id,
 			checklist,
-			req.supabase
+			req.db
 		);
 
 		// Prepare response
@@ -180,7 +180,7 @@ const updateCardAdministrator = async (req, res) => {
 		const updatedCard = await cardService.updateCardAdministrator(
 			id,
 			administratorId,
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json(updatedCard);
@@ -198,7 +198,7 @@ const updateSubtaskAssignees = async (req, res) => {
 		const { assignees } = req.body;
 
 		// Get current card
-		const card = await cardService.getCardById(id, req.supabase);
+		const card = await cardService.getCardById(id, req.db);
 		if (!card) {
 			return res.status(404).json({ error: "Card not found" });
 		}
@@ -211,7 +211,7 @@ const updateSubtaskAssignees = async (req, res) => {
 		const updatedCard = await cardService.updateChecklist(
 			id,
 			updatedChecklist,
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json(updatedCard);
@@ -228,7 +228,7 @@ const updateSubtaskDuration = async (req, res) => {
 		const { id, subtaskId } = req.params;
 		const { duration, startDate, dueDate } = req.body;
 
-		const card = await cardService.getCardById(id, req.supabase);
+		const card = await cardService.getCardById(id, req.db);
 		if (!card) {
 			return res.status(404).json({ error: "Card not found" });
 		}
@@ -250,7 +250,7 @@ const updateSubtaskDuration = async (req, res) => {
 		const updatedCard = await cardService.updateChecklist(
 			id,
 			updatedChecklist,
-			req.supabase
+			req.db
 		);
 
 		// Prepare response
@@ -297,7 +297,7 @@ const getCalendarData = async (req, res) => {
 		);
 
 		// Get all cards for the user (we'll process scheduling in memory)
-		const { data: cards, error: cardsError } = await req.supabase
+		const { data: cards, error: cardsError } = await req.db
 			.schema("kanban")
 			.from("Cards")
 			.select("*")
@@ -306,7 +306,7 @@ const getCalendarData = async (req, res) => {
 		if (cardsError) throw cardsError;
 
 		// Add dependency counts and duration calculations to all cards
-		await cardService.addDependencyCountsToCards(cards || [], req.supabase);
+		await cardService.addDependencyCountsToCards(cards || [], req.db);
 
 		// Extract scheduled subtask slots from checklist data
 		const scheduledSubtasks = [];
@@ -370,7 +370,7 @@ const getCardDependencies = async (req, res) => {
 		const { id } = req.params;
 		const dependencies = await dependencyService.getCardDependencies(
 			id,
-			req.supabase
+			req.db
 		);
 		res.status(200).json(dependencies);
 	} catch (error) {
@@ -385,7 +385,7 @@ const getDependentCards = async (req, res) => {
 		const { id } = req.params;
 		const dependentCards = await dependencyService.getDependentCards(
 			id,
-			req.supabase
+			req.db
 		);
 		res.status(200).json(dependentCards);
 	} catch (error) {
@@ -411,7 +411,7 @@ const addDependency = async (req, res) => {
 			targetCardId,
 			type,
 			lag,
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json(dependency);
@@ -429,13 +429,13 @@ const removeDependency = async (req, res) => {
 		await dependencyService.deleteDependency(
 			id,
 			dependencyId,
-			req.supabase
+			req.db
 		);
 
 		// Return updated dependencies
 		const updatedDependencies = await dependencyService.getCardDependencies(
 			id,
-			req.supabase
+			req.db
 		);
 		res.status(200).json(updatedDependencies);
 	} catch (error) {
@@ -450,7 +450,7 @@ const checkDependenciesStatus = async (req, res) => {
 		const { id } = req.params;
 		const areMet = await dependencyService.areDependenciesMet(
 			id,
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json({
@@ -470,7 +470,7 @@ const getUnlockedCards = async (req, res) => {
 		const unlockedCards =
 			await dependencyService.getUnlockedCardsByDependency(
 				id,
-				req.supabase
+				req.db
 			);
 
 		res.status(200).json(unlockedCards);
@@ -502,7 +502,7 @@ const addAttachment = async (req, res) => {
 		const updatedCard = await cardService.addAttachments(
 			id,
 			files,
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json(updatedCard);
@@ -525,7 +525,7 @@ const removeAttachment = async (req, res) => {
 		const updatedCard = await cardService.removeAttachment(
 			id,
 			decodeURIComponent(attachmentId),
-			req.supabase
+			req.db
 		);
 
 		res.status(200).json(updatedCard);

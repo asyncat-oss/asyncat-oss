@@ -1,6 +1,6 @@
 // projectPermissionHelpers.js
 import { verifyUser as jwtVerify } from '../../../auth/authMiddleware.js';
-import { createCompatClient } from '../../../db/compat.js';
+import { createDbClient } from '../../../db/sqlite.js';
 
 // =====================================================
 // SECURE EMOJI VALIDATION
@@ -397,13 +397,13 @@ const validateUserViewPreferences = (preferences, availableViews, accessibleView
 
 /**
  * Check if user is the owner of a project
- * @param {Object} supabase - Supabase client
+ * @param {Object} db - Supabase client
  * @param {string} projectId - Project ID
  * @param {string} userId - User ID
  * @returns {boolean} - Whether user is the owner
  */
-const isProjectOwner = async (supabase, projectId, userId) => {
-  const { data: project, error } = await supabase
+const isProjectOwner = async (db, projectId, userId) => {
+  const { data: project, error } = await db
     .from('projects')
     .select('owner_id')
     .eq('id', projectId)
@@ -418,18 +418,18 @@ const isProjectOwner = async (supabase, projectId, userId) => {
 
 /**
  * Get user's role and permissions in a project (UPDATED for hybrid ownership)
- * @param {Object} supabase - Supabase client
+ * @param {Object} db - Supabase client
  * @param {string} projectId - Project ID
  * @param {string} userId - User ID
  * @returns {Object|null} - User role data or null
  */
-const getUserProjectRole = async (supabase, projectId, userId) => {
+const getUserProjectRole = async (db, projectId, userId) => {
   // First check if user is the owner
-  const isOwner = await isProjectOwner(supabase, projectId, userId);
+  const isOwner = await isProjectOwner(db, projectId, userId);
   
   if (isOwner) {
     // Owner gets all permissions and all views
-    const { data: project, error: projectError } = await supabase
+    const { data: project, error: projectError } = await db
       .from('projects')
       .select('enabled_views')
       .eq('id', projectId)
@@ -453,21 +453,21 @@ const getUserProjectRole = async (supabase, projectId, userId) => {
 
 /**
  * Check if user has specific permission (UPDATED for hybrid ownership)
- * @param {Object} supabase - Supabase client
+ * @param {Object} db - Supabase client
  * @param {string} projectId - Project ID
  * @param {string} userId - User ID
  * @param {string} permission - Permission to check
  * @returns {boolean} - Whether user has permission
  */
-const hasPermission = async (supabase, projectId, userId, permission) => {
+const hasPermission = async (db, projectId, userId, permission) => {
   // Owners always have all permissions
-  const isOwner = await isProjectOwner(supabase, projectId, userId);
+  const isOwner = await isProjectOwner(db, projectId, userId);
   if (isOwner) {
     return true;
   }
 
   // Check member permissions
-  const userRole = await getUserProjectRole(supabase, projectId, userId);
+  const userRole = await getUserProjectRole(db, projectId, userId);
   
   if (!userRole) {
     return false;
@@ -477,8 +477,8 @@ const hasPermission = async (supabase, projectId, userId, permission) => {
 };
 
 // Helper function to check if user has permission for a specific view action
-const hasViewPermission = async (supabase, projectId, userId, viewName, requiredLevel = 'view') => {
-  const userRole = await getUserProjectRole(supabase, projectId, userId);
+const hasViewPermission = async (db, projectId, userId, viewName, requiredLevel = 'view') => {
+  const userRole = await getUserProjectRole(db, projectId, userId);
   
   if (!userRole) {
     return false;
@@ -513,16 +513,16 @@ const hasViewPermission = async (supabase, projectId, userId, viewName, required
 
 /**
  * Transfer project ownership
- * @param {Object} supabase - Supabase client
+ * @param {Object} db - Supabase client
  * @param {string} projectId - Project ID
  * @param {string} newOwnerId - New owner user ID
  * @param {string} currentUserId - Current user ID (must be current owner)
  * @returns {Object} - Transfer result
  */
-const transferProjectOwnership = async (supabase, projectId, newOwnerId, currentUserId) => {
+const transferProjectOwnership = async (db, projectId, newOwnerId, currentUserId) => {
   try {
     // Use the database function for atomic ownership transfer
-    const { data: result, error } = await supabase
+    const { data: result, error } = await db
       .rpc('transfer_project_ownership', {
         p_project_id: projectId,
         p_new_owner_id: newOwnerId,
@@ -543,11 +543,11 @@ const transferProjectOwnership = async (supabase, projectId, newOwnerId, current
   }
 };
 
-// Internal helper: if req.supabase already set by upstream middleware, use it;
-// otherwise create a compat client from the user already on the request.
-const getSupabase = (req) => {
-  if (req.supabase) return req.supabase;
-  return createCompatClient(req.user);
+// Internal helper: if req.db already set by upstream middleware, use it;
+// otherwise create a db client from the user already on the request.
+const getDb = (req) => {
+  if (req.db) return req.db;
+  return createDbClient(req.user);
 };
 
 // Middleware function to check permissions
@@ -556,14 +556,14 @@ const requirePermission = (permission) => {
     jwtVerify(req, res, async () => {
       try {
         const { id: projectId } = req.params;
-        const supabase = getSupabase(req);
-        req.supabase = supabase;
+        const db = getDb(req);
+        req.db = db;
 
-        const hasAccess = await hasPermission(supabase, projectId, req.user.id, permission);
+        const hasAccess = await hasPermission(db, projectId, req.user.id, permission);
         if (!hasAccess) {
           return res.status(403).json({ success: false, error: `Insufficient permissions. Required: ${permission}` });
         }
-        req.userRole = await getUserProjectRole(supabase, projectId, req.user.id);
+        req.userRole = await getUserProjectRole(db, projectId, req.user.id);
         next();
       } catch (err) {
         return res.status(401).json({ success: false, error: 'Authentication failed' });
@@ -578,14 +578,14 @@ const requireViewPermission = (viewName, requiredLevel = 'view') => {
     jwtVerify(req, res, async () => {
       try {
         const { id: projectId } = req.params;
-        const supabase = getSupabase(req);
-        req.supabase = supabase;
+        const db = getDb(req);
+        req.db = db;
 
-        const hasAccess = await hasViewPermission(supabase, projectId, req.user.id, viewName, requiredLevel);
+        const hasAccess = await hasViewPermission(db, projectId, req.user.id, viewName, requiredLevel);
         if (!hasAccess) {
           return res.status(403).json({ success: false, error: `Insufficient permissions for ${viewName}. Required: ${requiredLevel}` });
         }
-        req.userRole = await getUserProjectRole(supabase, projectId, req.user.id);
+        req.userRole = await getUserProjectRole(db, projectId, req.user.id);
         next();
       } catch (err) {
         return res.status(401).json({ success: false, error: 'Authentication failed' });
@@ -596,13 +596,13 @@ const requireViewPermission = (viewName, requiredLevel = 'view') => {
 
 
 /**
- * Controller-level helper: reads req.user and req.supabase (set by auth middleware).
+ * Controller-level helper: reads req.user and req.db (set by auth middleware).
  * Controllers that were written to call `await verifyUser(req)` use this.
  */
 export async function verifyUser(req) {
-  const { user, supabase } = req;
+  const { user, db } = req;
   if (!user) throw Object.assign(new Error('Authentication required'), { status: 401 });
-  return { user, supabase };
+  return { user, db };
 }
 
 export {

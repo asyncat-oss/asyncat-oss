@@ -1,7 +1,7 @@
 // aiRoutes.js - Chat Only
 import express from 'express';
 import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
-import { attachCompat } from '../../db/compat.js';
+import { attachDb } from '../../db/sqlite.js';
 import { enhancedRouter } from '../controllers/ai/chat/chatRouter.js';
 import { dataLayer } from '../controllers/ai/DataLayer.js';
 import { chatService } from '../controllers/ai/chatService.js';
@@ -22,7 +22,7 @@ const getWorkspaceContext = (req) => {
 const addAuthenticatedClient = (req, res, next) => {
   jwtVerify(req, res, (err) => {
     if (err) return; // jwtVerify already sent 401
-    attachCompat(req, res, () => {
+    attachDb(req, res, () => {
       req.workspaceId = getWorkspaceContext(req);
       next();
     });
@@ -113,7 +113,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
 
     // Get context
     const workspaceId = req.workspaceId;
-    const contextData = await dataLayer.getUserContext(req.user.id, projectIds, workspaceId, req.supabase);
+    const contextData = await dataLayer.getUserContext(req.user.id, projectIds, workspaceId, req.db);
     const contextPrompt = formatContext(contextData);
 
     const workspaceContext = `**WORKSPACE:** ${contextData.workspaceName || 'Current Workspace'}`;
@@ -167,7 +167,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
 
     const toolContext = {
       userId: req.user.id,
-      supabase: req.supabase,
+      db: req.db,
       workspaceId
     };
 
@@ -596,7 +596,7 @@ router.post('/chats/save', addAuthenticatedClient, async (req, res) => {
       conversationId,
       workspaceId: req.workspaceId,
       fileAttachments,
-      authenticatedSupabase: req.supabase
+      authenticatedSupabase: req.db
     });
     
     res.json({ success: true, ...result });
@@ -630,7 +630,7 @@ router.post('/chats/autosave', addAuthenticatedClient, async (req, res) => {
       conversationId,
       workspaceId: req.workspaceId,
       fileAttachments,
-      authenticatedSupabase: req.supabase
+      authenticatedSupabase: req.db
     });
     
     res.json({ success: true, ...result });
@@ -657,7 +657,7 @@ router.get('/chats', addAuthenticatedClient, async (req, res) => {
       includeArchived: includeArchived === 'true',
       searchTerm: search || null,
       workspaceId: req.workspaceId,
-      authenticatedSupabase: req.supabase // Pass authenticated client
+      authenticatedSupabase: req.db // Pass authenticated client
     };
 
     const result = await chatService.getUserConversations(req.user.id, options);
@@ -684,7 +684,7 @@ router.get('/chats/workspaces', authenticateUser, async (req, res) => {
 router.get('/chats/trash', addAuthenticatedClient, async (req, res) => {
   try {
     const conversations = await chatService.getTrashConversations(
-      req.user.id, req.workspaceId, req.supabase
+      req.user.id, req.workspaceId, req.db
     );
     res.json({ success: true, conversations });
   } catch (err) {
@@ -695,7 +695,7 @@ router.get('/chats/trash', addAuthenticatedClient, async (req, res) => {
 // Get specific conversation with workspace validation
 router.get('/chats/:conversationId', addAuthenticatedClient, async (req, res) => {
   try {
-    const conversation = await chatService.getConversation(req.user.id, req.params.conversationId, req.workspaceId, req.supabase);
+    const conversation = await chatService.getConversation(req.user.id, req.params.conversationId, req.workspaceId, req.db);
     res.json({ success: true, conversation });
 
   } catch (error) {
@@ -809,7 +809,7 @@ router.get('/chats/:conversationId/public/status', authenticateUser, async (req,
 // Update conversation (pin, archive, etc.) with workspace validation
 router.patch('/chats/:conversationId', addAuthenticatedClient, async (req, res) => {
   try {
-    const result = await chatService.updateConversation(req.user.id, req.params.conversationId, req.body, req.workspaceId, req.supabase);
+    const result = await chatService.updateConversation(req.user.id, req.params.conversationId, req.body, req.workspaceId, req.db);
     res.json({ success: true, conversation: result });
     
   } catch (error) {
@@ -826,7 +826,7 @@ router.patch('/chats/:conversationId', addAuthenticatedClient, async (req, res) 
 // Delete conversation with workspace validation
 router.delete('/chats/:conversationId', addAuthenticatedClient, async (req, res) => {
   try {
-    await chatService.deleteConversation(req.user.id, req.params.conversationId, req.workspaceId, req.supabase);
+    await chatService.deleteConversation(req.user.id, req.params.conversationId, req.workspaceId, req.db);
     res.json({ success: true, message: 'Conversation deleted successfully' });
     
   } catch (error) {
@@ -861,7 +861,7 @@ router.get('/chat-folders', addAuthenticatedClient, async (req, res) => {
     const workspaceId = req.workspaceId;
     if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.db
       .schema('aichats')
       .from('chat_folders')
       .select('*')
@@ -886,7 +886,7 @@ router.post('/chat-folders', addAuthenticatedClient, async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name required' });
     if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.db
       .schema('aichats')
       .from('chat_folders')
       .insert({ user_id: req.user.id, workspace_id: workspaceId, name: name.trim(), color: color || null })
@@ -911,7 +911,7 @@ router.patch('/chat-folders/:folderId', addAuthenticatedClient, async (req, res)
     if (color !== undefined) updates.color = color;
     if (sort_order !== undefined) updates.sort_order = sort_order;
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.db
       .schema('aichats')
       .from('chat_folders')
       .update(updates)
@@ -933,7 +933,7 @@ router.patch('/chat-folders/:folderId', addAuthenticatedClient, async (req, res)
 router.delete('/chat-folders/:folderId', addAuthenticatedClient, async (req, res) => {
   try {
     const { folderId } = req.params;
-    const { error } = await req.supabase
+    const { error } = await req.db
       .schema('aichats')
       .from('chat_folders')
       .delete()
@@ -954,7 +954,7 @@ router.patch('/chats/:conversationId/folder', addAuthenticatedClient, async (req
     const { conversationId } = req.params;
     const { folder_id } = req.body; // null to unassign
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.db
       .schema('aichats')
       .from('conversations')
       .update({ folder_id: folder_id || null })
@@ -1046,7 +1046,7 @@ router.use((error, req, res, next) => {
 router.post('/chats/:conversationId/restore', addAuthenticatedClient, async (req, res) => {
   try {
     await chatService.restoreConversation(
-      req.user.id, req.params.conversationId, req.workspaceId, req.supabase
+      req.user.id, req.params.conversationId, req.workspaceId, req.db
     );
     res.json({ success: true });
   } catch (err) {
@@ -1057,7 +1057,7 @@ router.post('/chats/:conversationId/restore', addAuthenticatedClient, async (req
 router.delete('/chats/:conversationId/permanent', addAuthenticatedClient, async (req, res) => {
   try {
     await chatService.permanentDeleteConversation(
-      req.user.id, req.params.conversationId, req.workspaceId, req.supabase
+      req.user.id, req.params.conversationId, req.workspaceId, req.db
     );
     res.json({ success: true });
   } catch (err) {
@@ -1067,7 +1067,7 @@ router.delete('/chats/:conversationId/permanent', addAuthenticatedClient, async 
 
 router.delete('/chats/trash/empty', addAuthenticatedClient, async (req, res) => {
   try {
-    await chatService.emptyTrash(req.user.id, req.workspaceId, req.supabase);
+    await chatService.emptyTrash(req.user.id, req.workspaceId, req.db);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to empty trash' });

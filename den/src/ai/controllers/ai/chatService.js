@@ -1,5 +1,5 @@
 // chatService.js - Simplified with Supabase client
-import { supabaseCompat as supabase } from '../../../db/compat.js';
+import { sqliteDb as db } from '../../../db/sqlite.js';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
@@ -12,7 +12,7 @@ class ChatService {
   // Helper to set RLS context for user
   async setUserContext(userId) {
     try {
-      await supabase.rpc('set_user_context', { user_id: userId });
+      await db.rpc('set_user_context', { user_id: userId });
     } catch (error) {
       console.warn('Could not set user context for RLS:', error.message);
     }
@@ -22,7 +22,7 @@ class ChatService {
   async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, authenticatedSupabase = null) {
     try {
       // Use authenticated client if provided, otherwise fall back to base client
-      const supabaseClient = authenticatedSupabase || supabase;
+      const supabaseClient = authenticatedSupabase || db;
 
       await this.setUserContext(userId);
 
@@ -255,7 +255,7 @@ class ChatService {
     const dbMode = mode === 'visual' ? 'chat' : mode;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedSupabase || supabase;
+    const supabaseClient = authenticatedSupabase || db;
 
     try {
       // Validation
@@ -362,7 +362,7 @@ class ChatService {
     if (cached) return cached;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedSupabase || supabase;
+    const supabaseClient = authenticatedSupabase || db;
 
     try {
       await this.setUserContext(userId);
@@ -420,7 +420,7 @@ class ChatService {
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId);
 
       // First verify user owns this conversation
-      const { data: conversation, error } = await supabase
+      const { data: conversation, error } = await db
         .schema('aichats')
           .from('conversations')
         .select('id, title, is_public, public_token')
@@ -452,7 +452,7 @@ class ChatService {
       }
 
       // Update conversation to be public
-      const { data: updated, error: updateError } = await supabase
+      const { data: updated, error: updateError } = await db
         .schema('aichats')
           .from('conversations')
         .update({
@@ -498,7 +498,7 @@ class ChatService {
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId);
 
       // Update conversation to remove public access
-      const { data, error } = await supabase
+      const { data, error } = await db
         .schema('aichats')
         .from('conversations')
         .update({
@@ -546,7 +546,7 @@ class ChatService {
       }
 
       // Get conversation by public token using Supabase
-      const { data: conversation, error } = await supabase
+      const { data: conversation, error } = await db
         .schema('aichats')
         .from('conversations')
         .select(`
@@ -600,7 +600,7 @@ class ChatService {
       // Get effective workspace ID
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId);
 
-      const { data: conversation, error } = await supabase
+      const { data: conversation, error } = await db
         .schema('aichats')
         .from('conversations')
         .select('is_public, public_token, public_expires_at, public_created_at')
@@ -645,7 +645,7 @@ class ChatService {
     } = options;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedSupabase || supabase;
+    const supabaseClient = authenticatedSupabase || db;
 
     try {
       await this.setUserContext(userId);
@@ -745,7 +745,7 @@ class ChatService {
   async updateConversation(userId, conversationId, updates, workspaceId = null, authenticatedSupabase = null) {
     try {
       // Use authenticated client if provided, otherwise fall back to base client
-      const supabaseClient = authenticatedSupabase || supabase;
+      const supabaseClient = authenticatedSupabase || db;
 
       // Get effective workspace ID
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
@@ -792,7 +792,7 @@ class ChatService {
   // Soft-delete (move to trash)
   async deleteConversation(userId, conversationId, workspaceId = null, authenticatedSupabase = null) {
     try {
-      const supabaseClient = authenticatedSupabase || supabase;
+      const supabaseClient = authenticatedSupabase || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
 
       // First verify the conversation exists and belongs to this user/workspace.
@@ -831,7 +831,7 @@ class ChatService {
   // Restore from trash
   async restoreConversation(userId, conversationId, workspaceId = null, authenticatedSupabase = null) {
     try {
-      const supabaseClient = authenticatedSupabase || supabase;
+      const supabaseClient = authenticatedSupabase || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
 
       const { data, error } = await supabaseClient
@@ -859,7 +859,7 @@ class ChatService {
   // Permanent delete (from trash only)
   async permanentDeleteConversation(userId, conversationId, workspaceId = null, authenticatedSupabase = null) {
     try {
-      const supabaseClient = authenticatedSupabase || supabase;
+      const supabaseClient = authenticatedSupabase || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
 
       const { data, error } = await supabaseClient
@@ -888,7 +888,7 @@ class ChatService {
   // Get trashed conversations
   async getTrashConversations(userId, workspaceId = null, authenticatedSupabase = null) {
     try {
-      const supabaseClient = authenticatedSupabase || supabase;
+      const supabaseClient = authenticatedSupabase || db;
       await this.setUserContext(userId);
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
 
@@ -912,7 +912,7 @@ class ChatService {
   // Empty trash (permanently delete all trashed conversations)
   async emptyTrash(userId, workspaceId = null, authenticatedSupabase = null) {
     try {
-      const supabaseClient = authenticatedSupabase || supabase;
+      const supabaseClient = authenticatedSupabase || db;
       await this.setUserContext(userId);
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedSupabase);
 
@@ -962,7 +962,7 @@ class ChatService {
 
       // Note: This is a complex aggregation query that might need to be split up for Supabase
       // For now, let's use a simpler approach and calculate stats on the client side
-      const { data: conversations, error } = await supabase
+      const { data: conversations, error } = await db
         .schema('aichats')
         .from('conversations')
         .select('mode, is_pinned, is_public, message_count, last_message_at')
@@ -1018,7 +1018,7 @@ class ChatService {
   async getUserConversationWorkspaces(userId) {
     try {
       // This is a complex join query - we'll need to fetch data separately and combine
-      const { data: conversations, error: convError } = await supabase
+      const { data: conversations, error: convError } = await db
         .schema('aichats')
         .from('conversations')
         .select('workspace_id, is_public, last_message_at')
@@ -1053,7 +1053,7 @@ class ChatService {
       const workspaceIds = Object.keys(workspaceStats);
       if (workspaceIds.length === 0) return [];
 
-      const { data: workspaceList, error: wsError } = await supabase
+      const { data: workspaceList, error: wsError } = await db
         .from('workspaces')
         .select('id, name, emoji')
         .in('id', workspaceIds);

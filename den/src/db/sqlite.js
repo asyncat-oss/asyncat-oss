@@ -1,5 +1,5 @@
-// den/src/db/compat.js
-// Supabase-compatible query builder over better-sqlite3.
+// den/src/db/sqlite.js
+// SQLite query builder — provides a Supabase-compatible API over better-sqlite3.
 //
 // Exposes the subset of the Supabase JS client API used by den's controllers:
 //   .schema(name)  .from(table)  .select(cols)  .eq/neq/gt/gte/lt/lte/in/is/ilike
@@ -11,7 +11,7 @@
 //
 // All methods return { data, error } objects exactly as the Supabase client does,
 // so no changes are needed in controllers that follow the standard pattern:
-//   const { data, error } = await supabase.from("Cards").select("*").eq("id", id);
+//   const { data, error } = await db.from("Cards").select("*").eq("id", id);
 //
 // JSON serialisation: object/array values are JSON.stringify'd on write and
 // JSON.parse'd on read (any string that starts with { or [).
@@ -415,7 +415,7 @@ class QueryBuilder {
 //   supabase.schema("kanban").from("Cards")  →  QueryBuilder("Cards")
 //   supabase.from("notes")                   →  QueryBuilder("notes")
 //   supabase.auth.getUser()                  →  { data: { user: req.user } }
-//                                               (populated by attachCompat middleware)
+//                                               (populated by attachDb middleware)
 
 class CompatClient {
   constructor(user = null) {
@@ -444,22 +444,22 @@ class CompatClient {
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
-/** Singleton compat client (no user context). Use for server-side operations. */
-export const supabaseCompat = new CompatClient();
+/** Singleton SQLite client (no user context). Use for server-side operations. */
+export const sqliteDb = new CompatClient();
 
 /**
- * Creates a user-scoped compat client.
+ * Creates a user-scoped SQLite client.
  * Replaces createAuthenticatedClient(token) calls.
  */
-export const createCompatClient = (user) => new CompatClient(user);
+export const createDbClient = (user) => new CompatClient(user);
 
 /**
- * Express middleware: attaches a CompatClient as req.supabase.
+ * Express middleware: attaches a CompatClient as req.db.
  * Drop-in replacement for the old "inject authenticated Supabase client" middleware.
  */
-export const attachCompat = (req, _res, next) => {
-  req.supabase = new CompatClient(req.user || null);
+export const attachDb = (req, _res, next) => {
+  req.db = new CompatClient(req.user || null);
   next();
 };
 
-export default supabaseCompat;
+export default sqliteDb;

@@ -2,12 +2,12 @@
 import express from "express";
 import columnController from "../controllers/columnController.js";
 import { verifyUser } from "../auth.js";
-import { attachCompat } from "../../db/compat.js";
+import { attachDb } from "../../db/sqlite.js";
 
 const router = express.Router();
 
 // Apply authentication middleware to all routes
-router.use(verifyUser, attachCompat);
+router.use(verifyUser, attachDb);
 
 // Column routes
 router.get("/", columnController.getColumns);

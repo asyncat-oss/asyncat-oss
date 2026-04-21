@@ -464,7 +464,7 @@ export async function launchLab(req, res) {
   const { labId, topic } = req.body;
   const workspaceId = req.workspaceId;
   const userId = req.user.id;
-  const db = req.supabase;
+  const db = req.db;
 
   if (!labId)               return res.status(400).json({ success: false, error: 'labId required' });
   if (!topic || !topic.trim()) return res.status(400).json({ success: false, error: 'topic required' });

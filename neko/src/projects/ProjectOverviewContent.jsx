@@ -186,6 +186,7 @@ const ProjectOverview = React.memo(({
 	const [loading, setLoading] = useState(true);
 	const [projectMembers, setProjectMembers] = useState([]);
 	const [loadingMembers, setLoadingMembers] = useState(false);
+	const [loadingEnrichedData, setLoadingEnrichedData] = useState(false);
 
 	// Master loading state - true when any essential data is loading
 	const [masterLoading, setMasterLoading] = useState(true);

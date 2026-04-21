@@ -1,6 +1,6 @@
 // attachmentAuth.js — JWT-based attachment auth middleware (OSS version)
 import { verifyUser } from '../../auth/authMiddleware.js';
-import { attachCompat } from '../../db/compat.js';
+import { attachDb } from '../../db/sqlite.js';
 
 // Special middleware for attachment routes — same as standard auth but with
 // more explicit CORS headers for image requests from <img src="..."> tags.
@@ -26,6 +26,6 @@ export const verifyAttachmentAccess = async (req, res, next) => {
     if (err) {
       return res.status(401).set(corsHeaders).json({ success: false, error: 'Invalid or expired token' });
     }
-    attachCompat(req, res, next);
+    attachDb(req, res, next);
   });
 };

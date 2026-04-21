@@ -1,6 +1,6 @@
 // DataLayer.js — Fetches user context for the AI assistant (OSS version).
 // Uses the SQLite compat client. No join syntax — flat queries only.
-import { supabaseCompat as defaultSupabase } from '../../../db/compat.js';
+import { sqliteDb as defaultSupabase } from '../../../db/sqlite.js';
 
 class DataLayer {
   constructor() {
@@ -20,11 +20,11 @@ class DataLayer {
   }
 
   // Solo mode: return the user's first workspace id.
-  async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, supabase = defaultSupabase) {
+  async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, db = defaultSupabase) {
     try {
       if (preferredWorkspaceId) return preferredWorkspaceId;
 
-      const { data: ws } = await supabase
+      const { data: ws } = await db
         .from('workspaces')
         .select('id')
         .eq('owner_id', userId)
@@ -38,10 +38,10 @@ class DataLayer {
     }
   }
 
-  async getUserContext(userId, projectIds = [], workspaceId = null, supabase = defaultSupabase) {
+  async getUserContext(userId, projectIds = [], workspaceId = null, db = defaultSupabase) {
     let effectiveWorkspaceId = null;
     try {
-      effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, supabase);
+      effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, db);
 
       const cacheKey = `ctx_${userId}_${effectiveWorkspaceId}_${projectIds.join(',')}`;
       const cached = this.getCache(cacheKey);
@@ -50,19 +50,19 @@ class DataLayer {
       const hasProjectFilter = projectIds && projectIds.length > 0;
 
       // Workspace info
-      const { data: workspaceInfo } = await supabase
+      const { data: workspaceInfo } = await db
         .from('workspaces').select('id, name, emoji')
         .eq('id', effectiveWorkspaceId).single();
 
       // Projects
-      let projectsQ = supabase.from('projects')
+      let projectsQ = db.from('projects')
         .select('id, name, description, emoji, due_date, team_id')
         .eq('team_id', effectiveWorkspaceId).eq('is_archived', 0);
       if (hasProjectFilter) projectsQ = projectsQ.in('id', projectIds);
       const { data: projects } = await projectsQ;
 
       // Tasks (assigned to user, not in completion columns)
-      const { data: rawTasks } = await supabase
+      const { data: rawTasks } = await db
         .from('Cards').select('id, title, priority, dueDate, completedAt, columnId, startedAt')
         .eq('administrator_id', userId).is('completedAt', null).limit(25);
 
@@ -70,7 +70,7 @@ class DataLayer {
       const columnIds = [...new Set((rawTasks || []).map(t => t.columnId))];
       let columnMap = {};
       if (columnIds.length > 0) {
-        const { data: cols } = await supabase
+        const { data: cols } = await db
           .from('Columns').select('id, title, isCompletionColumn, projectId')
           .in('id', columnIds);
         (cols || []).forEach(c => { columnMap[c.id] = c; });
@@ -86,14 +86,14 @@ class DataLayer {
         }));
 
       // Events (upcoming 14 days)
-      const { data: events } = await supabase
+      const { data: events } = await db
         .from('Events').select('id, title, startTime, endTime, description, projectId')
         .gte('startTime', new Date(Date.now() - 3600000).toISOString())
         .lte('startTime', new Date(Date.now() + 14 * 86400000).toISOString())
         .order('startTime', { ascending: true }).limit(15);
 
       // Habits
-      const { data: habits } = await supabase
+      const { data: habits } = await db
         .from('habits').select('id, name, category, color, icon, project_id')
         .eq('created_by', userId).eq('is_active', 1).limit(12);
 
@@ -101,7 +101,7 @@ class DataLayer {
       const habitIds = (habits || []).map(h => h.id);
       let streakMap = {};
       if (habitIds.length > 0) {
-        const { data: streaks } = await supabase
+        const { data: streaks } = await db
           .from('habit_streaks').select('habit_id, current_streak, longest_streak, last_completion_date')
           .in('habit_id', habitIds);
         (streaks || []).forEach(s => { streakMap[s.habit_id] = s; });
@@ -192,8 +192,8 @@ class DataLayer {
     return 'pending';
   }
 
-  async executeAnalyticsQuery(userId, query, classification, projectIds = [], workspaceId = null, supabase = defaultSupabase) {
-    const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, supabase);
+  async executeAnalyticsQuery(userId, query, classification, projectIds = [], workspaceId = null, db = defaultSupabase) {
+    const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, db);
     const cacheKey = `analytics_${userId}_${effectiveWorkspaceId}_${Buffer.from(query).toString('base64').slice(0, 20)}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
@@ -204,7 +204,7 @@ class DataLayer {
       let data = [];
 
       if (lower.includes('task') || lower.includes('todo')) {
-        const { data: tasks } = await supabase.from('Cards')
+        const { data: tasks } = await db.from('Cards')
           .select('title, priority, dueDate, columnId').eq('administrator_id', userId)
           .is('completedAt', null).limit(20);
         data = (tasks || []).map(t => ({
@@ -213,7 +213,7 @@ class DataLayer {
           'Urgency': this.calculateTaskUrgency(t.dueDate, false),
         }));
       } else if (lower.includes('project')) {
-        let q = supabase.from('projects').select('name, due_date, emoji')
+        let q = db.from('projects').select('name, due_date, emoji')
           .eq('team_id', effectiveWorkspaceId).eq('is_archived', 0);
         if (hasProjectFilter) q = q.in('id', projectIds);
         const { data: projects } = await q;
@@ -222,7 +222,7 @@ class DataLayer {
           'Due': p.due_date ? new Date(p.due_date).toLocaleDateString() : 'No deadline',
         }));
       } else if (lower.includes('habit')) {
-        const { data: habits } = await supabase.from('habits')
+        const { data: habits } = await db.from('habits')
           .select('name, category').eq('created_by', userId).eq('is_active', 1).limit(15);
         data = (habits || []).map(h => ({ 'Habit': h.name, 'Category': h.category }));
       }

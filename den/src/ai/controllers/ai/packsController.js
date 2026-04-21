@@ -541,7 +541,7 @@ export async function launchPack(req, res) {
   const { packId } = req.body;
   const workspaceId = req.workspaceId;
   const userId = req.user.id;
-  const db = req.supabase; // authenticated client — respects RLS
+  const db = req.db; // authenticated client — respects RLS
 
   if (!packId) return res.status(400).json({ success: false, error: 'packId required' });
   if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });

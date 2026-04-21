@@ -1,9 +1,8 @@
-// Replaced: ai/db/connections.js — now re-exports the SQLite compat layer.
+// den/src/ai/db/connections.js — re-exports the SQLite client.
 export {
-  supabaseCompat as default,
-  supabaseCompat as supabase,
-  supabaseCompat as supabaseAuth,
-  supabaseCompat as mainDb,
-  supabaseCompat as supabaseAdmin,
-  createCompatClient as createAuthenticatedClient,
-} from '../../db/compat.js';
+  sqliteDb as default,
+  sqliteDb as db,
+  sqliteDb as mainDb,
+  sqliteDb as supabaseAdmin,
+  createDbClient as createAuthenticatedClient,
+} from '../../db/sqlite.js';

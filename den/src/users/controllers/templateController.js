@@ -13,7 +13,7 @@ async function getTemplates(req, res) {
     const { team_id, category, purpose } = req.query;
 
     // Build query based on visibility and access
-    let query = supabase
+    let query = db
       .from('project_templates')
       .select(`
         id,

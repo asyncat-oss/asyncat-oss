@@ -14,9 +14,9 @@ import {
 } from "./projectPermissionHelpers.js";
 
 // Helper: fetch workspace by id
-async function getWorkspace(supabase, workspaceId) {
+async function getWorkspace(db, workspaceId) {
 	if (!workspaceId) return null;
-	const { data } = await supabase
+	const { data } = await db
 		.from("workspaces")
 		.select("id, name, owner_id, emoji")
 		.eq("id", workspaceId)
@@ -30,9 +30,9 @@ async function getWorkspace(supabase, workspaceId) {
  */
 async function getProjects(req, res) {
 	try {
-		const { user, supabase } = req;
+		const { user, db } = req;
 
-		const { data: projects, error } = await supabase
+		const { data: projects, error } = await db
 			.from("projects")
 			.select("id, name, description, due_date, created_by, owner_id, created_at, updated_at, is_archived, team_id, enabled_views, emoji")
 			.eq("owner_id", user.id)
@@ -46,7 +46,7 @@ async function getProjects(req, res) {
 
 		// Fetch unique workspaces
 		const workspaceIds = [...new Set(projects.map(p => p.team_id).filter(Boolean))];
-		const workspaceList = await Promise.all(workspaceIds.map(id => getWorkspace(supabase, id)));
+		const workspaceList = await Promise.all(workspaceIds.map(id => getWorkspace(db, id)));
 		const workspaceMap = workspaceList.reduce((acc, w) => { if (w) acc[w.id] = w; return acc; }, {});
 
 		const processedProjects = projects.map((project) => {
@@ -89,11 +89,11 @@ async function getProjects(req, res) {
  */
 async function getTeamProjects(req, res) {
 	try {
-		const { user, supabase } = req;
+		const { user, db } = req;
 		const { teamId } = req.params;
 
 		// Verify user owns this workspace
-		const { data: workspace, error: wsError } = await supabase
+		const { data: workspace, error: wsError } = await db
 			.from("workspaces")
 			.select("id, name, owner_id, emoji")
 			.eq("id", teamId)
@@ -103,7 +103,7 @@ async function getTeamProjects(req, res) {
 			return res.status(403).json({ success: false, error: "Workspace not found or access denied" });
 		}
 
-		const { data: projects, error } = await supabase
+		const { data: projects, error } = await db
 			.from("projects")
 			.select("id, name, description, due_date, created_by, owner_id, created_at, updated_at, is_archived, team_id, enabled_views, emoji")
 			.eq("team_id", teamId)
@@ -157,7 +157,7 @@ async function createProject(req, res) {
 	const { name, description, due_date, team_id, emoji = "📁" } = req.body;
 
 	try {
-		const { user, supabase } = req;
+		const { user, db } = req;
 		const userId = user.id;
 
 		const validatedEmoji = sanitizeEmoji(emoji);
@@ -173,7 +173,7 @@ async function createProject(req, res) {
 		}
 
 		// Validate workspace exists and user owns it
-		const { data: workspace, error: wsError } = await supabase
+		const { data: workspace, error: wsError } = await db
 			.from("workspaces")
 			.select("id")
 			.eq("id", team_id)
@@ -199,7 +199,7 @@ async function createProject(req, res) {
 			emoji: validatedEmoji,
 		};
 
-		const { data: project, error: projectError } = await supabase
+		const { data: project, error: projectError } = await db
 			.from("projects")
 			.insert([projectData])
 			.select()
@@ -240,10 +240,10 @@ async function updateProject(req, res) {
 		const { name, description, due_date, enabled_views, emoji, ...otherUpdates } = req.body;
 		delete otherUpdates.starred;
 
-		const { user, supabase } = req;
+		const { user, db } = req;
 
 		// Single-user: only owner can update
-		const { data: existingProject, error: fetchError } = await supabase
+		const { data: existingProject, error: fetchError } = await db
 			.from("projects")
 			.select("owner_id, team_id, enabled_views, emoji")
 			.eq("id", id)
@@ -279,7 +279,7 @@ async function updateProject(req, res) {
 		if (finalEnabledViews) validUpdates.enabled_views = finalEnabledViews;
 		if (emoji !== undefined) validUpdates.emoji = validatedEmoji;
 
-		const { data: updatedProject, error: updateError } = await supabase
+		const { data: updatedProject, error: updateError } = await db
 			.from("projects")
 			.update(validUpdates)
 			.eq("id", id)
@@ -289,7 +289,7 @@ async function updateProject(req, res) {
 		if (updateError) throw updateError;
 
 		// Fetch workspace info
-		const workspace = await getWorkspace(supabase, updatedProject.team_id);
+		const workspace = await getWorkspace(db, updatedProject.team_id);
 		const sanitizedWorkspace = workspace?.emoji
 			? { ...workspace, emoji: sanitizeWorkspaceEmoji(workspace.emoji) }
 			: workspace;
@@ -327,10 +327,10 @@ async function updateProject(req, res) {
 async function deleteProject(req, res) {
 	try {
 		const { id } = req.params;
-		const { user, supabase } = req;
+		const { user, db } = req;
 
 		// Single-user: only owner can delete
-		const { data: project, error: projectError } = await supabase
+		const { data: project, error: projectError } = await db
 			.from("projects")
 			.select("owner_id, team_id, name, emoji")
 			.eq("id", id)
@@ -346,13 +346,13 @@ async function deleteProject(req, res) {
 
 		// Delete related data
 		try {
-			await supabase.from("Events").delete().eq("projectId", id);
-			await supabase.from("Columns").delete().eq("projectId", id);
+			await db.from("Events").delete().eq("projectId", id);
+			await db.from("Columns").delete().eq("projectId", id);
 		} catch (relatedError) {
 			console.error("Error deleting project related data:", relatedError);
 		}
 
-		const { error: projectDeleteError } = await supabase
+		const { error: projectDeleteError } = await db
 			.from("projects")
 			.delete()
 			.eq("id", id);

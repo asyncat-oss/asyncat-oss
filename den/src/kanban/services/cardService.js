@@ -10,13 +10,13 @@ const isValidUUID = (uuid) => {
 	);
 };
 
-const getCards = async (columnId, supabase) => {
+const getCards = async (columnId, db) => {
 	try {
 		if (!isValidUUID(columnId)) {
 			throw new Error("Invalid column ID format");
 		}
 
-		const { data: cards, error } = await supabase
+		const { data: cards, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.select("*")
@@ -26,7 +26,7 @@ const getCards = async (columnId, supabase) => {
 		if (error) throw error;
 
 		// Add dependency counts efficiently
-		await addDependencyCountsToCards(cards || [], supabase);
+		await addDependencyCountsToCards(cards || [], db);
 
 		return cards || [];
 	} catch (error) {
@@ -35,7 +35,7 @@ const getCards = async (columnId, supabase) => {
 	}
 };
 
-const getCardById = async (id, supabase) => {
+const getCardById = async (id, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid card ID format");
@@ -43,7 +43,7 @@ const getCardById = async (id, supabase) => {
 
 		console.log("🔍 Fetching card by ID:", id);
 
-		const { data: card, error } = await supabase
+		const { data: card, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.select("*")
@@ -60,7 +60,7 @@ const getCardById = async (id, supabase) => {
 		if (card) {
 			console.log("📋 Card found with checklist:", card.checklist);
 			// Add dependency counts efficiently for single card
-			await addDependencyCountsToCards([card], supabase);
+			await addDependencyCountsToCards([card], db);
 			console.log(
 				"📋 Card after adding dependency counts:",
 				card.checklist
@@ -77,7 +77,7 @@ const getCardById = async (id, supabase) => {
 	}
 };
 
-const createCard = async (cardData, supabase, files = []) => {
+const createCard = async (cardData, db, files = []) => {
 	try {
 		const {
 			title,
@@ -188,7 +188,7 @@ const createCard = async (cardData, supabase, files = []) => {
 			updatedAt: new Date().toISOString(),
 		};
 
-		const { data: card, error } = await supabase
+		const { data: card, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.insert([cardToCreate])
@@ -198,7 +198,7 @@ const createCard = async (cardData, supabase, files = []) => {
 		if (error) throw error;
 
 		// Add dependency counts to the newly created card
-		await addDependencyCountsToCards([card], supabase);
+		await addDependencyCountsToCards([card], db);
 
 		return card;
 	} catch (error) {
@@ -207,14 +207,14 @@ const createCard = async (cardData, supabase, files = []) => {
 	}
 };
 
-const updateCard = async (id, cardData, supabase) => {
+const updateCard = async (id, cardData, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid card ID format");
 		}
 
 		// First get the existing card
-		const existingCard = await getCardById(id, supabase);
+		const existingCard = await getCardById(id, db);
 
 		// Remove assignees from updates since it's no longer a card field
 		const { assignees, ...updateData } = cardData;
@@ -280,7 +280,7 @@ const updateCard = async (id, cardData, supabase) => {
 
 		console.log("💾 About to save card with updateData:", updateData);
 
-		const { data: updatedCard, error } = await supabase
+		const { data: updatedCard, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.update(updateData)
@@ -291,7 +291,7 @@ const updateCard = async (id, cardData, supabase) => {
 		if (error) throw error;
 
 		// Add dependency counts to the returned card
-		await addDependencyCountsToCards([updatedCard], supabase);
+		await addDependencyCountsToCards([updatedCard], db);
 
 		console.log(
 			"✅ Card updated successfully, returning card with checklist:",
@@ -304,14 +304,14 @@ const updateCard = async (id, cardData, supabase) => {
 	}
 };
 
-const deleteCard = async (id, supabase) => {
+const deleteCard = async (id, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid card ID format");
 		}
 
 		// First, get the card to retrieve its attachments
-		const card = await getCardById(id, supabase);
+		const card = await getCardById(id, db);
 
 		// Delete all attachments from Azure Storage if they exist
 		if (
@@ -343,7 +343,7 @@ const deleteCard = async (id, supabase) => {
 		}
 
 		// Now delete the card from the database
-		const { error } = await supabase
+		const { error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.delete()
@@ -363,7 +363,7 @@ const moveCard = async (
 	sourceColumnId,
 	destinationColumnId,
 	newOrder,
-	supabase
+	db
 ) => {
 	try {
 		if (
@@ -375,9 +375,9 @@ const moveCard = async (
 		}
 
 		// Get card and columns
-		const card = await getCardById(cardId, supabase);
+		const card = await getCardById(cardId, db);
 
-		const { data: sourceColumn, error: sourceError } = await supabase
+		const { data: sourceColumn, error: sourceError } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -386,7 +386,7 @@ const moveCard = async (
 
 		if (sourceError) throw sourceError;
 
-		const { data: destColumn, error: destError } = await supabase
+		const { data: destColumn, error: destError } = await db
 			.schema("kanban")
 			.from("Columns")
 			.select("*")
@@ -433,7 +433,7 @@ const moveCard = async (
 			}
 
 			// Check dependencies using the TaskDependencies table
-			const { data: dependencies, error: depsError } = await supabase
+			const { data: dependencies, error: depsError } = await db
 				.schema("kanban")
 				.from("TaskDependencies")
 				.select("*")
@@ -447,7 +447,7 @@ const moveCard = async (
 					(dep) => dep.targetCardId
 				);
 
-				const { data: targetCards, error: cardsError } = await supabase
+				const { data: targetCards, error: cardsError } = await db
 					.schema("kanban")
 					.from("Cards")
 					.select("*")
@@ -459,7 +459,7 @@ const moveCard = async (
 				const columnIds = [
 					...new Set(targetCards.map((card) => card.columnId)),
 				];
-				const { data: columns, error: columnsError } = await supabase
+				const { data: columns, error: columnsError } = await db
 					.schema("kanban")
 					.from("Columns")
 					.select("*")
@@ -576,7 +576,7 @@ const moveCard = async (
 				if (newOrder < oldOrder) {
 					// Get cards that need their order incremented
 					const { data: cardsToUpdate, error: fetchError } =
-						await supabase
+						await db
 							.schema("kanban")
 							.from("Cards")
 							.select('id, "order"')
@@ -588,7 +588,7 @@ const moveCard = async (
 
 					// Update each card individually
 					for (const cardToUpdate of cardsToUpdate || []) {
-						const { error: updateError } = await supabase
+						const { error: updateError } = await db
 							.schema("kanban")
 							.from("Cards")
 							.update({
@@ -602,7 +602,7 @@ const moveCard = async (
 				} else if (newOrder > oldOrder) {
 					// Get cards that need their order decremented
 					const { data: cardsToUpdate, error: fetchError } =
-						await supabase
+						await db
 							.schema("kanban")
 							.from("Cards")
 							.select('id, "order"')
@@ -614,7 +614,7 @@ const moveCard = async (
 
 					// Update each card individually
 					for (const cardToUpdate of cardsToUpdate || []) {
-						const { error: updateError } = await supabase
+						const { error: updateError } = await db
 							.schema("kanban")
 							.from("Cards")
 							.update({
@@ -631,7 +631,7 @@ const moveCard = async (
 
 				// First, update cards in source column (decrement orders above moved card)
 				const { data: sourceCardsToUpdate, error: sourceFetchError } =
-					await supabase
+					await db
 						.schema("kanban")
 						.from("Cards")
 						.select('id, "order"')
@@ -641,7 +641,7 @@ const moveCard = async (
 				if (sourceFetchError) throw sourceFetchError;
 
 				for (const cardToUpdate of sourceCardsToUpdate || []) {
-					const { error: updateError } = await supabase
+					const { error: updateError } = await db
 						.schema("kanban")
 						.from("Cards")
 						.update({
@@ -655,7 +655,7 @@ const moveCard = async (
 
 				// Then, update cards in destination column (increment orders at/above new position)
 				const { data: destCardsToUpdate, error: destFetchError } =
-					await supabase
+					await db
 						.schema("kanban")
 						.from("Cards")
 						.select('id, "order"')
@@ -665,7 +665,7 @@ const moveCard = async (
 				if (destFetchError) throw destFetchError;
 
 				for (const cardToUpdate of destCardsToUpdate || []) {
-					const { error: updateError } = await supabase
+					const { error: updateError } = await db
 						.schema("kanban")
 						.from("Cards")
 						.update({
@@ -683,7 +683,7 @@ const moveCard = async (
 		}
 
 		// Update the card
-		const { data: updatedCard, error: updateError } = await supabase
+		const { data: updatedCard, error: updateError } = await db
 			.schema("kanban")
 			.from("Cards")
 			.update(cardUpdates)
@@ -695,7 +695,7 @@ const moveCard = async (
 
 		// Get updated columns with cards
 		const { data: updatedSourceColumn, error: sourceColError } =
-			await supabase
+			await db
 				.schema("kanban")
 				.from("Columns")
 				.select("*")
@@ -705,7 +705,7 @@ const moveCard = async (
 		if (sourceColError) throw sourceColError;
 
 		// Fetch cards for source column
-		const { data: sourceCards, error: sourceCardsError } = await supabase
+		const { data: sourceCards, error: sourceCardsError } = await db
 			.schema("kanban")
 			.from("Cards")
 			.select("*")
@@ -718,7 +718,7 @@ const moveCard = async (
 
 		let updatedDestinationColumn = updatedSourceColumn;
 		if (sourceColumnId !== destinationColumnId) {
-			const { data: destCol, error: destColError } = await supabase
+			const { data: destCol, error: destColError } = await db
 				.schema("kanban")
 				.from("Columns")
 				.select("*")
@@ -728,7 +728,7 @@ const moveCard = async (
 			if (destColError) throw destColError;
 
 			// Fetch cards for destination column
-			const { data: destCards, error: destCardsError } = await supabase
+			const { data: destCards, error: destCardsError } = await db
 				.schema("kanban")
 				.from("Cards")
 				.select("*")
@@ -750,7 +750,7 @@ const moveCard = async (
 		}
 
 		// Add dependency counts to the updated card
-		await addDependencyCountsToCards([updatedCard], supabase);
+		await addDependencyCountsToCards([updatedCard], db);
 
 		return {
 			sourceColumn: updatedSourceColumn,
@@ -764,13 +764,13 @@ const moveCard = async (
 	}
 };
 
-const updateChecklist = async (id, checklist, supabase) => {
+const updateChecklist = async (id, checklist, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid card ID format");
 		}
 
-		const card = await getCardById(id, supabase);
+		const card = await getCardById(id, db);
 
 		// Process checklist to ensure proper structure with multiple assignees and duration
 		let processedChecklist = checklist.map((item) => {
@@ -801,7 +801,7 @@ const updateChecklist = async (id, checklist, supabase) => {
 				? Math.round((completedTasks / processedChecklist.length) * 100)
 				: 0;
 
-		const { data: updatedCard, error } = await supabase
+		const { data: updatedCard, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.update({
@@ -820,7 +820,7 @@ const updateChecklist = async (id, checklist, supabase) => {
 		if (error) throw error;
 
 		// Add dependency counts to the returned card
-		await addDependencyCountsToCards([updatedCard], supabase);
+		await addDependencyCountsToCards([updatedCard], db);
 
 		// Calculate and add the duration field from incomplete items only
 		if (updatedCard.checklist && Array.isArray(updatedCard.checklist)) {
@@ -848,7 +848,7 @@ const updateChecklist = async (id, checklist, supabase) => {
 };
 
 // Changed from updateCardAssignees to updateCardAdministrator
-const updateCardAdministrator = async (id, administratorId, supabase) => {
+const updateCardAdministrator = async (id, administratorId, db) => {
 	try {
 		if (!isValidUUID(id)) {
 			throw new Error("Invalid card ID format");
@@ -859,7 +859,7 @@ const updateCardAdministrator = async (id, administratorId, supabase) => {
 				? administratorId.id
 				: administratorId;
 
-		const { data: updatedCard, error } = await supabase
+		const { data: updatedCard, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.update({
@@ -873,7 +873,7 @@ const updateCardAdministrator = async (id, administratorId, supabase) => {
 		if (error) throw error;
 
 		// Add dependency counts to the returned card
-		await addDependencyCountsToCards([updatedCard], supabase);
+		await addDependencyCountsToCards([updatedCard], db);
 
 		return updatedCard;
 	} catch (error) {
@@ -941,7 +941,7 @@ const fetchUserDetails = async (userIds, sessionToken = null) => {
 };
 
 // Helper function to efficiently add dependency counts and relationships to cards
-const addDependencyCountsToCards = async (cards, supabase) => {
+const addDependencyCountsToCards = async (cards, db) => {
 	if (!cards || cards.length === 0) return;
 
 	const cardIds = cards.map((card) => card.id);
@@ -973,14 +973,14 @@ const addDependencyCountsToCards = async (cards, supabase) => {
 		const [dependencyCounts, dependentCounts, userDetailsMap] =
 			await Promise.all([
 				// Count dependencies (cards these cards depend on)
-				supabase
+				db
 					.schema("kanban")
 					.from("TaskDependencies")
 					.select("sourceCardId")
 					.in("sourceCardId", cardIds),
 
 				// Count dependent cards (cards that depend on these cards)
-				supabase
+				db
 					.schema("kanban")
 					.from("TaskDependencies")
 					.select("targetCardId")
@@ -1061,14 +1061,14 @@ const addDependencyCountsToCards = async (cards, supabase) => {
 };
 
 // Add attachments to a card
-const addAttachments = async (cardId, files, supabase) => {
+const addAttachments = async (cardId, files, db) => {
 	try {
 		if (!isValidUUID(cardId)) {
 			throw new Error("Invalid card ID format");
 		}
 
 		// Get current card
-		const card = await getCardById(cardId, supabase);
+		const card = await getCardById(cardId, db);
 		if (!card) {
 			throw new Error("Card not found");
 		}
@@ -1094,7 +1094,7 @@ const addAttachments = async (cardId, files, supabase) => {
 		];
 
 		// Update card with new attachments
-		const { data: updatedCard, error } = await supabase
+		const { data: updatedCard, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.update({
@@ -1108,7 +1108,7 @@ const addAttachments = async (cardId, files, supabase) => {
 		if (error) throw error;
 
 		// Add dependency counts to the updated card
-		await addDependencyCountsToCards([updatedCard], supabase);
+		await addDependencyCountsToCards([updatedCard], db);
 
 		return updatedCard;
 	} catch (error) {
@@ -1118,14 +1118,14 @@ const addAttachments = async (cardId, files, supabase) => {
 };
 
 // Remove an attachment from a card
-const removeAttachment = async (cardId, blobName, supabase) => {
+const removeAttachment = async (cardId, blobName, db) => {
 	try {
 		if (!isValidUUID(cardId)) {
 			throw new Error("Invalid card ID format");
 		}
 
 		// Get current card
-		const card = await getCardById(cardId, supabase);
+		const card = await getCardById(cardId, db);
 		if (!card) {
 			throw new Error("Card not found");
 		}
@@ -1150,7 +1150,7 @@ const removeAttachment = async (cardId, blobName, supabase) => {
 		);
 
 		// Update card
-		const { data: updatedCard, error } = await supabase
+		const { data: updatedCard, error } = await db
 			.schema("kanban")
 			.from("Cards")
 			.update({
@@ -1164,7 +1164,7 @@ const removeAttachment = async (cardId, blobName, supabase) => {
 		if (error) throw error;
 
 		// Add dependency counts to the updated card
-		await addDependencyCountsToCards([updatedCard], supabase);
+		await addDependencyCountsToCards([updatedCard], db);
 
 		console.log(`Successfully removed attachment ${blobName}`);
 
