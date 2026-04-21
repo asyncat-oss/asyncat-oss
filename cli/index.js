@@ -135,15 +135,38 @@ async function startTui() {
   }
 
   // ── Command dispatch ──────────────────────────────────────────────────
+  // Helper: capture console output from a sync/async fn → result popup
+  async function runInline(title, fn) {
+    tui.startCapture();
+    try { await fn(); } catch (e) { console.log(`Error: ${e.message}`); }
+    const lines = tui.endCapture();
+    tui.showResult(title, lines.length ? lines : ['(no output)']);
+    tui.unlockInput();
+  }
+
   async function dispatch(cmd, args = []) {
     tui.lockInput();
 
-    // Commands that need the full terminal
+    // Commands that are capture-able: run inline, show output in result popup
+    const inlineCommands = {
+      'status': () => runInline('Service Status', () => _status.run()),
+      'ps':     () => runInline('Service Status', () => _status.run()),
+      'version':() => runInline('Version', () => _version.run()),
+      'v':      () => runInline('Version', () => _version.run()),
+      'doctor': () => runInline('Doctor', () => _doctor.run()),
+      'context':() => runInline('Context', () => _context.run()),
+      'config': () => runInline('Config', () => _config.run(args)),
+    };
+
+    if (inlineCommands[cmd]) {
+      await inlineCommands[cmd]();
+      return;
+    }
+
+    // Commands that still need the full terminal (interactive / spawning editors / processes)
     const shellCommands = [
-      'install', 'setup', 'onboard', 'doctor', 'provider', 'sessions',
-      'snippets', 'mcp', 'update', 'uninstall', 'logs',
-      'status', 'ps', 'config', 'version', 'v', 'context',
-      'code', 'git', 'skills',
+      'install', 'setup', 'onboard', 'snippets', 'update', 'uninstall', 'logs',
+      'code', 'git',
     ];
 
     if (shellCommands.includes(cmd)) {
@@ -151,27 +174,14 @@ async function startTui() {
         switch (cmd) {
           case 'install': case 'setup': await _install.run(); break;
           case 'onboard': await _onboard.run(); break;
-          case 'doctor':   _doctor.run();  break;
-          case 'provider': await _provider.run(args); break;
-          case 'sessions': await _sessions.run(args); break;
           case 'snippets': await _snippets.run(args); break;
-          case 'mcp':      await _mcp.run(args); break;
           case 'update':   _update.run(); break;
           case 'uninstall': _uninstall.run(); break;
           case 'logs':     _logs.run(args); break;
-          case 'status': case 'ps': _status.run(); break;
-          case 'config':   _config.run(args); break;
-          case 'version': case 'v': _version.run(); break;
-          case 'context':  _context.run(); break;
           case 'code':     _code.run(args); break;
           case 'git':      _git.run(args); break;
-          case 'skills':   _skills.run(args); break;
         }
       });
-      if (['provider'].includes(cmd)) {
-        const { model: m, provider: p } = await detectModel();
-        tui.setModel(m, p);
-      }
       tui.unlockInput();
       return;
     }
@@ -269,45 +279,150 @@ async function startTui() {
           break;
 case 'tools': {
           tui.unlockInput();
+          tui.showResult('Agent Tools', [
+            'Functions the LLM can call directly during a task:',
+            '',
+            '  read_file          Read any file from disk',
+            '  write_file         Write or overwrite a file',
+            '  edit_file          Patch specific lines in a file',
+            '  delete_file        Delete files or directories',
+            '  list_dir           List directory contents',
+            '  grep_search        Regex/literal search across files',
+            '  run_command        Execute any shell command',
+            '  run_python         Run Python code in a temp sandbox',
+            '  run_node           Run JavaScript code in a temp file',
+            '  web_search         Search the web (DuckDuckGo/SearXNG)',
+            '  fetch_url          Read any webpage (reader mode)',
+            '  http_request       Full HTTP client — POST/PUT/DELETE + headers',
+            '  sys_info           CPU, RAM, disk, uptime, OS info',
+            '  ps_list            Running processes — sort by CPU/mem',
+            '  env_get            Read environment variables (secrets masked)',
+            '  clipboard_read     Read clipboard contents',
+            '  clipboard_write    Write text to clipboard',
+            '  store_memory       Persist facts/preferences across sessions',
+            '  recall_memory      Search stored memories by query',
+            '  delegate_task      Spawn a specialized sub-agent',
+            '  mcp_call           Invoke external MCP tool servers',
+            '',
+            'Note: These are used automatically — you don\'t invoke them.',
+            'Use /skills to browse the 45 task-template brain skills instead.',
+          ]);
+          return;
+        }
 
-          // ── Agent Tools (direct function calls the LLM can invoke) ─────
-          tui.print('');
-          tui.print('━━ 🛠️  Agent Tools  (functions the LLM calls directly) ━━');
-          tui.print('');
-          tui.print('  📁  read_file          Read any file from disk');
-          tui.print('  ✏️   write_file         Write or overwrite a file');
-          tui.print('  📝  edit_file          Patch specific lines in a file');
-          tui.print('  🗑️   delete_file        Delete files or directories');
-          tui.print('  📂  list_dir           List directory contents');
-          tui.print('  🔍  grep_search        Regex/literal search across files');
-          tui.print('  🖥️   run_command        Execute any shell command');
-          tui.print('  🐍  run_python         Run Python code in a temp sandbox');
-          tui.print('  🟨  run_node           Run JavaScript code in a temp file');
-          tui.print('  🌐  web_search         Search the web (DuckDuckGo/SearXNG)');
-          tui.print('  🔗  fetch_url          Read any webpage (reader mode)');
-          tui.print('  🔌  http_request       Full HTTP client — POST/PUT/DELETE + headers');
-          tui.print('  🖥️   sys_info           CPU, RAM, disk, uptime, OS info');
-          tui.print('  📋  ps_list            Running processes — sort by CPU/mem');
-          tui.print('  🔑  env_get            Read environment variables (secrets masked)');
-          tui.print('  📎  clipboard_read     Read clipboard contents');
-          tui.print('  📎  clipboard_write    Write text to clipboard');
-          tui.print('  🧠  store_memory       Persist facts/preferences across sessions');
-          tui.print('  🧠  recall_memory      Search stored memories by query');
-          tui.print('  🤖  delegate_task      Spawn a specialized sub-agent');
-          tui.print('  🔌  mcp_call           Invoke external MCP tool servers');
-          tui.print('');
+        // ── Skills: inline searchable selector ──────────────────────────
+        case 'skills': {
+          tui.unlockInput();
+          const allSkills = _skills.listSkills ? _skills.listSkills() : [];
+          if (!allSkills.length) {
+            tui.printWarn('No skills found in skills/ directory.');
+            return;
+          }
+          const skillItems = allSkills.map(s => ({
+            name: s.name,
+            desc: `${(s.brain_region || 'unknown').padEnd(16)} ${(s.description || '').slice(0, 38)}`,
+            _skill: s,
+          }));
+          const chosenSkill = await tui.showSelector('Skills  (Cerebellum)', skillItems);
+          if (!chosenSkill) return;
+          // Show skill details in result popup
+          const skillDetail = _skills.loadSkill ? _skills.loadSkill(chosenSkill.name) : null;
+          const detailLines = [
+            `Name:         ${chosenSkill.name}`,
+            `Brain Region: ${chosenSkill._skill?.brain_region || 'unknown'}`,
+            `Tags:         ${chosenSkill._skill?.tags || 'none'}`,
+            '',
+            `${skillDetail?.frontmatter?.description || ''}`,
+            '',
+            '─'.repeat(48),
+            '',
+            ...(skillDetail?.body?.split('\n').slice(0, 40) || ['(no body)']),
+          ];
+          tui.showResult(`Skill: ${chosenSkill.name}`, detailLines);
+          return;
+        }
 
-          // ── Agent Skills (brain-inspired capabilities) ────────────
-          tui.print('━━ 🧠  Brain Skills  (45 bundled in Cerebellum) ━━');
-          tui.print('');
-          tui.print('  🧠  use /skills to browse 45 brain skills');
-          tui.print('  📂  Skills auto-match when you describe tasks');
-          tui.print('  🔄  Agent learns your patterns (Basal Ganglia)');
-          tui.print('  🧮  Episodic memory with FTS5 search');
-          tui.print('');
-          tui.print('  Type: "debug an error" → finds debugging skill');
-          tui.print('  Type: "deploy to production" → finds deployment skill');
-          tui.print('  /skills list  — browse all 45 skills');
+        // ── Sessions: inline selector, select to load into chat ─────────
+        case 'sessions': {
+          tui.unlockInput();
+          try {
+            const token = await getToken();
+            const base = getBase();
+            const data = await fetch(`${base}/api/ai/chats?limit=50`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }).then(r => r.json());
+            const convos = data.conversations || [];
+            if (!convos.length) {
+              tui.printInfo('No sessions yet. Start chatting to create one.');
+              return;
+            }
+            const relTime = iso => {
+              const d = Date.now() - new Date(iso).getTime();
+              const m = Math.floor(d / 60000), hr = Math.floor(m / 60), dy = Math.floor(hr / 24);
+              return dy > 0 ? `${dy}d ago` : hr > 0 ? `${hr}h ago` : m > 0 ? `${m}m ago` : 'just now';
+            };
+            const sessionItems = convos.map(c => ({
+              name: (c.title || '(no title)').slice(0, 42),
+              desc: `${relTime(c.last_message_at || c.created_at)}  ·  ${c.message_count || 0} msgs`,
+              _id: c.id,
+            }));
+            const chosen = await tui.showSelector('Sessions', sessionItems);
+            if (!chosen) return;
+            // Try to load the conversation messages
+            try {
+              const conv = await fetch(`${base}/api/ai/chats/${chosen._id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              }).then(r => r.json());
+              const msgs = (conv.messages || conv.conversation?.messages || [])
+                .filter(m => m.role === 'user' || m.role === 'assistant')
+                .map(m => ({ role: m.role, content: m.content || '' }));
+              if (msgs.length) {
+                tui.messages = msgs;
+                tui.conversationId = chosen._id;
+                tui.mode = 'chat';
+                tui.render();
+                tui.printOk(`Loaded: ${chosen.name}`);
+              } else {
+                tui.printWarn('Could not load messages for this session.');
+              }
+            } catch { tui.printWarn('Failed to load session messages.'); }
+          } catch (e) { tui.printErr(`Sessions: ${e.message}`); }
+          return;
+        }
+
+        // ── MCP: inline list + add/rm without leaving TUI ───────────────
+        case 'mcp': {
+          if (!args.length || args[0] === 'list') {
+            tui.unlockInput();
+            tui.startCapture();
+            await _mcp.run(['list']);
+            tui.showResult('MCP Servers', tui.endCapture());
+          } else {
+            tui.startCapture();
+            await _mcp.run(args);
+            const lines = tui.endCapture();
+            tui.showResult(`MCP: ${args[0]}`, lines.length ? lines : ['Done.']);
+            tui.unlockInput();
+          }
+          return;
+        }
+
+        // ── Provider: show config inline; setup still needs shell ────────
+        case 'provider': {
+          if (!args.length || args[0] === 'list' || args[0] === 'show') {
+            tui.startCapture();
+            await _provider.run(['list']);
+            const lines = tui.endCapture();
+            tui.showResult('Provider Config', lines.length ? lines : ['No provider configured.']);
+            tui.unlockInput();
+            const { model: m, provider: p } = await detectModel();
+            tui.setModel(m, p);
+          } else {
+            await runInShell(() => _provider.run(args));
+            const { model: m, provider: p } = await detectModel();
+            tui.setModel(m, p);
+            tui.unlockInput();
+          }
           return;
         }
         case 'new':

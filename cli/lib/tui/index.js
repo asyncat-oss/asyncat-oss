@@ -12,6 +12,7 @@ import {
   renderZen, renderChat, renderPalette, renderStatusBar,
   renderStreamingIndicator, renderSelector, filterPalette,
   spinnerFrame, nextCatMsg, setServiceStatus, renderModelSetup,
+  renderResult,
 } from './views.js';
 import { getTheme } from '../theme.js';
 import { getLiveLogsEnabled } from '../colors.js';
@@ -59,6 +60,15 @@ export class Tui extends EventEmitter {
     // Model setup state
     this._setupModel  = null;
     this._setupResolve = null;
+
+    // Result popup state
+    this._resultTitle  = '';
+    this._resultLines  = [];
+    this._resultScroll = 0;
+
+    // Console capture (for inline command output)
+    this._captureMode   = false;
+    this._captureBuffer = [];
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -71,16 +81,20 @@ export class Tui extends EventEmitter {
     write(ansi.hide);
     write(ansi.clear + ansi.home);
 
-    // Intercept console.log to push to sidebar instead of corrupting TUI
+    // Intercept console.log — routes to capture buffer or sidebar
     if (!this._origLog) {
       this._origLog = console.log;
       console.log = (...args) => {
         const text = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
         text.split('\n').forEach(line => {
-          this.logs.push(line);
-          if (this.logs.length > 500) this.logs.shift();
+          if (this._captureMode) {
+            this._captureBuffer.push(line);
+          } else {
+            this.logs.push(line);
+            if (this.logs.length > 500) this.logs.shift();
+          }
         });
-        if (getLiveLogsEnabled()) this.render();
+        if (!this._captureMode && getLiveLogsEnabled()) this.render();
       };
     }
 
@@ -177,26 +191,37 @@ export class Tui extends EventEmitter {
   render() {
     if (this._destroyed) return;
     write(ansi.hide);
-
-    // Render status bar first so the cursor is not left at the bottom
     renderStatusBar(this.version);
 
-    if (this.mode === 'selector') {
-      renderSelector(this._selTitle, this._selItems, this._selIdx, 1);
-    } else if (this.mode === 'model-setup') {
-      renderModelSetup(this._setupModel, this.buf, this.pos, true);
-    } else if (this.mode === 'palette') {
+    const isOverlay = this.mode === 'palette' || this.mode === 'selector' || this.mode === 'model-setup' || this.mode === 'result';
+
+    // Always render base screen first so overlays float on top of it
+    // Pass actual buf so the typed text shows through (like OpenCode's zen input behind palette)
+    if (this.mode === 'chat' || (isOverlay && this.messages.length > 0)) {
+      const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
+      renderChat(msgs, this.scrollOff, this.mode === 'model-setup' ? '' : this.buf, this.mode === 'model-setup' ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs);
+    } else {
+      renderZen(this.buf, this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs);
+    }
+
+    // Result popup doesn't need a background redraw (it's standalone)
+    if (this.mode === 'result') {
+      renderResult(this._resultTitle, this._resultLines, this._resultScroll);
+      write(ansi.show);
+      return;
+    }
+
+    // Then render overlays on top
+    if (this.mode === 'palette') {
       this.paletteItems = filterPalette(this.buf);
       if (this.paletteIdx >= this.paletteItems.length) {
         this.paletteIdx = Math.max(0, this.paletteItems.length - 1);
       }
       renderPalette(this.paletteItems, this.paletteIdx, this.buf, this.pos);
-    } else if (this.mode === 'chat') {
-      const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
-      renderChat(msgs, this.scrollOff, this.buf, this.pos, this.modelInfo, this.providerInfo, this.logs);
-    } else {
-      // zen
-      renderZen(this.buf, this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs);
+    } else if (this.mode === 'selector') {
+      renderSelector(this._selTitle, this._selItems, this._selIdx, this.buf, this.pos);
+    } else if (this.mode === 'model-setup') {
+      renderModelSetup(this._setupModel, this.buf, this.pos, true);
     }
 
     write(ansi.show);
@@ -237,7 +262,7 @@ export class Tui extends EventEmitter {
   printErr(text)   { this.print(`✖  ${text}`); }
   printInfo(text)  { this.print(`→  ${text}`); }
 
-  // ── Selector (inline picker for models/themes) ────────────────────────────
+  // ── Selector (floating panel picker for models/themes) ───────────────────
   showSelector(title, items) {
     return new Promise((resolve) => {
       this.mode = 'selector';
@@ -245,6 +270,7 @@ export class Tui extends EventEmitter {
       this._selItems = items;
       this._selIdx = 0;
       this._selResolve = resolve;
+      this.buf = ''; this.pos = 0; // buf used as search input
       this.render();
     });
   }
@@ -259,6 +285,27 @@ export class Tui extends EventEmitter {
       this.pos = this.buf.length;
       this.render();
     });
+  }
+
+  // ── Result popup ──────────────────────────────────────────────────────────
+  showResult(title, lines) {
+    this._resultTitle  = title;
+    this._resultLines  = lines.map(l => (typeof l === 'string' ? l : String(l)));
+    this._resultScroll = 0;
+    this.mode = 'result';
+    this.render();
+  }
+
+  startCapture() {
+    this._captureMode   = true;
+    this._captureBuffer = [];
+  }
+
+  endCapture() {
+    this._captureMode = false;
+    const lines = this._captureBuffer.slice();
+    this._captureBuffer = [];
+    return lines;
   }
 
   // ── Streaming ─────────────────────────────────────────────────────────────
@@ -337,211 +384,346 @@ export class Tui extends EventEmitter {
       return;
     }
 
+    // ── Result popup mode ────────────────────────────────────────────────
+  if (this.mode === 'result') {
+    if (name === 'escape' || str === 'q') {
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      this.render();
+    } else if (name === 'up') {
+      this._resultScroll = Math.max(0, this._resultScroll - 1);
+      this.render();
+    } else if (name === 'down') {
+      this._resultScroll = Math.min(Math.max(0, this._resultLines.length - 1), this._resultScroll + 1);
+      this.render();
+    } else if (name === 'pageup') {
+      this._resultScroll = Math.max(0, this._resultScroll - 10);
+      this.render();
+    } else if (name === 'pagedown') {
+      this._resultScroll = Math.min(Math.max(0, this._resultLines.length - 1), this._resultScroll + 10);
+      this.render();
+    }
+    return;
+  }
+
     // ── Selector mode ────────────────────────────────────────────────────
-    if (this.mode === 'selector') {
-      this._onKeySelector(name, ctrl, str, key);
-      return;
-    }
+  if (this.mode === 'selector') {
+    this._onKeySelector(name, ctrl, str, key);
+    return;
+  }
 
-    // ── Model Setup mode ─────────────────────────────────────────────────
-    if (this.mode === 'model-setup') {
-      if (name === 'escape') {
-        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
-        if (this._setupResolve) { this._setupResolve(null); this._setupResolve = null; }
-        this.buf = ''; this.pos = 0;
-        this.render();
-        return;
-      }
-      if (name === 'return') {
-        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
-        const ctxSize = this.buf.trim() || '8192';
-        if (this._setupResolve) { this._setupResolve(ctxSize); this._setupResolve = null; }
-        this.buf = ''; this.pos = 0;
-        this.render();
-        return;
-      }
-      // Allow only numbers and backspace/nav for context size
-      if (str && !/^[0-9]$/.test(str) && name !== 'backspace' && name !== 'delete' && name !== 'left' && name !== 'right') {
-        return; 
-      }
-    }
-
-    // ── ESC ──────────────────────────────────────────────────────────────
+  // ── Model Setup mode ─────────────────────────────────────────────────
+  if (this.mode === 'model-setup') {
     if (name === 'escape') {
-      if (this.mode === 'palette') {
-        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
-        this.buf = ''; this.pos = 0;
-        this.render(); return;
-      }
-      if (this.buf) { this.buf = ''; this.pos = 0; this.render(); return; }
-      if (this.mode === 'chat') {
-        this.mode = 'zen';
-        this._catMsg = nextCatMsg();
-        this.render(); return;
-      }
-      this.emit('exit'); return;
-    }
-
-    // ── Enter ────────────────────────────────────────────────────────────
-    if (name === 'return') {
-      if (this.mode === 'palette' && this.paletteItems.length > 0) {
-        const chosen = this.paletteItems[this.paletteIdx];
-        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
-        this.buf = ''; this.pos = 0; this.paletteIdx = 0;
-        this.render();
-        this.emit('command', chosen.cmd.slice(1));
-        return;
-      }
-
-      const line = this.buf.trim();
-      if (!line) {
-        // Enter on empty → cycle cat message
-        this._catMsg = nextCatMsg();
-        this.render();
-        return;
-      }
-
-      this.history.unshift(this.buf);
-      if (this.history.length > MAX_HISTORY) this.history.pop();
-      this.histIdx = -1;
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      if (this._setupResolve) { this._setupResolve(null); this._setupResolve = null; }
       this.buf = ''; this.pos = 0;
-
-      if (line.startsWith('/')) {
-        const parts = line.slice(1).split(/\s+/);
-        this.render();
-        this.emit('command', parts[0], parts.slice(1));
-        return;
-      }
-
-      // Regular text → AI
-      this.mode = 'chat';
       this.render();
-      this.emit('input', line);
       return;
     }
-
-    // ── Tab ──────────────────────────────────────────────────────────────
-    if (name === 'tab') {
-      if (this.mode === 'palette' && this.paletteItems.length > 0) {
-        const chosen = this.paletteItems[this.paletteIdx];
-        this.buf = chosen.cmd + ' ';
-        this.pos = this.buf.length;
-        this.render(); return;
-      }
+    if (name === 'return') {
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      const ctxSize = this.buf.trim() || '8192';
+      if (this._setupResolve) { this._setupResolve(ctxSize); this._setupResolve = null; }
+      this.buf = ''; this.pos = 0;
+      this.render();
       return;
     }
+    if (str && !/^[0-9]$/.test(str) && name !== 'backspace' && name !== 'delete' && name !== 'left' && name !== 'right') {
+      return;
+    }
+  }
 
-    // ── PageUp/PageDown — scroll messages ─────────────────────────────
-    if (name === 'pageup') {
-      const half = Math.max(3, Math.floor(h() / 2));
-      this.scrollOff += half;
-      if (this.mode !== 'chat') this.mode = 'chat';
+  // ── ESC ──────────────────────────────────────────────────────────────
+  if (name === 'escape') {
+    if (this.mode === 'palette') {
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      this.buf = ''; this.pos = 0;
       this.render(); return;
     }
-    if (name === 'pagedown') {
-      const half = Math.max(3, Math.floor(h() / 2));
-      this.scrollOff = Math.max(0, this.scrollOff - half);
+    if (this.buf) { this.buf = ''; this.pos = 0; this.render(); return; }
+    if (this.mode === 'chat') {
+      this.mode = 'zen';
+      this._catMsg = nextCatMsg();
       this.render(); return;
     }
+    this.emit('exit'); return;
+  }
 
-    // ── Arrows ───────────────────────────────────────────────────────────
-    if (name === 'up') {
-      if (this.mode === 'palette') {
-        this.paletteIdx = Math.max(0, this.paletteIdx - 1);
-        this.render(); return;
-      }
-      // Up = history navigation, always (bash behavior)
-      if (this.histIdx === -1) this.histSaved = this.buf;
-      if (this.histIdx < this.history.length - 1) {
-        this.histIdx++;
-        this.buf = this.history[this.histIdx];
-        this.pos = this.buf.length;
-        this.render();
-      }
+  // ── Enter ────────────────────────────────────────────────────────────
+  if (name === 'return') {
+    if (this.mode === 'palette' && this.paletteItems.length > 0) {
+      const chosen = this.paletteItems[this.paletteIdx];
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      this.buf = ''; this.pos = 0; this.paletteIdx = 0;
+      this.render();
+      this.emit('command', chosen.cmd.slice(1));
       return;
     }
 
-    if (name === 'down') {
-      if (this.mode === 'palette') {
-        this.paletteIdx = Math.min(this.paletteItems.length - 1, this.paletteIdx + 1);
-        this.render(); return;
-      }
-      // Down = walk forward through history back to current
-      if (this.histIdx > 0) {
-        this.histIdx--;
-        this.buf = this.history[this.histIdx];
-        this.pos = this.buf.length;
-      } else if (this.histIdx === 0) {
-        this.histIdx = -1;
-        this.buf = this.histSaved;
-        this.pos = this.buf.length;
-      }
+    if (str === '\n' && !ctrl) {
+      this.buf = this.buf.slice(0, this.pos) + '\n' + this.buf.slice(this.pos);
+      this.pos++;
       this.render();
       return;
     }
 
-    if (name === 'left') {
-      this.pos = Math.max(0, ctrl ? 0 : this.pos - 1);
-      this.render(); return;
-    }
-    if (name === 'right') {
-      this.pos = Math.min(this.buf.length, ctrl ? this.buf.length : this.pos + 1);
-      this.render(); return;
+    const line = this.buf.trim();
+    if (!line) {
+      this._catMsg = nextCatMsg();
+      this.render();
+      return;
     }
 
-    // ── Home/End ─────────────────────────────────────────────────────────
-    if (name === 'home' || (ctrl && name === 'a')) { this.pos = 0; this.render(); return; }
-    if (name === 'end' || (ctrl && name === 'e')) { this.pos = this.buf.length; this.render(); return; }
+    this.history.unshift(this.buf);
+    if (this.history.length > MAX_HISTORY) this.history.pop();
+    this.histIdx = -1;
+    this.buf = ''; this.pos = 0;
+
+    if (line.startsWith('/')) {
+      const parts = line.slice(1).split(/\s+/);
+      this.render();
+      this.emit('command', parts[0], parts.slice(1));
+      return;
+    }
+
+    this.mode = 'chat';
+    this.render();
+    this.emit('input', line);
+    return;
+  }
+
+  // ── Tab ──────────────────────────────────────────────────────────────
+  if (name === 'tab') {
+    if (this.mode === 'palette' && this.paletteItems.length > 0) {
+      const chosen = this.paletteItems[this.paletteIdx];
+      this.buf = chosen.cmd + ' ';
+      this.pos = this.buf.length;
+      this.render(); return;
+    }
+    return;
+  }
+
+  // ── PageUp/PageDown — scroll messages ─────────────────────────────
+  if (name === 'pageup') {
+    const half = Math.max(3, Math.floor(h() / 2));
+    this.scrollOff += half;
+    if (this.mode !== 'chat') this.mode = 'chat';
+    this.render(); return;
+  }
+  if (name === 'pagedown') {
+    const half = Math.max(3, Math.floor(h() / 2));
+    this.scrollOff = Math.max(0, this.scrollOff - half);
+    this.render(); return;
+  }
+
+  // ── Arrows ───────────────────────────────────────────────────────────
+  if (name === 'up') {
+    if (this.mode === 'palette') {
+      this.paletteIdx = Math.max(0, this.paletteIdx - 1);
+      this.render(); return;
+    }
+    if (ctrl) { this._onUp(); return; }
+    if (this.histIdx === -1) this.histSaved = this.buf;
+    if (this.histIdx < this.history.length - 1) {
+      this.histIdx++;
+      this.buf = this.history[this.histIdx];
+      this.pos = this.buf.length;
+      this.render();
+    }
+    return;
+  }
+
+  if (name === 'down') {
+    if (this.mode === 'palette') {
+      this.paletteIdx = Math.min(this.paletteItems.length - 1, this.paletteIdx + 1);
+      this.render(); return;
+    }
+    if (ctrl) { this._onDown(); return; }
+    if (this.histIdx > 0) {
+      this.histIdx--;
+      this.buf = this.history[this.histIdx];
+      this.pos = this.buf.length;
+    } else if (this.histIdx === 0) {
+      this.histIdx = -1;
+      this.buf = this.histSaved;
+      this.pos = this.buf.length;
+    }
+    this.render();
+    return;
+  }
+
+  if (name === 'left') {
+    if (ctrl) { this.pos = 0; this.render(); return; }
+    this._onLeft(); return;
+  }
+  if (name === 'right') {
+    if (ctrl) { this.pos = this.buf.length; this.render(); return; }
+    this._onRight(); return;
+  }
+
+  // ── Home/End ─────────────────────────────────────────────────────────
+  if (name === 'home' || (ctrl && name === 'a')) { this._onHome(); return; }
+  if (name === 'end' || (ctrl && name === 'e')) { this._onEnd(); return; }
 
     // ── Backspace / Delete ───────────────────────────────────────────────
-    if (name === 'backspace') {
-      if (this.pos > 0) {
+  if (name === 'backspace') {
+    if (this.pos > 0) {
+      if (this.buf[this.pos - 1] === '\n') {
+        const { line } = this._posToVis(this.pos);
+        const prevLineEnd = this._visToPos(line, vis(this.buf.split('\n')[line - 1] || ''));
+        this.buf = this.buf.slice(0, this.pos - 1) + this.buf.slice(this.pos);
+        this.pos = prevLineEnd;
+      } else {
         this.buf = this.buf.slice(0, this.pos - 1) + this.buf.slice(this.pos);
         this.pos--;
       }
-      if (this.mode === 'palette' && (!this.buf || !this.buf.startsWith('/'))) {
-        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
-        this.paletteIdx = 0;
-      }
-      this.render(); return;
     }
-    if (name === 'delete') {
-      if (this.pos < this.buf.length) {
+    if (this.mode === 'palette' && (!this.buf || !this.buf.startsWith('/'))) {
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      this.paletteIdx = 0;
+    }
+    this.render(); return;
+  }
+  if (name === 'delete') {
+    if (this.pos < this.buf.length) {
+      if (this.buf[this.pos] === '\n') {
+        this.buf = this.buf.slice(0, this.pos) + this.buf.slice(this.pos + 1);
+      } else {
         this.buf = this.buf.slice(0, this.pos) + this.buf.slice(this.pos + 1);
       }
-      this.render(); return;
     }
+    this.render(); return;
+  }
 
-    // ── Ctrl shortcuts ───────────────────────────────────────────────────
-    if (ctrl && name === 'u') { this.buf = this.buf.slice(this.pos); this.pos = 0; this.render(); return; }
-    if (ctrl && name === 'k') { this.buf = this.buf.slice(0, this.pos); this.render(); return; }
-    if (ctrl && name === 'w') {
-      let p = this.pos;
-      while (p > 0 && this.buf[p-1] === ' ') p--;
-      while (p > 0 && this.buf[p-1] !== ' ') p--;
-      this.buf = this.buf.slice(0, p) + this.buf.slice(this.pos);
-      this.pos = p;
-      this.render(); return;
-    }
-    if (ctrl && name === 'p') {
+  // ── Ctrl shortcuts ───────────────────────────────────────────────────
+  if (ctrl && name === 'u') { this.buf = this.buf.slice(this.pos); this.pos = 0; this.render(); return; }
+  if (ctrl && name === 'k') { this.buf = this.buf.slice(0, this.pos); this.render(); return; }
+  if (ctrl && name === 'w') {
+    let p = this.pos;
+    while (p > 0 && this.buf[p-1] === ' ') p--;
+    while (p > 0 && this.buf[p-1] !== ' ') p--;
+    this.buf = this.buf.slice(0, p) + this.buf.slice(this.pos);
+    this.pos = p;
+    this.render(); return;
+  }
+  if (ctrl && name === 'p') {
+    this.mode = 'palette';
+    this.buf = '/'; this.pos = 1; this.paletteIdx = 0;
+    this.render(); return;
+  }
+
+  // ── Printable character ──────────────────────────────────────────────
+  if (str && str.length === 1 && !ctrl && !meta) {
+    this.buf = this.buf.slice(0, this.pos) + str + this.buf.slice(this.pos);
+    this.pos++;
+
+    if (this.buf === '/' && this.mode !== 'palette') {
       this.mode = 'palette';
-      this.buf = '/'; this.pos = 1; this.paletteIdx = 0;
-      this.render(); return;
+      this.paletteIdx = 0;
     }
 
-    // ── Printable character ──────────────────────────────────────────────
-    if (str && str.length === 1 && !ctrl && !meta) {
-      this.buf = this.buf.slice(0, this.pos) + str + this.buf.slice(this.pos);
-      this.pos++;
+    this.render();
+  }
+  } // end _onKey
 
-      // Auto-enter palette when / is first char
-      if (this.buf === '/' && this.mode !== 'palette') {
-        this.mode = 'palette';
-        this.paletteIdx = 0;
+  // ── Multi-line helpers ─────────────────────────────────────────────────
+  _innerWidth() {
+    const W = w();
+    const liveLogs = getLiveLogsEnabled();
+    const mainW = liveLogs ? Math.floor(W * 0.65) : W;
+    // Must match the innerW used by each view's wrapInputLine call
+    if (this.mode === 'chat') return Math.floor(mainW * 0.8) - 2;
+    return Math.floor(mainW * 0.5) - 2; // zen / palette
+  }
+
+  _posToVis(pos) {
+    const iw = this._innerWidth();
+    const before = this.buf.slice(0, pos);
+    const beforeVis = vis(before);
+    const col = beforeVis % iw;
+    const line = Math.floor(beforeVis / iw);
+    return { col, line };
+  }
+
+  _visToPos(row, col) {
+    const iw = this._innerWidth();
+    const lines = this.buf.split('\n');
+    let pos = 0;
+    for (let l = 0; l < row && l < lines.length; l++) {
+      pos += lines[l].length + 1;
+    }
+    if (row < lines.length) {
+      pos += Math.min(col, vis(lines[row]));
+    }
+    return pos;
+  }
+
+  _onLeft() {
+    if (this.pos > 0) {
+      if (this.buf[this.pos - 1] === '\n') {
+        const { col, line } = this._posToVis(this.pos);
+        if (line > 0) {
+          const newRow = line - 1;
+          const lines = this.buf.split('\n');
+          const prevLineLen = vis(lines[newRow] || '');
+          const newCol = Math.min(col, prevLineLen);
+          this.pos = this._visToPos(newRow, newCol);
+        } else {
+          this.pos--;
+        }
+      } else {
+        this.pos--;
       }
-
-      this.render();
     }
+    this.render();
+  }
+
+  _onRight() {
+    if (this.pos < this.buf.length) {
+      if (this.buf[this.pos] === '\n') {
+        const { line } = this._posToVis(this.pos);
+        const newRow = line + 1;
+        this.pos = this._visToPos(newRow, 0);
+      } else {
+        this.pos++;
+      }
+    }
+    this.render();
+  }
+
+  _onUp() {
+    const { col, line } = this._posToVis(this.pos);
+    if (line > 0) {
+      const lines = this.buf.split('\n');
+      const prevLineLen = vis(lines[line - 1] || '');
+      const newCol = Math.min(col, prevLineLen);
+      this.pos = this._visToPos(line - 1, newCol);
+    }
+    this.render();
+  }
+
+  _onDown() {
+    const { col, line } = this._posToVis(this.pos);
+    const lines = this.buf.split('\n');
+    if (line < lines.length - 1) {
+      const nextLineLen = vis(lines[line + 1] || '');
+      const newCol = Math.min(col, nextLineLen);
+      this.pos = this._visToPos(line + 1, newCol);
+    }
+    this.render();
+  }
+
+  _onHome() {
+    const { line } = this._posToVis(this.pos);
+    this.pos = this._visToPos(line, 0);
+    this.render();
+  }
+
+  _onEnd() {
+    const { line } = this._posToVis(this.pos);
+    const lines = this.buf.split('\n');
+    this.pos = this._visToPos(line, vis(lines[line] || ''));
+    this.render();
   }
 
   // ── Mouse click handler ────────────────────────────────────────────────────
@@ -579,16 +761,24 @@ export class Tui extends EventEmitter {
 
   // ── Selector key handler ──────────────────────────────────────────────────
   _onKeySelector(name, ctrl, str, key) {
+    // Get filtered items (same logic as renderSelector)
+    const query = this.buf.toLowerCase();
+    const filtered = query
+      ? this._selItems.filter(it => (it.name || it).toLowerCase().includes(query) || (it.desc || '').toLowerCase().includes(query))
+      : this._selItems;
+
     if (name === 'escape') {
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
       if (this._selResolve) { this._selResolve(null); this._selResolve = null; }
+      this.buf = ''; this.pos = 0;
       this.render();
       return;
     }
     if (name === 'return') {
-      const chosen = this._selItems[this._selIdx];
+      const chosen = filtered[this._selIdx] ?? null;
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
       if (this._selResolve) { this._selResolve(chosen); this._selResolve = null; }
+      this.buf = ''; this.pos = 0;
       this.render();
       return;
     }
@@ -597,7 +787,20 @@ export class Tui extends EventEmitter {
       this.render(); return;
     }
     if (name === 'down') {
-      this._selIdx = Math.min(this._selItems.length - 1, this._selIdx + 1);
+      this._selIdx = Math.min(filtered.length - 1, this._selIdx + 1);
+      this.render(); return;
+    }
+    // Search: backspace
+    if (name === 'backspace') {
+      if (this.pos > 0) { this.buf = this.buf.slice(0, this.pos - 1) + this.buf.slice(this.pos); this.pos--; }
+      this._selIdx = 0;
+      this.render(); return;
+    }
+    // Search: typing
+    if (str && str.length === 1 && !ctrl) {
+      this.buf = this.buf.slice(0, this.pos) + str + this.buf.slice(this.pos);
+      this.pos++;
+      this._selIdx = 0;
       this.render(); return;
     }
   }

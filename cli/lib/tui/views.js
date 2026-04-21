@@ -6,9 +6,10 @@ import { execSync } from 'child_process';
 
 // ── Cat personality ─────────────────────────────────────────────────────────
 const CAT_FACE = [
-  '  /\\_/\\  ',
-  ' ( o.o ) ',
-  '  > ^ <  ',
+  '   /\\___/\\   ',
+  '  ( ●   ● )  ',
+  '   \\  ▾  /   ',
+  '    \\___/    ',
 ];
 
 const CAT_MSGS = [
@@ -30,7 +31,7 @@ export function nextCatMsg() {
   return CAT_MSGS[_catMsgIdx];
 }
 
-// ── Zen Home Screen (single centered input — no bottom bar) ─────────────────
+// ── Zen Home Screen — OpenCode-inspired minimal layout ──────────────────────
 export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, logs = []) {
   const t = getTheme();
   const W = w();
@@ -39,33 +40,27 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
 
   const liveLogs = getLiveLogsEnabled();
   const mainW = liveLogs ? Math.floor(W * 0.65) : W;
-  const logW = W - mainW - 1; // 1 for the border
+  const logW = W - mainW - 1;
 
   // Clear full screen
   for (let r = 1; r <= H - 1; r++) clearRow(r);
 
-  // ── Render logs sidebar if enabled ─────────────────────────────────────
+  // ── Logs sidebar ───────────────────────────────────────────────────────
   if (liveLogs) {
     for (let r = 1; r <= H - 1; r++) {
       at(r, mainW + 1, `${t.dimBorder}│${R}`);
     }
-    const logStartRow = 1;
     const logH = H - 2;
     const maxLogLen = logW - 2;
     const logLines = [];
-    for (const l of logs) {
-      logLines.push(...wrapText(l, maxLogLen));
-    }
+    for (const l of logs) logLines.push(...wrapText(l, maxLogLen));
     const startIdx = Math.max(0, logLines.length - logH);
-    const visibleLogs = logLines.slice(startIdx);
-    
     at(1, mainW + 3, `${ansi.bold}Live Logs${R}`);
-    for (let i = 0; i < visibleLogs.length; i++) {
-      at(i + 3, mainW + 3, `${ansi.dim}${visibleLogs[i]}${R}`);
-    }
+    logLines.slice(startIdx).forEach((l, i) => at(i + 3, mainW + 3, `${ansi.dim}${l}${R}`));
   }
 
-  const blockH = 14;
+  // ── Vertical centering — block is: 4 (cat) + 1 (brand) + 1 (msg) + 2 (gap) + 1 (input) + 1 (model) + 2 (gap) + 1 (hints) = 13
+  const blockH = 13;
   const startY = Math.max(2, Math.floor((H - blockH) / 2));
   let y = startY;
 
@@ -74,59 +69,59 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
     at(y++, 1, center(`${t.logoDim}${line}${R}`, mainW));
   }
 
-  // Brand name: "async" dim + "cat" bright
+  // Brand: "async" dim + "cat" bright
   const brand = `${t.logoDim}async${R}${t.logoBright}cat${R}`;
   at(y++, 1, center(brand, mainW));
 
   // Cat message
   const msg = catMsg || CAT_MSGS[_catMsgIdx];
   at(y++, 1, center(`${ansi.dim}${ansi.italic}${msg}${R}`, mainW));
-  y++;
+  y += 2; // breathing room
 
-  // ── Centered input box ──────────────────────────────────────────────────
-  const boxW = Math.min(56, mainW - 6);
-  const boxL = Math.floor((mainW - boxW) / 2);
-  const inner = boxW - 4;
+  // ── Input area: OpenCode-style left accent bar, no box ─────────────────
+  const inputW = Math.floor(mainW * 0.5);
+  const inputL = Math.floor((mainW - inputW) / 2);
 
-  // Top border
-  at(y, boxL, `${t.dimBorder}╭${'─'.repeat(boxW - 2)}╮${R}`);
-  y++;
-
-  // Input line
   const displayBuf = inputBuf || '';
-  const placeholder = displayBuf
-    ? `${t.inputFg}${displayBuf}${R}`
-    : `${ansi.dim}Ask the agent anything...${R}`;
-  const phVis = vis(placeholder);
-  const pad = Math.max(0, inner - phVis);
-  at(y, boxL, `${t.dimBorder}│${R} ${placeholder}${' '.repeat(pad)} ${t.dimBorder}│${R}`);
+  // For display wrap within the available width (inputW - 2 for "│ ")
+  const innerW = inputW - 2;
+  const wrappedInput = displayBuf ? wrapInputLine(displayBuf, innerW) : [];
+  const maxInputLines = 4;
+  const showLines = wrappedInput.slice(0, maxInputLines);
 
-  // Place cursor inside the box
-  const cursorRow = y;
-  const cursorCol = boxL + 2 + (displayBuf ? cursorPos : 0);
-  y++;
+  const inputStartY = y;
 
-  // Model info inside box
+  if (!displayBuf) {
+    // Single placeholder line
+    at(y, inputL, `${t.accent}│${R} ${ansi.dim}Ask the agent anything...${R}`);
+    y++;
+  } else {
+    for (let li = 0; li < showLines.length; li++) {
+      at(y, inputL, `${t.accent}│${R} ${t.inputFg}${showLines[li]}${R}`);
+      y++;
+    }
+  }
+
+  // Model info line (same left indent, no bar — just spacing)
   const hasModel = modelInfo && modelInfo !== 'no model' && modelInfo.trim();
   const mLine = hasModel
     ? (providerInfo
-        ? `${t.accent2}${modelInfo}${R} ${ansi.dim}· ${providerInfo}${R}`
+        ? `${t.accent2}${modelInfo}${R}  ${ansi.dim}· ${providerInfo}${R}`
         : `${t.accent2}${modelInfo}${R}`)
-    : `${ansi.dim}no model  ${t.accent}→ type /models to pick one${R}`;
-  const mPad = Math.max(0, inner - vis(mLine));
-  at(y, boxL, `${t.dimBorder}│${R} ${mLine}${' '.repeat(mPad)} ${t.dimBorder}│${R}`);
-  y++;
-
-  // Bottom border
-  at(y, boxL, `${t.dimBorder}╰${'─'.repeat(boxW - 2)}╯${R}`);
+    : `${ansi.dim}no model${R}  ${t.accent}→${R}  ${ansi.dim}/models to pick one${R}`;
+  at(y, inputL, `${ansi.dim}  ${mLine}`);
   y += 2;
 
-  // Shortcuts
-  const sc = `${ansi.bold}/${R} ${ansi.dim}commands${R}    ${ansi.bold}/open${R} ${ansi.dim}web UI${R}    ${ansi.bold}/tools${R} ${ansi.dim}skills${R}    ${ansi.bold}esc${R} ${ansi.dim}exit${R}`;
-  at(y, 1, center(sc, W));
+  // Shortcuts — subtle, centered
+  const sc = `${ansi.dim}/${R}${ansi.dim} commands    ${R}${ansi.bold}/open${R}${ansi.dim} web UI    ${R}${ansi.bold}/tools${R}${ansi.dim} skills    ${R}${ansi.bold}esc${R}${ansi.dim} exit${R}`;
+  at(y, 1, center(sc, mainW));
 
-  // Finally, position the hardware cursor
-  write(ansi.to(cursorRow, cursorCol));
+  // ── Cursor: placed on the current wrapped input line ──────────────────
+  const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, innerW);
+  const cursorRow = inputStartY + cursorLine;
+  // "│ " = 2 visible chars before input content
+  const cursorColAbs = inputL + 2 + cursorCol;
+  write(ansi.to(cursorRow, cursorColAbs));
 }
 
 // ── Chat View (messages + centered input at bottom) ─────────────────────────
@@ -164,8 +159,9 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
     }
   }
 
-  // Layout: content takes most space, input box at bottom
-  const inputAreaH = 5; // border + input + model + border + gap
+  // Layout: content takes most space, input area at bottom (minimal height)
+  const maxInputLines = 4;
+  const inputAreaH = maxInputLines + 3; // input lines + model line + top separator + gap
   const statusH = 1;
   const contentH = H - inputAreaH - statusH - 1;
 
@@ -192,36 +188,41 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
     at(1, mainW - 6, `${ansi.dim}${pct}%${R}`);
   }
 
-  // ── Centered input box ─────────────────────────────────────────────────
-  const boxW = Math.min(56, mainW - 6);
-  const boxL = Math.floor((mainW - boxW) / 2);
-  const inner = boxW - 4;
-  const boxTop = H - inputAreaH;
+  // ── Input area: OpenCode-style left accent bar ─────────────────────────
+  const inputW = Math.floor(mainW * 0.8);
+  const inputL = Math.floor((mainW - inputW) / 2);
+  const innerW = inputW - 2; // space after "│ "
 
-  at(boxTop, boxL, `${t.dimBorder}╭${'─'.repeat(boxW - 2)}╮${R}`);
+  // Thin separator line above input area
+  const sepRow = H - inputAreaH;
+  at(sepRow, inputL, `${t.dimBorder}${'─'.repeat(inputW)}${R}`);
 
+  const inputStartRow = sepRow + 1;
   const displayBuf = inputBuf || '';
-  const placeholder = displayBuf
-    ? `${t.inputFg}${displayBuf}${R}`
-    : `${ansi.dim}Type a message...${R}`;
-  const phVis = vis(placeholder);
-  const pad = Math.max(0, inner - phVis);
-  at(boxTop + 1, boxL, `${t.dimBorder}│${R} ${placeholder}${' '.repeat(pad)} ${t.dimBorder}│${R}`);
+  const wrappedInput = displayBuf ? wrapInputLine(displayBuf, innerW) : [];
+  const showLines = wrappedInput.slice(0, maxInputLines);
 
-  // Model info
+  if (!displayBuf) {
+    at(inputStartRow, inputL, `${t.accent}│${R} ${ansi.dim}Type a message...${R}`);
+  } else {
+    for (let li = 0; li < showLines.length; li++) {
+      at(inputStartRow + li, inputL, `${t.accent}│${R} ${t.inputFg}${showLines[li]}${R}`);
+    }
+  }
+
+  // Model info row
   const mName = modelInfo || 'no model';
   const pName = providerInfo || '';
   const mLine = pName
-    ? `${t.accent2}${mName}${R} ${ansi.dim}· ${pName}${R}`
+    ? `${t.accent2}${mName}${R}  ${ansi.dim}· ${pName}${R}`
     : `${ansi.dim}${mName}${R}`;
-  const mPad = Math.max(0, inner - vis(mLine));
-  at(boxTop + 2, boxL, `${t.dimBorder}│${R} ${mLine}${' '.repeat(mPad)} ${t.dimBorder}│${R}`);
+  at(inputStartRow + maxInputLines, inputL, `  ${mLine}`);
 
-  at(boxTop + 3, boxL, `${t.dimBorder}╰${'─'.repeat(boxW - 2)}╯${R}`);
-
-  // Position cursor
-  const cursorCol = boxL + 2 + (displayBuf ? cursorPos : 0);
-  write(ansi.to(boxTop + 1, cursorCol));
+  // Cursor
+  const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, innerW);
+  const cursorRow = inputStartRow + cursorLine;
+  const cursorColAbs = inputL + 2 + cursorCol;
+  write(ansi.to(cursorRow, cursorColAbs));
 }
 
 // ── Message formatting ──────────────────────────────────────────────────────
@@ -278,6 +279,40 @@ function wrapText(text, maxW) {
   return result;
 }
 
+function wrapInputLine(text, maxW) {
+  if (!text) return [''];
+  const result = [];
+  for (const line of text.split('\n')) {
+    if (vis(line) <= maxW) { result.push(line); continue; }
+    let rem = line;
+    while (vis(rem) > maxW) {
+      let cut = maxW;
+      for (let i = maxW - 1; i > 0; i--) {
+        if (rem[i] === ' ') { cut = i + 1; break; }
+      }
+      result.push(rem.slice(0, cut));
+      rem = rem.slice(cut);
+    }
+    if (rem) result.push(rem);
+  }
+  return result;
+}
+
+function calcCursorPosInWrapped(buf, pos, maxW) {
+  // Must use the same word-aware wrap logic as wrapInputLine, not simple division
+  if (!buf || pos === 0) return { col: 0, line: 0 };
+  const lines = wrapInputLine(buf, maxW);
+  let rem = pos;
+  for (let li = 0; li < lines.length; li++) {
+    if (rem <= lines[li].length) {
+      return { col: vis(lines[li].slice(0, rem)), line: li };
+    }
+    rem -= lines[li].length;
+  }
+  const last = lines[lines.length - 1] || '';
+  return { col: vis(last), line: lines.length - 1 };
+}
+
 // ── Command palette (renders over content area) ─────────────────────────────
 export const PALETTE_CMDS = [
   { cmd: '/models',   desc: 'Switch model / serve / pull',         group: '🤖 AI' },
@@ -320,106 +355,124 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos) {
   const W = w();
   const H = h();
   const R = ansi.reset;
+  const liveLogs = getLiveLogsEnabled();
+  const mainW = liveLogs ? Math.floor(W * 0.65) : W;
 
-  // Clear everything
-  for (let r = 1; r <= H - 1; r++) clearRow(r);
+  // ── Flat overlay panel — no emoji group headers, clean and compact ──────────
+  const panelBg  = ansi.bgRgb(20, 22, 30);
+  const selBg    = ansi.bgRgb(22, 42, 50); // muted teal, works across all themes
+  const panelW   = Math.min(Math.floor(mainW * 0.55), 68);
+  const panelL   = Math.floor((mainW - panelW) / 2) + 1;
+  const panelTop = 2;
 
-  // Title
-  at(1, 4, `${t.accentBold}Commands${R}  ${ansi.dim}(↑↓ select · enter confirm · esc back)${R}`);
-  at(2, 4, `${t.dimBorder}${'─'.repeat(W - 8)}${R}`);
-
-  const maxShow = Math.min(items.length, H - 8);
+  const maxShow = Math.min(items.length, H - 10);
   let scrollOff = 0;
   if (selIdx >= maxShow) scrollOff = selIdx - maxShow + 1;
+  const visible = items.slice(scrollOff, scrollOff + maxShow);
+  const colW = items.length > 0 ? Math.max(...items.map(c => c.cmd.length)) + 2 : 10;
+
+  // Paint panel rows
+  const totalRows = maxShow + 2;
+  for (let r = panelTop; r <= panelTop + totalRows; r++) {
+    at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
+  }
+
+  // Title + esc hint
+  const escPad = Math.max(0, panelW - 8 - 3);
+  at(panelTop,     panelL, `${panelBg}${ansi.bold}Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
+  at(panelTop + 1, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
 
   if (items.length === 0) {
-    at(4, 6, `${ansi.dim}No matching commands${R}`);
+    at(panelTop + 2, panelL, `${panelBg}  ${ansi.dim}No matching commands${R}`);
   } else {
-    const colW = Math.max(...items.map(c => c.cmd.length)) + 3;
-    const visible = items.slice(scrollOff, scrollOff + maxShow);
-
-    let lastGroup = '';
-    let row = 3;
-    for (let i = 0; i < visible.length && row < H - 5; i++) {
+    for (let i = 0; i < visible.length; i++) {
       const item = visible[i];
       const realIdx = i + scrollOff;
-
-      // Group header
-      if (item.group !== lastGroup) {
-        lastGroup = item.group;
-        at(row++, 4, `${ansi.dim}${item.group}${R}`);
-      }
-
       const sel = realIdx === selIdx;
-      const bg = sel ? t.paletteSel : '';
+      const bg = sel ? selBg : panelBg;
       const cmdStyle = sel ? `${ansi.bold}${t.paletteCmd}` : t.paletteCmd;
-      const descStyle = sel ? `${R}${bg}` : ansi.dim;
       const padded = item.cmd.padEnd(colW);
-      at(row++, 4, `${bg}  ${cmdStyle}${padded}${R}${bg}${descStyle}${item.desc}${' '.repeat(Math.max(0, W - colW - vis(item.desc) - 10))}${R}`);
+      const desc = (item.desc || '').slice(0, panelW - colW - 4);
+      const pad = Math.max(0, panelW - vis(padded) - vis(desc) - 2);
+      at(panelTop + 2 + i, panelL, `${bg}  ${cmdStyle}${padded}${R}${bg}${ansi.dim}${desc}${' '.repeat(pad)}${R}`);
     }
-
     if (items.length > scrollOff + maxShow) {
-      at(row, 6, `${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}`);
+      at(panelTop + 2 + maxShow, panelL, `${panelBg}  ${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}`);
     }
   }
 
-  // Input at bottom center
-  const boxW = Math.min(56, W - 6);
-  const boxL = Math.floor((W - boxW) / 2);
-  const inner = boxW - 4;
-  const boxTop = H - 4;
-
-  at(boxTop, boxL, `${t.dimBorder}╭${'─'.repeat(boxW - 2)}╮${R}`);
-  const buf = inputBuf || '/';
-  const bufPad = Math.max(0, inner - vis(buf));
-  at(boxTop + 1, boxL, `${t.dimBorder}│${R} ${t.paletteCmd}${buf}${R}${' '.repeat(bufPad)} ${t.dimBorder}│${R}`);
-  at(boxTop + 2, boxL, `${t.dimBorder}╰${'─'.repeat(boxW - 2)}╯${R}`);
-
-  write(ansi.to(boxTop + 1, boxL + 2 + cursorPos));
+  // Cursor at zen input position (renderZen already drew it, we re-anchor)
+  const inputW = Math.floor(mainW * 0.5);
+  const inputL = Math.floor((mainW - inputW) / 2);
+  const innerW = inputW - 2;
+  const buf = inputBuf || '';
+  const { col: cc, line: cl } = calcCursorPosInWrapped(buf, cursorPos, innerW);
+  const startY = Math.max(2, Math.floor((H - 13) / 2));
+  write(ansi.to(startY + 8 + cl, inputL + 2 + cc));
 }
 
-// ── Inline selector (for models, themes, etc.) ──────────────────────────────
-export function renderSelector(title, items, selIdx, contentStartRow) {
+// ── Selector — floating panel overlay with search ───────────────────────────
+export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
   const t = getTheme();
   const W = w();
   const H = h();
   const R = ansi.reset;
 
-  for (let r = contentStartRow; r <= H - 2; r++) clearRow(r);
+  const panelBg = ansi.bgRgb(18, 18, 24);
+  const panelW = Math.min(Math.floor(W * 0.5), 62);
+  const panelL = Math.floor((W - panelW) / 2) + 1;
 
-  const boxW = Math.min(50, W - 10);
-  const boxL = Math.floor((W - boxW) / 2);
-  const inner = boxW - 4;
-  let y = contentStartRow + 1;
+  // Filter items by search query
+  const query = (inputBuf || '').toLowerCase();
+  const filtered = query
+    ? items.filter(it => (it.name || it).toLowerCase().includes(query) || (it.desc || '').toLowerCase().includes(query))
+    : items;
 
-  at(y++, boxL, `${t.accentBold}${title}${R}`);
-  at(y++, boxL, `${t.dimBorder}${'─'.repeat(boxW)}${R}`);
-
-  const maxShow = Math.min(items.length, H - contentStartRow - 6);
+  const maxShow = Math.min(filtered.length, H - 14);
   let scrollOff = 0;
   if (selIdx >= maxShow) scrollOff = selIdx - maxShow + 1;
-  const visible = items.slice(scrollOff, scrollOff + maxShow);
+  const visible = filtered.slice(scrollOff, scrollOff + maxShow);
 
-  for (let i = 0; i < visible.length; i++) {
-    const item = visible[i];
-    const realIdx = i + scrollOff;
-    const sel = realIdx === selIdx;
-    const icon = sel ? `${t.accent}▸${R}` : ' ';
-    const bg = sel ? t.paletteSel : '';
-    const nameStyle = sel ? `${ansi.bold}${t.accent}` : '';
-    const descStyle = ansi.dim;
-    const name = item.name || item;
-    const desc = item.desc || '';
+  // Panel height: title + search + divider + items + divider + hint = maxShow + 5
+  const panelH = maxShow + 5;
+  const panelTop = Math.max(2, Math.floor((H - panelH) / 2));
 
-    at(y + i, boxL, `${bg} ${icon} ${nameStyle}${name}${R}${bg}${desc ? `  ${descStyle}${desc}${R}${bg}` : ''}${' '.repeat(Math.max(0, inner - vis(name) - vis(desc) - 4))}${R}`);
+  for (let r = panelTop; r <= panelTop + panelH; r++) {
+    at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
   }
 
-  y += visible.length + 1;
-  at(y, boxL, `${ansi.dim}↑↓ select  ·  enter confirm  ·  esc cancel${R}`);
+  // Title row + esc hint
+  const escPad = Math.max(0, panelW - vis(title) - 3);
+  at(panelTop, panelL, `${panelBg}${ansi.bold}${title}${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
 
-  if (items.length > scrollOff + maxShow) {
-    at(y + 1, boxL, `${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}`);
+  // Search input row
+  const searchStr = inputBuf || '';
+  const searchPad = Math.max(0, panelW - vis(searchStr) - 1);
+  at(panelTop + 1, panelL, `${panelBg}${ansi.dim}${t.paletteCmd}${searchStr || ''}${ansi.dim}${searchStr ? '' : 'Search...'}${R}${panelBg}${' '.repeat(searchPad)}${R}`);
+
+  at(panelTop + 2, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
+
+  if (filtered.length === 0) {
+    at(panelTop + 3, panelL, `${panelBg}  ${ansi.dim}No matches${R}`);
+  } else {
+    for (let i = 0; i < visible.length; i++) {
+      const item = visible[i];
+      const realIdx = i + scrollOff;
+      const sel = realIdx === selIdx;
+      const bg = sel ? t.paletteSel : panelBg;
+      const nameStyle = sel ? `${ansi.bold}${t.paletteCmd}` : '';
+      const name = item.name || item;
+      const desc = item.desc || '';
+      const pad = Math.max(0, panelW - vis(name) - vis(desc) - 4);
+      at(panelTop + 3 + i, panelL, `${bg}  ${nameStyle}${name}${R}${bg}${desc ? `  ${ansi.dim}${desc}${R}${bg}` : ''}${' '.repeat(pad)}${R}`);
+    }
   }
+
+  at(panelTop + 3 + maxShow, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
+  at(panelTop + 4 + maxShow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  ·  enter confirm  ·  esc cancel${R}`);
+
+  // Cursor in search input
+  write(ansi.to(panelTop + 1, panelL + cursorPos));
 }
 
 // ── Model Setup Wizard ────────────────────────────────────────────────────────
@@ -536,7 +589,43 @@ export function renderStatusBar(version, modelInfo) {
   const gap2 = Math.max(1, W - leftVis - gap1 - midVis - rightVis);
 
   clearRow(H);
-  at(H, 1, `${t.statusBg}${t.statusFg}${left}${' '.repeat(gap1)}${mid}${' '.repeat(gap2)}${right}${R}`);
+  at(H, 1, `${t.statusFg}${left}${' '.repeat(gap1)}${mid}${' '.repeat(gap2)}${right}${R}`);
+}
+
+// ── Result popup — scrollable command output overlay ───────────────────────
+export function renderResult(title, lines, scrollOff = 0) {
+  const t = getTheme();
+  const W = w();
+  const H = h();
+  const R = ansi.reset;
+
+  const panelBg = ansi.bgRgb(20, 22, 30);
+  const panelW  = Math.min(Math.floor(W * 0.72), 90);
+  const panelL  = Math.floor((W - panelW) / 2) + 1;
+  const contentH = Math.min(lines.length, H - 10);
+  const panelH   = contentH + 4; // title + divider + content + divider + hint
+  const panelTop = Math.max(2, Math.floor((H - panelH) / 2));
+
+  for (let r = panelTop; r <= panelTop + panelH; r++) {
+    at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
+  }
+
+  const escPad = Math.max(0, panelW - vis(title) - 3);
+  at(panelTop,     panelL, `${panelBg}${ansi.bold}${title}${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
+  at(panelTop + 1, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
+
+  const visLines = lines.slice(scrollOff, scrollOff + contentH);
+  for (let i = 0; i < contentH; i++) {
+    const line = i < visLines.length ? visLines[i] : '';
+    const pad = Math.max(0, panelW - vis(line) - 2);
+    at(panelTop + 2 + i, panelL, `${panelBg}  ${line}${' '.repeat(pad)}${R}`);
+  }
+
+  at(panelTop + 2 + contentH, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
+  const pct = lines.length > contentH ? ` ${Math.round(Math.min(100, ((scrollOff + contentH) / lines.length) * 100))}%` : '';
+  const hint = `  ↑↓ scroll  ·  esc close`;
+  const hintPad = Math.max(0, panelW - vis(hint) - vis(pct));
+  at(panelTop + 3 + contentH, panelL, `${panelBg}${ansi.dim}${hint}${' '.repeat(hintPad)}${pct}${R}`);
 }
 
 // ── Streaming indicator ─────────────────────────────────────────────────────
