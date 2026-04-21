@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HardDrive, Server, RefreshCw, Play, Square, CheckCircle, Info, Trash2, Box, Cpu, Zap } from 'lucide-react';
+import { HardDrive, Server, RefreshCw, Play, Square, CheckCircle, Info, Trash2, Box, Cpu, Zap, Activity, Thermometer } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
-import { llamaServerApi, localModelsApi } from './settingApi.js';
+import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';
 
 const Badge = ({ children, color = 'gray' }) => {
   const colors = {
@@ -23,6 +23,112 @@ const STATUS_META = {
   loading: { label: 'Loading model…',  color: 'amber' },
   ready:   { label: 'Ready',           color: 'green' },
   error:   { label: 'Error',           color: 'red'   },
+};
+
+const MiniBar = ({ value, color = 'bg-indigo-500', max = 100 }) => {
+  const pct = Math.min(100, Math.max(0, Math.round((value / max) * 100)));
+  const barColor = pct > 85 ? 'bg-red-500' : pct > 65 ? 'bg-amber-500' : color;
+  return (
+    <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-1">
+      <div className={`h-full ${barColor} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+};
+
+const SystemInfoSection = () => {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      setLoading(true);
+      try {
+        const res = await aiProviderApi.getStats();
+        if (res.success) setStats(res);
+      } catch { /* ignore */ }
+      finally { setLoading(false); }
+    };
+    fetchStats();
+    const interval = setInterval(fetchStats, 8000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const cpu = stats?.hardware?.cpu;
+  const ram = stats?.hardware?.ram;
+  const gpu = stats?.hardware?.gpu?.[0];
+
+  return (
+    <div className="bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-2xl p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <Activity className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-200">System Resources</h3>
+        {loading && <RefreshCw className="w-3 h-3 animate-spin text-gray-400 ml-auto" />}
+      </div>
+
+      {cpu && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+              <Cpu className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[120px]">{cpu.model?.split('@')[0]?.trim() || 'CPU'}</span>
+            </div>
+            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{cpu.usagePercent}%</span>
+          </div>
+          <MiniBar value={cpu.usagePercent} color="bg-blue-500" />
+        </div>
+      )}
+
+      {ram && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-gray-600 dark:text-gray-400">RAM</span>
+            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
+              {ram.usedGb}/{ram.totalGb} GB
+            </span>
+          </div>
+          <MiniBar value={ram.usagePercent} color="bg-indigo-500" />
+        </div>
+      )}
+
+      {gpu && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+              <Zap className="w-3.5 h-3.5 text-yellow-500" />
+              <span className="truncate max-w-[120px]">{gpu.name?.split(' ').slice(0, 2).join(' ') || 'GPU'}</span>
+            </div>
+            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
+              {gpu.utilizationPercent}%{gpu.temperatureC ? ` · ${gpu.temperatureC}°C` : ''}
+            </span>
+          </div>
+          <MiniBar value={gpu.utilizationPercent} color="bg-yellow-500" />
+          {gpu.vramTotalGb > 0 && (
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">VRAM</span>
+                <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">
+                  {gpu.vramUsedGb}/{gpu.vramTotalGb} GB
+                </span>
+              </div>
+              <MiniBar value={gpu.vramUsedGb} max={gpu.vramTotalGb} color="bg-green-500" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {!cpu && !gpu && !loading && (
+        <div className="text-xs text-gray-400 dark:text-gray-500">No hardware data available</div>
+      )}
+
+      {stats?.modelHardwareInfo && (
+        <div className="pt-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+          <div className="font-medium text-gray-600 dark:text-gray-400">{stats.modelHardwareInfo.name}</div>
+          {stats.modelHardwareInfo.sizeVram && <div className="mt-0.5">{stats.modelHardwareInfo.sizeVram} VRAM</div>}
+          {stats.modelHardwareInfo.gpuLayers && <div className="mt-0.5">{stats.modelHardwareInfo.gpuLayers} GPU layers</div>}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const ModelsPage = () => {
@@ -314,6 +420,7 @@ const ModelsPage = () => {
               {/* Right Column (Secondary / Management) */}
               <div className="space-y-6">
                 <LocalModelsSection storage={storage} onRefresh={loadModelList} />
+                <SystemInfoSection />
               </div>
 
             </div>

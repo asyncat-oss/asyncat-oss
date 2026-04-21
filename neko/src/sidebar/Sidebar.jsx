@@ -51,7 +51,6 @@ import ProjectExplorer from "./ProjectExplorer";
 import CreateProjectFlow from "../projects/components/CreateProjectFlow";
 import CalendarContent from "./CalendarContent";
 import UniversalSearch from "./UniversalSearch";
-import HardwareWidget from "./HardwareWidget";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { usePermissions } from "../utils/permissions";
 import { agentApi } from "../CommandCenter/commandCenterApi";
@@ -1153,9 +1152,6 @@ const DynamicSidebar = ({
 
 					{/* Model picker — persistent, accessible from all modes */}
 					<ModelSection />
-
-					{/* Hardware widget — only shown when using a local/custom AI provider */}
-					<HardwareWidget />
 
 					{/* Scrollable content area */}
 					<div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
