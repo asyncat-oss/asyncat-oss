@@ -505,104 +505,6 @@ export const packsApi = {
 };
 
 // =====================================================
-// LABS API METHODS
-// =====================================================
-
-export const labsApi = {
-  // --- Flashcards ---
-  generateDeck: async (topic) => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/generate`, {
-      method: 'POST',
-      body: JSON.stringify({ topic }),
-    });
-  },
-  listDecks: async () => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/decks`);
-  },
-  getDeckCards: async (deckId) => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/decks/${deckId}/cards`);
-  },
-  reviewCard: async (cardId, rating) => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/cards/${cardId}/review`, {
-      method: 'PATCH',
-      body: JSON.stringify({ rating }),
-    });
-  },
-  updateCard: async (cardId, front, back) => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/cards/${cardId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ front, back }),
-    });
-  },
-  deleteCard: async (cardId) => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/cards/${cardId}`, {
-      method: 'DELETE',
-    });
-  },
-  addCard: async (deckId, front, back) => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/decks/${deckId}/cards`, {
-      method: 'POST',
-      body: JSON.stringify({ front, back }),
-    });
-  },
-  deleteDeck: async (deckId) => {
-    return await apiRequest(`${API_BASE_URL}/labs/flashcards/decks/${deckId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  // --- Active Recall ---
-  generateRecall: async (topic) => {
-    return await apiRequest(`${API_BASE_URL}/labs/recall/generate`, {
-      method: 'POST',
-      body: JSON.stringify({ topic }),
-    });
-  },
-  updateRecallSession: async (sessionId, score_correct) => {
-    return await apiRequest(`${API_BASE_URL}/labs/recall/sessions/${sessionId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ score_correct }),
-    });
-  },
-  listRecallSessions: async () => {
-    return await apiRequest(`${API_BASE_URL}/labs/recall/sessions`);
-  },
-  getRecallSession: async (sessionId) => {
-    return await apiRequest(`${API_BASE_URL}/labs/recall/sessions/${sessionId}`);
-  },
-  deleteRecallSession: async (sessionId) => {
-    return await apiRequest(`${API_BASE_URL}/labs/recall/sessions/${sessionId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  // --- Mind Maps ---
-  generateMindMap: async (topic) => {
-    return await apiRequest(`${API_BASE_URL}/labs/mindmap/generate`, {
-      method: 'POST',
-      body: JSON.stringify({ topic }),
-    });
-  },
-  listMindMaps: async () => {
-    return await apiRequest(`${API_BASE_URL}/labs/mindmap`);
-  },
-  getMindMap: async (mapId) => {
-    return await apiRequest(`${API_BASE_URL}/labs/mindmap/${mapId}`);
-  },
-  updateMindMap: async (mapId, updates) => {
-    return await apiRequest(`${API_BASE_URL}/labs/mindmap/${mapId}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    });
-  },
-  deleteMindMap: async (mapId) => {
-    return await apiRequest(`${API_BASE_URL}/labs/mindmap/${mapId}`, {
-      method: 'DELETE',
-    });
-  },
-};
-
-// =====================================================
 // CHAT FOLDER API METHODS (user-specific)
 // =====================================================
 
@@ -1173,7 +1075,6 @@ export default {
   projectFolders: projectFoldersApi,
   packs: packsApi,
   trash: trashApi,
-  labs: labsApi,
   agent: agentApi,
 
   // Utilities

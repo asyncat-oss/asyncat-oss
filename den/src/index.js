@@ -13,7 +13,6 @@ import authRouter from './auth/authRouter.js';
 
 // ─── AI / MCP routes (from asy_b_main) ───────────────────────────────────────
 import aiRoutes from './ai/routes/aiRoutes.js';
-import labsRoutes from './ai/routes/labsRoutes.js';
 import providerRoutes from './ai/routes/providerRoutes.js';
 import agentRoutes from './ai/routes/agentRoutes.js';
 
@@ -88,7 +87,6 @@ app.use('/api/auth', authRouter);
 // matching /api/ai/providers/* requests first.
 app.use('/api/ai/providers', providerRoutes);
 app.use('/api/ai', aiRoutes);
-app.use('/api/labs', labsRoutes);
 app.use('/api/agent', agentRoutes);
 
 // ─── Routes: Users / Projects ────────────────────────────────────────────────

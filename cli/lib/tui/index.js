@@ -420,7 +420,7 @@ export class Tui extends EventEmitter {
     this._streamTimer = setInterval(() => {
       if (this._destroyed) return;
       renderStatusBar(this.version, this._streamMsg, this.modelInfo);
-    }, 80);
+    }, 700);
   }
 
   stopStreaming() {

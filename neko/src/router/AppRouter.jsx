@@ -20,11 +20,6 @@ import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import PacksPage from '../Packs/PacksPage';
-import LabsPage from '../Labs/LabsPage';
-import FlashcardsPage from '../Labs/FlashcardsPage';
-import FlashcardReview from '../Labs/FlashcardReview';
-import RecallPage from '../Labs/RecallPage';
-import MindMapPage from '../Labs/MindMapPage';
 import ModelsPage from '../Settings/ModelsPage';
 import AgentPage from '../Agent/AgentPage';
 
@@ -211,31 +206,6 @@ const createRouter = () => createBrowserRouter([
       {
         path: "packs",
         element: <PacksPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "lab",
-        element: <LabsPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "lab/flashcards",
-        element: <FlashcardsPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "lab/flashcards/:deckId",
-        element: <FlashcardReview />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "lab/recall",
-        element: <RecallPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "lab/mindmap",
-        element: <MindMapPage />,
         errorElement: <RouteErrorElement />
       },
       {

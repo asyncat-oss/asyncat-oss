@@ -380,7 +380,6 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos) {
   // Title + esc hint
   const escPad = Math.max(0, panelW - 8 - 3);
   at(panelTop,     panelL, `${panelBg}${ansi.bold}Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
-  at(panelTop + 1, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
 
   if (items.length === 0) {
     at(panelTop + 2, panelL, `${panelBg}  ${ansi.dim}No matching commands${R}`);
@@ -450,8 +449,6 @@ export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
   const searchPad = Math.max(0, panelW - vis(searchStr) - 1);
   at(panelTop + 1, panelL, `${panelBg}${ansi.dim}${t.paletteCmd}${searchStr || ''}${ansi.dim}${searchStr ? '' : 'Search...'}${R}${panelBg}${' '.repeat(searchPad)}${R}`);
 
-  at(panelTop + 2, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
-
   if (filtered.length === 0) {
     at(panelTop + 3, panelL, `${panelBg}  ${ansi.dim}No matches${R}`);
   } else {
@@ -468,8 +465,7 @@ export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
     }
   }
 
-  at(panelTop + 3 + maxShow, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
-  at(panelTop + 4 + maxShow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  ·  enter confirm  ·  esc cancel${R}`);
+  at(panelTop + 3 + maxShow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  ·  enter confirm  ·  esc cancel${R}`);
 
   // Cursor in search input
   write(ansi.to(panelTop + 1, panelL + cursorPos));
@@ -561,8 +557,8 @@ export function renderStatusBar(version, streamingMsg, modelInfo) {
     const spin = spinnerFrame();
     const modelStr = modelInfo ? `${t.accent2}${modelInfo}${R}  ` : '';
     const right = `${ansi.dim}esc stop${R}  ${modelStr}${ansi.dim}${version || ''}${R} `;
-    const left = ` ${t.accent}${spin}${R} ${ansi.dim}${streamingMsg}${R}`;
-    const leftVis = vis(` ${spin} ${streamingMsg}`);
+    const left = ` ${t.accent}${spin}${R}`;
+    const leftVis = vis(` ${spin}`);
     const rightVis = vis(`esc stop  ${modelInfo ? modelInfo + '  ' : ''}${version || ''} `);
     const gap = Math.max(1, W - leftVis - rightVis);
     at(H, 1, `${t.statusFg}${left}${' '.repeat(gap)}${right}${R}`);
@@ -611,7 +607,7 @@ export function renderResult(title, lines, scrollOff = 0) {
   const panelW  = Math.min(Math.floor(W * 0.72), 90);
   const panelL  = Math.floor((W - panelW) / 2) + 1;
   const contentH = Math.min(lines.length, H - 10);
-  const panelH   = contentH + 4; // title + divider + content + divider + hint
+  const panelH   = contentH + 3;
   const panelTop = Math.max(2, Math.floor((H - panelH) / 2));
 
   for (let r = panelTop; r <= panelTop + panelH; r++) {
@@ -620,7 +616,6 @@ export function renderResult(title, lines, scrollOff = 0) {
 
   const escPad = Math.max(0, panelW - vis(title) - 3);
   at(panelTop,     panelL, `${panelBg}${ansi.bold}${title}${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
-  at(panelTop + 1, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
 
   const visLines = lines.slice(scrollOff, scrollOff + contentH);
   for (let i = 0; i < contentH; i++) {
@@ -629,11 +624,7 @@ export function renderResult(title, lines, scrollOff = 0) {
     at(panelTop + 2 + i, panelL, `${panelBg}  ${line}${' '.repeat(pad)}${R}`);
   }
 
-  at(panelTop + 2 + contentH, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
-  const pct = lines.length > contentH ? ` ${Math.round(Math.min(100, ((scrollOff + contentH) / lines.length) * 100))}%` : '';
-  const hint = `  ↑↓ scroll  ·  esc close`;
-  const hintPad = Math.max(0, panelW - vis(hint) - vis(pct));
-  at(panelTop + 3 + contentH, panelL, `${panelBg}${ansi.dim}${hint}${' '.repeat(hintPad)}${pct}${R}`);
+  at(panelTop + 2 + contentH, panelL, `${panelBg}${ansi.dim}  ↑↓ scroll  ·  esc close${R}`);
 }
 
 // ── Models Page — 3-tab floating panel (Downloaded / Recommended / Search) ───
@@ -668,11 +659,9 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   // Tabs row
   const tabsStr = TAB_NAMES.map((name, i) => {
     const sel = i === tab;
-    return sel ? `${ansi.bold}${t.accent}[${name}]${R}` : `${ansi.dim}${name}`;
-  }).join(`  ${ansi.dim}|${R}  `);
+    return sel ? `${ansi.bold}${t.accent}${name}${R}` : `${ansi.dim}${name}`;
+  }).join(`  `);
   at(panelTop + 1, panelL, `${panelBg}${tabsStr}${R}`);
-
-  at(panelTop + 2, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
 
   // Item list
   if (items.length === 0) {
@@ -708,11 +697,10 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   }
 
   // Active downloads section
-  const dlTop = panelTop + 3 + maxShow;
-  at(dlTop, panelL, `${panelBg}${ansi.dim}${'─'.repeat(panelW)}${R}`);
+  const dlTop = panelTop + 2 + maxShow;
 
   if (activeDownloads && activeDownloads.length > 0) {
-    at(dlTop + 1, panelL, `${panelBg}${ansi.bold}  Downloading:${R}`);
+    at(dlTop, panelL, `${panelBg}${ansi.bold}  Downloading:${R}`);
     for (let di = 0; di < activeDownloads.length; di++) {
       const dl = activeDownloads[di];
       const dlRow = dlTop + 2 + di;
@@ -742,12 +730,22 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
 }
 
 // ── Streaming indicator ─────────────────────────────────────────────────────
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-let _spinIdx = 0;
-export function spinnerFrame() { return SPINNER[_spinIdx++ % SPINNER.length]; }
+const PROGRESS_FRAMES = [
+  "[████████░░░░░░░░░░░░░░░░░] thinking... (it's not)",
+  "[░░████████░░░░░░░░░░░░░░░░] calculating nothing...",
+  "[░░░░████████░░░░░░░░░░░░░░] existential processing...",
+  "[░░░░░░░████████░░░░░░░░░░] pretending to work...",
+  "[░░░░░░░░░░████████░░░░░░░] consulting the void...",
+  "[░░░░░░░░░░░░████████░░░░░░] lying about progress...",
+  "[░░░░░░░░░░░░░░████████░░░░] questioning my choices...",
+  "[░░░░░░░░░░░░░░░░████████░░] this is all your fault...",
+  "[░░░░░░░░░░░░░░░░░░████████] almost there... (lying)",
+];
+let _barIdx = 0;
+export function spinnerFrame() { return PROGRESS_FRAMES[_barIdx++ % PROGRESS_FRAMES.length]; }
 
 export function renderStreamingIndicator(row, msg) {
   const t = getTheme();
   clearRow(row);
-  at(row, 3, `${t.accent}${spinnerFrame()}${ansi.reset} ${ansi.dim}${msg || 'Thinking...'}${ansi.reset}`);
+  at(row, 3, `${t.accent}${spinnerFrame()}${ansi.reset}`);
 }

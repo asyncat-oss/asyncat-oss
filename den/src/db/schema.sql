@@ -11,7 +11,6 @@
 --   kanban.TaskDependencies         kanban.TimeEntries
 --   habits.habits   → habits        habits.habit_completions / habit_streaks
 --   aichats.conversations / chat_folders
---   studylab.flashcard_decks / flashcards / recall_sessions / mind_maps
 --
 -- SQLite adaptations:
 --   UUID columns   → TEXT
@@ -333,60 +332,6 @@ CREATE TABLE IF NOT EXISTS conversations (
   updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- ─── Study Lab ────────────────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS flashcard_decks (
-  id           TEXT PRIMARY KEY,
-  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  title        TEXT NOT NULL,
-  topic        TEXT,
-  color        TEXT NOT NULL DEFAULT '#6366f1',
-  card_count   INTEGER NOT NULL DEFAULT 0,
-  is_archived  INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS flashcards (
-  id               TEXT PRIMARY KEY,
-  deck_id          TEXT NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
-  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  front            TEXT NOT NULL,
-  back             TEXT NOT NULL,
-  ease_factor      REAL NOT NULL DEFAULT 2.5,
-  interval_days    INTEGER NOT NULL DEFAULT 0,
-  repetitions      INTEGER NOT NULL DEFAULT 0,
-  next_review_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  last_reviewed_at TEXT,
-  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS recall_sessions (
-  id            TEXT PRIMARY KEY,
-  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  topic         TEXT NOT NULL,
-  questions     TEXT NOT NULL DEFAULT '[]',   -- JSON
-  answers       TEXT NOT NULL DEFAULT '[]',   -- JSON
-  score_correct INTEGER NOT NULL DEFAULT 0,
-  score_total   INTEGER NOT NULL DEFAULT 0,
-  completed_at  TEXT,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS mind_maps (
-  id           TEXT PRIMARY KEY,
-  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  title        TEXT NOT NULL,
-  topic        TEXT,
-  nodes        TEXT NOT NULL DEFAULT '{}',   -- JSON
-  is_archived  INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_projects_team_id         ON projects(team_id);
@@ -408,11 +353,6 @@ CREATE INDEX IF NOT EXISTS idx_habit_streaks_habit      ON habit_streaks(habit_i
 CREATE INDEX IF NOT EXISTS idx_conversations_user       ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_workspace  ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_deleted    ON conversations(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_flashcard_decks_user     ON flashcard_decks(user_id);
-CREATE INDEX IF NOT EXISTS idx_flashcards_deck          ON flashcards(deck_id);
-CREATE INDEX IF NOT EXISTS idx_recall_sessions_user     ON recall_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_mind_maps_user           ON mind_maps(user_id);
-
 -- ─── AI Provider Config (per-user local model preferences) ───────────────────
 
 CREATE TABLE IF NOT EXISTS ai_provider_config (

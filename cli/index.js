@@ -564,7 +564,39 @@ case 'tools': {
 
         case 'help':
         case '?':
-          showTuiHelp(tui);
+          tui.showResult('asyncat help', [
+            'Just type          Send to AI (auto-agent mode)',
+            '/                  Browse all commands (palette)',
+            'esc                Back / Clear input / Exit',
+            '',
+            '  Prefrontal         Planning, code review, decisions',
+            '  Cerebellum         45 bundled skills (muscle memory)',
+            '  Hippocampus       Memory (semantic + episodic)',
+            '  Amygdala          Safety, permissions, errors',
+            '  Basal Ganglia     Auto-learns from your patterns',
+            '',
+            '  ↑ / ↓              Scroll prompt history',
+            '  PgUp / PgDn        Scroll messages',
+            '  Mouse wheel        Scroll',
+            '',
+            '  Ctrl+Y             Copy last AI response',
+            '  Ctrl+M             Toggle mouse (drag to select)',
+            '',
+            '  Ctrl+U             Delete to start of line',
+            '  Ctrl+K             Delete to end of line',
+            '  Ctrl+L             Refresh screen',
+            '  Ctrl+P             Open command palette',
+            '',
+            '  /skills      Browse 45 brain skills',
+            '  /tools      List agent tools',
+            '  /memory     Search agent memories',
+            '  /models     Select AI model',
+            '  /provider   Configure AI provider',
+            '  /theme      Switch color theme',
+            '  /open       Open web UI (localhost:8717)',
+            '  /new        Start fresh session',
+            '  /help       Show this',
+          ]);
           break;
         case 'clear':
           tui.clearMessages();
