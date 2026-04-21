@@ -116,7 +116,6 @@ const GeneralSection = ({
 
   // ── danger zone state ──
   const [pendingDelete, setPendingDelete] = useState(false);
-  const [pendingLeave,  setPendingLeave]  = useState(false);
   const [forceDelete,   setForceDelete]   = useState(false);
   const [hasProjects,   setHasProjects]   = useState(false);
   const [dangerLoading, setDangerLoading] = useState(false);
@@ -208,19 +207,6 @@ const GeneralSection = ({
       } else {
         flash(setDangerMsg, { type: 'error', text: msg }, 4000);
       }
-    } finally {
-      setDangerLoading(false);
-    }
-  };
-
-  // ── workspace leave ──
-  const handleLeave = async () => {
-    setDangerLoading(true);
-    try {
-      await workspaceApi.leaveWorkspace(workspace.id);
-      onWorkspaceLeft?.(workspace);
-    } catch (err) {
-      flash(setDangerMsg, { type: 'error', text: apiUtils.handleError(err, 'Failed to leave') }, 4000);
     } finally {
       setDangerLoading(false);
     }
@@ -471,43 +457,7 @@ const GeneralSection = ({
                     </div>
                   )}
                 </div>
-              ) : (
-                /* leave */
-                <div>
-                  {!pendingLeave ? (
-                    <button
-                      type="button"
-                      onClick={() => setPendingLeave(true)}
-                      className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 size={13} />
-                      Leave Workspace
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        Leave this workspace?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleLeave}
-                        disabled={dangerLoading}
-                        className="px-3 py-1 text-xs rounded-md bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 flex items-center gap-1.5 transition-colors"
-                      >
-                        {dangerLoading ? <Loader2 size={11} className="animate-spin" /> : null}
-                        Leave
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingLeave(false)}
-                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+              ) : null}
             </div>
           )}
         </section>

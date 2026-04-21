@@ -3,13 +3,6 @@ import { randomUUID } from "crypto";
 const router = express.Router();
 import { verifyUser } from "../auth.js";
 import { attachCompat } from "../../db/compat.js";
-import {
-	sendEventInvitations,
-	sendEventUpdateNotifications,
-	sendEventCancellationNotifications,
-	sendConflictWarning,
-	sendAttendeeRemovedNotifications,
-} from "../services/calendarEmailService.js";
 
 // Apply verification middleware to all routes
 router.use(verifyUser, attachCompat);
@@ -797,57 +790,7 @@ router.post("/", async (req, res) => {
 			}
 		}
 
-		// THE CAT'S EMAIL MAGIC: Send invitations if there are attendees
-		try {
-			if (attendees && attendees.length > 0) {
-				const organizerInfo = {
-					id: req.user.id,
-					name:
-						req.user.user_metadata?.full_name ||
-						req.user.email.split("@")[0],
-					email: req.user.email,
-				};
-
-				// Convert attendees to old format for email service
-				const attendeesForEmail = attendees.map((a) => ({
-					user_id: a.user_id,
-					status: a.status,
-				}));
-
-				await sendEventInvitations(
-					{ ...event, attendees: attendeesForEmail },
-					organizerInfo,
-					supabase
-				);
-				console.log(
-					"The Cat has delivered event invitations successfully! 🐱"
-				);
-			}
-
-			// THE CAT'S CONFLICT WARNING: Warn creator if they have conflicts
-			if (conflicts.length > 0) {
-				const userName =
-					req.user.user_metadata?.full_name ||
-					req.user.email.split("@")[0];
-				const conflictTime = `${startDateTime.toLocaleDateString()} ${startDateTime.toLocaleTimeString()} - ${endDateTime.toLocaleTimeString()}`;
-
-				// Don't await this - let it run in background
-				sendConflictWarning(
-					req.user.email,
-					userName,
-					conflictTime,
-					conflicts
-				).catch((error) =>
-					console.error(
-						"The Cat failed to send conflict warning:",
-						error
-					)
-				);
-			}
-		} catch (emailError) {
-			console.error("The Cat encountered email issues:", emailError);
-			// Don't fail the event creation if email fails
-		}
+		
 
 		// Return only necessary fields for frontend
 		const responseEvent = {
@@ -2018,173 +1961,6 @@ router.put("/:id", async (req, res) => {
 			newAttendees = originalAttendees;
 		}
 
-		// THE CAT'S EMAIL MAGIC: Handle different types of changes intelligently
-		try {
-			let updateMessage = "";
-			const changes = [];
-
-			// Check for non-attendee changes
-			if (updateData.startTime) {
-				const originalTime = new Date(
-					originalEvent.startTime
-				).getTime();
-				const newTime = updateData.startTime.getTime();
-				// Only consider it a change if there's more than 1 second difference
-				// to avoid false positives from millisecond differences
-				if (Math.abs(originalTime - newTime) > 1000) {
-					changes.push("time");
-				}
-			}
-			if (updateData.title && originalEvent.title !== updateData.title) {
-				changes.push("title");
-			}
-			if (
-				updateData.description &&
-				originalEvent.description !== updateData.description
-			) {
-				changes.push("description");
-			}
-
-			const updaterInfo = {
-				id: req.user.id,
-				name:
-					req.user.user_metadata?.full_name ||
-					req.user.email.split("@")[0],
-				email: req.user.email,
-			};
-
-			// Handle newly added attendees - send invitations only to them
-			if (addedAttendees.length > 0) {
-				console.log(
-					`The Cat is inviting ${addedAttendees.length} new attendees! 🐱✉️`
-				);
-
-				// Create a temporary event object with only new attendees for invitation
-				const eventForNewAttendees = {
-					...updated,
-					attendees: addedAttendees.map((attendee) => ({
-						user_id: attendee.user_id,
-						status: "pending",
-					})),
-				};
-
-				sendEventInvitations(
-					eventForNewAttendees,
-					updaterInfo,
-					supabase
-				).catch((error) =>
-					console.error(
-						"The Cat failed to send invitations to new attendees:",
-						error
-					)
-				);
-			}
-
-			// Handle removed attendees - send notifications to them
-			if (removedAttendees.length > 0) {
-				console.log(
-					`The Cat is notifying ${removedAttendees.length} removed attendees! 🐱🚪`
-				);
-
-				// Use the original event data (before update) for the notification
-				const eventForRemovedAttendees = {
-					...originalEvent,
-					attendees: removedAttendees.map((a) => ({
-						user_id: a.user_id,
-						status: a.status,
-					})),
-				};
-
-				sendAttendeeRemovedNotifications(
-					eventForRemovedAttendees,
-					removedAttendees.map((a) => ({
-						user_id: a.user_id,
-						status: a.status,
-					})),
-					updaterInfo,
-					supabase
-				).catch((error) =>
-					console.error(
-						"The Cat failed to send removal notifications:",
-						error
-					)
-				);
-			}
-
-			// Handle non-attendee changes - only send update notifications if there are significant changes
-			// and it's not just adding/removing attendees
-			if (changes.length > 0) {
-				// Only send update notifications if attendees weren't just added/removed
-				// If attendees were only added, we already sent invitations above
-				// If attendees were only removed, we don't want to notify remaining attendees about "modifications"
-				const onlyAttendeeChanges =
-					addedAttendees.length > 0 || removedAttendees.length > 0;
-
-				if (
-					!onlyAttendeeChanges ||
-					(onlyAttendeeChanges && changes.length > 0)
-				) {
-					updateMessage = `Event ${changes.join(", ")} updated`;
-
-					// Send notifications (don't await - let it run in background)
-					const eventWithAttendees = {
-						...updated,
-						attendees: newAttendees.map((a) => ({
-							user_id: a.user_id,
-							status: a.status,
-						})),
-					};
-
-					sendEventUpdateNotifications(
-						eventWithAttendees,
-						updaterInfo,
-						supabase,
-						updateMessage
-					).catch((error) =>
-						console.error(
-							"The Cat failed to send update notifications:",
-							error
-						)
-					);
-
-					console.log(
-						"The Cat is notifying attendees about event changes! 🐱"
-					);
-				} else {
-					console.log(
-						"The Cat says: Only attendee changes detected, appropriate notifications already sent! 👥"
-					);
-				}
-			} else if (
-				addedAttendees.length === 0 &&
-				removedAttendees.length === 0
-			) {
-				console.log(
-					"The Cat says: Only cosmetic changes detected (like color), no email notifications needed! 🎨"
-				);
-			}
-
-			// Log attendee changes for debugging
-			if (addedAttendees.length > 0) {
-				console.log(
-					`The Cat added ${addedAttendees.length} attendees:`,
-					addedAttendees.map((a) => a.user_id)
-				);
-			}
-			if (removedAttendees.length > 0) {
-				console.log(
-					`The Cat removed ${removedAttendees.length} attendees:`,
-					removedAttendees.map((a) => a.user_id)
-				);
-			}
-		} catch (emailError) {
-			console.error(
-				"The Cat encountered email issues during update:",
-				emailError
-			);
-			// Don't fail the update if email fails
-		}
-
 		// Return updated event with only necessary fields
 		const responseEvent = {
 			id: updated.id,
@@ -2228,9 +2004,6 @@ router.delete("/:id", async (req, res) => {
 			return res.status(404).json({ error: "Event not found" });
 		}
 
-		// Store event data before deletion for email notifications
-		const eventData = { ...event };
-
 		// Check if user has permission to delete this event
 		const isCreator = event.createdBy === userId;
 
@@ -2256,40 +2029,6 @@ router.delete("/:id", async (req, res) => {
 			return res.status(403).json({
 				error: "You do not have permission to delete this event. Only the event creator or project admin can delete events.",
 			});
-		}
-
-		// THE CAT'S EMAIL MAGIC: Send cancellation notifications before deleting
-		try {
-			if (eventData.attendees && eventData.attendees.length > 0) {
-				const cancellerInfo = {
-					id: req.user.id,
-					name:
-						req.user.user_metadata?.full_name ||
-						req.user.email.split("@")[0],
-					email: req.user.email,
-				};
-
-				// Send cancellation notifications (don't await - let it run in background)
-				sendEventCancellationNotifications(
-					eventData,
-					cancellerInfo,
-					supabase,
-					"Event has been cancelled"
-				).catch((error) =>
-					console.error(
-						"The Cat failed to send cancellation notifications:",
-						error
-					)
-				);
-
-				console.log("The Cat is delivering cancellation notices! 🐱");
-			}
-		} catch (emailError) {
-			console.error(
-				"The Cat encountered email issues during deletion:",
-				emailError
-			);
-			// Don't fail the deletion if email fails
 		}
 
 		// Delete the event from Supabase

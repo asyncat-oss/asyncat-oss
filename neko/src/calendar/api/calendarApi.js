@@ -361,29 +361,8 @@ export const calendarEventsApi = {
 			throw error;
 		}
 	},
-
-	// Update event response (accept/decline/maybe)
-	updateEventResponse: async (eventId, response) => {
-		try {
-			const res = await authService.authenticatedFetch(
-				`${CALENDAR_API_URL}/api/event-invites/${eventId}/respond`,
-				{
-					method: "POST",
-					body: JSON.stringify({
-						response: response,
-					}),
-				}
-			);
-
-			return await handleResponse(res);
-		} catch (error) {
-			console.error("Error updating event response:", error);
-			throw error;
-		}
-	},
 };
 
-// Optimized batch data fetching
 export const calendarDataApi = {
 	// Performance monitoring
 	performanceMetrics: {

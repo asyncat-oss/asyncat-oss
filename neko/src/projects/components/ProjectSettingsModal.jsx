@@ -76,9 +76,7 @@ const getProfilePictureSrc = (profilePicId) => {
 
 // Import API functions
 import { projectApi, projectViewsApi, projectMembersApi } from "../projectApi";
-import { teamMembersApi } from "../../teams/teamApi";
 import eventBus from "../../utils/eventBus.js";
-import { useWorkspace } from "../../contexts/WorkspaceContext";
 
 const soraFontBase = "font-sora";
 
@@ -686,71 +684,6 @@ const MembersSection = ({
 	loadingMembers,
 	onMemberAdded,
 }) => {
-	const { currentWorkspace } = useWorkspace();
-	const [workspaceMembers, setWorkspaceMembers] = useState([]);
-	const [loadingWs, setLoadingWs] = useState(false);
-	const [selected, setSelected] = useState(null);
-	const [dropdownOpen, setDropdownOpen] = useState(false);
-	const [search, setSearch] = useState('');
-	const [inviting, setInviting] = useState(false);
-	const [inviteError, setInviteError] = useState('');
-	const [inviteSuccess, setInviteSuccess] = useState('');
-	const dropdownRef = useRef(null);
-
-	useEffect(() => {
-		const load = async () => {
-			if (!currentWorkspace?.id) return;
-			setLoadingWs(true);
-			try {
-				const res = await teamMembersApi.getTeamMembers(currentWorkspace.id);
-				setWorkspaceMembers(res.data || []);
-			} catch {
-				// silently fail
-			} finally {
-				setLoadingWs(false);
-			}
-		};
-		load();
-	}, [currentWorkspace?.id]);
-
-	useEffect(() => {
-		const handler = (e) => {
-			if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false);
-		};
-		document.addEventListener('mousedown', handler);
-		return () => document.removeEventListener('mousedown', handler);
-	}, []);
-
-	const existingIds = new Set([...projectMembers, ...pendingInvites].map(m => m.id || m.user_id));
-	const getWsName = (m) => m.users?.name || m.user?.name || m.name || m.email?.split('@')[0] || 'Unknown';
-	const getWsEmail = (m) => m.users?.email || m.user?.email || m.email || '';
-	const getWsUserId = (m) => m.user_id || m.users?.id || m.user?.id || m.id;
-
-	const available = workspaceMembers.filter(m => {
-		const uid = getWsUserId(m);
-		if (existingIds.has(uid)) return false;
-		const q = search.toLowerCase();
-		return !q || getWsName(m).toLowerCase().includes(q) || getWsEmail(m).toLowerCase().includes(q);
-	});
-
-	const handleInlineInvite = async () => {
-		if (!selected) return;
-		setInviting(true);
-		setInviteError('');
-		try {
-			await projectMembersApi.inviteMemberWithViews(projectId, { user_id: getWsUserId(selected), role: 'member' });
-			setInviteSuccess(`${getWsName(selected)} added to the project`);
-			setSelected(null);
-			setSearch('');
-			setTimeout(() => setInviteSuccess(''), 3000);
-			onMemberAdded();
-		} catch (err) {
-			setInviteError(err?.message || 'Failed to add member');
-		} finally {
-			setInviting(false);
-		}
-	};
-
 	const canLeaveProject = () => {
 		if (userRole === "owner") {
 			const ownerIds = new Set();
@@ -765,85 +698,6 @@ const MembersSection = ({
 
 	return (
 		<div className="space-y-6">
-			{/* Inline invite */}
-			{permissions.canEditProject && (
-				<div className="bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/30 rounded-xl p-4 border border-gray-200 dark:border-gray-700 midnight:border-gray-700">
-					<h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-3 flex items-center gap-2">
-						<UserPlus className="w-4 h-4 text-indigo-500" />
-						Add team member
-					</h3>
-					<div className="flex gap-2" ref={dropdownRef}>
-						<div className="relative flex-1">
-							<button
-								type="button"
-								onClick={() => setDropdownOpen(v => !v)}
-								className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-700 rounded-lg text-sm text-left hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-							>
-								{selected ? (
-									<span className="truncate text-gray-900 dark:text-gray-100">{getWsName(selected)}</span>
-								) : (
-									<span className="text-gray-400 dark:text-gray-500">Select a workspace member…</span>
-								)}
-								<ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-							</button>
-							{dropdownOpen && (
-								<div className="absolute top-full left-0 right-0 mt-1 z-20 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-									<div className="p-2 border-b border-gray-100 dark:border-gray-700">
-										<input
-											autoFocus
-											value={search}
-											onChange={e => setSearch(e.target.value)}
-											placeholder="Search…"
-											className="w-full px-2 py-1 text-sm bg-transparent outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400"
-										/>
-									</div>
-									{loadingWs ? (
-										<div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>
-									) : available.length === 0 ? (
-										<div className="px-3 py-3 text-xs text-gray-400 dark:text-gray-500">
-											{search ? 'No matches' : 'All workspace members are already in this project'}
-										</div>
-									) : (
-										available.map((m, i) => (
-											<button
-												key={getWsUserId(m) || i}
-												onClick={() => { setSelected(m); setDropdownOpen(false); setSearch(''); }}
-												className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-											>
-												<div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-xs font-medium text-white flex-shrink-0">
-													{getWsName(m).charAt(0).toUpperCase()}
-												</div>
-												<div className="flex-1 min-w-0">
-													<div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{getWsName(m)}</div>
-													<div className="text-xs text-gray-400 dark:text-gray-500 truncate">{getWsEmail(m)}</div>
-												</div>
-											</button>
-										))
-									)}
-								</div>
-							)}
-						</div>
-						<button
-							onClick={handleInlineInvite}
-							disabled={!selected || inviting}
-							className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
-						>
-							{inviting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
-							Add
-						</button>
-					</div>
-					{inviteError && (
-						<div className="mt-2 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
-							<AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />{inviteError}
-						</div>
-					)}
-					{inviteSuccess && (
-						<div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
-							<Check className="w-3.5 h-3.5 flex-shrink-0" />{inviteSuccess}
-						</div>
-					)}
-				</div>
-			)}
 
 			{/* Members list */}
 			<div className="space-y-3">

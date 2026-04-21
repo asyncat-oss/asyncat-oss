@@ -23,20 +23,10 @@ const apiCall = async (url, options = {}) => {
 };
 
 // ===========================================
-// WORKSPACE/TEAM SETTINGS API FUNCTIONS
+// WORKSPACE SETTINGS API FUNCTIONS
 // ===========================================
 
 export const workspaceApi = {
-	// Fetch team members
-	fetchMembers: async (workspaceId) => {
-		return apiCall(`${MAIN_URL}/api/teams/${workspaceId}/members`);
-	},
-
-	// Fetch team stats (including member limits)
-	fetchStats: async (workspaceId) => {
-		return apiCall(`${MAIN_URL}/api/teams/${workspaceId}/stats`);
-	},
-
 	// Update workspace settings
 	updateWorkspace: async (workspaceId, updateData) => {
 		const result = await apiCall(`${MAIN_URL}/api/teams/${workspaceId}`, {
@@ -46,106 +36,12 @@ export const workspaceApi = {
 		return result;
 	},
 
-	// Invite member to workspace
-	inviteMember: async (workspaceId, email) => {
-		try {
-			const result = await apiCall(
-				`${MAIN_URL}/api/teams/${workspaceId}/members`,
-				{
-					method: "POST",
-					body: JSON.stringify({ email }),
-				}
-			);
-			return result;
-		} catch (error) {
-			if (error.code === "MEMBER_LIMIT_REACHED") throw error;
-			throw error;
-		}
-	},
-
-	// Invite non-app user to workspace (user without account)
-	inviteNonAppUser: async (workspaceId, email, roleInfo = {}) => {
-		return apiCall(
-			`${MAIN_URL}/api/teams/${workspaceId}/invitations/non-app-user`,
-			{
-				method: "POST",
-				body: JSON.stringify({
-					email,
-					role: roleInfo.role || null,
-					department: roleInfo.department || null,
-					responsibilities: roleInfo.responsibilities || null,
-				}),
-			}
-		);
-	},
-
-	// Cancel non-app user invitation
-	cancelNonAppUserInvitation: async (workspaceId, email) => {
-		const result = await apiCall(
-			`${MAIN_URL}/api/teams/${workspaceId}/invitations/non-app-user/${encodeURIComponent(
-				email
-			)}`,
-			{
-				method: "DELETE",
-			}
-		);
-		return result;
-	},
-
-	// Remove member from workspace
-	removeMember: async (workspaceId, userId, confirmDataLoss = false) => {
-		// Use query parameter for confirmDataLoss to avoid issues with DELETE body
-		const url = `${MAIN_URL}/api/teams/${workspaceId}/members/${userId}${
-			confirmDataLoss ? "?confirmDataLoss=true" : ""
-		}`;
-
-		const response = await authService.authenticatedFetch(url, {
-			method: "DELETE",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			// Also include in body as backup
-			body: JSON.stringify({ confirmDataLoss }),
-		});
-
-		// Handle the special case where confirmation is required
-		if (response.status === 400) {
-			const errorData = await response.json().catch(() => ({}));
-			if (errorData.requiresConfirmation) {
-				// Return a special error that includes the confirmation data
-				const confirmationError = new Error(
-					"Data loss confirmation required"
-				);
-				confirmationError.confirmationData = errorData;
-				throw confirmationError;
-			}
-			// For other 400 errors, handle normally
-			throw new Error(
-				errorData.error || errorData.message || "Bad request"
-			);
-		}
-
-		const result = await handleResponse(response);
-		return result;
-	},
-
 	// Delete workspace
 	deleteWorkspace: async (workspaceId, force = false) => {
 		const result = await apiCall(`${MAIN_URL}/api/teams/${workspaceId}`, {
 			method: "DELETE",
 			body: JSON.stringify({ force }),
 		});
-		return result;
-	},
-
-	// Leave workspace
-	leaveWorkspace: async (workspaceId) => {
-		const result = await apiCall(
-			`${MAIN_URL}/api/teams/${workspaceId}/leave`,
-			{
-				method: "POST",
-			}
-		);
 		return result;
 	},
 };

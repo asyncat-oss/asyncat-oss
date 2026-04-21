@@ -49,7 +49,7 @@ import {
 	DeadlinesWidget,
 	ProjectDetailsWidget,
 } from "./widgets";
-import { projectMembersApi, projectApi, projectDashboardApi, projectViewsApi } from "./projectApi";
+import { projectMembersApi, projectApi, projectViewsApi } from "./projectApi";
 import { useProjectPresence } from "../hooks/useProjectPresence";
 
 // Create a mapping object for easier lookup
@@ -186,8 +186,6 @@ const ProjectOverview = React.memo(({
 	const [loading, setLoading] = useState(true);
 	const [projectMembers, setProjectMembers] = useState([]);
 	const [loadingMembers, setLoadingMembers] = useState(false);
-	const [enrichedProjectData, setEnrichedProjectData] = useState(null);
-	const [loadingEnrichedData, setLoadingEnrichedData] = useState(false);
 
 	// Master loading state - true when any essential data is loading
 	const [masterLoading, setMasterLoading] = useState(true);
@@ -306,8 +304,7 @@ const ProjectOverview = React.memo(({
 				// Load all essential data in parallel
 				try {
 					await Promise.all([
-						fetchProjectMembers(selectedProject.id),
-						fetchEnrichedProjectData(selectedProject.id)
+						fetchProjectMembers(selectedProject.id)
 					]);
 				} catch (error) {
 					// Surface friendly error state without console logs
@@ -327,10 +324,10 @@ const ProjectOverview = React.memo(({
 
 	// Track master loading state based on individual loading states
 	useEffect(() => {
-		if (loading || loadingMembers || loadingEnrichedData) {
+		if (loading || loadingMembers) {
 			setMasterLoading(true);
 		}
-	}, [loading, loadingMembers, loadingEnrichedData]);
+	}, [loading, loadingMembers]);
 
 	const refreshProjectData = async () => {
 		if (!selectedProject?.id) return;
@@ -376,32 +373,6 @@ const ProjectOverview = React.memo(({
 		// Single-user mode: no project members to fetch — owner is always the only member.
 		setProjectMembers([]);
 		setLoadingMembers(false);
-	};
-
-	const fetchEnrichedProjectData = async (projectId) => {
-		setLoadingEnrichedData(true);
-		try {
-			const workspaceId = currentWorkspace?.is_personal ? null : currentWorkspace?.id;
-			const isPersonal = currentWorkspace?.is_personal || false;
-			const enrichedData = await projectDashboardApi.getEnrichedProjectData(
-				projectId,
-				workspaceId,
-				isPersonal
-			);
-			setEnrichedProjectData(enrichedData);
-		} catch (err) {
-			// Avoid console logs; fallback to empty enriched data
-			setEnrichedProjectData({
-				total_tasks: 0,
-				completed_tasks: 0,
-				progress_percent: 0,
-				upcoming_deadlines: 0,
-				deadlines: [],
-				task_stats: { totalChecklists: 0, completedChecklists: 0 }
-			});
-		} finally {
-			setLoadingEnrichedData(false);
-		}
 	};
 
 
@@ -537,16 +508,16 @@ const ProjectOverview = React.memo(({
 	const features = getProjectFeatures();
 
 	const metrics = {
-		tasksTotal: enrichedProjectData?.total_tasks || 0,
-		tasksCompleted: enrichedProjectData?.completed_tasks || 0,
-		upcomingDeadlines: enrichedProjectData?.upcoming_deadlines || 0,
+		tasksTotal: 0,
+		tasksCompleted: 0,
+		upcomingDeadlines: 0,
 		teamSize: projectMembers.length,
-		progressPercent: enrichedProjectData?.progress_percent || 0,
-		totalChecklists: enrichedProjectData?.task_stats?.totalChecklists || 0,
-		completedChecklists: enrichedProjectData?.task_stats?.completedChecklists || 0,
+		progressPercent: 0,
+		totalChecklists: 0,
+		completedChecklists: 0,
 	};
 
-	const deadlines = enrichedProjectData?.deadlines || [];
+	const deadlines = [];
 
 	// Enhanced team member display with online status and current view
 	const renderTeamMember = (member, index) => {

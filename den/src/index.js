@@ -16,15 +16,13 @@ import aiRoutes from './ai/routes/aiRoutes.js';
 import providerRoutes from './ai/routes/providerRoutes.js';
 import agentRoutes from './ai/routes/agentRoutes.js';
 
-// ─── Users / Projects / Dashboard (from asy_b_users) ─────────────────────────
+// ─── Users / Projects (from asy_b_users) ──────────────────────────────
 import userRoutes from './users/routes/userRoutes.js';
 import teamRoutes from './users/routes/teamRoutes.js';
 import projectRoutes from './users/routes/projectRouters.js';
-import dashboardRoutes from './users/routes/dashboardRoutes.js';
 
 // ─── Calendar (from asy_b_calendar) ──────────────────────────────────────────
 import eventRoutes from './calendar/routes/eventRoutes.js';
-import eventInviteRoutes from './calendar/routes/eventInviteRoutes.js';
 
 // ─── Habits (from asy_b_habit) ────────────────────────────────────────────────
 import habitsRoutes from './habits/routes/habitsRoutes.js';
@@ -93,11 +91,9 @@ app.use('/api/agent', agentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/projects', projectRoutes);
-app.use('/api/dashboard', dashboardRoutes);
 
 // ─── Routes: Calendar ─────────────────────────────────────────────────────────
 app.use('/api/events', eventRoutes);
-app.use('/api/event-invites', eventInviteRoutes);
 
 // ─── Routes: Habits ───────────────────────────────────────────────────────────
 app.use('/api/habits', habitsRoutes);

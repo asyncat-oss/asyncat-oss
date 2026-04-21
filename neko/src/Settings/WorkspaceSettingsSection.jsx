@@ -197,16 +197,14 @@ const WorkspaceSettingsSection = ({
 	const [workspaceDescription, setWorkspaceDescription] = useState("");
 	const [workspaceEmoji, setWorkspaceEmoji] = useState("👥");
 
-	// Delete/Leave state
+	// Delete state
 	const [pendingDelete, setPendingDelete] = useState(false);
-	const [pendingLeave, setPendingLeave] = useState(false);
 	const [forceDelete, setForceDelete] = useState(false);
 	const [hasProjects, setHasProjects] = useState(false);
 
 	// UI state
 	const [isSaving, setIsSaving] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
-	const [isLeaving, setIsLeaving] = useState(false);
 	const [error, setError] = useState(null);
 	const [successMessage, setSuccessMessage] = useState(null);
 
@@ -283,28 +281,6 @@ const WorkspaceSettingsSection = ({
 			setError(errorMessage);
 		} finally {
 			setIsDeleting(false);
-		}
-	};
-
-	// Leave workspace function
-	const handleLeaveWorkspace = async () => {
-		try {
-			setIsLeaving(true);
-			setError(null);
-
-			await workspaceApi.leaveWorkspace(workspace.id);
-
-			// Notify parent component about leaving
-			if (onWorkspaceLeft) {
-				onWorkspaceLeft(workspace);
-			}
-
-			setSuccessMessage("You have left the workspace successfully");
-			setPendingLeave(false);
-		} catch (err) {
-			setError(apiUtils.handleError(err, "Failed to leave workspace"));
-		} finally {
-			setIsLeaving(false);
 		}
 	};
 
@@ -474,161 +450,100 @@ const WorkspaceSettingsSection = ({
 								Danger Zone
 							</h4>
 							<p className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400 mb-3">
-								{isWorkspaceOwner()
-									? "Once you delete this workspace, there is no going back. Please be certain."
-									: "Leave this workspace if you no longer want to be a member."}
+								Once you delete this workspace, there is no going back. Please be certain.
 							</p>
 
-							{isWorkspaceOwner() ? (
-								// Delete workspace section for owners
-								<>
-									{hasProjects && (
-										<div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 midnight:bg-yellow-900/30 rounded-lg">
-											<label className="flex items-center">
-												<input
-													type="checkbox"
-													checked={forceDelete}
-													onChange={(e) =>
-														setForceDelete(
-															e.target.checked
-														)
-													}
-													className="mr-2 h-4 w-4 accent-red-500 dark:accent-red-400 midnight:accent-red-300"
-												/>
-												<span className="text-sm text-yellow-700 dark:text-yellow-400 midnight:text-yellow-300">
-													I understand this will
-													delete all associated
-													projects
-												</span>
-											</label>
-										</div>
-									)}
+							{hasProjects && (
+								<div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 midnight:bg-yellow-900/30 rounded-lg">
+									<label className="flex items-center">
+										<input
+											type="checkbox"
+											checked={forceDelete}
+											onChange={(e) =>
+												setForceDelete(
+													e.target.checked
+												)
+											}
+											className="mr-2 h-4 w-4 accent-red-500 dark:accent-red-400 midnight:accent-red-300"
+										/>
+										<span className="text-sm text-yellow-700 dark:text-yellow-400 midnight:text-yellow-300">
+											I understand this will delete all associated projects
+										</span>
+									</label>
+								</div>
+							)}
 
-									{pendingDelete ? (
-										<div className="flex items-center gap-2">
-											<span className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-												Are you sure? This action cannot
-												be undone.
-											</span>
-											<button
-												type="button"
-												onClick={handleDeleteWorkspace}
-												disabled={
-													isDeleting ||
-													(hasProjects &&
-														!forceDelete)
-												}
-												className="bg-red-600 hover:bg-red-700 text-white py-1.5 px-3 rounded-lg text-xs transition-colors disabled:opacity-50 flex items-center justify-center min-w-[100px]"
-											>
-												{isDeleting ? (
-													<Loader2
-														size={14}
-														className="animate-spin"
-													/>
-												) : (
-													"Yes, Delete"
-												)}
-											</button>
-											<button
-												type="button"
-												onClick={() => {
-													setPendingDelete(false);
-													setHasProjects(false);
-													setForceDelete(false);
-													setError(null);
-												}}
-												disabled={isDeleting}
-												className="hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 text-gray-700 dark:text-gray-300 midnight:text-gray-300 py-1.5 px-3 rounded-lg text-xs transition-colors"
-											>
-												Cancel
-											</button>
-										</div>
-									) : (
-										<button
-											type="button"
-											onClick={() =>
-												setPendingDelete(true)
-											}
-											className="hover:bg-red-50 dark:hover:bg-red-900/10 midnight:hover:bg-red-900/10 text-red-600 dark:text-red-500 midnight:text-red-500 py-1.5 px-3 rounded-lg text-xs transition-colors flex items-center gap-1.5"
-										>
-											<Trash2 className="w-3.5 h-3.5" />
-											Delete Workspace
-										</button>
-									)}
-								</>
+							{pendingDelete ? (
+								<div className="flex items-center gap-2">
+									<span className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400">
+										Are you sure? This action cannot be undone.
+									</span>
+									<button
+										type="button"
+										onClick={handleDeleteWorkspace}
+										disabled={
+											isDeleting ||
+											(hasProjects && !forceDelete)
+										}
+										className="bg-red-600 hover:bg-red-700 text-white py-1.5 px-3 rounded-lg text-xs transition-colors disabled:opacity-50 flex items-center justify-center min-w-[100px]"
+									>
+										{isDeleting ? (
+											<Loader2
+												size={14}
+												className="animate-spin"
+											/>
+										) : (
+											"Yes, Delete"
+										)}
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											setPendingDelete(false);
+											setHasProjects(false);
+											setForceDelete(false);
+											setError(null);
+										}}
+										disabled={isDeleting}
+										className="hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 text-gray-700 dark:text-gray-300 midnight:text-gray-300 py-1.5 px-3 rounded-lg text-xs transition-colors"
+									>
+										Cancel
+									</button>
+								</div>
 							) : (
-								// Leave workspace section for members
-								<>
-									{pendingLeave ? (
-										<div className="flex items-center gap-2">
-											<span className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-												Are you sure you want to leave
-												this workspace?
-											</span>
-											<button
-												type="button"
-												onClick={handleLeaveWorkspace}
-												disabled={isLeaving}
-												className="bg-red-600 hover:bg-red-700 text-white py-1.5 px-3 rounded-lg text-xs transition-colors disabled:opacity-50 flex items-center justify-center min-w-[90px]"
-											>
-												{isLeaving ? (
-													<Loader2
-														size={14}
-														className="animate-spin"
-													/>
-												) : (
-													"Yes, Leave"
-												)}
-											</button>
-											<button
-												type="button"
-												onClick={() =>
-													setPendingLeave(false)
-												}
-												disabled={isLeaving}
-												className="hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 text-gray-700 dark:text-gray-300 midnight:text-gray-300 py-1.5 px-3 rounded-lg text-xs transition-colors"
-											>
-												Cancel
-											</button>
-										</div>
-									) : (
-										<button
-											type="button"
-											onClick={() =>
-												setPendingLeave(true)
-											}
-											className="hover:bg-red-50 dark:hover:bg-red-900/10 midnight:hover:bg-red-900/10 text-red-600 dark:text-red-500 midnight:text-red-500 py-1.5 px-3 rounded-lg text-xs transition-colors flex items-center gap-1.5"
-										>
-											<Trash2 className="w-3.5 h-3.5" />
-											Leave Workspace
-										</button>
-									)}
-								</>
+								<button
+									type="button"
+									onClick={() =>
+										setPendingDelete(true)
+									}
+									className="hover:bg-red-50 dark:hover:bg-red-900/10 midnight:hover:bg-red-900/10 text-red-600 dark:text-red-500 midnight:text-red-500 py-1.5 px-3 rounded-lg text-xs transition-colors flex items-center gap-1.5"
+								>
+									<Trash2 className="w-3.5 h-3.5" />
+									Delete Workspace
+								</button>
 							)}
 						</div>
 					</div>
 				)}
 
-				{/* Save Changes button - only for owners */}
-				{!isMember && (
-					<div className="pt-4 border-t border-gray-200 dark:border-gray-800 midnight:border-gray-800">
-						<button
-							onClick={saveWorkspaceSettings}
-							disabled={
-								isSaving ||
-								(!workspace.is_personal &&
-									!workspaceName.trim())
-							}
-							className="px-4 py-1.5 bg-gray-900 dark:bg-gray-100 midnight:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 midnight:hover:bg-gray-200 text-white dark:text-gray-900 midnight:text-gray-900 rounded-lg transition-colors disabled:opacity-50 text-sm font-medium min-w-[100px] flex items-center justify-center gap-1.5"
-						>
-							{isSaving ? (
-								<Loader2 size={14} className="animate-spin" />
-							) : (
-								"Save Changes"
-							)}
-						</button>
-					</div>
-				)}
+				{/* Save Changes button */}
+				<div className="pt-4 border-t border-gray-200 dark:border-gray-800 midnight:border-gray-800">
+					<button
+						onClick={saveWorkspaceSettings}
+						disabled={
+							isSaving ||
+							(!workspace.is_personal &&
+								!workspaceName.trim())
+						}
+						className="px-4 py-1.5 bg-gray-900 dark:bg-gray-100 midnight:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 midnight:hover:bg-gray-200 text-white dark:text-gray-900 midnight:text-gray-900 rounded-lg transition-colors disabled:opacity-50 text-sm font-medium min-w-[100px] flex items-center justify-center gap-1.5"
+					>
+						{isSaving ? (
+							<Loader2 size={14} className="animate-spin" />
+						) : (
+							"Save Changes"
+						)}
+					</button>
+				</div>
 			</div>
 		);
 	};

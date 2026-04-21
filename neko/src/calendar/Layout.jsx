@@ -99,16 +99,12 @@ const Layout = ({ selectedProject, session }) => {
 			setFetchTrigger((prev) => prev + 1);
 		};
 
-		window.addEventListener("eventInviteAccepted", invalidateAndRefresh);
-		window.addEventListener("eventInviteDeclined", invalidateAndRefresh);
 		window.addEventListener("eventUpdated", invalidateAndRefresh);
 		window.addEventListener("cardUpdated", invalidateAndRefresh);
 		window.addEventListener("projectsUpdated", invalidateAndRefresh);
 		window.addEventListener("networkRestored", invalidateAndRefresh);
 
 		return () => {
-			window.removeEventListener("eventInviteAccepted", invalidateAndRefresh);
-			window.removeEventListener("eventInviteDeclined", invalidateAndRefresh);
 			window.removeEventListener("eventUpdated", invalidateAndRefresh);
 			window.removeEventListener("cardUpdated", invalidateAndRefresh);
 			window.removeEventListener("projectsUpdated", invalidateAndRefresh);

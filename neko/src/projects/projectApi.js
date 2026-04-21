@@ -342,106 +342,8 @@ export const formatRelativeTime = (dateString) => {
   return date.toLocaleDateString(undefined, options);
 };
 
-// Dashboard Integration APIs for Project Overview
-export const projectDashboardApi = {
-  // Get enriched project data with dashboard metrics
-  async getEnrichedProjectData(projectId, workspaceId = null, isPersonal = false) {
-    const queryParams = new URLSearchParams();
-    if (workspaceId) queryParams.append('workspaceId', workspaceId);
-    if (isPersonal) queryParams.append('isPersonal', 'true');
-
-    const [projectsResponse, tasksResponse] = await Promise.all([
-      apiFetch(`${API_URL}/api/dashboard/projects?${queryParams}`),
-      apiFetch(`${API_URL}/api/dashboard/user-tasks?${queryParams}`)
-    ]);
-
-    const projects = projectsResponse.data || [];
-    const tasks = tasksResponse.data || [];
-
-    // Find the specific project
-    const enrichedProject = projects.find(p => p.id === projectId);
-    if (!enrichedProject) {
-      throw new Error('Project not found in dashboard data');
-    }
-
-    // Filter tasks for this project
-    const projectTasks = tasks.filter(t => t.project_id === projectId);
-
-    // Calculate additional metrics
-    const upcomingDeadlines = projectTasks.filter(t => {
-      if (!t.due_date || t.status === 'completed') return false;
-      const dueDate = new Date(t.due_date);
-      const today = new Date();
-      const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-      return dueDate >= today && dueDate <= weekFromNow;
-    }).length;
-
-    return {
-      ...enrichedProject,
-      total_tasks: enrichedProject.tasks_total || 0,
-      completed_tasks: enrichedProject.tasks_completed || 0,
-      progress_percent: enrichedProject.completion_percentage || 0,
-      upcoming_deadlines: upcomingDeadlines,
-      deadlines: projectTasks
-        .filter(t => t.due_date && t.status !== 'completed')
-        .map(t => ({
-          id: t.id,
-          title: t.title,
-          due_date: t.due_date,
-          priority: t.priority,
-          status: t.status
-        }))
-        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
-        .slice(0, 5), // Top 5 upcoming deadlines
-      task_stats: {
-        totalChecklists: projectTasks.reduce((sum, t) => sum + (t.checklist?.length || 0), 0),
-        completedChecklists: projectTasks.reduce((sum, t) => {
-          const checklist = t.checklist || [];
-          return sum + checklist.filter(item => item.completed).length;
-        }, 0)
-      }
-    };
-  },
-
-  // Get project events for timeline
-  async getProjectEvents(projectId, workspaceId = null, isPersonal = false) {
-    const queryParams = new URLSearchParams();
-    if (workspaceId) queryParams.append('workspaceId', workspaceId);
-    if (isPersonal) queryParams.append('isPersonal', 'true');
-
-    const response = await apiFetch(`${API_URL}/api/dashboard/events?${queryParams}`);
-    const allEvents = response.data || [];
-
-    // Filter events for this specific project
-    return allEvents.filter(event => event.projectId === projectId);
-  },
-
-  // Get team activity for project (using tasks as activity)
-  async getProjectActivity(projectId, workspaceId = null, isPersonal = false) {
-    const queryParams = new URLSearchParams();
-    if (workspaceId) queryParams.append('workspaceId', workspaceId);
-    if (isPersonal) queryParams.append('isPersonal', 'true');
-
-    const response = await apiFetch(`${API_URL}/api/dashboard/user-tasks?${queryParams}`);
-    const tasks = response.data || [];
-
-    // Filter and format tasks as activity for this project
-    const projectTasks = tasks.filter(t => t.project_id === projectId);
-
-    return projectTasks
-      .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-      .slice(0, 10) // Latest 10 activities
-      .map(task => ({
-        id: task.id,
-        type: task.status === 'completed' ? 'task_completed' : 'task_updated',
-        title: task.title,
-        description: `Task ${task.status === 'completed' ? 'completed' : 'updated'}: ${task.title}`,
-        created_at: task.updated_at,
-        user_name: 'User', // Tasks don't have user name in current schema
-        avatar: null
-      }));
-  }
-};
+// Dashboard Integration APIs for Project Overview (REMOVED - dashboard endpoints deleted)
+// This section intentionally left blank as dashboard functionality has been removed
 
 // Export all APIs as a combined object for convenience
 export default {
@@ -450,7 +352,6 @@ export default {
   views: projectViewsApi,
   components: componentDataApi,
   ai: aiApi,
-  dashboard: projectDashboardApi,
   viewAccess: viewAccessUtils,
   utils: {
     formatRelativeTime,

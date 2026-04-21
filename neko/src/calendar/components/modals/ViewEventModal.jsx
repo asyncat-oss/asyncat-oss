@@ -154,35 +154,13 @@ const ViewEventModal = ({
 
 		setIsUpdatingResponse(true);
 
-		try {
-			// Make the API call in the background
-			await calendarEventsApi.updateEventResponse(event.id, newResponse);
-
-			// Optional: Refresh events in the background (non-blocking)
-			// This ensures data consistency without blocking the UI
-			if (fetchEvents) {
-				// Use setTimeout to make it non-blocking
-				setTimeout(() => fetchEvents(), 100);
-			}
-		} catch (error) {
-			console.error("Error updating response:", error);
-
-			// ROLLBACK: Revert to previous state on error
-			setCurrentUserResponse(previousResponse);
-
-			if (event.attendees) {
-				const revertedAttendees = event.attendees.map((attendee) =>
-					attendee.user_id === currentUserId
-						? { ...attendee, status: previousResponse }
-						: attendee
-				);
-				event.attendees = revertedAttendees;
-			}
-
-			alert(`Error updating response: ${error.message}`);
-		} finally {
-			setIsUpdatingResponse(false);
+		// Optimistic update already applied above - no backend sync needed in solo mode
+		// Optional: Refresh events in the background (non-blocking)
+		if (fetchEvents) {
+			setTimeout(() => fetchEvents(), 100);
 		}
+
+		setIsUpdatingResponse(false);
 	};
 
 	// Function to get status badge
