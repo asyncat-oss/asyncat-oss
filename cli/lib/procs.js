@@ -107,12 +107,15 @@ function spawnProc(key) {
 
 	const isWin = process.platform === "win32";
 	const actualCmd = isWin && cmd === "npm" ? "npm.cmd" : cmd;
+	const spawnCwd = path.join(ROOT, cwd);
 
-	const proc = spawn(actualCmd, args, {
-		cwd: path.join(ROOT, cwd),
-		shell: isWin,
-		env: process.env,
-	});
+	const proc = isWin
+		? spawn(`${actualCmd} ${args.join(" ")}`, {
+				cwd: spawnCwd,
+				shell: true,
+				env: process.env,
+			})
+		: spawn(actualCmd, args, { cwd: spawnCwd, env: process.env });
 	procs[key] = proc;
 
 	const handleData = (d) => {
@@ -197,16 +200,28 @@ export function stopAll() {
 		}
 	}
 
+	const isWin = process.platform === "win32";
 	for (const port of [8716, 8717, 8765]) {
 		try {
-			const pids = execSync(`lsof -ti :${port} 2>/dev/null`)
-				.toString()
-				.trim()
-				.split(/\s+/)
-				.filter(Boolean);
+			const pids = isWin
+				? execSync(`netstat -ano -p TCP`, { stdio: ["ignore", "pipe", "ignore"] })
+						.toString()
+						.split(/\r?\n/)
+						.filter((l) => l.includes(`:${port} `) && l.includes("LISTENING"))
+						.map((l) => l.trim().split(/\s+/).pop())
+						.filter(Boolean)
+				: execSync(`lsof -ti :${port} 2>/dev/null`)
+						.toString()
+						.trim()
+						.split(/\s+/)
+						.filter(Boolean);
 			for (const pid of pids) {
 				try {
-					process.kill(Number(pid), "SIGTERM");
+					if (isWin) {
+						execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" });
+					} else {
+						process.kill(Number(pid), "SIGTERM");
+					}
 					stopped = true;
 				} catch (_) {}
 			}

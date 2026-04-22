@@ -58,21 +58,33 @@ function resolveFromWorkspace(pkg, workspaceDir) {
 function runWithSpinner(cmd, args, cwd, label) {
 	return new Promise((resolve) => {
 		const s = spinner(`Installing ${label} packages...`);
-		const proc = spawn(cmd === "npm" ? NPM_CMD : cmd, args, {
-			cwd,
-			stdio: "ignore",
-			shell: process.platform === "win32",
-		});
+		const resolved = cmd === "npm" ? NPM_CMD : cmd;
+		const isWin = process.platform === "win32";
+		const proc = isWin
+			? spawn(`${resolved} ${args.join(" ")}`, {
+					cwd,
+					stdio: "ignore",
+					shell: true,
+				})
+			: spawn(resolved, args, { cwd, stdio: "ignore" });
 		proc.on("exit", (code) => {
 			if (code === 0) {
 				s.stop(`${label} packages installed`);
 				resolve(true);
 			} else {
+				const rel = path.relative(ROOT, cwd) || ".";
 				s.fail(
-					`Failed to install ${label} — try: cd ${path.relative(ROOT, cwd)} && npm install`,
+					`Failed to install ${label} — try: cd ${rel} && npm install`,
 				);
 				resolve(false);
 			}
+		});
+		proc.on("error", (e) => {
+			const rel = path.relative(ROOT, cwd) || ".";
+			s.fail(
+				`Failed to install ${label} (${e.code || e.message}) — try: cd ${rel} && npm install`,
+			);
+			resolve(false);
 		});
 	});
 }
@@ -91,7 +103,7 @@ function prompt(question) {
 	});
 }
 
-function ensureNativeRuntimeDeps() {
+export function ensureNativeRuntimeDeps() {
 	const runtimeInstalls = [];
 	const frontendDir = path.join(ROOT, "neko");
 	const backendDir = path.join(ROOT, "den");
@@ -104,7 +116,7 @@ function ensureNativeRuntimeDeps() {
 			label,
 			workspace,
 			pkgs,
-			cmd: `npm install --workspace ${workspace} --no-save --legacy-peer-deps ${pkgList}`,
+			cmd: `npm install --workspace ${workspace} --no-save --no-package-lock --legacy-peer-deps ${pkgList}`,
 		});
 	};
 
@@ -142,6 +154,14 @@ function ensureNativeRuntimeDeps() {
 			]);
 		}
 
+		if (
+			!resolveFromWorkspace("@tailwindcss/oxide-win32-x64-msvc", frontendDir)
+		) {
+			pushInstall("Tailwind oxide native runtime", "neko", [
+				"@tailwindcss/oxide-win32-x64-msvc",
+			]);
+		}
+
 		if (!resolveFromWorkspace("@img/sharp-win32-x64", backendDir)) {
 			pushInstall("Sharp native runtime", "den", ["@img/sharp-win32-x64"]);
 		}
@@ -161,6 +181,7 @@ function ensureNativeRuntimeDeps() {
 			"--workspace",
 			install.workspace,
 			"--no-save",
+			"--no-package-lock",
 			"--legacy-peer-deps",
 			...install.pkgs,
 		];
