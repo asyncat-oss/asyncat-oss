@@ -7,6 +7,8 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT, setKey } from './lib/env.js';
 import { PROVIDER_DEFAULTS } from './lib/tui/views.js';
+import { spawn as _spawn } from 'child_process';
+import crypto from 'crypto';
 
 // ── Command imports ──────────────────────────────────────────────────────────
 import * as _start    from './commands/start.js';
@@ -93,6 +95,61 @@ async function testProviderConnection(providerType, apiKey, model, baseUrl) {
     if (e.name === 'TimeoutError' || e.code === 'UND_ERR_CONNECT_TIMEOUT') return { ok: false, msg: 'Connection timed out' };
     return { ok: false, msg: `Cannot reach ${baseUrl}` };
   }
+}
+
+// ── ChatGPT Plus/Pro OAuth (PKCE) ────────────────────────────────────────────
+async function doChatGPTOAuth(tui) {
+  const http = await import('http');
+  const { openSync } = await import('./lib/open.js').catch(() => ({ openSync: null }));
+
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  const state = crypto.randomBytes(16).toString('hex');
+  const redirectUri = 'http://localhost:59012/callback';
+  const clientId = 'app_EMoamEEZ73f0CkXaXp7hrann';
+
+  const authUrl = `https://auth.openai.com/oauth/authorize?` +
+    `client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=openid+email+profile+offline_access+model.read+model.request+organization.read+organization.write` +
+    `&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`;
+
+  tui.printInfo('Opening browser for ChatGPT login...');
+  try {
+    const { exec } = await import('child_process');
+    const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    exec(`${opener} "${authUrl}"`);
+  } catch {}
+  tui.printInfo(`Or open manually: ${authUrl.slice(0, 60)}...`);
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { server.close(); resolve(null); }, 120000);
+    const server = http.default.createServer(async (req, res) => {
+      try {
+        const url = new URL(req.url, 'http://localhost:59012');
+        if (url.pathname !== '/callback') { res.end(); return; }
+        const code = url.searchParams.get('code');
+        if (!code) { res.end('No code'); resolve(null); return; }
+
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body style="font-family:sans-serif;padding:2rem"><h2>✔ Logged in — return to asyncat</h2></body></html>');
+        server.close();
+        clearTimeout(timer);
+
+        const tokenRes = await fetch('https://auth.openai.com/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code', code,
+            redirect_uri: redirectUri, client_id: clientId,
+            code_verifier: verifier,
+          }),
+        });
+        const data = await tokenRes.json();
+        resolve(data.access_token || null);
+      } catch (e) { server.close(); clearTimeout(timer); resolve(null); }
+    });
+    server.listen(59012);
+  });
 }
 
 // ── Detect model info ───────────────────────────────────────────────────────
@@ -440,6 +497,32 @@ case 'tools': {
               setKey('den/.env', 'AI_API_KEY', '');
               setKey('den/.env', 'AI_MODEL', 'lmstudio');
               setKey('den/.env', 'AI_PROVIDER_TYPE', 'local');
+            } else if (result.providerType === 'copilot') {
+              setKey('den/.env', 'AI_BASE_URL', 'http://localhost:4141/v1');
+              setKey('den/.env', 'AI_API_KEY', 'copilot');
+              setKey('den/.env', 'AI_MODEL', 'gpt-4o');
+              setKey('den/.env', 'AI_PROVIDER_TYPE', 'cloud');
+              tui.printInfo('Testing GitHub Copilot proxy at localhost:4141...');
+              const test = await testProviderConnection('copilot', 'copilot', 'gpt-4o', 'http://localhost:4141/v1');
+              if (test.ok) {
+                tui.printOk('GitHub Copilot connected via local proxy');
+              } else {
+                tui.printWarn('Proxy not running. Set it up once with these steps:');
+                tui.printInfo('  1. npx copilot-api@latest auth   (login with GitHub)');
+                tui.printInfo('  2. npx copilot-api@latest start  (run in a separate terminal)');
+                tui.printInfo('  3. /provider  →  GitHub Copilot  (connect again)');
+              }
+            } else if (result.providerType === 'chatgpt') {
+              const token = await doChatGPTOAuth(tui);
+              if (token) {
+                setKey('den/.env', 'AI_BASE_URL', 'https://api.openai.com/v1');
+                setKey('den/.env', 'AI_API_KEY', token);
+                setKey('den/.env', 'AI_MODEL', 'gpt-4o');
+                setKey('den/.env', 'AI_PROVIDER_TYPE', 'cloud');
+                tui.printOk('ChatGPT login successful');
+              } else {
+                tui.printErr('Login cancelled or failed');
+              }
             } else {
               const baseUrl = result.baseUrl || PROVIDER_DEFAULTS[result.providerType]?.baseUrl || '';
               const model = result.model || PROVIDER_DEFAULTS[result.providerType]?.model || '';
