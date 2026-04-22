@@ -585,7 +585,8 @@ export class Tui extends EventEmitter {
         const chosen = PROVIDER_TYPES[st._selIdx];
         if (!chosen) return;
         st.providerType = chosen.type;
-        if (chosen.local) {
+        if (chosen.local || chosen.oauth) {
+          // copilot, ollama, lmstudio, chatgpt — resolve immediately, index.js handles setup
           const result = { providerType: st.providerType, apiKey: '', model: '', baseUrl: '' };
           this.mode = this.messages.length > 0 ? 'chat' : 'zen';
           if (this._providerSetupResolve) { this._providerSetupResolve(result); this._providerSetupResolve = null; }

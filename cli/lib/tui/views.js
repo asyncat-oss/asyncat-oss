@@ -735,19 +735,23 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
 // step 1 = config fields (api key / model / url)
 
 export const PROVIDER_TYPES = [
-  { name: 'Claude (Anthropic)', type: 'anthropic', desc: 'Claude Opus/Sonnet/Haiku',       local: false },
-  { name: 'OpenAI',             type: 'openai',    desc: 'OpenAI / ChatGPT',               local: false },
-  { name: 'MiniMax',            type: 'minimax',   desc: 'MiniMax API (M2.7, fast)',        local: false },
-  { name: 'Groq',               type: 'groq',      desc: 'Groq (free tier, fast)',          local: false },
-  { name: 'Ollama',             type: 'ollama',    desc: 'Local GGUF via Ollama',           local: true  },
-  { name: 'LM Studio',         type: 'lmstudio',  desc: 'Local GGUF via LM Studio',        local: true  },
-  { name: 'Custom',             type: 'custom',    desc: 'Any OpenAI-compatible API',       local: false },
+  { name: 'Claude (Anthropic)', type: 'anthropic', desc: 'Claude Opus/Sonnet/Haiku',            local: false },
+  { name: 'OpenAI',             type: 'openai',    desc: 'OpenAI API key (platform.openai.com)', local: false },
+  { name: 'ChatGPT Plus/Pro',   type: 'chatgpt',   desc: 'Use existing subscription via OAuth',  local: false, oauth: true },
+  { name: 'GitHub Copilot',     type: 'copilot',   desc: 'Use Copilot subscription (local proxy)', local: true },
+  { name: 'MiniMax',            type: 'minimax',   desc: 'MiniMax API',                          local: false },
+  { name: 'Groq',               type: 'groq',      desc: 'Groq (free tier, fast)',               local: false },
+  { name: 'Ollama',             type: 'ollama',    desc: 'Local GGUF via Ollama',                local: true  },
+  { name: 'LM Studio',         type: 'lmstudio',  desc: 'Local GGUF via LM Studio',             local: true  },
+  { name: 'Custom',             type: 'custom',    desc: 'Any OpenAI-compatible API',            local: false },
 ];
 
 export const PROVIDER_DEFAULTS = {
   anthropic: { model: 'claude-sonnet-4-6',          baseUrl: 'https://api.anthropic.com/v1' },
-  minimax:   { model: 'MiniMax-Text-01',             baseUrl: 'https://api.minimax.io/v1' },
   openai:    { model: 'gpt-4o',                     baseUrl: 'https://api.openai.com/v1' },
+  chatgpt:   { model: 'gpt-4o',                     baseUrl: 'https://api.openai.com/v1' },
+  copilot:   { model: 'gpt-4o',                     baseUrl: 'http://localhost:4141/v1' },
+  minimax:   { model: 'MiniMax-Text-01',             baseUrl: 'https://api.minimax.io/v1' },
   groq:      { model: 'llama-3.3-70b-versatile',    baseUrl: 'https://api.groq.com/openai/v1' },
   custom:    { model: '',                           baseUrl: '' },
 };
