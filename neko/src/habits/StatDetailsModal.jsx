@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { X, Sparkles, Flame, TrendingUp, Users, Award, Target, Trophy, Star } from 'lucide-react';
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronUp, MoreHorizontal, Info, KanbanSquare, List, Clock,
   GanttChartSquare, FileText, FolderGit2, Activity, Link2, LayoutGrid,

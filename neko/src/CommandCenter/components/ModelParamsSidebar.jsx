@@ -1,5 +1,5 @@
 // ModelParamsSidebar.jsx — Left sidebar for local model parameters and logs
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { RefreshCw, X, RotateCcw, SlidersHorizontal, ScrollText, AlertTriangle } from 'lucide-react';
 import { llamaServerApi } from '../../Settings/settingApi.js';
 import { useModelConfig, DEFAULT_CONFIG } from '../hooks/useModelConfig.js';

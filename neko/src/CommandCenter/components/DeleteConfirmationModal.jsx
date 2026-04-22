@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, X, Trash2, Loader2 } from 'lucide-react';
 import Portal from '../../components/Portal';
 

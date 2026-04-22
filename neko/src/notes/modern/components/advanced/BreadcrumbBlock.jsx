@@ -1,4 +1,3 @@
-import React from 'react';
 import { Navigation } from 'lucide-react';
 
 const BreadcrumbBlock = ({ block, onChange }) => {

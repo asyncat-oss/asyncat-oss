@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useColumnContext } from "../../views/context/ColumnContext";
 import { useCardContext } from "../../views/context/CardContext";
 import { useCardActions } from "../hooks/useCardActions";

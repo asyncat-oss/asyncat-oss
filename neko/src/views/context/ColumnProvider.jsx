@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ColumnContext from "./ColumnContext";
 import { FolderGit2 } from "lucide-react";
 import viewsApi from "../viewsApi";

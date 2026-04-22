@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useColumnContext } from "../context/ColumnContext";
 import { useCardContext } from "../context/CardContext";
 import viewsApi from "../viewsApi";

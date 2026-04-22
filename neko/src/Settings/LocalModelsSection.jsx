@@ -2,7 +2,7 @@
 // Download, manage and delete local GGUF models stored in data/models/
 // Includes live HuggingFace search
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Download, Trash2, RefreshCw, HardDrive,
   CheckCircle, X, Plus, Search,

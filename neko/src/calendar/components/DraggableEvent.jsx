@@ -1,4 +1,3 @@
-import React from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { motion } from "framer-motion";
 import { Clock, X, HelpCircle } from "lucide-react";

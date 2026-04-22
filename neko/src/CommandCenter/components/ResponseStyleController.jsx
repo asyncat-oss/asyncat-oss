@@ -1,5 +1,5 @@
 // ResponseStyleController.jsx - Response Style Controller Component
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Sliders, Check, Target, MessageCircle, BookOpen, GraduationCap } from 'lucide-react';
 
 const RESPONSE_STYLES = [

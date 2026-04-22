@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { MousePointer, ChevronDown } from 'lucide-react';
 
 const CustomDropdown = ({ value, onChange, options, placeholder = "Select option..." }) => {

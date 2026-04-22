@@ -1,4 +1,3 @@
-import React from "react"
 import { useOutletContext } from "react-router-dom"
 import Layout from "./Layout"
 

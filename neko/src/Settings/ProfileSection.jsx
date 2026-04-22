@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AtSign, Check } from 'lucide-react';
 import { profileApi, apiUtils } from './settingApi';
 import eventBus from '../utils/eventBus.js';

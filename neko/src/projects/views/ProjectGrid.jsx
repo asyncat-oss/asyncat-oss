@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Grid, List, Star, Filter, ChevronDown, User, Users, Search, Folder, FolderOpen } from 'lucide-react';
 import ProjectCard from "../projectCard/ProjectCard";
 import ProjectListView from "./ProjectListView";

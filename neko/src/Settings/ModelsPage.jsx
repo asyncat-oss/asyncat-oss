@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HardDrive, Server, RefreshCw, Play, Square, CheckCircle, Info, Trash2, Box, Cpu, Zap, Activity, Thermometer } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';

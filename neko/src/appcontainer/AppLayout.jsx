@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { PanelLeft } from "lucide-react";
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';

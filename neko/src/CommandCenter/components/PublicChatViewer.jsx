@@ -1,5 +1,5 @@
 // PublicChatViewer.jsx - Component for viewing public conversations - FIXED
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { MessageListV2 } from './MessageListV2';
 import { chatApi } from '../commandCenterApi';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import ProjectOverviewOriginal from "../projects/ProjectOverviewContent.jsx";
 import eventBus from "../utils/eventBus.js";

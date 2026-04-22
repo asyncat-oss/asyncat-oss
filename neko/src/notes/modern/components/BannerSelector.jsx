@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import ReactDOM from "react-dom";
 import { Image, Loader, Palette, Trash2, Upload, X, AlertTriangle } from "lucide-react";
 import { attachmentApi } from "../../attachmentApi";

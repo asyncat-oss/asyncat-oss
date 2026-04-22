@@ -1,4 +1,3 @@
-import React from 'react';
 import { Check } from 'lucide-react';
 
 const MemberAvatar = ({ member, size = "w-8 h-8", completed = false }) => {

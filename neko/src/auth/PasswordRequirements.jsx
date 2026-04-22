@@ -1,4 +1,3 @@
-import React from "react";
 import { Check, X, Shield, Lock } from "lucide-react";
 
 const soraFontBase = "font-sora";

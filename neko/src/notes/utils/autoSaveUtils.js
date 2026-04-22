@@ -1,5 +1,5 @@
 // Auto-Save System
-import React, { useCallback, useRef, useEffect, useState } from "react";
+import { useCallback, useRef, useEffect, useState } from "react";
 
 /**
  * Enhanced debounce function with conditional delay

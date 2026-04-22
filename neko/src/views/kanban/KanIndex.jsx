@@ -1,4 +1,4 @@
-import React from "react";
+
 import KanbanBoard from "./features/boards/KanbanBoard";
 
 function KanIndex() {

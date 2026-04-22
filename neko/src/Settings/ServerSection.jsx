@@ -1,5 +1,5 @@
 // Settings/ServerSection.jsx — server config and secrets management
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Server, Eye, EyeOff, Loader2, RotateCcw } from 'lucide-react';
 import { configApi, apiUtils } from './settingApi';
 

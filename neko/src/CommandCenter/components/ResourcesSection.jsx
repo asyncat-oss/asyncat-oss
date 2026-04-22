@@ -1,5 +1,5 @@
 // ResourcesSection.jsx — AI-suggested search resources (safe: no hallucinated URLs)
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Search, ChevronDown, ChevronUp, Wrench, BookOpen,
   FileText, Video, Code2, Users, Newspaper, ExternalLink, AlertTriangle

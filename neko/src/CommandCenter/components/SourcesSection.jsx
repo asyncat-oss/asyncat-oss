@@ -1,5 +1,5 @@
 // SourcesSection.jsx - Unified info footer: data sources + bonus links + knowledge notice
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ExternalLink, Database, FileText, Calendar, CheckSquare,
   Target, RotateCcw, BarChart3, AlertTriangle, ChevronDown, ChevronUp

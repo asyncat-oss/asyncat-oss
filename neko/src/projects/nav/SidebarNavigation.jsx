@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Star, Info, KanbanSquare, List, Clock,
   GanttChartSquare, FileText, FolderGit2, Activity,

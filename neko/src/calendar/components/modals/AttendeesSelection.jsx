@@ -2,7 +2,6 @@
 // Attendee selection is not applicable in single-user mode.
 // This component is kept as a stub for API compatibility.
 
-import React from "react";
 import { Users } from "lucide-react";
 
 const AttendeesSelection = ({

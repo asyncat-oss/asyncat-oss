@@ -2,7 +2,7 @@
 // Shows CPU%, RAM, GPU% with live polling when expanded
 // Only visible when the built-in llama.cpp server is running (ready or loading)
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Cpu, Zap, Activity, ChevronDown, ChevronUp, Server, Loader2 } from 'lucide-react';
 import { llamaServerApi, aiProviderApi } from '../Settings/settingApi.js';
 import { tokenTracker } from '../CommandCenter/components/LocalModelStats.jsx';

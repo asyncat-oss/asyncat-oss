@@ -1,6 +1,6 @@
 // ModelConfigPanel.jsx — slide-in configuration panel for local model parameters
 // Temperature, Top-P, Top-K, Min-P, Repeat Penalty, System Prompt Prefix
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { X, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { DEFAULT_CONFIG } from '../hooks/useModelConfig.js';
 

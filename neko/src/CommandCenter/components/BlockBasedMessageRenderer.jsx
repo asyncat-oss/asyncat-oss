@@ -1,5 +1,5 @@
 // BlockBasedMessageRenderer.jsx - Updated for New Mode System
-import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
+import { useMemo, useState, useCallback, memo, useEffect } from 'react';
 import SaveAsNoteModal from './SaveAsNoteModal';
 import SourcesSection, { stripBonusLinks } from './SourcesSection';
 import CitationSettings, { defaultCitationSettings } from './CitationSettings';

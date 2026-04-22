@@ -1,5 +1,5 @@
 // WebSourcesBar.jsx — AI-generated reference links shown at top of messages
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ExternalLink, TriangleAlert, X, BookOpen } from 'lucide-react';
 
 const getDomain = (url) => {

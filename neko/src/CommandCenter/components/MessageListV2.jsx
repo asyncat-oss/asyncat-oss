@@ -1,5 +1,5 @@
 // MessageListV2.jsx - Clean Minimal Design with UNIFIED BLOCK SYSTEM
-import React, { forwardRef, useState, useCallback } from 'react';
+import { forwardRef, useState, useCallback } from 'react';
 import BlockBasedMessageRenderer from './BlockBasedMessageRenderer';
 import { ProjectBadges } from './ProjectManagerV2';
 import { ToolCallList } from './ToolCallCard';

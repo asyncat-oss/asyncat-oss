@@ -1,9 +1,9 @@
-import React, {
+import {
 	useState,
 	useCallback,
-	useRef,
 	useEffect,
 	useMemo,
+	useRef,
 } from "react";
 import { createPortal } from "react-dom";
 import {

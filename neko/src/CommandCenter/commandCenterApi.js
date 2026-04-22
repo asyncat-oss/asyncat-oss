@@ -47,7 +47,7 @@ const handleResponse = async (response) => {
       if (response.status === 413) {
         errorMessage = errorData.message || 'The file is too large to process. Please use a smaller image.';
       }
-    } catch (e) {
+    } catch (_e) {
       // If we can't parse JSON, handle payload errors by status code
       if (response.status === 413) {
         errorMessage = 'The file is too large to process. Please use a smaller image.';
@@ -107,19 +107,7 @@ const apiRequest = async (url, options = {}) => {
   return await handleResponse(response);
 };
 
-// Helper function to make public API requests (no authentication)
-const publicApiRequest = async (url, options = {}) => {
-  const defaultOptions = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers
-    },
-    ...options
-  };
-  
-  const response = await fetch(url, defaultOptions);
-  return await handleResponse(response);
-};
+
 
 // Helper function to get user timezone information
 const getUserTimeContext = () => {
@@ -265,7 +253,7 @@ export const chatApi = {
               if (parsed.content) {
                 yield parsed.content;
               }
-            } catch (e) {
+            } catch (_e) {
               if (e.code || e.type) {
                 // Re-throw errors with code/type (our custom errors)
                 throw e;
@@ -671,7 +659,7 @@ export const feedApi = {
     if (forceRefresh) {
       try {
         localStorage.removeItem(cacheKey);
-      } catch (e) {
+      } catch (_e) {
         // Ignore cache errors
       }
     } else {
@@ -686,7 +674,7 @@ export const feedApi = {
             return { success: true, feed: parsed, fromCache: true };
           }
         }
-      } catch (e) {
+      } catch (_e) {
         // Ignore cache errors
       }
     }
@@ -697,7 +685,7 @@ export const feedApi = {
     if (result.success && result.feed) {
       try {
         localStorage.setItem(cacheKey, JSON.stringify(result.feed));
-      } catch (e) {
+      } catch (_e) {
         // Ignore storage errors
       }
     }
@@ -724,7 +712,7 @@ export const feedApi = {
         const cacheKey = workspaceId ? `asyncat-feed-cache-${workspaceId}` : 'asyncat-feed-cache';
         localStorage.removeItem(cacheKey);
       }
-    } catch (e) {
+    } catch (_e) {
       // Ignore errors
     }
   }
@@ -1020,7 +1008,7 @@ export const agentApi = {
               const parsed = JSON.parse(line.slice(6));
               if (parsed.type === 'done') return;
               yield parsed;
-            } catch (e) {
+            } catch (_e) {
               console.warn('Failed to parse agent SSE:', e);
             }
           }

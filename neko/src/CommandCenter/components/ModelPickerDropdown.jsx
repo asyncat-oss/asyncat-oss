@@ -2,7 +2,7 @@
 // Trigger: minimal text-style. Dropdown: model list only.
 // Parameters have moved to ModelParamsSidebar.
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown, HardDrive, Loader2, CheckCircle2,

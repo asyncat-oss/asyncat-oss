@@ -1,5 +1,5 @@
 // ToolCallCard.jsx - Inline AI action indicators
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   CheckCircle2, XCircle, Loader2, ChevronDown,
   LayoutList, Calendar, FileText, FolderOpen, Pencil,

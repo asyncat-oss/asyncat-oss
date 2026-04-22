@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useColumnContext } from "../context/ColumnContext";
 import { useCardContext } from "../context/CardContext";
 import AddCardModal from "../kanban/features/cards/AddCardModal";

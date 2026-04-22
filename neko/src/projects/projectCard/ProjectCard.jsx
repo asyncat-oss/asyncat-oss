@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Users, Calendar, X, CheckCircle, Star, Crown, Eye, User } from 'lucide-react';
 import { getRoleInfo } from '../../utils/permissions';
 

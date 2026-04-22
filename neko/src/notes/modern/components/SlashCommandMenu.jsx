@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import {
   Hash, Type, List, ListOrdered, CheckSquare, Quote, Table, Minus, Image, Video, File,
   AlertTriangle, ChevronRight, Link, Calculator, FileText, TrendingUp, BarChart3,

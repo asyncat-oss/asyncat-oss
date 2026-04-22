@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Plus, Minus, Hash, Timer, Check } from 'lucide-react';
 import Portal from '../components/Portal';
 

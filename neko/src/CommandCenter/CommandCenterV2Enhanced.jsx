@@ -19,28 +19,21 @@ import ConversationNavigation from "./components/ConversationNavigation";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
 import { chatApi } from "./commandCenterApi";
 import { useUser } from "../contexts/UserContext";
-import eventBus from "../utils/eventBus.js";
 import {
   Edit2,
   Trash2,
   Check,
   X,
   Ghost,
-  Sparkles,
-  ArrowLeft,
   Grid3x3,
   LayoutList,
   Calendar,
-  FileText,
-  Search,
-  MessageSquare,
-  BookOpen,
   PenLine,
-  Clock,
   Lightbulb,
   Download,
   Library,
   Menu,
+  BookOpen,
 } from "lucide-react";
 
 const CommandCenterV2Enhanced = ({ session }) => {

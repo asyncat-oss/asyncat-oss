@@ -1,5 +1,5 @@
 // GlossaryGallery.jsx — Full-screen modal: all annotated terms from the conversation
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, BookOpen, Search, ChevronRight, ArrowUpDown } from 'lucide-react';
 
 // Extract all [[term|definition]] annotations from a string

@@ -1,5 +1,5 @@
 // auth/SignIn.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound } from 'lucide-react';
 import FormInput from './FormInput';

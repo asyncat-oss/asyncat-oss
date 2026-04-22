@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SlidersHorizontal, Lock, Moon, Sun } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 

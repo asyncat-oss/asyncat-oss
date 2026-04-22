@@ -1,5 +1,5 @@
 // ArtifactViewer.jsx - Container for artifacts with explanation
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import ArtifactRenderer from './ArtifactRenderer';
 import { ChevronDown, ChevronUp, Code, FileText, Maximize2, Copy, Download, Save, Eye, GitBranch, Cpu, BarChart2, Play } from 'lucide-react';
 

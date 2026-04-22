@@ -1,4 +1,4 @@
-import React from "react";
+
 import { Loader2, Plus, Settings } from "lucide-react";
 
 export const LoadingColumn = ({ style = {} }) => {

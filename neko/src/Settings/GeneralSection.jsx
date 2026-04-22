@@ -1,5 +1,5 @@
 // Settings/GeneralSection.jsx — unified profile + workspace settings
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Check, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { profileApi, workspaceApi, apiUtils } from './settingApi';
 import eventBus from '../utils/eventBus.js';

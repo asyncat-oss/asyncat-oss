@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { LiveProvider, LiveError, LivePreview } from 'react-live';
 import * as LucideIcons from 'lucide-react';
 import katex from 'katex';

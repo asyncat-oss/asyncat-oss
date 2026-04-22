@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { SlidersHorizontal, Lock, Moon, Sun, Bot, Server } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';

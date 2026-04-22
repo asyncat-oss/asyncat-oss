@@ -1,5 +1,3 @@
-import React from "react";
-
 // Import profile pictures (matching kanban implementation)
 import catDP from "../../../assets/dp/CAT.webp";
 import dogDP from "../../../assets/dp/DOG.webp";

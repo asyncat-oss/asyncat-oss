@@ -2,7 +2,7 @@
 // Shows: model name, tokens/sec (rolling), time-to-first-token, GPU%, RAM
 // Only renders when the built-in server is ready or loading.
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Cpu, Zap, Clock, Activity, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { aiProviderApi, llamaServerApi } from '../../Settings/settingApi.js';
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Trash2, Info, CheckCircle } from "lucide-react";
 import { useColumnActions } from "../hooks/useColumnActions";

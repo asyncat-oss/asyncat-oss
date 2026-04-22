@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Link, Youtube, ExternalLink, RefreshCw, Edit3 } from 'lucide-react';
 
 const EmbedBlock = ({ block, onChange, contentRef, commonProps }) => {

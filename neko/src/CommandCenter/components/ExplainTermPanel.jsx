@@ -1,5 +1,4 @@
 // ExplainTermPanel.jsx — Right-side panel for an AI-annotated term explanation
-import React from 'react';
 import { X, BookOpen, Library } from 'lucide-react';
 
 const ExplainTermPanel = ({ term, definition, onClose, onOpenGlossary }) => {

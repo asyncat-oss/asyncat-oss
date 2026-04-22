@@ -1,5 +1,3 @@
-import React from 'react';
-
 const HabitCardSkeleton = ({ showTeamMembers = true }) => {
   return (
     <div className="bg-white dark:bg-gray-800/90 midnight:bg-gray-900/90 rounded-xl border border-gray-200/80 dark:border-gray-700/50 midnight:border-gray-700/40 relative">

@@ -1,5 +1,5 @@
 // ConversationNavigation.jsx - "On this page" sidebar panel
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, Search } from 'lucide-react';
 
 // Extract H2/H3 headings from assistant messages

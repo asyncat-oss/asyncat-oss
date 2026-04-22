@@ -1,5 +1,5 @@
 // VersionHistoryPanel.jsx - Google Docs style version history
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ChevronDown,
   ChevronRight,

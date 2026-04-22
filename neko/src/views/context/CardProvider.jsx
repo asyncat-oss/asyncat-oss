@@ -1,5 +1,5 @@
 // context/CardProvider.jsx - Card context provider
-import React, { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import CardContext from "./CardContext";
 import CardDetailModal from "../tasks/carddetail/CardDetailModal";
 import { useColumnContext } from "./ColumnContext";

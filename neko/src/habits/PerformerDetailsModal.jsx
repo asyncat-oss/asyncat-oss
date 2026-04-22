@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, CheckCircle2, Calendar, Award, TrendingUp, Info, Sparkles, Target, ArrowLeft } from 'lucide-react';
 import { habitApi } from './habitApi';
 

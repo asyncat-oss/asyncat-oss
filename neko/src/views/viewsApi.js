@@ -46,20 +46,16 @@ const apiRequest = async (url, options = {}) => {
 	const shouldDebounce = !options.method || options.method === "GET";
 
 	const makeRequest = async () => {
-		try {
-			const response = await authService.authenticatedFetch(url, options);
+		const response = await authService.authenticatedFetch(url, options);
 
-			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({}));
-				throw new Error(
-					errorData.error || `HTTP error! status: ${response.status}`
-				);
-			}
-
-			return await response.json();
-		} catch (error) {
-			throw error;
+		if (!response.ok) {
+			const errorData = await response.json().catch(() => ({}));
+			throw new Error(
+				errorData.error || `HTTP error! status: ${response.status}`
+			);
 		}
+
+		return await response.json();
 	};
 
 	if (shouldDebounce) {
@@ -77,25 +73,21 @@ const apiRequestRaw = async (url, options = {}) => {
 	const shouldDebounce = !options.method || options.method === "GET";
 
 	const makeRequest = async () => {
-		try {
-			const response = await authService.authenticatedFetch(url, {
-				...options,
-				headers: {
-					...options.headers,
-				},
-			});
+		const response = await authService.authenticatedFetch(url, {
+			...options,
+			headers: {
+				...options.headers,
+			},
+		});
 
-			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({}));
-				throw new Error(
-					errorData.error || `HTTP error! status: ${response.status}`
-				);
-			}
-
-			return response;
-		} catch (error) {
-			throw error;
+		if (!response.ok) {
+			const errorData = await response.json().catch(() => ({}));
+			throw new Error(
+				errorData.error || `HTTP error! status: ${response.status}`
+			);
 		}
+
+		return response;
 	};
 
 	if (shouldDebounce) {

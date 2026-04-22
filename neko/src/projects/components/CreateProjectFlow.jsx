@@ -1,5 +1,5 @@
 // CreateProjectFlow.jsx - Clean project creation flow without templates
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   X, Check, Calendar, Target,
   KanbanSquare, List, Clock, GanttChartSquare,

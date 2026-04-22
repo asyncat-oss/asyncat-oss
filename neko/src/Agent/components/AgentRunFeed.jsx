@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Brain, ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
-  Search, Pencil, Trash2, Plus, List, Zap, FilePlus,
+  Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';

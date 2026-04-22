@@ -1,7 +1,7 @@
 // ClarifyingQuestionsWidget.jsx
 // Floating panel shown when the AI needs structured input from the user.
 // Questions come from <clarify> JSON blocks in the AI response.
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, ChevronLeft, ChevronRight, PenLine } from 'lucide-react';
 
 export default function ClarifyingQuestionsWidget({ questions, onSubmit, onClose }) {

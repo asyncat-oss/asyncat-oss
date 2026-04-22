@@ -1,5 +1,4 @@
 // projects/widgets/index.js - Simplified without widget configuration system
-import React from 'react';
 import { 
   TrendingUp, Clock, Users, Activity, ListChecks, 
   Info, GitBranch, Calendar, Shield, Briefcase,

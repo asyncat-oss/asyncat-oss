@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import PasswordRequirements from '../auth/PasswordRequirements';

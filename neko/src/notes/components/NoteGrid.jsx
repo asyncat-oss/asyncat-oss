@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Plus, Search, Trash2, Grid, List, UserRound } from "lucide-react";
 import NoteCard from "./NoteCard";
 import NoteListView, { NoteListSkeleton } from "./NoteListView";

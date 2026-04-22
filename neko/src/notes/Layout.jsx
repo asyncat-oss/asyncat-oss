@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNoteContext } from "./context/NoteContext";
 import NoteGrid from "./components/NoteGrid";
 import ModernNoteEditor from "./modern/ModernNoteEditor";

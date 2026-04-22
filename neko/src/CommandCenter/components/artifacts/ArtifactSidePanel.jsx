@@ -1,5 +1,5 @@
 // ArtifactSidePanel.jsx — Right-side panel showing the active artifact
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Copy, Download, Save, Eye, Code, Check } from 'lucide-react';
 import ArtifactRenderer from './ArtifactRenderer';
 

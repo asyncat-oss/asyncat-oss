@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { X, User, FolderOpen } from "lucide-react";
 import { useForm } from "react-hook-form";

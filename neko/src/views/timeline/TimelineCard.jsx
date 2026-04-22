@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { CheckCircle, Clock, Play, Square, AlertCircle } from "lucide-react";
 
 const TimelineCard = ({

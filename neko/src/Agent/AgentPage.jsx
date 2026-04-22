@@ -3,8 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 import AgentRunFeed from './components/AgentRunFeed';
 import {
-  Send, Square, Loader2, Trash2, RotateCcw, Clock, CheckCircle2, AlertCircle,
-  ChevronDown
+  Send, Square, Loader2, Trash2, RotateCcw, Clock, CheckCircle2, AlertCircle
 } from 'lucide-react';
 
 const EXAMPLE_GOALS = [

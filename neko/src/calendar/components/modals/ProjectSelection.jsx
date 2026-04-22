@@ -1,7 +1,7 @@
 // ProjectSelection.jsx — single-user OSS version
 // Shows all user projects (no team filtering needed)
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Briefcase, Search, Check } from "lucide-react";
 import { calendarProjectsApi } from "../../api/calendarApi";
 

@@ -1,7 +1,6 @@
 // sidebar/CreateWorkSpaceModal.jsx
 // In solo-mode the workspace is auto-created on first boot.
 // This modal is shown if somehow no workspace exists yet.
-import React from 'react';
 import { X } from 'lucide-react';
 
 const CreateWorkspaceModal = ({ isOpen, onClose }) => {

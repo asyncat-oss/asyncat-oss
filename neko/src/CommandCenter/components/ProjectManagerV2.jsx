@@ -1,5 +1,5 @@
 // ProjectManagerV2.jsx - Clean Minimal Version
-import React, { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Folders, X } from 'lucide-react';
 import authService from '../../services/authService';
 

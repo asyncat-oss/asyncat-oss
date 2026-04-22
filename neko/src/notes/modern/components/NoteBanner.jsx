@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Image as ImageIcon, Plus, Settings, Loader, Move } from "lucide-react";
 import BannerSelector from "./BannerSelector";
 import { attachmentApi } from "../../attachmentApi";

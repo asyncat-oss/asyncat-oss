@@ -1,5 +1,5 @@
 // ArtifactRenderer.jsx - Main artifact display component
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Code, FileText, Download, Copy, Check, Play, Edit3, Eye, EyeOff, Save, BarChart2, Sigma, RotateCcw } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../BlockBasedMessageRenderer';
 import {

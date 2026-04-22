@@ -1,5 +1,5 @@
 // DiffViewer.jsx - Google Docs style diff viewer with inline changes and user attribution
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   RotateCcw,
   SquareX,

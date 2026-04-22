@@ -1,5 +1,5 @@
 // NoteProvider.jsx - Simplified without versioning
-import React, { createContext, useState, useCallback, useEffect } from "react";
+import { createContext, useState, useCallback, useEffect } from "react";
 import { notesApi } from "../noteApi";
 import { NoteContext } from "./NoteContext";
 

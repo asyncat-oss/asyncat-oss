@@ -1,4 +1,4 @@
-import React, { forwardRef } from "react";
+import { forwardRef } from "react";
 
 const GanttTimeline = forwardRef(
   ({ timelineHeaders, cellWidth, containerWidth, viewType = "week" }, ref) => {

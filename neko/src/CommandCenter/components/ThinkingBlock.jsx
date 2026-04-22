@@ -1,5 +1,5 @@
 // ThinkingBlock.jsx — renders <think>...</think> content as a collapsible reasoning panel
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
 
 /**

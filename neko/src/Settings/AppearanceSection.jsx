@@ -1,5 +1,4 @@
-import React from 'react';
-import { Moon, Sun, Palette } from 'lucide-react';
+
 
 const soraFontBase = "font-sora"; // Added Sora font
 

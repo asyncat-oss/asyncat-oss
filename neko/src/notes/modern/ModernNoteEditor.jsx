@@ -1,5 +1,5 @@
 // ModernNoteEditor.jsx - Enhanced with real-time content synchronization
-import React, {
+import {
   useState,
   useEffect,
   useRef,

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Bold, Italic, Underline, Strikethrough, Highlighter } from 'lucide-react';
 
 const FloatingToolbar = ({ position, onFormat, selection }) => {

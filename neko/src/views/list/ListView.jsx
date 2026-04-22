@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useColumnContext } from "../../views/context/ColumnContext";
 import { useCardContext } from "../../views/context/CardContext";
 import ListViewFilters from "./ListViewFilters";

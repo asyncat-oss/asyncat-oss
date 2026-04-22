@@ -1,5 +1,5 @@
 // CitationSettings.jsx - Optional user controls for citation display
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Settings, Eye, EyeOff, List, Grid } from 'lucide-react';
 
 const CitationSettings = ({ settings, onSettingsChange }) => {
