@@ -203,3 +203,80 @@ Issues and PRs welcome. No safety department. No corporate oversight.
 Good luck. Have fun. Don't blame us if your quantized baby model deletes your homework.
 
 🐱
+
+---
+
+## For Developers
+
+### Running from Source
+
+If you cloned the repo instead of installing via npm, here's how to run:
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start the CLI (interactive terminal UI)
+node cat               # Windows
+./cat                  # Mac/Linux
+npm run cli            # Cross-platform alternative
+
+# 3. Or run components separately
+npm run dev:backend    # den/ server only (port 8716)
+npm run dev:frontend   # neko/ UI only (port 8717)
+```
+
+### Why `./cat` Doesn't Work on Windows
+
+The `cat` file starts with `#!/usr/bin/env node` — this is a **shebang**, a Unix/Mac/Linux feature that tells the OS to run the script with Node.js. Windows doesn't understand shebangs.
+
+**On Windows:** Use `node cat` instead.
+
+### Project Architecture
+
+```
+asyncat-oss/
+├── cat          # Simple launcher script (shebang → cli/index.js)
+├── cli/         # Terminal User Interface (TUI)
+│   ├── index.js # Main CLI entry
+│   ├── commands/  # Individual commands (start, stop, models, etc.)
+│   ├── lib/     # TUI helpers, themes, colors
+│   └── skills/  # Brain skills (45 bundled)
+├── den/         # Backend API server
+│   └── src/     # Agent runtime, tools, database
+├── neko/        # Frontend web UI (Vite + React)
+└── data/        # Models, MCP config
+```
+
+| Directory | Purpose | Port |
+|-----------|---------|------|
+| `cli/` | Terminal interface | N/A (runs in terminal) |
+| `den/` | Backend API | 8716 |
+| `neko/` | Web UI | 8717 |
+
+### npm Scripts
+
+```bash
+npm run cli           # Start TUI (node cat)
+npm run dev           # Start both backend + frontend
+npm run dev:backend   # Backend only
+npm run dev:frontend  # Frontend only
+npm run build         # Build frontend for production
+```
+
+### Key Files
+
+- `cat` — 2-line launcher: `#!/usr/bin/env node` + `import('./cli/index.js')`
+- `cli/index.js` — Main TUI with all commands
+- `cli/commands/` — Individual command implementations
+- `den/src/` — Backend agent, tools, database
+- `neko/src/` — React frontend components
+
+### Database
+
+The backend uses SQLite (`den/data/`). It's created automatically on first run.
+
+### Environment
+
+- `.env` files are auto-created by `scripts/postinstall.js`
+- Config: `den/.env` (backend settings)
