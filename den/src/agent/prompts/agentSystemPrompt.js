@@ -13,6 +13,12 @@
  * @param {object[]} opts.skills - Relevant skills from Cerebellum
  * @returns {string}
  */
+function getShellName(platform) {
+  if (platform === 'win32') return 'PowerShell / cmd.exe';
+  if (platform === 'darwin') return 'zsh/bash';
+  return 'bash';
+}
+
 export function buildAgentSystemPrompt(opts = {}) {
   const {
     goal = '',
@@ -23,6 +29,8 @@ export function buildAgentSystemPrompt(opts = {}) {
     skills = [],
     platform = process.platform,
   } = opts;
+
+  const shellName = getShellName(platform);
 
   const memorySection = memories.length > 0
     ? `\n## Stored Memories\n${memories.map(m => `- **${m.key}**: ${m.content}`).join('\n')}\n`
@@ -41,7 +49,7 @@ export function buildAgentSystemPrompt(opts = {}) {
 ## Environment
 - **Platform**: ${platform}
 - **Working directory**: ${workingDir}
-- **Shell**: bash
+- **Shell**: ${shellName}
 
 ## How You Work (ReAct Pattern)
 For each step, you MUST output your response in this exact format:

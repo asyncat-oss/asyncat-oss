@@ -3,13 +3,18 @@
 // process_kill, process_spawn, port_scan, disk_usage, memory_detail, network_check.
 
 import { spawn, execSync, exec } from 'child_process';
+import net from 'net';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
+
+const PLATFORM = os.platform();
+const IS_WIN   = PLATFORM === 'win32';
 
 const execAsync = (cmd, cwd, timeout = 10000) => {
   return new Promise((resolve) => {
     let stdout = '', stderr = '';
-    const proc = spawn('/bin/sh', ['-c', cmd], { cwd, shell: false });
+    const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
+    const proc = spawn(sh, [flag, cmd], { cwd, shell: false });
     const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${timeout / 1000}s`, stdout, stderr }); }, timeout);
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });
@@ -35,18 +40,30 @@ export const processKillTool = {
   execute: async (args) => {
     const signal = args.force ? 'SIGKILL' : (args.signal || 'SIGTERM');
     try {
-      if (args.pid) {
-        execSync(`kill -${signal} ${args.pid} 2>/dev/null`, { timeout: 3000 });
-        return { success: true, action: 'killed', pid: args.pid, signal };
-      }
-      if (args.name) {
-        const out = execSync(`pgrep -x "${args.name}" 2>/dev/null || pgrep "${args.name}" 2>/dev/null || true`, { encoding: 'utf8', timeout: 5000 });
-        const pids = out.trim().split('\n').filter(Boolean).map(Number);
-        if (!pids.length) return { success: false, error: `No process found matching: ${args.name}` };
-        for (const pid of pids) {
-          try { execSync(`kill -${signal} ${pid} 2>/dev/null`, { timeout: 3000 }); } catch {}
+      if (IS_WIN) {
+        const flag = args.force ? '/F' : '';
+        if (args.pid) {
+          execSync(`taskkill ${flag} /PID ${args.pid}`, { timeout: 3000 });
+          return { success: true, action: 'killed', pid: args.pid };
         }
-        return { success: true, action: 'killed', matched: pids.length, signal, pids };
+        if (args.name) {
+          execSync(`taskkill ${flag} /IM "${args.name}" /T`, { timeout: 3000 });
+          return { success: true, action: 'killed', name: args.name };
+        }
+      } else {
+        if (args.pid) {
+          execSync(`kill -${signal} ${args.pid} 2>/dev/null`, { timeout: 3000 });
+          return { success: true, action: 'killed', pid: args.pid, signal };
+        }
+        if (args.name) {
+          const out = execSync(`pgrep -x "${args.name}" 2>/dev/null || pgrep "${args.name}" 2>/dev/null || true`, { encoding: 'utf8', timeout: 5000 });
+          const pids = out.trim().split('\n').filter(Boolean).map(Number);
+          if (!pids.length) return { success: false, error: `No process found matching: ${args.name}` };
+          for (const pid of pids) {
+            try { execSync(`kill -${signal} ${pid} 2>/dev/null`, { timeout: 3000 }); } catch {}
+          }
+          return { success: true, action: 'killed', matched: pids.length, signal, pids };
+        }
       }
       return { success: false, error: 'Must specify either pid or name' };
     } catch (err) {
@@ -74,13 +91,25 @@ export const processSpawnTool = {
     const cwd = args.cwd || context.workingDir;
     const env = { ...process.env, ...(args.env_vars || {}) };
     try {
-      if (args.detached) {
-        execSync(`nohup sh -c '${args.command.replace(/'/g, "'\\''")}' > /dev/null 2>&1 &`, { cwd, timeout: 5000 });
-        const pidOut = execSync('echo $!', { encoding: 'utf8', timeout: 3000 }).trim();
-        return { success: true, action: 'spawned_detached', pid: parseInt(pidOut) || null, command: args.command };
+      if (IS_WIN) {
+        if (args.detached) {
+          // Start-Process creates a fully detached process on Windows
+          const ps = `Start-Process cmd -ArgumentList '/c ${args.command.replace(/'/g, "''")}' -WindowStyle Hidden`;
+          execSync(`powershell -NoProfile -Command "${ps}"`, { cwd, timeout: 5000 });
+          return { success: true, action: 'spawned_detached', pid: null, command: args.command, note: 'Detached on Windows — PID not available via this method.' };
+        } else {
+          const proc = spawn('cmd.exe', ['/c', args.command], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+          return { success: true, action: 'spawned', pid: proc.pid, command: args.command, note: 'Process is running. Use process_kill to stop it.' };
+        }
       } else {
-        const proc = spawn('/bin/sh', ['-c', args.command], { cwd, shell: false, env, detached: false, stdio: ['ignore', 'pipe', 'pipe'] });
-        return { success: true, action: 'spawned', pid: proc.pid, command: args.command, note: 'Process is running. Use process_kill to stop it.' };
+        if (args.detached) {
+          execSync(`nohup sh -c '${args.command.replace(/'/g, "'\\''")}' > /dev/null 2>&1 &`, { cwd, timeout: 5000 });
+          const pidOut = execSync('echo $!', { encoding: 'utf8', timeout: 3000 }).trim();
+          return { success: true, action: 'spawned_detached', pid: parseInt(pidOut) || null, command: args.command };
+        } else {
+          const proc = spawn('/bin/sh', ['-c', args.command], { cwd, shell: false, env, detached: false, stdio: ['ignore', 'pipe', 'pipe'] });
+          return { success: true, action: 'spawned', pid: proc.pid, command: args.command, note: 'Process is running. Use process_kill to stop it.' };
+        }
       }
     } catch (err) {
       return { success: false, error: err.message };
@@ -102,24 +131,29 @@ export const portScanTool = {
     required: [],
   },
   execute: async (args) => {
-    const platform = os.platform();
     try {
       let output;
-      if (platform === 'linux') {
+      if (IS_WIN) {
+        // netstat -ano shows PID; filter by port if requested
+        const raw = execSync('netstat -ano 2>nul', { encoding: 'utf8', timeout: 8000 });
+        const lines = raw.split('\n').filter(l => /TCP|UDP/.test(l));
+        const filtered = args.port ? lines.filter(l => l.includes(`:${args.port}`)) : lines.slice(0, 50);
+        output = filtered.join('\n') || `No process found on port ${args.port}`;
+      } else if (PLATFORM === 'linux') {
         const proto = args.protocol === 'udp' ? '-u' : '-t';
         if (args.port) {
           output = execSync(`ss -${proto}lnp 2>/dev/null | grep ':${args.port}' || netstat -${proto}lnp 2>/dev/null | grep ':${args.port}' || echo "No process found on port ${args.port}"`, { encoding: 'utf8', timeout: 8000 });
         } else {
           output = execSync(`ss -${proto}lnp 2>/dev/null | head -50 || netstat -${proto}lnp 2>/dev/null | head -50`, { encoding: 'utf8', timeout: 8000 });
         }
-      } else if (platform === 'darwin') {
+      } else if (PLATFORM === 'darwin') {
         if (args.port) {
           output = execSync(`lsof -i :${args.port} -P -n 2>/dev/null || echo "No process found on port ${args.port}"`, { encoding: 'utf8', timeout: 8000 });
         } else {
           output = execSync(`lsof -i -P -n 2>/dev/null | head -50`, { encoding: 'utf8', timeout: 8000 });
         }
       } else {
-        return { success: false, error: `Platform "${platform}" not supported for port scanning.` };
+        return { success: false, error: `Platform "${PLATFORM}" not supported for port scanning.` };
       }
 
       const lines = output.trim().split('\n').filter(Boolean);
@@ -189,34 +223,56 @@ export const memoryDetailTool = {
   execute: async (args) => {
     const top = args.top || 10;
     try {
-      const memInfo = execSync('free -b 2>/dev/null || vm_stat 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
-      let memData = {};
-      if (os.platform() === 'linux') {
+      const totalMem = os.totalmem();
+      const freeMem  = os.freemem();
+      let memData = { total: totalMem, used: totalMem - freeMem, free: freeMem, available: freeMem, swap: { total: 0, used: 0, free: 0 } };
+      let topProcs = [];
+
+      if (IS_WIN) {
+        // wmic gives WorkingSetSize in bytes
+        const raw = execSync(`powershell -NoProfile -Command "Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First ${top} | ForEach-Object { $_.Id.ToString() + '\\t' + [math]::Round($_.WorkingSet64/1MB,1).ToString() + '\\t' + $_.ProcessName }"`, { encoding: 'utf8', timeout: 8000 });
+        topProcs = raw.trim().split('\n').filter(Boolean).map(line => {
+          const [pid, memMb, cmd] = line.split('\t');
+          return { pid: parseInt(pid), mem_percent: 0, rss_kb: parseFloat(memMb) * 1024, command: cmd?.trim() };
+        });
+      } else if (PLATFORM === 'linux') {
+        const memInfo = execSync('free -b 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
         const lines = memInfo.trim().split('\n');
-        const header = lines[0].split(/\s+/);
         const values = (lines[1] || '').split(/\s+/);
-        const total = parseInt(values[1] || '0') * 1024;
-        const used = parseInt(values[2] || '0') * 1024;
-        const free = parseInt(values[3] || '0') * 1024;
-        const available = parseInt(values[4] || '0') * 1024;
-        const buffers = parseInt(values[5] || '0') * 1024;
-        const swapTotal = parseInt(values[7] || '0') * 1024;
-        const swapUsed = parseInt(values[8] || '0') * 1024;
-        memData = { total, used, free, available, buffers, swap: { total: swapTotal, used: swapUsed, free: swapTotal - swapUsed } };
-      } else if (os.platform() === 'darwin') {
-        const lines = memInfo.trim().split('\n');
-        const extract = (label) => {
-          const line = lines.find(l => l.includes(label));
-          return line ? parseInt(line.match(/(\d+)/)?.[1] || '0') * 1024 * 1024 : 0;
-        };
-        memData = { total: os.totalmem(), used: extract('Pages active'), free: extract('Pages free'), swap: { total: 0, used: 0, free: 0 } };
+        const total = parseInt(values[1] || '0');
+        const used = parseInt(values[2] || '0');
+        const free = parseInt(values[3] || '0');
+        const available = parseInt(values[6] || values[3] || '0');
+        const swapValues = (lines[2] || '').split(/\s+/);
+        const swapTotal = parseInt(swapValues[1] || '0');
+        const swapUsed  = parseInt(swapValues[2] || '0');
+        memData = { total, used, free, available, swap: { total: swapTotal, used: swapUsed, free: swapTotal - swapUsed } };
+      } else if (PLATFORM === 'darwin') {
+        try {
+          const vmRaw = execSync('vm_stat 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+          const pageSize = 4096;
+          const extract = (label) => {
+            const line = vmRaw.split('\n').find(l => l.includes(label));
+            return line ? parseInt(line.match(/(\d+)/)?.[1] || '0') * pageSize : 0;
+          };
+          memData.used = extract('Pages active') + extract('Pages wired down');
+          memData.free = extract('Pages free');
+        } catch {}
       }
 
-      const procOut = execSync(`ps aux --no-headers 2>/dev/null | awk '{printf "%s\\t%s\\t%s\\t%s\\n", $2, $4, $6, $11}' | sort -k3 -rn | head -${top}`, { encoding: 'utf8', timeout: 5000 });
-      const topProcs = procOut.trim().split('\n').filter(Boolean).map(line => {
-        const [pid, memPct, rssKb, cmd] = line.split('\t');
-        return { pid: parseInt(pid), mem_percent: parseFloat(memPct), rss_kb: parseInt(rssKb), command: cmd };
-      });
+      // top processes — tail -n +2 skips ps header, works on Linux AND macOS
+      if (!IS_WIN) {
+        try {
+          const procOut = execSync(
+            `ps aux 2>/dev/null | tail -n +2 | awk '{printf "%s\\t%s\\t%s\\t%s\\n", $2, $4, $6, $11}' | sort -k3 -rn | head -${top}`,
+            { encoding: 'utf8', timeout: 5000 }
+          );
+          topProcs = procOut.trim().split('\n').filter(Boolean).map(line => {
+            const [pid, memPct, rssKb, cmd] = line.split('\t');
+            return { pid: parseInt(pid), mem_percent: parseFloat(memPct), rss_kb: parseInt(rssKb), command: cmd };
+          });
+        } catch {}
+      }
 
       return {
         success: true,
@@ -253,28 +309,37 @@ export const networkCheckTool = {
     required: ['host'],
   },
   execute: async (args) => {
-    const host = args.host;
-    const port = args.port || 80;
+    const host    = args.host;
+    const port    = args.port || 80;
     const timeout = (args.timeout || 5) * 1000;
 
-    const start = Date.now();
+    // DNS lookup — cross-platform via Node.js dns module
+    let dnsResolved = null;
     try {
-      const dnsResult = execSync(`dig +short "${host}" 2>/dev/null || nslookup "${host}" 2>/dev/null | tail -1 || echo ""`, { encoding: 'utf8', timeout: 5000 }).trim();
-      const tcpResult = execSync(`timeout ${args.timeout || 5} bash -c 'echo > /dev/tcp/${host}/${port}' 2>/dev/null && echo "open" || echo "closed"`, { encoding: 'utf8', timeout: timeout + 1000 }).trim();
-      const latency = Date.now() - start;
-      return {
-        success: tcpResult === 'open',
-        host,
-        port,
-        dns_resolved: dnsResult.split('\n')[0] || null,
-        tcp_status: tcpResult,
-        latency_ms: latency,
-        reachable: tcpResult === 'open',
-      };
-    } catch (err) {
-      const tcpMatch = err.message.includes('open') ? 'open' : 'closed';
-      return { success: false, host, port, tcp_status: tcpMatch, reachable: false, error: err.message };
-    }
+      const dns = await import('dns/promises');
+      const addrs = await dns.lookup(host);
+      dnsResolved = addrs?.address || null;
+    } catch {}
+
+    // TCP reachability — pure Node.js net module, works on Linux/Mac/Windows
+    const start = Date.now();
+    const tcpStatus = await new Promise((resolve) => {
+      const sock = net.createConnection({ host, port });
+      const timer = setTimeout(() => { sock.destroy(); resolve('closed'); }, timeout);
+      sock.on('connect', () => { clearTimeout(timer); sock.destroy(); resolve('open'); });
+      sock.on('error',   () => { clearTimeout(timer); resolve('closed'); });
+    });
+    const latency = Date.now() - start;
+
+    return {
+      success: tcpStatus === 'open',
+      host,
+      port,
+      dns_resolved: dnsResolved,
+      tcp_status: tcpStatus,
+      latency_ms: latency,
+      reachable: tcpStatus === 'open',
+    };
   },
 };
 

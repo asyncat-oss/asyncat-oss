@@ -179,35 +179,35 @@ export class AgentRuntime {
         break;
       }
 
-      // Execute tool calls (one at a time for safety)
+      // Permission checks — always sequential (may need interactive prompts)
+      const permitted = [];
       for (const tc of toolCalls) {
-        // Permission check
         const permission = toolRegistry.getPermission(tc.tool_name);
         const actionDesc = PermissionManager.describeAction(tc.tool_name, tc.arguments);
-
         this.onEvent({ type: 'tool_start', data: { tool: tc.tool_name, args: tc.arguments, permission, description: actionDesc, round } });
-
         const permResult = await permissionManager.check(tc.tool_name, tc.arguments, permission);
-
         if (!permResult.allowed) {
           const deniedResult = { success: false, error: `Permission denied: ${permResult.reason}` };
           this.session.recordToolCall(tc.tool_name, tc.arguments, deniedResult);
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: deniedResult, round } });
-
-          // Feed denial back to LLM
-          const resultStr = ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, deniedResult);
-          messages.push({ role: 'user', content: resultStr });
-          continue;
+          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, deniedResult) });
+        } else {
+          permitted.push(tc);
         }
+      }
 
-        // Execute
-        const result = await toolRegistry.execute(tc.tool_name, tc.arguments, toolContext);
-        this.session.recordToolCall(tc.tool_name, tc.arguments, result);
-        this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result, round } });
-
-        // Feed result back to LLM
-        const resultStr = ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, result);
-        messages.push({ role: 'user', content: resultStr });
+      // Execute permitted tools in parallel — safe tools gain the most from this
+      if (permitted.length > 0) {
+        const execResults = await Promise.all(
+          permitted.map(tc => toolRegistry.execute(tc.tool_name, tc.arguments, toolContext))
+        );
+        for (let i = 0; i < permitted.length; i++) {
+          const tc = permitted[i];
+          const result = execResults[i];
+          this.session.recordToolCall(tc.tool_name, tc.arguments, result);
+          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result, round } });
+          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, result) });
+        }
       }
 
       // Save session periodically

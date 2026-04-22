@@ -7,6 +7,16 @@ import os from 'os';
 import { execSync, spawn } from 'child_process';
 import { PermissionLevel } from './toolRegistry.js';
 
+const PLATFORM = os.platform();
+const IS_WIN = PLATFORM === 'win32';
+
+function shell(cmd, opts = {}) {
+  if (IS_WIN) {
+    return execSync(`powershell -NoProfile -Command "${cmd.replace(/"/g, '\\"')}"`, { encoding: 'utf8', ...opts });
+  }
+  return execSync(cmd, { encoding: 'utf8', ...opts });
+}
+
 // ── sys_info ──────────────────────────────────────────────────────────────────
 export const sysInfoTool = {
   name: 'sys_info',
@@ -84,17 +94,29 @@ export const psListTool = {
     try {
       const sort  = args.sort_by || 'cpu';
       const limit = args.limit   || 20;
+      let procs = [];
 
-      // ps output: pid, %cpu, %mem, command
-      const raw = execSync(
-        `ps aux --no-headers 2>/dev/null | awk '{printf "%s\\t%s\\t%s\\t%s\\n", $2, $3, $4, $11}' | sort -k${sort === 'mem' ? 3 : 2} -rn | head -${limit + 5}`,
-        { encoding: 'utf8', timeout: 5000 }
-      );
-
-      let procs = raw.trim().split('\n').map(line => {
-        const [pid, cpu, mem, cmd] = line.split('\t');
-        return { pid: parseInt(pid), cpu: parseFloat(cpu), mem: parseFloat(mem), command: cmd };
-      }).filter(p => !isNaN(p.pid));
+      if (IS_WIN) {
+        // tasklist /FO CSV /NH — Name,PID,SessionName,Session#,Mem Usage
+        const raw = execSync('tasklist /FO CSV /NH 2>nul', { encoding: 'utf8', timeout: 8000 });
+        procs = raw.trim().split('\n').filter(Boolean).map(line => {
+          const parts = line.replace(/"/g, '').split(',');
+          const memKb = parseInt((parts[4] || '0').replace(/\D/g, '')) || 0;
+          return { pid: parseInt(parts[1]) || 0, cpu: 0, mem: parseFloat((memKb / 1024).toFixed(1)), command: parts[0] };
+        }).filter(p => p.pid > 0);
+        if (sort === 'mem') procs.sort((a, b) => b.mem - a.mem);
+      } else {
+        // tail -n +2 skips the header — works on both Linux and macOS
+        const sortCol = sort === 'mem' ? 3 : 2;
+        const raw = execSync(
+          `ps aux 2>/dev/null | tail -n +2 | awk '{printf "%s\\t%s\\t%s\\t%s\\n", $2, $3, $4, $11}' | sort -k${sortCol} -rn | head -${limit + 5}`,
+          { encoding: 'utf8', timeout: 5000 }
+        );
+        procs = raw.trim().split('\n').filter(Boolean).map(line => {
+          const [pid, cpu, mem, cmd] = line.split('\t');
+          return { pid: parseInt(pid), cpu: parseFloat(cpu), mem: parseFloat(mem), command: cmd };
+        }).filter(p => !isNaN(p.pid));
+      }
 
       if (args.filter) {
         const f = args.filter.toLowerCase();
@@ -166,30 +188,36 @@ export const notifyTool = {
     const title   = args.title.slice(0, 100);
     const message = args.message.slice(0, 300);
     const urgency = args.urgency || 'normal';
-    const platform = os.platform();
 
     try {
-      if (platform === 'linux') {
-        // notify-send is available on most Linux desktops
+      if (PLATFORM === 'linux') {
         execSync(
           `notify-send --urgency=${urgency} ${JSON.stringify(title)} ${JSON.stringify(message)} 2>/dev/null || true`,
           { timeout: 3000 }
         );
-      } else if (platform === 'darwin') {
+      } else if (PLATFORM === 'darwin') {
+        // osascript needs Notifications permission for the terminal app in
+        // System Settings > Privacy & Security > Notifications
         execSync(
           `osascript -e 'display notification ${JSON.stringify(message)} with title ${JSON.stringify(title)}'`,
           { timeout: 3000 }
         );
-      } else if (platform === 'win32') {
-        // PowerShell toast notification
-        execSync(
-          `powershell -command "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $t = [Windows.UI.Notifications.ToastTemplateType]::ToastText02; $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($t); $xml.GetElementsByTagName('text')[0].AppendChild($xml.CreateTextNode('${title}')); $xml.GetElementsByTagName('text')[1].AppendChild($xml.CreateTextNode('${message}')); $toast = [Windows.UI.Notifications.ToastNotification]::new($xml); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Asyncat').Show($toast)"`,
-          { timeout: 5000 }
-        );
+      } else if (PLATFORM === 'win32') {
+        // Use BurntToast-style PowerShell toast — works without extra packages on Win 10/11
+        const ps = [
+          `Add-Type -AssemblyName System.Windows.Forms`,
+          `$n = New-Object System.Windows.Forms.NotifyIcon`,
+          `$n.Icon = [System.Drawing.SystemIcons]::Information`,
+          `$n.Visible = $true`,
+          `$n.ShowBalloonTip(4000, ${JSON.stringify(title)}, ${JSON.stringify(message)}, [System.Windows.Forms.ToolTipIcon]::Info)`,
+          `Start-Sleep -Milliseconds 4500`,
+          `$n.Dispose()`,
+        ].join('; ');
+        execSync(`powershell -NoProfile -Command "${ps.replace(/"/g, '\\"')}"`, { timeout: 6000 });
       }
-      return { success: true, title, message, platform };
+      return { success: true, title, message, platform: PLATFORM };
     } catch (err) {
-      return { success: false, error: err.message, note: 'Notification may not be supported in this environment.' };
+      return { success: false, error: err.message, note: 'On macOS grant Notifications permission to your terminal in System Settings > Privacy & Security.' };
     }
   },
 };
@@ -240,7 +268,8 @@ export const testRunnerTool = {
 
     return new Promise((resolve) => {
       let output = '';
-      const proc = spawn('/bin/sh', ['-c', cmd], { cwd, shell: false });
+      const [sh, shFlag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
+      const proc = spawn(sh, [shFlag, cmd], { cwd, shell: false });
       const timer = setTimeout(() => {
         proc.kill();
         resolve({ success: false, error: `Tests timed out after ${args.timeout || 60}s`, output });
@@ -251,11 +280,8 @@ export const testRunnerTool = {
       proc.on('close', code => {
         clearTimeout(timer);
         if (output.length > 8000) output = output.slice(0, 8000) + '\n... [truncated]';
-
-        // Parse pass/fail from output
         const passMatch = output.match(/(\d+)\s+(?:passing|passed|tests? passed)/i);
         const failMatch = output.match(/(\d+)\s+(?:failing|failed|tests? failed)/i);
-
         resolve({
           success: code === 0,
           exit_code: code,
@@ -279,13 +305,12 @@ export const clipboardReadTool = {
   execute: async () => {
     try {
       let content = '';
-      const platform = os.platform();
-      if (platform === 'linux') {
+      if (PLATFORM === 'linux') {
         content = execSync('xclip -selection clipboard -o 2>/dev/null || xsel --clipboard --output 2>/dev/null || wl-paste 2>/dev/null || echo ""', { encoding: 'utf8', timeout: 3000 });
-      } else if (platform === 'darwin') {
+      } else if (PLATFORM === 'darwin') {
         content = execSync('pbpaste', { encoding: 'utf8', timeout: 3000 });
-      } else if (platform === 'win32') {
-        content = execSync('powershell Get-Clipboard', { encoding: 'utf8', timeout: 3000 });
+      } else if (IS_WIN) {
+        content = execSync('powershell -NoProfile -Command "Get-Clipboard"', { encoding: 'utf8', timeout: 3000 });
       }
       return { success: true, content: content.trim().slice(0, 4000) };
     } catch (err) {
@@ -308,20 +333,23 @@ export const clipboardWriteTool = {
   },
   execute: async (args) => {
     try {
-      const text     = args.text.slice(0, 10000);
-      const platform = os.platform();
-      if (platform === 'linux') {
+      const text = args.text.slice(0, 10000);
+      if (PLATFORM === 'linux') {
         const proc = spawn('sh', ['-c', 'xclip -selection clipboard 2>/dev/null || xsel --clipboard --input 2>/dev/null || wl-copy 2>/dev/null']);
         proc.stdin.write(text);
         proc.stdin.end();
         await new Promise(r => proc.on('close', r));
-      } else if (platform === 'darwin') {
+      } else if (PLATFORM === 'darwin') {
         const proc = spawn('pbcopy');
         proc.stdin.write(text);
         proc.stdin.end();
         await new Promise(r => proc.on('close', r));
-      } else if (platform === 'win32') {
-        execSync(`echo ${JSON.stringify(text)} | clip`, { timeout: 3000 });
+      } else if (IS_WIN) {
+        // pipe via powershell Set-Clipboard to avoid cmd quoting issues
+        const proc = spawn('powershell', ['-NoProfile', '-Command', 'Set-Clipboard -Value ([Console]::In.ReadToEnd())']);
+        proc.stdin.write(text);
+        proc.stdin.end();
+        await new Promise(r => proc.on('close', r));
       }
       return { success: true, length: text.length };
     } catch (err) {

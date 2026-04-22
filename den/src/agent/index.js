@@ -16,6 +16,7 @@ import { dockerTools } from './tools/dockerTools.js';
 import { devTools } from './tools/devTools.js';
 import { osTools } from './tools/osTools.js';
 import { screenTools } from './tools/screenTools.js';
+import { dataTools } from './tools/dataTools.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -107,6 +108,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(devTools);
   toolRegistry.registerAll(osTools);
   toolRegistry.registerAll(screenTools);
+  toolRegistry.registerAll(dataTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

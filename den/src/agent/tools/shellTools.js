@@ -9,10 +9,11 @@ import path from 'path';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
 
+const IS_WIN = os.platform() === 'win32';
 const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '30000', 10); // 30s
 const MAX_OUTPUT = 16000; // chars
 
-/** Run a command and capture output. */
+/** Run a command and capture output — cross-platform. */
 function runProcess(cmd, args, options = {}) {
   return new Promise((resolve) => {
     const timeout = options.timeout || DEFAULT_TIMEOUT;
@@ -74,12 +75,12 @@ export const runCommandTool = {
   },
   execute: async (args, context) => {
     const cwd = args.cwd ? path.resolve(context.workingDir, args.cwd) : context.workingDir;
-    // Verify cwd is within workspace
     if (!cwd.startsWith(path.resolve(context.workingDir))) {
       return { success: false, error: 'Working directory must be within the workspace.' };
     }
     const timeout = (args.timeout || 30) * 1000;
-    return await runProcess('/bin/sh', ['-c', args.command], { cwd, timeout });
+    const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
+    return await runProcess(sh, [flag, args.command], { cwd, timeout });
   },
 };
 
@@ -103,7 +104,8 @@ export const runPythonTool = {
     try {
       fs.writeFileSync(tmpFile, args.code, 'utf8');
       const timeout = (args.timeout || 30) * 1000;
-      const result = await runProcess('python3', [tmpFile], { cwd: context.workingDir, timeout });
+      const python = IS_WIN ? 'python' : 'python3';
+      const result = await runProcess(python, [tmpFile], { cwd: context.workingDir, timeout });
       return result;
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
