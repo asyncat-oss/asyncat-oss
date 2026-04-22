@@ -8,6 +8,7 @@ import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
 
 const MAX_OUTPUT = 16000;
+const IS_WIN = process.platform === 'win32';
 
 function runProcess(cmd, args, options = {}) {
   return new Promise((resolve) => {
@@ -33,11 +34,19 @@ function runProcess(cmd, args, options = {}) {
 }
 
 function hasDocker() {
-  try { execSync('which docker 2>/dev/null'); return true; } catch { return false; }
+  try { 
+    const cmd = IS_WIN ? 'where docker 2>nul' : 'which docker 2>/dev/null';
+    execSync(cmd); 
+    return true; 
+  } catch { return false; }
 }
 
 function hasDockerCompose() {
-  try { execSync('which docker-compose 2>/dev/null'); return true; } catch { return false; }
+  try { 
+    const cmd = IS_WIN ? 'where docker-compose 2>nul' : 'which docker-compose 2>/dev/null';
+    execSync(cmd); 
+    return true; 
+  } catch { return false; }
 }
 
 export const dockerRunTool = {

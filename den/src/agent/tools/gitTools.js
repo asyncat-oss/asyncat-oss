@@ -8,6 +8,8 @@ import path from 'path';
 import fs from 'fs';
 import { PermissionLevel } from './toolRegistry.js';
 
+const IS_WIN = process.platform === 'win32';
+
 function runGit(cmd, cwd, timeout = 30000) {
   try {
     const output = execSync(cmd, { cwd, encoding: 'utf8', timeout, maxBuffer: 512 * 1024 });
@@ -20,7 +22,8 @@ function runGit(cmd, cwd, timeout = 30000) {
 function runGitStream(cmd, cwd, timeout = 30000) {
   return new Promise((resolve) => {
     let stdout = '', stderr = '';
-    const proc = spawn('/bin/sh', ['-c', cmd], { cwd, shell: false });
+    const [sh, shFlag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
+    const proc = spawn(sh, [shFlag, cmd], { cwd, shell: false });
     const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${timeout / 1000}s`, stdout, stderr }); }, timeout);
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });

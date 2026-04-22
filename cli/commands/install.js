@@ -106,7 +106,6 @@ function prompt(question) {
 export function ensureNativeRuntimeDeps() {
 	const runtimeInstalls = [];
 	const frontendDir = path.join(ROOT, "neko");
-	const backendDir = path.join(ROOT, "den");
 
 	const NPM_CMD = process.platform === "win32" ? "npm.cmd" : "npm";
 
@@ -124,21 +123,6 @@ export function ensureNativeRuntimeDeps() {
 		if (!resolveFromWorkspace("@rollup/rollup-darwin-arm64", frontendDir)) {
 			pushInstall("Rollup native runtime", "neko", [
 				"@rollup/rollup-darwin-arm64",
-			]);
-		}
-
-		const hasSharpRuntime = resolveFromWorkspace(
-			"@img/sharp-darwin-arm64",
-			backendDir,
-		);
-		const hasSharpLibvips = resolveFromWorkspace(
-			"@img/sharp-libvips-darwin-arm64",
-			backendDir,
-		);
-		if (!hasSharpRuntime || !hasSharpLibvips) {
-			pushInstall("Sharp native runtime", "den", [
-				"@img/sharp-darwin-arm64",
-				"@img/sharp-libvips-darwin-arm64",
 			]);
 		}
 	} else if (process.platform === "win32" && process.arch === "x64") {
@@ -160,10 +144,6 @@ export function ensureNativeRuntimeDeps() {
 			pushInstall("Tailwind oxide native runtime", "neko", [
 				"@tailwindcss/oxide-win32-x64-msvc",
 			]);
-		}
-
-		if (!resolveFromWorkspace("@img/sharp-win32-x64", backendDir)) {
-			pushInstall("Sharp native runtime", "den", ["@img/sharp-win32-x64"]);
 		}
 	}
 

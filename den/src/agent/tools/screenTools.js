@@ -8,6 +8,7 @@
 //
 // Linux: uses scrot/gnome-screenshot + xdotool (sudo apt install scrot xdotool)
 // macOS: uses screencapture + cliclick
+// Windows: uses native PowerShell commands
 // All output is written to a temp file, path returned to agent.
 // Zero new npm packages — pure child_process.
 
@@ -21,10 +22,15 @@ const TMP_DIR = path.join(os.tmpdir(), 'asyncat-screen');
 fs.mkdirSync(TMP_DIR, { recursive: true });
 
 const PLATFORM = os.platform();
+const IS_WIN = PLATFORM === 'win32';
 
 // ── Helper: check if a binary is available ───────────────────────────────────
 function hasBin(bin) {
-  try { execSync(`which ${bin} 2>/dev/null`); return true; } catch { return false; }
+  try { 
+    const cmd = IS_WIN ? `where ${bin} 2>nul` : `which ${bin} 2>/dev/null`;
+    execSync(cmd); 
+    return true; 
+  } catch { return false; }
 }
 
 // ── take_screenshot ───────────────────────────────────────────────────────────

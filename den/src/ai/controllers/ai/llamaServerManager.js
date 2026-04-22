@@ -18,6 +18,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
+const IS_WIN = process.platform === 'win32';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PYTHON_WRAPPER_PATH = path.resolve(__dirname, '../../../../scripts/llama_cpp_server_wrapper.py');
 
@@ -109,7 +110,13 @@ export async function checkBinary() {
 
   // 2. Well-known absolute paths (no PATH needed)
   //    Covers: unsloth installs, homebrew, standard Linux locations
+  //    Also includes Windows paths for llama-server binaries
   const absolutePaths = [
+    // Windows llama-server locations
+    path.join(home, 'AppData', 'Local', 'Programs', 'Python', 'Python*', 'Scripts', 'llama-server.exe'),
+    path.join(home, 'AppData', 'Local', 'Programs', 'llama.cpp', 'llama-server.exe'),
+    path.join(home, '.local', 'bin', 'llama-server.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'llama.cpp', 'llama-server.exe'),
     // unsloth studio ships its own llama.cpp build
     path.join(home, '.unsloth', 'llama.cpp', 'build', 'bin', 'llama-server'),
     path.join(home, '.unsloth', 'llama.cpp', 'llama-server'),
@@ -126,7 +133,22 @@ export async function checkBinary() {
   ];
 
   for (const p of absolutePaths) {
-    if (fs.existsSync(p)) {
+    // Handle glob patterns for Windows Python paths
+    if (p.includes('Python*')) {
+      const baseDir = path.dirname(p);
+      const baseName = path.basename(p);
+      try {
+        const entries = fs.readdirSync(baseDir);
+        for (const entry of entries) {
+          if (entry.startsWith('Python')) {
+            const fullPath = path.join(baseDir, entry, baseName.replace('*', ''));
+            if (fs.existsSync(fullPath)) {
+              return { found: true, binary: fullPath, path: fullPath, source: 'auto-detected' };
+            }
+          }
+        }
+      } catch { /* skip */ }
+    } else if (fs.existsSync(p)) {
       return { found: true, binary: p, path: p, source: 'auto-detected' };
     }
   }
@@ -135,23 +157,30 @@ export async function checkBinary() {
   const pathNames = ['llama-server', 'llama-cpp-server'];
   for (const name of pathNames) {
     try {
-      const { stdout } = await execAsync(`which "${name}" 2>/dev/null`);
-      const p = stdout.trim();
+      // Use 'where' on Windows, 'which' on Unix
+      const cmd = IS_WIN ? `where "${name}" 2>nul` : `which "${name}" 2>/dev/null`;
+      const { stdout } = await execAsync(cmd);
+      const p = stdout.trim().split('\n')[0]; // Take first match on Windows
       if (p) return { found: true, binary: p, path: p, source: 'PATH' };
     } catch { /* not found */ }
   }
 
   // 4. llama-cpp-python python package (pip install llama-cpp-python[server])
-  try {
-    await execAsync('python3 -c "import llama_cpp" 2>/dev/null');
-    return {
-      found:    true,
-      binary:   'python3',
-      path:     'python3',
-      source:   'llama-cpp-python package',
-      isPython: true,
-    };
-  } catch { /* not installed */ }
+  // Try both python and python3 - Windows typically uses 'python'
+  const pythonCommands = IS_WIN ? ['python', 'python3', 'py'] : ['python3', 'python'];
+  for (const pythonCmd of pythonCommands) {
+    try {
+      await execAsync(`${pythonCmd} -c "import llama_cpp" 2>/dev/null`);
+      return {
+        found:    true,
+        binary:   pythonCmd,
+        path:     pythonCmd,
+        source:   'llama-cpp-python package',
+        isPython: true,
+        pythonCmd, // Store the working command for spawning
+      };
+    } catch { /* not installed */ }
+  }
 
   return {
     found:    false,
@@ -222,9 +251,12 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
   });
 
   let proc;
+  // Use the python command that was found during checkBinary (could be 'python', 'python3', or 'py' on Windows)
+  const pythonCmd = binInfo.pythonCmd || (IS_WIN ? 'python' : 'python3');
 
   if (binInfo.isPython) {
-    proc = spawn('python3', [
+    // On Windows, use shell: true for better compatibility
+    proc = spawn(pythonCmd, [
       PYTHON_WRAPPER_PATH,
       '--model',         modelPath,
       '--host',          LLAMA_HOST,
@@ -232,9 +264,11 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       '--n_ctx',         ctxSize,
       '--n_gpu_layers',  nGpuLayers,
       '--n_threads',     nThreads,
-    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, shell: IS_WIN });
   } else {
-    proc = spawn(binInfo.binary, [
+    // On Windows, use shell: true and also add .exe extension if not present
+    const binaryPath = binInfo.binary.endsWith('.exe') ? binInfo.binary : binInfo.binary;
+    proc = spawn(binaryPath, [
       '-m',         modelPath,
       '--host',     LLAMA_HOST,
       '--port',     String(LLAMA_PORT),
@@ -242,7 +276,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       '-ngl',       nGpuLayers,
       '--threads',  nThreads,
       // Note: intentionally NOT passing --log-disable so we capture startup errors
-    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, shell: IS_WIN });
   }
 
   state.proc = proc;
