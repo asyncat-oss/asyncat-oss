@@ -45,11 +45,13 @@ function setupEnv(target, example) {
 }
 
 function resolveFromWorkspace(pkg, workspaceDir) {
-	try {
-		require.resolve(`${pkg}/package.json`, { paths: [workspaceDir] });
-		return true;
-	} catch {
-		return false;
+	let dir = workspaceDir;
+	while (true) {
+		if (fs.existsSync(path.join(dir, "node_modules", pkg, "package.json")))
+			return true;
+		const parent = path.dirname(dir);
+		if (parent === dir) return false;
+		dir = parent;
 	}
 }
 
@@ -96,19 +98,21 @@ function ensureNativeRuntimeDeps() {
 
 	const NPM_CMD = process.platform === "win32" ? "npm.cmd" : "npm";
 
+	const pushInstall = (label, workspace, pkgs) => {
+		const pkgList = pkgs.join(" ");
+		runtimeInstalls.push({
+			label,
+			workspace,
+			pkgs,
+			cmd: `npm install --workspace ${workspace} --no-save --legacy-peer-deps ${pkgList}`,
+		});
+	};
+
 	if (process.platform === "darwin" && process.arch === "arm64") {
 		if (!resolveFromWorkspace("@rollup/rollup-darwin-arm64", frontendDir)) {
-			runtimeInstalls.push({
-				label: "Rollup native runtime",
-				args: [
-					"install",
-					"--no-save",
-					"--no-package-lock",
-					"--legacy-peer-deps",
-					"@rollup/rollup-darwin-arm64",
-				],
-				cmd: "npm install --no-save --no-package-lock --legacy-peer-deps @rollup/rollup-darwin-arm64",
-			});
+			pushInstall("Rollup native runtime", "neko", [
+				"@rollup/rollup-darwin-arm64",
+			]);
 		}
 
 		const hasSharpRuntime = resolveFromWorkspace(
@@ -120,72 +124,26 @@ function ensureNativeRuntimeDeps() {
 			backendDir,
 		);
 		if (!hasSharpRuntime || !hasSharpLibvips) {
-			runtimeInstalls.push({
-				label: "Sharp native runtime",
-				args: [
-					"install",
-					"--no-save",
-					"--no-package-lock",
-					"--legacy-peer-deps",
-					"@img/sharp-darwin-arm64",
-					"@img/sharp-libvips-darwin-arm64",
-				],
-				cmd: "npm install --no-save --no-package-lock --legacy-peer-deps @img/sharp-darwin-arm64 @img/sharp-libvips-darwin-arm64",
-			});
+			pushInstall("Sharp native runtime", "den", [
+				"@img/sharp-darwin-arm64",
+				"@img/sharp-libvips-darwin-arm64",
+			]);
 		}
 	} else if (process.platform === "win32" && process.arch === "x64") {
-		const hasLightningCss = resolveFromWorkspace(
-			"lightningcss-win32-x64-msvc",
-			frontendDir,
-		);
-		if (!hasLightningCss) {
-			runtimeInstalls.push({
-				label: "LightningCSS native runtime",
-				args: [
-					"install",
-					"--no-save",
-					"--no-package-lock",
-					"--legacy-peer-deps",
-					"lightningcss-win32-x64-msvc",
-				],
-				cmd: "npm install --no-save --no-package-lock --legacy-peer-deps lightningcss-win32-x64-msvc",
-			});
+		if (!resolveFromWorkspace("lightningcss-win32-x64-msvc", frontendDir)) {
+			pushInstall("LightningCSS native runtime", "neko", [
+				"lightningcss-win32-x64-msvc",
+			]);
 		}
 
-		const hasRollup = resolveFromWorkspace(
-			"@rollup/rollup-win32-x64-msvc",
-			frontendDir,
-		);
-		if (!hasRollup) {
-			runtimeInstalls.push({
-				label: "Rollup native runtime",
-				args: [
-					"install",
-					"--no-save",
-					"--no-package-lock",
-					"--legacy-peer-deps",
-					"@rollup/rollup-win32-x64-msvc",
-				],
-				cmd: "npm install --no-save --no-package-lock --legacy-peer-deps @rollup/rollup-win32-x64-msvc",
-			});
+		if (!resolveFromWorkspace("@rollup/rollup-win32-x64-msvc", frontendDir)) {
+			pushInstall("Rollup native runtime", "neko", [
+				"@rollup/rollup-win32-x64-msvc",
+			]);
 		}
 
-		const hasSharpRuntime = resolveFromWorkspace(
-			"@img/sharp-win32-x64",
-			backendDir,
-		);
-		if (!hasSharpRuntime) {
-			runtimeInstalls.push({
-				label: "Sharp native runtime",
-				args: [
-					"install",
-					"--no-save",
-					"--no-package-lock",
-					"--legacy-peer-deps",
-					"@img/sharp-win32-x64",
-				],
-				cmd: "npm install --no-save --no-package-lock --legacy-peer-deps @img/sharp-win32-x64",
-			});
+		if (!resolveFromWorkspace("@img/sharp-win32-x64", backendDir)) {
+			pushInstall("Sharp native runtime", "den", ["@img/sharp-win32-x64"]);
 		}
 	}
 
@@ -195,14 +153,31 @@ function ensureNativeRuntimeDeps() {
 	log(col("bold", "  Repairing native runtime packages..."));
 	log("");
 
+	const isWin = process.platform === "win32";
 	for (const install of runtimeInstalls) {
 		info(`Installing ${install.label}...`);
+		const args = [
+			"install",
+			"--workspace",
+			install.workspace,
+			"--no-save",
+			"--legacy-peer-deps",
+			...install.pkgs,
+		];
 		try {
-			execFileSync(NPM_CMD, install.args, { cwd: ROOT, stdio: "ignore" });
+			if (isWin) {
+				execSync(`${NPM_CMD} ${args.join(" ")}`, {
+					cwd: ROOT,
+					stdio: "ignore",
+					shell: true,
+				});
+			} else {
+				execFileSync(NPM_CMD, args, { cwd: ROOT, stdio: "ignore" });
+			}
 			ok(`${install.label} installed`);
-		} catch (_) {
+		} catch (e) {
 			warn(
-				`Could not install ${install.label}. If startup fails, rerun ${col("dim", install.cmd)} from the repo root.`,
+				`Could not install ${install.label} (${e.code || e.message}). If startup fails, rerun ${col("dim", install.cmd)} from the repo root.`,
 			);
 		}
 	}
