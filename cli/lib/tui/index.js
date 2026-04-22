@@ -385,8 +385,10 @@ export class Tui extends EventEmitter {
     try {
       const { apiGet } = await import('../denApi.js');
       const data = await apiGet('/api/ai/providers/local-models/downloads').catch(() => ({ downloads: [] }));
-      this._activeDownloads = data.downloads || [];
-      this.render();
+      const next = data.downloads || [];
+      const changed = JSON.stringify(next) !== JSON.stringify(this._activeDownloads);
+      this._activeDownloads = next;
+      if (changed) this.render();
     } catch {}
     if (this.mode === 'models' && !this._destroyed) {
       this._downloadPollTimer = setTimeout(() => this._pollDownloads(), 800);
@@ -448,7 +450,7 @@ export class Tui extends EventEmitter {
     if (this.mode !== 'chat') this.mode = 'chat';
     this._streamTimer = setInterval(() => {
       if (this._destroyed) return;
-      renderStatusBar(this.version, this._streamMsg, this.modelInfo);
+      this.render();
     }, 700);
   }
 
@@ -1143,8 +1145,12 @@ export class Tui extends EventEmitter {
       checkTcp(8716),
       checkHttp('http://localhost:8717'),
     ]).then(([be, fe]) => {
-      setServiceStatus(be, fe);
-      if (!this._destroyed) this.render();
+      const prev = this._lastServiceStatus;
+      if (!prev || prev.be !== be || prev.fe !== fe) {
+        this._lastServiceStatus = { be, fe };
+        setServiceStatus(be, fe);
+        if (!this._destroyed) this.render();
+      }
     });
   }
 

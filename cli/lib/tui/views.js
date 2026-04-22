@@ -246,9 +246,10 @@ function formatMessage(msg, maxW, t) {
                : `${ansi.dim}…${R}`;
     lines.push(`${ansi.dim}  ╭─ ${R}${t.paletteCmd}${msg.tool || 'tool'}${R} ${icon}`);
     if (msg.content) {
-      const preview = msg.content.split('\n').slice(0, 3);
-      for (const l of preview) lines.push(`${ansi.dim}  │${R}  ${ansi.dim}${l.slice(0, maxW - 6)}${R}`);
-      if (msg.content.split('\n').length > 3) lines.push(`${ansi.dim}  │  …${R}`);
+      const limit = msg.success === false ? 8 : 3;
+      const allLines = msg.content.split('\n');
+      for (const l of allLines.slice(0, limit)) lines.push(`${ansi.dim}  │${R}  ${ansi.dim}${l.slice(0, maxW - 6)}${R}`);
+      if (allLines.length > limit) lines.push(`${ansi.dim}  │  … (${allLines.length - limit} more lines)${R}`);
     }
     lines.push(`${ansi.dim}  ╰─${R}`);
   } else if (msg.role === 'thinking') {

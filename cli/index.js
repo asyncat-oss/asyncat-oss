@@ -966,11 +966,15 @@ function handleAgentEvent(tui, event, token, base) {
       tui.setStreamMsg(`Running ${data.tool}...`);
       tui.addMessage('tool', data.description || '', { tool: data.tool, success: null });
       break;
-    case 'tool_result':
-      const content = data.result?.content || data.result?.message || '';
-      const preview = typeof content === 'string' ? content.slice(0, 200) : JSON.stringify(content).slice(0, 200);
+    case 'tool_result': {
+      const isErr = data.result?.success === false;
+      const raw = isErr
+        ? (data.result?.error || data.result?.content || data.result?.message || 'Unknown error')
+        : (data.result?.content || data.result?.message || '');
+      const preview = typeof raw === 'string' ? raw : JSON.stringify(raw);
       tui.addMessage('tool', preview, { tool: data.tool || 'tool', success: data.result?.success });
       break;
+    }
     case 'done':
       tui.stopStreaming();
       break;
