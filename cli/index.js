@@ -58,14 +58,36 @@ async function testProviderConnection(providerType, apiKey, model, baseUrl) {
   } else {
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
+
+  const authFailed = s => s === 401 || s === 403;
+
+  // Step 1: try lightweight GET /models
   try {
-    // Try GET /models as a lightweight auth check
     const res = await fetch(`${baseUrl}/models`, {
       headers,
       signal: AbortSignal.timeout(6000),
     });
-    if (res.status === 401 || res.status === 403) return { ok: false, msg: 'Auth failed — check your API key' };
+    if (authFailed(res.status)) return { ok: false, msg: 'Auth failed — check your API key' };
     if (res.ok) return { ok: true, msg: 'Connected' };
+    // 404 = provider doesn't have /models, fall through to chat ping
+    if (res.status !== 404) return { ok: false, msg: `Server returned ${res.status}` };
+  } catch (e) {
+    if (e.name === 'TimeoutError' || e.code === 'UND_ERR_CONNECT_TIMEOUT') return { ok: false, msg: 'Connection timed out' };
+    return { ok: false, msg: `Cannot reach ${baseUrl}` };
+  }
+
+  // Step 2: /models not found — do a minimal chat completion as auth check
+  try {
+    const body = isAnthropic
+      ? JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] })
+      : JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST', headers,
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (authFailed(res.status)) return { ok: false, msg: 'Auth failed — check your API key' };
+    if (res.ok || res.status === 400) return { ok: true, msg: 'Connected' }; // 400 = bad request but auth passed
     return { ok: false, msg: `Server returned ${res.status}` };
   } catch (e) {
     if (e.name === 'TimeoutError' || e.code === 'UND_ERR_CONNECT_TIMEOUT') return { ok: false, msg: 'Connection timed out' };
