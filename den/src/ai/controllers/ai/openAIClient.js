@@ -9,9 +9,16 @@ export class OpenAIClient {
     this.apiKey = config.apiKey;
     this.defaultModel = config.defaultModel || 'gpt-4o';
 
+    const isAnthropic = this.endpoint?.includes('anthropic.com');
     this.client = new OpenAI({
       apiKey: this.apiKey || 'not-configured',
-      baseURL: this.endpoint
+      baseURL: this.endpoint,
+      ...(isAnthropic && {
+        defaultHeaders: {
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      }),
     });
     
     // Maintain compatibility with existing code structure

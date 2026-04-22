@@ -5,7 +5,8 @@ import { loadTheme, setTheme, getThemeName, THEME_NAMES } from './lib/theme.js';
 import { stopAll, procs } from './lib/procs.js';
 import fs from 'fs';
 import path from 'path';
-import { ROOT } from './lib/env.js';
+import { ROOT, setKey } from './lib/env.js';
+import { PROVIDER_DEFAULTS } from './lib/tui/views.js';
 
 // ── Command imports ──────────────────────────────────────────────────────────
 import * as _start    from './commands/start.js';
@@ -45,6 +46,31 @@ function getVersion() {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'cli/package.json'), 'utf8'));
     return pkg.version || '0.4.0';
   } catch { return '0.4.0'; }
+}
+
+// ── Test provider connection directly (before backend restart) ──────────────
+async function testProviderConnection(providerType, apiKey, model, baseUrl) {
+  const isAnthropic = baseUrl.includes('anthropic.com');
+  const headers = { 'Content-Type': 'application/json' };
+  if (isAnthropic) {
+    headers['x-api-key'] = apiKey;
+    headers['anthropic-version'] = '2023-06-01';
+  } else {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+  try {
+    // Try GET /models as a lightweight auth check
+    const res = await fetch(`${baseUrl}/models`, {
+      headers,
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.status === 401 || res.status === 403) return { ok: false, msg: 'Auth failed — check your API key' };
+    if (res.ok) return { ok: true, msg: 'Connected' };
+    return { ok: false, msg: `Server returned ${res.status}` };
+  } catch (e) {
+    if (e.name === 'TimeoutError' || e.code === 'UND_ERR_CONNECT_TIMEOUT') return { ok: false, msg: 'Connection timed out' };
+    return { ok: false, msg: `Cannot reach ${baseUrl}` };
+  }
 }
 
 // ── Detect model info ───────────────────────────────────────────────────────
@@ -373,16 +399,44 @@ case 'tools': {
           return;
         }
 
-        // ── Provider: show config inline; setup still needs shell ────────
+        // ── Provider: show setup wizard ─────────────────────────────────────
         case 'provider': {
-          if (!args.length || args[0] === 'list' || args[0] === 'show') {
-            tui.startCapture();
-            await _provider.run(['list']);
-            const lines = tui.endCapture();
-            tui.showResult('Provider Config', lines.length ? lines : ['No provider configured.']);
+          if (!args.length || args[0] === 'set' || args[0] === 'list' || args[0] === 'show') {
             tui.unlockInput();
+            const result = await tui.showProviderSetup();
+            if (!result) {
+              tui.unlockInput();
+              return;
+            }
+            if (result.providerType === 'ollama') {
+              setKey('den/.env', 'AI_BASE_URL', 'http://localhost:11434/v1');
+              setKey('den/.env', 'AI_API_KEY', '');
+              setKey('den/.env', 'AI_MODEL', 'ollama');
+              setKey('den/.env', 'AI_PROVIDER_TYPE', 'local');
+            } else if (result.providerType === 'lmstudio') {
+              setKey('den/.env', 'AI_BASE_URL', 'http://localhost:1234/v1');
+              setKey('den/.env', 'AI_API_KEY', '');
+              setKey('den/.env', 'AI_MODEL', 'lmstudio');
+              setKey('den/.env', 'AI_PROVIDER_TYPE', 'local');
+            } else {
+              const baseUrl = result.baseUrl || PROVIDER_DEFAULTS[result.providerType]?.baseUrl || '';
+              const model = result.model || PROVIDER_DEFAULTS[result.providerType]?.model || '';
+              setKey('den/.env', 'AI_BASE_URL', baseUrl);
+              setKey('den/.env', 'AI_API_KEY', result.apiKey);
+              setKey('den/.env', 'AI_MODEL', model);
+              setKey('den/.env', 'AI_PROVIDER_TYPE', 'cloud');
+              tui.printInfo(`Testing connection to ${result.providerType}...`);
+              const test = await testProviderConnection(result.providerType, result.apiKey, model, baseUrl);
+              if (test.ok) {
+                tui.printOk(`Connected to ${result.providerType} — ${model}`);
+              } else {
+                tui.printErr(`${result.providerType}: ${test.msg}`);
+                tui.printWarn('Settings saved anyway. Fix the key and run /provider again.');
+              }
+            }
             const { model: m, provider: p } = await detectModel();
             tui.setModel(m, p);
+            tui.unlockInput();
           } else {
             await runInShell(() => _provider.run(args));
             const { model: m, provider: p } = await detectModel();

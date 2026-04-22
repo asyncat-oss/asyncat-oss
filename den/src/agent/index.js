@@ -11,6 +11,11 @@ import { browserTools } from './tools/browserTools.js';
 import { workspaceTools } from './tools/workspaceTools.js';
 import { agentTools } from './tools/agentTools.js';
 import { systemTools } from './tools/systemTools.js';
+import { gitTools } from './tools/gitTools.js';
+import { dockerTools } from './tools/dockerTools.js';
+import { devTools } from './tools/devTools.js';
+import { osTools } from './tools/osTools.js';
+import { screenTools } from './tools/screenTools.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -97,6 +102,11 @@ export async function initializeAgent() {
   toolRegistry.registerAll(workspaceTools);
   toolRegistry.registerAll(agentTools);
   toolRegistry.registerAll(systemTools);
+  toolRegistry.registerAll(gitTools);
+  toolRegistry.registerAll(dockerTools);
+  toolRegistry.registerAll(devTools);
+  toolRegistry.registerAll(osTools);
+  toolRegistry.registerAll(screenTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

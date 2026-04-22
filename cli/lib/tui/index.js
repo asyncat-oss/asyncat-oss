@@ -12,7 +12,8 @@ import {
   renderZen, renderChat, renderPalette, renderStatusBar,
   renderStreamingIndicator, renderSelector, filterPalette,
   spinnerFrame, nextCatMsg, setServiceStatus, renderModelSetup,
-  renderResult, renderModelsPage,
+  renderResult, renderModelsPage, renderProviderSetup,
+  PROVIDER_TYPES, PROVIDER_DEFAULTS,
 } from './views.js';
 import { getTheme } from '../theme.js';
 import { getLiveLogsEnabled } from '../colors.js';
@@ -83,6 +84,10 @@ export class Tui extends EventEmitter {
     // Console capture (for inline command output)
     this._captureMode   = false;
     this._captureBuffer = [];
+
+    // Provider setup state
+    this._providerSetup  = null;
+    this._providerSetupResolve = null;
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -208,7 +213,7 @@ export class Tui extends EventEmitter {
     write(ansi.hide);
     renderStatusBar(this.version, this.streaming ? this._streamMsg : null, this.modelInfo);
 
-    const isOverlay = this.mode === 'palette' || this.mode === 'selector' || this.mode === 'model-setup' || this.mode === 'result';
+    const isOverlay = this.mode === 'palette' || this.mode === 'selector' || this.mode === 'model-setup' || this.mode === 'result' || this.mode === 'provider-setup';
 
     // Models page — standalone overlay, no base screen
     if (this.mode === 'models') {
@@ -225,11 +230,12 @@ export class Tui extends EventEmitter {
     }
 
     // Always render base screen first so overlays float on top of it
+    const hideInput = this.mode === 'model-setup' || this.mode === 'provider-setup';
     if ((this.mode === 'chat') || (isOverlay && this.messages.length > 0)) {
       const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
-      renderChat(msgs, this.scrollOff, this.mode === 'model-setup' ? '' : this.buf, this.mode === 'model-setup' ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs);
+      renderChat(msgs, this.scrollOff, hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs);
     } else {
-      renderZen(this.buf, this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs);
+      renderZen(hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs);
     }
 
     // Result popup doesn't need a background redraw (it's standalone)
@@ -250,6 +256,8 @@ export class Tui extends EventEmitter {
       renderSelector(this._selTitle, this._selItems, this._selIdx, this.buf, this.pos);
     } else if (this.mode === 'model-setup') {
       renderModelSetup(this._setupModel, this.buf, this.pos, true);
+    } else if (this.mode === 'provider-setup') {
+      renderProviderSetup(this._providerSetup, this.pos);
     }
 
     write(ansi.show);
@@ -311,6 +319,27 @@ export class Tui extends EventEmitter {
       this._setupResolve = resolve;
       this.buf = String(model.contextLength || 8192);
       this.pos = this.buf.length;
+      this.render();
+    });
+  }
+
+  // ── Provider Setup Wizard ─────────────────────────────────────────────────
+  showProviderSetup() {
+    return new Promise((resolve) => {
+      this.mode = 'provider-setup';
+      this._providerSetup = {
+        step: 0,
+        providerType: null,
+        apiKey: '',
+        model: '',
+        baseUrl: '',
+        fieldIdx: 0,
+        _selIdx: 0,
+        _scrollOff: 0,
+      };
+      this._providerSetupResolve = resolve;
+      this.buf = '';
+      this.pos = 0;
       this.render();
     });
   }
@@ -519,6 +548,130 @@ export class Tui extends EventEmitter {
     if (str && !/^[0-9]$/.test(str) && name !== 'backspace' && name !== 'delete' && name !== 'left' && name !== 'right') {
       return;
     }
+  }
+
+  // ── Provider Setup mode ────────────────────────────────────────────────
+  if (this.mode === 'provider-setup') {
+    const st = this._providerSetup;
+    if (!st) { this.mode = 'zen'; this.render(); return; }
+
+    if (name === 'escape') {
+      if (st.step === 1) {
+        st.step = 0;
+        st.fieldIdx = 0;
+        this.render();
+        return;
+      }
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      if (this._providerSetupResolve) { this._providerSetupResolve(null); this._providerSetupResolve = null; }
+      this._providerSetup = null;
+      this.buf = ''; this.pos = 0;
+      this.render();
+      return;
+    }
+
+    if (st.step === 0) {
+      const maxShow = 10;
+      const topIdx = Math.max(0, Math.min(st._selIdx ?? 0, PROVIDER_TYPES.length - maxShow));
+      if (name === 'up') {
+        if (st._selIdx > 0) { st._selIdx--; this.render(); }
+        return;
+      }
+      if (name === 'down') {
+        if (st._selIdx < PROVIDER_TYPES.length - 1) { st._selIdx++; this.render(); }
+        return;
+      }
+      if (name === 'return' || name === 'enter') {
+        const chosen = PROVIDER_TYPES[st._selIdx];
+        if (!chosen) return;
+        st.providerType = chosen.type;
+        if (chosen.local) {
+          const result = { providerType: st.providerType, apiKey: '', model: '', baseUrl: '' };
+          this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+          if (this._providerSetupResolve) { this._providerSetupResolve(result); this._providerSetupResolve = null; }
+          this._providerSetup = null;
+          this.buf = ''; this.pos = 0;
+          this.render();
+          return;
+        }
+        st.step = 1;
+        st.fieldIdx = 0;
+        const defaults = PROVIDER_DEFAULTS[st.providerType] || {};
+        st.model = defaults.model || '';
+        st.baseUrl = defaults.baseUrl || '';
+        this.buf = st.apiKey;
+        this.pos = st.apiKey.length;
+        this.render();
+        return;
+      }
+      return;
+    }
+
+    if (st.step === 1) {
+      const fields = ['apiKey', 'model', 'baseUrl'];
+      const isLocal = st.providerType === 'ollama' || st.providerType === 'lmstudio';
+
+      if (isLocal) {
+        if (name === 'return') {
+          const result = { providerType: st.providerType, apiKey: '', model: st.model || 'local', baseUrl: st.baseUrl };
+          this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+          if (this._providerSetupResolve) { this._providerSetupResolve(result); this._providerSetupResolve = null; }
+          this._providerSetup = null;
+          this.buf = ''; this.pos = 0;
+          this.render();
+        }
+        return;
+      }
+
+      if (name === 'tab' || name === 'right') {
+        st.fieldIdx = (st.fieldIdx + 1) % fields.length;
+        const field = fields[st.fieldIdx];
+        this.buf = st[field] || '';
+        this.pos = this.buf.length;
+        this.render();
+        return;
+      }
+      if (name === 'left') {
+        st.fieldIdx = (st.fieldIdx - 1 + fields.length) % fields.length;
+        const field = fields[st.fieldIdx];
+        this.buf = st[field] || '';
+        this.pos = this.buf.length;
+        this.render();
+        return;
+      }
+      if (name === 'up' || name === 'down') {
+        return;
+      }
+      if (name === 'backspace') {
+        const field = fields[st.fieldIdx];
+        if (st[field] && st[field].length > 0) {
+          st[field] = st[field].slice(0, -1);
+          if (this.buf.length > 0) this.buf = this.buf.slice(0, -1);
+          this.pos = Math.min(this.pos, st[field].length);
+        }
+        this.render();
+        return;
+      }
+      if (str && str.length === 1 && !ctrl && !meta && str.charCodeAt(0) >= 32) {
+        const field = fields[st.fieldIdx];
+        st[field] = (st[field] || '') + str;
+        this.buf = st[field];
+        this.pos = this.buf.length;
+        this.render();
+        return;
+      }
+      if (name === 'return') {
+        const result = { providerType: st.providerType, apiKey: st.apiKey, model: st.model, baseUrl: st.baseUrl };
+        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+        if (this._providerSetupResolve) { this._providerSetupResolve(result); this._providerSetupResolve = null; }
+        this._providerSetup = null;
+        this.buf = ''; this.pos = 0;
+        this.render();
+        return;
+      }
+      return;
+    }
+    return;
   }
 
   // ── Models page mode ─────────────────────────────────────────────────

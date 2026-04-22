@@ -280,6 +280,227 @@ export const findFilesTool = {
   },
 };
 
+export const fileDiffTool = {
+  name: 'file_diff',
+  description: 'Compare two files or a file with git to see what changed. Shows additions (+), deletions (-), and line numbers. Use before committing or when reviewing changes.',
+  category: 'file',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Path to the file (relative to working directory)' },
+      compare_to: { type: 'string', description: 'Optional: compare against this path instead of git HEAD' },
+      context_lines: { type: 'number', description: 'Number of context lines to show (default: 3)' },
+    },
+    required: ['path'],
+  },
+  execute: async (args, context) => {
+    const filePath = safePath(args.path, context.workingDir);
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: `File not found: ${args.path}` };
+    }
+
+    try {
+      let output;
+      if (args.compare_to) {
+        const comparePath = safePath(args.compare_to, context.workingDir);
+        output = execSync(`diff -u "${comparePath}" "${filePath}" 2>/dev/null || true`, { encoding: 'utf8', timeout: 10000 });
+      } else {
+        const cl = args.context_lines || 3;
+        output = execSync(`git diff --no-color -U ${cl} -- "${filePath}" 2>/dev/null || diff -u /dev/null "${filePath}" 2>/dev/null || echo "No git repo and no compare_to specified"`, { cwd: context.workingDir, encoding: 'utf8', timeout: 10000 });
+      }
+      if (!output.trim()) return { success: true, path: args.path, diff: '(no changes)', changes: 0 };
+
+      const added = (output.match(/^\+[^+]/g) || []).length;
+      const removed = (output.match(/^-[^-]/g) || []).length;
+      return {
+        success: true,
+        path: args.path,
+        diff: truncate(output, 8000),
+        additions: added,
+        deletions: removed,
+        changes: added + removed,
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const globFindTool = {
+  name: 'glob_find',
+  description: 'Find files using glob patterns (like find_files but with full glob support: **/*.js, src/**/*.ts, etc.). Searches recursively.',
+  category: 'file',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      pattern: { type: 'string', description: 'Glob pattern, e.g. "**/*.js", "src/**/*.ts", "test/**/*.py"' },
+      path: { type: 'string', description: 'Directory to search in (default: working directory)' },
+      max_results: { type: 'number', description: 'Maximum files to return (default: 100)' },
+    },
+    required: ['pattern'],
+  },
+  execute: async (args, context) => {
+    const searchPath = safePath(args.path || '.', context.workingDir);
+    const max = args.max_results || 100;
+    const escapedPattern = args.pattern.replace(/'/g, "'\\''");
+
+    try {
+      const cmd = `find '${searchPath}' -path '*/node_modules' -prune -o -path '*/.git' -prune -o -name '${escapedPattern}' -print 2>/dev/null | head -${max}`;
+      const output = execSync(cmd, { encoding: 'utf8', timeout: 15000 });
+      const files = output.trim().split('\n').filter(Boolean).map(f => path.relative(context.workingDir, f));
+      return {
+        success: true,
+        pattern: args.pattern,
+        count: files.length,
+        files: files.join('\n') || 'No files found.',
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const fileCopyTool = {
+  name: 'file_copy',
+  description: 'Copy a file or directory to a destination. Creates parent directories if needed.',
+  category: 'file',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      source: { type: 'string', description: 'Source path (relative to working directory)' },
+      destination: { type: 'string', description: 'Destination path (relative to working directory)' },
+    },
+    required: ['source', 'destination'],
+  },
+  execute: async (args, context) => {
+    const src = safePath(args.source, context.workingDir);
+    const dst = safePath(args.destination, context.workingDir);
+    if (!fs.existsSync(src)) {
+      return { success: false, error: `Source not found: ${args.source}` };
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      if (fs.statSync(src).isDirectory()) {
+        return { success: false, error: 'Use list_directory recursive to copy directories, or specify individual files.' };
+      }
+      fs.copyFileSync(src, dst);
+      const stat = fs.statSync(dst);
+      return { success: true, source: args.source, destination: args.destination, size_bytes: stat.size };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const fileMoveTool = {
+  name: 'file_move',
+  description: 'Move or rename a file or directory.',
+  category: 'file',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      source: { type: 'string', description: 'Source path (relative to working directory)' },
+      destination: { type: 'string', description: 'Destination path (relative to working directory)' },
+    },
+    required: ['source', 'destination'],
+  },
+  execute: async (args, context) => {
+    const src = safePath(args.source, context.workingDir);
+    const dst = safePath(args.destination, context.workingDir);
+    if (!fs.existsSync(src)) {
+      return { success: false, error: `Source not found: ${args.source}` };
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.renameSync(src, dst);
+      return { success: true, source: args.source, destination: args.destination, action: 'moved' };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const fileDeleteTool = {
+  name: 'file_delete',
+  description: 'Delete a file. For directories, you must specify recursive=true. Shows confirmation info before deletion.',
+  category: 'file',
+  permission: PermissionLevel.DANGEROUS,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Path to delete (relative to working directory)' },
+      recursive: { type: 'boolean', description: 'Delete directory and all contents (default: false)' },
+    },
+    required: ['path'],
+  },
+  execute: async (args, context) => {
+    const targetPath = safePath(args.path, context.workingDir);
+    if (!fs.existsSync(targetPath)) {
+      return { success: false, error: `Path not found: ${args.path}` };
+    }
+
+    try {
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory() && !args.recursive) {
+        return { success: false, error: 'Path is a directory. Use recursive=true to delete directories.' };
+      }
+      if (stat.isDirectory()) {
+        fs.rmSync(targetPath, { recursive: true });
+      } else {
+        fs.unlinkSync(targetPath);
+      }
+      return { success: true, path: args.path, action: 'deleted' };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const fileWatchTool = {
+  name: 'file_watch',
+  description: 'Watch a file for changes. Returns the current content and starts watching. When the file changes, you will be notified on the next call. Note: watching is per-request only.',
+  category: 'file',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'File path to watch (relative to working directory)' },
+      poll_interval_ms: { type: 'number', description: 'How often to check for changes in ms (default: 2000)' },
+    },
+    required: ['path'],
+  },
+  execute: async (args, context) => {
+    const filePath = safePath(args.path, context.workingDir);
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: `File not found: ${args.path}` };
+    }
+
+    const stat = fs.statSync(filePath);
+    const mtime = stat.mtime.toISOString();
+    const content = fs.readFileSync(filePath, 'utf8').slice(0, 4000);
+    const lines = content.split('\n').length;
+
+    return {
+      success: true,
+      path: args.path,
+      last_modified: mtime,
+      current_content_preview: content.slice(0, 500) + (content.length > 500 ? '...' : ''),
+      total_lines: lines,
+      note: 'Call file_watch again after other operations to check if the file has changed.',
+    };
+  },
+};
+
 /** All file tools for batch registration. */
-export const fileTools = [readFileTool, writeFileTool, editFileTool, searchFilesTool, listDirectoryTool, findFilesTool];
+export const fileTools = [
+  readFileTool, writeFileTool, editFileTool, searchFilesTool,
+  listDirectoryTool, findFilesTool, fileDiffTool, globFindTool,
+  fileCopyTool, fileMoveTool, fileDeleteTool, fileWatchTool,
+];
 export default fileTools;

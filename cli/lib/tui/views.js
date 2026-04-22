@@ -729,6 +729,148 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   }
 }
 
+// ── Provider Setup Wizard ────────────────────────────────────────────────────
+// state: { step, providerType, apiKey, model, baseUrl, fieldIdx }
+// step 0 = provider type selection
+// step 1 = config fields (api key / model / url)
+
+export const PROVIDER_TYPES = [
+  { name: 'Claude (Anthropic)', type: 'anthropic', desc: 'Claude Opus/Sonnet/Haiku',       local: false },
+  { name: 'OpenAI',             type: 'openai',    desc: 'OpenAI / ChatGPT',               local: false },
+  { name: 'MiniMax',            type: 'minimax',   desc: 'MiniMax API (M2.7, fast)',        local: false },
+  { name: 'Groq',               type: 'groq',      desc: 'Groq (free tier, fast)',          local: false },
+  { name: 'Ollama',             type: 'ollama',    desc: 'Local GGUF via Ollama',           local: true  },
+  { name: 'LM Studio',         type: 'lmstudio',  desc: 'Local GGUF via LM Studio',        local: true  },
+  { name: 'Custom',             type: 'custom',    desc: 'Any OpenAI-compatible API',       local: false },
+];
+
+export const PROVIDER_DEFAULTS = {
+  anthropic: { model: 'claude-sonnet-4-6',          baseUrl: 'https://api.anthropic.com/v1' },
+  minimax:   { model: 'MiniMax-M2.7',               baseUrl: 'https://api.minimax.chat/v1' },
+  openai:    { model: 'gpt-4o',                     baseUrl: 'https://api.openai.com/v1' },
+  groq:      { model: 'llama-3.3-70b-versatile',    baseUrl: 'https://api.groq.com/openai/v1' },
+  custom:    { model: '',                           baseUrl: '' },
+};
+
+export function renderProviderSetup(state, cursorPos) {
+  const t = getTheme();
+  const W = w();
+  const H = h();
+  const R = ansi.reset;
+
+  for (let r = 1; r <= H; r++) clearRow(r);
+
+  const boxW = Math.min(64, W - 4);
+  const boxL = Math.floor((W - boxW) / 2);
+  const inner = boxW - 4;
+
+  const blockH = state.step === 0 ? 18 : 20;
+  const startY = Math.max(2, Math.floor((H - blockH) / 2));
+  let y = startY;
+
+  const title = state.step === 0 ? 'Provider Setup' : `Provider: ${PROVIDER_TYPES.find(p => p.type === state.providerType)?.name || state.providerType}`;
+  at(y++, boxL, `${t.accentBold}${title}${R}`);
+  at(y++, boxL, `${t.dimBorder}${'─'.repeat(boxW)}${R}`);
+  y++;
+
+  if (state.step === 0) {
+    const items = PROVIDER_TYPES;
+    const maxShow = Math.min(items.length, H - startY - 8);
+    const topIdx = Math.max(0, Math.min(state._selIdx ?? 0, items.length - maxShow));
+    const selIdx = state._selIdx ?? 0;
+
+    for (let i = 0; i < maxShow; i++) {
+      const item = items[i + topIdx];
+      if (!item) break;
+      const sel = (i + topIdx) === selIdx;
+      const bg = sel ? t.paletteSel : '';
+      const nameStyle = sel ? `${ansi.bold}${t.paletteCmd}` : t.paletteCmd;
+      const icon = item.local ? `${t.success}●${R}` : `${t.accent}●${R}`;
+      const namePad = 14;
+      const desc = item.desc || '';
+      const pad = Math.max(0, inner - vis(namePad + desc) - 4);
+      at(y + i, boxL, `${bg}  ${icon} ${nameStyle}${item.name.padEnd(namePad)}${R}${bg}${ansi.dim}${desc}${R}${bg}${' '.repeat(pad)}${R}`);
+    }
+
+    const hint = items.length > maxShow ? `${ansi.dim}  ↑↓ scroll · enter select · esc cancel${R}` : `${ansi.dim}  ↑↓ navigate · enter select · esc cancel${R}`;
+    at(y + maxShow, boxL, hint);
+
+    const visIdx = selIdx - topIdx;
+    if (visIdx >= 0 && visIdx < maxShow) {
+      write(ansi.to(startY + 3 + visIdx, boxL + 2));
+    }
+    return;
+  }
+
+  // Step 1: config fields
+  const fields = [
+    { label: 'API Key',  key: 'apiKey',  masked: false, hint: 'sk-...' },
+    { label: 'Model',    key: 'model',   masked: false, hint: PROVIDER_DEFAULTS[state.providerType]?.model || 'model-name' },
+    { label: 'Base URL', key: 'baseUrl', masked: false, hint: PROVIDER_DEFAULTS[state.providerType]?.baseUrl || 'https://...' },
+  ];
+
+  const isLocal = state.providerType === 'ollama' || state.providerType === 'lmstudio';
+
+  if (isLocal) {
+    const port = state.providerType === 'ollama' ? '11434' : '1234';
+    at(y++, boxL, `  ${ansi.dim}Local provider — no API key needed.${R}`);
+    at(y++, boxL, `  ${ansi.dim}Server should be running at localhost:${port}${R}`);
+    at(y++, boxL, `  ${ansi.dim}Use /models to serve a GGUF file.${R}`);
+    y++;
+    at(y++, boxL, `${t.dimBorder}${'─'.repeat(boxW)}${R}`);
+    y++;
+  } else {
+    at(y++, boxL, `  ${ansi.bold}Enter your credentials:${R}  ${ansi.dim}(tab to move, enter to confirm)${R}`);
+    y++;
+
+    let cursorRow = -1, cursorCol = -1;
+    for (let fi = 0; fi < fields.length; fi++) {
+      const field = fields[fi];
+      const active = state.fieldIdx === fi;
+      const val = state[field.key] || '';
+      const label = ` ${field.label.padEnd(9)}`;
+      const labelW = vis(label);
+      const availW = inner - labelW - 1;
+
+      if (active) {
+        let displayVal = val;
+        // scroll view: if value is too wide, show the tail so cursor stays visible
+        if (vis(displayVal) > availW) displayVal = displayVal.slice(-(availW));
+        const hint = !val ? `${ansi.dim}${field.hint}${R}` : '';
+        const valStyle = t.inputFg;
+        const display = displayVal || hint;
+        const fillW = Math.max(0, availW - vis(display));
+        at(y, boxL, `${t.paletteSel}${label}${valStyle}${display}${R}${t.paletteSel}${' '.repeat(fillW)} ${R}`);
+        cursorRow = y;
+        cursorCol = boxL + labelW + vis(displayVal);
+      } else {
+        let displayVal = val || `${ansi.dim}${field.hint}${R}`;
+        // truncate non-active fields too so they don't overflow
+        if (val && vis(val) > availW) displayVal = val.slice(0, availW - 1) + '…';
+        const pad = Math.max(0, availW - vis(val ? displayVal : field.hint));
+        at(y, boxL, ` ${label}${displayVal}${R}${' '.repeat(pad)}`);
+      }
+      y++;
+    }
+    y++;
+
+    at(y++, boxL, `${t.dimBorder}${'─'.repeat(boxW)}${R}`);
+    const confirmLabel = isLocal ? 'Save & Connect' : 'Save Provider';
+    at(y++, boxL, center(`${ansi.dim}tab next field · enter ${confirmLabel} · esc back${R}`, boxW));
+
+    if (cursorRow >= 0) write(ansi.to(cursorRow, cursorCol));
+    return;
+  }
+
+  at(y++, boxL, `${t.dimBorder}${'─'.repeat(boxW)}${R}`);
+
+  const confirmLabel = isLocal ? 'Save & Connect' : 'Save Provider';
+  const hints = state.step === 0
+    ? `${ansi.dim}enter confirm · esc cancel${R}`
+    : `${ansi.dim}tab next field · enter ${confirmLabel} · esc back${R}`;
+  at(y++, boxL, center(hints, boxW));
+}
+
 // ── Streaming indicator ─────────────────────────────────────────────────────
 const PROGRESS_FRAMES = [
   "[████████░░░░░░░░░░░░░░░░░] thinking... (it's not)",
