@@ -70,6 +70,7 @@ export class AgentRuntime {
     this.workingDir = opts.workingDir || process.cwd();
     this.maxRounds = opts.maxRounds || MAX_ROUNDS_DEFAULT;
     this.onEvent = opts.onEvent || (() => {});
+    this.autoApprove = opts.autoApprove === true || opts.autoApprove === 'all';
     this.session = null;
   }
 
@@ -81,6 +82,8 @@ export class AgentRuntime {
    * @returns {Promise<{answer: string, session: AgentSession, toolCalls: Array}>}
    */
   async run(goal, conversationHistory = []) {
+    if (this.autoApprove) permissionManager.setAutoApprove('all');
+
     // Create session
     this.session = new AgentSession({
       userId: this.userId,

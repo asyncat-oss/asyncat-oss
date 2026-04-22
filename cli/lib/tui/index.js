@@ -85,6 +85,16 @@ export class Tui extends EventEmitter {
     this._captureMode   = false;
     this._captureBuffer = [];
 
+    // Full-control mode: skip all permission prompts
+    this._fullControl = false;
+
+    // Agent run log: full tool call history for /log viewer
+    this._agentLog = [];
+
+    // Message focus & inline expand (Tab nav in chat)
+    this._msgFocus = -1;       // index into this.messages, -1 = input active
+    this._expandedMsgs = new Set(); // set of message indices that are expanded
+
     // Provider setup state
     this._providerSetup  = null;
     this._providerSetupResolve = null;
@@ -211,7 +221,7 @@ export class Tui extends EventEmitter {
   render() {
     if (this._destroyed) return;
     write(ansi.hide);
-    renderStatusBar(this.version, this.streaming ? this._streamMsg : null, this.modelInfo);
+    renderStatusBar(this.version, this.streaming ? this._streamMsg : null, this.modelInfo, this._fullControl);
 
     const isOverlay = this.mode === 'palette' || this.mode === 'selector' || this.mode === 'model-setup' || this.mode === 'result' || this.mode === 'provider-setup';
 
@@ -233,7 +243,7 @@ export class Tui extends EventEmitter {
     const hideInput = this.mode === 'model-setup' || this.mode === 'provider-setup';
     if ((this.mode === 'chat') || (isOverlay && this.messages.length > 0)) {
       const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
-      renderChat(msgs, this.scrollOff, hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs);
+      renderChat(msgs, this.scrollOff, hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs, this._msgFocus, this._expandedMsgs);
     } else {
       renderZen(hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs);
     }
@@ -487,6 +497,16 @@ export class Tui extends EventEmitter {
       return;
     }
 
+    // Ctrl+F — toggle full-control mode (no permission prompts)
+    if (ctrl && name === 'f') {
+      this._fullControl = !this._fullControl;
+      this.print(this._fullControl
+        ? '  Full-control ON — all tool calls auto-approved'
+        : '  Full-control OFF — tool calls require approval');
+      this.render();
+      return;
+    }
+
     // Ctrl+Y — yank (copy) last assistant message to clipboard
     if (ctrl && name === 'y') {
       const lastAi = [...this.messages].reverse().find(m => m.role === 'assistant');
@@ -505,20 +525,28 @@ export class Tui extends EventEmitter {
 
     // ── Result popup mode ────────────────────────────────────────────────
   if (this.mode === 'result') {
+    const _contentH = Math.min(this._resultLines.length, h() - 10);
+    const _maxScroll = Math.max(0, this._resultLines.length - _contentH);
     if (name === 'escape' || str === 'q') {
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
       this.render();
-    } else if (name === 'up') {
+    } else if (name === 'up' || (ctrl && name === 'p')) {
       this._resultScroll = Math.max(0, this._resultScroll - 1);
       this.render();
-    } else if (name === 'down') {
-      this._resultScroll = Math.min(Math.max(0, this._resultLines.length - 1), this._resultScroll + 1);
+    } else if (name === 'down' || (ctrl && name === 'n')) {
+      this._resultScroll = Math.min(_maxScroll, this._resultScroll + 1);
       this.render();
     } else if (name === 'pageup') {
-      this._resultScroll = Math.max(0, this._resultScroll - 10);
+      this._resultScroll = Math.max(0, this._resultScroll - _contentH);
       this.render();
     } else if (name === 'pagedown') {
-      this._resultScroll = Math.min(Math.max(0, this._resultLines.length - 1), this._resultScroll + 10);
+      this._resultScroll = Math.min(_maxScroll, this._resultScroll + _contentH);
+      this.render();
+    } else if (name === 'home') {
+      this._resultScroll = 0;
+      this.render();
+    } else if (name === 'end') {
+      this._resultScroll = _maxScroll;
       this.render();
     }
     return;
@@ -750,6 +778,11 @@ export class Tui extends EventEmitter {
       this.buf = ''; this.pos = 0;
       this.render(); return;
     }
+    // Clear message focus first if active
+    if (this._msgFocus !== -1) {
+      this._msgFocus = -1;
+      this.render(); return;
+    }
     if (this.buf) { this.buf = ''; this.pos = 0; this.render(); return; }
     if (this.mode === 'chat') {
       this.mode = 'zen';
@@ -761,6 +794,19 @@ export class Tui extends EventEmitter {
 
   // ── Enter ────────────────────────────────────────────────────────────
   if (name === 'return') {
+    // If a tool message is focused, toggle expand/collapse
+    if (this._msgFocus !== -1 && !this.buf) {
+      const msg = this.messages[this._msgFocus];
+      if (msg?.role === 'tool') {
+        if (this._expandedMsgs.has(this._msgFocus)) {
+          this._expandedMsgs.delete(this._msgFocus);
+        } else {
+          this._expandedMsgs.add(this._msgFocus);
+        }
+        this.render(); return;
+      }
+    }
+
     if (this.mode === 'palette' && this.paletteItems.length > 0) {
       const chosen = this.paletteItems[this.paletteIdx];
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
@@ -808,6 +854,18 @@ export class Tui extends EventEmitter {
       const chosen = this.paletteItems[this.paletteIdx];
       this.buf = chosen.cmd + ' ';
       this.pos = this.buf.length;
+      this.render(); return;
+    }
+    // In chat with empty input: cycle focus through tool messages (newest → oldest)
+    if ((this.mode === 'chat' || this.mode === 'zen') && !this.buf) {
+      const toolIdxs = this.messages.map((m, i) => m.role === 'tool' ? i : -1).filter(i => i !== -1);
+      if (toolIdxs.length === 0) { this.print('  No tool calls yet.'); return; }
+      const cur = this._msgFocus;
+      const pos = toolIdxs.lastIndexOf(cur);
+      const next = pos <= 0 ? toolIdxs[toolIdxs.length - 1] : toolIdxs[pos - 1];
+      this._msgFocus = next;
+      // Auto-scroll so focused message is visible
+      this.scrollOff = 0;
       this.render(); return;
     }
     return;
@@ -924,6 +982,7 @@ export class Tui extends EventEmitter {
 
   // ── Printable character ──────────────────────────────────────────────
   if (str && str.length === 1 && !ctrl && !meta) {
+    if (this._msgFocus !== -1) this._msgFocus = -1; // typing clears message focus
     this.buf = this.buf.slice(0, this.pos) + str + this.buf.slice(this.pos);
     this.pos++;
 

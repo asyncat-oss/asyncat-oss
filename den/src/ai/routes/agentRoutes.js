@@ -42,6 +42,21 @@ const authenticate = (req, res, next) => {
 };
 
 /**
+ * GET /api/agent/tools
+ * Return all registered tools grouped by category.
+ */
+router.get('/tools', authenticate, async (req, res) => {
+  const { toolRegistry } = await import('../../agent/index.js');
+  const tools = toolRegistry.all().map(t => ({
+    name: t.name,
+    description: t.description,
+    permission: t.permission,
+    category: t.category || 'general',
+  }));
+  res.json({ tools });
+});
+
+/**
  * POST /api/agent/run
  * Run the agent with SSE streaming.
  *
@@ -49,7 +64,7 @@ const authenticate = (req, res, next) => {
  */
 router.post('/run', authenticate, async (req, res) => {
   try {
-    const { goal, conversationHistory = [], workingDir, maxRounds } = req.body;
+    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove } = req.body;
 
     if (!goal || !goal.trim()) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
@@ -82,6 +97,7 @@ router.post('/run', authenticate, async (req, res) => {
       workspaceId: req.workspaceId,
       workingDir: workingDir || process.cwd(),
       maxRounds: maxRounds || 25,
+      autoApprove: autoApprove === true || autoApprove === 'all',
     });
 
     await agent.runStreaming(goal, conversationHistory, res);

@@ -359,36 +359,70 @@ async function startTui() {
         case 'live-logs':
           handleLiveLogs(args, tui);
           break;
+        case 'log':
+        case 'logs': {
+          tui.unlockInput();
+          const log = tui._agentLog;
+          if (!log.length) {
+            tui.printInfo('No tool calls yet this session.');
+            return;
+          }
+          const lines = [];
+          for (const entry of log) {
+            const icon = entry.success === false ? '✘' : entry.success === true ? '✔' : '…';
+            const ts = entry.ts ? entry.ts.slice(11, 19) : '';
+            lines.push(`${icon}  ${entry.tool}  ${ts}${entry.round != null ? `  round ${entry.round}` : ''}`);
+            if (Object.keys(entry.args || {}).length) {
+              lines.push(`   args: ${JSON.stringify(entry.args).slice(0, 120)}`);
+            }
+            lines.push('');
+            const outLines = (entry.output || '').split('\n');
+            for (const l of outLines) lines.push(`   ${l}`);
+            lines.push('');
+            lines.push('─'.repeat(52));
+            lines.push('');
+          }
+          tui.showResult(`Tool Log  (${log.length} calls)`, lines);
+          return;
+        }
 case 'tools': {
           tui.unlockInput();
-          tui.showResult('Agent Tools', [
-            'Functions the LLM can call directly during a task:',
-            '',
-            '  read_file          Read any file from disk',
-            '  write_file         Write or overwrite a file',
-            '  edit_file          Patch specific lines in a file',
-            '  delete_file        Delete files or directories',
-            '  list_dir           List directory contents',
-            '  grep_search        Regex/literal search across files',
-            '  run_command        Execute any shell command',
-            '  run_python         Run Python code in a temp sandbox',
-            '  run_node           Run JavaScript code in a temp file',
-            '  web_search         Search the web (DuckDuckGo/SearXNG)',
-            '  fetch_url          Read any webpage (reader mode)',
-            '  http_request       Full HTTP client — POST/PUT/DELETE + headers',
-            '  sys_info           CPU, RAM, disk, uptime, OS info',
-            '  ps_list            Running processes — sort by CPU/mem',
-            '  env_get            Read environment variables (secrets masked)',
-            '  clipboard_read     Read clipboard contents',
-            '  clipboard_write    Write text to clipboard',
-            '  store_memory       Persist facts/preferences across sessions',
-            '  recall_memory      Search stored memories by query',
-            '  delegate_task      Spawn a specialized sub-agent',
-            '  mcp_call           Invoke external MCP tool servers',
-            '',
-            'Note: These are used automatically — you don\'t invoke them.',
-            'Use /skills to browse the 45 task-template brain skills instead.',
-          ]);
+          try {
+            const token = await getToken();
+            const base = getBase();
+            const data = await fetch(`${base}/api/agent/tools`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }).then(r => r.json());
+
+            const tools = data.tools || [];
+            const byCategory = {};
+            for (const t of tools) {
+              const cat = t.category || 'general';
+              if (!byCategory[cat]) byCategory[cat] = [];
+              byCategory[cat].push(t);
+            }
+
+            const permIcon = p => p === 'safe' ? '●' : p === 'moderate' ? '◐' : '○';
+            const lines = [
+              `${tools.length} tools registered  (● safe  ◐ moderate  ○ dangerous)`,
+              '',
+            ];
+            for (const [cat, catTools] of Object.entries(byCategory).sort()) {
+              lines.push(`── ${cat} ${'─'.repeat(Math.max(0, 44 - cat.length))}`);
+              for (const t of catTools.sort((a, b) => a.name.localeCompare(b.name))) {
+                const icon = permIcon(t.permission);
+                const name = t.name.padEnd(26);
+                const desc = (t.description || '').slice(0, 50);
+                lines.push(`  ${icon}  ${name} ${desc}`);
+              }
+              lines.push('');
+            }
+            lines.push('Tools are called automatically by the agent during tasks.');
+            lines.push('Use /skills to browse task-template brain skills instead.');
+            tui.showResult(`Agent Tools  (${tools.length})`, lines);
+          } catch (e) {
+            tui.printErr(`Could not load tools: ${e.message}`);
+          }
           return;
         }
 
@@ -402,7 +436,7 @@ case 'tools': {
           }
           const skillItems = allSkills.map(s => ({
             name: s.name,
-            desc: `${(s.brain_region || 'unknown').padEnd(16)} ${(s.description || '').slice(0, 38)}`,
+            desc: `[${(s.brain_region || '?').slice(0, 11)}]  ${(s.description || '').slice(0, 58)}`,
             _skill: s,
           }));
           const chosenSkill = await tui.showSelector('Skills  (Cerebellum)', skillItems);
@@ -734,38 +768,62 @@ case 'tools': {
 
         case 'help':
         case '?':
-          tui.showResult('asyncat help', [
-            'Just type          Send to AI (auto-agent mode)',
-            '/                  Browse all commands (palette)',
-            'esc                Back / Clear input / Exit',
+          tui.showResult('asyncat  —  help', [
+            '── Basics ───────────────────────────────────────────────',
+            '  Type anything       Send goal to AI agent',
+            '  /                   Open command palette (browse all)',
+            '  esc                 Clear focus → clear input → back → exit',
             '',
-            '  Prefrontal         Planning, code review, decisions',
-            '  Cerebellum         45 bundled skills (muscle memory)',
-            '  Hippocampus       Memory (semantic + episodic)',
-            '  Amygdala          Safety, permissions, errors',
-            '  Basal Ganglia     Auto-learns from your patterns',
+            '── Keyboard shortcuts ───────────────────────────────────',
+            '  Ctrl+P              Open command palette',
+            '  Ctrl+F              Toggle full-control mode (no permission prompts)',
+            '  Ctrl+Y              Copy last AI response to clipboard',
+            '  Ctrl+M              Toggle mouse tracking (off = drag-to-select)',
+            '  Ctrl+L              Refresh / redraw screen',
+            '  Ctrl+U              Delete to start of line',
+            '  Ctrl+K              Delete to end of line',
             '',
-            '  ↑ / ↓              Scroll prompt history',
-            '  PgUp / PgDn        Scroll messages',
-            '  Mouse wheel        Scroll',
+            '── Scrolling ────────────────────────────────────────────',
+            '  PgUp / PgDn         Scroll messages up / down',
+            '  ↑ / ↓               Command history (when input not empty)',
+            '  Mouse wheel         Scroll messages',
             '',
-            '  Ctrl+Y             Copy last AI response',
-            '  Ctrl+M             Toggle mouse (drag to select)',
+            '── Tool call log (inline) ───────────────────────────────',
+            '  Tab                 Focus tool calls — cycle newest → oldest',
+            '  Enter               Expand / collapse focused tool call inline',
+            '  Esc                 Return focus to input',
+            '  /log                Open full scrollable tool call log overlay',
             '',
-            '  Ctrl+U             Delete to start of line',
-            '  Ctrl+K             Delete to end of line',
-            '  Ctrl+L             Refresh screen',
-            '  Ctrl+P             Open command palette',
+            '── Commands ─────────────────────────────────────────────',
+            '  /skills             Browse all brain skills (searchable)',
+            '  /tools              All registered tools grouped by category (live count)',
+            '  /log                Full tool call log — output, errors, args',
+            '  /memory             Search agent memories',
+            '  /models             Switch or pull AI models',
+            '  /provider           Configure AI provider',
+            '  /sessions           Browse & reload past conversations',
+            '  /cron               Schedule recurring tasks',
+            '  /mcp                Manage MCP servers',
+            '  /git                Git status, branches, commits',
+            '  /status             Running services status',
+            '  /live-logs          Toggle live log sidebar',
+            '  /theme              Switch color theme',
+            '  /open               Open web UI (localhost:8717)',
+            '  /new                Start fresh session',
+            '  /help               Show this',
             '',
-            '  /skills      Browse 45 brain skills',
-            '  /tools      List agent tools',
-            '  /memory     Search agent memories',
-            '  /models     Select AI model',
-            '  /provider   Configure AI provider',
-            '  /theme      Switch color theme',
-            '  /open       Open web UI (localhost:8717)',
-            '  /new        Start fresh session',
-            '  /help       Show this',
+            '── Full-control mode ─────────────────────────────────────',
+            '  Ctrl+F to toggle. When ON (⚡ shown in status bar):',
+            '  · All tool calls auto-approved — no permission prompts',
+            '  · Agent can run shell commands, write files, etc. freely',
+            '  · Resets when you restart the CLI',
+            '',
+            '── Brain regions ─────────────────────────────────────────',
+            '  prefrontal          Planning, code review, decisions',
+            '  cerebellum          45 bundled skills (muscle memory)',
+            '  hippocampus         Memory — semantic + episodic',
+            '  amygdala            Safety, permissions, error handling',
+            '  basal-ganglia       Auto-learns patterns from your usage',
           ]);
           break;
         case 'clear':
@@ -876,7 +934,7 @@ case 'tools': {
           conversationHistory: history,
           workingDir: process.cwd(),
           maxRounds: 25,
-          autoApprove: false,
+          autoApprove: tui._fullControl,
         }),
       });
 
@@ -971,8 +1029,17 @@ function handleAgentEvent(tui, event, token, base) {
       const raw = isErr
         ? (data.result?.error || data.result?.content || data.result?.message || 'Unknown error')
         : (data.result?.content || data.result?.message || '');
-      const preview = typeof raw === 'string' ? raw : JSON.stringify(raw);
-      tui.addMessage('tool', preview, { tool: data.tool || 'tool', success: data.result?.success });
+      const fullText = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+      tui.addMessage('tool', fullText, { tool: data.tool || 'tool', success: data.result?.success });
+      // Store full entry in run log for /log viewer
+      tui._agentLog.push({
+        tool: data.tool || 'tool',
+        args: data.args || {},
+        success: data.result?.success,
+        output: fullText,
+        round: data.round,
+        ts: new Date().toISOString(),
+      });
       break;
     }
     case 'done':

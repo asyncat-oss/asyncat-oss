@@ -125,7 +125,7 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
 }
 
 // ── Chat View (messages + centered input at bottom) ─────────────────────────
-export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInfo, providerInfo, logs = []) {
+export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInfo, providerInfo, logs = [], focusIdx = -1, expandedMsgs = new Set()) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -167,8 +167,13 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
 
   // ── Render messages ────────────────────────────────────────────────────
   const allLines = [];
-  for (const msg of messages) {
-    allLines.push(...formatMessage(msg, mainW - 6, t));
+  for (let i = 0; i < messages.length; i++) {
+    allLines.push(...formatMessage(messages[i], mainW - 6, t, focusIdx === i, expandedMsgs.has(i)));
+  }
+  // Footer hint when a tool message is focused
+  if (focusIdx !== -1 && messages[focusIdx]?.role === 'tool') {
+    const isExpanded = expandedMsgs.has(focusIdx);
+    allLines.push(`${ansi.dim}  ↵ ${isExpanded ? 'collapse' : 'expand'}  ·  tab next  ·  esc clear${ansi.reset}`);
   }
 
   const totalLines = allLines.length;
@@ -226,7 +231,7 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
 }
 
 // ── Message formatting ──────────────────────────────────────────────────────
-function formatMessage(msg, maxW, t) {
+function formatMessage(msg, maxW, t, focused = false, expanded = false) {
   const R = ansi.reset;
   const lines = [];
 
@@ -244,12 +249,14 @@ function formatMessage(msg, maxW, t) {
     const icon = msg.success === true ? `${t.success}✔${R}`
                : msg.success === false ? `${t.error}✘${R}`
                : `${ansi.dim}…${R}`;
-    lines.push(`${ansi.dim}  ╭─ ${R}${t.paletteCmd}${msg.tool || 'tool'}${R} ${icon}`);
+    const gutter = focused ? `${t.accent}▶${R}` : `${ansi.dim} ${R}`;
+    const headerBg = focused ? t.accent : ansi.dim;
+    lines.push(`${gutter} ${headerBg}╭─ ${R}${t.paletteCmd}${msg.tool || 'tool'}${R} ${icon}${focused ? `  ${ansi.dim}[tab·↵]${R}` : ''}`);
     if (msg.content) {
-      const limit = msg.success === false ? 8 : 3;
-      const allLines = msg.content.split('\n');
+      const allLines = msg.content.split('\n').filter(l => l.trim());
+      const limit = expanded ? allLines.length : (msg.success === false ? 8 : 3);
       for (const l of allLines.slice(0, limit)) lines.push(`${ansi.dim}  │${R}  ${ansi.dim}${l.slice(0, maxW - 6)}${R}`);
-      if (allLines.length > limit) lines.push(`${ansi.dim}  │  … (${allLines.length - limit} more lines)${R}`);
+      if (!expanded && allLines.length > limit) lines.push(`${ansi.dim}  │  … ${allLines.length - limit} more lines${R}`);
     }
     lines.push(`${ansi.dim}  ╰─${R}`);
   } else if (msg.role === 'thinking') {
@@ -330,6 +337,7 @@ export const PALETTE_CMDS = [
   { cmd: '/context',  desc: 'Show workspace context',           group: '📝 Dev' },
   { cmd: '/snippets', desc: 'Save and reuse code',              group: '📝 Dev' },
   { cmd: '/status',   desc: 'Running services',                 group: '🛠 Services' },
+  { cmd: '/log',      desc: 'Tool call log — full output & errors', group: '🛠 Services' },
   { cmd: '/logs',     desc: 'View service logs',                group: '🛠 Services' },
   { cmd: '/doctor',   desc: 'System health check',               group: '🛠 Services' },
   { cmd: '/theme',    desc: 'Switch color theme',                group: '⚙️ Settings' },
@@ -339,7 +347,7 @@ export const PALETTE_CMDS = [
   { cmd: '/stash',    desc: 'Save or view notes',             group: '🧹 Tools' },
   { cmd: '/live-logs',desc: 'Toggle streaming logs',          group: '🧹 Tools' },
   { cmd: '/clear',    desc: 'Clear screen',                   group: '❓ Help' },
-  { cmd: '/help',     desc: 'Command reference',            group: '❓ Help' },
+  { cmd: '/help',     desc: 'Full command & shortcut reference', group: '❓ Help' },
   { cmd: '/exit',     desc: 'Exit asyncat',                 group: '❓ Help' },
 ];
 
@@ -419,7 +427,7 @@ export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
   const R = ansi.reset;
 
   const panelBg = ansi.bgRgb(18, 18, 24);
-  const panelW = Math.min(Math.floor(W * 0.5), 62);
+  const panelW = Math.min(Math.floor(W * 0.78), 96);
   const panelL = Math.floor((W - panelW) / 2) + 1;
 
   // Filter items by search query
@@ -466,7 +474,7 @@ export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
     }
   }
 
-  at(panelTop + 3 + maxShow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  ·  enter confirm  ·  esc cancel${R}`);
+  at(panelTop + 3 + maxShow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  ·  enter select / view details  ·  esc cancel${R}`);
 
   // Cursor in search input
   write(ansi.to(panelTop + 1, panelL + cursorPos));
@@ -545,7 +553,7 @@ export function setServiceStatus(backend, frontend) {
   _statusCache = { backend, frontend, ts: Date.now() };
 }
 
-export function renderStatusBar(version, streamingMsg, modelInfo) {
+export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = false) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -584,8 +592,9 @@ export function renderStatusBar(version, streamingMsg, modelInfo) {
     ? `${t.success}●${R}${ansi.dim} web :8717${R}`
     : `${ansi.dim}○ web${R}`;
 
+  const fcIndicator = fullControl ? `${t.error}⚡ full-control${R}  ` : '';
   const left = ` ${loc}`;
-  const mid = `${be}  ${fe}`;
+  const mid = `${fcIndicator}${be}  ${fe}`;
   const right = `${version || 'unknown'} `;
 
   const leftVis = vis(left);
@@ -615,8 +624,21 @@ export function renderResult(title, lines, scrollOff = 0) {
     at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
   }
 
-  const escPad = Math.max(0, panelW - vis(title) - 3);
-  at(panelTop,     panelL, `${panelBg}${ansi.bold}${title}${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
+  const maxScroll = Math.max(0, lines.length - contentH);
+  const pct = maxScroll > 0 ? ` ${Math.round((scrollOff / maxScroll) * 100)}%` : '';
+  const titleRight = `${ansi.dim}${pct}  esc${R}`;
+  const escPad = Math.max(0, panelW - vis(title) - vis(pct) - 5);
+  at(panelTop, panelL, `${panelBg}${ansi.bold}${title}${R}${panelBg}${' '.repeat(escPad)}${titleRight}`);
+
+  // Scrollbar gutter (right edge)
+  if (maxScroll > 0) {
+    const barH = Math.max(1, Math.round((contentH / lines.length) * contentH));
+    const barTop = Math.round((scrollOff / maxScroll) * (contentH - barH));
+    for (let i = 0; i < contentH; i++) {
+      const barChar = (i >= barTop && i < barTop + barH) ? `${t.accent}▐${R}` : `${ansi.dim}│${R}`;
+      at(panelTop + 2 + i, panelL + panelW, `${panelBg}${barChar}`);
+    }
+  }
 
   const visLines = lines.slice(scrollOff, scrollOff + contentH);
   for (let i = 0; i < contentH; i++) {
@@ -625,7 +647,10 @@ export function renderResult(title, lines, scrollOff = 0) {
     at(panelTop + 2 + i, panelL, `${panelBg}  ${line}${' '.repeat(pad)}${R}`);
   }
 
-  at(panelTop + 2 + contentH, panelL, `${panelBg}${ansi.dim}  ↑↓ scroll  ·  esc close${R}`);
+  const hint = maxScroll > 0
+    ? `  ↑↓ / PgUp·PgDn scroll  ·  Home/End  ·  esc close`
+    : `  esc close`;
+  at(panelTop + 2 + contentH, panelL, `${panelBg}${ansi.dim}${hint}${R}`);
 }
 
 // ── Models Page — 3-tab floating panel (Downloaded / Recommended / Search) ───
