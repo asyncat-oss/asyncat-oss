@@ -4,7 +4,6 @@ import { ROOT } from '../lib/env.js';
 import { err, info, warn, col } from '../lib/colors.js';
 import { startProc } from '../lib/procs.js';
 import { run as runOnboard } from './onboard.js';
-import { ensureNativeRuntimeDeps } from './install.js';
 
 function isFirstRun() {
   const home = process.env.ASYNCAT_HOME || path.join(process.env.HOME || process.env.USERPROFILE, '.asyncat');
@@ -24,8 +23,6 @@ export async function run(args = []) {
   if (!fs.existsSync(path.join(ROOT, 'den/node_modules'))) {
     err(`Dependencies missing — run ${col('cyan', 'install')} first.`); return;
   }
-
-  ensureNativeRuntimeDeps();
 
   const backendOnly  = args.includes('--backend-only')  || args.includes('-b');
   const frontendOnly = args.includes('--frontend-only') || args.includes('-f');

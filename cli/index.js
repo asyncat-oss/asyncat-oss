@@ -198,12 +198,42 @@ async function autoStartServices() {
 
 // ── TUI Mode (default — interactive) ────────────────────────────────────────
 async function startTui() {
-  // Create TUI first so alternate screen captures service output
+  // Print startup progress BEFORE TUI starts (so messages aren't cleared by alternate screen)
+  console.log('\x1b[36m[asyncat]\x1b[0m Starting up...');
+
+  // Step 1: Check if backend is already running
+  let backendUp = false;
+  try {
+    console.log('\x1b[36m[asyncat]\x1b[0m Checking backend health...');
+    const res = await fetch('http://localhost:8716/api/health', {
+      signal: AbortSignal.timeout(1000),
+    });
+    backendUp = res.ok;
+  } catch {
+    console.log('\x1b[33m[asyncat]\x1b[0m Backend not running, will start it...');
+  }
+  if (backendUp) console.log('\x1b[32m[asyncat]\x1b[0m Backend is already running');
+
+  // Step 2: Start services (or skip if already running)
+  console.log('\x1b[36m[asyncat]\x1b[0m Starting services...');
+  await autoStartServices();
+  console.log('\x1b[32m[asyncat]\x1b[0m Services started');
+
+  // Step 3: Wait a bit for services to be ready
+  console.log('\x1b[36m[asyncat]\x1b[0m Waiting for services to be ready...');
+  await new Promise(r => setTimeout(r, 1500));
+
+  // Step 4: Detect model
+  console.log('\x1b[36m[asyncat]\x1b[0m Detecting model...');
+  const { model, provider } = await detectModel();
+
+  // Now create and start TUI
   const tui = new Tui({
     modelInfo: '',
     providerInfo: '',
     version: getVersion(),
   });
+  tui.setModel(model, provider);
   tui.start();
 
   // Wire events immediately so Ctrl+C and other keys work during startup.
@@ -217,21 +247,7 @@ async function startTui() {
     process.exit(0);
   });
 
-  // Suppress console output during auto-start
-  const origWrite = process.stdout.write.bind(process.stdout);
-  const origConsoleLog = console.log;
-  process.stdout.write = (s) => { /* swallow during startup */ return true; };
-  console.log = () => {};
-
-  await autoStartServices();
-
-  // Restore and re-render
-  process.stdout.write = origWrite;
-  console.log = origConsoleLog;
-
-  // Detect model after backend is up
-  const { model, provider } = await detectModel();
-  tui.setModel(model, provider);
+  console.log('\x1b[32m[asyncat]\x1b[0m Ready! Starting TUI...\n');
 
   // ── Helper: run a command in normal terminal, then return to TUI ───────
   function runInShell(fn) {

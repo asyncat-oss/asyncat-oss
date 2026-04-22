@@ -191,15 +191,19 @@ export function ensureNativeRuntimeDeps() {
 					cwd: ROOT,
 					stdio: "ignore",
 					shell: true,
+					timeout: 30000, // 30 second timeout - fail fast
 				});
 			} else {
-				execFileSync(NPM_CMD, args, { cwd: ROOT, stdio: "ignore" });
+				execFileSync(NPM_CMD, args, { cwd: ROOT, stdio: "ignore", timeout: 30000 });
 			}
 			ok(`${install.label} installed`);
 		} catch (e) {
-			warn(
-				`Could not install ${install.label} (${e.code || e.message}). If startup fails, rerun ${col("dim", install.cmd)} from the repo root.`,
-			);
+			// Don't block startup - native runtimes are optional
+			if (e.code === 'ETIMEDOUT' || e.message?.includes('timeout')) {
+				info(`${install.label} install timed out (skipping - it's optional)`);
+			} else {
+				info(`${install.label} not available (skipping - it's optional)`);
+			}
 		}
 	}
 }
