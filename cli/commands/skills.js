@@ -8,7 +8,7 @@ function getSkillsDir() {
   if (fs.existsSync(fromCwd)) return fromCwd;
   const fromParent = path.join(cwd, '..', 'cli', 'skills');
   if (fs.existsSync(fromParent)) return fromParent;
-  return path.join(__dirname, '..', 'cli', 'skills');
+  return path.join(import.meta.dirname, '..', 'cli', 'skills');
 }
 
 const SKILLS_DIR = getSkillsDir();
