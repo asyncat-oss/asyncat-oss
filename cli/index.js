@@ -206,6 +206,17 @@ async function startTui() {
   });
   tui.start();
 
+  // Wire events immediately so Ctrl+C and other keys work during startup.
+  // Function declarations below are hoisted, so these closures are safe.
+  tui.on('command', (cmd, args) => dispatch(cmd, args));
+  tui.on('input', (text) => handleAiInput(text));
+  tui.on('exit', () => {
+    tui.destroy();
+    stopAll();
+    console.log('  bye ♡');
+    process.exit(0);
+  });
+
   // Suppress console output during auto-start
   const origWrite = process.stdout.write.bind(process.stdout);
   const origConsoleLog = console.log;
@@ -931,17 +942,6 @@ case 'tools': {
     tui.unlockInput();
   }
 
-  // ── Event wiring ──────────────────────────────────────────────────────
-  tui.on('command', (cmd, args) => dispatch(cmd, args));
-  tui.on('input', (text) => handleAiInput(text));
-  tui.on('exit', () => {
-    tui.destroy();
-    stopAll();
-    console.log('  bye ♡');
-    process.exit(0);
-  });
-
-  tui.start();
 }
 
 // ── Agent event handler ─────────────────────────────────────────────────────
