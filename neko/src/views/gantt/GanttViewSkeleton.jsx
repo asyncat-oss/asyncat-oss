@@ -1,4 +1,4 @@
-import React from "react";
+
 
 const GanttViewSkeleton = () => {
 	// Create skeleton rows for the Gantt chart

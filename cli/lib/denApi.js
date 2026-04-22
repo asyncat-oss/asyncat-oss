@@ -123,7 +123,13 @@ export async function streamPost(path, body, onEvent) {
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const raw = line.slice(6).trim();
-      try { await onEvent(JSON.parse(raw)); } catch (_) {}
+      let event;
+      try {
+        event = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      await onEvent(event);
     }
   }
 }

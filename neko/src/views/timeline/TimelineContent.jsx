@@ -1,4 +1,4 @@
-import React from "react";
+
 import { Calendar } from "lucide-react";
 import TimelineCard from "./TimelineCard";
 import { calculateTaskPosition, formatDate } from "./timelineUtils";

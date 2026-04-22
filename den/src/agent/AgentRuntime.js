@@ -15,31 +15,9 @@ import { toolRegistry } from './tools/toolRegistry.js';
 import { permissionManager, PermissionManager } from './PermissionManager.js';
 import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt } from './prompts/agentSystemPrompt.js';
-import path from 'path';
-import fs from 'fs';
 import { basalGanglia } from './BasalGanglia.js';
 import db from '../db/client.js';
-
-// ── Inline Skills Helper (Cerebellum) ─────────────────────────────────────────────
-function getRelevantSkillsForGoal(goal) {
-  if (!goal || !fs.existsSync) return [];
-  try {
-    const skillsDir = path.resolve(process.cwd(), 'cli', 'skills');
-    if (!fs.existsSync(skillsDir)) return [];
-    const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'));
-    const q = goal.toLowerCase();
-    return files.map(f => {
-      const content = fs.readFileSync(path.join(skillsDir, f), 'utf8');
-      const name = f.replace('.md', '');
-      const desc = content.match(/description:\s*(.+)/)?.[1] || '';
-      const body = content.split('---')[2] || '';
-      return { name, description: desc, body: body.slice(0, 150) };
-    }).filter(s => {
-      const haystack = `${s.name} ${s.description} ${s.body}`.toLowerCase();
-      return haystack.includes(q);
-    }).slice(0, 3);
-  } catch { return []; }
-}
+import { findRelevantSkills } from './skills.js';
 
 const MAX_ROUNDS_DEFAULT = 25;
 
@@ -71,6 +49,8 @@ export class AgentRuntime {
     this.maxRounds = opts.maxRounds || MAX_ROUNDS_DEFAULT;
     this.onEvent = opts.onEvent || (() => {});
     this.autoApprove = opts.autoApprove === true || opts.autoApprove === 'all';
+    this.requestPermission = opts.requestPermission || null;
+    this.sessionApprovedTools = new Set();
     this.session = null;
   }
 
@@ -82,8 +62,6 @@ export class AgentRuntime {
    * @returns {Promise<{answer: string, session: AgentSession, toolCalls: Array}>}
    */
   async run(goal, conversationHistory = []) {
-    if (this.autoApprove) permissionManager.setAutoApprove('all');
-
     // Create session
     this.session = new AgentSession({
       userId: this.userId,
@@ -91,6 +69,7 @@ export class AgentRuntime {
       goal,
       workingDir: this.workingDir,
     });
+    this.session.save();
 
     // Load relevant memories
     const memories = this._loadMemories(goal);
@@ -102,7 +81,7 @@ export class AgentRuntime {
     );
 
     // Get relevant skills based on the goal (Cerebellum)
-    const relevantSkills = getRelevantSkillsForGoal(goal);
+    const relevantSkills = findRelevantSkills(goal);
 
     const systemPrompt = buildAgentSystemPrompt({
       goal,
@@ -130,6 +109,7 @@ export class AgentRuntime {
 
     // ── ReAct Loop ──────────────────────────────────────────────────────────
     let answer = null;
+    let formatRepairAttempts = 0;
 
     for (let round = 0; round < this.maxRounds; round++) {
       this.session.nextRound();
@@ -171,6 +151,26 @@ export class AgentRuntime {
 
       // If no tool calls and no explicit answer, treat entire response as answer
       if (toolCalls.length === 0) {
+        if (this._looksLikeUnfinishedAction(responseText) && formatRepairAttempts < 2) {
+          formatRepairAttempts++;
+          messages.push({
+            role: 'user',
+            content: [
+              'You said you need to use a tool, but you did not emit a valid tool call.',
+              'Reply with exactly one machine-readable tool call block and no extra prose.',
+              '',
+              '<tool_call>',
+              '{"name": "create_directory", "arguments": {"path": "folder-name"}}',
+              '</tool_call>',
+            ].join('\n'),
+          });
+          this.onEvent({
+            type: 'thinking',
+            data: { thought: 'The model did not output a valid tool call. Asking for the required tool_call format.', round },
+          });
+          continue;
+        }
+
         if (!answer) {
           answer = responseText
             .replace(/(?:\*\*)?Thought:(?:\*\*)?[\s\S]*?(?=(?:\*\*)?(?:Action|Answer):(?:\*\*)?|<tool_call>|<think>|$)/i, '')
@@ -187,29 +187,83 @@ export class AgentRuntime {
       for (const tc of toolCalls) {
         const permission = toolRegistry.getPermission(tc.tool_name);
         const actionDesc = PermissionManager.describeAction(tc.tool_name, tc.arguments);
-        this.onEvent({ type: 'tool_start', data: { tool: tc.tool_name, args: tc.arguments, permission, description: actionDesc, round } });
-        const permResult = await permissionManager.check(tc.tool_name, tc.arguments, permission);
+        const permissionStartedAt = new Date().toISOString();
+        const permResult = await this._checkPermission({
+          toolCall: tc,
+          permission,
+          actionDesc,
+          round,
+        });
+
         if (!permResult.allowed) {
           const deniedResult = { success: false, error: `Permission denied: ${permResult.reason}` };
-          this.session.recordToolCall(tc.tool_name, tc.arguments, deniedResult);
+          this.onEvent({
+            type: 'tool_start',
+            data: {
+              tool: tc.tool_name,
+              args: tc.arguments,
+              permission,
+              permissionDecision: permResult.decision || 'denied',
+              permissionReason: permResult.reason || 'Denied',
+              workingDir: this.workingDir,
+              description: actionDesc,
+              round,
+            }
+          });
+          this.session.recordToolCall(tc.tool_name, tc.arguments, deniedResult, {
+            permissionLevel: permission,
+            permissionDecision: permResult.decision || 'denied',
+            permissionReason: permResult.reason || 'Denied',
+            workingDir: this.workingDir,
+            startedAt: permissionStartedAt,
+          });
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: deniedResult, round } });
-          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, deniedResult) });
+          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, this._compactToolResultForContext(tc.tool_name, deniedResult)) });
         } else {
-          permitted.push(tc);
+          this.onEvent({
+            type: 'tool_start',
+            data: {
+              tool: tc.tool_name,
+              args: tc.arguments,
+              permission,
+              permissionDecision: permResult.decision || 'allowed',
+              permissionReason: permResult.reason || null,
+              workingDir: this.workingDir,
+              description: actionDesc,
+              round,
+            }
+          });
+          permitted.push({
+            toolCall: tc,
+            permission,
+            permissionDecision: permResult.decision || 'allowed',
+            permissionReason: permResult.reason || null,
+            startedAt: new Date().toISOString(),
+          });
         }
       }
 
       // Execute permitted tools in parallel — safe tools gain the most from this
       if (permitted.length > 0) {
         const execResults = await Promise.all(
-          permitted.map(tc => toolRegistry.execute(tc.tool_name, tc.arguments, toolContext))
+          permitted.map(({ toolCall }) =>
+            toolRegistry.execute(toolCall.tool_name, toolCall.arguments, toolContext)
+              .catch(err => ({ success: false, error: err.message || String(err) }))
+          )
         );
         for (let i = 0; i < permitted.length; i++) {
-          const tc = permitted[i];
+          const item = permitted[i];
+          const tc = item.toolCall;
           const result = execResults[i];
-          this.session.recordToolCall(tc.tool_name, tc.arguments, result);
+          this.session.recordToolCall(tc.tool_name, tc.arguments, result, {
+            permissionLevel: item.permission,
+            permissionDecision: item.permissionDecision,
+            permissionReason: item.permissionReason,
+            workingDir: this.workingDir,
+            startedAt: item.startedAt,
+          });
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result, round } });
-          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, result) });
+          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, this._compactToolResultForContext(tc.tool_name, result)) });
         }
       }
 
@@ -255,6 +309,49 @@ export class AgentRuntime {
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
+
+  async _checkPermission({ toolCall, permission, actionDesc, round }) {
+    if (permission === 'safe') {
+      return { allowed: true, decision: 'auto_safe' };
+    }
+
+    if (this.autoApprove) {
+      return { allowed: true, decision: 'auto_approved' };
+    }
+
+    if (this.sessionApprovedTools.has(toolCall.tool_name)) {
+      return { allowed: true, decision: 'session_approved' };
+    }
+
+    if (this.requestPermission) {
+      const request = {
+        sessionId: this.session?.id,
+        tool: toolCall.tool_name,
+        args: toolCall.arguments,
+        permission,
+        description: actionDesc,
+        round,
+        workingDir: this.workingDir,
+      };
+
+      const decision = await this.requestPermission(request);
+      const allowed = decision?.decision === 'allow' || decision?.decision === 'allow_session';
+      if (decision?.decision === 'allow_session') {
+        this.sessionApprovedTools.add(toolCall.tool_name);
+      }
+      return {
+        allowed,
+        decision: allowed ? decision.decision : 'denied',
+        reason: decision?.reason || (allowed ? null : 'User denied permission'),
+      };
+    }
+
+    const result = await permissionManager.check(toolCall.tool_name, toolCall.arguments, permission);
+    return {
+      ...result,
+      decision: result.allowed ? `auto_${permission}` : 'denied',
+    };
+  }
 
   async _callLLM(systemPrompt, messages) {
     const useNativeTools = !this.isLocal;
@@ -333,6 +430,28 @@ export class AgentRuntime {
     if (answerMatch) finalAnswer = answerMatch[1].trim();
 
     return { thinking, finalAnswer };
+  }
+
+  _looksLikeUnfinishedAction(text) {
+    if (!text || /(?:\*\*)?Answer:(?:\*\*)?/i.test(text)) return false;
+    return (
+      /(?:\*\*)?Action:(?:\*\*)?/i.test(text) ||
+      /\b(i'?ll|i will|going to|need to|should)\s+(use|run|execute|create|make)\b/i.test(text) ||
+      /\b(mkdir|run_command|write_file|create_directory|tool_call)\b/i.test(text)
+    );
+  }
+
+  _compactToolResultForContext(toolName, result) {
+    if (!result || typeof result !== 'object') return result;
+    const maxString = toolName === 'list_directory' ? 1800 : 3000;
+    const compact = Array.isArray(result) ? [...result] : { ...result };
+    for (const [key, value] of Object.entries(compact)) {
+      if (typeof value === 'string' && value.length > maxString) {
+        compact[key] = `${value.slice(0, maxString)}\n... [truncated for model context: ${value.length - maxString} more chars]`;
+        compact.truncated_for_context = true;
+      }
+    }
+    return compact;
   }
 
   _loadMemories(goal) {

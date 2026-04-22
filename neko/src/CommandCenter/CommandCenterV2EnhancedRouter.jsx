@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { useCommandCenter } from './CommandCenterContextEnhanced';
 import CommandCenterV2EnhancedOriginal from "./CommandCenterV2Enhanced.jsx";

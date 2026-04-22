@@ -98,6 +98,33 @@ export const writeFileTool = {
   },
 };
 
+export const createDirectoryTool = {
+  name: 'create_directory',
+  description: 'Create a directory and any missing parent directories inside the working directory. Use this instead of shell mkdir for folder creation.',
+  category: 'file',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Directory path relative to working directory' },
+    },
+    required: ['path'],
+  },
+  execute: async (args, context) => {
+    const dirPath = safePath(args.path, context.workingDir);
+    const existed = fs.existsSync(dirPath);
+    if (existed && !fs.statSync(dirPath).isDirectory()) {
+      return { success: false, error: `"${args.path}" exists and is not a directory.` };
+    }
+    fs.mkdirSync(dirPath, { recursive: true });
+    return {
+      success: true,
+      path: args.path,
+      action: existed ? 'already_exists' : 'created',
+    };
+  },
+};
+
 export const editFileTool = {
   name: 'edit_file',
   description: 'Replace specific content in a file. Provide the exact text to find and its replacement. Use read_file first to see the current content.',
@@ -193,6 +220,7 @@ export const listDirectoryTool = {
     properties: {
       path: { type: 'string', description: 'Directory path relative to working directory (default: ".")' },
       recursive: { type: 'boolean', description: 'List recursively (default: false, max depth 3)' },
+      max_entries: { type: 'number', description: 'Maximum entries to return (default: 80, max 120)' },
     },
     required: [],
   },
@@ -206,7 +234,7 @@ export const listDirectoryTool = {
     }
 
     const entries = [];
-    const maxEntries = 200;
+    const maxEntries = Math.min(Math.max(Number(args.max_entries || 80), 1), 120);
 
     function listDir(dir, depth = 0) {
       if (entries.length >= maxEntries) return;
@@ -242,7 +270,8 @@ export const listDirectoryTool = {
       path: args.path || '.',
       count: entries.length,
       truncated: entries.length >= maxEntries,
-      listing: display,
+      listing: truncate(display, 3500),
+      note: entries.length >= maxEntries ? `Listing capped at ${maxEntries} entries. Use a narrower path or max_entries for more control.` : undefined,
     };
   },
 };
@@ -499,7 +528,7 @@ export const fileWatchTool = {
 
 /** All file tools for batch registration. */
 export const fileTools = [
-  readFileTool, writeFileTool, editFileTool, searchFilesTool,
+  readFileTool, writeFileTool, createDirectoryTool, editFileTool, searchFilesTool,
   listDirectoryTool, findFilesTool, fileDiffTool, globFindTool,
   fileCopyTool, fileMoveTool, fileDeleteTool, fileWatchTool,
 ];

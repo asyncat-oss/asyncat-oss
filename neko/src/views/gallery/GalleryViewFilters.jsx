@@ -1,4 +1,4 @@
-import React from "react";
+
 import { Search, CheckCircle, Plus, X } from "lucide-react";
 
 const GalleryViewFilters = ({

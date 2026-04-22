@@ -8,8 +8,10 @@ import { attachDb } from '../../db/sqlite.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { randomUUID } from 'crypto';
 
 const router = express.Router();
+const pendingPermissions = new Map();
 
 // Initialize agent tools on first load
 await initializeAgent();
@@ -40,6 +42,53 @@ const authenticate = (req, res, next) => {
     });
   });
 };
+
+function createPermissionRequest(req, res) {
+  const ownedRequestIds = new Set();
+
+  res.on('close', () => {
+    for (const requestId of ownedRequestIds) {
+      const pending = pendingPermissions.get(requestId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pending.resolve({ decision: 'deny', reason: 'Agent stream closed before approval' });
+        pendingPermissions.delete(requestId);
+      }
+    }
+  });
+
+  return (request) => new Promise((resolve) => {
+    const requestId = randomUUID();
+    ownedRequestIds.add(requestId);
+
+    const timer = setTimeout(() => {
+      pendingPermissions.delete(requestId);
+      ownedRequestIds.delete(requestId);
+      resolve({ decision: 'deny', reason: 'Permission request timed out' });
+    }, 5 * 60 * 1000);
+
+    pendingPermissions.set(requestId, {
+      userId: req.user.id,
+      sessionId: request.sessionId,
+      resolve: (decision) => {
+        clearTimeout(timer);
+        ownedRequestIds.delete(requestId);
+        resolve(decision);
+      },
+      timer,
+    });
+
+    res.write(`data: ${JSON.stringify({
+      type: 'permission_request',
+      data: {
+        ...request,
+        toolName: request.toolName || request.tool,
+        requestId,
+        expiresInMs: 5 * 60 * 1000,
+      }
+    })}\n\n`);
+  });
+}
 
 /**
  * GET /api/agent/tools
@@ -98,6 +147,7 @@ router.post('/run', authenticate, async (req, res) => {
       workingDir: workingDir || process.cwd(),
       maxRounds: maxRounds || 25,
       autoApprove: autoApprove === true || autoApprove === 'all',
+      requestPermission: createPermissionRequest(req, res),
     });
 
     await agent.runStreaming(goal, conversationHistory, res);
@@ -124,6 +174,41 @@ router.get('/sessions', authenticate, (req, res) => {
 });
 
 /**
+ * GET /api/agent/sessions/:id/audit
+ * Get audited tool calls for a session.
+ */
+router.get('/sessions/:id/audit', authenticate, async (req, res) => {
+  try {
+    const { default: db } = await import('../../db/client.js');
+    const session = db.prepare(
+      'SELECT id FROM agent_sessions WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id);
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+
+    const rows = db.prepare(`
+      SELECT id, session_id, tool_name, permission_level, permission_decision,
+             permission_reason, working_dir, args, result, success, round,
+             started_at, completed_at
+      FROM agent_tool_audit
+      WHERE session_id = ? AND user_id = ?
+      ORDER BY started_at ASC
+    `).all(req.params.id, req.user.id).map(row => ({
+      ...row,
+      args: JSON.parse(row.args || '{}'),
+      result: row.result ? JSON.parse(row.result) : null,
+      success: row.success === null ? null : Boolean(row.success),
+    }));
+
+    res.json({ success: true, count: rows.length, audit: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/agent/sessions/:id
  * Get a specific agent session.
  */
@@ -133,6 +218,59 @@ router.get('/sessions/:id', authenticate, (req, res) => {
     return res.status(404).json({ success: false, error: 'Session not found' });
   }
   res.json({ success: true, session });
+});
+
+/**
+ * POST /api/agent/permissions/:requestId
+ * Resolve a pending tool permission request.
+ * Body: { decision: "allow" | "deny" | "allow_session", reason? }
+ */
+router.post('/permissions/:requestId', authenticate, (req, res) => {
+  const pending = pendingPermissions.get(req.params.requestId);
+  if (!pending || pending.userId !== req.user.id) {
+    return res.status(404).json({ success: false, error: 'Permission request not found' });
+  }
+
+  const decision = ['allow', 'deny', 'allow_session'].includes(req.body?.decision)
+    ? req.body.decision
+    : 'deny';
+
+  pendingPermissions.delete(req.params.requestId);
+  pending.resolve({
+    decision,
+    reason: req.body?.reason || null,
+  });
+
+  res.json({ success: true, decision });
+});
+
+/**
+ * POST /api/agent/permission
+ * Legacy resolver for older CLI clients that only know sessionId.
+ * Body: { sessionId, decision }
+ */
+router.post('/permission', authenticate, (req, res) => {
+  const { sessionId } = req.body || {};
+  const found = [...pendingPermissions.entries()].find(([, pending]) =>
+    pending.userId === req.user.id && pending.sessionId === sessionId
+  );
+
+  if (!found) {
+    return res.status(404).json({ success: false, error: 'Permission request not found' });
+  }
+
+  const [requestId, pending] = found;
+  const decision = ['allow', 'deny', 'allow_session'].includes(req.body?.decision)
+    ? req.body.decision
+    : 'deny';
+
+  pendingPermissions.delete(requestId);
+  pending.resolve({
+    decision,
+    reason: req.body?.reason || null,
+  });
+
+  res.json({ success: true, decision });
 });
 
 /**

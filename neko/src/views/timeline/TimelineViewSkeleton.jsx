@@ -1,4 +1,4 @@
-import React from "react";
+
 
 const TimelineViewSkeleton = () => {
 	// Create skeleton groups for the timeline view

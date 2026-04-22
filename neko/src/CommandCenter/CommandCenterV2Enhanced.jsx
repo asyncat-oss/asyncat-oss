@@ -1,5 +1,5 @@
 // CommandCenterV2Enhanced.jsx
-import React, {
+import {
   useState,
   useRef,
   useEffect,

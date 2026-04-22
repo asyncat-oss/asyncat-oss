@@ -1,4 +1,4 @@
-import React from "react";
+
 
 const ListViewSkeleton = () => {
 	// Create skeleton rows for the list view table

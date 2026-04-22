@@ -39,6 +39,7 @@ export class Tui extends EventEmitter {
     this.paletteItems = [];
     this.modelInfo    = opts.modelInfo || '';
     this.providerInfo = opts.providerInfo || '';
+    this.contextInfo  = opts.contextInfo || {};
     this.version = opts.version || 'unknown';
     this.streaming    = false;
     this._streamTimer = null;
@@ -84,6 +85,7 @@ export class Tui extends EventEmitter {
     // Console capture (for inline command output)
     this._captureMode   = false;
     this._captureBuffer = [];
+    this._cancelStreaming = null;
 
     // Full-control mode: skip all permission prompts
     this._fullControl = false;
@@ -243,9 +245,9 @@ export class Tui extends EventEmitter {
     const hideInput = this.mode === 'model-setup' || this.mode === 'provider-setup';
     if ((this.mode === 'chat') || (isOverlay && this.messages.length > 0)) {
       const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
-      renderChat(msgs, this.scrollOff, hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs, this._msgFocus, this._expandedMsgs);
+      renderChat(msgs, this.scrollOff, hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs, this._msgFocus, this._expandedMsgs, this._contextStatus(hideInput ? '' : this.buf));
     } else {
-      renderZen(hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs);
+      renderZen(hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs, this._contextStatus(hideInput ? '' : this.buf));
     }
 
     // Result popup doesn't need a background redraw (it's standalone)
@@ -296,10 +298,25 @@ export class Tui extends EventEmitter {
     this.render();
   }
 
-  setModel(name, provider) {
+  setModel(name, provider, contextInfo = {}) {
     this.modelInfo = name || '';
     this.providerInfo = provider || '';
+    this.contextInfo = contextInfo || {};
     this.render();
+  }
+
+  _contextStatus(inputBuf = '') {
+    const text = [
+      ...this.messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)),
+      inputBuf || '',
+    ].join('\n');
+    const messageTokens = Math.ceil(text.length / 4);
+    const agentOverhead = 3500;
+    const usedTokens = messageTokens + agentOverhead;
+    const ctxSize = this.contextInfo?.ctxSize || null;
+    const ctxTrain = this.contextInfo?.ctxTrain || null;
+    const percent = ctxSize ? Math.min(999, Math.round((usedTokens / ctxSize) * 100)) : null;
+    return { usedTokens, messageTokens, ctxSize, ctxTrain, percent };
   }
 
   print(text)     { this.addMessage('system', text); }
@@ -471,14 +488,29 @@ export class Tui extends EventEmitter {
   }
 
   setStreamMsg(msg) { this._streamMsg = msg; }
+  setCancelStreaming(fn) { this._cancelStreaming = typeof fn === 'function' ? fn : null; }
   lockInput() { this._inputLocked = true; }
   unlockInput() { this._inputLocked = false; this.render(); }
 
   // ── Key handler ───────────────────────────────────────────────────────────
   _onKey(str, key) {
     if (this._destroyed || !key) return;
-    if (this._inputLocked && !(key.ctrl && key.name === 'c')) return;
     const { name, ctrl, meta } = key;
+    if (this._inputLocked && !(ctrl && name === 'c')) {
+      if (ctrl && name === 'f') {
+        this._fullControl = !this._fullControl;
+        this.print(this._fullControl
+          ? '  Full-control ON — future permission requests in this run will auto-approve'
+          : '  Full-control OFF — future tool calls require approval');
+        this.render();
+        return;
+      }
+      if (name === 'escape' && this._cancelStreaming) {
+        this._cancelStreaming();
+        this.setStreamMsg('Stopping agent run...');
+      }
+      return;
+    }
 
     // ── Global shortcuts (always active) ─────────────────────────────────
     if (ctrl && name === 'c') { this.emit('exit'); return; }
@@ -569,7 +601,9 @@ export class Tui extends EventEmitter {
     }
     if (name === 'return') {
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
-      const ctxSize = this.buf.trim() || '8192';
+      const rawCtx = parseInt(this.buf.trim() || '8192', 10) || 8192;
+      const maxCtx = this._setupModel?.contextLength ? Number(this._setupModel.contextLength) : null;
+      const ctxSize = String(maxCtx ? Math.min(rawCtx, maxCtx) : rawCtx);
       if (this._setupResolve) { this._setupResolve(ctxSize); this._setupResolve = null; }
       this.buf = ''; this.pos = 0;
       this.render();
@@ -1101,6 +1135,30 @@ export class Tui extends EventEmitter {
     const H = h();
     const W = w();
 
+    if (this.mode === 'selector') {
+      const query = this.buf.toLowerCase();
+      const filtered = query
+        ? this._selItems.filter(it => (it.name || it).toLowerCase().includes(query) || (it.desc || '').toLowerCase().includes(query))
+        : this._selItems;
+      const panelW = Math.min(Math.floor(W * 0.78), 96);
+      const panelL = Math.floor((W - panelW) / 2) + 1;
+      const maxShow = Math.min(filtered.length, H - 14);
+      const scrollOff = this._selIdx >= maxShow ? this._selIdx - maxShow + 1 : 0;
+      const panelH = maxShow + 5;
+      const panelTop = Math.max(2, Math.floor((H - panelH) / 2));
+      const itemRow = row - (panelTop + 3);
+      if (col >= panelL && col <= panelL + panelW && itemRow >= 0 && itemRow < maxShow) {
+        const realIdx = scrollOff + itemRow;
+        const chosen = filtered[realIdx] ?? null;
+        this._selIdx = realIdx;
+        this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+        if (this._selResolve) { this._selResolve(chosen); this._selResolve = null; }
+        this.buf = ''; this.pos = 0;
+        this.render();
+        return;
+      }
+    }
+
     if (this.mode === 'zen') {
       // Cat area: top half of screen
       const centerY = Math.floor(H / 2) - 4;
@@ -1250,13 +1308,18 @@ export class Tui extends EventEmitter {
     if (!item) return;
 
     if (this._modelsTab === 0) {
-      // Close the models page, then load with default context
+      // Close the models page, then ask for context size before loading.
       if (this._downloadPollTimer) { clearTimeout(this._downloadPollTimer); this._downloadPollTimer = null; }
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
       if (this._modelsResolve) { this._modelsResolve(null); this._modelsResolve = null; }
       this.buf = ''; this.pos = 0;
       this.render();
-      this._loadSelectedModel(item.filename, item.contextLength || 8192);
+      const ctxSize = await this.showModelSetup(item);
+      if (!ctxSize) {
+        this.printInfo('Model load cancelled.');
+        return;
+      }
+      this._loadSelectedModel(item.filename, ctxSize);
       return;
     }
 
@@ -1309,18 +1372,28 @@ export class Tui extends EventEmitter {
 
   async _loadSelectedModel(filename, ctxSize) {
     try {
-      const { apiPost } = await import('../denApi.js');
-      await apiPost('/api/ai/providers/server/start', { filename, ctxSize: parseInt(ctxSize, 10) || 8192 });
-      this.printOk(`Loading ${filename}...`);
-      setTimeout(async () => {
-        const { apiGet } = await import('../denApi.js');
-        try {
-          const data = await apiGet('/api/ai/providers/server/status');
-          if (data.model_file || data.model) {
-            this.setModel(data.model_file || data.model, 'local');
-          }
-        } catch {}
-      }, 3000);
+      const { apiPost, apiGet } = await import('../denApi.js');
+      const requestedCtx = parseInt(ctxSize, 10) || 8192;
+      await apiPost('/api/ai/providers/server/start', { filename, ctxSize: requestedCtx });
+      this.printOk(`Loading ${filename} with ctx ${requestedCtx}...`);
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const data = await apiGet('/api/ai/providers/server/status').catch(() => null);
+        if (!data) continue;
+        if (data.status === 'ready') {
+          this.setModel(data.model_file || data.model || filename, 'local', {
+            ctxSize: data.ctxSize || requestedCtx,
+            ctxTrain: data.ctxTrain || null,
+          });
+          this.printOk(`Model ready · ctx ${data.ctxSize || requestedCtx}${data.ctxTrain ? ` / max ${data.ctxTrain}` : ''}`);
+          return;
+        }
+        if (data.status === 'error') {
+          this.printErr(data.error || 'Model failed to load.');
+          return;
+        }
+      }
+      this.printWarn('Model is still loading. Check /models or /ctx for status.');
     } catch (e) {
       this.printErr(`Failed to load model: ${e.message}`);
     }

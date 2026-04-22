@@ -37,7 +37,7 @@ import * as _code     from './commands/code.js';
 import * as _agent    from './commands/agent.js';
 import * as _mcp      from './commands/mcp.js';
 import * as _context  from './commands/context.js';
-import { getToken, getBase, apiGet } from './lib/denApi.js';
+import { getToken, getBase, apiGet, apiPost } from './lib/denApi.js';
 import { banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
 import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
 
@@ -157,19 +157,33 @@ async function detectModel() {
   try {
     const token = await getToken();
     const base  = getBase();
+    let localStatus = null;
+    try {
+      const statusRes = await fetch(`${base}/api/ai/providers/server/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(1200),
+      });
+      if (statusRes.ok) localStatus = await statusRes.json();
+    } catch {}
+
     const res = await fetch(`${base}/api/ai/providers/config`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(2000),
     });
     if (res.ok) {
       const data = await res.json();
+      const isLocal = data.provider_type === 'local';
       return {
         model: data.model || 'default',
         provider: data.provider_type || 'local',
+        context: isLocal ? {
+          ctxSize: localStatus?.ctxSize || null,
+          ctxTrain: localStatus?.ctxTrain || null,
+        } : {},
       };
     }
   } catch {}
-  return { model: '', provider: '' };
+  return { model: '', provider: '', context: {} };
 }
 
 // ── Auto-start all services on TUI launch ──────────────────────────────────
@@ -225,7 +239,7 @@ async function startTui() {
 
   // Step 4: Detect model
   console.log('\x1b[36m[asyncat]\x1b[0m Detecting model...');
-  const { model, provider } = await detectModel();
+  const { model, provider, context } = await detectModel();
 
   // Now create and start TUI
   const tui = new Tui({
@@ -233,7 +247,7 @@ async function startTui() {
     providerInfo: '',
     version: getVersion(),
   });
-  tui.setModel(model, provider);
+  tui.setModel(model, provider, context);
   tui.start();
 
   // Wire events immediately so Ctrl+C and other keys work during startup.
@@ -331,13 +345,59 @@ async function startTui() {
         case 'models': {
           if (args.length > 0) {
             await runInShell(() => _models.run(args));
-            const { model: m, provider: p } = await detectModel();
-            tui.setModel(m, p);
+            const { model: m, provider: p, context: c } = await detectModel();
+            tui.setModel(m, p, c);
             tui.unlockInput();
             return;
           }
           tui.unlockInput();
           await tui.showModelsPage();
+          return;
+        }
+
+        case 'ctx': {
+          tui.unlockInput();
+          const size = parseInt(args[0], 10);
+          if (!Number.isFinite(size) || size < 512) {
+            const status = await apiGet('/api/ai/providers/server/status').catch(() => null);
+            const current = status?.ctxSize ? `current ${status.ctxSize}` : 'current unknown';
+            const max = status?.ctxTrain ? `, model max ${status.ctxTrain}` : '';
+            tui.printInfo(`Usage: /ctx <tokens>  (${current}${max})`);
+            return;
+          }
+
+          const status = await apiGet('/api/ai/providers/server/status');
+          const filename = status.model_file || status.model;
+          if (!filename || status.status === 'idle') {
+            tui.printWarn('No local model is loaded. Use /models first.');
+            return;
+          }
+
+          const target = status.ctxTrain ? Math.min(size, status.ctxTrain) : size;
+          if (target !== size) {
+            tui.printWarn(`Requested context exceeds model max; using ${target}.`);
+          }
+          tui.printInfo(`Restarting ${filename} with ctx ${target}...`);
+          await apiPost('/api/ai/providers/server/start', { filename, ctxSize: target });
+
+          for (let i = 0; i < 60; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            const next = await apiGet('/api/ai/providers/server/status').catch(() => null);
+            if (!next) continue;
+            if (next.status === 'ready') {
+              tui.setModel(next.model_file || next.model || filename, 'local', {
+                ctxSize: next.ctxSize || target,
+                ctxTrain: next.ctxTrain || status.ctxTrain || null,
+              });
+              tui.printOk(`Context active: ${next.ctxSize || target}${next.ctxTrain ? ` / max ${next.ctxTrain}` : ''}`);
+              return;
+            }
+            if (next.status === 'error') {
+              tui.printErr(next.error || 'Model failed to restart with that context size.');
+              return;
+            }
+          }
+          tui.printWarn('Still loading. Run /ctx again to check current status.');
           return;
         }
 
@@ -374,6 +434,14 @@ async function startTui() {
           break;
         case 'live-logs':
           handleLiveLogs(args, tui);
+          break;
+        case 'full-control':
+        case 'fc':
+          tui._fullControl = !tui._fullControl;
+          tui.print(tui._fullControl
+            ? '  Full-control ON — tool permission requests auto-approve'
+            : '  Full-control OFF — tool permission requests require approval');
+          tui.render();
           break;
         case 'log':
         case 'logs': {
@@ -600,13 +668,13 @@ case 'tools': {
                 tui.printWarn('Settings saved anyway. Fix the key and run /provider again.');
               }
             }
-            const { model: m, provider: p } = await detectModel();
-            tui.setModel(m, p);
+            const { model: m, provider: p, context: c } = await detectModel();
+            tui.setModel(m, p, c);
             tui.unlockInput();
           } else {
             await runInShell(() => _provider.run(args));
-            const { model: m, provider: p } = await detectModel();
-            tui.setModel(m, p);
+            const { model: m, provider: p, context: c } = await detectModel();
+            tui.setModel(m, p, c);
             tui.unlockInput();
           }
           return;
@@ -812,6 +880,7 @@ case 'tools': {
             '',
             '── Commands ─────────────────────────────────────────────',
             '  /skills             Browse all brain skills (searchable)',
+            '  /ctx <tokens>       Restart local model with a new context size',
             '  /tools              All registered tools grouped by category (live count)',
             '  /log                Full tool call log — output, errors, args',
             '  /memory             Search agent memories',
@@ -829,7 +898,7 @@ case 'tools': {
             '  /help               Show this',
             '',
             '── Full-control mode ─────────────────────────────────────',
-            '  Ctrl+F to toggle. When ON (⚡ shown in status bar):',
+            '  Ctrl+F or /fc to toggle. When ON (⚡ shown in status bar):',
             '  · All tool calls auto-approved — no permission prompts',
             '  · Agent can run shell commands, write files, etc. freely',
             '  · Resets when you restart the CLI',
@@ -915,8 +984,8 @@ case 'tools': {
         tui.printOk(`Model ${chosen.name} loaded!`);
         // Wait for model to be ready
         await new Promise(r => setTimeout(r, 2000));
-        const { model: m, provider: p } = await detectModel();
-        tui.setModel(m, p);
+        const { model: m, provider: p, context: c } = await detectModel();
+        tui.setModel(m, p, c);
       } catch (e) {
         tui.printErr(`Failed: ${e.message}`);
         return;
@@ -931,6 +1000,8 @@ case 'tools': {
     try {
       const token = await getToken();
       const base  = getBase();
+      const controller = new AbortController();
+      tui.setCancelStreaming(() => controller.abort());
 
       // Prepare conversation history (exclude the current goal)
       const history = tui.messages.slice(0, -1).map(m => ({
@@ -952,6 +1023,7 @@ case 'tools': {
           maxRounds: 25,
           autoApprove: tui._fullControl,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -973,11 +1045,14 @@ case 'tools': {
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
+          let event;
           try {
-            const event = JSON.parse(line.slice(6).trim());
-            handleAgentEvent(tui, event, token, base);
-            if (event.type === 'answer') fullAnswer = event.data?.answer || '';
-          } catch {}
+            event = JSON.parse(line.slice(6).trim());
+          } catch {
+            continue;
+          }
+          await handleAgentEvent(tui, event, token, base);
+          if (event.type === 'answer') fullAnswer = event.data?.answer || '';
         }
       }
 
@@ -1006,20 +1081,23 @@ case 'tools': {
       }
     } catch (e) {
       tui.stopStreaming();
-      if (e.message.includes('fetch failed') || e.message.includes('ECONNREFUSED')) {
+      if (e.name === 'AbortError') {
+        tui.printWarn('Agent run stopped.');
+      } else if (e.message.includes('fetch failed') || e.message.includes('ECONNREFUSED')) {
         tui.printErr('Backend not reachable. Try /start or /doctor');
       } else {
         tui.printErr(e.message);
       }
     }
 
+    tui.setCancelStreaming(null);
     tui.unlockInput();
   }
 
 }
 
 // ── Agent event handler ─────────────────────────────────────────────────────
-function handleAgentEvent(tui, event, token, base) {
+async function handleAgentEvent(tui, event, token, base) {
   const { type, data } = event;
   switch (type) {
     case 'thinking':
@@ -1066,13 +1144,57 @@ function handleAgentEvent(tui, event, token, base) {
       tui.printErr(data.message || 'Unknown agent error');
       break;
     case 'permission_request':
-      // Auto-allow in TUI mode for now (can add dialog later)
-      fetch(`${base}/api/agent/permission`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ sessionId: data.sessionId, decision: 'allow' }),
-      }).catch(() => {});
+      await handlePermissionRequest(tui, data, token, base);
       break;
+  }
+}
+
+async function handlePermissionRequest(tui, data, token, base) {
+  const toolName = data.toolName || data.tool || 'unknown_tool';
+  const requestId = data.requestId;
+
+  if (!requestId) {
+    tui.printErr('Permission request missing requestId; denying tool call.');
+    return;
+  }
+
+  const argPreview = previewPermissionArgs(toolName, data.args || {});
+  tui.setStreamMsg(`Permission needed: ${toolName}`);
+  tui.printWarn(`Permission needed for ${toolName}: ${argPreview}`);
+
+  let decision = 'deny';
+  if (tui._fullControl) {
+    decision = 'allow_session';
+  } else {
+    tui.unlockInput();
+    const selected = await tui.showSelector(`Permission: ${toolName}`, [
+      { name: 'Approve once', desc: argPreview, decision: 'allow' },
+      { name: 'Deny', desc: 'Do not run this tool call', decision: 'deny' },
+      { name: 'Trust this run', desc: 'Approve this tool for the rest of this agent run', decision: 'allow_session' },
+    ]);
+    tui.lockInput();
+    decision = selected?.decision || 'deny';
+  }
+
+  const res = await fetch(`${base}/api/agent/permissions/${requestId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ decision }),
+  });
+  if (!res.ok) throw new Error(`Permission response failed (${res.status})`);
+
+  tui.print(`${decision === 'deny' ? 'Denied' : 'Approved'} ${toolName}`);
+  tui.setStreamMsg('Agent continuing...');
+}
+
+function previewPermissionArgs(toolName, args) {
+  if (toolName === 'run_command') return `$ ${args.command || ''}${args.cwd ? `  in ${args.cwd}` : ''}`;
+  if (toolName === 'write_file' || toolName === 'edit_file') return args.path || JSON.stringify(args).slice(0, 120);
+  if (toolName === 'run_python' || toolName === 'run_node') return String(args.code || '').split('\n').slice(0, 2).join(' ').slice(0, 120);
+  try {
+    return JSON.stringify(args).slice(0, 120);
+  } catch {
+    return String(args).slice(0, 120);
   }
 }
 // ── Help ────────────────────────────────────────────────────────────────────

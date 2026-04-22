@@ -1,4 +1,4 @@
-import React from "react";
+
 import { File, Upload, AlertCircle, X, Download } from "lucide-react";
 
 const CardAttachmentsSection = ({

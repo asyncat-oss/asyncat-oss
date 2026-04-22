@@ -1,5 +1,5 @@
 // CommandCenterContextEnhanced.jsx - Updated for New Mode System
-import React, { createContext, useState, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
+import { createContext, useState, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import commandCenterApi, { chatApi } from './commandCenterApi';

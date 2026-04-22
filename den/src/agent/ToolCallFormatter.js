@@ -129,6 +129,8 @@ export class ToolCallFormatter {
       '{"name": "tool_name", "arguments": {"param1": "value1"}}',
       '</tool_call>',
       '',
+      'If you need to act, output the tool_call block itself. Do not only describe the action in prose.',
+      '',
       'You may call multiple tools in sequence. After each tool call, you will receive the result.',
       'Always wait for tool results before proceeding.',
       '',
@@ -194,8 +196,11 @@ export class ToolCallFormatter {
     let match;
 
     while ((match = TOOL_CALL_XML_RE.exec(text)) !== null) {
+      const content = match[1].trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
       try {
-        const content = match[1].trim();
         const parsed = JSON.parse(content);
         const name = parsed.name || parsed.function || parsed.tool_name || parsed.tool;
         const args = parsed.arguments || parsed.args || parsed.parameters || parsed.params || {};

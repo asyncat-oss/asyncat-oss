@@ -976,7 +976,7 @@ export const agentApi = {
    * Run an agent with a goal — returns an async generator of SSE events.
    * Event types: thinking, tool_start, tool_result, delta, answer, error, done
    */
-  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25) {
+  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null) {
     const workspaceId = getCurrentWorkspaceId();
     const token = await authService.getSession();
 
@@ -986,6 +986,7 @@ export const agentApi = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token?.access_token}`
       },
+      signal,
       body: JSON.stringify({ goal, conversationHistory, workingDir, maxRounds, workspaceId })
     });
 
@@ -1045,6 +1046,23 @@ export const agentApi = {
       headers: { 'Authorization': `Bearer ${token?.access_token}` },
     });
     return res.json();
+  },
+
+  getSessionAudit: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/audit`);
+  },
+
+  respondPermission: async (requestId, decision, reason = null) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/permissions/${requestId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token?.access_token}`
+      },
+      body: JSON.stringify({ decision, reason })
+    });
+    return await handleResponse(res);
   },
 };
 

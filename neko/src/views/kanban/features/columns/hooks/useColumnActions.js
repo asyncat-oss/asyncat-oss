@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { useColumnContext } from "../../../../context/ColumnContext";
 import { useState } from "react";
 import viewsApi from "../../../../viewsApi";

@@ -1,4 +1,4 @@
-import React from "react";
+
 
 const GalleryViewSkeleton = () => {
 	// Create skeleton cards for the gallery view

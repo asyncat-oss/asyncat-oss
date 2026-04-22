@@ -32,9 +32,15 @@ class BasalGanglia {
         last_seen_at TEXT NOT NULL,
         last_failure_at TEXT,
         created_at TEXT NOT NULL,
-        auto_skill_created INTEGER DEFAULT 0
+        auto_skill_created INTEGER DEFAULT 0,
+        corrections TEXT NOT NULL DEFAULT '[]'
       )
     `).run();
+
+    const cols = db.prepare('PRAGMA table_info("agent_patterns")').all();
+    if (!cols.some(col => col.name === 'corrections')) {
+      db.prepare('ALTER TABLE agent_patterns ADD COLUMN corrections TEXT NOT NULL DEFAULT \'[]\'').run();
+    }
 
     db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_patterns_user_pattern

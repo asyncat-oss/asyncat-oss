@@ -32,7 +32,7 @@ export function nextCatMsg() {
 }
 
 // ── Zen Home Screen — OpenCode-inspired minimal layout ──────────────────────
-export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, logs = []) {
+export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, logs = [], contextInfo = {}) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -106,8 +106,8 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
   const hasModel = modelInfo && modelInfo !== 'no model' && modelInfo.trim();
   const mLine = hasModel
     ? (providerInfo
-        ? `${t.accent2}${modelInfo}${R}  ${ansi.dim}· ${providerInfo}${R}`
-        : `${t.accent2}${modelInfo}${R}`)
+        ? `${t.accent2}${modelInfo}${R}  ${ansi.dim}· ${providerInfo}${formatContextSuffix(contextInfo)}${R}`
+        : `${t.accent2}${modelInfo}${R}${ansi.dim}${formatContextSuffix(contextInfo)}${R}`)
     : `${ansi.dim}no model${R}  ${t.accent}→${R}  ${ansi.dim}/models to pick one${R}`;
   at(y, inputL, `${ansi.dim}  ${mLine}`);
   y += 2;
@@ -125,7 +125,7 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
 }
 
 // ── Chat View (messages + centered input at bottom) ─────────────────────────
-export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInfo, providerInfo, logs = [], focusIdx = -1, expandedMsgs = new Set()) {
+export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInfo, providerInfo, logs = [], focusIdx = -1, expandedMsgs = new Set(), contextInfo = {}) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -219,8 +219,8 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   const mName = modelInfo || 'no model';
   const pName = providerInfo || '';
   const mLine = pName
-    ? `${t.accent2}${mName}${R}  ${ansi.dim}· ${pName}${R}`
-    : `${ansi.dim}${mName}${R}`;
+    ? `${t.accent2}${mName}${R}  ${ansi.dim}· ${pName}${formatContextSuffix(contextInfo)}${R}`
+    : `${ansi.dim}${mName}${formatContextSuffix(contextInfo)}${R}`;
   at(inputStartRow + maxInputLines, inputL, `  ${mLine}`);
 
   // Cursor
@@ -228,6 +228,22 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   const cursorRow = inputStartRow + cursorLine;
   const cursorColAbs = inputL + 2 + cursorCol;
   write(ansi.to(cursorRow, cursorColAbs));
+}
+
+function formatContextSuffix(info = {}) {
+  if (!info.ctxSize) return '';
+  const used = compactNumber(info.usedTokens || 0);
+  const size = compactNumber(info.ctxSize);
+  const max = info.ctxTrain ? ` max ${compactNumber(info.ctxTrain)}` : '';
+  const pct = info.percent != null ? ` ${info.percent}%` : '';
+  return ` · ctx ${used}/${size}${pct}${max}`;
+}
+
+function compactNumber(n) {
+  const value = Number(n) || 0;
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}m`;
+  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+  return String(value);
 }
 
 // ── Message formatting ──────────────────────────────────────────────────────
@@ -324,6 +340,7 @@ function calcCursorPosInWrapped(buf, pos, maxW) {
 // ── Command palette (renders over content area) ─────────────────────────────
 export const PALETTE_CMDS = [
   { cmd: '/models',   desc: 'Switch model / serve / pull',         group: '🤖 AI' },
+  { cmd: '/ctx',      desc: 'Restart local model with context size', group: '🤖 AI' },
   { cmd: '/provider', desc: 'Configure AI provider',            group: '🤖 AI' },
   { cmd: '/skills',   desc: 'Browse 45 brain skills',             group: '🤖 AI' },
   { cmd: '/tools',    desc: 'View agent tools & capabilities',    group: '🤖 AI' },
@@ -340,6 +357,7 @@ export const PALETTE_CMDS = [
   { cmd: '/log',      desc: 'Tool call log — full output & errors', group: '🛠 Services' },
   { cmd: '/logs',     desc: 'View service logs',                group: '🛠 Services' },
   { cmd: '/doctor',   desc: 'System health check',               group: '🛠 Services' },
+  { cmd: '/full-control', desc: 'Toggle permission auto-approval', group: '⚙️ Settings' },
   { cmd: '/theme',    desc: 'Switch color theme',                group: '⚙️ Settings' },
   { cmd: '/config',   desc: 'Get or set configuration',         group: '⚙️ Settings' },
   { cmd: '/install',  desc: 'Install dependencies',             group: '⚙️ Settings' },
@@ -474,7 +492,7 @@ export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
     }
   }
 
-  at(panelTop + 3 + maxShow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  ·  enter select / view details  ·  esc cancel${R}`);
+  at(panelTop + 3 + maxShow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  ·  enter/click select  ·  esc cancel${R}`);
 
   // Cursor in search input
   write(ansi.to(panelTop + 1, panelL + cursorPos));
@@ -531,13 +549,16 @@ export function renderModelSetup(model, ctxBuf, cursorPos, isFocused) {
   const label = " Context Size: ";
   const ctxStr = ctxBuf || '';
   const bufPad = Math.max(0, 10 - vis(ctxStr));
+  const maxCtx = model.contextLength ? `max ${Number(model.contextLength).toLocaleString()} tokens` : 'max unknown';
 
   const bg = isFocused ? t.paletteSel : '';
   at(y, boxL, `${bg}${label}${isFocused ? t.inputFg : ''}${ctxStr}${R}${bg}${' '.repeat(bufPad)}${R}`);
 
   const cursorRow = y;
   const cursorCol = boxL + vis(label) + cursorPos;
-  y += 2;
+  y++;
+  at(y++, boxL, ` ${ansi.dim}${maxCtx} from GGUF metadata; higher context uses more RAM/VRAM${R}`);
+  y++;
 
   at(y++, boxL, center(`${ansi.dim}enter start model  ·  esc cancel${R}`, boxW));
 

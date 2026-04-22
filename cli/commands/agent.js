@@ -202,15 +202,17 @@ async function runAgent(goal, options = {}, tui = null) {
   }, async (event) => {
     // Permission requests need interactive response
     if (event.type === 'permission_request') {
-      const { toolName, args, permission } = event.data;
+      const { requestId, args, permission } = event.data;
+      const toolName = event.data.toolName || event.data.tool;
 
       if (options.autoApprove || sessionApprovals.has(toolName)) {
         // Respond to the API that permission is granted
-        await fetch(`${base}/api/agent/permission`, {
+        const res = await fetch(`${base}/api/agent/permissions/${requestId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ sessionId: event.data.sessionId, decision: 'allow' }),
-        }).catch(() => {});
+          body: JSON.stringify({ decision: options.autoApprove ? 'allow_session' : 'allow' }),
+        });
+        if (!res.ok) throw new Error(`Permission response failed (${res.status})`);
         return;
       }
 
@@ -220,11 +222,12 @@ async function runAgent(goal, options = {}, tui = null) {
 
       if (decision === 'allow_session') sessionApprovals.add(toolName);
 
-      await fetch(`${base}/api/agent/permission`, {
+      const res = await fetch(`${base}/api/agent/permissions/${requestId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ sessionId: event.data.sessionId, decision }),
-      }).catch(() => {});
+        body: JSON.stringify({ decision }),
+      });
+      if (!res.ok) throw new Error(`Permission response failed (${res.status})`);
       return;
     }
 

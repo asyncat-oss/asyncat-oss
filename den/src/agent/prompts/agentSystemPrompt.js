@@ -73,10 +73,23 @@ OR, when the task is complete:
 8. **Ask for clarification via Answer** if the goal is ambiguous — don't guess.
 
 ## Tool Call Format
-To call a tool, output:
+To call a tool, output EXACTLY this machine-readable block:
 
 <tool_call>
 {"name": "tool_name", "arguments": {"param1": "value1"}}
+</tool_call>
+
+Do not describe a tool call in prose. Do not write "I'll use mkdir" or "I will run a command" unless you also output the exact <tool_call> block.
+For folder creation, prefer:
+
+<tool_call>
+{"name": "create_directory", "arguments": {"path": "folder-name"}}
+</tool_call>
+
+For shell commands, prefer:
+
+<tool_call>
+{"name": "run_command", "arguments": {"command": "pwd"}}
 </tool_call>
 
 ## Important Safety Rules

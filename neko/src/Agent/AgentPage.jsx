@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 import AgentRunFeed from './components/AgentRunFeed';
@@ -117,15 +117,40 @@ export default function AgentPage() {
     }
     setLoadingSession(true);
     setCurrentSession(null);
-    agentApi.getSession(sessionId).then(res => {
+    agentApi.getSession(sessionId).then(async res => {
       const session = res?.session;
       if (session) {
         setCurrentGoal(session.goal || '');
         setCurrentSession(session);
         // Reconstruct events from persisted tool history + final answer
-        const toolEvents = (session.toolHistory || []).map(tc => ({
+        let auditRows = [];
+        try {
+          const auditRes = await agentApi.getSessionAudit(sessionId);
+          auditRows = auditRes?.audit || [];
+        } catch {}
+
+        const sourceRows = auditRows.length ? auditRows.map(row => ({
+          tool: row.tool_name,
+          args: row.args,
+          result: row.result,
+          round: row.round,
+          permission: row.permission_level,
+          permissionDecision: row.permission_decision,
+          permissionReason: row.permission_reason,
+          workingDir: row.working_dir,
+        })) : (session.toolHistory || []);
+
+        const toolEvents = sourceRows.map(tc => ({
           type: 'tool_start',
-          data: { tool: tc.tool, args: tc.args, round: tc.round },
+          data: {
+            tool: tc.tool,
+            args: tc.args,
+            round: tc.round,
+            permission: tc.permission,
+            permissionDecision: tc.permissionDecision,
+            permissionReason: tc.permissionReason,
+            workingDir: tc.workingDir,
+          },
           result: tc.result,
         }));
         const finalAnswer = session.scratchpad?.finalAnswer;
@@ -194,7 +219,7 @@ export default function AgentPage() {
     abortRef.current = controller;
 
     try {
-      for await (const event of agentApi.runStream(submittedGoal)) {
+      for await (const event of agentApi.runStream(submittedGoal, [], null, 25, controller.signal)) {
         // Check abort between events
         if (controller.signal.aborted) break;
 
@@ -239,6 +264,31 @@ export default function AgentPage() {
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
   }, [goal, isRunning, sessionId, navigate]);
+
+  const handlePermissionDecision = useCallback(async (requestId, decision) => {
+    if (!requestId) return;
+
+    setEvents(prev => prev.map(ev => (
+      ev.type === 'permission_request' && ev.data?.requestId === requestId
+        ? { ...ev, data: { ...ev.data, resolving: true } }
+        : ev
+    )));
+
+    try {
+      await agentApi.respondPermission(requestId, decision);
+      setEvents(prev => prev.map(ev => (
+        ev.type === 'permission_request' && ev.data?.requestId === requestId
+          ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision } }
+          : ev
+      )));
+    } catch (err) {
+      setEvents(prev => prev.map(ev => (
+        ev.type === 'permission_request' && ev.data?.requestId === requestId
+          ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision: 'error', error: err.message } }
+          : ev
+      )));
+    }
+  }, []);
 
   const hasEvents = events.length > 0;
   const isViewingHistory = !!sessionId && !isRunning;
@@ -343,7 +393,12 @@ export default function AgentPage() {
                 Loading session…
               </div>
             ) : (
-              <AgentRunFeed events={events} isRunning={isRunning} streamingText={streamingText} />
+              <AgentRunFeed
+                events={events}
+                isRunning={isRunning}
+                streamingText={streamingText}
+                onPermissionDecision={handlePermissionDecision}
+              />
             )}
             <div ref={feedEndRef} />
           </div>
