@@ -746,7 +746,7 @@ export const PROVIDER_TYPES = [
 
 export const PROVIDER_DEFAULTS = {
   anthropic: { model: 'claude-sonnet-4-6',          baseUrl: 'https://api.anthropic.com/v1' },
-  minimax:   { model: 'MiniMax-M2.7',               baseUrl: 'https://api.minimax.chat/v1' },
+  minimax:   { model: 'MiniMax-Text-01',             baseUrl: 'https://api.minimax.io/v1' },
   openai:    { model: 'gpt-4o',                     baseUrl: 'https://api.openai.com/v1' },
   groq:      { model: 'llama-3.3-70b-versatile',    baseUrl: 'https://api.groq.com/openai/v1' },
   custom:    { model: '',                           baseUrl: '' },
