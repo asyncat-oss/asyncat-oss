@@ -12,22 +12,6 @@ const formatDuration = (seconds) => {
   return `${hours}h ${minutes}m`;
 };
 
-// Format time difference in a human-readable way
-const formatTimeDiff = (startDate, endDate) => {
-  const start = new Date(startDate);
-  const end = endDate ? new Date(endDate) : new Date();
-
-  const diffInSeconds = Math.floor((end - start) / 1000);
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  const diffInHours = Math.floor(diffInMinutes / 60);
-
-  if (diffInHours > 0) {
-    return `${diffInHours}h ${diffInMinutes % 60}m`;
-  } else {
-    return `${diffInMinutes}m`;
-  }
-};
-
 // Format a date relative to now
 const formatTimeAgo = (date) => {
   const now = new Date();

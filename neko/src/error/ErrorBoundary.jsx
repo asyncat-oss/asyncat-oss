@@ -256,14 +256,14 @@ const UnauthorizedErrorPage = ({ onClear, details }) => {
             <>
               <p>🐾 Welcome back!</p>
               <p className="mt-1 italic">
-                "Every good cat needs a stretch after a nap!" - The Cat
+                &quot;Every good cat needs a stretch after a nap!&quot; - The Cat
               </p>
             </>
           ) : (
             <>
               <p>🐾 Thanks for keeping your account secure!</p>
               <p className="mt-1 italic">
-                "Every good cat needs a nap... and every good session needs a refresh!" - The Cat
+                &quot;Every good cat needs a nap... and every good session needs a refresh!&quot; - The Cat
               </p>
             </>
           )}
@@ -275,7 +275,7 @@ const UnauthorizedErrorPage = ({ onClear, details }) => {
 
 // Route Error Element component for React Router
 export const RouteErrorElement = () => {
-  const error = useRouteError();
+  useRouteError();
   const navigate = useNavigate();
 
   const handleGoHome = () => {
@@ -332,7 +332,7 @@ export const RouteErrorElement = () => {
           </h1>
 
           <p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 mb-6">
-            Looks like you wandered off the beaten path. Let's get you back home!
+            Looks like you wandered off the beaten path. Let&apos;s get you back home!
           </p>
         </div>
 
@@ -364,7 +364,7 @@ export const RouteErrorElement = () => {
         <div className="mt-8 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
           <p>🐾 No worries, it happens!</p>
           <p className="mt-1 italic">
-            "Every path leads somewhere... even the wrong ones!" - The Cat
+            &quot;Every path leads somewhere... even the wrong ones!&quot; - The Cat
           </p>
         </div>
       </div>
@@ -379,7 +379,7 @@ export class ErrorBoundary extends React.Component {
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
 
@@ -505,7 +505,7 @@ export class ErrorBoundary extends React.Component {
             <div className="mt-8 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
               <p>🐾 Thanks for your patience!</p>
               <p className="mt-1 italic">
-                "Even the nimblest cats sometimes stumble... but we always land on our feet!" - The Cat
+                &quot;Even the nimblest cats sometimes stumble... but we always land on our feet!&quot; - The Cat
               </p>
             </div>
           </div>

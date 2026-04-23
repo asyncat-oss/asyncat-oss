@@ -208,7 +208,7 @@ const AuthContainer = () => {
       default: // 'signin'
         return (
           <p className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <button
               onClick={() => navigate('/signup')}
               className="text-gray-900 dark:text-white midnight:text-indigo-400 hover:underline focus:outline-none font-medium"
@@ -230,7 +230,7 @@ const AuthContainer = () => {
             {/* Random motivational quote */}
             <div className="mb-12">
               <h2 className="text-4xl font-bold text-gray-900 dark:text-white midnight:text-gray-100 mb-4 leading-tight">
-                "{currentQuote.text}"
+                &quot;{currentQuote.text}&quot;
                 <span className="block mt-3 text-lg font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-400">— {currentQuote.author}</span>
               </h2>
               
@@ -240,7 +240,7 @@ const AuthContainer = () => {
                 className="mt-4 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
                 title="Get a new quote"
               >
-                ↻ Cat's wisdom
+                ↻ Cat&apos;s wisdom
               </button>
             </div>
           </div>

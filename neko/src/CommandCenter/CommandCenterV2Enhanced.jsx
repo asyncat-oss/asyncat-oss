@@ -36,62 +36,29 @@ import {
   BookOpen,
 } from "lucide-react";
 
-const CommandCenterV2Enhanced = ({ session }) => {
+const CommandCenterV2Enhanced = () => {
   const commandCenterContext = useCommandCenter();
   const { userName } = useUser();
 
-  if (!commandCenterContext) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-indigo-200 dark:border-indigo-800 midnight:border-gray-800 border-t-indigo-600 dark:border-t-indigo-400 midnight:border-t-indigo-300 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-            Initializing Command Center...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const {
-    messages,
-    isProcessing,
-    isStreaming,
-    streamingMessageId,
-    isConversationLoading,
-    handleStreamingMessage,
-    handleRegenerate,
-    handleClearConversation,
-    handleNewConversation,
-    currentConversationId,
-    conversationTitle,
-    loadConversation,
-    triggerConversationRefresh,
-    setConversationTitle,
-
-    // Response style features
-    responseStyle,
-    setResponseStyle,
-
-    // Ghost mode features
-    isGhostMode,
-    toggleGhostMode,
-
-    // Summarization features
-    conversationSummaries,
-
-    // Conversation history for token estimation
-    conversationHistory,
-  } = commandCenterContext;
-
-  // Rough token estimate for context bar: 1 token ≈ 4 chars; add ~500 for system prompt
-  const conversationTokens = useMemo(() => {
-    const historyChars = (conversationHistory || []).reduce(
-      (sum, m) => sum + (m.content?.length || 0),
-      0,
-    );
-    return Math.round(historyChars / 4) + 500;
-  }, [conversationHistory]);
+    messages = [],
+    isProcessing = false,
+    isStreaming = false,
+    isConversationLoading = false,
+    handleStreamingMessage = () => {},
+    handleRegenerate = () => {},
+    handleClearConversation = () => {},
+    currentConversationId = null,
+    conversationTitle = "",
+    triggerConversationRefresh = () => {},
+    setConversationTitle = () => {},
+    responseStyle = "concise",
+    setResponseStyle = () => {},
+    isGhostMode = false,
+    toggleGhostMode = () => {},
+    conversationSummaries = null,
+    conversationHistory = [],
+  } = commandCenterContext || {};
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -103,10 +70,18 @@ const CommandCenterV2Enhanced = ({ session }) => {
   const [artifactToSave, setArtifactToSave] = useState(null);
   const [clarifyQuestions, setClarifyQuestions] = useState(null);
   const [sideArtifact, setSideArtifact] = useState(null);
-  const [explainPanel, setExplainPanel] = useState(null); // { term, definition }
+  const [explainPanel, setExplainPanel] = useState(null);
   const [showGlossary, setShowGlossary] = useState(false);
   const [showNavigation, setShowNavigation] = useState(true);
   const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const conversationTokens = useMemo(() => {
+    const historyChars = (conversationHistory || []).reduce(
+      (sum, m) => sum + (m.content?.length || 0),
+      0,
+    );
+    return Math.round(historyChars / 4) + 500;
+  }, [conversationHistory]);
 
   // Count total artifacts in conversation - memoized for performance
   const totalArtifacts = useMemo(() => {
@@ -199,7 +174,9 @@ const CommandCenterV2Enhanced = ({ session }) => {
       if (parsed.questions?.length) {
         setClarifyQuestions(parsed.questions);
       }
-    } catch {}
+    } catch (err) {
+        console.error('Failed to parse clarify questions:', err);
+      }
   }, [messages, isStreaming, isProcessing]);
 
   // Close export menu on outside click
@@ -244,7 +221,6 @@ const CommandCenterV2Enhanced = ({ session }) => {
     currentConversationId,
     setConversationTitle,
     triggerConversationRefresh,
-    true,
   ]);
 
   const handleCancelRename = useCallback(() => {
@@ -253,7 +229,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
   }, [conversationTitle]);
 
   const handleDeleteConversation = useCallback(async () => {
-    if (!true || !currentConversationId) return;
+    if (!currentConversationId) return;
     try {
       await chatApi.deleteConversation(currentConversationId);
       handleClearConversation();
@@ -266,7 +242,6 @@ const CommandCenterV2Enhanced = ({ session }) => {
     currentConversationId,
     handleClearConversation,
     triggerConversationRefresh,
-    true,
   ]);
 
   const handleKeyDown = useCallback(
@@ -719,6 +694,19 @@ const CommandCenterV2Enhanced = ({ session }) => {
 
   const [activeCategory, setActiveCategory] = useState(null);
 
+  if (!commandCenterContext) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-indigo-200 dark:border-indigo-800 midnight:border-gray-800 border-t-indigo-600 dark:border-t-indigo-400 midnight:border-t-indigo-300 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500 dark:text-gray-400 midnight:text-gray-400">
+            Initializing Command Center...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Welcome screen
   const firstName = userName ? userName.split(" ")[0] : "there";
   const hour = new Date().getHours();
@@ -862,8 +850,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
                     <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" />
 
                     <div className="flex items-center gap-2">
-                      {true &&
-                      currentConversationId &&
+                      {currentConversationId &&
                       conversationTitle &&
                       !isEditingTitle ? (
                         <button
@@ -996,8 +983,7 @@ const CommandCenterV2Enhanced = ({ session }) => {
                       </button>
                     )}
 
-                    {true &&
-                      currentConversationId &&
+                    {currentConversationId &&
                       conversationTitle && (
                         <div className="flex items-center gap-1">
                           {isEditingTitle ? (

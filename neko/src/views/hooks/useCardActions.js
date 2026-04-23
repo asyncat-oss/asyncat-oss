@@ -5,7 +5,7 @@ import viewsApi from "../viewsApi";
 
 export const useCardActions = () => {
 	const { setSelectedCard } = useCardContext();
-	const { columns, setColumns, loadColumns } = useColumnContext();
+	const { columns, setColumns } = useColumnContext();
 	const [completionError, setCompletionError] = useState(null);
 
 	// Add function to communicate with The Cat (using MAIN_API_URL)

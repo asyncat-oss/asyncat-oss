@@ -4,7 +4,7 @@ import { X, Trash2, Info, CheckCircle } from "lucide-react";
 import { useColumnActions } from "../hooks/useColumnActions";
 
 const ColumnSettingsModal = ({ column, onClose, onDelete }) => {
-	const { handleColumnUpdate, handleColumnDelete } = useColumnActions();
+	const { handleColumnUpdate } = useColumnActions();
 	const [title, setTitle] = useState(column.title);
 	const [isCompletionColumn, setIsCompletionColumn] = useState(
 		column.isCompletionColumn || false
@@ -38,10 +38,6 @@ const ColumnSettingsModal = ({ column, onClose, onDelete }) => {
 
 	const handleDeleteClick = () => {
 		setConfirmDelete(true);
-	};
-
-	const handleCancelDelete = () => {
-		setConfirmDelete(false);
 	};
 
 	const handleConfirmDelete = async () => {

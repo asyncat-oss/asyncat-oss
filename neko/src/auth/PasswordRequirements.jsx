@@ -1,37 +1,8 @@
-import { Check, X, Shield, Lock } from "lucide-react";
+import { Check, X, Shield } from "lucide-react";
 
 const soraFontBase = "font-sora";
 
 const PasswordRequirements = ({ password, email = "", fullName = "" }) => {
-  const mainRequirements = [
-    {
-      id: "length",
-      text: "At least 8 Characters",
-      shortText: "8+ chars",
-      test: (pwd) => pwd.length >= 8,
-    },
-    {
-      id: "uppercase",
-      text: "One Uppercase Letter",
-      shortText: "Uppercase",
-      test: (pwd) => /[A-Z]/.test(pwd),
-    },
-    {
-      id: "lowercase",
-      text: "One Lowercase Letter",
-      shortText: "Lowercase",
-      test: (pwd) => /[a-z]/.test(pwd),
-    },
-    {
-      id: "number_special",
-      text: "One Number & Special Character",
-      shortText: "Number & special",
-      test: (pwd) =>
-        /[0-9]/.test(pwd) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
-    },
-  ];
-
-  // Separate weak password checks
   const checkWeakPassword = (pwd) => {
     const weakPatterns = [
       /^password/i,
@@ -42,7 +13,7 @@ const PasswordRequirements = ({ password, email = "", fullName = "" }) => {
       /^welcome/i,
       /^admin/i,
       /^user/i,
-      /(.)\1{2,}/, // Repeated characters (3 or more)
+      /(.)\1{2,}/,
     ];
     return weakPatterns.some((pattern) => pattern.test(pwd));
   };
@@ -64,6 +35,13 @@ const PasswordRequirements = ({ password, email = "", fullName = "" }) => {
   const isWeakPassword = password && checkWeakPassword(password);
   const containsPersonalInfo = password && checkPersonalInfo(password);
 
+  const mainRequirements = [
+    { id: 'length', text: 'At least 8 characters', test: pwd => pwd.length >= 8 },
+    { id: 'upper', text: 'Uppercase letter', test: pwd => /[A-Z]/.test(pwd) },
+    { id: 'lower', text: 'Lowercase letter', test: pwd => /[a-z]/.test(pwd) },
+    { id: 'number', text: 'Number & special', test: pwd => /[0-9]/.test(pwd) && /[!@#$%^&*()_+={}[\]:;'"\\|,.<>?-]/.test(pwd) },
+  ];
+
   const getRequirementStatus = (requirement) => {
     if (!password) return "inactive";
     return requirement.test(password) ? "valid" : "invalid";
@@ -82,8 +60,6 @@ const PasswordRequirements = ({ password, email = "", fullName = "" }) => {
       return { level: "Good", color: "orange", width: "w-3/4" };
     return { level: "Strong", color: "green", width: "w-full" };
   };
-
-  const strength = getStrengthInfo();
 
   const allRequirementsMet = validCount === totalCount;
 

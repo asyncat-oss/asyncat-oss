@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Home, ArrowLeft, Search } from 'lucide-react';
+import { Home, ArrowLeft } from 'lucide-react';
 
 const NotFound = () => {
   const navigate = useNavigate();
@@ -28,7 +28,7 @@ const NotFound = () => {
         </h2>
         
         <p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 mb-8 leading-relaxed">
-          The Cat knocked this page off the internet. It's probably somewhere under the couch with the missing socks and your motivation.
+          The Cat knocked this page off the internet. It&apos;s probably somewhere under the couch with the missing socks and your motivation.
         </p>
 
         {/* Action buttons */}
@@ -53,10 +53,10 @@ const NotFound = () => {
         {/* Fun cat facts */}
         <div className="mt-12 p-4 bg-gray-50 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800">
           <p className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-500 italic">
-            "Fun fact: Cats spend 70% of their lives sleeping and 30% knocking things off tables. This page was in the 30%."
+            &quot;Fun fact: Cats spend 70% of their lives sleeping and 30% knocking things off tables. This page was in the 30%."
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-500 midnight:text-gray-600 mt-2">
-            — The Cat's excuse for everything
+            — The Cat&apos;s excuse for everything
           </p>
         </div>
 

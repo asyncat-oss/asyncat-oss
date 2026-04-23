@@ -1,5 +1,7 @@
 
 
+import { Moon, Sun, Palette } from 'lucide-react';
+
 const soraFontBase = "font-sora"; // Added Sora font
 
 const AppearanceSection = ({ theme, setThemeMode }) => {  // Get theme-specific icon for midnight

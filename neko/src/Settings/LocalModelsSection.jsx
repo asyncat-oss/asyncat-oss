@@ -4,8 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Download, Trash2, RefreshCw, HardDrive,
-  CheckCircle, X, Plus, Search,
+  Download, X, Plus, Search,
   ChevronDown, ChevronUp, AlertCircle, Loader2, Database
 } from 'lucide-react';
 import { localModelsApi } from './settingApi.js';
@@ -55,7 +54,7 @@ const useHFSearch = () => {
       if (!res.ok) throw new Error('Search failed');
       const data = await res.json();
       setResults(data || []);
-    } catch (err) {
+    } catch {
       setSearchError('Could not reach HuggingFace. Check your connection.');
       setResults([]);
     } finally {
@@ -91,7 +90,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
           f.rfilename.endsWith('.gguf') || f.rfilename.endsWith('.bin')
         );
         setFiles(ggufFiles);
-      } catch (err) {
+      } catch {
         setError('Could not load model files.');
       } finally {
         setLoading(false);
@@ -416,7 +415,7 @@ const LocalModelsSection = ({ storage, onRefresh }) => {
           </div>
         )}
         {!searching && query && results.length === 0 && !searchError && (
-          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">No GGUF models found for "{query}"</p>
+          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">No GGUF models found for &quot;{query}&quot;</p>
         )}
       </div>
 

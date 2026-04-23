@@ -542,7 +542,7 @@ export const batchAPI = {
 				return entries && entries.length > 0
 					? { [cardId]: entries }
 					: null;
-			} catch (error) {
+			} catch {
 				return null;
 			}
 		});

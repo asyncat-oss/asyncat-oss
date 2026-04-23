@@ -10,7 +10,7 @@ const soraFontBase = "font-sora";
 const DEFAULT_EMAIL = 'admin@local';
 const DEFAULT_PASSWORD = 'changeme';
 
-const SignIn = ({ navigateToSignUp }) => {
+const SignIn = () => {
   const navigate = useNavigate();
   const { signIn } = useAuth();
 

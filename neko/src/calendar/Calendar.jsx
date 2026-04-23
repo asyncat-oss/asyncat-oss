@@ -5,17 +5,15 @@ import {
 	useCallback,
 	useRef,
 } from "react";
-import { Plus } from "lucide-react";
-import { EVENT_COLORS, DAYS_OF_WEEK } from "./data/CalendarConstants"; // Fixed typo here
+import { EVENT_COLORS } from "./data/CalendarConstants";
 import { AddEventModal } from "./components/modals/AddEventModal";
 import ViewEventModal from "./components/modals/ViewEventModal";
 import ViewCardModal from "./components/modals/ViewCardModal";
 import MonthView from "./components/MonthView";
 import DayView from "./components/DayView";
 import WeekView from "./components/WeekView";
-import MultipleEventsModal from "./components/MultipleEventsModal";
 import { EditEventModal } from "./components/modals/EditEventModal";
-import { motion, AnimatePresence } from "framer-motion"; // Added framer-motion for transitions
+import { AnimatePresence } from "framer-motion";
 
 const Calendar = ({
 	view,
@@ -51,7 +49,6 @@ const Calendar = ({
 	// Optimistic UI states
 	const [localEvents, setLocalEvents] = useState([]);
 	const [isOptimisticUpdate, setIsOptimisticUpdate] = useState(false);
-	const [pendingActions, setPendingActions] = useState([]);
 	const [currentTime, setCurrentTime] = useState(new Date()); // Add state for current time
 
 	// Sync local events with props events
@@ -129,43 +126,15 @@ const Calendar = ({
 		setIsOptimisticUpdate(true);
 		setLocalEvents((prev) => prev.filter((e) => e.id !== event.id));
 
-		// Add a visual pending indicator or status
-		setPendingActions((prev) => [
-			...prev,
-			{ type: "delete", id: event.id },
-		]);
-
 		// Close the modal immediately for better UX
 		setShowViewEvent(false);
 
 		// Actually delete from server
 		onDeleteEvent(event)
-			.then(() => {
-				// On success, keep the optimistic state
-				setPendingActions((prev) =>
-					prev.filter(
-						(action) =>
-							!(
-								action.type === "delete" &&
-								action.id === event.id
-							)
-					)
-				);
-			})
 			.catch((error) => {
 				// On failure, restore the event
 				console.error("Failed to delete event:", error);
 				setLocalEvents(events);
-				setPendingActions((prev) =>
-					prev.filter(
-						(action) =>
-							!(
-								action.type === "delete" &&
-								action.id === event.id
-							)
-					)
-				);
-				// Could show an error notification here
 			})
 			.finally(() => {
 				setIsOptimisticUpdate(false);
@@ -214,15 +183,9 @@ const Calendar = ({
 		setIsOptimisticUpdate(true);
 		setLocalEvents((prev) => [...prev, tempEvent]);
 
-		// Close modal immediately
+// Close modal immediately
 		setShowAddEvent(false);
 		setSelectedTimeSlot(null);
-
-		// Add to pending actions
-		setPendingActions((prev) => [
-			...prev,
-			{ type: "add", id: tempEvent.id, tempEvent },
-		]);
 
 		// Actually add to server
 		onAddEvent(newEvent)
@@ -235,15 +198,6 @@ const Calendar = ({
 							: e
 					)
 				);
-				setPendingActions((prev) =>
-					prev.filter(
-						(action) =>
-							!(
-								action.type === "add" &&
-								action.id === tempEvent.id
-							)
-					)
-				);
 			})
 			.catch((error) => {
 				// On failure, remove the temp event
@@ -251,16 +205,6 @@ const Calendar = ({
 				setLocalEvents((prev) =>
 					prev.filter((e) => e.id !== tempEvent.id)
 				);
-				setPendingActions((prev) =>
-					prev.filter(
-						(action) =>
-							!(
-								action.type === "add" &&
-								action.id === tempEvent.id
-							)
-					)
-				);
-				// Could show an error notification here
 			})
 			.finally(() => {
 				setIsOptimisticUpdate(false);
@@ -294,16 +238,6 @@ const Calendar = ({
 		// Close modal immediately
 		setShowEditModal(false);
 
-		// Add to pending actions
-		setPendingActions((prev) => [
-			...prev,
-			{
-				type: "update",
-				id: updatedEvent.id,
-				updatedEvent,
-				originalEvent,
-			},
-		]);
 		// Actually update on server
 		return onEventUpdate(updatedEvent)
 			.then(() => {
@@ -320,16 +254,6 @@ const Calendar = ({
 				if (selectedEvent && selectedEvent.id === updatedEvent.id) {
 					setSelectedEvent({ ...updatedEvent, isPending: false });
 				}
-
-				setPendingActions((prev) =>
-					prev.filter(
-						(action) =>
-							!(
-								action.type === "update" &&
-								action.id === updatedEvent.id
-							)
-					)
-				);
 			})
 			.catch((error) => {
 				// On failure, restore original event
@@ -345,28 +269,12 @@ const Calendar = ({
 					setSelectedEvent(originalEvent);
 				}
 
-				setPendingActions((prev) =>
-					prev.filter(
-						(action) =>
-							!(
-								action.type === "update" &&
-								action.id === updatedEvent.id
-							)
-					)
-				);
 				throw error; // Re-throw to allow awaiting component to catch if necessary
 			})
 			.finally(() => {
 				setIsOptimisticUpdate(false);
 			});
 	};
-
-	const timeSlots = useMemo(() => {
-		return Array.from(
-			{ length: 24 },
-			(_, i) => `${i.toString().padStart(2, "0")}:00`
-		);
-	}, []);
 
 	const isToday = useCallback((date) => {
 		const today = new Date();

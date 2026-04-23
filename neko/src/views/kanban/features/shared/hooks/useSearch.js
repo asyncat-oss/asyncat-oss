@@ -152,7 +152,7 @@ export const useSearch = () => {
       });
 
       // Search through the cards
-      content.cardMap.forEach((card, id) => {
+      content.cardMap.forEach((card) => {
         let matches = [];
         let score = 0;
 

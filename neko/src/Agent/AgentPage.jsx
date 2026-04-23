@@ -126,8 +126,11 @@ export default function AgentPage() {
         try {
           const auditRes = await agentApi.getSessionAudit(sessionId);
           auditRows = auditRes?.audit || [];
-        } catch {}
-
+        } catch (err) {
+          // TODO: handle error
+          console.error('Failed to audit session:', err);
+        }
+    
         const sourceRows = auditRows.length ? auditRows.map(row => ({
           tool: row.tool_name,
           args: row.args,
@@ -187,7 +190,9 @@ export default function AgentPage() {
       await agentApi.deleteSession(sessionId);
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
       navigate('/agents');
-    } catch {}
+    } catch {
+      // TODO: handle error
+    }
     setIsDeleting(false);
   }, [sessionId, isDeleting, navigate]);
 

@@ -1,17 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import {
-	Search,
-	ZoomIn,
-	ZoomOut,
-	Maximize2,
-	Filter,
-	X,
-	Tag,
-	FileText,
-	Clock,
-	AlertCircle,
-	Columns,
-} from "lucide-react";
 import { useSearch } from "../shared/hooks/useSearch";
 import KanbanFilters from "../shared/components/KanbanFilters";
 import { useCardContext } from "../../../context/CardContext";

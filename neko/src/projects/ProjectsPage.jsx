@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ProjectGrid from "./views/ProjectGrid";
 import { useWorkspace } from "../contexts/WorkspaceContext";
-import { projectApi, projectMembersApi } from "./projectApi";
+import { projectApi } from "./projectApi";
 import { projectFoldersApi } from "../CommandCenter/commandCenterApi";
 import eventBus from "../utils/eventBus.js";
 

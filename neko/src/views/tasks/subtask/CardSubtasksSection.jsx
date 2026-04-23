@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CheckSquare, Plus, AlertTriangle } from "lucide-react";
+import { CheckSquare, Plus } from "lucide-react";
 import TaskChecklist from "../../kanban/features/shared/components/TaskChecklist";
 
 const CardSubtasksSection = ({

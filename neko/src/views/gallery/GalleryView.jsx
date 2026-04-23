@@ -48,51 +48,12 @@ const getPriorityColor = (priority) => {
 };
 
 const GalleryView = ({ selectedProject }) => {
-	const { columns, isLoading, error } = useColumnContext();
+	const { columns, error } = useColumnContext();
 	const { setSelectedCard } = useCardContext();
 
-	if (error) {
-		return (
-			<div className="p-6 bg-white dark:bg-gray-900 midnight:bg-gray-950 min-h-screen flex items-center justify-center">
-				<div className="text-center">
-					<div className="text-red-500 dark:text-red-400 midnight:text-red-400 text-6xl mb-4">
-						⚠️
-					</div>
-					<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-2">
-						Error loading gallery
-					</h3>
-					<p className="text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-						{error}
-					</p>
-				</div>
-			</div>
-		);
-	}
-	if (!selectedProject?.id) {
-		return (
-			<div className="p-6 bg-white dark:bg-gray-900 midnight:bg-gray-950 min-h-screen flex items-center justify-center">
-				<div className="text-center">
-					<div className="text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-6xl mb-4">
-						📁
-					</div>
-					<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-2">
-						No Project Selected
-					</h3>
-					<p className="text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-						Select a project to view its gallery.
-					</p>
-				</div>
-			</div>
-		);
-	}
-
-	// Flatten all cards from columns
 	const cards = columns.flatMap((col) => col.Cards || []);
 
-	// State for CreateTaskModal
 	const [showCreateTask, setShowCreateTask] = useState(false);
-
-	// Search and filter state (mirrors ListView basic filters)
 	const [searchTerm, setSearchTerm] = useState("");
 	const [filterConfig, setFilterConfig] = useState({
 		priority: [],
@@ -100,53 +61,6 @@ const GalleryView = ({ selectedProject }) => {
 		completed: false,
 	});
 
-	// Filter toggles
-	const toggleCompletedFilter = () => {
-		setFilterConfig((prev) => ({ ...prev, completed: !prev.completed }));
-	};
-
-	const togglePriorityFilter = (priority) => {
-		setFilterConfig((prev) => ({
-			...prev,
-			priority: prev.priority.includes(priority)
-				? prev.priority.filter((p) => p !== priority)
-				: [...prev.priority, priority],
-		}));
-	};
-
-	const toggleDueStatusFilter = (key) => {
-		setFilterConfig((prev) => ({
-			...prev,
-			dueStatus: prev.dueStatus.includes(key)
-				? prev.dueStatus.filter((k) => k !== key)
-				: [...prev.dueStatus, key],
-		}));
-	};
-
-	const clearFilters = () => {
-		setFilterConfig({
-			priority: [],
-			dueStatus: [],
-			completed: false,
-		});
-	};
-
-	// Helper for filter: status by due date like in ListView
-	const dueStatusKey = (dueDate) => {
-		if (!dueDate) return null;
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-		const due = new Date(dueDate);
-		due.setHours(0, 0, 0, 0);
-		if (due < today) return "overdue";
-		if (due.getTime() === today.getTime()) return "today";
-		const nextWeek = new Date(today);
-		nextWeek.setDate(today.getDate() + 7);
-		if (due > today && due <= nextWeek) return "thisWeek";
-		return null;
-	};
-
-	// Apply search and filters
 	const filteredCards = useMemo(() => {
 		let result = [...cards];
 
@@ -184,6 +98,85 @@ const GalleryView = ({ selectedProject }) => {
 
 		return result;
 	}, [cards, searchTerm, filterConfig]);
+
+	const toggleCompletedFilter = () => {
+		setFilterConfig((prev) => ({ ...prev, completed: !prev.completed }));
+	};
+
+	const togglePriorityFilter = (priority) => {
+		setFilterConfig((prev) => ({
+			...prev,
+			priority: prev.priority.includes(priority)
+				? prev.priority.filter((p) => p !== priority)
+				: [...prev.priority, priority],
+		}));
+	};
+
+	const toggleDueStatusFilter = (key) => {
+		setFilterConfig((prev) => ({
+			...prev,
+			dueStatus: prev.dueStatus.includes(key)
+				? prev.dueStatus.filter((k) => k !== key)
+				: [...prev.dueStatus, key],
+		}));
+	};
+
+	const clearFilters = () => {
+		setFilterConfig({
+			priority: [],
+			dueStatus: [],
+			completed: false,
+		});
+	};
+
+	const dueStatusKey = (dueDate) => {
+		if (!dueDate) return null;
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		const due = new Date(dueDate);
+		due.setHours(0, 0, 0, 0);
+		if (due < today) return "overdue";
+		if (due.getTime() === today.getTime()) return "today";
+		const nextWeek = new Date(today);
+		nextWeek.setDate(today.getDate() + 7);
+		if (due > today && due <= nextWeek) return "thisWeek";
+		return null;
+	};
+
+	if (error) {
+		return (
+			<div className="p-6 bg-white dark:bg-gray-900 midnight:bg-gray-950 min-h-screen flex items-center justify-center">
+				<div className="text-center">
+					<div className="text-red-500 dark:text-red-400 midnight:text-red-400 text-6xl mb-4">
+						⚠️
+					</div>
+					<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-2">
+						Error loading gallery
+					</h3>
+					<p className="text-gray-600 dark:text-gray-400 midnight:text-gray-400">
+						{error}
+					</p>
+				</div>
+			</div>
+		);
+	}
+	if (!selectedProject?.id) {
+		return (
+			<div className="p-6 bg-white dark:bg-gray-900 midnight:bg-gray-950 min-h-screen flex items-center justify-center">
+				<div className="text-center">
+					<div className="text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-6xl mb-4">
+						📁
+					</div>
+					<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-2">
+						No Project Selected
+					</h3>
+					<p className="text-gray-600 dark:text-gray-400 midnight:text-gray-400">
+						Select a project to view its gallery.
+					</p>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="p-0 bg-white dark:bg-gray-900 midnight:bg-gray-950 min-h-screen flex flex-col">

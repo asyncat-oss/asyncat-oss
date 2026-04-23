@@ -59,7 +59,7 @@ export const attachmentApi = {
             try {
               const response = JSON.parse(xhr.responseText);
               resolve(response);
-            } catch (e) {
+            } catch {
               reject(new Error("Invalid response format"));
             }
           } else {
@@ -71,7 +71,7 @@ export const attachmentApi = {
                     `Upload failed with status ${xhr.status}`
                 )
               );
-            } catch (e) {
+            } catch {
               reject(new Error(`Upload failed with status ${xhr.status}`));
             }
           }
@@ -564,14 +564,14 @@ export const attachmentApi = {
             try {
               const response = JSON.parse(xhr.responseText);
               resolve(response.data);
-            } catch (e) {
+            } catch {
               reject(new Error("Invalid response format"));
             }
           } else {
             try {
               const error = JSON.parse(xhr.responseText);
               reject(new Error(error.error || "Upload failed"));
-            } catch (e) {
+            } catch {
               reject(new Error(`Upload failed with status ${xhr.status}`));
             }
           }

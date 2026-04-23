@@ -1,5 +1,5 @@
 
-import { Search, CheckCircle, User, Calendar, AlertCircle, X, ZoomIn, ZoomOut, Maximize2, Siren, Disc3Icon, LifeBuoy } from "lucide-react";
+import { Search, User, Calendar, AlertCircle, X, ZoomIn, ZoomOut, Maximize2, Siren, Disc3Icon, LifeBuoy } from "lucide-react";
 
 const KanbanFilters = ({
   searchTerm,

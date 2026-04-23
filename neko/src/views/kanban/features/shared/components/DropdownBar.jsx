@@ -5,7 +5,6 @@ import {
 	AlertCircle,
 	Tag,
 	Sun,
-	LifeBuoyIcon,
 	BadgeAlert,
 	ListTodo,
 	Timer,

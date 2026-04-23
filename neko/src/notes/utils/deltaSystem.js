@@ -614,44 +614,47 @@ export class DeltaTracker {
         this.currentTitle = operation.data.to;
         break;
         
-      case OperationType.INSERT_BLOCK:
-        // Add to block states
+      case OperationType.INSERT_BLOCK: {
         const newState = new BlockState(operation.data.block);
         newState.currentPosition = operation.data.position;
         this.blockStates.set(operation.data.block.id, newState);
         this.updateBlockPositions(operation.data.position, 1);
         break;
+      }
         
       case OperationType.DELETE_BLOCK:
         this.blockStates.delete(operation.data.blockId);
         this.updateBlockPositions(operation.data.position, -1);
         break;
         
-      case OperationType.UPDATE_BLOCK_CONTENT:
+      case OperationType.UPDATE_BLOCK_CONTENT: {
         const contentState = this.blockStates.get(operation.data.blockId);
         if (contentState) {
           contentState.currentContent = operation.data.to;
           contentState.version = operation.data.version;
         }
         break;
+      }
         
-      case OperationType.UPDATE_BLOCK_TYPE:
+      case OperationType.UPDATE_BLOCK_TYPE: {
         const typeState = this.blockStates.get(operation.data.blockId);
         if (typeState) {
           typeState.currentType = operation.data.to;
           typeState.version = operation.data.version;
         }
         break;
+      }
         
-      case OperationType.UPDATE_BLOCK_PROPERTIES:
+      case OperationType.UPDATE_BLOCK_PROPERTIES: {
         const propState = this.blockStates.get(operation.data.blockId);
         if (propState) {
           propState.currentProperties = operation.data.to;
           propState.version = operation.data.version;
         }
         break;
+      }
         
-      case OperationType.MOVE_BLOCK:
+      case OperationType.MOVE_BLOCK: {
         const moveState = this.blockStates.get(operation.data.blockId);
         if (moveState) {
           this.moveBlock(
@@ -661,6 +664,7 @@ export class DeltaTracker {
           );
         }
         break;
+      }
         
       case OperationType.UPDATE_METADATA:
         // Metadata changes don't affect block states but are tracked for sync
@@ -831,13 +835,14 @@ export function applyChangeset(blocks, changeset) {
         );
         break;
         
-      case OperationType.MOVE_BLOCK:
+      case OperationType.MOVE_BLOCK: {
         const block = newBlocks.find(b => b.id === operation.data.blockId);
         if (block) {
           newBlocks = newBlocks.filter(b => b.id !== operation.data.blockId);
           newBlocks.splice(operation.data.toPosition, 0, block);
         }
         break;
+      }
         
       case OperationType.UPDATE_METADATA:
         // Metadata updates are handled at a higher level

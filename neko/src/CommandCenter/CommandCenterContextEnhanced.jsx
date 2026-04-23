@@ -133,7 +133,7 @@ function commandCenterReducer(state, action) {
   switch (action.type) {
     case ActionTypes.SET_MESSAGES:
       return { ...state, messages: action.payload };
-    case ActionTypes.ADD_MESSAGE:
+    case ActionTypes.ADD_MESSAGE: {
       const newMessage = {
         id: action.payload.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date().toISOString(),
@@ -144,6 +144,7 @@ function commandCenterReducer(state, action) {
         ...state,
         messages: [...state.messages, newMessage]
       };
+    }
     case ActionTypes.SET_PROCESSING:
       return { ...state, isProcessing: action.payload };
     case ActionTypes.SET_CONVERSATION_LOADING:
@@ -213,7 +214,7 @@ function commandCenterReducer(state, action) {
       return { ...state, conversationSummaries: action.payload };
 
     // Conversation file cases
-    case ActionTypes.ADD_CONVERSATION_FILES:
+    case ActionTypes.ADD_CONVERSATION_FILES: {
       const newFiles = action.payload;
       const existingFiles = state.conversationFiles || [];
       const combinedFiles = [...existingFiles, ...newFiles];
@@ -227,6 +228,7 @@ function commandCenterReducer(state, action) {
         conversationFiles: combinedFiles,
         conversationFileContent: combinedContent
       };
+    }
       
     case ActionTypes.CLEAR_CONVERSATION_FILES:
       return { 

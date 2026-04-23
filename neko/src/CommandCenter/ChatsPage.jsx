@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi, chatFoldersApi } from './commandCenterApi';
-import { MessageSquare, Clock, Plus, Search, Folder, FolderOpen } from 'lucide-react';
+import { MessageSquare, Clock, Search, Folder, FolderOpen } from 'lucide-react';
 
 const getRelativeTime = (dateString) => {
   const date = new Date(dateString);

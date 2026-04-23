@@ -1,14 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import ProjectOverviewOriginal from "../projects/ProjectOverviewContent.jsx";
 import eventBus from "../utils/eventBus.js";
 
 const ProjectOverview = () => {
-  const { selectedProject, session, refreshProjects, onProjectSelect } = useOutletContext();
+  const { selectedProject, session, refreshProjects } = useOutletContext();
   const { projectId, tab } = useParams();
   const navigate = useNavigate();
-  
-  const [error, setError] = useState(null);
 
   // Valid tabs that can be accessed via URL
   const validTabs = [
@@ -34,26 +32,18 @@ const ProjectOverview = () => {
     }
   }, [tab, projectId, navigate, validTabs]);
 
-  const handleTabChange = (newTab) => {
-    navigate(`/projects/${projectId}/${newTab}`);
-  };
-
   const handleUpdate = async (updatedData) => {
     try {
-      // Import the projectApi to update the project
       const { projectApi } = await import('./projectApi.js');
 
-      // Update the project using the API
       const updatedProject = await projectApi.updateProject(selectedProject.id, updatedData);
 
-      // Notify other components to refresh project lists
       eventBus.emit('projectsUpdated');
-      
-      // Refresh projects list in parent
+
       if (refreshProjects) {
         refreshProjects();
       }
-      
+
       return updatedProject;
     } catch (error) {
       console.error('Error updating project:', error);
@@ -61,17 +51,8 @@ const ProjectOverview = () => {
     }
   };
 
-  const handleDelete = async (project) => {
-    // Your existing delete logic here
+  const handleDelete = async () => {
     refreshProjects();
-    navigate('/projects');
-  };
-
-  const handleSwitchProject = (project) => {
-    navigate(`/projects/${project.id}`);
-  };
-
-  const handleBackToProjects = () => {
     navigate('/projects');
   };
 
@@ -81,12 +62,9 @@ const ProjectOverview = () => {
       selectedProject={selectedProject}
       projectId={projectId}
       currentTab={currentTab}
-      onTabChange={handleTabChange}
       onUpdate={handleUpdate}
       onDelete={handleDelete}
-      onSwitchProject={handleSwitchProject}
       session={session}
-      onBackToProjects={handleBackToProjects}
     />
   );
 };

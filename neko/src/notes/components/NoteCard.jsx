@@ -3,12 +3,6 @@ import {
   FileText,
   Clock,
   Check,
-  Briefcase,
-  User,
-  Hash,
-  List,
-  Quote,
-  Info,
   Loader,
 } from "lucide-react";
 import { attachmentApi } from "../attachmentApi";
@@ -24,43 +18,13 @@ const formatDate = (dateString) => {
   }).format(date);
 };
 
-// Get note type icon based on content
-const getNoteTypeIcon = (content, metadata) => {
-  try {
-    if (metadata) {
-      const meta =
-        typeof metadata === "string" ? JSON.parse(metadata) : metadata;
-      if (meta.blocks && meta.blocks.length > 0) {
-        const firstBlock = meta.blocks[0];
-        switch (firstBlock.type) {
-          case "heading1":
-          case "heading2":
-          case "heading3":
-            return Hash;
-          case "bulletList":
-          case "numberedList":
-            return List;
-          case "quote":
-            return Quote;
-          case "callout":
-            return Info;
-          default:
-            return FileText;
-        }
-      }
-    }
-  } catch (e) {
-    // Fallback to default icon
-  }
-  return FileText;
-};
+
 
 const NoteCard = ({
   note,
   onClick,
   isSelected,
   onToggleSelect,
-  projectName,
   userData,
   getProfilePicture,
 }) => {
@@ -68,7 +32,7 @@ const NoteCard = ({
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerError, setBannerError] = useState(false);
 
-  const handleClick = (e) => {
+  const handleClick = () => {
     onClick(note);
   };
 

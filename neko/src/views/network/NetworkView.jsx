@@ -20,7 +20,6 @@ import {
   CheckCircle,
   Link2,
   Network,
-  Trash2, // Icon for delete
   Plus, // Icon for add
   X, // Icon for closing notification
   Info, // Icon for info/legend

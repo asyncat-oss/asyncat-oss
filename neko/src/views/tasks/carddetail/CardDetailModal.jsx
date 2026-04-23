@@ -3,8 +3,15 @@ import {
 	useEffect,
 	useCallback,
 	useRef,
-	useMemo,
 } from "react";
+
+const getProfilePicture = (profilePicId) => {
+	if (!profilePicId) return null;
+	const baseUrl = import.meta.env?.VITE_API_URL || '';
+	return profilePicId.startsWith('http') 
+		? profilePicId 
+		: `${baseUrl}/api/files/${profilePicId}`;
+};
 import {
 	FileText,
 	File,

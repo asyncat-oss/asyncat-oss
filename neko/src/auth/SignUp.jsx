@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import FormInput from './FormInput';
 import PasswordRequirements from './PasswordRequirements';
 import useAuth from '../hooks/useAuth';
-import { AlertTriangle } from 'lucide-react';
 
 const soraFontBase = "font-sora";
 
-const SignUp = ({ navigateToSignIn }) => {
+const SignUp = () => {
   const navigate = useNavigate();
   const { signUp } = useAuth();
   const [formData, setFormData] = useState({
@@ -25,7 +24,7 @@ const SignUp = ({ navigateToSignIn }) => {
       { test: pwd => pwd.length >= 8, message: 'Password must be at least 8 characters long' },
       { test: pwd => /[A-Z]/.test(pwd), message: 'Password must contain at least one uppercase letter' },
       { test: pwd => /[a-z]/.test(pwd), message: 'Password must contain at least one lowercase letter' },
-      { test: pwd => /[0-9]/.test(pwd) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd), message: 'Password must contain at least one number and one special character' },
+      { test: pwd => /[0-9]/.test(pwd) && /[!@#$%^&*()_+={}[\]:;'"\\|,.<>?-]/.test(pwd), message: 'Password must contain at least one number and one special character' },
       {
         test: pwd => {
           const weakPatterns = [
@@ -86,7 +85,7 @@ const SignUp = ({ navigateToSignIn }) => {
       pwd => pwd.length >= 8,
       pwd => /[A-Z]/.test(pwd),
       pwd => /[a-z]/.test(pwd),
-      pwd => /[0-9]/.test(pwd) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
+pwd => /[0-9]/.test(pwd) && /[!@#$%^&*()_+={}[\]:;'"\\|,.<>?-]/.test(pwd),
     ];
 
     return requirements.every(test => test(password));

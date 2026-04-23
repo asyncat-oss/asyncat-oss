@@ -18,11 +18,8 @@ import {
   MoveRight,
   Edit3,
   Lock,
-  Eye,
-  Wifi,
   WifiOff,
   Link2,
-  GitBranch,
   Link,
   Loader,
 } from "lucide-react";
@@ -109,37 +106,6 @@ const isDueDatePassed = (dueDate) => {
   due.setHours(0, 0, 0, 0); // Set to beginning of day
 
   return due < today;
-};
-
-// Get due date styling classes based on status
-const getDueDateClasses = (dueDate) => {
-  if (!dueDate)
-    return "text-gray-500 dark:text-gray-300 midnight:text-gray-500";
-
-  if (isDueDatePassed(dueDate)) {
-    return "text-red-600 dark:text-red-400 midnight:text-red-500 font-medium";
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const due = new Date(dueDate);
-  due.setHours(0, 0, 0, 0);
-
-  // Due today
-  if (due.getTime() === today.getTime()) {
-    return "text-yellow-600 dark:text-yellow-400 midnight:text-yellow-500 font-medium";
-  }
-
-  // Due within next 2 days
-  const twoDaysFromNow = new Date(today);
-  twoDaysFromNow.setDate(today.getDate() + 2);
-
-  if (due <= twoDaysFromNow) {
-    return "text-orange-500 dark:text-orange-400 midnight:text-orange-500";
-  }
-
-  return "text-gray-500 dark:text-gray-300 midnight:text-gray-500";
 };
 
 // Get formatted date for completion display

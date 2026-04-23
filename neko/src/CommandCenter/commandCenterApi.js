@@ -253,7 +253,7 @@ export const chatApi = {
               if (parsed.content) {
                 yield parsed.content;
               }
-            } catch (_e) {
+            } catch (e) {
               if (e.code || e.type) {
                 // Re-throw errors with code/type (our custom errors)
                 throw e;
@@ -1008,7 +1008,7 @@ export const agentApi = {
               const parsed = JSON.parse(line.slice(6));
               if (parsed.type === 'done') return;
               yield parsed;
-            } catch (_e) {
+            } catch (e) {
               console.warn('Failed to parse agent SSE:', e);
             }
           }

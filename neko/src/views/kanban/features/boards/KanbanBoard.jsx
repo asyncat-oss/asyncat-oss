@@ -22,11 +22,9 @@ import {
 	SortableContext,
 	horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 
 import Column from "../columns/components/Column";
 import LoadingColumn from "../shared/components/LoadingColumn";
-import { useColumnActions } from "../columns/hooks/useColumnActions";
 import viewsApi from "../../../viewsApi";
 
 import Card from "../cards/Card";
@@ -52,11 +50,10 @@ const KanbanBoard = () => {
 		loadColumns,
 		selectedProject,
 	} = useColumnContext();
-	const { setSelectedCard, deletingCards } = useCardContext();
+	useCardContext();
 	const { moveCard } = useCardActions();
 	const { getUserRole, hasPermission, userId } = useUser();
 	keyframes;
-	const { handleColumnDelete: deleteColumn } = useColumnActions();
 
 	const [showAddColumnModal, setShowAddColumnModal] = useState(false);
 	const [zoomLevel, setZoomLevel] = useState(80);

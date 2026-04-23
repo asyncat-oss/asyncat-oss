@@ -4,7 +4,7 @@ import NoteGrid from "./components/NoteGrid";
 import ModernNoteEditor from "./modern/ModernNoteEditor";
 import EmptyState from "./components/EmptyState";
 import AlertModal from "./modern/AlertModal";
-import { FileWarning, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { FileWarning, WifiOff, RefreshCw } from "lucide-react";
 
 const Layout = ({ selectedProject }) => {
   const {
@@ -55,7 +55,7 @@ const Layout = ({ selectedProject }) => {
           await loadNotes(projectId);
         }
         setLastRefresh(new Date());
-      } catch (error) {
+      } catch {
         // Error handled by context
       }
     };
@@ -66,7 +66,6 @@ const Layout = ({ selectedProject }) => {
   // Check for note to open from Universal Search
   useEffect(() => {
     const noteIdToOpen = sessionStorage.getItem("openNoteId");
-    const shouldEdit = sessionStorage.getItem("editMode") === "true";
 
     if (noteIdToOpen && notes.length > 0) {
       // Find the note in the loaded notes
@@ -125,7 +124,7 @@ const Layout = ({ selectedProject }) => {
       if (newNote) {
         setSelectedNote(newNote);
       }
-    } catch (error) {
+    } catch {
       // Error handled by context
     }
   }, [
@@ -154,7 +153,7 @@ const Layout = ({ selectedProject }) => {
         } else {
           await selectNoteWithContent(newNote);
         }
-      } catch (error) {
+      } catch {
         setSelectedNote(newNote); // Fallback
       }
     },
@@ -174,7 +173,7 @@ const Layout = ({ selectedProject }) => {
         if (fullNote) {
           setSelectedNote(fullNote);
         }
-      } catch (error) {
+      } catch {
         // Note is already selected, so user can still interact with it
       }
     },
@@ -199,7 +198,7 @@ const Layout = ({ selectedProject }) => {
         await loadNotes(projectId);
       }
       setLastRefresh(new Date());
-    } catch (error) {
+    } catch {
       // Error handled by context
     } finally {
       setIsRefreshing(false);
@@ -219,7 +218,7 @@ const Layout = ({ selectedProject }) => {
         if (projectId) {
           loadNotes(projectId);
         }
-      } catch (error) {
+      } catch {
         // Error handled by context
       }
     },
@@ -272,7 +271,7 @@ const Layout = ({ selectedProject }) => {
             <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200 midnight:text-orange-300">
               <WifiOff className="w-4 h-4" />
               <span className="text-sm">
-                You're offline. Changes will be saved when connection is
+                You&apos;re offline. Changes will be saved when connection is
                 restored.
               </span>
             </div>
@@ -326,7 +325,7 @@ const Layout = ({ selectedProject }) => {
             <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200 midnight:text-orange-300">
               <WifiOff className="w-4 h-4" />
               <span className="text-sm">
-                You're offline. Changes will be saved when connection is
+                You&apos;re offline. Changes will be saved when connection is
                 restored.
               </span>
             </div>
@@ -348,7 +347,7 @@ const Layout = ({ selectedProject }) => {
             <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200 midnight:text-orange-300">
               <WifiOff className="w-4 h-4" />
               <span className="text-sm">
-                You're offline. Changes will be saved when connection is
+                You&apos;re offline. Changes will be saved when connection is
                 restored.
               </span>
             </div>

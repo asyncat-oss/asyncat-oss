@@ -22,6 +22,9 @@ import {
 	formatDuration,
 	getDueDateStyle,
 	getProgressColor,
+	getProfilePicture,
+	getMemberDisplayName,
+	getMemberInitial,
 } from "./ListViewUtils";
 import { useCardActions } from "../hooks/useCardActions";
 

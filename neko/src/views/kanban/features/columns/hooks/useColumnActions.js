@@ -3,17 +3,15 @@ import { useState } from "react";
 import viewsApi from "../../../../viewsApi";
 
 export const useColumnActions = () => {
-	const { columns, setColumns, loadColumns } = useColumnContext();
+	const { setColumns } = useColumnContext();
 	const [pendingOperations, setPendingOperations] = useState({
 		deletingColumns: [],
 	});
 
-	// Move the API methods from ColumnProvider here
 	const addColumn = async (columnData) => {
 		const projectId = sessionStorage.getItem("projectId");
 		const userId = sessionStorage.getItem("userId");
 
-		// For personal boards, use the user's ID as the project
 		const effectiveProjectId = projectId || userId;
 
 		try {
@@ -23,17 +21,13 @@ export const useColumnActions = () => {
 				Cards: [],
 			});
 
-			// Only add to state if real-time doesn't handle it
-			// Check if column already exists (real-time might have added it)
 			setColumns((prev) => {
 				const existingColumn = prev.find(
 					(col) => col.id === newColumn.id
 				);
 				if (existingColumn) {
-					// Column already exists (probably from real-time), don't add duplicate
 					return prev;
 				}
-				// Column doesn't exist, add it
 				return [...prev, { ...newColumn, Cards: [] }];
 			});
 
@@ -52,7 +46,7 @@ export const useColumnActions = () => {
 		try {
 			const updatedColumn = await viewsApi.column.update(columnId, {
 				...updates,
-				projectId: effectiveProjectId, // Make sure projectId is included
+				projectId: effectiveProjectId,
 			});
 
 			setColumns((prev) =>
@@ -83,7 +77,6 @@ export const useColumnActions = () => {
 		try {
 			await viewsApi.column.delete(columnId, effectiveProjectId);
 
-			// Only update the state after the API call succeeds
 			setColumns((prev) => prev.filter((col) => col.id !== columnId));
 		} catch (err) {
 			console.error("Error deleting column:", err);
@@ -96,7 +89,7 @@ export const useColumnActions = () => {
 
 		try {
 			const updatedColumns = await viewsApi.column.updateOrder(
-				projectId || null, // Send null explicitly for personal boards
+				projectId || null,
 				newOrder
 			);
 
@@ -112,7 +105,6 @@ export const useColumnActions = () => {
 		}
 	};
 
-	// New function to update column completion status
 	const updateColumnCompletionStatus = async (
 		columnId,
 		isCompletionColumn
@@ -123,7 +115,6 @@ export const useColumnActions = () => {
 				isCompletionColumn
 			);
 
-			// Update the columns in the UI
 			setColumns((prev) =>
 				prev.map((col) => {
 					if (col.id === columnId) {
@@ -144,7 +135,6 @@ export const useColumnActions = () => {
 		}
 	};
 
-	// Keep the existing wrapper methods, but have them call the local methods
 	const handleColumnAdd = async (columnData) => {
 		try {
 			return await addColumn(columnData);
@@ -165,16 +155,13 @@ export const useColumnActions = () => {
 
 	const handleColumnDelete = async (columnId) => {
 		try {
-			// Set column as deleting
 			setPendingOperations((prev) => ({
 				...prev,
 				deletingColumns: [...prev.deletingColumns, columnId],
 			}));
 
-			// Wait for the actual deletion
 			await deleteColumn(columnId);
 
-			// Remove from tracking state after deletion
 			setPendingOperations((prev) => ({
 				...prev,
 				deletingColumns: prev.deletingColumns.filter(
@@ -184,7 +171,6 @@ export const useColumnActions = () => {
 		} catch (error) {
 			console.error("Error deleting column:", error);
 
-			// Clean up the pending state if there's an error
 			setPendingOperations((prev) => ({
 				...prev,
 				deletingColumns: prev.deletingColumns.filter(
@@ -192,7 +178,6 @@ export const useColumnActions = () => {
 				),
 			}));
 
-			// Re-throw with a clear message
 			if (
 				error.message &&
 				error.message.includes("Cannot delete column with cards")
