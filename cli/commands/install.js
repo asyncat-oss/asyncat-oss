@@ -26,6 +26,70 @@ function checkCmd(cmd) {
 	}
 }
 
+function llamaServerPaths() {
+	const home = os.homedir();
+	const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+	return [
+		path.join(home, "AppData", "Local", "Microsoft", "WindowsApps", "llama-server.exe"),
+		path.join(localAppData, "Microsoft", "WindowsApps", "llama-server.exe"),
+		path.join(localAppData, "Microsoft", "WinGet", "Packages", "*", "llama-server.exe"),
+		path.join(home, "AppData", "Local", "Programs", "Python", "Python*", "Scripts", "llama-server.exe"),
+		path.join(home, "AppData", "Local", "Programs", "llama.cpp", "llama-server.exe"),
+		path.join(localAppData, "Programs", "llama.cpp", "llama-server.exe"),
+		path.join(home, ".local", "bin", "llama-server.exe"),
+		path.join(home, ".unsloth", "llama.cpp", "build", "bin", "llama-server"),
+		path.join(home, ".unsloth", "llama.cpp", "llama-server"),
+		path.join(home, ".local", "bin", "llama-server"),
+		path.join(home, "bin", "llama-server"),
+		"/usr/local/bin/llama-server",
+		"/usr/bin/llama-server",
+		"/opt/homebrew/bin/llama-server",
+	];
+}
+
+function pathExistsWithSimpleGlob(pattern) {
+	if (!pattern.includes("*")) {
+		try { return fs.statSync(pattern).isFile(); } catch { return false; }
+	}
+
+	const dir = path.dirname(pattern);
+	const base = path.basename(pattern);
+	const parent = path.dirname(dir);
+	const dirPattern = path.basename(dir).replace("*", "");
+	try {
+		return fs.readdirSync(parent)
+			.filter(entry => entry.startsWith(dirPattern))
+			.some(entry => {
+				try { return fs.statSync(path.join(parent, entry, base)).isFile(); }
+				catch { return false; }
+			});
+	} catch {
+		return false;
+	}
+}
+
+function llamaServerFound() {
+	return checkCmd(process.platform === "win32" ? "llama-server.exe" : "llama-server") ||
+		checkCmd("llama-server") ||
+		llamaServerPaths().some(pathExistsWithSimpleGlob);
+}
+
+function installLlamaCppWithWinget() {
+	if (process.platform !== "win32" || !checkCmd("winget")) return false;
+	const s = spinner("Installing llama.cpp local engine...");
+	try {
+		execSync("winget install llama.cpp --accept-package-agreements --accept-source-agreements --disable-interactivity", {
+			stdio: "ignore",
+			timeout: 180000,
+		});
+		s.stop("llama.cpp installed");
+		return true;
+	} catch (_) {
+		s.fail("llama.cpp install failed");
+		return false;
+	}
+}
+
 function setupEnv(target, example) {
 	const t = path.join(ROOT, target);
 	const e = path.join(ROOT, example);
@@ -189,25 +253,7 @@ export function ensureNativeRuntimeDeps() {
 }
 
 async function checkLlama(python) {
-	const paths = [
-		path.join(os.homedir(), ".unsloth/llama.cpp/build/bin/llama-server"),
-		path.join(os.homedir(), ".unsloth/llama.cpp/llama-server"),
-		path.join(os.homedir(), ".local/bin/llama-server"),
-		path.join(os.homedir(), "bin/llama-server"),
-		"/usr/local/bin/llama-server",
-		"/usr/bin/llama-server",
-		"/opt/homebrew/bin/llama-server",
-	];
-
-	const found =
-		checkCmd("llama-server") ||
-		paths.some((p) => {
-			try {
-				return fs.statSync(p).isFile();
-			} catch {
-				return false;
-			}
-		});
+	const found = llamaServerFound();
 	const pythonLlama =
 		python &&
 		(() => {
@@ -233,17 +279,25 @@ async function checkLlama(python) {
 	warn("llama-server not found — local AI models will not work without it.");
 	log("");
 	log(`  ${col("bold", "Install options:")}`);
-	log(
-		`  ${col("cyan", "[1]")} pip install llama-cpp-python[server]  ${col("dim", "(easiest)")}`,
-	);
-	log(
-		`  ${col("cyan", "[2]")} Download pre-built binary              ${col("dim", "github.com/ggml-org/llama.cpp/releases")}`,
-	);
+	if (process.platform === "win32" && checkCmd("winget")) {
+		log(`  ${col("cyan", "[1]")} Install llama.cpp with winget        ${col("dim", "(recommended on Windows)")}`);
+		log(`  ${col("cyan", "[2]")} pip install llama-cpp-python[server]  ${col("dim", "(fallback)")}`);
+	} else {
+		log(`  ${col("cyan", "[1]")} pip install llama-cpp-python[server]  ${col("dim", "(fallback)")}`);
+		log(`  ${col("cyan", "[2]")} Download pre-built binary              ${col("dim", "github.com/ggml-org/llama.cpp/releases")}`);
+	}
 	log(`  ${col("cyan", "[3]")} Skip — cloud AI providers still work`);
 	log("");
 
 	const choice = await prompt("  Choose [1/2/3]: ");
-	if (choice === "1") {
+	const canWinget = process.platform === "win32" && checkCmd("winget");
+	if (choice === "1" && canWinget) {
+		if (installLlamaCppWithWinget() && llamaServerFound()) {
+			ok("llama-server found");
+		} else {
+			warn("Install finished but llama-server was not detected. Restart your terminal and run install again.");
+		}
+	} else if (choice === "1" || (choice === "2" && canWinget)) {
 		if (!python) {
 			err("Python not found. Install Python 3.10+ first.");
 			return;

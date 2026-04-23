@@ -15,6 +15,45 @@ function Die   { Write-Host "[asyncat] x $args" -ForegroundColor Red; exit 1 }
 $REPO_URL  = "https://github.com/asyncat-oss/asyncat-oss.git"
 $BinDir    = "$env:USERPROFILE\.local\bin"
 
+function Test-LlamaServer {
+    if (Get-Command llama-server -ErrorAction SilentlyContinue) { return $true }
+    if (Get-Command llama-server.exe -ErrorAction SilentlyContinue) { return $true }
+
+    $candidates = @(
+        "$env:LOCALAPPDATA\Microsoft\WindowsApps\llama-server.exe",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\llama-server.exe",
+        "$env:LOCALAPPDATA\Programs\llama.cpp\llama-server.exe",
+        "$env:USERPROFILE\.local\bin\llama-server.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) { return $true }
+    }
+    $wingetPackage = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter "llama-server.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($wingetPackage) { return $true }
+    return $false
+}
+
+function Ensure-LlamaServer {
+    Info "Checking local AI engine..."
+    if (Test-LlamaServer) {
+        Ok "llama-server found"
+        return
+    }
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Warn "winget not found - local models can be enabled later with asyncat install"
+        return
+    }
+
+    Info "Installing llama.cpp local engine..."
+    winget install llama.cpp --accept-package-agreements --accept-source-agreements --disable-interactivity
+    if ($LASTEXITCODE -eq 0 -or (Test-LlamaServer)) {
+        Ok "llama.cpp installed"
+    } else {
+        Warn "Could not auto-install llama.cpp - cloud providers still work"
+    }
+}
+
 Write-Host ""
 Write-Host "    /\_____/\ " -ForegroundColor Magenta
 Write-Host "   /  o   o  \    asyncat  open-source AI workspace" -ForegroundColor Magenta
@@ -74,7 +113,10 @@ $nekoEx  = Join-Path $InstallDir "neko\.env.example"
 if (-not (Test-Path $denEnv)  -and (Test-Path $denEx))  { Copy-Item $denEx  $denEnv;  Warn "Created den\.env  - edit JWT_SECRET before deploying!" }
 if (-not (Test-Path $nekoEnv) -and (Test-Path $nekoEx)) { Copy-Item $nekoEx $nekoEnv }
 
-# -- 6. Wire up the asyncat command --------------------------------------------
+# -- 6. Local AI engine --------------------------------------------------------
+Ensure-LlamaServer
+
+# -- 7. Wire up the asyncat command --------------------------------------------
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 # PowerShell script - asyncat.ps1
@@ -92,14 +134,14 @@ node "$InstallDir\cat" %*
 
 Ok "Command ready: asyncat"
 
-# -- 7. Add to PATH ------------------------------------------------------------
+# -- 8. Add to PATH ------------------------------------------------------------
 $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
 if ($userPath -notlike "*$BinDir*") {
     [Environment]::SetEnvironmentVariable("PATH", "$userPath;$BinDir", "User")
     Warn "Added $BinDir to PATH - restart your terminal for it to take effect."
 }
 
-# -- 8. Desktop launcher (for humans) ------------------------------------------
+# -- 9. Desktop launcher (for humans) ------------------------------------------
 $uiScript = Join-Path $BinDir "asyncat-ui.ps1"
 $iconSrc = Join-Path $InstallDir "neko\public\pwa-192x192.png"
 

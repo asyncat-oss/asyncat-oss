@@ -27,6 +27,40 @@ const LLAMA_HOST      = '127.0.0.1';
 const LOAD_TIMEOUT_MS = 180_000; // 3 min — large models can take time
 const POLL_INTERVAL   = 700;     // ms between /health polls
 
+function expandWildcardPath(pattern) {
+  if (!pattern.includes('*')) return [pattern];
+
+  const parsed = path.parse(pattern);
+  const parts = pattern
+    .slice(parsed.root.length)
+    .split(path.sep)
+    .filter(Boolean);
+
+  let matches = [parsed.root || path.parse(process.cwd()).root];
+  for (const part of parts) {
+    if (!part.includes('*')) {
+      matches = matches.map(base => path.join(base, part));
+      continue;
+    }
+
+    const re = new RegExp(`^${part.split('*').map(escapeRegex).join('.*')}$`, IS_WIN ? 'i' : '');
+    const next = [];
+    for (const base of matches) {
+      try {
+        for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+          if (re.test(entry.name)) next.push(path.join(base, entry.name));
+        }
+      } catch { /* skip missing directories */ }
+    }
+    matches = next;
+  }
+  return matches;
+}
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ── Singleton state ───────────────────────────────────────────────────────────
 const state = {
   status:    'idle',   // 'idle' | 'loading' | 'ready' | 'error'
@@ -47,6 +81,27 @@ function pushLog(line) {
   if (!line.trim()) return;
   state.logLines.push(line);
   if (state.logLines.length > 80) state.logLines.shift();
+}
+
+function captureProcessOutput(source, chunk) {
+  const lines = chunk.toString().split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) continue;
+    pushLog(line);
+    if (!shouldMirrorProcessLog(line)) continue;
+    const prefix = `[llamaServer:${source}]`;
+    if (source === 'stderr') {
+      console.error(`${prefix} ${line}`);
+    } else {
+      console.log(`${prefix} ${line}`);
+    }
+  }
+}
+
+function shouldMirrorProcessLog(line) {
+  return /^Traceback/i.test(line)
+    || /ModuleNotFoundError|ImportError|FileNotFoundError|error|failed|fatal|warning|address already in use|no module|started server process|application startup complete|uvicorn running|GET \/health|GET \/v1\/models/i.test(line);
 }
 
 function emit(patch) {
@@ -70,6 +125,9 @@ function snapshot() {
     baseUrl:    state.status === 'ready' ? `http://${LLAMA_HOST}:${LLAMA_PORT}/v1` : null,
     ctxSize:    state.ctxSize ?? parseInt(process.env.LLAMA_CTX_SIZE ?? '8192', 10),
     ctxTrain:   state.ctxTrain ?? null,
+    logs:       state.status === 'loading' || state.status === 'error'
+      ? state.logLines.slice(-20)
+      : [],
   };
 }
 
@@ -112,6 +170,9 @@ export async function checkBinary() {
   //    Also includes Windows paths for llama-server binaries
   const absolutePaths = [
     // Windows llama-server locations
+    path.join(home, 'AppData', 'Local', 'Microsoft', 'WindowsApps', 'llama-server.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'llama-server.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages', '*', 'llama-server.exe'),
     path.join(home, 'AppData', 'Local', 'Programs', 'Python', 'Python*', 'Scripts', 'llama-server.exe'),
     path.join(home, 'AppData', 'Local', 'Programs', 'llama.cpp', 'llama-server.exe'),
     path.join(home, '.local', 'bin', 'llama-server.exe'),
@@ -132,28 +193,17 @@ export async function checkBinary() {
   ];
 
   for (const p of absolutePaths) {
-    // Handle glob patterns for Windows Python paths
-    if (p.includes('Python*')) {
-      const baseDir = path.dirname(p);
-      const baseName = path.basename(p);
-      try {
-        const entries = fs.readdirSync(baseDir);
-        for (const entry of entries) {
-          if (entry.startsWith('Python')) {
-            const fullPath = path.join(baseDir, entry, baseName.replace('*', ''));
-            if (fs.existsSync(fullPath)) {
-              return { found: true, binary: fullPath, path: fullPath, source: 'auto-detected' };
-            }
-          }
-        }
-      } catch { /* skip */ }
-    } else if (fs.existsSync(p)) {
-      return { found: true, binary: p, path: p, source: 'auto-detected' };
+    for (const candidate of expandWildcardPath(p)) {
+      if (fs.existsSync(candidate)) {
+        return { found: true, binary: candidate, path: candidate, source: 'auto-detected' };
+      }
     }
   }
 
   // 3. PATH-based lookup
-  const pathNames = ['llama-server', 'llama-cpp-server'];
+  const pathNames = IS_WIN
+    ? ['llama-server.exe', 'llama-server', 'llama-cpp-server.exe', 'llama-cpp-server']
+    : ['llama-server', 'llama-cpp-server'];
   for (const name of pathNames) {
     try {
       // Use 'where' on Windows, 'which' on Unix
@@ -167,14 +217,20 @@ export async function checkBinary() {
   // 4. llama-cpp-python python package (pip install llama-cpp-python[server])
   // Try both python and python3 - Windows typically uses 'python'
   const pythonCommands = IS_WIN ? ['python', 'python3', 'py'] : ['python3', 'python'];
+  const stderrNull = IS_WIN ? '2>nul' : '2>/dev/null';
+  const serverImportProbe =
+    'import site, sys; ' +
+    'usersite = site.getusersitepackages(); ' +
+    'sys.path.append(usersite) if usersite not in sys.path else None; ' +
+    'from llama_cpp.server.__main__ import main';
   for (const pythonCmd of pythonCommands) {
     try {
-      await execAsync(`${pythonCmd} -c "import llama_cpp" 2>/dev/null`);
+      await execAsync(`${pythonCmd} -c "${serverImportProbe}" ${stderrNull}`);
       return {
         found:    true,
         binary:   pythonCmd,
         path:     pythonCmd,
-        source:   'llama-cpp-python package',
+        source:   'llama-cpp-python server package',
         isPython: true,
         pythonCmd, // Store the working command for spawning
       };
@@ -183,7 +239,7 @@ export async function checkBinary() {
 
   return {
     found:    false,
-    searched: [...absolutePaths, ...pathNames, 'python3 llama-cpp-python'],
+    searched: [...absolutePaths, ...pathNames, ...pythonCommands.map(cmd => `${cmd} llama-cpp-python`)],
     hint:     'Set LLAMA_BINARY_PATH=/path/to/llama-server in your .env file, or install via pip install llama-cpp-python[server]',
   };
 }
@@ -254,7 +310,12 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
   const pythonCmd = binInfo.pythonCmd || (IS_WIN ? 'python' : 'python3');
 
   if (binInfo.isPython) {
-    // On Windows, use shell: true for better compatibility
+    const childEnv = {
+      ...process.env,
+      HOST: LLAMA_HOST,
+      PORT: String(LLAMA_PORT),
+      LLAMA_SERVER_PORT: String(LLAMA_PORT),
+    };
     proc = spawn(pythonCmd, [
       PYTHON_WRAPPER_PATH,
       '--model',         modelPath,
@@ -263,9 +324,8 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       '--n_ctx',         ctxSize,
       '--n_gpu_layers',  nGpuLayers,
       '--n_threads',     nThreads,
-    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, shell: IS_WIN });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, windowsHide: IS_WIN, env: childEnv });
   } else {
-    // On Windows, use shell: true and also add .exe extension if not present
     const binaryPath = binInfo.binary.endsWith('.exe') ? binInfo.binary : binInfo.binary;
     proc = spawn(binaryPath, [
       '-m',         modelPath,
@@ -275,14 +335,27 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       '-ngl',       nGpuLayers,
       '--threads',  nThreads,
       // Note: intentionally NOT passing --log-disable so we capture startup errors
-    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, shell: IS_WIN });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, windowsHide: IS_WIN });
   }
 
   state.proc = proc;
   emit({ pid: proc.pid });
 
-  proc.stdout?.on('data', d => d.toString().split('\n').forEach(pushLog));
-  proc.stderr?.on('data', d => d.toString().split('\n').forEach(pushLog));
+  proc.stdout?.on('data', d => captureProcessOutput('stdout', d));
+  proc.stderr?.on('data', d => captureProcessOutput('stderr', d));
+
+  proc.on('error', err => {
+    const message = `START_FAILED: Could not start llama-server: ${err.message}`;
+    pushLog(message);
+    emit({
+      status:   'error',
+      error:    message,
+      errorRaw: state.logLines.join('\n'),
+      proc:     null,
+      pid:      null,
+    });
+    state.proc = null;
+  });
 
   proc.on('exit', (code, signal) => {
     if (state.status === 'loading' || state.status === 'ready') {
@@ -308,6 +381,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
 
 async function waitUntilReady() {
   const healthUrl = `http://${LLAMA_HOST}:${LLAMA_PORT}/health`;
+  const modelsUrl = `http://${LLAMA_HOST}:${LLAMA_PORT}/v1/models`;
   const deadline  = Date.now() + LOAD_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
@@ -324,19 +398,7 @@ async function waitUntilReady() {
         const json = await res.json().catch(() => ({}));
         // llama-server: { status: 'ok' } = ready, { status: 'loading model' } = still loading
         if (json.status === 'ok' || !json.status) {
-          // Query /props for n_ctx_train so the UI can cap the context size slider
-          let ctxTrain = null;
-          try {
-            const propsCtrl  = new AbortController();
-            const propsTimer = setTimeout(() => propsCtrl.abort(), 2500);
-            const propsRes   = await fetch(`http://${LLAMA_HOST}:${LLAMA_PORT}/props`, { signal: propsCtrl.signal });
-            clearTimeout(propsTimer);
-            if (propsRes.ok) {
-              const props = await propsRes.json().catch(() => ({}));
-              ctxTrain = props.n_ctx_train || null;
-            }
-          } catch { /* non-critical — older llama-server versions may not expose /props */ }
-          emit({ status: 'ready', ctxTrain });
+          emit({ status: 'ready', ctxTrain: await readCtxTrain() });
           return;
         }
         // Still loading weights — keep waiting
@@ -344,12 +406,40 @@ async function waitUntilReady() {
       // 503 = loading model, anything else = keep waiting
     } catch { /* server not accepting connections yet — normal during startup */ }
 
+    try {
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 2500);
+      const res   = await fetch(modelsUrl, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        if (Array.isArray(json.data)) {
+          emit({ status: 'ready', ctxTrain: await readCtxTrain() });
+          return;
+        }
+      }
+    } catch { /* some llama-server builds do not expose /health while booting */ }
+
     await sleep(POLL_INTERVAL);
   }
 
   const err = 'Model load timed out (3 min). The model may be too large for your hardware, or try a smaller quantization (Q4_K_M instead of Q8).';
   emit({ status: 'error', error: err });
   await stopServer({ preserveState: true }).catch(() => {});
+}
+
+async function readCtxTrain() {
+  try {
+    const propsCtrl  = new AbortController();
+    const propsTimer = setTimeout(() => propsCtrl.abort(), 2500);
+    const propsRes   = await fetch(`http://${LLAMA_HOST}:${LLAMA_PORT}/props`, { signal: propsCtrl.signal });
+    clearTimeout(propsTimer);
+    if (propsRes.ok) {
+      const props = await propsRes.json().catch(() => ({}));
+      return props.n_ctx_train || null;
+    }
+  } catch { /* non-critical — older llama-server versions may not expose /props */ }
+  return null;
 }
 
 /**

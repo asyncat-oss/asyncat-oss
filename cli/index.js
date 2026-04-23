@@ -173,6 +173,9 @@ async function detectModel() {
     if (res.ok) {
       const data = await res.json();
       const isLocal = data.provider_type === 'local';
+      if (isLocal && localStatus?.status !== 'ready') {
+        return { model: '', provider: '', context: {} };
+      }
       return {
         model: data.model || 'default',
         provider: data.provider_type || 'local',
@@ -981,11 +984,28 @@ case 'tools': {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ filename: chosen._file, ctxSize: parseInt(ctxSize, 10) || 8192 }),
         });
-        tui.printOk(`Model ${chosen.name} loaded!`);
-        // Wait for model to be ready
-        await new Promise(r => setTimeout(r, 2000));
-        const { model: m, provider: p, context: c } = await detectModel();
-        tui.setModel(m, p, c);
+        tui.printInfo(`Model ${chosen.name} is loading...`);
+        let ready = false;
+        for (let i = 0; i < 180; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+          const status = await apiGet('/api/ai/providers/server/status').catch(() => null);
+          if (!status) continue;
+          if (status.status === 'ready') {
+            tui.printOk(`Model ${status.model || chosen.name} is ready.`);
+            const { model: m, provider: p, context: c } = await detectModel();
+            tui.setModel(m, p, c);
+            ready = true;
+            break;
+          }
+          if (status.status === 'error') {
+            tui.printErr(status.error || 'Model failed to load.');
+            return;
+          }
+        }
+        if (!ready) {
+          tui.printWarn('Model is still loading. Try again when the status becomes ready.');
+          return;
+        }
       } catch (e) {
         tui.printErr(`Failed: ${e.message}`);
         return;

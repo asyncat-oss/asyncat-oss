@@ -223,6 +223,7 @@ const ModelsPage = () => {
   const status = serverStatus?.status ?? 'idle';
   const { label: statusLabel, color: statusColor } = STATUS_META[status] || STATUS_META.idle;
   const isRunning = status === 'ready' || status === 'loading';
+  const isReady = status === 'ready';
 
   const bannerClass = {
     ready:   'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 midnight:bg-green-900/20 midnight:border-green-800',
@@ -290,7 +291,7 @@ const ModelsPage = () => {
                         </div>
                         {serverStatus?.model ? (
                           <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                            Running: <span className="text-gray-800 dark:text-gray-200 midnight:text-gray-100 font-semibold">{serverStatus.model}</span>
+                            {isReady ? 'Running' : 'Loading'}: <span className="text-gray-800 dark:text-gray-200 midnight:text-gray-100 font-semibold">{serverStatus.model}</span>
                           </p>
                         ) : (
                           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -306,7 +307,7 @@ const ModelsPage = () => {
                     {isRunning && (
                       <button
                         onClick={handleStop}
-                        disabled={stopping || status === 'loading'}
+                        disabled={stopping}
                         className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-xl disabled:opacity-50 transition-all shadow-sm"
                       >
                         {stopping ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4 fill-current" />}
@@ -342,7 +343,7 @@ const ModelsPage = () => {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {models.map(m => {
-                        const isLoaded = serverStatus?.model === m.filename && isRunning;
+                        const isLoaded = serverStatus?.model === m.filename && status === 'ready';
                         const isStarting = startingModel === m.filename;
                         const isDeleting = deletingModel === m.filename;
                         

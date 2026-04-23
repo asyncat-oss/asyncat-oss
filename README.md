@@ -71,6 +71,7 @@ We just have code, a lot of GGUF files, a few pending lab reports, and a cat tha
 
 - **Node.js 20+**
 - **A local model** (GGUF in `den/data/models/`) **or** an API key
+- **Windows local models:** Python 3.10+ and the Microsoft C++ Build Tools if you use the Python llama server fallback
 
 ### Install
 
@@ -118,6 +119,32 @@ Drop a GGUF file in `den/data/models/`. Asyncat runs its own llama-server.
 ```env
 LLAMA_SERVER_PORT=8765
 MODELS_PATH=./data/models
+```
+
+#### Windows local model setup
+
+Windows does Windows things, so Asyncat checks for local inference in this order:
+
+1. `LLAMA_BINARY_PATH` pointing to `llama-server.exe`
+2. `llama-server.exe` on `PATH`
+3. `llama-cpp-python[server]` through Python
+
+For most Windows users, either install a llama.cpp release that includes `llama-server.exe`, or install the Python server package:
+
+```powershell
+python -m pip install --upgrade "llama-cpp-python[server]"
+```
+
+If pip builds from source, install **Microsoft C++ Build Tools** first. In the Visual Studio installer, select **Desktop development with C++**. After installing, reopen PowerShell and verify:
+
+```powershell
+python -c "from llama_cpp.server.__main__ import main; print('server ok')"
+```
+
+You do not need to manually copy binaries into Asyncat. If `llama-server.exe` is not on `PATH`, set this in `den/.env`:
+
+```env
+LLAMA_BINARY_PATH=C:\path\to\llama-server.exe
 ```
 
 ### Cloud

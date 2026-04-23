@@ -67,7 +67,12 @@ export async function apiPost(path, body) {
     body:    JSON.stringify(body),
     signal:  AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error(`POST ${path} → ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let detail = text.slice(0, 160);
+    try { detail = JSON.parse(text).error || detail; } catch {}
+    throw new Error(`POST ${path} -> ${res.status}${detail ? `: ${detail}` : ''}`);
+  }
   return res.json();
 }
 

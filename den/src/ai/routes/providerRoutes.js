@@ -29,6 +29,20 @@ const LLAMA_BASE_URL = `http://127.0.0.1:${process.env.LLAMA_SERVER_PORT ?? '876
 
 const router = express.Router();
 
+function saveBuiltinProviderConfig(userId, filename) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO ai_provider_config (user_id, provider_type, provider_id, base_url, model, api_key, updated_at)
+    VALUES (?, 'local', 'llamacpp-builtin', ?, ?, NULL, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      provider_type = 'local',
+      provider_id   = 'llamacpp-builtin',
+      base_url      = excluded.base_url,
+      model         = excluded.model,
+      updated_at    = excluded.updated_at
+  `).run(userId, LLAMA_BASE_URL, filename, now);
+}
+
 router.use((_req, res, next) => {
   res.set({
     'Cache-Control': 'no-store, no-cache, must-revalidate, private',
@@ -520,30 +534,57 @@ router.post('/server/start', verifyUser, async (req, res) => {
       return res.status(400).json({ success: false, error: 'filename is required' });
     }
 
-    res.json({ success: true, message: 'Server starting…', filename });
+    const current = getLlamaStatus();
+    if (current.status === 'loading') {
+      return res.status(409).json({
+        success: false,
+        error: `A model is already loading: ${current.model || 'unknown'}. Please wait or stop it first.`,
+      });
+    }
 
-    startServer(filename, MODELS_DIR, ctxSize).then(() => {
-      const now = new Date().toISOString();
-      try {
-        db.prepare(`
-          INSERT INTO ai_provider_config (user_id, provider_type, provider_id, base_url, model, api_key, updated_at)
-          VALUES (?, 'local', 'llamacpp-builtin', ?, ?, NULL, ?)
-          ON CONFLICT(user_id) DO UPDATE SET
-            provider_type = 'local',
-            provider_id   = 'llamacpp-builtin',
-            base_url      = excluded.base_url,
-            model         = excluded.model,
-            updated_at    = excluded.updated_at
-        `).run(req.user.id, LLAMA_BASE_URL, filename, now);
-      } catch (dbErr) {
-        console.error('[llamaServer] Failed to auto-save provider config:', dbErr);
+    await startServer(filename, MODELS_DIR, ctxSize);
+
+    const unsub = llamaSubscribe(snap => {
+      if (snap.status === 'ready' && snap.model === filename) {
+        unsub();
+        try {
+          saveBuiltinProviderConfig(req.user.id, filename);
+        } catch (dbErr) {
+          console.error('[llamaServer] Failed to auto-save provider config:', dbErr);
+        }
+      } else if (snap.status === 'error' || snap.status === 'idle') {
+        unsub();
       }
-    }).catch(err => {
-      console.error('[llamaServer] Start failed:', err.message);
     });
 
+    res.json({ success: true, message: 'Server loading…', filename });
+
   } catch (err) {
-    console.error('Server start error:', err);
+    console.error('[llamaServer] Start failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /server/activate — mark the ready built-in server as the provider ───
+router.post('/server/activate', verifyUser, async (req, res) => {
+  try {
+    const snap = getLlamaStatus();
+    if (snap.status !== 'ready' || !snap.model) {
+      return res.status(409).json({
+        success: false,
+        error: `Local model is not ready yet (status: ${snap.status}).`,
+      });
+    }
+
+    try {
+      saveBuiltinProviderConfig(req.user.id, snap.model);
+      res.json({ success: true, model: snap.model, baseUrl: LLAMA_BASE_URL });
+    } catch (dbErr) {
+      console.error('[llamaServer] Failed to save provider config:', dbErr);
+      res.status(500).json({ success: false, error: dbErr.message });
+    }
+  } catch (err) {
+    console.error('Server activate error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

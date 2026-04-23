@@ -18,14 +18,29 @@ import {
 import { artifactParser } from '../artifactParser.js';
 import { TOOL_DEFINITIONS, buildToolsSystemSection } from '../toolDefinitions.js';
 import { executeTool } from '../toolExecutor.js';
+import { getStatus as getLlamaStatus } from '../llamaServerManager.js';
 
 config();
 
 // Global fallback: built-in llama server (no cloud provider by default)
 const LLAMA_PORT = parseInt(process.env.LLAMA_SERVER_PORT ?? '8765', 10);
-const GLOBAL_AI_MODEL = 'local';
-const GLOBAL_AI_BASE_URL = `http://127.0.0.1:${LLAMA_PORT}/v1`;
-const GLOBAL_AI_API_KEY = 'local';
+const GLOBAL_AI_MODEL = process.env.AI_MODEL || 'local';
+const GLOBAL_AI_BASE_URL = process.env.AI_BASE_URL || `http://127.0.0.1:${LLAMA_PORT}/v1`;
+const GLOBAL_AI_API_KEY = process.env.AI_API_KEY || 'local';
+
+function isLocalBaseUrl(baseUrl) {
+  return /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(baseUrl || '');
+}
+
+function assertLocalModelReady() {
+  const status = getLlamaStatus();
+  if (status.status !== 'ready') {
+    throw new Error(
+      `Local model is not ready yet (status: ${status.status}${status.model ? `, model: ${status.model}` : ''}).`
+    );
+  }
+  return status;
+}
 
 // Global fallback AI Client (points to local llama server)
 const aiClient = new OpenAIClient({
@@ -46,7 +61,14 @@ export function getAiClientForUser(userId) {
 
     if (!row) {
       console.log(`🤖 [chat] No provider config for user ${userId} — using global defaults (${GLOBAL_AI_BASE_URL}, model=${GLOBAL_AI_MODEL})`);
-      return { client: aiClient, model: GLOBAL_AI_MODEL, isLocal: false, providerInfo: null };
+      const isLocal = isLocalBaseUrl(GLOBAL_AI_BASE_URL);
+      const localStatus = isLocal ? assertLocalModelReady() : null;
+      return {
+        client: aiClient,
+        model: localStatus?.model || GLOBAL_AI_MODEL,
+        isLocal,
+        providerInfo: null,
+      };
     }
 
     const isLocal = row.provider_type === 'local' || row.provider_id === 'llamacpp-builtin';
@@ -57,6 +79,8 @@ export function getAiClientForUser(userId) {
       baseUrl = baseUrl.replace(/\/$/, '') + '/v1';
     }
 
+    const localStatus = isLocal ? assertLocalModelReady() : null;
+
     // Use 'local' as the API key for local providers (llama-server ignores auth)
     // Fixed: operator precedence bug — was `key || type === 'local' ? ... : global`
     const apiKey = isLocal ? (row.api_key || 'local') : (row.api_key || GLOBAL_AI_API_KEY);
@@ -66,12 +90,12 @@ export function getAiClientForUser(userId) {
     const userClient = new OpenAIClient({
       endpoint: baseUrl,
       apiKey,
-      defaultModel: row.model,
+      defaultModel: localStatus?.model || row.model,
     });
 
     return {
       client: userClient,
-      model: row.model,
+      model: localStatus?.model || row.model,
       isLocal,
       providerInfo: {
         type: row.provider_type,
@@ -81,6 +105,7 @@ export function getAiClientForUser(userId) {
       },
     };
   } catch (err) {
+    if (err.message?.startsWith('Local model is not ready')) throw err;
     console.warn('Failed to load user AI config, using global defaults:', err.message);
     return { client: aiClient, model: GLOBAL_AI_MODEL, isLocal: false, providerInfo: null };
   }

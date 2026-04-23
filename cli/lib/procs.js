@@ -12,6 +12,20 @@ const procState = {
 	frontend: { pendingRestart: false, stopping: false },
 };
 
+function killProcessTree(proc, signal = "SIGTERM") {
+	if (!proc) return;
+	const isWin = process.platform === "win32";
+	try {
+		if (isWin && proc.pid) {
+			execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: "ignore" });
+		} else {
+			proc.kill(signal);
+		}
+	} catch (_) {
+		try { proc.kill(signal); } catch {}
+	}
+}
+
 function logsDir() {
 	const d = path.join(ROOT, "logs");
 	if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
@@ -70,7 +84,7 @@ function restartProc(key, reason) {
 	info(`Restarting ${key} (${reason})...`);
 
 	if (procs[key]) {
-		procs[key].kill("SIGTERM");
+		killProcessTree(procs[key]);
 		return;
 	}
 
@@ -177,7 +191,7 @@ export function stopProc(key) {
 	if (procs[key]) {
 		procState[key].pendingRestart = false;
 		procState[key].stopping = true;
-		procs[key].kill("SIGTERM");
+		killProcessTree(procs[key]);
 		ok(`Stopped ${key}`);
 	} else if (hadWatcher) {
 		ok(`Stopped ${key} watcher`);
@@ -194,14 +208,15 @@ export function stopAll() {
 		if (procs[key]) {
 			procState[key].pendingRestart = false;
 			procState[key].stopping = true;
-			procs[key].kill("SIGTERM");
+			killProcessTree(procs[key]);
 			ok(`Stopped ${key}`);
 			stopped = true;
 		}
 	}
 
 	const isWin = process.platform === "win32";
-	for (const port of [8716, 8717, 8765]) {
+	const ports = [8716, 8765, ...Array.from({ length: 14 }, (_, i) => 8717 + i)];
+	for (const port of ports) {
 		try {
 			const pids = isWin
 				? execSync(`netstat -ano -p TCP`, { stdio: ["ignore", "pipe", "ignore"] })

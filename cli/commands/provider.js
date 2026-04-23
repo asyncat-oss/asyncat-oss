@@ -125,8 +125,8 @@ async function setLocal(args) {
 
   try {
     await apiPost('/api/ai/providers/server/start', { filename });
-    ok(`llama-server started with ${col('white', filename)}`);
-    info('Provider set to local. Chat with: ' + col('cyan', 'chat'));
+    ok(`llama-server loading ${col('white', filename)}`);
+    info('Wait for status to become ready before chatting.');
   } catch (e) {
     err(`Failed to start server: ${e.message}`);
   }

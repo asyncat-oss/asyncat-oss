@@ -2,11 +2,19 @@
 """Start llama_cpp.server after closing inherited non-stdio file descriptors."""
 
 import os
-import resource
+import site
 import sys
+
+try:
+    import resource
+except ImportError:
+    resource = None
 
 
 def close_extra_fds():
+    if resource is None:
+        return
+
     try:
         _soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         if hard == resource.RLIM_INFINITY:
@@ -20,6 +28,10 @@ def close_extra_fds():
 
 
 def main():
+    usersite = site.getusersitepackages()
+    if usersite not in sys.path:
+        sys.path.append(usersite)
+
     close_extra_fds()
     from llama_cpp.server.__main__ import main as llama_main
 
