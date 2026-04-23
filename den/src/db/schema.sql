@@ -297,7 +297,7 @@ CREATE TABLE IF NOT EXISTS habit_streaks (
 -- ─── AI Chats ─────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS chat_folders (
-  id           TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY NOT NULL,
   user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
@@ -317,10 +317,6 @@ CREATE TABLE IF NOT EXISTS conversations (
                       CHECK (mode IN ('chat','build','image')),
   is_pinned         INTEGER NOT NULL DEFAULT 0,
   is_archived       INTEGER NOT NULL DEFAULT 0,
-  is_public         INTEGER NOT NULL DEFAULT 0,
-  public_token      TEXT UNIQUE,
-  public_expires_at TEXT,
-  public_created_at TEXT,
   message_count     INTEGER NOT NULL DEFAULT 0,
   last_message_at   TEXT,
   has_attachments   INTEGER NOT NULL DEFAULT 0,
@@ -490,4 +486,3 @@ END;
 -- =============================================
 -- Feedback columns added via migration in BasalGanglia.js and AgentSession.js
 -- instead of schema to avoid duplicate column errors
-

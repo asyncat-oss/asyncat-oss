@@ -1,7 +1,6 @@
 // chatService.js - Simplified with Supabase client
 import { sqliteDb as db } from '../../../db/sqlite.js';
 import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
 
 class ChatService {
   constructor() {
@@ -60,11 +59,6 @@ class ChatService {
     } catch (error) {
       throw new Error('Failed to determine team/workspace context');
     }
-  }
-
-  // Generate secure public token
-  generatePublicToken() {
-    return crypto.randomBytes(32).toString('hex');
   }
 
   // Helper function to detect if conversation has attachments (images or text files)
@@ -375,8 +369,7 @@ class ChatService {
         .select(`
           id, title, mode, is_pinned, is_archived, workspace_id,
           last_message_at, created_at, updated_at, has_attachments,
-          project_ids, metadata, messages, folder_id,
-          is_public, public_token, public_expires_at
+          project_ids, metadata, messages, folder_id
         `)
         .eq('id', conversationId)
         .eq('user_id', userId);
@@ -406,229 +399,6 @@ class ChatService {
 
     } catch (error) {
       throw new Error(`Failed to retrieve conversation: ${error.message}`);
-    }
-  }
-
-  // ==========================================
-  // PUBLIC CHAT METHODS - NEW
-  // ==========================================
-
-  // Make conversation public using Supabase
-  async makeConversationPublic(userId, conversationId, expiresIn = null, workspaceId = null) {
-    try {
-      await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId);
-
-      // First verify user owns this conversation
-      const { data: conversation, error } = await db
-        .schema('aichats')
-          .from('conversations')
-        .select('id, title, is_public, public_token')
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .eq('workspace_id', effectiveWorkspaceId)
-        .single();
-
-      if (error || !conversation) {
-        throw new Error('Conversation not found or access denied');
-      }
-
-      // If already public, return existing token
-      if (conversation.is_public && conversation.public_token) {
-        return {
-          success: true,
-          publicToken: conversation.public_token,
-          message: 'Conversation is already public'
-        };
-      }
-
-      // Generate new public token
-      const publicToken = this.generatePublicToken();
-
-      // Calculate expiration if provided
-      let expiresAt = null;
-      if (expiresIn && typeof expiresIn === 'number' && expiresIn > 0) {
-        expiresAt = new Date(Date.now() + (expiresIn * 60 * 60 * 1000)).toISOString();
-      }
-
-      // Update conversation to be public
-      const { data: updated, error: updateError } = await db
-        .schema('aichats')
-          .from('conversations')
-        .update({
-          is_public: true,
-          public_token: publicToken,
-          public_expires_at: expiresAt,
-          public_created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .eq('workspace_id', effectiveWorkspaceId)
-        .select('public_token, public_expires_at')
-        .single();
-
-      if (updateError || !updated) {
-        throw new Error('Failed to make conversation public');
-      }
-
-      // Clear cache
-      this.clearUserWorkspaceCache(userId, effectiveWorkspaceId);
-      this.cache.delete(`conversation_${conversationId}_${userId}`);
-
-      return {
-        success: true,
-        publicToken: updated.public_token,
-        expiresAt: updated.public_expires_at,
-        message: 'Conversation made public successfully'
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  // Revoke public access
-  async revokePublicAccess(userId, conversationId, workspaceId = null) {
-    try {
-      // Get effective workspace ID
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId);
-
-      // Update conversation to remove public access
-      const { data, error } = await db
-        .schema('aichats')
-        .from('conversations')
-        .update({
-          is_public: false,
-          public_token: null,
-          public_expires_at: null,
-          public_created_at: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .eq('workspace_id', effectiveWorkspaceId)
-        .select('id')
-        .single();
-
-      if (error || !data) {
-        throw new Error('Conversation not found or access denied');
-      }
-
-      // Clear cache
-      this.clearUserWorkspaceCache(userId, effectiveWorkspaceId);
-      this.cache.delete(`conversation_${conversationId}_${userId}`);
-
-      return {
-        success: true,
-        message: 'Public access revoked successfully'
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  // Get public conversation (NO USER AUTHENTICATION) - FIXED SQL AMBIGUITY
-  async getPublicConversation(publicToken) {
-    try {
-      if (!publicToken) {
-        return {
-          success: false,
-          error: 'Public token is required'
-        };
-      }
-
-      // Get conversation by public token using Supabase
-      const { data: conversation, error } = await db
-        .schema('aichats')
-        .from('conversations')
-        .select(`
-          id, title, mode, messages, metadata, has_attachments,
-          public_expires_at, created_at, updated_at,
-          users!conversations_user_id_fkey(name)
-        `)
-        .eq('public_token', publicToken)
-        .eq('is_public', true)
-        .or('public_expires_at.is.null,public_expires_at.gt.' + new Date().toISOString())
-        .single();
-
-      if (error || !conversation) {
-        return {
-          success: false,
-          error: 'Public conversation not found or has expired'
-        };
-      }
-      
-      // Convert JSONB messages back to frontend format
-      const messages = this.convertFromJsonbFormat(conversation.messages || []);
-
-      // Return conversation data (without sensitive info)
-      return {
-        success: true,
-        conversation: {
-          id: conversation.id,
-          title: conversation.title,
-          mode: conversation.mode,
-          messages: messages,
-          metadata: conversation.metadata || {},
-          authorName: conversation.users?.name,
-          createdAt: conversation.created_at,
-          updatedAt: conversation.updated_at,
-          isPublic: true
-        },
-        expiresAt: conversation.public_expires_at
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        error: 'Failed to retrieve public conversation'
-      };
-    }
-  }
-
-  // Get public status for conversation owner
-  async getPublicStatus(userId, conversationId, workspaceId = null) {
-    try {
-      // Get effective workspace ID
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId);
-
-      const { data: conversation, error } = await db
-        .schema('aichats')
-        .from('conversations')
-        .select('is_public, public_token, public_expires_at, public_created_at')
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .eq('workspace_id', effectiveWorkspaceId)
-        .single();
-
-      if (error || !conversation) {
-        return {
-          success: false,
-          error: 'Conversation not found or access denied'
-        };
-      }
-
-      return {
-        success: true,
-        isPublic: conversation.is_public || false,
-        publicToken: conversation.public_token,
-        expiresAt: conversation.public_expires_at,
-        publicCreatedAt: conversation.public_created_at
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        error: 'Failed to get public status'
-      };
     }
   }
 
@@ -672,7 +442,7 @@ class ChatService {
         .select(`
           id, title, mode, is_pinned, is_archived, workspace_id,
           message_count, last_message_at, created_at, updated_at, has_attachments,
-          project_ids, metadata, is_public, messages, folder_id
+          project_ids, metadata, messages, folder_id
         `)
         .eq('user_id', userId)
         .eq('workspace_id', effectiveWorkspaceId);
@@ -788,7 +558,7 @@ class ChatService {
     }
   }
 
-  // Delete conversation with workspace validation (also revokes public access)
+  // Delete conversation with workspace validation
   // Soft-delete (move to trash)
   async deleteConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     try {
@@ -965,7 +735,7 @@ class ChatService {
       const { data: conversations, error } = await db
         .schema('aichats')
         .from('conversations')
-        .select('mode, is_pinned, is_public, message_count, last_message_at')
+        .select('mode, is_pinned, message_count, last_message_at')
         .eq('user_id', userId)
         .eq('workspace_id', effectiveWorkspaceId)
         .eq('is_archived', false);
@@ -980,7 +750,6 @@ class ChatService {
         chat_conversations: conversations.filter(c => c.mode === 'chat').length,
         build_conversations: conversations.filter(c => c.mode === 'build').length,
         pinned_conversations: conversations.filter(c => c.is_pinned).length,
-        public_conversations: conversations.filter(c => c.is_public).length,
         total_messages: conversations.reduce((sum, c) => sum + (c.message_count || 0), 0),
         last_activity: conversations.reduce((latest, c) => {
           const messageTime = new Date(c.last_message_at || 0);
@@ -994,7 +763,6 @@ class ChatService {
         chatConversations: parseInt(stats.chat_conversations || 0),
         buildConversations: parseInt(stats.build_conversations || 0),
         pinnedConversations: parseInt(stats.pinned_conversations || 0),
-        publicConversations: parseInt(stats.public_conversations || 0),
         totalMessages: parseInt(stats.total_messages || 0),
         lastActivity: stats.last_activity,
         workspaceId: effectiveWorkspaceId
@@ -1006,7 +774,6 @@ class ChatService {
         chatConversations: 0,
         buildConversations: 0,
         pinnedConversations: 0,
-        publicConversations: 0,
         totalMessages: 0,
         lastActivity: null,
         workspaceId: null
@@ -1021,7 +788,7 @@ class ChatService {
       const { data: conversations, error: convError } = await db
         .schema('aichats')
         .from('conversations')
-        .select('workspace_id, is_public, last_message_at')
+        .select('workspace_id, last_message_at')
         .eq('user_id', userId)
         .eq('is_archived', false);
 
@@ -1036,14 +803,10 @@ class ChatService {
         if (!workspaceStats[wsId]) {
           workspaceStats[wsId] = {
             conversation_count: 0,
-            public_conversation_count: 0,
             last_activity: null
           };
         }
         workspaceStats[wsId].conversation_count++;
-        if (conv.is_public) {
-          workspaceStats[wsId].public_conversation_count++;
-        }
         if (!workspaceStats[wsId].last_activity || conv.last_message_at > workspaceStats[wsId].last_activity) {
           workspaceStats[wsId].last_activity = conv.last_message_at;
         }
@@ -1068,7 +831,6 @@ class ChatService {
         workspace_name: team.name,
         workspace_emoji: team.emoji,
         conversation_count: workspaceStats[team.id].conversation_count,
-        public_conversation_count: workspaceStats[team.id].public_conversation_count,
         last_activity: workspaceStats[team.id].last_activity
       }));
 

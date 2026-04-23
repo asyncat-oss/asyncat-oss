@@ -2,14 +2,12 @@
 import express from 'express';
 import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
 import { attachDb } from '../../db/sqlite.js';
+import db from '../../db/client.js';
 import { enhancedRouter } from '../controllers/ai/chat/chatRouter.js';
 import { dataLayer } from '../controllers/ai/DataLayer.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { getPacks, launchPack } from '../controllers/ai/packsController.js';
-
-// import { imageGenerator } from '../controllers/ai/imageGenerator.js'; // PAUSED: Image model temporarily disabled
-import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
+import { randomUUID } from 'crypto';
 
 const router = express.Router();
 
@@ -707,105 +705,6 @@ router.get('/chats/:conversationId', addAuthenticatedClient, async (req, res) =>
   }
 });
 
-// ==========================================
-// PUBLIC CHAT ENDPOINTS
-// ==========================================
-
-// Make conversation public
-router.post('/chats/:conversationId/public', authenticateUser, async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const { expiresIn = null } = req.body;
-    
-    
-    const result = await chatService.makeConversationPublic(req.user.id, conversationId, expiresIn, req.workspaceId);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        publicToken: result.publicToken,
-        publicUrl: `${req.protocol}://${req.get('host')}/public/chat/${result.publicToken}`,
-        expiresAt: result.expiresAt
-      });
-    } else {
-      res.status(400).json(result);
-    }
-    
-  } catch (error) {
-    console.error('Make public error:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
-      res.status(404).json({ success: false, error: 'Conversation not found or access denied' });
-    } else {
-      res.status(500).json({ success: false, error: 'Failed to make conversation public' });
-    }
-  }
-});
-
-// Revoke public access
-router.delete('/chats/:conversationId/public', authenticateUser, async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    
-    
-    const result = await chatService.revokePublicAccess(req.user.id, conversationId, req.workspaceId);
-    
-    if (result.success) {
-      res.json({ success: true, message: 'Public access revoked successfully' });
-    } else {
-      res.status(400).json(result);
-    }
-    
-  } catch (error) {
-    console.error('Revoke public access error:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
-      res.status(404).json({ success: false, error: 'Conversation not found or access denied' });
-    } else {
-      res.status(500).json({ success: false, error: 'Failed to revoke public access' });
-    }
-  }
-});
-
-// Get public conversation (NO AUTHENTICATION REQUIRED)
-router.get('/public/chat/:token', async (req, res) => {
-  try {
-    const { token } = req.params;
-    
-    
-    const result = await chatService.getPublicConversation(token);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        conversation: result.conversation,
-        isPublic: true,
-        expiresAt: result.expiresAt
-      });
-    } else {
-      res.status(404).json(result);
-    }
-    
-  } catch (error) {
-    console.error('Get public conversation error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve public conversation' });
-  }
-});
-
-// Check if conversation is public (for owner)
-router.get('/chats/:conversationId/public/status', authenticateUser, async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    
-    const result = await chatService.getPublicStatus(req.user.id, conversationId, req.workspaceId);
-    res.json(result);
-    
-  } catch (error) {
-    console.error('Get public status error:', error);
-    res.status(500).json({ success: false, error: 'Failed to get public status' });
-  }
-});
-
 // Update conversation (pin, archive, etc.) with workspace validation
 router.patch('/chats/:conversationId', addAuthenticatedClient, async (req, res) => {
   try {
@@ -861,6 +760,20 @@ router.get('/chat-folders', addAuthenticatedClient, async (req, res) => {
     const workspaceId = req.workspaceId;
     if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
 
+    // Repair folders created before the API assigned explicit ids.
+    const legacyFolders = db.prepare(`
+      SELECT rowid
+      FROM chat_folders
+      WHERE id IS NULL AND user_id = ? AND workspace_id = ?
+    `).all(req.user.id, workspaceId);
+    if (legacyFolders.length > 0) {
+      const repair = db.prepare('UPDATE chat_folders SET id = ? WHERE rowid = ?');
+      const tx = db.transaction(rows => {
+        rows.forEach(row => repair.run(randomUUID(), row.rowid));
+      });
+      tx(legacyFolders);
+    }
+
     const { data, error } = await req.db
       .schema('aichats')
       .from('chat_folders')
@@ -889,7 +802,7 @@ router.post('/chat-folders', addAuthenticatedClient, async (req, res) => {
     const { data, error } = await req.db
       .schema('aichats')
       .from('chat_folders')
-      .insert({ user_id: req.user.id, workspace_id: workspaceId, name: name.trim(), color: color || null })
+      .insert({ id: randomUUID(), user_id: req.user.id, workspace_id: workspaceId, name: name.trim(), color: color || null })
       .select()
       .single();
 
@@ -933,12 +846,17 @@ router.patch('/chat-folders/:folderId', addAuthenticatedClient, async (req, res)
 router.delete('/chat-folders/:folderId', addAuthenticatedClient, async (req, res) => {
   try {
     const { folderId } = req.params;
+    const workspaceId = req.workspaceId;
+    if (!folderId || folderId === 'null') return res.status(400).json({ success: false, error: 'folderId required' });
+    if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
+
     const { error } = await req.db
       .schema('aichats')
       .from('chat_folders')
       .delete()
       .eq('id', folderId)
-      .eq('user_id', req.user.id);
+      .eq('user_id', req.user.id)
+      .eq('workspace_id', workspaceId);
 
     if (error) throw error;
     res.json({ success: true });
@@ -953,6 +871,23 @@ router.patch('/chats/:conversationId/folder', addAuthenticatedClient, async (req
   try {
     const { conversationId } = req.params;
     const { folder_id } = req.body; // null to unassign
+    const workspaceId = req.workspaceId;
+    if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
+
+    if (folder_id) {
+      const { data: folder, error: folderError } = await req.db
+        .schema('aichats')
+        .from('chat_folders')
+        .select('id')
+        .eq('id', folder_id)
+        .eq('user_id', req.user.id)
+        .eq('workspace_id', workspaceId)
+        .single();
+
+      if (folderError || !folder) {
+        return res.status(404).json({ success: false, error: 'Folder not found' });
+      }
+    }
 
     const { data, error } = await req.db
       .schema('aichats')
@@ -960,6 +895,7 @@ router.patch('/chats/:conversationId/folder', addAuthenticatedClient, async (req
       .update({ folder_id: folder_id || null })
       .eq('id', conversationId)
       .eq('user_id', req.user.id)
+      .eq('workspace_id', workspaceId)
       .select('id, folder_id')
       .single();
 

@@ -156,6 +156,15 @@ const groupByTime = (conversations) => {
   return g;
 };
 
+const normalizeFolders = (items) => (
+  Array.isArray(items)
+    ? items.filter(folder => folder?.id).map(folder => ({
+        ...folder,
+        name: folder.name?.trim() || 'Untitled folder',
+      }))
+    : []
+);
+
 // ─── skeletons ──────────────────────────────────────────────────────────────
 
 const ChatSkeleton = () => (
@@ -206,7 +215,7 @@ const ConversationMenu = memo(({ conversation, folders, onAssign, onUnassign, on
           <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-600 font-semibold">
             Move to folder
           </div>
-          {folders.map(f => (
+          {folders.filter(f => f?.id).map(f => (
             <button
               key={f.id}
               onClick={() => { onAssign(f.id); onClose(); }}
@@ -425,11 +434,12 @@ const FolderItem = memo(({ folder, conversations, isExpanded, onToggle, isSelect
         </span>
 
         {/* folder ⋯ */}
-        <div className="hidden group-hover:flex items-center flex-shrink-0 relative">
+        <div className="flex items-center flex-shrink-0 relative">
           <button
             ref={btnRef}
             onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
-            className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-0.5 rounded text-gray-400 opacity-70 hover:opacity-100 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            title="Folder actions"
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
@@ -580,7 +590,7 @@ const ChatExplorer = ({ isChatMode = false, isCollapsed = false, onNewChat, show
         return new Date(b.updated_at) - new Date(a.updated_at);
       });
       setConversations(convs);
-      setFolders(foldRes?.folders || []);
+      setFolders(normalizeFolders(foldRes?.folders));
     } catch (err) {
       console.error('Failed to load chat explorer data:', err);
       setError('Failed to load conversations');
@@ -630,19 +640,21 @@ const ChatExplorer = ({ isChatMode = false, isCollapsed = false, onNewChat, show
     setShowNewFolder(false);
     try {
       const res = await chatFoldersApi.createFolder(name);
-      if (res?.folder) {
+      if (res?.folder?.id) {
         setFolders(prev => [...prev, res.folder]);
         setExpandedFolders(prev => ({ ...prev, [res.folder.id]: true }));
+      } else {
+        loadAll(false);
       }
     } catch (err) {
       console.error('Create folder error:', err);
     }
-  }, []);
+  }, [loadAll]);
 
   const handleRenameFolder = useCallback(async (folderId, name) => {
     try {
       const res = await chatFoldersApi.updateFolder(folderId, { name });
-      if (res?.folder) setFolders(prev => prev.map(f => f.id === folderId ? res.folder : f));
+      if (res?.folder?.id) setFolders(prev => prev.map(f => f.id === folderId ? res.folder : f));
     } catch (err) {
       console.error('Rename folder error:', err);
     }
@@ -713,7 +725,7 @@ const ChatExplorer = ({ isChatMode = false, isCollapsed = false, onNewChat, show
 
   const folderConversations = useMemo(() => {
     const map = {};
-    folders.forEach(f => { map[f.id] = []; });
+    folders.forEach(f => { if (f.id) map[f.id] = []; });
     conversations.forEach(c => {
       if (c.folder_id && map[c.folder_id]) map[c.folder_id].push(c);
     });
