@@ -5,7 +5,8 @@ import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
 /**
  * Parse <think>...</think> block out of a message.
  * Returns { thinking: string|null, answer: string }
- */
+  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function parseThinkingContent(content) {
   if (!content) return { thinking: null, answer: '' };
   // Match optional leading <think> block (case-insensitive, across newlines)
@@ -21,6 +22,7 @@ export function parseThinkingContent(content) {
  * Detect if we're currently mid-think (open tag but no close tag yet).
  * Used during streaming to show the thinking indicator without showing raw tags.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function isInsideThinkBlock(content) {
   const openIdx  = content.indexOf('<think>');
   const closeIdx = content.indexOf('</think>');
@@ -31,6 +33,7 @@ export function isInsideThinkBlock(content) {
  * Strip partial/complete <think> block for display during streaming
  * so raw tags don't bleed into the visible answer.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function stripThinkForStreaming(content) {
   // Complete think block present — show only what comes after
   const afterClose = content.replace(/^<think>[\s\S]*?<\/think>\s*/i, '');

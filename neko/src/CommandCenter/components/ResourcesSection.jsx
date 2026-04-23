@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
-
+// eslint-disable-next-line react-refresh/only-export-components
 export const parseResources = (content) => {
   if (!content) return [];
   const match = content.match(/<resources>([\s\S]*?)<\/resources>/i);
@@ -22,13 +22,13 @@ export const parseResources = (content) => {
   }
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const stripResources = (content) => {
   if (!content) return content;
   return content.replace(/<resources>[\s\S]*?<\/resources>/gi, '').trim();
 };
 
 // ── Type config ───────────────────────────────────────────────────────────────
-
 const TYPE_CONFIG = {
   tool:          { label: 'Tool',          color: 'violet',  Icon: Wrench },
   guide:         { label: 'Guide',         color: 'blue',    Icon: BookOpen },
@@ -44,7 +44,6 @@ const TYPE_CONFIG = {
 };
 
 const DEFAULT_TYPE = { label: 'Resource', color: 'gray', Icon: Search };
-
 const COLOR_CLASSES = {
   violet: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border-violet-100 dark:border-violet-800',
   blue:   'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-100 dark:border-blue-800',

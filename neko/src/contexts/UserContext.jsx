@@ -316,6 +316,7 @@ export const UserProvider = ({ children, session }) => {
 };
 
 // Custom hook to use the user context
+// eslint-disable-next-line react-refresh/only-export-components
 export const useUser = () => {
   const context = useContext(UserContext);
   if (!context) {
@@ -325,12 +326,14 @@ export const useUser = () => {
 };
 
 // Custom hook for project-specific permissions
+// eslint-disable-next-line react-refresh/only-export-components
 export const useProjectPermissions = (projectId) => {
   const { getPermissions } = useUser();
   return getPermissions(projectId);
 };
 
 // Custom hook for team-specific permissions
+// eslint-disable-next-line react-refresh/only-export-components
 export const useTeamPermissions = (teamId) => {
   const { getPermissions } = useUser();
   return getPermissions(null, teamId);

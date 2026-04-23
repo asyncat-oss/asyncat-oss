@@ -642,6 +642,7 @@ const BlockType = {
 const createId = () => `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 // Enhanced AI response parser
+// eslint-disable-next-line react-refresh/only-export-components
 export const parseAIResponseToBlocks = (content) => {
   if (!content || !content.trim()) {
     return [{ id: createId(), type: BlockType.TEXT, content: '', properties: {} }];

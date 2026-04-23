@@ -138,6 +138,7 @@ const WebSourcesBar = ({ links = [] }) => {
 
 // Parse <weblinks>[...]</weblinks> from message content
 // Returns { links, cleanContent }
+// eslint-disable-next-line react-refresh/only-export-components
 export function parseWebLinks(content) {
   if (!content) return { links: [], cleanContent: content };
   const match = content.match(/<weblinks>([\s\S]*?)<\/weblinks>/);

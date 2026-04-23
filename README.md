@@ -70,13 +70,16 @@ We just have code, a lot of GGUF files, a few pending lab reports, and a cat tha
 ### Requirements
 
 - **Node.js 20+**
+- **git**
 - **A local model** (GGUF in `den/data/models/`) **or** an API key
-- **Windows local models:** Python 3.10+ and the Microsoft C++ Build Tools if you use the Python llama server fallback
+- **Local GGUF models:** Asyncat can install a managed user-local `llama-server` binary with `asyncat install --local-engine`
+- **Python is optional:** only needed if you explicitly choose the Asyncat-owned venv fallback
 
 ### Install
 
 ```bash
 npm i -g @asyncat/asyncat
+asyncat install
 ```
 
 ### Run
@@ -114,38 +117,67 @@ asyncat config      # mess with env
 
 ### Local (recommended)
 
-Drop a GGUF file in `den/data/models/`. Asyncat runs its own llama-server.
+Drop a GGUF file in `den/data/models/`. Asyncat runs its own `llama-server`.
+
+For the smoothest setup, let Asyncat install a managed llama.cpp binary in your user profile:
+
+```bash
+asyncat install --local-engine
+```
+
+Managed install locations:
+
+| OS | Path |
+|---|---|
+| Linux/macOS | `~/.asyncat/llama.cpp/current/llama-server` |
+| Windows | `%LOCALAPPDATA%\Asyncat\llama.cpp\current\llama-server.exe` |
+
+Asyncat writes `LLAMA_BINARY_PATH` into `den/.env` after a managed install. This avoids global Python package installs, including Linux `externally-managed-environment` / PEP 668 failures.
 
 ```env
 LLAMA_SERVER_PORT=8765
 MODELS_PATH=./data/models
 ```
 
-#### Windows local model setup
+#### Local engine detection order
 
-Windows does Windows things, so Asyncat checks for local inference in this order:
+Asyncat checks for local inference in this order:
 
-1. `LLAMA_BINARY_PATH` pointing to `llama-server.exe`
-2. `llama-server.exe` on `PATH`
-3. `llama-cpp-python[server]` through Python
+1. `LLAMA_BINARY_PATH` in `den/.env`
+2. Asyncat's managed llama.cpp binary
+3. Known llama.cpp install paths, including Homebrew, winget, and Unsloth paths
+4. `llama-server` / `llama-server.exe` on `PATH`
+5. Asyncat's Python venv fallback, then any existing `llama-cpp-python[server]`
 
-For most Windows users, either install a llama.cpp release that includes `llama-server.exe`, or install the Python server package:
+If you prefer a manually downloaded llama.cpp release, set:
 
-```powershell
-python -m pip install --upgrade "llama-cpp-python[server]"
+```env
+LLAMA_BINARY_PATH=/full/path/to/llama-server
 ```
 
-If pip builds from source, install **Microsoft C++ Build Tools** first. In the Visual Studio installer, select **Desktop development with C++**. After installing, reopen PowerShell and verify:
-
-```powershell
-python -c "from llama_cpp.server.__main__ import main; print('server ok')"
-```
-
-You do not need to manually copy binaries into Asyncat. If `llama-server.exe` is not on `PATH`, set this in `den/.env`:
+On Windows:
 
 ```env
 LLAMA_BINARY_PATH=C:\path\to\llama-server.exe
 ```
+
+#### Python fallback without global pip
+
+Asyncat no longer recommends:
+
+```bash
+pip install "llama-cpp-python[server]"
+```
+
+That can fail on modern Linux distributions with PEP 668 because system Python is externally managed. If you explicitly choose the Python fallback, Asyncat creates its own venv under your Asyncat user data directory and installs there.
+
+For NVIDIA CUDA experiments inside that venv, use the CUDA build flag manually:
+
+```bash
+CMAKE_ARGS="-DGGML_CUDA=on" python -m pip install "llama-cpp-python[server]"
+```
+
+Ollama and LM Studio solve this differently: they ship or manage their own local runtime and expose an OpenAI-compatible endpoint. Asyncat supports both through `/provider`, while the built-in GGUF path uses Asyncat's managed `llama-server`.
 
 ### Cloud
 

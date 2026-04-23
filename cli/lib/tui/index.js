@@ -20,6 +20,15 @@ import { getLiveLogsEnabled } from '../colors.js';
 
 const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
 const MAX_HISTORY  = 200;
+const LOCAL_ENGINE_MISSING = 'Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+
+function localEngineErrorMessage(message) {
+  const text = String(message || '');
+  if (/MISSING_ENGINE|llama-server binary not found|Local engine missing/i.test(text)) {
+    return LOCAL_ENGINE_MISSING;
+  }
+  return text;
+}
 
 export class Tui extends EventEmitter {
   constructor(opts = {}) {
@@ -1389,13 +1398,13 @@ export class Tui extends EventEmitter {
           return;
         }
         if (data.status === 'error') {
-          this.printErr(data.error || 'Model failed to load.');
+          this.printErr(localEngineErrorMessage(data.error || 'Model failed to load.'));
           return;
         }
       }
       this.printWarn('Model is still loading. Check /models or /ctx for status.');
     } catch (e) {
-      this.printErr(`Failed to load model: ${e.message}`);
+      this.printErr(`Failed to load model: ${localEngineErrorMessage(e.message)}`);
     }
   }
 }

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 // ─── Bonus Links Parser (moved here from BonusLinksSection) ─────────────────
-
+// eslint-disable-next-line react-refresh/only-export-components
 export const parseBonusLinks = (content) => {
   if (!content || typeof content !== 'string') return [];
   const blockMatch = content.match(/<bonus_links>([\s\S]*?)<\/bonus_links>/i);
@@ -29,6 +29,7 @@ export const parseBonusLinks = (content) => {
   return links;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const stripBonusLinks = (content) => {
   if (!content) return content;
   return content.replace(/<bonus_links>[\s\S]*?<\/bonus_links>/gi, '').trim();

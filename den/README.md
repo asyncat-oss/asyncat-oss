@@ -49,12 +49,22 @@ JWT_SECRET=change-this-to-a-long-random-string
 # Local model (recommended)
 LLAMA_SERVER_PORT=8765
 MODELS_PATH=./data/models
+# Optional explicit llama.cpp binary; asyncat install --local-engine sets this
+LLAMA_BINARY_PATH=/full/path/to/llama-server
 
 # OR cloud API
 AI_BASE_URL=https://api.openai.com/v1
 AI_API_KEY=sk-...
 AI_MODEL=gpt-4o
 ```
+
+For local GGUF models, prefer the CLI-managed llama.cpp install:
+
+```bash
+asyncat install --local-engine
+```
+
+Do not install `llama-cpp-python` into system Python on Linux; Asyncat uses a managed binary or an Asyncat-owned venv fallback to avoid PEP 668 / externally managed Python errors.
 
 ### Run
 

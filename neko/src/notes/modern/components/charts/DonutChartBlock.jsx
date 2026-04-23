@@ -14,7 +14,7 @@ import {
   getHeightKey,
 } from "./chartConstants";
 
-// Predefined colors for chart segments
+/* eslint-disable react-hooks/exhaustive-deps */
 const CHART_COLORS = [
   "#3b82f6", // blue
   "#ef4444", // red

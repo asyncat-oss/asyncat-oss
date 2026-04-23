@@ -4,9 +4,10 @@
 //
 // Binary resolution order:
 //   1. LLAMA_BINARY_PATH env var (set in .env for custom installs)
-//   2. Well-known absolute paths (unsloth, homebrew, standard Linux paths)
-//   3. PATH-based lookup (which llama-server)
-//   4. llama-cpp-python server (python3 -m llama_cpp.server)
+//   2. Asyncat managed llama.cpp binary
+//   3. Well-known absolute paths (unsloth, homebrew, standard Linux paths)
+//   4. PATH-based lookup (which llama-server)
+//   5. Asyncat Python venv or existing llama-cpp-python server
 //
 // State machine: idle → loading → ready (or error)
 
@@ -26,6 +27,25 @@ const LLAMA_PORT      = parseInt(process.env.LLAMA_SERVER_PORT  ?? '8765', 10);
 const LLAMA_HOST      = '127.0.0.1';
 const LOAD_TIMEOUT_MS = 180_000; // 3 min — large models can take time
 const POLL_INTERVAL   = 700;     // ms between /health polls
+
+const MISSING_ENGINE_ERROR =
+  'MISSING_ENGINE: Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+
+function asyncatHome() {
+  if (IS_WIN) {
+    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
+  }
+  return path.join(os.homedir(), '.asyncat');
+}
+
+function managedLlamaBinaryPath() {
+  return path.join(asyncatHome(), 'llama.cpp', 'current', IS_WIN ? 'llama-server.exe' : 'llama-server');
+}
+
+function managedPythonBinaryPath() {
+  if (IS_WIN) return path.join(asyncatHome(), 'llama.cpp', 'python', 'Scripts', 'python.exe');
+  return path.join(asyncatHome(), 'llama.cpp', 'python', 'bin', 'python');
+}
 
 function expandWildcardPath(pattern) {
   if (!pattern.includes('*')) return [pattern];
@@ -59,6 +79,53 @@ function expandWildcardPath(pattern) {
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function detectGpuAdvice() {
+  try {
+    const { stdout } = await execAsync(
+      'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits',
+      { timeout: 3000 }
+    );
+    const first = stdout.trim().split('\n').filter(Boolean)[0];
+    if (first) {
+      const [name, memMb] = first.split(',').map(s => s.trim());
+      const vram = Number.isFinite(Number(memMb)) ? ` (${(Number(memMb) / 1024).toFixed(1)} GB VRAM)` : '';
+      return {
+        vendor: 'NVIDIA',
+        name,
+        advice: `NVIDIA GPU detected: ${name}${vram}. Asyncat keeps CPU-safe defaults; for CUDA builds use a CUDA llama.cpp binary or an Asyncat Python venv with CMAKE_ARGS="-DGGML_CUDA=on" python -m pip install "llama-cpp-python[server]".`,
+      };
+    }
+  } catch {}
+
+  try {
+    await execAsync('rocm-smi --showuse', { timeout: 3000 });
+    return {
+      vendor: 'AMD',
+      name: 'AMD GPU with ROCm detected',
+      advice: 'AMD/ROCm detected. ROCm llama.cpp builds are advanced/manual; keep LLAMA_GPU_LAYERS=0 unless you configure a ROCm-capable build.',
+    };
+  } catch {}
+
+  if (process.platform === 'darwin' && process.arch === 'arm64') {
+    return {
+      vendor: 'Apple',
+      name: 'Apple Silicon / Metal',
+      advice: 'Apple Silicon detected. Use the managed macOS llama.cpp build first, then set LLAMA_GPU_LAYERS in den/.env if you want Metal offload.',
+    };
+  }
+
+  return null;
+}
+
+async function withDiagnostics(result) {
+  return {
+    managedPath: managedLlamaBinaryPath(),
+    managedPythonPath: managedPythonBinaryPath(),
+    gpu: await detectGpuAdvice(),
+    ...result,
+  };
 }
 
 // ── Singleton state ───────────────────────────────────────────────────────────
@@ -157,7 +224,7 @@ export async function checkBinary() {
   if (process.env.LLAMA_BINARY_PATH) {
     const envPath = process.env.LLAMA_BINARY_PATH.trim();
     if (fs.existsSync(envPath)) {
-      return { found: true, binary: envPath, path: envPath, source: 'LLAMA_BINARY_PATH env var' };
+      return withDiagnostics({ found: true, binary: envPath, path: envPath, source: 'LLAMA_BINARY_PATH env var' });
     }
     // Env var was set but path doesn't exist — warn but continue searching
     console.warn(`[llamaServer] LLAMA_BINARY_PATH="${envPath}" does not exist, falling through to auto-detect`);
@@ -169,6 +236,7 @@ export async function checkBinary() {
   //    Covers: unsloth installs, homebrew, standard Linux locations
   //    Also includes Windows paths for llama-server binaries
   const absolutePaths = [
+    managedLlamaBinaryPath(),
     // Windows llama-server locations
     path.join(home, 'AppData', 'Local', 'Microsoft', 'WindowsApps', 'llama-server.exe'),
     path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'llama-server.exe'),
@@ -195,7 +263,12 @@ export async function checkBinary() {
   for (const p of absolutePaths) {
     for (const candidate of expandWildcardPath(p)) {
       if (fs.existsSync(candidate)) {
-        return { found: true, binary: candidate, path: candidate, source: 'auto-detected' };
+        return withDiagnostics({
+          found: true,
+          binary: candidate,
+          path: candidate,
+          source: candidate === managedLlamaBinaryPath() ? 'Asyncat managed llama.cpp' : 'auto-detected',
+        });
       }
     }
   }
@@ -210,13 +283,16 @@ export async function checkBinary() {
       const cmd = IS_WIN ? `where "${name}" 2>nul` : `which "${name}" 2>/dev/null`;
       const { stdout } = await execAsync(cmd);
       const p = stdout.trim().split('\n')[0]; // Take first match on Windows
-      if (p) return { found: true, binary: p, path: p, source: 'PATH' };
+      if (p) return withDiagnostics({ found: true, binary: p, path: p, source: 'PATH' });
     } catch { /* not found */ }
   }
 
-  // 4. llama-cpp-python python package (pip install llama-cpp-python[server])
-  // Try both python and python3 - Windows typically uses 'python'
-  const pythonCommands = IS_WIN ? ['python', 'python3', 'py'] : ['python3', 'python'];
+  // 4. Asyncat Python venv or existing llama-cpp-python package.
+  const pythonCommands = [
+    process.env.LLAMA_PYTHON_PATH,
+    managedPythonBinaryPath(),
+    ...(IS_WIN ? ['python', 'python3', 'py'] : ['python3', 'python']),
+  ].filter(Boolean);
   const stderrNull = IS_WIN ? '2>nul' : '2>/dev/null';
   const serverImportProbe =
     'import site, sys; ' +
@@ -225,23 +301,23 @@ export async function checkBinary() {
     'from llama_cpp.server.__main__ import main';
   for (const pythonCmd of pythonCommands) {
     try {
-      await execAsync(`${pythonCmd} -c "${serverImportProbe}" ${stderrNull}`);
-      return {
+      await execAsync(`${JSON.stringify(pythonCmd)} -c "${serverImportProbe}" ${stderrNull}`);
+      return withDiagnostics({
         found:    true,
         binary:   pythonCmd,
         path:     pythonCmd,
         source:   'llama-cpp-python server package',
         isPython: true,
         pythonCmd, // Store the working command for spawning
-      };
+      });
     } catch { /* not installed */ }
   }
 
-  return {
+  return withDiagnostics({
     found:    false,
     searched: [...absolutePaths, ...pathNames, ...pythonCommands.map(cmd => `${cmd} llama-cpp-python`)],
-    hint:     'Set LLAMA_BINARY_PATH=/path/to/llama-server in your .env file, or install via pip install llama-cpp-python[server]',
-  };
+    hint:     'Run asyncat install --local-engine, set LLAMA_BINARY_PATH=/path/to/llama-server, or choose /provider for Ollama, LM Studio, or cloud.',
+  });
 }
 
 // ── Server start/stop ─────────────────────────────────────────────────────────
@@ -275,13 +351,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
 
   const binInfo = await checkBinary();
   if (!binInfo.found) {
-    throw new Error(
-      'llama-server binary not found.\n\n' +
-      'Install options:\n' +
-      '  pip install llama-cpp-python[server]  (easiest, uses your existing Python)\n' +
-      '  Download llama.cpp release binary from https://github.com/ggml-org/llama.cpp/releases\n\n' +
-      'Then set LLAMA_BINARY_PATH=/full/path/to/llama-server in your .env file.'
-    );
+    throw new Error(MISSING_ENGINE_ERROR);
   }
 
   const cpuCount   = os.cpus().length;

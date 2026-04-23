@@ -7,6 +7,7 @@ import { ROOT, readEnv, setKey } from '../lib/env.js';
 import { log, ok, warn, err, info, col } from '../lib/colors.js';
 import { select } from '../lib/select.js';
 import { getToken, apiGet, apiPost, getBase } from '../lib/denApi.js';
+import { MISSING_ENGINE_MESSAGE } from '../lib/localEngine.js';
 
 const DEN_ENV = path.join(ROOT, 'den/.env');
 
@@ -34,6 +35,14 @@ async function getLocalModels() {
     const data = await apiGet('/api/ai/providers/local-models');
     return data.models || [];
   } catch (_) { return []; }
+}
+
+function localEngineErrorMessage(message) {
+  const text = String(message || '');
+  if (/MISSING_ENGINE|llama-server binary not found|Local engine missing/i.test(text)) {
+    return MISSING_ENGINE_MESSAGE;
+  }
+  return text;
 }
 
 // ── list / get ────────────────────────────────────────────────────────────────
@@ -128,7 +137,7 @@ async function setLocal(args) {
     ok(`llama-server loading ${col('white', filename)}`);
     info('Wait for status to become ready before chatting.');
   } catch (e) {
-    err(`Failed to start server: ${e.message}`);
+    err(`Failed to start server: ${localEngineErrorMessage(e.message)}`);
   }
 }
 

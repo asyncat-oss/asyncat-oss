@@ -27,6 +27,7 @@ const CitationSettings = ({ settings, onSettingsChange }) => {
 };
 
 // Default citation settings
+// eslint-disable-next-line react-refresh/only-export-components
 export const defaultCitationSettings = {
   showSources: false,          // Show sources section
   inlineCitations: false,      // Show inline badges

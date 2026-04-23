@@ -1,23 +1,47 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { ROOT, readEnv } from '../lib/env.js';
 import { log, ok, err, warn, col } from '../lib/colors.js';
 import { procs } from '../lib/procs.js';
+import {
+  detectGpu,
+  findExistingLlamaServer,
+  gpuAdvice,
+  managedEngineDir,
+  managedLlamaBinaryPath,
+} from '../lib/localEngine.js';
 
 function checkCmd(cmd) {
-  try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
+  try {
+    execSync(`${process.platform === 'win32' ? 'where' : 'command -v'} ${cmd}`, { stdio: 'ignore' });
+    return true;
+  } catch { return false; }
 }
 
 function portRunning(port) {
+  if (process.platform === 'win32') {
+    try {
+      const out = execSync('netstat -ano -p TCP', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      return out.split(/\r?\n/).some(line => line.includes(`:${port} `) && /LISTENING/i.test(line));
+    } catch (_) { return false; }
+  }
+
   try {
     const out = execSync(`lsof -ti :${port} 2>/dev/null`).toString().trim();
     return out.length > 0;
-  } catch (_) { return false; }
+  } catch (_) {
+    try {
+      const out = execSync(`ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null`, { encoding: 'utf8' });
+      return out.split(/\r?\n/).some(line => line.includes(`:${port} `));
+    } catch {
+      return false;
+    }
+  }
 }
 
 function diskFreeGB(dir) {
+  if (process.platform === 'win32') return Infinity;
   try {
     const out = execSync(`df -k "${dir}" 2>/dev/null`).toString().split('\n')[1];
     if (!out) return Infinity;
@@ -53,29 +77,33 @@ export function run() {
     else warnIt(`npm ${npmVer} — version 8+ recommended`);
   } catch (_) { fail('npm not found'); }
 
-  // 3. Python (optional)
-  const python = ['python3', 'python'].find(c => {
-    try { execSync(`command -v ${c}`, { stdio: 'ignore' }); return true; } catch { return false; }
-  });
+  // 3. git
+  try {
+    const gitVer = execSync('git --version').toString().trim().replace(/^git version /, '');
+    pass(`git ${gitVer}`);
+  } catch (_) { fail('git not found'); }
+
+  // 4. Python (optional fallback only)
+  const python = (process.platform === 'win32' ? ['python', 'python3', 'py'] : ['python3', 'python']).find(checkCmd);
   if (python) {
     try {
       const ver = execSync(`${python} --version`).toString().trim();
-      pass(`${ver} available`);
+      pass(`${ver} available (optional fallback only)`);
     } catch (_) { warnIt('Python found but version check failed'); }
   } else {
-    warnIt('Python not found (optional — needed for llama-cpp-python)');
+    warnIt('Python not found (optional — managed llama.cpp binary is preferred)');
   }
 
-  // 4. den/.env exists
+  // 5. den/.env exists
   const denEnvPath = path.join(ROOT, 'den/.env');
   if (fs.existsSync(denEnvPath)) pass('den/.env exists');
   else fail(`den/.env missing — run ${col('cyan', 'install')}`);
 
-  // 5. neko/.env exists
+  // 6. neko/.env exists
   if (fs.existsSync(path.join(ROOT, 'neko/.env'))) pass('neko/.env exists');
   else fail(`neko/.env missing — run ${col('cyan', 'install')}`);
 
-  // 6. JWT_SECRET set and not default
+  // 7. JWT_SECRET set and not default
   if (fs.existsSync(denEnvPath)) {
     const env = readEnv('den/.env');
     const jwt = env['JWT_SECRET'] || '';
@@ -87,50 +115,65 @@ export function run() {
     } else pass('JWT_SECRET is set');
   }
 
-  // 7. den/node_modules
+  // 8. workspace dependencies
+  if (fs.existsSync(path.join(ROOT, 'node_modules'))) pass('workspace node_modules exists');
+  else fail(`node_modules missing — run ${col('cyan', 'install')}`);
+
   if (fs.existsSync(path.join(ROOT, 'den/node_modules'))) pass('den/node_modules exists');
-  else fail(`den/node_modules missing — run ${col('cyan', 'install')}`);
+  else warnIt('den/node_modules not present (ok for npm workspaces if root node_modules exists)');
 
-  // 8. neko/node_modules
   if (fs.existsSync(path.join(ROOT, 'neko/node_modules'))) pass('neko/node_modules exists');
-  else fail(`neko/node_modules missing — run ${col('cyan', 'install')}`);
+  else warnIt('neko/node_modules not present (ok for npm workspaces if root node_modules exists)');
 
-  // 9. Port 8716 free or backend running
+  // 9. Ports
   const backendRunning = (procs.backend !== null) || portRunning(8716);
   if (backendRunning) pass('Port 8716 in use (backend running)');
   else pass('Port 8716 free');
 
-  // 10. Port 8717 free or frontend running
   const frontendRunning = (procs.frontend !== null) || portRunning(8717);
   if (frontendRunning) pass('Port 8717 in use (frontend running)');
   else pass('Port 8717 free');
 
-  // 11. Port 8765 free or llama-server running
   const llamaRunning = portRunning(8765);
   if (llamaRunning) pass('Port 8765 in use (llama-server running)');
   else pass('Port 8765 free');
 
-  // 12. data/asyncat.db
-  if (fs.existsSync(path.join(ROOT, 'data/asyncat.db'))) pass('data/asyncat.db exists');
+  // 10. data/asyncat.db
+  if (fs.existsSync(path.join(ROOT, 'den/data/asyncat.db'))) pass('den/data/asyncat.db exists');
   else warnIt('data/asyncat.db not found — will be created on first run (SOLO_MODE)');
 
-  // 13. llama-server detectable (optional)
-  const llamaPaths = [
-    path.join(os.homedir(), '.unsloth/llama.cpp/build/bin/llama-server'),
-    path.join(os.homedir(), '.unsloth/llama.cpp/llama-server'),
-    path.join(os.homedir(), '.local/bin/llama-server'),
-    path.join(os.homedir(), 'bin/llama-server'),
-    '/usr/local/bin/llama-server',
-    '/usr/bin/llama-server',
-    '/opt/homebrew/bin/llama-server',
-  ];
-  const llamaBin = checkCmd('llama-server') ||
-    llamaPaths.some(p => { try { return fs.statSync(p).isFile(); } catch { return false; } });
-  const llamaPython = python && (() => {
-    try { execSync(`${python} -c "import llama_cpp"`, { stdio: 'ignore' }); return true; } catch { return false; }
-  })();
-  if (llamaBin || llamaPython) pass('llama-server / llama-cpp-python detected');
-  else warnIt('llama-server not found (optional — cloud AI still works)');
+  // 11. Local engine
+  const env = readEnv('den/.env');
+  const managedPath = managedLlamaBinaryPath();
+  if (fs.existsSync(managedPath)) pass(`Managed llama.cpp binary exists: ${managedPath}`);
+  else warnIt(`Managed llama.cpp binary not found at ${managedPath}`);
+
+  const configuredPath = env.LLAMA_BINARY_PATH || '';
+  if (configuredPath) {
+    if (fs.existsSync(configuredPath)) pass(`LLAMA_BINARY_PATH exists: ${configuredPath}`);
+    else fail(`LLAMA_BINARY_PATH points to a missing file: ${configuredPath}`);
+  }
+
+  const localEngine = findExistingLlamaServer();
+  if (localEngine.found) {
+    pass(`llama-server detected (${localEngine.source})`);
+  } else {
+    warnIt(`llama-server not found — run ${col('cyan', 'asyncat install --local-engine')} or configure Ollama/LM Studio/cloud`);
+  }
+
+  if (fs.existsSync(managedEngineDir())) pass(`Managed engine dir exists: ${managedEngineDir()}`);
+  else warnIt(`Managed engine dir not found: ${managedEngineDir()}`);
+
+  // 12. Models dir
+  const modelsDir = env.MODELS_PATH ? path.resolve(path.dirname(denEnvPath), env.MODELS_PATH) : path.join(ROOT, 'den/data/models');
+  if (fs.existsSync(modelsDir)) pass(`Local models dir exists: ${modelsDir}`);
+  else warnIt(`Local models dir not found yet: ${modelsDir}`);
+
+  // 13. GPU advisory
+  const gpu = detectGpu();
+  const advice = gpuAdvice(gpu);
+  if (gpu) warnIt(advice);
+  else pass('No GPU acceleration detected; CPU-safe defaults are active');
 
   // 14. Git repo clean
   if (checkCmd('git')) {

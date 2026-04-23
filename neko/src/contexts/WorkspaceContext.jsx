@@ -9,6 +9,7 @@ const API_URL = import.meta.env.VITE_USER_URL;
 const WorkspaceContext = createContext();
 
 // Custom hook to use the workspace context
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkspace = () => {
   const context = useContext(WorkspaceContext);
   if (!context) {

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { useRouteError, useNavigate } from 'react-router-dom';
 
 // Idle Detection Hook
+// eslint-disable-next-line react-refresh/only-export-components
 export const useIdleDetection = (onIdle, idleTime = 15 * 60 * 1000) => { // 15 minutes default
   const timeoutRef = useRef();
   const isIdleRef = useRef(false);
@@ -32,7 +33,7 @@ export const useIdleDetection = (onIdle, idleTime = 15 * 60 * 1000) => { // 15 m
       document.addEventListener(event, resetTimerHandler, true);
     });
 
-    resetTimer(); // Start the timer
+    resetTimer();
 
     return () => {
       events.forEach(event => {
@@ -42,6 +43,7 @@ export const useIdleDetection = (onIdle, idleTime = 15 * 60 * 1000) => { // 15 m
         clearTimeout(timeoutRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idleTime, onIdle]);
 
   return { resetTimer };
@@ -50,6 +52,7 @@ export const useIdleDetection = (onIdle, idleTime = 15 * 60 * 1000) => { // 15 m
 // Global 401 Error Context
 const UnauthorizedErrorContext = createContext();
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useUnauthorizedError = () => {
   const context = useContext(UnauthorizedErrorContext);
   if (!context) {

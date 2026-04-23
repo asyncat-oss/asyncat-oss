@@ -40,18 +40,8 @@ function Ensure-LlamaServer {
         return
     }
 
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Warn "winget not found - local models can be enabled later with asyncat install"
-        return
-    }
-
-    Info "Installing llama.cpp local engine..."
-    winget install llama.cpp --accept-package-agreements --accept-source-agreements --disable-interactivity
-    if ($LASTEXITCODE -eq 0 -or (Test-LlamaServer)) {
-        Ok "llama.cpp installed"
-    } else {
-        Warn "Could not auto-install llama.cpp - cloud providers still work"
-    }
+    Warn "llama-server not found - cloud providers, Ollama, and LM Studio still work"
+    Info "To install Asyncat's managed local engine, run: asyncat install --local-engine"
 }
 
 Write-Host ""

@@ -10,6 +10,11 @@ function isFirstRun() {
   return !fs.existsSync(path.join(home, '.first-run'));
 }
 
+function depsInstalled() {
+  return fs.existsSync(path.join(ROOT, 'node_modules')) ||
+    fs.existsSync(path.join(ROOT, 'den/node_modules'));
+}
+
 export async function run(args = []) {
   // Auto-trigger onboard on first run
   if (isFirstRun()) {
@@ -20,7 +25,7 @@ export async function run(args = []) {
   if (!fs.existsSync(path.join(ROOT, 'den/.env'))) {
     err(`den/.env not found — run ${col('cyan', 'install')} first.`); return;
   }
-  if (!fs.existsSync(path.join(ROOT, 'den/node_modules'))) {
+  if (!depsInstalled()) {
     err(`Dependencies missing — run ${col('cyan', 'install')} first.`); return;
   }
 

@@ -7,6 +7,7 @@ import { ROOT, readEnv } from '../lib/env.js';
 import { log, ok, warn, err, info, col, spinner } from '../lib/colors.js';
 import { select, confirm } from '../lib/select.js';
 import { getToken, apiGet, apiPost, apiDelete } from '../lib/denApi.js';
+import { MISSING_ENGINE_MESSAGE } from '../lib/localEngine.js';
 
 const MODELS_DIR = path.join(ROOT, 'den/data/models');
 
@@ -29,6 +30,14 @@ function getLocalModels() {
       return { name: f, size: stat.size, path: full, mtime: stat.mtime };
     })
     .sort((a, b) => b.mtime - a.mtime);
+}
+
+function localEngineErrorMessage(message) {
+  const text = String(message || '');
+  if (/MISSING_ENGINE|llama-server binary not found|Local engine missing/i.test(text)) {
+    return MISSING_ENGINE_MESSAGE;
+  }
+  return text;
 }
 
 
@@ -291,7 +300,7 @@ async function serveModel(args) {
     info(`Chat with it directly: ${col('cyan', 'run')}`);
     info(`Or use via asyncat:    ${col('cyan', 'chat')}`);
   } catch (e) {
-    err(`Failed to start server: ${e.message}`);
+    err(`Failed to start server: ${localEngineErrorMessage(e.message)}`);
   }
 }
 

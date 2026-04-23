@@ -2,12 +2,21 @@ import readline from "readline";
 import { execFileSync, execSync, spawn } from "child_process";
 import fs from "fs";
 import path from "path";
-import os from "os";
-import { createRequire } from "module";
-import { ROOT } from "../lib/env.js";
+import crypto from "crypto";
+import { ROOT, readEnv, setKey } from "../lib/env.js";
 import { log, ok, err, warn, info, col, spinner } from "../lib/colors.js";
+import {
+	LLAMA_RELEASES_URL,
+	detectGpu,
+	findExistingLlamaServer,
+	gpuAdvice,
+	installManagedLlamaServer,
+	installPythonVenvFallback,
+	managedLlamaBinaryPath,
+	verifyBinary,
+	writeLlamaBinaryEnv,
+} from "../lib/localEngine.js";
 
-const require = createRequire(import.meta.url);
 const NPM_CMD = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function checkCmd(cmd) {
@@ -22,70 +31,6 @@ function checkCmd(cmd) {
 		});
 		return true;
 	} catch {
-		return false;
-	}
-}
-
-function llamaServerPaths() {
-	const home = os.homedir();
-	const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
-	return [
-		path.join(home, "AppData", "Local", "Microsoft", "WindowsApps", "llama-server.exe"),
-		path.join(localAppData, "Microsoft", "WindowsApps", "llama-server.exe"),
-		path.join(localAppData, "Microsoft", "WinGet", "Packages", "*", "llama-server.exe"),
-		path.join(home, "AppData", "Local", "Programs", "Python", "Python*", "Scripts", "llama-server.exe"),
-		path.join(home, "AppData", "Local", "Programs", "llama.cpp", "llama-server.exe"),
-		path.join(localAppData, "Programs", "llama.cpp", "llama-server.exe"),
-		path.join(home, ".local", "bin", "llama-server.exe"),
-		path.join(home, ".unsloth", "llama.cpp", "build", "bin", "llama-server"),
-		path.join(home, ".unsloth", "llama.cpp", "llama-server"),
-		path.join(home, ".local", "bin", "llama-server"),
-		path.join(home, "bin", "llama-server"),
-		"/usr/local/bin/llama-server",
-		"/usr/bin/llama-server",
-		"/opt/homebrew/bin/llama-server",
-	];
-}
-
-function pathExistsWithSimpleGlob(pattern) {
-	if (!pattern.includes("*")) {
-		try { return fs.statSync(pattern).isFile(); } catch { return false; }
-	}
-
-	const dir = path.dirname(pattern);
-	const base = path.basename(pattern);
-	const parent = path.dirname(dir);
-	const dirPattern = path.basename(dir).replace("*", "");
-	try {
-		return fs.readdirSync(parent)
-			.filter(entry => entry.startsWith(dirPattern))
-			.some(entry => {
-				try { return fs.statSync(path.join(parent, entry, base)).isFile(); }
-				catch { return false; }
-			});
-	} catch {
-		return false;
-	}
-}
-
-function llamaServerFound() {
-	return checkCmd(process.platform === "win32" ? "llama-server.exe" : "llama-server") ||
-		checkCmd("llama-server") ||
-		llamaServerPaths().some(pathExistsWithSimpleGlob);
-}
-
-function installLlamaCppWithWinget() {
-	if (process.platform !== "win32" || !checkCmd("winget")) return false;
-	const s = spinner("Installing llama.cpp local engine...");
-	try {
-		execSync("winget install llama.cpp --accept-package-agreements --accept-source-agreements --disable-interactivity", {
-			stdio: "ignore",
-			timeout: 180000,
-		});
-		s.stop("llama.cpp installed");
-		return true;
-	} catch (_) {
-		s.fail("llama.cpp install failed");
 		return false;
 	}
 }
@@ -105,6 +50,32 @@ function setupEnv(target, example) {
 		);
 	} else {
 		ok(`${target} exists`);
+	}
+}
+
+function isWeakSecret(value) {
+	if (!value) return true;
+	const v = value.toLowerCase();
+	return value === "change-this-to-a-long-random-string" ||
+		value === "change_me_please" ||
+		value === "your-secret-here" ||
+		value === "changeme" ||
+		v.includes("example") ||
+		(v.includes("secret") && value.length < 32);
+}
+
+function hardenFirstRunEnv() {
+	const envPath = path.join(ROOT, "den/.env");
+	if (!fs.existsSync(envPath)) return;
+	const env = readEnv("den/.env");
+	if (isWeakSecret(env.JWT_SECRET || "")) {
+		setKey("den/.env", "JWT_SECRET", crypto.randomBytes(32).toString("hex"));
+		ok("Generated JWT_SECRET");
+	}
+	if (!env.SOLO_PASSWORD || env.SOLO_PASSWORD === "changeme") {
+		const password = `${crypto.randomBytes(2).toString("hex")}-${crypto.randomBytes(2).toString("hex")}-${crypto.randomBytes(2).toString("hex")}`;
+		setKey("den/.env", "SOLO_PASSWORD", password);
+		ok("Generated SOLO_PASSWORD");
 	}
 }
 
@@ -151,6 +122,22 @@ function runWithSpinner(cmd, args, cwd, label) {
 			resolve(false);
 		});
 	});
+}
+
+async function installManagedEngine() {
+	const s = spinner("Installing managed llama.cpp local engine...");
+	try {
+		const result = await installManagedLlamaServer();
+		s.stop(`llama.cpp installed from ${result.asset}`);
+		ok(`LLAMA_BINARY_PATH=${result.binary}`);
+		return true;
+	} catch (e) {
+		s.fail("Managed llama.cpp install failed");
+		warn(e.message);
+		info(`Manual releases: ${col("cyan", LLAMA_RELEASES_URL)}`);
+		info(`Then run: ${col("cyan", "asyncat config set LLAMA_BINARY_PATH=/full/path/to/llama-server")}`);
+		return false;
+	}
 }
 
 function prompt(question) {
@@ -252,79 +239,92 @@ export function ensureNativeRuntimeDeps() {
 	}
 }
 
-async function checkLlama(python) {
-	const found = llamaServerFound();
-	const pythonLlama =
-		python &&
-		(() => {
-			try {
-				execSync(`${python} -c "import llama_cpp"`, {
-					stdio: "ignore",
-				});
-				return true;
-			} catch {
-				return false;
-			}
-		})();
+async function checkLlama(python, args = []) {
+	const existing = findExistingLlamaServer();
+	const gpu = detectGpu();
+	const advice = gpuAdvice(gpu);
 
-	if (found) {
-		ok("llama-server found");
+	if (existing.found) {
+		if (args.includes("--local-engine") && !existing.isPython && !verifyBinary(existing.binary)) {
+			warn(`Existing llama-server at ${existing.binary} failed verification; reinstalling managed engine.`);
+			await installManagedEngine();
+			return;
+		}
+		ok(`llama-server detected (${existing.source})`);
+		if (!existing.isPython && path.isAbsolute(existing.binary)) {
+			writeLlamaBinaryEnv(existing.binary);
+			info(`LLAMA_BINARY_PATH=${col("white", existing.binary)}`);
+		}
+		if (advice) warn(advice);
 		return;
 	}
-	if (pythonLlama) {
-		ok("llama-cpp-python detected");
+
+	if (args.includes("--skip-local-engine")) {
+		info("Skipped local engine setup. Ollama, LM Studio, and cloud providers still work.");
 		return;
 	}
 
 	warn("llama-server not found — local AI models will not work without it.");
+	if (advice) warn(advice);
+
+	if (args.includes("--local-engine")) {
+		await installManagedEngine();
+		return;
+	}
+
 	log("");
 	log(`  ${col("bold", "Install options:")}`);
-	if (process.platform === "win32" && checkCmd("winget")) {
-		log(`  ${col("cyan", "[1]")} Install llama.cpp with winget        ${col("dim", "(recommended on Windows)")}`);
-		log(`  ${col("cyan", "[2]")} pip install llama-cpp-python[server]  ${col("dim", "(fallback)")}`);
-	} else {
-		log(`  ${col("cyan", "[1]")} pip install llama-cpp-python[server]  ${col("dim", "(fallback)")}`);
-		log(`  ${col("cyan", "[2]")} Download pre-built binary              ${col("dim", "github.com/ggml-org/llama.cpp/releases")}`);
-	}
-	log(`  ${col("cyan", "[3]")} Skip — cloud AI providers still work`);
+	log(`  ${col("cyan", "[1]")} Install managed llama.cpp binary       ${col("dim", "(recommended)")}`);
+	log(`  ${col("cyan", "[2]")} Set custom LLAMA_BINARY_PATH`);
+	log(`  ${col("cyan", "[3]")} Create Asyncat Python venv fallback   ${col("dim", "(no global pip)")}`);
+	log(`  ${col("cyan", "[4]")} Skip — use Ollama, LM Studio, or cloud`);
 	log("");
 
-	const choice = await prompt("  Choose [1/2/3]: ");
-	const canWinget = process.platform === "win32" && checkCmd("winget");
-	if (choice === "1" && canWinget) {
-		if (installLlamaCppWithWinget() && llamaServerFound()) {
-			ok("llama-server found");
-		} else {
-			warn("Install finished but llama-server was not detected. Restart your terminal and run install again.");
-		}
-	} else if (choice === "1" || (choice === "2" && canWinget)) {
-		if (!python) {
-			err("Python not found. Install Python 3.10+ first.");
+	if (!process.stdin.isTTY) {
+		info(`Non-interactive shell detected. Run ${col("cyan", "asyncat install --local-engine")} to install the managed local engine.`);
+		return;
+	}
+
+	const choice = await prompt("  Choose [1/2/3/4]: ");
+	if (choice === "1") {
+		await installManagedEngine();
+	} else if (choice === "2") {
+		const customPath = await prompt("  Full path to llama-server: ");
+		if (!customPath) {
+			info("Cancelled.");
 			return;
 		}
-		const s = spinner("Installing llama-cpp-python...");
-		try {
-			execSync(`${python} -m pip install "llama-cpp-python[server]"`, {
-				stdio: "ignore",
-			});
-			s.stop("llama-cpp-python installed");
-		} catch (_) {
-			s.fail(
-				"Installation failed — run pip install manually and check output.",
-			);
+		if (!fs.existsSync(customPath)) {
+			err(`Not found: ${customPath}`);
+			return;
 		}
-	} else if (choice === "2") {
-		info(`Download llama-server for ${os.platform()}-${os.arch()} from:`);
-		info(col("cyan", "https://github.com/ggml-org/llama.cpp/releases"));
-		info(
-			`Place it at ${col("white", "~/.local/bin/llama-server")} and run ${col("dim", "chmod +x")} on it.`,
-		);
+		writeLlamaBinaryEnv(customPath);
+		ok(`LLAMA_BINARY_PATH=${customPath}`);
+	} else if (choice === "3") {
+		if (!python) {
+			err("Python not found. Install Python 3.10+ first, then rerun install.");
+			return;
+		}
+		if (gpu?.vendor === "NVIDIA") {
+			warn('For CUDA acceleration in the venv, rerun manually with CMAKE_ARGS="-DGGML_CUDA=on" before pip install.');
+		}
+		const s = spinner("Creating Asyncat Python venv and installing llama-cpp-python...");
+		try {
+			const venvPython = installPythonVenvFallback(python);
+			s.stop("llama-cpp-python installed in Asyncat venv");
+			info(`venv python: ${col("white", venvPython)}`);
+		} catch (e) {
+			s.fail("Python venv fallback failed");
+			warn(e.message);
+			info("This did not touch system Python packages.");
+		}
 	} else {
-		info("Skipped — cloud AI (OpenAI, Anthropic, etc.) will still work.");
+		info("Skipped — Ollama, LM Studio, and cloud AI providers still work.");
+		info(`Managed path when you are ready: ${col("white", managedLlamaBinaryPath())}`);
 	}
 }
 
-export async function run() {
+export async function run(args = []) {
 	log("");
 	log(col("bold", "  Checking dependencies..."));
 	log("");
@@ -349,6 +349,12 @@ export async function run() {
 	}
 	ok(`npm ${execSync("npm --version").toString().trim()}`);
 
+	if (!checkCmd("git")) {
+		err("git not found — install from https://git-scm.com and rerun install.");
+		return;
+	}
+	ok(`git ${execSync("git --version").toString().trim().replace(/^git version /, "")}`);
+
 	const python = ["python3", "python"].find(checkCmd);
 	if (python)
 		ok(
@@ -364,24 +370,18 @@ export async function run() {
 	log("");
 	setupEnv("den/.env", "den/.env.example");
 	setupEnv("neko/.env", "neko/.env.example");
+	hardenFirstRunEnv();
 
 	log("");
 	log(col("bold", "  Installing packages..."));
 	log("");
-	await runWithSpinner("npm", ["install"], ROOT, "root");
-	await runWithSpinner("npm", ["install"], path.join(ROOT, "den"), "backend");
-	await runWithSpinner(
-		"npm",
-		["install"],
-		path.join(ROOT, "neko"),
-		"frontend",
-	);
+	await runWithSpinner("npm", ["install"], ROOT, "workspace");
 	ensureNativeRuntimeDeps();
 
 	log("");
 	log(col("bold", "  Checking llama.cpp (local AI)..."));
 	log("");
-	await checkLlama(python);
+	await checkLlama(python, args);
 
 	log("");
 	ok(

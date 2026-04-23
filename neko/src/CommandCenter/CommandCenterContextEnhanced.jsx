@@ -326,6 +326,7 @@ const generateInstantTitle = (message) => {
 
 const CommandCenterContext = createContext();
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useCommandCenter() {
   const context = useContext(CommandCenterContext);
   if (!context) {

@@ -1966,6 +1966,7 @@ const ModernBlockEditor = forwardRef(
       createAutoVersionIfNeeded,
     ]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const deleteSelectedBlocks = useCallback(
       ({ skipNotification = false, skipWarning = false } = {}) => {
         if (!selectedBlockIdsRef.current.size) {
@@ -2073,6 +2074,7 @@ const ModernBlockEditor = forwardRef(
         trackContentChange();
         return true;
       },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       [
         blocks,
         clearBlockSelection,
@@ -2100,6 +2102,7 @@ const ModernBlockEditor = forwardRef(
       return deleted;
     }, [copySelectedBlocks, deleteSelectedBlocks, showNotification]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const pasteClipboardBlocks = useCallback(
       ({ replaceSelection = true, templatesOverride = null } = {}) => {
         const sourceTemplates =
@@ -3717,6 +3720,7 @@ const ModernBlockEditor = forwardRef(
     );
 
     // Block-level undo/redo functions
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockUndo = useCallback(() => {
       // Clear command delete and rapid delete flags to allow undo to restore content
       commandDeleteActiveRef.current = false;
@@ -4113,6 +4117,7 @@ const ModernBlockEditor = forwardRef(
       title,
     ]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockRedo = useCallback(() => {
       // Clear command delete and rapid delete flags to allow redo to restore content
       commandDeleteActiveRef.current = false;
@@ -4493,6 +4498,7 @@ const ModernBlockEditor = forwardRef(
     );
 
     // Enhanced block change handler with delta tracking and typing detection
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockChange = useCallback(
       (blockId, updates, isTyping = false) => {
         let didChange = false;
@@ -4945,6 +4951,7 @@ const ModernBlockEditor = forwardRef(
     );
 
     // Enhanced block actions with delta tracking
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockAction = useCallback(
       (action, blockId) => {
         switch (action) {

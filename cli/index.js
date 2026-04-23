@@ -43,6 +43,16 @@ import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
 
 loadTheme();
 
+const LOCAL_ENGINE_MISSING = 'Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+
+function localEngineErrorMessage(message) {
+  const text = String(message || '');
+  if (/MISSING_ENGINE|llama-server binary not found|Local engine missing/i.test(text)) {
+    return LOCAL_ENGINE_MISSING;
+  }
+  return text;
+}
+
 function getVersion() {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'cli/package.json'), 'utf8'));
@@ -328,7 +338,7 @@ async function startTui() {
     if (shellCommands.includes(cmd)) {
       await runInShell(async () => {
         switch (cmd) {
-          case 'install': case 'setup': await _install.run(); break;
+          case 'install': case 'setup': await _install.run(args); break;
           case 'onboard': await _onboard.run(); break;
           case 'snippets': await _snippets.run(args); break;
           case 'update':   _update.run(); break;
@@ -998,7 +1008,7 @@ case 'tools': {
             break;
           }
           if (status.status === 'error') {
-            tui.printErr(status.error || 'Model failed to load.');
+            tui.printErr(localEngineErrorMessage(status.error || 'Model failed to load.'));
             return;
           }
         }
@@ -1007,7 +1017,7 @@ case 'tools': {
           return;
         }
       } catch (e) {
-        tui.printErr(`Failed: ${e.message}`);
+        tui.printErr(`Failed: ${localEngineErrorMessage(e.message)}`);
         return;
       }
     }
@@ -1345,7 +1355,7 @@ async function runSingleCommand(argv) {
     case 'start': _start.run(rest); break;
     case 'stop':  _stop.run(); break;
     case 'status': _status.run(); break;
-    case 'install': await _install.run(); break;
+    case 'install': await _install.run(rest); break;
     case 'doctor': _doctor.run(); break;
     case 'version': _version.run(); break;
     case 'help': banner(); console.log('  Run asyncat without arguments for interactive TUI.'); break;
