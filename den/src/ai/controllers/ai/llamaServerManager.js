@@ -547,6 +547,9 @@ function classifyError(logs, exitCode) {
   if (/corrupted or incomplete|data is not within the file bounds/i.test(logs)) {
     return 'CORRUPTED: The model file is incomplete or corrupted (the download was cut short). Delete it and re-download from Models.';
   }
+  if (/error while loading shared libraries|cannot open shared object file/i.test(logs)) {
+    return 'ENGINE_LIBS: The local llama.cpp engine is missing its shared libraries. Re-run asyncat install --local-engine.';
+  }
   if (/failed to create command queue|ggml_metal_init|backend_metal|failed to initialize the context: failed to initialize +backend/i.test(logs)) {
     return 'BACKEND_INIT: llama.cpp backend initialization failed. If you are using GPU offload, set LLAMA_GPU_LAYERS=0 in den/.env. Otherwise try a newer llama.cpp or llama-cpp-python build.';
   }

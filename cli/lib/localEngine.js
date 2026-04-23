@@ -440,20 +440,30 @@ function ensureLinuxSonameLinks(root) {
       }
       const match = entry.name.match(/^(lib.+\.so)\.(\d+)\.\d+(?:\.\d+)*$/);
       if (!match) continue;
-      const soname = path.join(current, `${match[1]}.${match[2]}`);
-      try {
-        const stat = fs.lstatSync(soname);
-        if (stat.isSymbolicLink() && !fs.existsSync(soname)) {
-          fs.unlinkSync(soname);
-        } else {
-          continue;
-        }
-      } catch {}
-      try {
-        fs.symlinkSync(entry.name, soname);
-      } catch {}
+      ensureRelativeSymlink(path.join(current, match[1]), entry.name);
+      ensureRelativeSymlink(path.join(current, `${match[1]}.${match[2]}`), entry.name);
     }
   }
+}
+
+function ensureRelativeSymlink(linkPath, targetName) {
+  const desiredTarget = targetName.split(path.sep).join('/');
+
+  try {
+    const stat = fs.lstatSync(linkPath);
+    if (!stat.isSymbolicLink()) return;
+
+    const currentTarget = fs.readlinkSync(linkPath);
+    const resolvedCurrent = path.resolve(path.dirname(linkPath), currentTarget);
+    const resolvedDesired = path.resolve(path.dirname(linkPath), desiredTarget);
+    if (resolvedCurrent === resolvedDesired) return;
+
+    fs.unlinkSync(linkPath);
+  } catch {}
+
+  try {
+    fs.symlinkSync(desiredTarget, linkPath);
+  } catch {}
 }
 
 function installUnixLauncher(targetPath, realBinary, root = path.dirname(targetPath)) {

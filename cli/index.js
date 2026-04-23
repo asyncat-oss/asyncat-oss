@@ -207,7 +207,7 @@ async function autoStartServices() {
   // Check if backend is already up
   let backendUp = false;
   try {
-    const res = await fetch('http://localhost:8716/api/health', {
+    const res = await fetch('http://localhost:8716/health', {
       signal: AbortSignal.timeout(600),
     });
     backendUp = res.ok;
@@ -232,7 +232,7 @@ async function startTui() {
   let backendUp = false;
   try {
     console.log('\x1b[36m[asyncat]\x1b[0m Checking backend health...');
-    const res = await fetch('http://localhost:8716/api/health', {
+    const res = await fetch('http://localhost:8716/health', {
       signal: AbortSignal.timeout(1000),
     });
     backendUp = res.ok;
@@ -965,7 +965,13 @@ case 'tools': {
           contextLength: m.contextLength || 8192,
           _file: m.filename,
         }));
-      } catch {
+      } catch (err) {
+        const message = String(err?.message || '');
+        if (/Auth failed|Authentication failed|401/.test(message)) {
+          tui.printErr('Backend auth failed. den/.env SOLO_PASSWORD does not match the backend database user.');
+          tui.printInfo('Sync the solo password, then try again.');
+          return;
+        }
         tui.printErr('Backend not running. Starting it...');
         _start.run(['--backend-only']);
         tui.printInfo('Waiting for backend... try again in a few seconds.');
