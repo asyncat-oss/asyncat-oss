@@ -47,7 +47,7 @@ function sessionStatus(s) {
   return 'complete';
 }
 
-const AgentsSidebarContent = memo(({ navigate, currentPage }) => {
+const AgentsSidebarContent = memo(({ navigate }) => {
 	const [sessions, setSessions]       = useState([]);
 	const [deletingId, setDeletingId]   = useState(null);
 	const [hoveredId, setHoveredId]     = useState(null);
@@ -83,7 +83,7 @@ const AgentsSidebarContent = memo(({ navigate, currentPage }) => {
 	const yesterday = new Date(Date.now() - 86400000).toDateString();
 	const formatDate = (d) => {
 		const dt = new Date(d).toDateString();
-		if (dt === today) return null; // no label for today
+		if (dt === today) return 'Today';
 		if (dt === yesterday) return 'Yesterday';
 		return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 	};
@@ -93,18 +93,18 @@ const AgentsSidebarContent = memo(({ navigate, currentPage }) => {
 	return (
 		<div className="flex flex-col h-full">
 			{/* New Run button */}
-			<div className="px-2 pt-2 pb-1">
+			<div className="px-2 pt-2 pb-1 space-y-0.5">
 				<button
 					onClick={() => navigate('/agents')}
-					className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 border border-indigo-200/60 dark:border-indigo-700/40 transition-colors"
+					className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left group"
 				>
-					<Plus className="w-3.5 h-3.5" />
+					<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
 					New Run
 				</button>
 			</div>
 
 			{/* Sessions list */}
-			<div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+			<div className="flex-1 overflow-y-auto px-1 pb-4 space-y-0.5">
 				{sessions.length === 0 && (
 					<p className="text-xs text-gray-400 dark:text-gray-600 text-center py-8 px-3 leading-relaxed">
 						No runs yet.<br />Give the agent a goal above.
@@ -123,32 +123,35 @@ const AgentsSidebarContent = memo(({ navigate, currentPage }) => {
 					return (
 						<React.Fragment key={s.id}>
 							{showLabel && dateLabel && (
-								<div className="px-2 pt-3 pb-1">
-									<span className="text-[10px] font-medium text-gray-400 dark:text-gray-600 uppercase tracking-wider">{dateLabel}</span>
+								<div className="px-3 py-1.5 mt-3 mb-1 first:mt-1">
+									<span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{dateLabel}</span>
 								</div>
 							)}
 							<div
-								className={`group relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors cursor-pointer ${
+								className={`group relative flex items-center gap-2 rounded-lg px-3 py-2 transition-all duration-150 cursor-pointer ${
 									active
-										? 'bg-gray-100 dark:bg-gray-800'
-										: 'hover:bg-gray-100 dark:hover:bg-gray-800/60'
+										? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-200'
+										: 'text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 active:scale-[0.98]'
 								}`}
 								onClick={() => navigate(`/agents/${s.id}`)}
 								onMouseEnter={() => setHoveredId(s.id)}
 								onMouseLeave={() => setHoveredId(null)}
 							>
 								{/* Status dot */}
-								<div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full mt-0.5 ${
+								<div
+									title={status === 'error' ? 'Error' : status === 'incomplete' ? 'Partial' : 'Done'}
+									className={`flex-shrink-0 w-2 h-2 rounded-full ${
 									status === 'error'      ? 'bg-red-400'
 									: status === 'incomplete' ? 'bg-amber-400'
 									: 'bg-emerald-400'
-								}`} />
+								}`}
+								/>
 
 								{/* Label */}
-								<span className={`flex-1 text-xs truncate leading-snug ${
+								<span className={`flex-1 min-w-0 truncate text-sm ${
 									active
 										? 'text-gray-900 dark:text-gray-100 font-medium'
-										: 'text-gray-600 dark:text-gray-400'
+										: 'text-gray-700 dark:text-gray-300 midnight:text-gray-300'
 								}`}>
 									{label}
 								</span>
@@ -158,7 +161,7 @@ const AgentsSidebarContent = memo(({ navigate, currentPage }) => {
 									<button
 										onClick={(e) => handleDelete(e, s.id)}
 										disabled={isDeleting}
-										className="flex-shrink-0 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500 transition-colors"
+										className="flex-shrink-0 p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
 										title="Delete session"
 									>
 										{isDeleting
@@ -171,15 +174,6 @@ const AgentsSidebarContent = memo(({ navigate, currentPage }) => {
 					);
 				})}
 			</div>
-
-			{/* Legend */}
-			{sessions.length > 0 && (
-				<div className="flex-shrink-0 px-3 py-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3">
-					<span className="flex items-center gap-1 text-[10px] text-gray-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />Done</span>
-					<span className="flex items-center gap-1 text-[10px] text-gray-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Partial</span>
-					<span className="flex items-center gap-1 text-[10px] text-gray-400"><span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />Error</span>
-				</div>
-			)}
 		</div>
 	);
 });
@@ -1246,9 +1240,7 @@ const DynamicSidebar = ({
 						{/* Agents mode */}
 						<div className={`${activeMode !== 'agents' ? 'hidden' : ''}`}>
 							<AgentsSidebarContent
-								basePage={basePage}
 								navigate={navigate}
-								currentPage={currentPage}
 							/>
 						</div>
 
