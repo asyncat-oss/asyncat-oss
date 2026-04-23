@@ -634,7 +634,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       // Check for content filter error
       if (error.type === 'local_model_offline' || error.message?.includes('local model server is not running') || error.message?.includes('ECONNREFUSED')) {
         errorMessage = "Local Model Offline";
-        userFriendlyMessage = "😿 The local model server isn't running.\n\nGo to **Settings → Local Models** and click **Start** to load your model first.";
+        userFriendlyMessage = "The local model server isn't running.\n\nOpen **Models** and load a model first.";
       } else if (error.type === 'context_overflow' || error.message?.includes('context') && error.message?.includes('token')) {
         errorMessage = "Message Too Long";
         userFriendlyMessage = "😿 Your message (plus search results) is too long for the model's context window.\n\nTry a shorter message or start a new conversation.";

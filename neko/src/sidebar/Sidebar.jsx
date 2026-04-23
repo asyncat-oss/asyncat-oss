@@ -23,7 +23,6 @@ import {
 	Search,
 	Cpu,
 	Bot,
-	SlidersHorizontal,
 	MessageSquare as ChatIcon,
 	Calendar as CalendarIcon,
 	Loader2,
@@ -37,36 +36,6 @@ import UniversalSearch from "./UniversalSearch";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { usePermissions } from "../utils/permissions";
 import { agentApi } from "../CommandCenter/commandCenterApi";
-import ModelPickerDropdown from "../CommandCenter/components/ModelPickerDropdown";
-import ModelParamsSidebar from "../CommandCenter/components/ModelParamsSidebar";
-
-// ── Persistent model section (all modes) ─────────────────────────────────────
-const ModelSection = memo(() => {
-	const [showParams, setShowParams] = useState(false);
-	return (
-		<>
-			<div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-2 py-1.5 flex items-center gap-1">
-				<div className="flex-1 min-w-0">
-					<ModelPickerDropdown />
-				</div>
-				<button
-					onClick={() => setShowParams(v => !v)}
-					className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${showParams
-							? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-							: 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-						}`}
-					title="Model parameters & logs"
-				>
-					<SlidersHorizontal className="w-3.5 h-3.5" />
-				</button>
-			</div>
-			{showParams && (
-				<ModelParamsSidebar onClose={() => setShowParams(false)} />
-			)}
-		</>
-	);
-});
-ModelSection.displayName = 'ModelSection';
 
 // ── Agents sidebar panel ──────────────────────────────────────────────────────
 function sessionStatus(s) {
@@ -1132,9 +1101,6 @@ const DynamicSidebar = ({
 							</button>
 						))}
 					</div>
-
-					{/* Model picker — persistent, accessible from all modes */}
-					<ModelSection />
 
 					{/* Scrollable content area */}
 					<div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">

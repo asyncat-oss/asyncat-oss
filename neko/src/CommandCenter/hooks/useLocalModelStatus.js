@@ -21,10 +21,6 @@ export function useLocalModelStatus() {
         const s = await llamaServerApi.getStatus();
         if (mounted) {
           setLocalStatus(s);
-          // Persist last known model so "Start last model" button works after server stops
-          if (s.status === 'ready' && s.model) {
-            localStorage.setItem('asyncat-last-model', s.model);
-          }
         }
       } catch { /* server not reachable — keep last known state */ }
     };

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';
+import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 
 const Badge = ({ children, color = 'gray' }) => {
   const colors = {
@@ -132,6 +133,7 @@ const SystemInfoSection = () => {
 };
 
 const ModelsPage = () => {
+  const { config } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
   const [models, setModels] = useState([]);
   const [storage, setStorage] = useState(null);
@@ -178,7 +180,7 @@ const ModelsPage = () => {
   const handleStart = async (filename) => {
     setStartingModel(filename);
     try {
-      await llamaServerApi.start(filename);
+      await llamaServerApi.start(filename, config.ctx_size);
       setServerStatus(prev => ({ ...prev, status: 'loading', model: filename }));
       pollCleanup.current?.();
       pollCleanup.current = llamaServerApi.pollStatus(
@@ -251,7 +253,7 @@ const ModelsPage = () => {
                   Model Studio
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 mt-0.5">
-                  Manage, load and discover local AI models
+                  Load, stop, download, and remove local AI models
                 </p>
               </div>
             </div>
@@ -276,9 +278,6 @@ const ModelsPage = () => {
                 
                 {/* Active Server Banner */}
                 <div className={`relative overflow-hidden rounded-2xl border p-6 transition-all duration-300 ${bannerClass}`}>
-                  {/* Decorative background blur */}
-                  <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-white/20 dark:bg-black/20 blur-3xl rounded-full pointer-events-none" />
-                  
                   <div className="relative z-10 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
                     <div className="flex items-center gap-4">
                       <div className={`p-3 bg-white dark:bg-gray-900 midnight:bg-gray-900 rounded-xl shadow-sm border border-black/5 dark:border-white/5 midnight:border-white/5`}>
@@ -432,4 +431,3 @@ const ModelsPage = () => {
 };
 
 export default ModelsPage;
-

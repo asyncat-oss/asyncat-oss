@@ -1,10 +1,10 @@
 // MessageListV2.jsx - Clean Minimal Design with UNIFIED BLOCK SYSTEM
 import { forwardRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BlockBasedMessageRenderer from './BlockBasedMessageRenderer';
 import { ProjectBadges } from './ProjectManagerV2';
 import { ToolCallList } from './ToolCallCard';
 import { parseWebLinks } from './WebSourcesBar';
-import { llamaServerApi } from '../../Settings/settingApi.js';
 import { FileText, AlertCircle, RotateCcw, X, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import ThinkingBlock, { parseThinkingContent, isInsideThinkBlock, stripThinkForStreaming } from './ThinkingBlock.jsx';
 
@@ -136,23 +136,15 @@ function SearchImageGrid({ images }) {
   );
 }
 
-// ── One-click model start button — appears in offline error messages ──────────
-const ModelStartButton = () => {
-  const lastModel = localStorage.getItem('asyncat-last-model');
-  const [phase, setPhase] = useState('idle'); // idle | starting | done
-  if (!lastModel) return null;
-  const shortName = lastModel.replace(/\.gguf$/i, '');
-  const handleStart = async () => {
-    setPhase('starting');
-    try { await llamaServerApi.start(lastModel); setPhase('done'); } catch { setPhase('idle'); }
-  };
+// ── Model page shortcut — appears in offline error messages ──────────────────
+const ModelActionButton = () => {
+  const navigate = useNavigate();
   return (
     <button
-      onClick={handleStart}
-      disabled={phase !== 'idle'}
+      onClick={() => navigate('/models')}
       className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors"
     >
-      {phase === 'done' ? '✓ Loading…' : phase === 'starting' ? 'Starting…' : `▶ Start ${shortName}`}
+      Open Models
     </button>
   );
 };
@@ -334,7 +326,7 @@ const MessageComponent = ({
                     Retry
                   </button>
                   {message.errorType === 'local_model_offline' && (
-                    <ModelStartButton />
+                    <ModelActionButton />
                   )}
                 </div>
               </div>
@@ -460,7 +452,7 @@ const MessageComponent = ({
 
         {/* Model offline — quick-start button */}
         {message.isError && message.errorType === 'local_model_offline' && (
-          <ModelStartButton />
+          <ModelActionButton />
         )}
 
         {/* Thinking block — collapsible reasoning panel */}

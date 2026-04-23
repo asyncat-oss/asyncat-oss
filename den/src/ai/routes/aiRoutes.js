@@ -303,7 +303,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
       (cause?.address === '127.0.0.1' || String(cause?.port) === String(process.env.LLAMA_SERVER_PORT ?? '8765'));
     if (isLocalRefused || error.message?.includes('ECONNREFUSED')) {
       errorType = 'local_model_offline';
-      errorMessage = 'The local model server is not running. Go to Settings → Local Models and click Start to load your model first.';
+      errorMessage = 'The local model server is not running. Open Models and load a model first.';
     }
     // Azure / cloud content filter
     else if (error.code === 'content_filter' || error.message?.includes('content management policy')) {

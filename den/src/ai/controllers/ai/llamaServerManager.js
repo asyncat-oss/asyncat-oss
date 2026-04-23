@@ -68,7 +68,6 @@ function snapshot() {
     startedAt:  state.startedAt,
     port:       LLAMA_PORT,
     baseUrl:    state.status === 'ready' ? `http://${LLAMA_HOST}:${LLAMA_PORT}/v1` : null,
-    recentLogs: state.logLines.slice(-15),
     ctxSize:    state.ctxSize ?? parseInt(process.env.LLAMA_CTX_SIZE ?? '8192', 10),
     ctxTrain:   state.ctxTrain ?? null,
   };
@@ -214,7 +213,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
     throw new Error(
       `Model file not found: ${safeFilename}\n` +
       `Expected at: ${modelPath}\n` +
-      `Tip: Download the model from Settings → Local Models first.`
+      `Tip: Download the model from Models first.`
     );
   }
 
@@ -386,7 +385,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function classifyError(logs, exitCode) {
   if (/corrupted or incomplete|data is not within the file bounds/i.test(logs)) {
-    return 'CORRUPTED: The model file is incomplete or corrupted (the download was cut short). Delete it and re-download from Settings → Local Models.';
+    return 'CORRUPTED: The model file is incomplete or corrupted (the download was cut short). Delete it and re-download from Models.';
   }
   if (/failed to create command queue|ggml_metal_init|backend_metal|failed to initialize the context: failed to initialize +backend/i.test(logs)) {
     return 'BACKEND_INIT: llama.cpp backend initialization failed. If you are using GPU offload, set LLAMA_GPU_LAYERS=0 in den/.env. Otherwise try a newer llama.cpp or llama-cpp-python build.';
@@ -401,7 +400,7 @@ function classifyError(logs, exitCode) {
     return 'PORT: Port 8765 is already in use. Stop any other llama-server instance and try again.';
   }
   if (/no such file|cannot open/i.test(logs)) {
-    return 'MISSING: Model file not found. It may have been moved or deleted. Re-download it from Settings → Local Models.';
+    return 'MISSING: Model file not found. It may have been moved or deleted. Re-download it from Models.';
   }
   if (/unsupported model|unknown model/i.test(logs)) {
     return 'UNSUPPORTED: This model format is not supported by your version of llama-server. Try updating llama.cpp.';
