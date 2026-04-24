@@ -66,14 +66,14 @@ const MiniBar = ({ value, color = 'bg-indigo-500', max = 100 }) => {
 
 const OverviewCard = ({ icon: Icon, label, value, detail, tone = 'gray' }) => {
   const tones = {
-    gray: 'from-white to-gray-50 border-gray-200 text-gray-700',
-    blue: 'from-blue-50 to-white border-blue-200 text-blue-700',
-    amber: 'from-amber-50 to-white border-amber-200 text-amber-700',
-    green: 'from-green-50 to-white border-green-200 text-green-700',
+    gray: 'border-gray-200 text-gray-700',
+    blue: 'border-gray-200 text-gray-700',
+    amber: 'border-gray-200 text-gray-700',
+    green: 'border-gray-200 text-gray-700',
   };
   const toneClass = tones[tone] || tones.gray;
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${toneClass} dark:from-gray-900 dark:to-gray-900 dark:border-gray-700 midnight:from-gray-900 midnight:to-gray-900 midnight:border-gray-800 p-4 shadow-sm`}>
+    <div className={`rounded-2xl border bg-white ${toneClass} dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800 p-4 shadow-sm`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">{label}</div>
@@ -442,7 +442,7 @@ const EngineAdvisorSection = ({
                   className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 ${
                     primaryAction.type === 'install'
                       ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'border border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/10'
+                      : 'border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
                   {primaryAction.type === 'install' && <Download className="w-3.5 h-3.5" />}
@@ -474,7 +474,7 @@ const EngineAdvisorSection = ({
             </button>
           </div>
           {!primaryAction && recommendation?.state === 'not_installed' && !managedProfileAvailable && (
-            <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 midnight:bg-amber-950/20 p-3">
+            <div className="mt-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-gray-950/40 p-3">
               <div className="text-xs font-semibold text-amber-900 dark:text-amber-200">
                 {manualPathGuidance.title}
               </div>
@@ -584,7 +584,7 @@ const EngineAdvisorSection = ({
           </div>
           <div className="mt-3 space-y-3">
             {showRecommendedInstallCard ? (
-              <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/10 p-3">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-gray-950/40 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-xs font-semibold text-blue-900 dark:text-blue-200">
@@ -608,7 +608,7 @@ const EngineAdvisorSection = ({
                   <button
                     onClick={() => onInstall({ profile: installProfile }, true)}
                     disabled={!canRetry || Boolean(switchingKey) || Boolean(installingKey)}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
                   >
                     {isInstallingRecommended && installingKey === `${installKeyBase}:retry` ? 'Installing…' : 'Install + Retry'}
                   </button>
@@ -781,7 +781,7 @@ const EngineAdvisorSection = ({
         )}
 
         {showAdvancedOptions && recommendation?.state === 'not_installed' && (
-          <div className="rounded-xl border border-dashed border-amber-200 dark:border-amber-800 p-3 bg-amber-50/40 dark:bg-amber-900/10">
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-900/40 midnight:bg-gray-950/40">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <TerminalSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -831,7 +831,7 @@ const EngineAdvisorSection = ({
               return (
                 <div
                   key={candidate.id}
-                  className={`rounded-xl border p-3 transition-colors ${candidate.isRecommended ? 'border-amber-300 bg-amber-50/60 dark:border-amber-700 dark:bg-amber-900/10' : 'border-gray-200 dark:border-gray-700 midnight:border-gray-800'}`}
+                  className={`rounded-xl border p-3 transition-colors ${candidate.isRecommended ? 'border-gray-300 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/40 midnight:border-gray-800 midnight:bg-gray-950/40' : 'border-gray-200 dark:border-gray-700 midnight:border-gray-800'}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -949,7 +949,7 @@ const EngineAdvisorSection = ({
           <button
             onClick={() => onSwitch(revertSelection, false)}
             disabled={Boolean(switchingKey) || Boolean(installingKey)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-xl border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/10 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/10 disabled:opacity-50"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Revert to Previous Engine
@@ -1372,9 +1372,9 @@ const ModelsPage = () => {
   const isReady = status === 'ready';
 
   const bannerClass = {
-    ready:   'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 midnight:bg-green-900/20 midnight:border-green-800',
-    loading: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800 midnight:bg-amber-900/20 midnight:border-amber-800',
-    error:   'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800 midnight:bg-red-900/20 midnight:border-red-800',
+    ready:   'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800',
+    loading: 'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800',
+    error:   'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800',
     idle:    'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700 midnight:bg-gray-800/50 midnight:border-gray-700',
   }[status] ?? 'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700 midnight:bg-gray-800/50 midnight:border-gray-700';
 
@@ -1416,14 +1416,14 @@ const ModelsPage = () => {
   ];
 
   return (
-    <div className="flex h-full w-full bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.08),_transparent_24%),linear-gradient(to_bottom,_#ffffff,_#f8fafc)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.14),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(56,189,248,0.12),_transparent_20%),linear-gradient(to_bottom,_#0f172a,_#020617)] midnight:bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_20%),radial-gradient(circle_at_top_right,_rgba(244,114,182,0.10),_transparent_18%),linear-gradient(to_bottom,_#020617,_#000000)] font-sans">
+    <div className="flex h-full w-full bg-gray-50 dark:bg-gray-950 midnight:bg-black font-sans">
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800/60 midnight:border-gray-800/60 flex-shrink-0 bg-white/90 dark:bg-gray-900/90 midnight:bg-gray-950/90 backdrop-blur z-10 sticky top-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 rounded-lg text-gray-700 dark:text-gray-300">
-                <Box className="w-5 h-5" />
+                <Cpu className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
@@ -1506,7 +1506,6 @@ const ModelsPage = () => {
                 
                 {/* Active Server Banner */}
                 <div className={`relative overflow-hidden rounded-3xl border p-6 transition-all duration-300 shadow-sm ${bannerClass}`}>
-                  <div className="absolute inset-y-0 right-0 w-40 bg-gradient-to-l from-white/40 to-transparent dark:from-white/[0.03] pointer-events-none" />
                   <div className="relative z-10 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
                     <div className="flex items-center gap-4">
                       <div className={`p-3 bg-white dark:bg-gray-900 midnight:bg-gray-900 rounded-xl shadow-sm border border-black/5 dark:border-white/5 midnight:border-white/5`}>
@@ -1597,7 +1596,7 @@ const ModelsPage = () => {
                             className={`group relative flex flex-col bg-white dark:bg-gray-800 midnight:bg-gray-900 border rounded-3xl overflow-hidden transition-all duration-200 hover:shadow-md
                               ${isLoaded ? 'border-gray-400 dark:border-gray-500 midnight:border-gray-600 ring-1 ring-gray-400/30 dark:ring-gray-500/30 midnight:ring-gray-500/20 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 hover:border-gray-300 dark:hover:border-gray-600 midnight:hover:border-gray-700'}`}
                           >
-                            <div className={`absolute inset-x-0 top-0 h-1 ${isLoaded ? 'bg-green-500' : 'bg-gradient-to-r from-gray-200 via-gray-100 to-transparent dark:from-gray-700 dark:via-gray-800'}`} />
+                            <div className={`absolute inset-x-0 top-0 h-1 ${isLoaded ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
                             <div className="p-5 flex-1">
                               <div className="flex items-start justify-between gap-3 mb-3">
                                 <div className="flex items-center gap-2.5 min-w-0">
