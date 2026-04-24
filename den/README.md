@@ -51,6 +51,8 @@ LLAMA_SERVER_PORT=8765
 MODELS_PATH=./data/models
 # Optional explicit llama.cpp binary; asyncat install --local-engine sets this
 LLAMA_BINARY_PATH=/full/path/to/llama-server
+# Optional GPU offload tuning for the selected local engine
+LLAMA_GPU_LAYERS=0
 
 # OR cloud API
 AI_BASE_URL=https://api.openai.com/v1
@@ -63,6 +65,8 @@ For local GGUF models, prefer the CLI-managed llama.cpp install:
 ```bash
 asyncat install --local-engine
 ```
+
+That managed install is CPU-safe by default. The Models page can inspect the machine, recommend a better runtime, switch to already-installed `llama-server` or `llama-cpp-python` engines, and trigger supported managed installs without restarting `den`.
 
 Do not install `llama-cpp-python` into system Python on Linux; Asyncat uses a managed binary or an Asyncat-owned venv fallback to avoid PEP 668 / externally managed Python errors.
 

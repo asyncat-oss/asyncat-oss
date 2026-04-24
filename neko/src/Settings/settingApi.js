@@ -244,6 +244,17 @@ export const llamaServerApi = {
     return apiCall(`${AI_API_BASE}/server/check`);
   },
 
+  // Get engine advisor data: current engine, candidates, recommendation
+  getEngines: async () => {
+    return apiCall(`${AI_API_BASE}/server/engines`);
+  },
+
+  // Get managed install release catalog and any active install job.
+  getEngineCatalog: async (refresh = false) => {
+    const suffix = refresh ? '?refresh=1' : '';
+    return apiCall(`${AI_API_BASE}/server/engines/catalog${suffix}`);
+  },
+
   // Get current server state (idle / loading / ready / error)
   getStatus: async () => {
     return apiCall(`${AI_API_BASE}/server/status`);
@@ -262,6 +273,35 @@ export const llamaServerApi = {
   // Stop the server and unload the model.
   stop: async () => {
     return apiCall(`${AI_API_BASE}/server/stop`, { method: 'POST' });
+  },
+
+  // Switch the active local engine and optionally retry the current model.
+  selectEngine: async (payload) => {
+    return apiCall(`${AI_API_BASE}/server/engines/select`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Install or reinstall a managed engine profile and optionally retry a model.
+  installEngine: async (payload) => {
+    return apiCall(`${AI_API_BASE}/server/engines/install`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Start a background managed install job.
+  startInstallJob: async (payload) => {
+    return apiCall(`${AI_API_BASE}/server/engines/install-jobs`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Poll a background managed install job.
+  getInstallJob: async (jobId) => {
+    return apiCall(`${AI_API_BASE}/server/engines/install-jobs/${encodeURIComponent(jobId)}`);
   },
 
   // Poll server status until it reaches 'ready' or 'error'.
@@ -287,6 +327,47 @@ export const llamaServerApi = {
         if (snap.status === 'error') {
           stopped = true;
           onError?.(snap);
+          return;
+        }
+      } catch (err) {
+        if (!stopped) {
+          stopped = true;
+          onError?.({ status: 'error', error: err.message });
+          return;
+        }
+      }
+      if (!stopped) {
+        timerId = setTimeout(poll, 800);
+      }
+    };
+
+    poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timerId);
+    };
+  },
+
+  // Poll a managed install job until it completes or errors.
+  pollInstallJob: (jobId, onUpdate, onDone, onError) => {
+    let stopped = false;
+    let timerId = null;
+
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const data = await apiCall(`${AI_API_BASE}/server/engines/install-jobs/${encodeURIComponent(jobId)}`);
+        if (stopped) return;
+        const job = data.job;
+        onUpdate?.(job);
+        if (job?.status === 'complete') {
+          stopped = true;
+          onDone?.(job);
+          return;
+        }
+        if (job?.status === 'error') {
+          stopped = true;
+          onError?.(job);
           return;
         }
       } catch (err) {

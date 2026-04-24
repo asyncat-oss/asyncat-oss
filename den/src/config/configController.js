@@ -80,7 +80,7 @@ export function updateConfig(req, res) {
     return res.status(400).json({ success: false, error: 'key and value are required' });
   }
 
-  const allowed = [...SECRETS, 'SOLO_EMAIL', 'AI_BASE_URL', 'AI_MODEL', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'MODELS_PATH', 'STORAGE_PATH'];
+  const allowed = [...SECRETS, 'SOLO_EMAIL', 'AI_BASE_URL', 'AI_MODEL', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'MODELS_PATH', 'STORAGE_PATH'];
   if (!allowed.includes(key)) {
     return res.status(400).json({ success: false, error: `Key not allowed: ${key}. Allowed: ${allowed.join(', ')}` });
   }

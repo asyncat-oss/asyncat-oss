@@ -134,6 +134,8 @@ Managed install locations:
 
 Asyncat writes `LLAMA_BINARY_PATH` into `den/.env` after a managed install. This avoids global Python package installs, including Linux `externally-managed-environment` / PEP 668 failures.
 
+The managed install is intentionally CPU-safe by default. Asyncat's Models page can now inspect the current machine, recommend a better local engine when one fits the hardware, switch to already-installed runtimes, or trigger a managed install from the UI for supported engine profiles.
+
 ```env
 LLAMA_SERVER_PORT=8765
 MODELS_PATH=./data/models
@@ -160,6 +162,8 @@ On Windows:
 ```env
 LLAMA_BINARY_PATH=C:\path\to\llama-server.exe
 ```
+
+For GPU-capable local engines, Asyncat can switch to already-installed/custom runtimes and can also trigger supported managed installs from Model Studio. Manual paths are still available for custom CUDA/ROCm/Metal runtimes when you want a specific build.
 
 #### Python fallback without global pip
 

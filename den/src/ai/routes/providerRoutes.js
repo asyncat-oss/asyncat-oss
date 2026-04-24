@@ -21,6 +21,12 @@ import {
   stopServer,
   getStatus as getLlamaStatus,
   checkBinary,
+  getEngineAdvisor,
+  getEngineInstallCatalog,
+  selectEngine,
+  installEngine,
+  startEngineInstallJob,
+  getEngineInstallJob,
   subscribe as llamaSubscribe,
 } from '../controllers/ai/llamaServerManager.js';
 import db from '../../db/client.js';
@@ -486,6 +492,129 @@ router.get('/server/check', verifyUser, async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// ── GET /server/engines — current engine, candidates, and recommendation ─────
+router.get('/server/engines', verifyUser, async (_req, res) => {
+  try {
+    const result = await getEngineAdvisor();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /server/engines/catalog — release catalog for managed installs ──────
+router.get('/server/engines/catalog', verifyUser, async (req, res) => {
+  try {
+    const force = String(req.query.refresh || '') === '1';
+    const result = await getEngineInstallCatalog({ force });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const status = /GitHub releases API returned|GitHub release .* returned/i.test(err.message) ? 502 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /server/engines/select — switch engine and optionally retry model ───
+router.post('/server/engines/select', verifyUser, async (req, res) => {
+  try {
+    const { runtime, path, retryModel, ctxSize } = req.body || {};
+    if (!runtime || !path) {
+      return res.status(400).json({ success: false, error: 'runtime and path are required' });
+    }
+
+    const result = await selectEngine({
+      runtime,
+      path,
+      retryModel,
+      ctxSize,
+      modelsDir: MODELS_DIR,
+    });
+
+    if (result.retry?.attempted && result.retry?.success && retryModel) {
+      const unsub = llamaSubscribe(snap => {
+        if (snap.status === 'ready' && snap.model === retryModel) {
+          unsub();
+          try {
+            saveBuiltinProviderConfig(req.user.id, retryModel);
+          } catch (dbErr) {
+            console.error('[llamaServer] Failed to auto-save provider config after engine switch:', dbErr);
+          }
+        } else if (snap.status === 'error' || snap.status === 'idle') {
+          unsub();
+        }
+      });
+    }
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const status = /required|not found|failed verification|does not provide/i.test(err.message) ? 400 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /server/engines/install — install managed engine and optionally retry ──
+router.post('/server/engines/install', verifyUser, async (req, res) => {
+  try {
+    const { profile, releaseTag, assetName, retryModel, ctxSize } = req.body || {};
+    const result = await installEngine({
+      profile,
+      releaseTag,
+      assetName,
+      retryModel,
+      ctxSize,
+      modelsDir: MODELS_DIR,
+    });
+
+    if (result.retry?.attempted && result.retry?.success && retryModel) {
+      const unsub = llamaSubscribe(snap => {
+        if (snap.status === 'ready' && snap.model === retryModel) {
+          unsub();
+          try {
+            saveBuiltinProviderConfig(req.user.id, retryModel);
+          } catch (dbErr) {
+            console.error('[llamaServer] Failed to auto-save provider config after engine install:', dbErr);
+          }
+        } else if (snap.status === 'error' || snap.status === 'idle') {
+          unsub();
+        }
+      });
+    }
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const status = /No llama\.cpp release asset matched|Download failed|extract|verification failed|required/i.test(err.message) ? 400 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /server/engines/install-jobs — start background managed install ─────
+router.post('/server/engines/install-jobs', verifyUser, async (req, res) => {
+  try {
+    const { profile, releaseTag, assetName, retryModel, ctxSize } = req.body || {};
+    const job = await startEngineInstallJob({
+      profile,
+      releaseTag,
+      assetName,
+      retryModel,
+      ctxSize,
+      modelsDir: MODELS_DIR,
+    });
+    res.status(202).json({ success: true, job });
+  } catch (err) {
+    const status = /already running/i.test(err.message) ? 409 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /server/engines/install-jobs/:id — poll managed install job status ───
+router.get('/server/engines/install-jobs/:id', verifyUser, async (req, res) => {
+  const job = getEngineInstallJob(req.params.id);
+  if (!job) {
+    return res.status(404).json({ success: false, error: 'Install job not found' });
+  }
+  res.json({ success: true, job });
 });
 
 // ── GET /server/status — current server state ─────────────────────────────────

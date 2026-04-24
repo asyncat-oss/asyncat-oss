@@ -2,13 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFileSync, execSync } from 'child_process';
-import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
+import { once } from 'events';
 import { ROOT, readEnv, setKey } from './env.js';
 
 export const LLAMA_RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
+export const LLAMA_RELEASES_LIST_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases';
 export const LLAMA_RELEASES_URL = 'https://github.com/ggml-org/llama.cpp/releases';
 export const MISSING_ENGINE_MESSAGE = 'Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+export const MANAGED_ENGINE_METADATA_FILE = 'asyncat-engine.json';
+export const LLAMA_ENGINE_PROFILES = ['cpu_safe', 'nvidia_gpu', 'apple_metal', 'amd_rocm'];
 
 const isWin = process.platform === 'win32';
 
@@ -27,6 +29,10 @@ export function managedLlamaBinaryPath() {
   return path.join(managedEngineDir(), isWin ? 'llama-server.exe' : 'llama-server');
 }
 
+export function managedEngineMetadataPath(root = managedEngineDir()) {
+  return path.join(root, MANAGED_ENGINE_METADATA_FILE);
+}
+
 export function managedPythonDir() {
   return path.join(asyncatHome(), 'llama.cpp', 'python');
 }
@@ -34,6 +40,27 @@ export function managedPythonDir() {
 export function managedPythonBinaryPath() {
   if (isWin) return path.join(managedPythonDir(), 'Scripts', 'python.exe');
   return path.join(managedPythonDir(), 'bin', 'python');
+}
+
+export function profileCapabilityHint(profile = 'cpu_safe') {
+  if (profile === 'nvidia_gpu') return 'nvidia';
+  if (profile === 'apple_metal') return 'apple';
+  if (profile === 'amd_rocm') return 'amd';
+  return 'cpu_safe';
+}
+
+export function readManagedEngineMetadata(root = managedEngineDir()) {
+  const metadataPath = managedEngineMetadataPath(root);
+  if (!fs.existsSync(metadataPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeManagedEngineMetadata(metadata, root = managedEngineDir()) {
+  fs.writeFileSync(managedEngineMetadataPath(root), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
 }
 
 export function commandExists(cmd) {
@@ -232,7 +259,48 @@ export function gpuAdvice(gpu = detectGpu()) {
   return null;
 }
 
-function scoreLlamaReleaseAsset(asset, platform = process.platform, arch = process.arch) {
+function githubApiHeaders() {
+  return {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'asyncat-installer',
+  };
+}
+
+function formatByteSize(bytes) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 || unit === 0 ? value.toFixed(unit === 0 ? 0 : 1) : value.toFixed(2)} ${units[unit]}`;
+}
+
+function assetTagsFromName(name = '') {
+  const lower = String(name).toLowerCase();
+  const tags = [];
+  if (/cuda|cublas/.test(lower)) tags.push('cuda');
+  if (/rocm|hip/.test(lower)) tags.push('rocm');
+  if (/metal/.test(lower)) tags.push('metal');
+  if (/cpu/.test(lower)) tags.push('cpu');
+  if (/vulkan/.test(lower)) tags.push('vulkan');
+  if (/opencl/.test(lower)) tags.push('opencl');
+  if (/sycl/.test(lower)) tags.push('sycl');
+  return tags;
+}
+
+function inferProfileFromAssetName(name = '', fallbackProfile = 'cpu_safe', platform = process.platform) {
+  const tags = assetTagsFromName(name);
+  if (tags.includes('cuda')) return 'nvidia_gpu';
+  if (tags.includes('rocm')) return 'amd_rocm';
+  if (tags.includes('metal')) return 'apple_metal';
+  if (platform === 'darwin' && fallbackProfile === 'apple_metal') return 'apple_metal';
+  return fallbackProfile;
+}
+
+function scoreLlamaReleaseAsset(asset, platform = process.platform, arch = process.arch, profile = 'cpu_safe') {
   const name = String(asset.name || '').toLowerCase();
   if (!asset.browser_download_url) return null;
   if (!/\.(zip|tar\.gz|tgz)$/.test(name)) return null;
@@ -260,36 +328,143 @@ function scoreLlamaReleaseAsset(asset, platform = process.platform, arch = proce
 
   if (/server/.test(name)) score += 4;
   if (/bin|binary/.test(name)) score += 4;
-  if (/cpu/.test(name)) score += 30;
   if (/noavx/.test(name)) score -= 2;
   if (/avx2/.test(name)) score += 1;
-  if (/openvino|cuda|cublas|rocm|vulkan|kompute|sycl|opencl|hip|metal/.test(name)) score -= 100;
+
+  const hasCuda = /cuda|cublas/.test(name);
+  const hasRocm = /rocm|hip/.test(name);
+  const hasMetal = /metal/.test(name);
+  const hasOtherGpu = /openvino|vulkan|kompute|sycl|opencl/.test(name);
+  const hasAnyGpuTag = hasCuda || hasRocm || hasMetal || hasOtherGpu;
+
+  if (profile === 'cpu_safe') {
+    if (/cpu/.test(name)) score += 30;
+    if (hasAnyGpuTag) score -= 100;
+    return score;
+  }
+
+  if (profile === 'nvidia_gpu') {
+    if (!hasCuda) return null;
+    score += 40;
+    if (/cu12|cuda12|cublas/.test(name)) score += 10;
+    return score;
+  }
+
+  if (profile === 'amd_rocm') {
+    if (!hasRocm) return null;
+    score += 40;
+    return score;
+  }
+
+  if (profile === 'apple_metal') {
+    if (platform !== 'darwin') return null;
+    if (hasMetal) score += 40;
+    else if (!hasCuda && !hasRocm && !hasOtherGpu) score += 18;
+    else return null;
+    return score;
+  }
 
   return score;
 }
 
-export function rankLlamaReleaseAssets(assets, platform = process.platform, arch = process.arch) {
+export function rankLlamaReleaseAssets(assets, platform = process.platform, arch = process.arch, profile = 'cpu_safe') {
   return (assets || [])
-    .map(asset => ({ asset, score: scoreLlamaReleaseAsset(asset, platform, arch) }))
+    .map(asset => ({ asset, score: scoreLlamaReleaseAsset(asset, platform, arch, profile) }))
     .filter(item => item.score !== null)
     .sort((a, b) => b.score - a.score)
     .map(item => item.asset);
 }
 
-export function chooseLlamaReleaseAsset(assets, platform = process.platform, arch = process.arch) {
-  return rankLlamaReleaseAssets(assets, platform, arch)[0] || null;
+export function chooseLlamaReleaseAsset(assets, platform = process.platform, arch = process.arch, profile = 'cpu_safe') {
+  return rankLlamaReleaseAssets(assets, platform, arch, profile)[0] || null;
 }
 
-async function installManagedAsset(asset, release) {
+export function buildReleaseCatalog(releases, platform = process.platform, arch = process.arch) {
+  return (releases || []).map(release => {
+    const assets = (release.assets || [])
+      .filter(asset => /\.(zip|tar\.gz|tgz)$/i.test(String(asset.name || '')))
+      .filter(asset => !/sha256|checksums?|source|cmake|dev|devel|android|ios/i.test(String(asset.name || '').toLowerCase()))
+      .map(asset => {
+        const profileScores = Object.fromEntries(
+          LLAMA_ENGINE_PROFILES.map(profile => [profile, scoreLlamaReleaseAsset(asset, platform, arch, profile)])
+        );
+        const supportedProfiles = Object.entries(profileScores)
+          .filter(([, score]) => score !== null)
+          .sort((a, b) => b[1] - a[1])
+          .map(([profile]) => profile);
+        const suggestedProfile = inferProfileFromAssetName(asset.name, supportedProfiles[0] || 'cpu_safe', platform);
+        return {
+          name: asset.name,
+          sizeBytes: asset.size || 0,
+          sizeFormatted: formatByteSize(asset.size || 0),
+          updatedAt: asset.updated_at || null,
+          downloadUrl: asset.browser_download_url,
+          tags: assetTagsFromName(asset.name),
+          profileScores,
+          supportedProfiles,
+          suggestedProfile,
+          compatible: supportedProfiles.length > 0,
+        };
+      })
+      .sort((a, b) => {
+        const aBest = Math.max(...Object.values(a.profileScores).filter(score => score !== null), -Infinity);
+        const bBest = Math.max(...Object.values(b.profileScores).filter(score => score !== null), -Infinity);
+        return bBest - aBest || a.name.localeCompare(b.name);
+      });
+
+    return {
+      tagName: release.tag_name || release.name || 'latest',
+      name: release.name || release.tag_name || 'latest',
+      publishedAt: release.published_at || null,
+      prerelease: Boolean(release.prerelease),
+      draft: Boolean(release.draft),
+      compatibleAssetCount: assets.filter(asset => asset.compatible).length,
+      assets,
+    };
+  });
+}
+
+async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgress = null) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-llama-'));
   const archivePath = path.join(tmpRoot, asset.name);
   const extractDir = path.join(tmpRoot, 'extract');
   try {
-    await downloadFile(asset.browser_download_url, archivePath);
+    onProgress?.({
+      phase: 'downloading',
+      message: `Downloading ${asset.name}`,
+      percent: 2,
+      assetName: asset.name,
+      releaseTag: release.tag_name || release.name || 'latest',
+    });
+    await downloadFile(asset.browser_download_url, archivePath, progress => {
+      onProgress?.({
+        phase: 'downloading',
+        message: `Downloading ${asset.name}`,
+        percent: Math.max(2, Math.min(72, progress.percent ?? 0)),
+        downloadedBytes: progress.downloadedBytes,
+        totalBytes: progress.totalBytes,
+        assetName: asset.name,
+        releaseTag: release.tag_name || release.name || 'latest',
+      });
+    });
+    onProgress?.({
+      phase: 'extracting',
+      message: `Extracting ${asset.name}`,
+      percent: 78,
+      assetName: asset.name,
+      releaseTag: release.tag_name || release.name || 'latest',
+    });
     extractArchive(archivePath, extractDir);
     const serverBinary = findLlamaServerBinary(extractDir);
     if (!serverBinary) throw new Error(`Archive did not contain ${isWin ? 'llama-server.exe' : 'llama-server'}.`);
 
+    onProgress?.({
+      phase: 'installing',
+      message: 'Installing managed engine files',
+      percent: 86,
+      assetName: asset.name,
+      releaseTag: release.tag_name || release.name || 'latest',
+    });
     fs.rmSync(managedEngineDir(), { recursive: true, force: true });
     fs.mkdirSync(managedEngineDir(), { recursive: true });
     fs.cpSync(extractDir, managedEngineDir(), { recursive: true });
@@ -314,13 +489,34 @@ async function installManagedAsset(asset, release) {
       throw new Error(`Archive did not install ${isWin ? 'llama-server.exe' : 'llama-server'} into ${managedEngineDir()}.`);
     }
     if (!isWin) fs.chmodSync(installed, 0o755);
+    onProgress?.({
+      phase: 'verifying',
+      message: 'Verifying llama-server binary',
+      percent: 93,
+      assetName: asset.name,
+      releaseTag: release.tag_name || release.name || 'latest',
+    });
     if (!verifyBinary(installed)) {
       const detail = verifyBinaryError(installed);
       fs.rmSync(managedEngineDir(), { recursive: true, force: true });
       throw new Error(`Installed ${installed}, but llama-server verification failed: ${detail}.`);
     }
+    writeManagedEngineMetadata({
+      profile,
+      capabilityHint: profileCapabilityHint(profile),
+      asset: asset.name,
+      version: release.tag_name || release.name || 'latest',
+      installedAt: new Date().toISOString(),
+    });
     setKey('den/.env', 'LLAMA_BINARY_PATH', installed);
-    return { binary: installed, asset: asset.name, version: release.tag_name || release.name || 'latest' };
+    onProgress?.({
+      phase: 'complete',
+      message: 'Managed engine installed successfully',
+      percent: 100,
+      assetName: asset.name,
+      releaseTag: release.tag_name || release.name || 'latest',
+    });
+    return { binary: installed, asset: asset.name, version: release.tag_name || release.name || 'latest', profile };
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
@@ -328,17 +524,34 @@ async function installManagedAsset(asset, release) {
 
 export async function fetchLatestLlamaRelease() {
   const res = await fetch(LLAMA_RELEASES_API, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'asyncat-installer',
-    },
+    headers: githubApiHeaders(),
     signal: AbortSignal.timeout(20000),
   });
   if (!res.ok) throw new Error(`GitHub releases API returned ${res.status}`);
   return res.json();
 }
 
-export async function downloadFile(url, destination) {
+export async function fetchLlamaReleases(limit = 12) {
+  const perPage = Math.max(1, Math.min(20, Number(limit) || 12));
+  const res = await fetch(`${LLAMA_RELEASES_LIST_API}?per_page=${perPage}`, {
+    headers: githubApiHeaders(),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`GitHub releases API returned ${res.status}`);
+  return res.json();
+}
+
+export async function fetchLlamaReleaseByTag(tag) {
+  const encodedTag = encodeURIComponent(tag);
+  const res = await fetch(`${LLAMA_RELEASES_LIST_API}/tags/${encodedTag}`, {
+    headers: githubApiHeaders(),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`GitHub release ${tag} returned ${res.status}`);
+  return res.json();
+}
+
+export async function downloadFile(url, destination, onProgress = null) {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'asyncat-installer' },
     signal: AbortSignal.timeout(900000),
@@ -346,7 +559,34 @@ export async function downloadFile(url, destination) {
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
   if (!res.body) throw new Error('Download failed: empty response body');
   fs.mkdirSync(path.dirname(destination), { recursive: true });
-  await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(destination));
+  const totalBytes = Number(res.headers.get('content-length')) || 0;
+  const reader = res.body.getReader();
+  const stream = fs.createWriteStream(destination);
+  let downloadedBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      downloadedBytes += chunk.length;
+      if (!stream.write(chunk)) {
+        await once(stream, 'drain');
+      }
+      onProgress?.({
+        downloadedBytes,
+        totalBytes,
+        percent: totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : null,
+      });
+    }
+    await new Promise((resolve, reject) => {
+      stream.on('error', reject);
+      stream.end(resolve);
+    });
+  } catch (err) {
+    stream.destroy();
+    throw err;
+  }
 }
 
 function extractArchive(archivePath, destination) {
@@ -485,17 +725,42 @@ function installUnixLauncher(targetPath, realBinary, root = path.dirname(targetP
   fs.chmodSync(targetPath, 0o755);
 }
 
-export async function installManagedLlamaServer() {
-  const release = await fetchLatestLlamaRelease();
-  const candidates = rankLlamaReleaseAssets(release.assets || []).slice(0, 5);
+export async function installManagedLlamaServer(input = 'cpu_safe') {
+  const options = typeof input === 'string'
+    ? { profile: input }
+    : { ...(input || {}) };
+  const requestedProfile = options.profile || 'cpu_safe';
+  const release = options.releaseTag
+    ? await fetchLlamaReleaseByTag(options.releaseTag)
+    : await fetchLatestLlamaRelease();
+
+  let effectiveProfile = requestedProfile;
+  let candidates = [];
+
+  if (options.assetName) {
+    const selectedAsset = (release.assets || []).find(asset => asset.name === options.assetName);
+    if (!selectedAsset) {
+      throw new Error(`Selected asset not found in release ${release.tag_name || release.name || 'latest'}: ${options.assetName}`);
+    }
+    effectiveProfile = inferProfileFromAssetName(selectedAsset.name, requestedProfile);
+    const score = scoreLlamaReleaseAsset(selectedAsset, process.platform, process.arch, effectiveProfile);
+    if (score === null) {
+      throw new Error(`Selected asset ${selectedAsset.name} does not match ${process.platform}-${process.arch} for profile ${effectiveProfile}.`);
+    }
+    candidates = [selectedAsset];
+  } else {
+    candidates = rankLlamaReleaseAssets(release.assets || [], process.platform, process.arch, requestedProfile).slice(0, 5);
+  }
+
   if (candidates.length === 0) {
-    throw new Error(`No llama.cpp release asset matched ${process.platform}-${process.arch}. Download manually from ${LLAMA_RELEASES_URL} and set LLAMA_BINARY_PATH.`);
+    throw new Error(`No llama.cpp release asset matched ${process.platform}-${process.arch} for profile ${requestedProfile}. Download manually from ${LLAMA_RELEASES_URL} and set LLAMA_BINARY_PATH.`);
   }
 
   const failures = [];
   for (const asset of candidates) {
     try {
-      return await installManagedAsset(asset, release);
+      const assetProfile = inferProfileFromAssetName(asset.name, effectiveProfile);
+      return await installManagedAsset(asset, release, assetProfile, options.onProgress);
     } catch (e) {
       failures.push(`${asset.name}: ${e.message}`);
       fs.rmSync(managedEngineDir(), { recursive: true, force: true });

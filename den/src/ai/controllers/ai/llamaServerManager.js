@@ -16,12 +16,27 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
+import {
+  installManagedLlamaServer,
+  readManagedEngineMetadata,
+  profileCapabilityHint,
+  LLAMA_ENGINE_PROFILES,
+  fetchLlamaReleases,
+  buildReleaseCatalog,
+} from '../../../../../cli/lib/localEngine.js';
 
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PYTHON_WRAPPER_PATH = path.resolve(__dirname, '../../../../scripts/llama_cpp_server_wrapper.py');
+const DEN_ENV_PATH = path.resolve(__dirname, '../../../../.env');
+const LLAMA_PYTHON_IMPORT_PROBE =
+  'import site, sys; ' +
+  'usersite = site.getusersitepackages(); ' +
+  'sys.path.append(usersite) if usersite not in sys.path else None; ' +
+  'from llama_cpp.server.__main__ import main';
 
 const LLAMA_PORT      = parseInt(process.env.LLAMA_SERVER_PORT  ?? '8765', 10);
 const LLAMA_HOST      = '127.0.0.1';
@@ -81,7 +96,7 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function detectGpuAdvice() {
+export async function detectGpuInfo() {
   try {
     const { stdout } = await execAsync(
       'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits',
@@ -94,6 +109,7 @@ async function detectGpuAdvice() {
       return {
         vendor: 'NVIDIA',
         name,
+        vramGb: Number.isFinite(Number(memMb)) ? +(Number(memMb) / 1024).toFixed(1) : null,
         advice: `NVIDIA GPU detected: ${name}${vram}. Asyncat keeps CPU-safe defaults; for CUDA builds use a CUDA llama.cpp binary or an Asyncat Python venv with CMAKE_ARGS="-DGGML_CUDA=on" python -m pip install "llama-cpp-python[server]".`,
       };
     }
@@ -104,6 +120,7 @@ async function detectGpuAdvice() {
     return {
       vendor: 'AMD',
       name: 'AMD GPU with ROCm detected',
+      vramGb: null,
       advice: 'AMD/ROCm detected. ROCm llama.cpp builds are advanced/manual; keep LLAMA_GPU_LAYERS=0 unless you configure a ROCm-capable build.',
     };
   } catch {}
@@ -112,6 +129,7 @@ async function detectGpuAdvice() {
     return {
       vendor: 'Apple',
       name: 'Apple Silicon / Metal',
+      vramGb: null,
       advice: 'Apple Silicon detected. Use the managed macOS llama.cpp build first, then set LLAMA_GPU_LAYERS in den/.env if you want Metal offload.',
     };
   }
@@ -123,9 +141,722 @@ async function withDiagnostics(result) {
   return {
     managedPath: managedLlamaBinaryPath(),
     managedPythonPath: managedPythonBinaryPath(),
-    gpu: await detectGpuAdvice(),
+    gpu: await detectGpuInfo(),
     ...result,
   };
+}
+
+function currentEnvValue(key) {
+  return (process.env[key] || '').trim();
+}
+
+function normalizeCandidatePath(candidatePath) {
+  if (!candidatePath) return '';
+  if (path.isAbsolute(candidatePath) && fs.existsSync(candidatePath)) {
+    try {
+      return fs.realpathSync(candidatePath);
+    } catch {
+      return path.resolve(candidatePath);
+    }
+  }
+  return candidatePath;
+}
+
+function managedCapabilityHintFor(runtime, candidatePath) {
+  if (runtime !== 'binary') return null;
+  if (normalizeCandidatePath(candidatePath) !== normalizeCandidatePath(managedLlamaBinaryPath())) return null;
+  const metadata = readManagedEngineMetadata();
+  const hint = metadata?.capabilityHint || profileCapabilityHint(metadata?.profile || 'cpu_safe');
+  if (!hint) return null;
+  return {
+    profile: metadata?.profile || 'cpu_safe',
+    capabilityHint: hint,
+    metadata,
+  };
+}
+
+function capabilityHintFor(runtime, source, candidatePath) {
+  const managed = managedCapabilityHintFor(runtime, candidatePath);
+  if (managed?.capabilityHint) return managed.capabilityHint;
+  const text = `${runtime} ${source || ''} ${candidatePath || ''}`.toLowerCase();
+  if (/cuda|cublas/.test(text)) return 'nvidia';
+  if (/rocm|hip/.test(text)) return 'amd';
+  if (/metal/.test(text)) return 'apple';
+  return 'cpu_safe';
+}
+
+function capabilityLabelFor(hint) {
+  if (hint === 'nvidia') return 'NVIDIA';
+  if (hint === 'amd') return 'AMD';
+  if (hint === 'apple') return 'Apple';
+  return 'CPU-safe';
+}
+
+function addEngineCandidate(map, candidate) {
+  const normalizedPath = normalizeCandidatePath(candidate.path);
+  const key = `${candidate.runtime}:${normalizedPath}`;
+  const existing = map.get(key);
+  const next = {
+    id: key,
+    ...candidate,
+    path: candidate.path,
+    normalizedPath,
+    capabilityHint: capabilityHintFor(candidate.runtime, candidate.source, candidate.path),
+  };
+  if (!existing) {
+    next.capabilityLabel = capabilityLabelFor(next.capabilityHint);
+    map.set(key, next);
+    return;
+  }
+
+  existing.source = existing.source === 'PATH' ? next.source : existing.source;
+  existing.configured = existing.configured || next.configured;
+  existing.managed = existing.managed || next.managed;
+  existing.isCurrent = existing.isCurrent || next.isCurrent;
+  if (!existing.path && next.path) existing.path = next.path;
+  if (existing.capabilityHint === 'cpu_safe' && next.capabilityHint !== 'cpu_safe') {
+    existing.capabilityHint = next.capabilityHint;
+    existing.capabilityLabel = capabilityLabelFor(next.capabilityHint);
+  }
+}
+
+function absoluteBinaryCandidatePaths() {
+  const home = os.homedir();
+  return [
+    managedLlamaBinaryPath(),
+    path.join(home, 'AppData', 'Local', 'Microsoft', 'WindowsApps', 'llama-server.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'llama-server.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages', '*', 'llama-server.exe'),
+    path.join(home, 'AppData', 'Local', 'Programs', 'Python', 'Python*', 'Scripts', 'llama-server.exe'),
+    path.join(home, 'AppData', 'Local', 'Programs', 'llama.cpp', 'llama-server.exe'),
+    path.join(home, '.local', 'bin', 'llama-server.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'llama.cpp', 'llama-server.exe'),
+    path.join(home, '.unsloth', 'llama.cpp', 'build', 'bin', 'llama-server'),
+    path.join(home, '.unsloth', 'llama.cpp', 'llama-server'),
+    path.join(home, '.local', 'bin', 'llama-server'),
+    path.join(home, 'bin', 'llama-server'),
+    '/usr/local/bin/llama-server',
+    '/usr/bin/llama-server',
+    '/usr/local/llama.cpp/bin/llama-server',
+    '/opt/homebrew/bin/llama-server',
+    '/usr/local/opt/llama.cpp/bin/llama-server',
+  ];
+}
+
+function pythonCommandsForDetection() {
+  return [
+    currentEnvValue('LLAMA_PYTHON_PATH'),
+    managedPythonBinaryPath(),
+    ...(IS_WIN ? ['python', 'python3', 'py'] : ['python3', 'python']),
+  ].filter(Boolean);
+}
+
+async function commandPaths(name) {
+  try {
+    const cmd = IS_WIN ? `where "${name}" 2>nul` : `which -a "${name}" 2>/dev/null`;
+    const { stdout } = await execAsync(cmd);
+    return stdout.trim().split('\n').map(line => line.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function pythonHasLlamaServer(pythonCmd) {
+  const stderrNull = IS_WIN ? '2>nul' : '2>/dev/null';
+  try {
+    await execAsync(`${JSON.stringify(pythonCmd)} -c "${LLAMA_PYTHON_IMPORT_PROBE}" ${stderrNull}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function verifyEngineSelection(runtime, selectedPath) {
+  const trimmed = String(selectedPath || '').trim();
+  if (!trimmed) throw new Error('Engine path is required.');
+  if (runtime !== 'binary' && runtime !== 'python') throw new Error('Engine runtime must be "binary" or "python".');
+
+  if (runtime === 'binary') {
+    if (path.isAbsolute(trimmed) && !fs.existsSync(trimmed)) {
+      throw new Error(`Engine binary not found: ${trimmed}`);
+    }
+    const actual = path.isAbsolute(trimmed) ? trimmed : trimmed;
+    try {
+      const { execFileSync } = await import('child_process');
+      try {
+        execFileSync(actual, ['--version'], { stdio: 'ignore', timeout: 5000 });
+      } catch {
+        execFileSync(actual, ['--help'], { stdio: 'ignore', timeout: 5000 });
+      }
+    } catch (err) {
+      throw new Error(`Engine binary failed verification: ${err.message}`);
+    }
+    return { runtime, path: trimmed, normalizedPath: normalizeCandidatePath(trimmed) };
+  }
+
+  if (path.isAbsolute(trimmed) && !fs.existsSync(trimmed)) {
+    throw new Error(`Python runtime not found: ${trimmed}`);
+  }
+  if (!(await pythonHasLlamaServer(trimmed))) {
+    throw new Error(`Python runtime does not provide llama-cpp-python server support: ${trimmed}`);
+  }
+  return { runtime, path: trimmed, normalizedPath: normalizeCandidatePath(trimmed) };
+}
+
+function recommendationKindForGpu(gpu) {
+  if (!gpu) return 'cpu_safe';
+  if (gpu.vendor === 'NVIDIA') return 'nvidia_gpu';
+  if (gpu.vendor === 'Apple') return 'apple_metal';
+  if (gpu.vendor === 'AMD') return 'amd_rocm';
+  return 'custom_gpu_needed';
+}
+
+function targetCapabilityForGpu(gpu) {
+  if (!gpu) return 'cpu_safe';
+  if (gpu.vendor === 'NVIDIA') return 'nvidia';
+  if (gpu.vendor === 'Apple') return 'apple';
+  if (gpu.vendor === 'AMD') return 'amd';
+  return 'cpu_safe';
+}
+
+function suggestedGpuLayers(capabilityHint, gpu) {
+  if (!gpu || capabilityHint === 'cpu_safe') return 0;
+  if (gpu.vendor === 'NVIDIA') {
+    if (typeof gpu.vramGb === 'number') {
+      if (gpu.vramGb < 10) return 20;
+      if (gpu.vramGb < 20) return 35;
+      return 60;
+    }
+    return 20;
+  }
+  if (gpu.vendor === 'Apple' || gpu.vendor === 'AMD') return 20;
+  return 20;
+}
+
+function buildCurrentEngine(currentInfo, currentEnv) {
+  if (!currentInfo?.found) return null;
+  const runtime = currentInfo.isPython ? 'python' : 'binary';
+  const managed = managedCapabilityHintFor(runtime, currentInfo.path || currentInfo.binary);
+  const capabilityHint = capabilityHintFor(runtime, currentInfo.source, currentInfo.path || currentInfo.binary);
+  return {
+    id: `${runtime}:${normalizeCandidatePath(currentInfo.path || currentInfo.binary)}`,
+    runtime,
+    path: currentInfo.path || currentInfo.binary,
+    normalizedPath: normalizeCandidatePath(currentInfo.path || currentInfo.binary),
+    source: currentInfo.source,
+    configured: runtime === 'binary'
+      ? normalizeCandidatePath(currentEnv.LLAMA_BINARY_PATH) === normalizeCandidatePath(currentInfo.path || currentInfo.binary)
+      : normalizeCandidatePath(currentEnv.LLAMA_PYTHON_PATH) === normalizeCandidatePath(currentInfo.path || currentInfo.binary),
+    managed: normalizeCandidatePath(currentInfo.path || currentInfo.binary) === normalizeCandidatePath(runtime === 'binary' ? managedLlamaBinaryPath() : managedPythonBinaryPath()),
+    capabilityHint,
+    capabilityLabel: capabilityLabelFor(capabilityHint),
+    isCurrent: true,
+    managedProfile: managed?.profile || null,
+    managedMetadata: managed?.metadata || null,
+  };
+}
+
+async function listEngineCandidates(currentEngine = null) {
+  const map = new Map();
+  const configuredBinary = currentEnvValue('LLAMA_BINARY_PATH');
+  const configuredPython = currentEnvValue('LLAMA_PYTHON_PATH');
+
+  if (configuredBinary && fs.existsSync(configuredBinary)) {
+    addEngineCandidate(map, {
+      runtime: 'binary',
+      path: configuredBinary,
+      source: 'LLAMA_BINARY_PATH env var',
+      configured: true,
+      managed: normalizeCandidatePath(configuredBinary) === normalizeCandidatePath(managedLlamaBinaryPath()),
+    });
+  }
+
+  for (const pattern of absoluteBinaryCandidatePaths()) {
+    for (const candidate of expandWildcardPath(pattern)) {
+      if (!fs.existsSync(candidate)) continue;
+      addEngineCandidate(map, {
+        runtime: 'binary',
+        path: candidate,
+        source: normalizeCandidatePath(candidate) === normalizeCandidatePath(managedLlamaBinaryPath()) ? 'Asyncat managed llama.cpp' : 'auto-detected',
+        configured: normalizeCandidatePath(candidate) === normalizeCandidatePath(configuredBinary),
+        managed: normalizeCandidatePath(candidate) === normalizeCandidatePath(managedLlamaBinaryPath()),
+      });
+    }
+  }
+
+  const pathNames = IS_WIN
+    ? ['llama-server.exe', 'llama-server', 'llama-cpp-server.exe', 'llama-cpp-server']
+    : ['llama-server', 'llama-cpp-server'];
+  for (const name of pathNames) {
+    for (const candidate of await commandPaths(name)) {
+      addEngineCandidate(map, {
+        runtime: 'binary',
+        path: candidate,
+        source: 'PATH',
+        configured: normalizeCandidatePath(candidate) === normalizeCandidatePath(configuredBinary),
+        managed: normalizeCandidatePath(candidate) === normalizeCandidatePath(managedLlamaBinaryPath()),
+      });
+    }
+  }
+
+  for (const pythonCmd of pythonCommandsForDetection()) {
+    if (!(await pythonHasLlamaServer(pythonCmd))) continue;
+    addEngineCandidate(map, {
+      runtime: 'python',
+      path: pythonCmd,
+      source: pythonCmd === configuredPython
+        ? 'LLAMA_PYTHON_PATH env var'
+        : normalizeCandidatePath(pythonCmd) === normalizeCandidatePath(managedPythonBinaryPath())
+          ? 'Asyncat Python venv'
+          : 'llama-cpp-python server package',
+      configured: normalizeCandidatePath(pythonCmd) === normalizeCandidatePath(configuredPython),
+      managed: normalizeCandidatePath(pythonCmd) === normalizeCandidatePath(managedPythonBinaryPath()),
+    });
+  }
+
+  if (currentEngine) {
+    addEngineCandidate(map, currentEngine);
+  }
+
+  const candidates = [...map.values()];
+  if (currentEngine) {
+    for (const candidate of candidates) {
+      candidate.isCurrent = candidate.id === currentEngine.id;
+    }
+  }
+
+  candidates.sort((a, b) => {
+    const score = (candidate) =>
+      (candidate.isCurrent ? 100 : 0) +
+      (candidate.configured ? 20 : 0) +
+      (candidate.managed ? 10 : 0) +
+      (candidate.runtime === 'binary' ? 2 : 1);
+    return score(b) - score(a) || a.path.localeCompare(b.path);
+  });
+
+  return candidates;
+}
+
+function buildEngineRecommendation(current, candidates, hardware) {
+  const gpu = hardware.gpu;
+  const targetCapability = targetCapabilityForGpu(gpu);
+  const kind = recommendationKindForGpu(gpu);
+  const recommendedInstallProfile = gpu ? kind : 'cpu_safe';
+  const recommendedCandidate = targetCapability === 'cpu_safe'
+    ? (current?.capabilityHint === 'cpu_safe' ? current : candidates.find(candidate => candidate.capabilityHint === 'cpu_safe') || null)
+    : candidates.find(candidate => candidate.capabilityHint === targetCapability) || null;
+  const currentCapability = current?.capabilityHint || 'cpu_safe';
+  const currentMatchesTarget = targetCapability === 'cpu_safe'
+    ? currentCapability === 'cpu_safe'
+    : currentCapability === targetCapability;
+
+  if (!gpu) {
+    return {
+      kind: 'cpu_safe',
+      state: 'current_ok',
+      title: 'Current setup is fine',
+      body: 'No compatible GPU acceleration was detected. Asyncat\'s CPU-safe engine is the recommended default on this machine.',
+      recommendedCandidateId: recommendedCandidate?.id || current?.id || null,
+      suggestedGpuLayers: 0,
+      recommendedInstallProfile: 'cpu_safe',
+    };
+  }
+
+  if (currentMatchesTarget) {
+    return {
+      kind,
+      state: 'current_ok',
+      title: 'Current setup is fine',
+      body: `${gpu.vendor} hardware is detected and the active engine already matches it.`,
+      recommendedCandidateId: current?.id || recommendedCandidate?.id || null,
+      suggestedGpuLayers: suggestedGpuLayers(currentCapability, gpu),
+      recommendedInstallProfile,
+    };
+  }
+
+  if (recommendedCandidate) {
+    return {
+      kind,
+      state: 'recommended_available',
+      title: 'Recommended engine available on this machine',
+      body: `${gpu.vendor} hardware is detected, but the current engine is ${currentCapability === 'cpu_safe' ? 'CPU-safe' : 'not hardware-optimized'}. Switch to the recommended engine to try GPU offload.`,
+      recommendedCandidateId: recommendedCandidate.id,
+      suggestedGpuLayers: suggestedGpuLayers(recommendedCandidate.capabilityHint, gpu),
+      recommendedInstallProfile,
+    };
+  }
+
+  return {
+    kind: 'custom_gpu_needed',
+    state: 'not_installed',
+    title: 'Better engine not installed yet',
+    body: `${gpu.vendor} hardware is detected, but no matching GPU-capable llama.cpp runtime was found on this machine. Install one manually, then point Asyncat to it here.`,
+    recommendedCandidateId: null,
+    suggestedGpuLayers: suggestedGpuLayers(targetCapability, gpu),
+    recommendedInstallProfile,
+  };
+}
+
+function sanitizeInstallProfile(profile, hardware = null) {
+  if (profile && LLAMA_ENGINE_PROFILES.includes(profile)) return profile;
+  if (!hardware?.gpu) return 'cpu_safe';
+  if (hardware.gpu.vendor === 'NVIDIA') return 'nvidia_gpu';
+  if (hardware.gpu.vendor === 'Apple') return 'apple_metal';
+  if (hardware.gpu.vendor === 'AMD') return 'amd_rocm';
+  return 'cpu_safe';
+}
+
+const RELEASE_CATALOG_TTL_MS = 5 * 60 * 1000;
+const releaseCatalogCache = {
+  expiresAt: 0,
+  releases: [],
+};
+const installJobs = new Map();
+let latestInstallJobId = null;
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function snapshotInstallJob(job = null) {
+  if (!job) return null;
+  return {
+    id: job.id,
+    status: job.status,
+    phase: job.phase,
+    message: job.message,
+    percent: job.percent,
+    downloadedBytes: job.downloadedBytes ?? null,
+    totalBytes: job.totalBytes ?? null,
+    profile: job.profile,
+    releaseTag: job.releaseTag,
+    assetName: job.assetName,
+    retryModel: job.retryModel || null,
+    retry: job.retry || null,
+    error: job.error || null,
+    previousSelection: job.previousSelection || null,
+    install: job.install || null,
+    advisor: job.advisor || null,
+    statusSnapshot: job.statusSnapshot || null,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt || null,
+    finishedAt: job.finishedAt || null,
+  };
+}
+
+function updateInstallJob(job, patch) {
+  Object.assign(job, patch, { updatedAt: nowIso() });
+  return snapshotInstallJob(job);
+}
+
+function currentInstallJobSnapshot() {
+  return snapshotInstallJob(latestInstallJobId ? installJobs.get(latestInstallJobId) : null);
+}
+
+function pruneInstallJobs() {
+  const entries = [...installJobs.values()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  for (const job of entries.slice(12)) {
+    installJobs.delete(job.id);
+  }
+}
+
+async function loadReleaseCatalog(force = false) {
+  const now = Date.now();
+  if (!force && releaseCatalogCache.releases.length > 0 && releaseCatalogCache.expiresAt > now) {
+    return releaseCatalogCache.releases;
+  }
+  const releases = await fetchLlamaReleases(10);
+  const catalog = buildReleaseCatalog(releases);
+  releaseCatalogCache.releases = catalog;
+  releaseCatalogCache.expiresAt = now + RELEASE_CATALOG_TTL_MS;
+  return catalog;
+}
+
+function persistEngineEnv(updates) {
+  const existing = fs.existsSync(DEN_ENV_PATH) ? fs.readFileSync(DEN_ENV_PATH, 'utf8') : '';
+  const lines = existing.split('\n');
+  const written = new Set();
+  const updated = lines.map(raw => {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith('#')) return raw;
+    const idx = trimmed.indexOf('=');
+    if (idx < 0) return raw;
+    const key = trimmed.slice(0, idx).trim();
+    if (!(key in updates)) return raw;
+    written.add(key);
+    return `${key}=${updates[key]}`;
+  });
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (!written.has(key)) updated.push(`${key}=${value}`);
+  }
+
+  fs.writeFileSync(DEN_ENV_PATH, updated.join('\n'), 'utf8');
+}
+
+function applyProcessEnv(updates) {
+  for (const [key, value] of Object.entries(updates)) {
+    process.env[key] = value;
+  }
+}
+
+function currentSelectionSnapshot(currentEngine = null) {
+  if (!currentEngine) return null;
+  return {
+    runtime: currentEngine.runtime,
+    path: currentEngine.path,
+    source: currentEngine.source,
+    id: currentEngine.id,
+    capabilityHint: currentEngine.capabilityHint,
+  };
+}
+
+export async function getEngineAdvisor() {
+  const currentInfo = await checkBinary();
+  const currentEnv = {
+    LLAMA_BINARY_PATH: currentEnvValue('LLAMA_BINARY_PATH'),
+    LLAMA_PYTHON_PATH: currentEnvValue('LLAMA_PYTHON_PATH'),
+    LLAMA_GPU_LAYERS: currentEnvValue('LLAMA_GPU_LAYERS'),
+  };
+  const current = buildCurrentEngine(currentInfo, currentEnv);
+  const candidates = await listEngineCandidates(current);
+  const gpu = await detectGpuInfo();
+  const hardware = {
+    platform: process.platform,
+    arch: process.arch,
+    gpu: gpu ? { vendor: gpu.vendor, name: gpu.name, vramGb: gpu.vramGb ?? null } : null,
+  };
+  const recommendation = buildEngineRecommendation(current, candidates, hardware);
+
+  return {
+    current,
+    configured: currentEnv,
+    hardware,
+    candidates,
+    recommendation,
+  };
+}
+
+export async function getEngineInstallCatalog({ force = false } = {}) {
+  const advisor = await getEngineAdvisor();
+  return {
+    generatedAt: nowIso(),
+    activeJob: currentInstallJobSnapshot(),
+    releases: await loadReleaseCatalog(force),
+    current: advisor.current,
+    hardware: advisor.hardware,
+    recommendation: advisor.recommendation,
+  };
+}
+
+export async function selectEngine({ runtime, path: selectedPath, retryModel, ctxSize, modelsDir }) {
+  const previousAdvisor = await getEngineAdvisor();
+  const previousSelection = currentSelectionSnapshot(previousAdvisor.current);
+  const verified = await verifyEngineSelection(runtime, selectedPath);
+  const gpu = await detectGpuInfo();
+  const capabilityHint = capabilityHintFor(runtime, runtime === 'python' ? 'llama-cpp-python server package' : 'manual engine', verified.path);
+  const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
+
+  const updates = runtime === 'binary'
+    ? {
+        LLAMA_BINARY_PATH: verified.path,
+        LLAMA_PYTHON_PATH: '',
+        LLAMA_GPU_LAYERS: gpuLayers,
+      }
+    : {
+        LLAMA_BINARY_PATH: '',
+        LLAMA_PYTHON_PATH: verified.path,
+        LLAMA_GPU_LAYERS: gpuLayers,
+      };
+
+  await stopServer();
+  persistEngineEnv(updates);
+  applyProcessEnv(updates);
+
+  let retry = {
+    attempted: false,
+    success: false,
+    model: retryModel || null,
+    error: null,
+  };
+
+  if (retryModel) {
+    retry.attempted = true;
+    try {
+      await startServer(retryModel, modelsDir, ctxSize);
+      retry.success = true;
+    } catch (err) {
+      retry.error = err.message;
+    }
+  }
+
+  return {
+    previousSelection,
+    advisor: await getEngineAdvisor(),
+    retry,
+    statusSnapshot: getStatus(),
+    applied: {
+      runtime,
+      path: verified.path,
+      gpuLayers: parseInt(gpuLayers, 10),
+      capabilityHint,
+    },
+  };
+}
+
+export async function installEngine({ profile, releaseTag, assetName, retryModel, ctxSize, modelsDir, onProgress = null }) {
+  const previousAdvisor = await getEngineAdvisor();
+  const previousSelection = currentSelectionSnapshot(previousAdvisor.current);
+  const effectiveProfile = sanitizeInstallProfile(profile, previousAdvisor.hardware);
+
+  await stopServer();
+  const installed = await installManagedLlamaServer({
+    profile: effectiveProfile,
+    releaseTag,
+    assetName,
+    onProgress,
+  });
+
+  const capabilityHint = profileCapabilityHint(installed.profile || effectiveProfile);
+  const gpu = await detectGpuInfo();
+  const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
+  const updates = {
+    LLAMA_BINARY_PATH: installed.binary,
+    LLAMA_PYTHON_PATH: '',
+    LLAMA_GPU_LAYERS: gpuLayers,
+  };
+  persistEngineEnv(updates);
+  applyProcessEnv(updates);
+
+  let retry = {
+    attempted: false,
+    success: false,
+    model: retryModel || null,
+    error: null,
+  };
+
+  if (retryModel) {
+    retry.attempted = true;
+    try {
+      await startServer(retryModel, modelsDir, ctxSize);
+      retry.success = true;
+    } catch (err) {
+      retry.error = err.message;
+    }
+  }
+
+  return {
+    previousSelection,
+    advisor: await getEngineAdvisor(),
+    retry,
+    statusSnapshot: getStatus(),
+    install: {
+      profile: installed.profile || effectiveProfile,
+      binary: installed.binary,
+      asset: installed.asset,
+      version: installed.version,
+      gpuLayers: parseInt(gpuLayers, 10),
+      capabilityHint,
+    },
+  };
+}
+
+export async function startEngineInstallJob({ profile, releaseTag, assetName, retryModel, ctxSize, modelsDir }) {
+  const runningJob = currentInstallJobSnapshot();
+  if (runningJob && (runningJob.status === 'queued' || runningJob.status === 'running')) {
+    throw new Error('Another managed engine install is already running.');
+  }
+
+  const job = {
+    id: randomUUID(),
+    status: 'queued',
+    phase: 'queued',
+    message: 'Preparing managed engine install…',
+    percent: 0,
+    downloadedBytes: null,
+    totalBytes: null,
+    profile: profile || null,
+    releaseTag: releaseTag || null,
+    assetName: assetName || null,
+    retryModel: retryModel || null,
+    retry: null,
+    error: null,
+    previousSelection: null,
+    install: null,
+    advisor: null,
+    statusSnapshot: null,
+    createdAt: nowIso(),
+    startedAt: null,
+    finishedAt: null,
+    updatedAt: nowIso(),
+  };
+
+  installJobs.set(job.id, job);
+  latestInstallJobId = job.id;
+  pruneInstallJobs();
+
+  (async () => {
+    updateInstallJob(job, {
+      status: 'running',
+      phase: 'preparing',
+      message: 'Inspecting hardware and preparing install…',
+      startedAt: nowIso(),
+      percent: 1,
+    });
+
+    try {
+      const result = await installEngine({
+        profile,
+        releaseTag,
+        assetName,
+        retryModel,
+        ctxSize,
+        modelsDir,
+        onProgress: progress => {
+          updateInstallJob(job, {
+            status: 'running',
+            phase: progress.phase || 'running',
+            message: progress.message || 'Installing managed engine…',
+            percent: typeof progress.percent === 'number' ? progress.percent : job.percent,
+            downloadedBytes: progress.downloadedBytes ?? job.downloadedBytes,
+            totalBytes: progress.totalBytes ?? job.totalBytes,
+            releaseTag: progress.releaseTag || releaseTag || job.releaseTag,
+            assetName: progress.assetName || assetName || job.assetName,
+          });
+        },
+      });
+
+      updateInstallJob(job, {
+        status: 'complete',
+        phase: result.retry?.attempted ? 'retrying_model' : 'complete',
+        message: result.retry?.attempted
+          ? (result.retry.success ? 'Managed engine installed and model retry started.' : 'Managed engine installed, but model retry failed.')
+          : 'Managed engine installed successfully.',
+        percent: 100,
+        retry: result.retry,
+        previousSelection: result.previousSelection,
+        install: result.install,
+        advisor: result.advisor,
+        statusSnapshot: result.statusSnapshot,
+        finishedAt: nowIso(),
+      });
+      releaseCatalogCache.expiresAt = 0;
+    } catch (err) {
+      updateInstallJob(job, {
+        status: 'error',
+        phase: 'error',
+        message: err.message || 'Managed engine install failed.',
+        error: err.message || 'Managed engine install failed.',
+        finishedAt: nowIso(),
+      });
+    }
+  })();
+
+  return snapshotInstallJob(job);
+}
+
+export function getEngineInstallJob(jobId) {
+  return snapshotInstallJob(installJobs.get(jobId));
 }
 
 // ── Singleton state ───────────────────────────────────────────────────────────
