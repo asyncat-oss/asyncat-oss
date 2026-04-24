@@ -266,8 +266,8 @@ router.get('/hf-search', verifyUser, async (req, res) => {
   }
 });
 
-// ── GET /recommended-models — curated list of good GGUF models ───────────────
-router.get('/recommended-models', verifyUser, async (req, res) => {
+// ── GET /recommended-models — curated list of good GGUF models (public, static data)
+router.get('/recommended-models', async (req, res) => {
   try {
     const catalog = [
       {

@@ -23,6 +23,18 @@ import { readEnv } from '../env.js';
 const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
 const MAX_HISTORY  = 200;
 const LOCAL_ENGINE_MISSING = 'Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+
+// Built-in recommended catalog — always available, no backend/auth required
+const RECOMMENDED_CATALOG = [
+  { repoId: 'unsloth/gemma-4-E4B-it-GGUF',                    name: 'Gemma 4 E4B',           params: '4.5B',         vram: '~9GB',  defaultQuant: 'Q4_K_M', description: 'Google Gemma 4 · multimodal (text/image/audio) · 128K ctx · great for laptops' },
+  { repoId: 'unsloth/gemma-4-26B-A4B-it-GGUF',                name: 'Gemma 4 26B MoE',        params: '25B/3.8B act', vram: '~17GB', defaultQuant: 'Q4_K_M', description: 'Google MoE Gemma 4 · 256K ctx · 88% AIME 2026 · vision' },
+  { repoId: 'unsloth/Qwen3.6-35B-A3B-GGUF',                   name: 'Qwen 3.6-35B MoE',       params: '35B/3B act',   vram: '~22GB', defaultQuant: 'Q4_K_M', description: 'Alibaba Apr 2026 · 73% SWE-bench · best agentic coding · 262K ctx' },
+  { repoId: 'unsloth/Qwen3.5-7B-Instruct-GGUF',               name: 'Qwen 3.5-7B',            params: '7B',           vram: '~4.7GB',defaultQuant: 'Q4_K_M', description: 'Fast, stable workhorse · 32K ctx · 29+ languages · great coding' },
+  { repoId: 'unsloth/Qwen3.5-14B-Instruct-GGUF',              name: 'Qwen 3.5-14B',           params: '14B',          vram: '~9GB',  defaultQuant: 'Q4_K_M', description: 'Balanced power & hardware · 32K ctx · strong coding and math' },
+  { repoId: 'HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive', name: 'Qwen 3.5-9B Uncensored', params: '9B', vram: '~5.3GB', defaultQuant: 'Q4_K_M', description: 'Qwen 3.5 uncensored · 262K ctx · 0 refusals · multimodal' },
+  { repoId: 'unsloth/gemma-4-31B-it-GGUF',                    name: 'Gemma 4 31B Dense',      params: '30.7B',        vram: '~30GB', defaultQuant: 'Q5_K_M', description: 'Google dense 31B · 85% MMLU Pro · 256K ctx · vision — needs 24GB+ VRAM' },
+  { repoId: 'prism-ml/Bonsai-8B-gguf',                        name: 'Bonsai 8B',              params: '8B',           vram: '~5GB',  defaultQuant: 'Q4_K_M', description: 'Consumer-friendly · fast inference · low VRAM · great everyday tasks' },
+];
 const DEFAULT_LOCAL_CTX_SIZE = 32768;
 const MAX_LOCAL_CTX_SIZE = 1048576;
 
@@ -129,6 +141,9 @@ export class Tui extends EventEmitter {
     // Provider setup state
     this._providerSetup  = null;
     this._providerSetupResolve = null;
+
+    // Startup log — shown in zen view without switching to chat mode
+    this._startupLog = [];
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -276,7 +291,7 @@ export class Tui extends EventEmitter {
       const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
       renderChat(msgs, this.scrollOff, hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs, this._msgFocus, this._expandedMsgs, this._contextStatus(hideInput ? '' : this.buf));
     } else {
-      renderZen(hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs, this._contextStatus(hideInput ? '' : this.buf));
+      renderZen(hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this._catMsg, this.logs, this._contextStatus(hideInput ? '' : this.buf), this._startupLog);
     }
 
     // Result popup doesn't need a background redraw (it's standalone)
@@ -310,7 +325,7 @@ export class Tui extends EventEmitter {
   addMessage(role, content, extra = {}) {
     this.messages.push({ role, content, ...extra });
     this.scrollOff = 0;
-    if (this.mode !== 'chat') this.mode = 'chat';
+    if (this.mode !== 'chat') { this.mode = 'chat'; this._startupLog = []; }
     this.render();
   }
 
@@ -355,6 +370,13 @@ export class Tui extends EventEmitter {
   printWarn(text)  { this.print(`⚠  ${text}`); }
   printErr(text)   { this.print(`✖  ${text}`); }
   printInfo(text)  { this.print(`→  ${text}`); }
+
+  // Startup-only log: renders in zen view without switching to chat mode
+  logStartup(icon, text) {
+    this._startupLog.push({ icon, text, ts: Date.now() });
+    if (this._startupLog.length > 8) this._startupLog.shift();
+    if (this.mode === 'zen') this.render();
+  }
 
   // ── Selector (floating panel picker for models/themes) ───────────────────
   showSelector(title, items, opts = {}) {
@@ -437,18 +459,27 @@ export class Tui extends EventEmitter {
   }
 
   async _loadModelsData() {
+    // Recommended catalog is static — show it immediately from the built-in list,
+    // then refresh from the backend (no auth required for that route).
+    this._recommendedModels = RECOMMENDED_CATALOG;
+    this.render();
+
     try {
-      const { apiGet } = await import('../denApi.js');
+      const { apiGet, getBase } = await import('../denApi.js');
+      const base = getBase();
+
       const [localData, recData] = await Promise.all([
         apiGet('/api/ai/providers/local-models').catch(() => ({ models: [], storage: {} })),
-        apiGet('/api/ai/providers/recommended-models').catch(() => ({ models: [] })),
+        // Public endpoint — no auth header needed
+        fetch(`${base}/api/ai/providers/recommended-models`, { signal: AbortSignal.timeout(5000) })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
       ]);
       this._localModels = localData.models || [];
-      this._recommendedModels = recData.models || [];
+      if (recData?.models?.length) this._recommendedModels = recData.models;
       this.render();
     } catch {
       this._localModels = [];
-      this._recommendedModels = [];
       this.render();
     }
   }
@@ -538,6 +569,11 @@ export class Tui extends EventEmitter {
   lockInput() { this._inputLocked = true; }
   unlockInput() { this._inputLocked = false; this.render(); }
   setUsage(usage) { this._usage = usage; this.render(); }
+  setServicesStarting(starting = true) {
+    const prev = this._lastServiceStatus || { be: false, fe: false };
+    setServiceStatus(prev.be, prev.fe, starting);
+    this.render();
+  }
 
   // ── Key handler ───────────────────────────────────────────────────────────
   _onKey(str, key) {
@@ -1355,9 +1391,10 @@ export class Tui extends EventEmitter {
       checkHttp('http://localhost:8717'),
     ]).then(([be, fe]) => {
       const prev = this._lastServiceStatus;
-      if (!prev || prev.be !== be || prev.fe !== fe) {
-        this._lastServiceStatus = { be, fe };
-        setServiceStatus(be, fe);
+      const starting = !be || !fe;
+      if (!prev || prev.be !== be || prev.fe !== fe || prev.starting !== starting) {
+        this._lastServiceStatus = { be, fe, starting };
+        setServiceStatus(be, fe, starting);
         if (!this._destroyed) this.render();
       }
     });

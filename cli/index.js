@@ -202,27 +202,44 @@ async function detectModel() {
 }
 
 // ── Auto-start all services on TUI launch ──────────────────────────────────
-async function autoStartServices() {
-  if (!fs.existsSync(path.join(ROOT, 'den/.env')))          return;
-  if (!fs.existsSync(path.join(ROOT, 'den/node_modules')))  return;
+async function autoStartServices(tui) {
+  if (!fs.existsSync(path.join(ROOT, 'den/.env')))         return;
+  if (!fs.existsSync(path.join(ROOT, 'den/node_modules'))) return;
 
-  // Check if backend is already up
-  let backendUp = false;
-  try {
-    const res = await fetch('http://localhost:8716/health', {
-      signal: AbortSignal.timeout(600),
-    });
-    backendUp = res.ok;
-  } catch {}
+  const checkBe = () => fetch('http://localhost:8716/health', { signal: AbortSignal.timeout(700) }).then(r => r.ok).catch(() => false);
+  const checkFe = () => fetch('http://localhost:8717',        { signal: AbortSignal.timeout(700) }).then(() => true).catch(() => false);
 
-  if (!backendUp && !procs.backend) {
-    _start.run(['--backend-only']);
+  let [beUp, feUp] = await Promise.all([checkBe(), checkFe()]);
+
+  if (!beUp) { tui.logStartup('→', 'Starting backend...'); _start.run(['--backend-only']); }
+  if (!feUp) { tui.logStartup('→', 'Starting frontend...'); _start.run(['--frontend-only']); }
+
+  if (beUp && feUp) {
+    const { model, provider, context } = await detectModel();
+    tui.setModel(model, provider, context);
+    tui._startupLog = [];
+    tui.render();
+    return;
   }
 
-  // Start frontend if not already running
-  if (!procs.frontend) {
-    _start.run(['--frontend-only']);
+  // Poll until both services are up (max ~40 s)
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const [nowBe, nowFe] = await Promise.all([
+      beUp ? Promise.resolve(true) : checkBe(),
+      feUp ? Promise.resolve(true) : checkFe(),
+    ]);
+    if (!beUp && nowBe) { tui.logStartup('✔', 'Backend ready'); beUp = true; }
+    if (!feUp && nowFe) { tui.logStartup('✔', 'Frontend ready'); feUp = true; }
+    if (beUp && feUp) break;
   }
+
+  if (!beUp) tui.logStartup('✖', 'Backend timed out — /start or /doctor');
+
+  const { model, provider, context } = await detectModel();
+  tui.setModel(model, provider, context);
+  // Clear startup log a moment after everything is ready
+  setTimeout(() => { tui._startupLog = []; tui.render(); }, 3000);
 }
 
 // ── TUI Mode (default — interactive) ────────────────────────────────────────
@@ -243,27 +260,17 @@ async function startTui() {
   }
   if (backendUp) console.log('\x1b[32m[asyncat]\x1b[0m Backend is already running');
 
-  // Step 2: Start services (or skip if already running)
-  console.log('\x1b[36m[asyncat]\x1b[0m Starting services...');
-  await autoStartServices();
-  console.log('\x1b[32m[asyncat]\x1b[0m Services started');
-
-  // Step 3: Wait a bit for services to be ready
-  console.log('\x1b[36m[asyncat]\x1b[0m Waiting for services to be ready...');
-  await new Promise(r => setTimeout(r, 1500));
-
-  // Step 4: Detect model
-  console.log('\x1b[36m[asyncat]\x1b[0m Detecting model...');
-  const { model, provider, context } = await detectModel();
-
   // Now create and start TUI
   const tui = new Tui({
     modelInfo: '',
     providerInfo: '',
     version: getVersion(),
   });
-  tui.setModel(model, provider, context);
   tui.start();
+  tui.setServicesStarting(true);
+
+  // Start services with live TUI feedback; detectModel is called inside once both are up.
+  autoStartServices(tui).catch(e => tui.printWarn(`Startup: ${e.message}`));
 
   // Wire events immediately so Ctrl+C and other keys work during startup.
   // Function declarations below are hoisted, so these closures are safe.

@@ -2,8 +2,16 @@
 // Replaces the 5 separate Supabase auth middleware copies across services.
 // Works entirely offline — no Supabase Auth call needed.
 import jwt from 'jsonwebtoken';
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
+const MACHINE_TOKEN_PATH = join(homedir(), '.asyncat_machine_token');
+
+function getMachineToken() {
+  try { return readFileSync(MACHINE_TOKEN_PATH, 'utf8').trim(); } catch { return null; }
+}
 
 /**
  * Standard verifyUser middleware used across all routes.
@@ -18,6 +26,13 @@ export const verifyUser = async (req, res, next) => {
 
   if (!token) {
     return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+
+  // Machine token: local CLI auth without user credentials
+  const machineToken = getMachineToken();
+  if (machineToken && token === machineToken) {
+    req.user = { id: 'cli', email: 'cli@local', role: 'machine' };
+    return next();
   }
 
   try {

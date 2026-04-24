@@ -41,7 +41,7 @@ export function nextCatMsg() {
 }
 
 // ── Zen Home Screen — OpenCode-inspired minimal layout ──────────────────────
-export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, logs = [], contextInfo = {}) {
+export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, logs = [], contextInfo = {}, startupLog = []) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -65,6 +65,17 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
     const startIdx = Math.max(0, logLines.length - logH);
     at(1, mainW + 3, `${ansi.bold}Live Logs${R}`);
     logLines.slice(startIdx).forEach((l, i) => at(i + 3, mainW + 3, `${ansi.dim}${l}${R}`));
+  }
+
+  // ── Startup log — top-right corner, dim, non-intrusive ────────────────
+  if (startupLog.length > 0) {
+    const iconColor = { '✔': t.success, '✖': t.error, '→': ansi.dim, '◐': t.warning };
+    startupLog.forEach((entry, i) => {
+      const ic = iconColor[entry.icon] || ansi.dim;
+      const line = `${ic}${entry.icon}${R}${ansi.dim} ${entry.text}${R}`;
+      const col = Math.max(2, mainW - vis(` ${entry.icon} ${entry.text}`) - 2);
+      at(i + 1, col, line);
+    });
   }
 
   const layout = getZenLayout(mainW, H);
@@ -149,7 +160,7 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
 
   // Layout: content takes most space, input area at bottom (minimal height)
   const maxInputLines = 4;
-  const inputAreaH = maxInputLines + 4; // separator + framed prompt, above status bar
+  const inputAreaH = maxInputLines + 2; // separator + borderless prompt (inputs + meta)
   const statusH = 1;
   const contentH = H - inputAreaH - statusH - 1;
 
@@ -213,7 +224,7 @@ function getZenLayout(mainW, H) {
   const logoH = bigBrand ? ASYNCAT_WORDMARK.length : 4;
   const inputW = clamp(Math.floor(mainW * 0.46), Math.min(44, mainW - 4), Math.min(78, mainW - 4));
   const inputL = Math.floor((mainW - inputW) / 2);
-  const promptH = 6; // border + 3 input rows + model row + border
+  const promptH = 4; // 3 input rows + model row
   const blockH = logoH + 1 + 1 + promptH + 1;
   return {
     bigBrand,
@@ -243,9 +254,7 @@ function renderPromptPanel({
   const displayBuf = inputBuf || '';
   const wrappedInput = displayBuf ? wrapInputLine(displayBuf, textW) : [];
   const showLines = wrappedInput.slice(0, maxInputLines);
-
   const screenBg = t.screenBg || '';
-  at(row, left, `${screenBg}${t.dimBorder}╭${'─'.repeat(width - 2)}╮${R}`);
 
   for (let li = 0; li < maxInputLines; li++) {
     const hasText = li < showLines.length;
@@ -253,19 +262,18 @@ function renderPromptPanel({
     const style = hasText ? t.inputFg : ansi.dim;
     const accent = li === 0 ? `${t.accent}▏${R}${panelBg}` : ' ';
     const pad = Math.max(0, textW - vis(shown));
-    at(row + 1 + li, left, `${screenBg}${t.dimBorder}│${R}${panelBg}${accent} ${style}${shown}${R}${panelBg}${' '.repeat(pad)}${R}${screenBg}${t.dimBorder}│${R}`);
+    at(row + li, left, `${screenBg}${panelBg} ${accent} ${style}${shown}${R}${panelBg}${' '.repeat(pad)} ${R}`);
   }
 
   const meta = formatModelLine(modelInfo, providerInfo, contextInfo, emptyModelText, t);
   const metaShown = truncateVisible(meta, textW);
   const metaPad = Math.max(0, textW - vis(metaShown));
-  at(row + 1 + maxInputLines, left, `${screenBg}${t.dimBorder}│${R}${panelBg}  ${metaShown}${R}${panelBg}${' '.repeat(metaPad)}${R}${screenBg}${t.dimBorder}│${R}`);
-  at(row + maxInputLines + 2, left, `${screenBg}${t.dimBorder}╰${'─'.repeat(width - 2)}╯${R}`);
+  at(row + maxInputLines, left, `${screenBg}${panelBg}   ${metaShown}${R}${panelBg}${' '.repeat(metaPad)} ${R}`);
 
   const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, textW);
   return {
-    height: maxInputLines + 3,
-    cursorRow: row + 1 + cursorLine,
+    height: maxInputLines + 1,
+    cursorRow: row + cursorLine,
     cursorCol: left + 3 + cursorCol,
   };
 }
@@ -486,8 +494,8 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos, inChatMode = f
   // Anchor palette just above the input, matching zen vs chat input position
   let inputRow, inputL, inputW;
   if (inChatMode) {
-    const inputAreaH = 4 + 4; // separator + framed prompt, above status bar
-    inputRow = H - inputAreaH + 2; // first input text row inside prompt panel
+    const inputAreaH = 4 + 2; // separator + borderless prompt (inputs + meta)
+    inputRow = H - inputAreaH + 1; // first input text row inside prompt panel
     inputW = clamp(Math.floor(mainW * 0.62), Math.min(52, mainW - 4), Math.min(96, mainW - 4));
     inputL = Math.floor((mainW - inputW) / 2);
   } else {
@@ -510,28 +518,27 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos, inChatMode = f
   const visible = items.slice(scrollOff, scrollOff + maxShow);
   const colW = items.length > 0 ? Math.max(...items.map(c => c.cmd.length)) + 2 : 10;
 
-  // panelH: title row + item rows; place it ending one row above input
-  const panelH = maxShow + 2;
+  // panelH: title + separator + items + padding, placed just above input
+  const panelH = maxShow + 3;
   const panelTop = Math.max(2, inputRow - panelH - 1);
 
-  // Paint panel background
+  // Paint borderless panel background
   for (let r = panelTop; r <= panelTop + panelH; r++) {
-    at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
+    at(r, panelL, `${panelBg}${' '.repeat(panelW)}${R}`);
   }
-  for (let r = panelTop; r <= inputRow + 1; r++) {
-    at(r, panelL - 1, `${t.accent}│${R}`);
-  }
-  at(panelTop, panelL - 1, `${t.accent}╭${R}`);
-  at(panelTop + panelH, panelL - 1, `${t.accent}╰${R}`);
 
-  // Title uses accent so it visually connects to the │ bar below
-  const escPad = Math.max(0, panelW - 8 - 3);
-  at(panelTop, panelL, `${panelBg}${ansi.bold}${t.accent}Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}${t.accent}╮${R}`);
+  // Title row — accent pip + label, dim esc hint, no box chars
+  const escPad = Math.max(0, panelW - 12);
+  at(panelTop, panelL, `${panelBg}${t.accent}${ansi.bold} Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc ${R}`);
 
+  // Thin separator under title
+  at(panelTop + 1, panelL, `${panelBg}${t.dimBorder}${' '}${'─'.repeat(panelW - 1)}${R}`);
+
+  const itemOffset = 2; // title + separator
   if (items.length === 0) {
     const emptyText = 'No matching commands';
     const emptyPad = Math.max(0, panelW - vis(emptyText) - 2);
-    at(panelTop + 1, panelL, `${panelBg}  ${ansi.dim}${emptyText}${R}${panelBg}${' '.repeat(emptyPad)}${t.dimBorder}│${R}`);
+    at(panelTop + itemOffset, panelL, `${panelBg}  ${ansi.dim}${emptyText}${R}${panelBg}${' '.repeat(emptyPad)}${R}`);
   } else {
     for (let i = 0; i < visible.length; i++) {
       const item = visible[i];
@@ -542,10 +549,11 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos, inChatMode = f
       const padded = item.cmd.padEnd(colW);
       const desc = (item.desc || '').slice(0, panelW - colW - 4);
       const pad = Math.max(0, panelW - vis(padded) - vis(desc) - 2);
-      at(panelTop + 1 + i, panelL, `${bg}  ${cmdStyle}${padded}${R}${bg}${ansi.dim}${desc}${' '.repeat(pad)}${R}${t.dimBorder}│${R}`);
+      at(panelTop + itemOffset + i, panelL, `${bg}  ${cmdStyle}${padded}${R}${bg}${ansi.dim}${desc}${' '.repeat(pad)}${R}`);
     }
     if (items.length > scrollOff + maxShow) {
-      at(panelTop + 1 + maxShow, panelL, `${panelBg}  ${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}${panelBg}${' '.repeat(Math.max(0, panelW - 10))}${t.dimBorder}│${R}`);
+      const moreText = `↓ ${items.length - scrollOff - maxShow} more`;
+      at(panelTop + itemOffset + maxShow, panelL, `${panelBg}  ${ansi.dim}${moreText}${R}${panelBg}${' '.repeat(Math.max(0, panelW - vis(moreText) - 2))}${R}`);
     }
   }
 
@@ -721,10 +729,10 @@ export function renderModelSetup(model, ctxBuf, cursorPos, isFocused) {
 }
 
 // ── Status bar ──────────────────────────────────────────────────────────────
-let _statusCache = { backend: false, frontend: false, ts: 0 };
+let _statusCache = { backend: false, frontend: false, starting: false, ts: 0 };
 
-export function setServiceStatus(backend, frontend) {
-  _statusCache = { backend, frontend, ts: Date.now() };
+export function setServiceStatus(backend, frontend, starting = false) {
+  _statusCache = { backend, frontend, starting, ts: Date.now() };
 }
 
 export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = false, usage = null) {
@@ -762,10 +770,10 @@ export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = 
 
   const be = _statusCache.backend
     ? `${t.success}●${R}${ansi.dim} api :8716${R}`
-    : `${ansi.dim}○ api${R}`;
+    : _statusCache.starting ? `${t.warning}◐${R}${ansi.dim} api${R}` : `${ansi.dim}○ api${R}`;
   const fe = _statusCache.frontend
     ? `${t.success}●${R}${ansi.dim} web :8717${R}`
-    : `${ansi.dim}○ web${R}`;
+    : _statusCache.starting ? `${t.warning}◐${R}${ansi.dim} web${R}` : `${ansi.dim}○ web${R}`;
 
   const fcIndicator = fullControl ? `${t.error}⚡ full-control${R}  ` : '';
   const left = ` ${loc}`;

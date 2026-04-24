@@ -1,4 +1,13 @@
 import { readEnv } from './env.js';
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+
+const MACHINE_TOKEN_PATH = join(homedir(), '.asyncat_machine_token');
+
+function readMachineToken() {
+  try { return readFileSync(MACHINE_TOKEN_PATH, 'utf8').trim(); } catch { return null; }
+}
 
 let _token = null;
 
@@ -16,11 +25,22 @@ export function getBase() {
   return `http://localhost:${port}`;
 }
 
-export function clearToken() { _token = null; }
+export function clearToken() {
+  _token = null;
+  // Next getToken() call re-reads the machine token file (handles backend restarts)
+}
 
 export async function getToken(forceRefresh = false) {
   if (_token && !forceRefresh) return _token;
 
+  // Prefer machine token (written by backend at startup) — no user credentials needed
+  const machineToken = readMachineToken();
+  if (machineToken) {
+    _token = machineToken;
+    return _token;
+  }
+
+  // Fall back to credential-based login (SOLO_EMAIL / SOLO_PASSWORD)
   const { port, email, password } = getDenConfig();
   const base = `http://localhost:${port}`;
 

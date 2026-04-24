@@ -45,6 +45,21 @@ import configRouter from './config/configRouter.js';
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
 
+// ─── Machine token ────────────────────────────────────────────────────────────
+import { randomUUID } from 'crypto';
+import { writeFileSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+
+const MACHINE_TOKEN_PATH = join(homedir(), '.asyncat_machine_token');
+const MACHINE_TOKEN = randomUUID();
+try {
+  writeFileSync(MACHINE_TOKEN_PATH, MACHINE_TOKEN, { mode: 0o600 });
+} catch (e) {
+  console.warn('Could not write machine token:', e.message);
+}
+export { MACHINE_TOKEN };
+
 // ─── App setup ────────────────────────────────────────────────────────────────
 const app = express();
 const PORT = process.env.PORT || 8716;
