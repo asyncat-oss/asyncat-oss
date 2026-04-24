@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync, execSync, spawnSync } from 'child_process';
 import { once } from 'events';
 import { ROOT, readEnv, setKey } from './env.js';
 
@@ -127,34 +127,88 @@ export function knownLlamaPaths() {
 }
 
 export function verifyBinary(binary) {
-  try {
-    execFileSync(binary, ['--version'], { stdio: 'ignore', timeout: 5000 });
-    return true;
-  } catch {
-    try {
-      execFileSync(binary, ['--help'], { stdio: 'ignore', timeout: 5000 });
-      return true;
-    } catch {
-      return false;
-    }
+  return verifyBinaryDetailed(binary).ok;
+}
+
+const DEFAULT_VERIFY_BINARY_TIMEOUT_MS = 30000;
+const VERIFY_BINARY_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.ASYNCAT_LLAMA_VERIFY_TIMEOUT_MS || DEFAULT_VERIFY_BINARY_TIMEOUT_MS) || DEFAULT_VERIFY_BINARY_TIMEOUT_MS
+);
+const VERIFY_BINARY_OUTPUT_LIMIT = 4000;
+
+function stringifyExecOutput(value) {
+  if (value == null) return '';
+  return Buffer.isBuffer(value) ? value.toString('utf8') : String(value);
+}
+
+function truncateVerifyOutput(value) {
+  const text = stringifyExecOutput(value).trim();
+  if (text.length <= VERIFY_BINARY_OUTPUT_LIMIT) return text;
+  return `${text.slice(0, VERIFY_BINARY_OUTPUT_LIMIT)}\n... truncated ${text.length - VERIFY_BINARY_OUTPUT_LIMIT} chars`;
+}
+
+function runVerifyProbe(binary, arg) {
+  const command = `${binary} ${arg}`;
+  const startedAt = Date.now();
+  const result = spawnSync(binary, [arg], {
+    encoding: 'utf8',
+    timeout: VERIFY_BINARY_TIMEOUT_MS,
+    windowsHide: true,
+  });
+  const timedOut = result.error?.code === 'ETIMEDOUT' || /timed out/i.test(result.error?.message || '');
+  return {
+    command,
+    ok: !result.error && result.status === 0,
+    status: Number.isInteger(result.status) ? result.status : null,
+    signal: result.signal || null,
+    timedOut,
+    durationMs: Date.now() - startedAt,
+    timeoutMs: VERIFY_BINARY_TIMEOUT_MS,
+    stdout: truncateVerifyOutput(result.stdout),
+    stderr: truncateVerifyOutput(result.stderr),
+    error: result.error?.message || null,
+  };
+}
+
+function formatVerifyProbe(probe) {
+  const lines = [
+    `${probe.command}: ${probe.ok ? 'ok' : 'failed'}`,
+    `exit=${probe.status ?? 'unknown'} signal=${probe.signal || 'none'} timedOut=${probe.timedOut ? 'yes' : 'no'} durationMs=${probe.durationMs ?? 'unknown'} timeoutMs=${probe.timeoutMs ?? 'unknown'}`,
+  ];
+  if (probe.stderr) lines.push(`stderr:\n${probe.stderr}`);
+  if (probe.stdout) lines.push(`stdout:\n${probe.stdout}`);
+  if (probe.error && !probe.stderr && !probe.stdout) lines.push(`error: ${probe.error}`);
+  return lines.join('\n');
+}
+
+function formatVerifyDetail(probes) {
+  return probes.map(formatVerifyProbe).join('\n\n');
+}
+
+export function verifyBinaryDetailed(binary) {
+  const versionProbe = runVerifyProbe(binary, '--version');
+  if (versionProbe.ok) {
+    return {
+      ok: true,
+      acceptedProbe: '--version',
+      probes: [versionProbe],
+      detail: formatVerifyDetail([versionProbe]),
+    };
   }
+
+  const helpProbe = runVerifyProbe(binary, '--help');
+  const probes = [versionProbe, helpProbe];
+  return {
+    ok: helpProbe.ok,
+    acceptedProbe: helpProbe.ok ? '--help' : null,
+    probes,
+    detail: formatVerifyDetail(probes),
+  };
 }
 
 function verifyBinaryError(binary) {
-  try {
-    execFileSync(binary, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 });
-    return '';
-  } catch (versionErr) {
-    try {
-      execFileSync(binary, ['--help'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 });
-      return '';
-    } catch (helpErr) {
-      const stderr = helpErr.stderr || versionErr.stderr || '';
-      const stdout = helpErr.stdout || versionErr.stdout || '';
-      const text = `${stderr}\n${stdout}`.trim();
-      return text || helpErr.message || versionErr.message || 'unknown verification failure';
-    }
-  }
+  return verifyBinaryDetailed(binary).detail || 'unknown verification failure';
 }
 
 export function findExistingLlamaServer() {
@@ -469,6 +523,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     fs.mkdirSync(managedEngineDir(), { recursive: true });
     fs.cpSync(extractDir, managedEngineDir(), { recursive: true });
     ensureLinuxSonameLinks(managedEngineDir());
+    ensureDarwinDylibLinks(managedEngineDir());
 
     const installed = managedLlamaBinaryPath();
     const copiedServer = findLlamaServerBinary(managedEngineDir());
@@ -496,10 +551,20 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    if (!verifyBinary(installed)) {
-      const detail = verifyBinaryError(installed);
+    const verification = verifyBinaryDetailed(installed);
+    if (!verification.ok) {
+      const detail = verification.detail || verifyBinaryError(installed);
       fs.rmSync(managedEngineDir(), { recursive: true, force: true });
-      throw new Error(`Installed ${installed}, but llama-server verification failed: ${detail}.`);
+      const err = new Error(`Installed ${installed}, but llama-server verification failed:\n${detail}`);
+      err.diagnostics = {
+        type: 'llama-server-verification',
+        binary: installed,
+        asset: asset.name,
+        releaseTag: release.tag_name || release.name || 'latest',
+        profile,
+        verification,
+      };
+      throw err;
     }
     writeManagedEngineMetadata({
       profile,
@@ -678,10 +743,38 @@ function ensureLinuxSonameLinks(root) {
         stack.push(full);
         continue;
       }
+      if (entry.isSymbolicLink()) continue;
       const match = entry.name.match(/^(lib.+\.so)\.(\d+)\.\d+(?:\.\d+)*$/);
       if (!match) continue;
       ensureRelativeSymlink(path.join(current, match[1]), entry.name);
       ensureRelativeSymlink(path.join(current, `${match[1]}.${match[2]}`), entry.name);
+    }
+  }
+}
+
+function ensureDarwinDylibLinks(root) {
+  if (isWin || process.platform !== 'darwin') return;
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (entry.isSymbolicLink()) continue;
+      const match = entry.name.match(/^(lib.+?)\.(\d+)\.\d+(?:\.\d+)*\.dylib$/);
+      if (!match) continue;
+      ensureRelativeSymlink(path.join(current, `${match[1]}.dylib`), entry.name);
+      ensureRelativeSymlink(path.join(current, `${match[1]}.${match[2]}.dylib`), entry.name);
     }
   }
 }
@@ -717,7 +810,9 @@ function installUnixLauncher(targetPath, realBinary, root = path.dirname(targetP
     'set -eu',
     'DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)',
     `LD_LIBRARY_PATH="${libExports}:\${LD_LIBRARY_PATH:-}"`,
+    `DYLD_LIBRARY_PATH="${libExports}:\${DYLD_LIBRARY_PATH:-}"`,
     'export LD_LIBRARY_PATH',
+    'export DYLD_LIBRARY_PATH',
     `exec "$DIR/${rel}" "$@"`,
     '',
   ].join('\n');
@@ -757,17 +852,30 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
   }
 
   const failures = [];
+  const diagnostics = [];
   for (const asset of candidates) {
     try {
       const assetProfile = inferProfileFromAssetName(asset.name, effectiveProfile);
       return await installManagedAsset(asset, release, assetProfile, options.onProgress);
     } catch (e) {
       failures.push(`${asset.name}: ${e.message}`);
+      diagnostics.push({
+        asset: asset.name,
+        message: e.message,
+        diagnostics: e.diagnostics || null,
+      });
       fs.rmSync(managedEngineDir(), { recursive: true, force: true });
     }
   }
 
-  throw new Error(`Tried ${candidates.length} llama.cpp release asset(s), but none verified:\n${failures.join('\n')}\nManual releases: ${LLAMA_RELEASES_URL}`);
+  const err = new Error(`Tried ${candidates.length} llama.cpp release asset(s), but none verified:\n${failures.join('\n')}\nManual releases: ${LLAMA_RELEASES_URL}`);
+  err.diagnostics = {
+    type: 'llama-managed-install',
+    releaseTag: release.tag_name || release.name || 'latest',
+    profile: requestedProfile,
+    failures: diagnostics,
+  };
+  throw err;
 }
 
 export function writeLlamaBinaryEnv(binaryPath) {

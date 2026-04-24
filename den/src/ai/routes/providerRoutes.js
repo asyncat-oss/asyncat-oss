@@ -549,6 +549,7 @@ router.post('/server/engines/select', verifyUser, async (req, res) => {
 
     res.json({ success: true, ...result });
   } catch (err) {
+    console.error('[llamaServer] Engine switch failed:', err.message || err);
     const status = /required|not found|failed verification|does not provide/i.test(err.message) ? 400 : 500;
     res.status(status).json({ success: false, error: err.message });
   }
@@ -584,6 +585,7 @@ router.post('/server/engines/install', verifyUser, async (req, res) => {
 
     res.json({ success: true, ...result });
   } catch (err) {
+    console.error('[llamaServer] Managed engine install failed:', err.message || err);
     const status = /No llama\.cpp release asset matched|Download failed|extract|verification failed|required/i.test(err.message) ? 400 : 500;
     res.status(status).json({ success: false, error: err.message });
   }

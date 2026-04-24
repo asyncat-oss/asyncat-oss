@@ -538,6 +538,7 @@ function snapshotInstallJob(job = null) {
     install: job.install || null,
     advisor: job.advisor || null,
     statusSnapshot: job.statusSnapshot || null,
+    diagnostics: job.diagnostics || null,
     createdAt: job.createdAt,
     startedAt: job.startedAt || null,
     finishedAt: job.finishedAt || null,
@@ -550,7 +551,9 @@ function updateInstallJob(job, patch) {
 }
 
 function currentInstallJobSnapshot() {
-  return snapshotInstallJob(latestInstallJobId ? installJobs.get(latestInstallJobId) : null);
+  const job = latestInstallJobId ? installJobs.get(latestInstallJobId) : null;
+  if (!job || (job.status !== 'queued' && job.status !== 'running')) return null;
+  return snapshotInstallJob(job);
 }
 
 function pruneInstallJobs() {
@@ -650,6 +653,11 @@ export async function getEngineInstallCatalog({ force = false } = {}) {
 }
 
 export async function selectEngine({ runtime, path: selectedPath, retryModel, ctxSize, modelsDir }) {
+  console.info('[llamaServer] Switching engine:', JSON.stringify({
+    runtime,
+    path: selectedPath,
+    retryModel: retryModel || null,
+  }));
   const previousAdvisor = await getEngineAdvisor();
   const previousSelection = currentSelectionSnapshot(previousAdvisor.current);
   const verified = await verifyEngineSelection(runtime, selectedPath);
@@ -690,7 +698,7 @@ export async function selectEngine({ runtime, path: selectedPath, retryModel, ct
     }
   }
 
-  return {
+  const result = {
     previousSelection,
     advisor: await getEngineAdvisor(),
     retry,
@@ -702,6 +710,15 @@ export async function selectEngine({ runtime, path: selectedPath, retryModel, ct
       capabilityHint,
     },
   };
+  console.info('[llamaServer] Engine switch applied:', JSON.stringify({
+    runtime,
+    path: verified.path,
+    capabilityHint,
+    gpuLayers: parseInt(gpuLayers, 10),
+    retryAttempted: retry.attempted,
+    retrySuccess: retry.success,
+  }));
+  return result;
 }
 
 export async function installEngine({ profile, releaseTag, assetName, retryModel, ctxSize, modelsDir, onProgress = null }) {
@@ -785,6 +802,7 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
     install: null,
     advisor: null,
     statusSnapshot: null,
+    diagnostics: null,
     createdAt: nowIso(),
     startedAt: null,
     finishedAt: null,
@@ -794,6 +812,13 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
   installJobs.set(job.id, job);
   latestInstallJobId = job.id;
   pruneInstallJobs();
+  console.info('[llamaServer] Managed engine install job started:', JSON.stringify({
+    jobId: job.id,
+    profile: profile || null,
+    releaseTag: releaseTag || null,
+    assetName: assetName || null,
+    retryModel: retryModel || null,
+  }));
 
   (async () => {
     updateInstallJob(job, {
@@ -838,15 +863,29 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
         install: result.install,
         advisor: result.advisor,
         statusSnapshot: result.statusSnapshot,
+        diagnostics: null,
         finishedAt: nowIso(),
       });
+      console.info('[llamaServer] Managed engine install job completed:', JSON.stringify({
+        jobId: job.id,
+        profile: result.install?.profile || profile || null,
+        asset: result.install?.asset || assetName || null,
+        retryAttempted: result.retry?.attempted || false,
+        retrySuccess: result.retry?.success || false,
+      }));
       releaseCatalogCache.expiresAt = 0;
     } catch (err) {
+      const diagnostics = err.diagnostics || null;
+      console.error('[llamaServer] Managed engine install failed:', err.message || err);
+      if (diagnostics) {
+        console.error('[llamaServer] Managed engine install diagnostics:', JSON.stringify(diagnostics, null, 2));
+      }
       updateInstallJob(job, {
         status: 'error',
         phase: 'error',
         message: err.message || 'Managed engine install failed.',
         error: err.message || 'Managed engine install failed.',
+        diagnostics,
         finishedAt: nowIso(),
       });
     }

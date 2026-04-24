@@ -304,6 +304,7 @@ const EngineAdvisorSection = ({
   const [customPath, setCustomPath] = useState('');
   const [customRuntime, setCustomRuntime] = useState('binary');
   const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [showInstallerControls, setShowInstallerControls] = useState(false);
   const [expandedCandidate, setExpandedCandidate] = useState(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showCurrentEnginePath, setShowCurrentEnginePath] = useState(false);
@@ -334,9 +335,13 @@ const EngineAdvisorSection = ({
     ? releases.some(release => release.assets.some(asset => asset.compatible && asset.supportedProfiles.includes(installProfile)))
     : false;
   const manualPathGuidance = getManualPathGuidance(engineData, managedProfileAvailable);
+  const hasCpuSafeCandidate = Boolean(engineData?.candidates?.some(candidate => candidate.capabilityHint === 'cpu_safe'));
+  const needsManagedInstall = !current || recommendation?.state === 'not_installed';
+  const showManagedInstallerControls = needsManagedInstall || showInstallerControls;
   const showRecommendedInstallCard = canInstallRecommended
     && managedProfileAvailable
-    && (recommendation?.state === 'not_installed' || !current?.managed || current?.managedProfile !== installProfile);
+    && needsManagedInstall
+    && (!current?.managed || current?.managedProfile !== installProfile);
 
   useEffect(() => {
     if (!releases.length) return;
@@ -485,7 +490,7 @@ const EngineAdvisorSection = ({
           )}
         </div>
 
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+	        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
           <div className="text-xs font-medium text-gray-700 dark:text-gray-300">This Machine</div>
           <div className="mt-3 grid grid-cols-1 gap-3">
             <div className="rounded-xl bg-gray-50/80 dark:bg-gray-900/50 midnight:bg-gray-950/50 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
@@ -609,17 +614,21 @@ const EngineAdvisorSection = ({
                   </button>
                 </div>
               </div>
-            ) : (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {canInstallRecommended && !managedProfileAvailable
-                  ? `Asyncat does not currently have a matching managed ${INSTALL_PROFILE_LABELS[installProfile] || installProfile} asset for ${hardwarePlatformLabel}. Use the manual/custom runtime path below, or pick another compatible asset in the advanced installer.`
-                  : canInstallRecommended
-                  ? 'You are already on the recommended managed profile for this machine. You can still reinstall it or fall back to the CPU-safe build below.'
-                  : 'This machine does not have a managed GPU profile recommendation right now, but you can still reinstall the CPU-safe managed engine below.'}
-              </p>
-            )}
+	            ) : (
+	              <p className="text-xs text-gray-500 dark:text-gray-400">
+	                {!showManagedInstallerControls
+	                  ? 'Detected engines are already installed on this machine. Use Detected Engines to switch; reinstall controls are hidden unless you explicitly open them.'
+	                  : canInstallRecommended && !managedProfileAvailable
+	                  ? `Asyncat does not currently have a matching managed ${INSTALL_PROFILE_LABELS[installProfile] || installProfile} asset for ${hardwarePlatformLabel}. Use the manual/custom runtime path below, or pick another compatible asset in the advanced installer.`
+	                  : needsManagedInstall
+	                  ? 'Install a managed runtime only if no detected engine matches this machine yet.'
+	                  : 'Installer controls are available for manual repair or version pinning.'}
+	              </p>
+	            )}
 
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+	            {showManagedInstallerControls ? (
+	            <>
+	            <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Advanced Installer</div>
@@ -727,11 +736,12 @@ const EngineAdvisorSection = ({
               )}
             </div>
 
-            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-gray-800 p-3">
-              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Fallback managed install</div>
-              <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-                Reinstall the default Asyncat engine if you want to go back to the safest CPU-first setup.
-              </p>
+	            {!hasCpuSafeCandidate && (
+	            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-gray-800 p-3">
+	              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Fallback managed install</div>
+	              <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+	                Install the default Asyncat engine if no CPU-safe runtime is already detected.
+	              </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={() => onInstall({ profile: 'cpu_safe' }, false)}
@@ -739,18 +749,34 @@ const EngineAdvisorSection = ({
                   className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  {installingKey === 'install:cpu_safe' ? 'Installing…' : 'Reinstall CPU-safe Engine'}
+	                  {installingKey === 'install:cpu_safe' ? 'Installing…' : 'Install CPU-safe Engine'}
                 </button>
                 <button
                   onClick={() => onInstall({ profile: 'cpu_safe' }, true)}
                   disabled={!canRetry || Boolean(switchingKey) || Boolean(installingKey)}
                   className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-200 dark:text-gray-900 disabled:opacity-50"
                 >
-                  {installingKey === 'install:cpu_safe:retry' ? 'Installing…' : 'Reinstall + Retry'}
-                </button>
-              </div>
-            </div>
-          </div>
+	                  {installingKey === 'install:cpu_safe:retry' ? 'Installing…' : 'Install + Retry'}
+	                </button>
+	              </div>
+	            </div>
+	            )}
+	            </>
+	            ) : (
+	              <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-gray-950/40 p-3">
+	                <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Installed engines are ready</div>
+	                <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+	                  The local llama.cpp runtimes are already detected. Switching uses the downloaded engines directly; reinstalling would replace files in the managed runtime folder.
+	                </p>
+	                <button
+	                  onClick={() => setShowInstallerControls(true)}
+	                  className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-800"
+	                >
+	                  Show reinstall controls
+	                </button>
+	              </div>
+	            )}
+	          </div>
         </div>
         )}
 
@@ -1038,6 +1064,7 @@ const ModelsPage = () => {
   const [engineCatalog, setEngineCatalog] = useState(null);
   const [installJob, setInstallJob] = useState(null);
   const [storage, setStorage] = useState(null);
+  const [activeTab, setActiveTab] = useState('library');
   const [loadingModels, setLoadingModels] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [loadingEngines, setLoadingEngines] = useState(true);
@@ -1066,6 +1093,15 @@ const ModelsPage = () => {
     };
   }, []);
 
+  const clearEngineActionMessages = () => {
+    setSwitchError('');
+    setSwitchSuccess('');
+    setInstallError('');
+    setInstallSuccess('');
+    setRevertSelection(null);
+    setShowInstallerControls(false);
+  };
+
   const loadStatus = async () => {
     setLoadingStatus(true);
     try {
@@ -1093,11 +1129,16 @@ const ModelsPage = () => {
     }
   };
 
-  const loadEngineData = async () => {
+  const loadEngineData = async ({ clearActions = false } = {}) => {
     setLoadingEngines(true);
     try {
       const res = await llamaServerApi.getEngines();
-      if (res.success) setEngineData(res);
+      if (res.success) {
+        setEngineData(res);
+        if (clearActions && res.recommendation?.state === 'current_ok') {
+          clearEngineActionMessages();
+        }
+      }
     } catch (err) {
       console.warn('Failed to load engine advisor:', err);
     } finally {
@@ -1152,16 +1193,19 @@ const ModelsPage = () => {
       const res = await llamaServerApi.getEngineCatalog(refresh);
       if (res.success) {
         setEngineCatalog(res);
-        if (res.activeJob) {
-          setInstallJob(res.activeJob);
-          if (res.activeJob.status === 'queued' || res.activeJob.status === 'running') {
-            setInstallingEngine(`install:${res.activeJob.profile || 'cpu_safe'}${res.activeJob.retryModel ? ':retry' : ''}`);
+        const activeJob = res.activeJob || null;
+        setInstallJob(activeJob);
+        if (activeJob) {
+          if (activeJob.status === 'queued' || activeJob.status === 'running') {
+            setInstallingEngine(`install:${activeJob.profile || 'cpu_safe'}${activeJob.retryModel ? ':retry' : ''}`);
           } else {
             setInstallingEngine(null);
           }
-          if (res.activeJob.status === 'queued' || res.activeJob.status === 'running') {
-            beginInstallJobPolling(res.activeJob.id);
+          if (activeJob.status === 'queued' || activeJob.status === 'running') {
+            beginInstallJobPolling(activeJob.id);
           }
+        } else {
+          setInstallingEngine(null);
         }
       }
     } catch (err) {
@@ -1359,6 +1403,17 @@ const ModelsPage = () => {
       : recommendationState === 'not_installed'
         ? 'Install GPU engine'
         : 'Setup looks healthy';
+  const storageDetail = storage?.disk
+    ? `${storage.totalFormatted} models · ${storage.disk.availableFormatted} free on device`
+    : storage?.totalFormatted
+      ? `${storage.totalFormatted} stored locally`
+      : 'Ready for GGUF downloads';
+  const tabs = [
+    { id: 'library', label: 'Library', icon: HardDriveDownload },
+    { id: 'discover', label: 'Download', icon: Download },
+    { id: 'engine', label: 'Engine', icon: Wrench },
+    { id: 'system', label: 'System', icon: Activity },
+  ];
 
   return (
     <div className="flex h-full w-full bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.08),_transparent_24%),linear-gradient(to_bottom,_#ffffff,_#f8fafc)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.14),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(56,189,248,0.12),_transparent_20%),linear-gradient(to_bottom,_#0f172a,_#020617)] midnight:bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_20%),radial-gradient(circle_at_top_right,_rgba(244,114,182,0.10),_transparent_18%),linear-gradient(to_bottom,_#020617,_#000000)] font-sans">
@@ -1380,7 +1435,14 @@ const ModelsPage = () => {
               </div>
             </div>
             <button
-              onClick={() => { loadStatus(); loadModelList(); loadEngineData(); loadEngineCatalog(true); }}
+              onClick={() => {
+                clearEngineActionMessages();
+                setInstallJob(null);
+                loadStatus();
+                loadModelList();
+                loadEngineData({ clearActions: true });
+                loadEngineCatalog(true);
+              }}
               disabled={loadingStatus || loadingModels || loadingEngines || loadingCatalog || Boolean(switchingEngine) || Boolean(installingEngine)}
               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:text-gray-900 dark:hover:text-white midnight:hover:text-white transition-colors bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700"
             >
@@ -1398,7 +1460,7 @@ const ModelsPage = () => {
                 icon={HardDriveDownload}
                 label="Local Library"
                 value={`${models.length} model${models.length === 1 ? '' : 's'}`}
-                detail={storage?.totalFormatted ? `${storage.totalFormatted} stored locally` : 'Ready for GGUF downloads'}
+                detail={storageDetail}
                 tone="blue"
               />
               <OverviewCard
@@ -1417,10 +1479,30 @@ const ModelsPage = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              
-              {/* Left Column (Primary) */}
-              <div className="lg:col-span-2 space-y-8">
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white/80 dark:bg-gray-900/70 midnight:bg-gray-950/70 p-2 shadow-sm">
+                {tabs.map(({ id, label, icon: Icon }) => {
+                  const selected = activeTab === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setActiveTab(id)}
+                      className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                        selected
+                          ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-gray-100 midnight:text-gray-900'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 midnight:text-gray-400 midnight:hover:text-gray-100 midnight:hover:bg-gray-800'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeTab === 'library' && (
+              <div className="space-y-8">
                 
                 {/* Active Server Banner */}
                 <div className={`relative overflow-hidden rounded-3xl border p-6 transition-all duration-300 shadow-sm ${bannerClass}`}>
@@ -1499,7 +1581,7 @@ const ModelsPage = () => {
                       </div>
                       <p className="text-gray-600 dark:text-gray-300 midnight:text-gray-300 font-medium">Your library is empty</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 mt-1 max-w-sm text-center">
-                        Use the discovery panel on the right to search HuggingFace and download GGUF models.
+                        Open the Download tab to search HuggingFace and add GGUF models.
                       </p>
                     </div>
                   ) : (
@@ -1598,10 +1680,16 @@ const ModelsPage = () => {
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Right Column (Secondary / Management) */}
-              <div className="space-y-6 lg:sticky lg:top-24 self-start">
+              {activeTab === 'discover' && (
+              <div className="rounded-3xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white/85 dark:bg-gray-900/75 midnight:bg-gray-950/75 p-6 shadow-sm">
                 <LocalModelsSection storage={storage} onRefresh={loadModelList} />
+              </div>
+              )}
+
+              {activeTab === 'engine' && (
+              <div className="max-w-5xl">
                 <EngineAdvisorSection
                   engineData={engineData}
                   engineCatalog={engineCatalog}
@@ -1621,8 +1709,52 @@ const ModelsPage = () => {
                   onInstall={handleManagedInstall}
                   onRefreshCatalog={loadEngineCatalog}
                 />
-                <SystemInfoSection />
               </div>
+              )}
+
+              {activeTab === 'system' && (
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] gap-6">
+                <SystemInfoSection />
+                <div className="bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <HardDriveDownload className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-200">Storage Footprint</h3>
+                  </div>
+                  {storage ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 border border-gray-100 dark:border-gray-800 p-3">
+                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400">Models</div>
+                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{storage.totalFormatted}</div>
+                        </div>
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 border border-gray-100 dark:border-gray-800 p-3">
+                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400">Device Free</div>
+                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{storage.disk?.availableFormatted || 'Unknown'}</div>
+                        </div>
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 border border-gray-100 dark:border-gray-800 p-3">
+                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400">Device Total</div>
+                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{storage.disk?.totalFormatted || 'Unknown'}</div>
+                        </div>
+                      </div>
+                      {storage.disk && (
+                        <div>
+                          <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
+                            <span>{storage.disk.usedFormatted} used</span>
+                            <span>{storage.disk.usedPercent}%</span>
+                          </div>
+                          <MiniBar value={storage.disk.usedPercent || 0} color="bg-gray-700" />
+                          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                            GGUF models use {storage.disk.modelPercent}% of this device.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Storage details are unavailable.</p>
+                  )}
+                </div>
+              </div>
+              )}
 
             </div>
           </div>
