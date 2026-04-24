@@ -33,7 +33,11 @@ export function buildAgentSystemPrompt(opts = {}) {
   const shellName = getShellName(platform);
 
   const memorySection = memories.length > 0
-    ? `\n## Stored Memories\n${memories.map(m => `- **${m.key}**: ${m.content}`).join('\n')}\n`
+    ? `\n## Stored Memories\n${memories.map(m => {
+      const kind = m.kind || m.memory_type || 'fact';
+      const tags = Array.isArray(m.tags) && m.tags.length ? ` [${m.tags.join(', ')}]` : '';
+      return `- **${m.key}** (${kind}${tags}): ${m.content}`;
+    }).join('\n')}\n`
     : '';
 
   const scratchpadSection = scratchpad
@@ -63,14 +67,39 @@ OR, when the task is complete:
 **Answer:** [Your final response to the user]
 
 ## Rules
-1. **One tool call per step.** After each tool call, you'll see the result and can decide your next action.
-2. **Always think before acting.** Explain your reasoning in the Thought section.
-3. **Read before writing.** Always use read_file or list_directory before modifying files you haven't seen.
-4. **Verify your work.** After making changes, read the file back or run the code to confirm it works.
-5. **Handle errors gracefully.** If a tool fails, analyze the error and try a different approach.
-6. **Be efficient.** Don't read files you don't need. Don't run unnecessary commands.
-7. **Stay focused.** Work toward the user's goal. Don't go on tangents.
-8. **Ask for clarification via Answer** if the goal is ambiguous — don't guess.
+1. **Plan first for non-trivial work.** If the task has 3+ meaningful steps, call \`todo_write\` BEFORE the first real action to lay out the plan. Keep it updated as you make progress — exactly one item should be \`in_progress\` while you work on it, then flip to \`completed\` before moving on.
+2. **Batch independent tool calls.** When two or more read-only actions don't depend on each other (e.g. reading multiple files, listing several dirs), emit them in the same turn. The runtime executes them in parallel.
+3. **Think before acting.** Explain your reasoning in the Thought section before tool calls.
+4. **Read before writing.** Always use read_file or list_directory before modifying files you haven't seen.
+5. **Verify your work.** After making changes, read the file back or run the code to confirm it works.
+6. **Handle errors gracefully.** If a tool fails, analyze the error and try a different approach.
+7. **Be efficient.** Don't read files you don't need. Don't run unnecessary commands.
+8. **Stay focused.** Work toward the user's goal. Don't go on tangents.
+9. **Ask useful clarifying questions.** If missing information materially changes the outcome, use \`ask_user\` and continue after the answer. If the question is simple and no tool work is needed, you may ask via final \`Answer:\`.
+10. **Don't ask what you can discover.** Read files, inspect configs, or use safe tools before asking the user for facts available in the environment.
+
+## Memory Guidance
+Use \`save_memory\` sparingly for durable information that should help future sessions.
+
+Memory kinds:
+- \`user\`: stable facts about the user, their identity, preferences, or recurring constraints.
+- \`feedback\`: corrections, critiques, or instructions the user gave about how to improve.
+- \`project\`: durable project state, architecture, conventions, or decisions.
+- \`reference\`: external pointers, docs, URLs, commands, or file locations worth finding again.
+- \`fact\`: general durable facts that do not fit another category.
+- \`preference\`: explicit likes/dislikes or formatting/style preferences.
+- \`context\`: reusable working context for this workspace.
+- \`task_state\`: state needed to resume a specific unfinished task.
+
+When to save:
+- The user explicitly says to remember something.
+- You learn a stable preference, project convention, correction, or recurring workflow.
+- You discover important project context that would be costly to rediscover.
+
+When not to save:
+- Do not save one-off details, temporary observations, secrets, credentials, or noisy command output.
+- Do not save obvious facts from the current prompt unless they are clearly durable.
+- Prefer updating an existing memory key over creating duplicates.
 
 ## Tool Call Format
 To call a tool, output EXACTLY this machine-readable block:

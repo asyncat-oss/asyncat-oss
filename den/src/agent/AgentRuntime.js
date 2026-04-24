@@ -16,10 +16,17 @@ import { permissionManager, PermissionManager } from './PermissionManager.js';
 import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt } from './prompts/agentSystemPrompt.js';
 import { basalGanglia } from './BasalGanglia.js';
-import db from '../db/client.js';
+import { Compactor } from './Compactor.js';
+import { PermissionRules } from './PermissionRules.js';
 import { findRelevantSkills } from './skills.js';
+import { listMemories, searchMemories } from './tools/memoryTools.js';
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
 
 const MAX_ROUNDS_DEFAULT = 25;
+const CHECKPOINTS = new Map();
+const SNAPSHOT_SKIP = new Set(['.git', 'node_modules']);
 
 /**
  * @typedef {Object} AgentEvent
@@ -50,8 +57,17 @@ export class AgentRuntime {
     this.onEvent = opts.onEvent || (() => {});
     this.autoApprove = opts.autoApprove === true || opts.autoApprove === 'all';
     this.requestPermission = opts.requestPermission || null;
+    this.askUser = opts.askUser || null;
     this.sessionApprovedTools = new Set();
     this.session = null;
+    this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+    // Local models handle much smaller contexts than cloud models — compact sooner.
+    const defaultBudget = this.isLocal ? 6000 : 24000;
+    this.compactor = opts.compactor || new Compactor({
+      tokenBudget: opts.tokenBudget ?? defaultBudget,
+      keepLastMessages: opts.keepLastMessages ?? (this.isLocal ? 6 : 10),
+    });
   }
 
   /**
@@ -94,15 +110,22 @@ export class AgentRuntime {
 
     // Build conversation thread (filter out UI system messages)
     const validHistory = conversationHistory.filter(m => m.role === 'user' || m.role === 'assistant');
+    const historyPrefix = validHistory.slice(-4).map(m => ({ role: m.role, content: m.content }));
     const messages = [
-      ...validHistory.slice(-4).map(m => ({ role: m.role, content: m.content })),
+      ...historyPrefix,
       { role: 'user', content: goal },
     ];
+    const goalIndex = historyPrefix.length; // position of the original goal user message
 
     const toolContext = {
       userId: this.userId,
       workspaceId: this.workspaceId,
       workingDir: this.workingDir,
+      session: this.session,
+      emitEvent: (event) => this.onEvent(event),
+      askUser: this.askUser
+        ? (request) => this.askUser({ ...request, round: this.session?.totalRounds || 0 })
+        : null,
     };
 
     const knownTools = toolRegistry.names();
@@ -114,14 +137,42 @@ export class AgentRuntime {
     for (let round = 0; round < this.maxRounds; round++) {
       this.session.nextRound();
 
+      // Compact before the LLM call if we're over budget.
+      if (this.compactor.needsCompaction(messages)) {
+        const result = this.compactor.compact(messages, this.session, { goalIndex });
+        if (result.compacted) {
+          messages.length = 0;
+          messages.push(...result.messages);
+          this.onEvent({
+            type: 'compaction',
+            data: {
+              droppedMessages: result.droppedCount,
+              tokensBefore: result.tokensBefore,
+              tokensAfter: result.tokensAfter,
+              round,
+            },
+          });
+        }
+      }
+
       // Call the LLM
       let responseText = '';
       let apiToolCalls = null;
 
       try {
+        const promptTokens = this._estimateTokens(systemPrompt) + this._estimateTokens(JSON.stringify(messages));
         const result = await this._callLLM(systemPrompt, messages);
         responseText = result.text;
         apiToolCalls = result.toolCalls;
+        const inputTokens = result.usage?.prompt_tokens || promptTokens;
+        const outputTokens = result.usage?.completion_tokens || this._estimateTokens(responseText);
+        this.usage.inputTokens += inputTokens;
+        this.usage.outputTokens += outputTokens;
+        this.usage.totalTokens = this.usage.inputTokens + this.usage.outputTokens;
+        this.onEvent({
+          type: 'usage_update',
+          data: { ...this.usage, round, model: this.model, isLocal: this.isLocal },
+        });
       } catch (err) {
         this.onEvent({ type: 'error', data: { message: `LLM call failed: ${err.message}`, round } });
         this.session.fail(err.message);
@@ -220,6 +271,13 @@ export class AgentRuntime {
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: deniedResult, round } });
           messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, this._compactToolResultForContext(tc.tool_name, deniedResult)) });
         } else {
+          let checkpoint = null;
+          if (permission === 'dangerous') {
+            checkpoint = this._createCheckpoint({ round, toolName: tc.tool_name });
+            if (checkpoint) {
+              this.onEvent({ type: 'checkpoint', data: checkpoint });
+            }
+          }
           this.onEvent({
             type: 'tool_start',
             data: {
@@ -228,6 +286,7 @@ export class AgentRuntime {
               permission,
               permissionDecision: permResult.decision || 'allowed',
               permissionReason: permResult.reason || null,
+              checkpointId: checkpoint?.id || null,
               workingDir: this.workingDir,
               description: actionDesc,
               round,
@@ -323,6 +382,22 @@ export class AgentRuntime {
       return { allowed: true, decision: 'session_approved' };
     }
 
+    // Persistent allowlist check — workspace- or global-scope rules the user has saved.
+    if (this.userId) {
+      const ruleResult = PermissionRules.evaluate({
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        toolName: toolCall.tool_name,
+        args: toolCall.arguments || {},
+      });
+      if (ruleResult.decision === 'allow') {
+        return { allowed: true, decision: 'rule_allow', reason: ruleResult.rule?.note || null };
+      }
+      if (ruleResult.decision === 'deny') {
+        return { allowed: false, decision: 'rule_deny', reason: ruleResult.rule?.note || 'Denied by saved rule' };
+      }
+    }
+
     if (this.requestPermission) {
       const request = {
         sessionId: this.session?.id,
@@ -330,18 +405,62 @@ export class AgentRuntime {
         args: toolCall.arguments,
         permission,
         description: actionDesc,
+        diff: this._buildPermissionDiff(toolCall.tool_name, toolCall.arguments),
         round,
         workingDir: this.workingDir,
       };
 
       const decision = await this.requestPermission(request);
-      const allowed = decision?.decision === 'allow' || decision?.decision === 'allow_session';
-      if (decision?.decision === 'allow_session') {
+      const decisionName = decision?.decision || 'deny';
+      const allowed = decisionName === 'allow'
+        || decisionName === 'allow_session'
+        || decisionName === 'allow_always_tool'
+        || decisionName === 'allow_always_command';
+
+      if (decisionName === 'allow_session') {
         this.sessionApprovedTools.add(toolCall.tool_name);
       }
+      if (decisionName === 'allow_always_tool' && this.userId) {
+        try {
+          PermissionRules.add({
+            userId: this.userId,
+            workspaceId: this.workspaceId,
+            toolName: toolCall.tool_name,
+            action: 'allow',
+            scope: 'workspace',
+            note: 'Allowed via TUI — Always allow this tool',
+          });
+          this.sessionApprovedTools.add(toolCall.tool_name);
+        } catch (err) {
+          console.error('[permission] Failed to save allow_always_tool rule:', err.message);
+        }
+      }
+      if (decisionName === 'allow_always_command' && this.userId && toolCall.tool_name === 'run_command') {
+        try {
+          const cmd = String(toolCall.arguments?.command || '').trim();
+          const first = cmd.split(/\s+/)[0] || cmd;
+          if (first) {
+            const safe = first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            PermissionRules.add({
+              userId: this.userId,
+              workspaceId: this.workspaceId,
+              toolName: 'run_command',
+              argField: 'command',
+              argPattern: `^${safe}( |$)`,
+              action: 'allow',
+              scope: 'workspace',
+              note: `Allowed via TUI — always allow: ${first}`,
+            });
+            this.sessionApprovedTools.add(toolCall.tool_name);
+          }
+        } catch (err) {
+          console.error('[permission] Failed to save allow_always_command rule:', err.message);
+        }
+      }
+
       return {
         allowed,
-        decision: allowed ? decision.decision : 'denied',
+        decision: allowed ? decisionName : 'denied',
         reason: decision?.reason || (allowed ? null : 'User denied permission'),
       };
     }
@@ -409,6 +528,108 @@ export class AgentRuntime {
     };
   }
 
+  _buildPermissionDiff(toolName, args = {}) {
+    if (toolName !== 'write_file' && toolName !== 'edit_file') return null;
+    if (!args.path) return null;
+
+    try {
+      const targetPath = path.resolve(this.workingDir, args.path);
+      const rootPath = path.resolve(this.workingDir);
+      const relative = path.relative(rootPath, targetPath);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
+
+      const oldContent = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : '';
+      let newContent = oldContent;
+      if (toolName === 'write_file') {
+        newContent = String(args.content ?? '');
+      } else {
+        const find = String(args.find ?? '');
+        if (!find || !oldContent.includes(find)) return null;
+        newContent = oldContent.replace(find, String(args.replace ?? ''));
+      }
+
+      return this._unifiedDiff(args.path, oldContent, newContent);
+    } catch {
+      return null;
+    }
+  }
+
+  _unifiedDiff(filePath, oldContent, newContent) {
+    if (oldContent === newContent) return null;
+    const oldLines = oldContent.split('\n');
+    const newLines = newContent.split('\n');
+    const lines = [`--- a/${filePath}`, `+++ b/${filePath}`];
+    const maxLines = 120;
+    const maxLen = Math.max(oldLines.length, newLines.length);
+
+    for (let i = 0; i < maxLen && lines.length < maxLines; i++) {
+      const oldLine = oldLines[i];
+      const newLine = newLines[i];
+      if (oldLine === newLine) {
+        lines.push(` ${oldLine ?? ''}`);
+      } else {
+        if (oldLine !== undefined) lines.push(`-${oldLine}`);
+        if (newLine !== undefined) lines.push(`+${newLine}`);
+      }
+    }
+
+    if (maxLen + 2 > maxLines) {
+      lines.push(`... [diff truncated: ${maxLen + 2 - maxLines} more lines]`);
+    }
+
+    const diff = lines.join('\n');
+    return diff.length > 12000 ? `${diff.slice(0, 12000)}\n... [diff truncated]` : diff;
+  }
+
+  _estimateTokens(value) {
+    return Math.ceil(String(value || '').length / 4);
+  }
+
+  _createCheckpoint({ round, toolName }) {
+    try {
+      const id = `cp_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+      const workspace = path.resolve(this.workingDir);
+      const message = `asyncat checkpoint ${this.session?.id || 'session'} round ${round} ${toolName}`;
+      let checkpoint;
+      try {
+        execSync('git rev-parse --is-inside-work-tree', { cwd: workspace, stdio: 'ignore', timeout: 3000 });
+        execSync(`git stash push --include-untracked -m ${JSON.stringify(message)}`, { cwd: workspace, stdio: 'ignore', timeout: 15000 });
+        const list = execSync('git stash list', { cwd: workspace, encoding: 'utf8', timeout: 3000 });
+        const first = list.split('\n').find(line => line.includes(message));
+        checkpoint = { id, kind: 'git_stash', workspace, message, ref: first?.split(':')[0] || 'stash@{0}', createdAt: new Date().toISOString() };
+      } catch {
+        const snapRoot = path.join(workspace, '.asyncat', 'snapshots');
+        const dir = path.join(snapRoot, id);
+        fs.mkdirSync(dir, { recursive: true });
+        this._copySnapshot(workspace, dir, workspace);
+        checkpoint = { id, kind: 'dir_snapshot', workspace, dir, createdAt: new Date().toISOString() };
+      }
+      CHECKPOINTS.set(id, checkpoint);
+      return checkpoint;
+    } catch (err) {
+      this.onEvent({ type: 'error', data: { message: `Checkpoint failed: ${err.message}` } });
+      return null;
+    }
+  }
+
+  _copySnapshot(src, dest, root) {
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+      if (SNAPSHOT_SKIP.has(entry.name)) continue;
+      const from = path.join(src, entry.name);
+      const rel = path.relative(root, from);
+      if (rel === '.asyncat' || rel.startsWith(`.asyncat${path.sep}snapshots`)) continue;
+      const to = path.join(dest, entry.name);
+      if (entry.isDirectory()) {
+        fs.mkdirSync(to, { recursive: true });
+        this._copySnapshot(from, to, root);
+      } else if (entry.isFile()) {
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.copyFileSync(from, to);
+      }
+    }
+  }
+
   _parseResponse(text) {
     let thinking = null;
     let finalAnswer = null;
@@ -456,11 +677,21 @@ export class AgentRuntime {
 
   _loadMemories(goal) {
     try {
-      // Load all memories for this workspace (they're small, load all)
-      const rows = db.prepare(
-        'SELECT key, content, memory_type FROM agent_memory WHERE user_id = ? AND workspace_id = ? ORDER BY updated_at DESC LIMIT 20'
-      ).all(this.userId, this.workspaceId);
-      return rows || [];
+      const rows = searchMemories({
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        query: goal,
+        kind: 'all',
+        limit: 10,
+        bumpAccess: true,
+      });
+      if (rows.length > 0) return rows;
+      return listMemories({
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        kind: 'all',
+        limit: 5,
+      });
     } catch {
       return [];
     }
@@ -476,6 +707,40 @@ export class AgentRuntime {
         tools,
         success: true,
       }).catch(err => console.error('[basal-ganglia] Track error:', err.message));
+    }
+  }
+}
+
+export function listCheckpoints() {
+  return [...CHECKPOINTS.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+export function restoreCheckpoint(id) {
+  const cp = id ? CHECKPOINTS.get(id) : listCheckpoints()[0];
+  if (!cp) return { success: false, error: 'No checkpoint found' };
+  try {
+    if (cp.kind === 'git_stash') {
+      execSync(`git stash apply ${cp.ref}`, { cwd: cp.workspace, stdio: 'pipe', timeout: 30000 });
+    } else if (cp.kind === 'dir_snapshot') {
+      restoreDirectorySnapshot(cp.dir, cp.workspace);
+    }
+    return { success: true, checkpoint: cp };
+  } catch (err) {
+    return { success: false, error: err.message, checkpoint: cp };
+  }
+}
+
+function restoreDirectorySnapshot(src, dest) {
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      fs.mkdirSync(to, { recursive: true });
+      restoreDirectorySnapshot(from, to);
+    } else if (entry.isFile()) {
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.copyFileSync(from, to);
     }
   }
 }

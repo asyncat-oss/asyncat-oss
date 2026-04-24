@@ -234,9 +234,9 @@ function formatContextSuffix(info = {}) {
   if (!info.ctxSize) return '';
   const used = compactNumber(info.usedTokens || 0);
   const size = compactNumber(info.ctxSize);
-  const max = info.ctxTrain ? ` max ${compactNumber(info.ctxTrain)}` : '';
+  const metadata = info.ctxTrain ? ` meta ${compactNumber(info.ctxTrain)}` : '';
   const pct = info.percent != null ? ` ${info.percent}%` : '';
-  return ` · ctx ${used}/${size}${pct}${max}`;
+  return ` · ctx ${used}/${size}${pct}${metadata}`;
 }
 
 function compactNumber(n) {
@@ -280,6 +280,23 @@ function formatMessage(msg, maxW, t, focused = false, expanded = false) {
     if (msg.content) {
       for (const l of msg.content.split('\n').slice(0, 4)) {
         lines.push(`${ansi.dim}  │  ${l.slice(0, maxW - 6)}${R}`);
+      }
+    }
+    lines.push(`${ansi.dim}  ╰─${R}`);
+  } else if (msg.role === 'plan') {
+    const plan = Array.isArray(msg.plan) ? msg.plan : [];
+    lines.push(`${t.accent}  ╭─ 📋 Plan${R}`);
+    if (plan.length === 0) {
+      lines.push(`${ansi.dim}  │  (empty)${R}`);
+    } else {
+      for (const item of plan) {
+        const mark = item.status === 'completed'
+          ? `${t.success}✔${R}`
+          : item.status === 'in_progress'
+            ? `${t.accent}◉${R}`
+            : `${ansi.dim}○${R}`;
+        const label = (item.status === 'in_progress' && item.activeForm) ? item.activeForm : (item.content || '');
+        lines.push(`${ansi.dim}  │  ${R}${mark} ${String(label).slice(0, maxW - 8)}`);
       }
     }
     lines.push(`${ansi.dim}  ╰─${R}`);
@@ -498,6 +515,39 @@ export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
   write(ansi.to(panelTop + 1, panelL + cursorPos));
 }
 
+export function renderAskInput(question, inputBuf, cursorPos, defaultAnswer = '') {
+  const W = w();
+  const H = h();
+  const R = ansi.reset;
+  const panelBg = ansi.bgRgb(18, 18, 24);
+  const panelW = Math.min(Math.floor(W * 0.78), 96);
+  const panelL = Math.floor((W - panelW) / 2) + 1;
+  const wrappedQuestion = wrapText(question || 'The agent needs more information.', panelW - 4).slice(0, 6);
+  const panelH = wrappedQuestion.length + (defaultAnswer ? 6 : 5);
+  const panelTop = Math.max(2, Math.floor((H - panelH) / 2));
+
+  for (let r = panelTop; r <= panelTop + panelH; r++) {
+    at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
+  }
+
+  at(panelTop, panelL, `${panelBg}${ansi.bold}Agent Question${R}${panelBg}${' '.repeat(Math.max(0, panelW - 20))}${ansi.dim}esc${R}`);
+  wrappedQuestion.forEach((line, i) => {
+    at(panelTop + 2 + i, panelL, `${panelBg}  ${line}${' '.repeat(Math.max(0, panelW - vis(line) - 2))}${R}`);
+  });
+
+  let y = panelTop + 2 + wrappedQuestion.length;
+  if (defaultAnswer) {
+    const d = `Default: ${defaultAnswer}`;
+    at(y++, panelL, `${panelBg}  ${ansi.dim}${d.slice(0, panelW - 4)}${R}${panelBg}${' '.repeat(Math.max(0, panelW - vis(d) - 2))}${R}`);
+  }
+
+  const prompt = inputBuf || '';
+  const shown = prompt || 'Type answer...';
+  at(y + 1, panelL, `${panelBg}${ansi.dim}▸ ${R}${panelBg}${prompt ? shown : `${ansi.dim}${shown}${R}${panelBg}`}${' '.repeat(Math.max(0, panelW - vis(shown) - 3))}${R}`);
+  at(y + 3, panelL, `${panelBg}${ansi.dim}  enter submit  ·  esc use default/cancel${R}`);
+  write(ansi.to(y + 1, panelL + 2 + cursorPos));
+}
+
 // ── Model Setup Wizard ────────────────────────────────────────────────────────
 export function renderModelSetup(model, ctxBuf, cursorPos, isFocused) {
   const t = getTheme();
@@ -549,7 +599,9 @@ export function renderModelSetup(model, ctxBuf, cursorPos, isFocused) {
   const label = " Context Size: ";
   const ctxStr = ctxBuf || '';
   const bufPad = Math.max(0, 10 - vis(ctxStr));
-  const maxCtx = model.contextLength ? `max ${Number(model.contextLength).toLocaleString()} tokens` : 'max unknown';
+  const metadataCtx = model.contextLength
+    ? `metadata ${Number(model.contextLength).toLocaleString()} tokens`
+    : 'metadata unknown';
 
   const bg = isFocused ? t.paletteSel : '';
   at(y, boxL, `${bg}${label}${isFocused ? t.inputFg : ''}${ctxStr}${R}${bg}${' '.repeat(bufPad)}${R}`);
@@ -557,7 +609,7 @@ export function renderModelSetup(model, ctxBuf, cursorPos, isFocused) {
   const cursorRow = y;
   const cursorCol = boxL + vis(label) + cursorPos;
   y++;
-  at(y++, boxL, ` ${ansi.dim}${maxCtx} from GGUF metadata; higher context uses more RAM/VRAM${R}`);
+  at(y++, boxL, ` ${ansi.dim}${metadataCtx}; requested context may be higher and uses more RAM/VRAM${R}`);
   y++;
 
   at(y++, boxL, center(`${ansi.dim}enter start model  ·  esc cancel${R}`, boxW));
@@ -574,7 +626,7 @@ export function setServiceStatus(backend, frontend) {
   _statusCache = { backend, frontend, ts: Date.now() };
 }
 
-export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = false) {
+export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = false, usage = null) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -586,10 +638,11 @@ export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = 
   if (streamingMsg) {
     const spin = spinnerFrame();
     const modelStr = modelInfo ? `${t.accent2}${modelInfo}${R}  ` : '';
-    const right = `${ansi.dim}esc stop${R}  ${modelStr}${ansi.dim}${version || ''}${R} `;
+    const usageStr = usage ? `${ansi.dim}${formatUsage(usage)}${R}  ` : '';
+    const right = `${ansi.dim}esc stop${R}  ${usageStr}${modelStr}${ansi.dim}${version || ''}${R} `;
     const left = ` ${t.accent}${spin}${R}`;
     const leftVis = vis(` ${spin}`);
-    const rightVis = vis(`esc stop  ${modelInfo ? modelInfo + '  ' : ''}${version || ''} `);
+    const rightVis = vis(`esc stop  ${usage ? formatUsage(usage) + '  ' : ''}${modelInfo ? modelInfo + '  ' : ''}${version || ''} `);
     const gap = Math.max(1, W - leftVis - rightVis);
     at(H, 1, `${t.statusFg}${left}${' '.repeat(gap)}${right}${R}`);
     return;
@@ -616,7 +669,7 @@ export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = 
   const fcIndicator = fullControl ? `${t.error}⚡ full-control${R}  ` : '';
   const left = ` ${loc}`;
   const mid = `${fcIndicator}${be}  ${fe}`;
-  const right = `${version || 'unknown'} `;
+  const right = `${usage ? `${formatUsage(usage)}  ` : ''}${version || 'unknown'} `;
 
   const leftVis = vis(left);
   const midVis = vis(mid);
@@ -625,6 +678,11 @@ export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = 
   const gap2 = Math.max(1, W - leftVis - gap1 - midVis - rightVis);
 
   at(H, 1, `${t.statusFg}${left}${' '.repeat(gap1)}${mid}${' '.repeat(gap2)}${right}${R}`);
+}
+
+function formatUsage(usage) {
+  const total = Number(usage.totalTokens || 0).toLocaleString();
+  return usage.costUsd ? `${total} tok ~$${usage.costUsd.toFixed(4)}` : `${total} tok`;
 }
 
 // ── Result popup — scrollable command output overlay ───────────────────────

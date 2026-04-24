@@ -80,7 +80,7 @@ export function updateConfig(req, res) {
     return res.status(400).json({ success: false, error: 'key and value are required' });
   }
 
-  const allowed = [...SECRETS, 'SOLO_EMAIL', 'AI_BASE_URL', 'AI_MODEL', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'MODELS_PATH', 'STORAGE_PATH'];
+  const allowed = [...SECRETS, 'SOLO_EMAIL', 'AI_BASE_URL', 'AI_MODEL', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH'];
   if (!allowed.includes(key)) {
     return res.status(400).json({ success: false, error: `Key not allowed: ${key}. Allowed: ${allowed.join(', ')}` });
   }
@@ -89,6 +89,8 @@ export function updateConfig(req, res) {
   if (!success) {
     return res.status(500).json({ success: false, error: 'Failed to write config' });
   }
+
+  process.env[key] = value;
 
   res.json({ success: true, message: restart ? 'Config updated. Restart the server to apply changes.' : 'Config updated.' });
 }

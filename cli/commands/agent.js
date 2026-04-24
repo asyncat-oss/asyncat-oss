@@ -8,22 +8,43 @@
 //   ./cat agent --workspace ./myproject "what files are here?"
 //   ./cat agent   (interactive mode)
 
-import { col, log, ok, warn, info, getRl } from '../lib/colors.js';
-import { getToken, getBase, streamPost, apiGet } from '../lib/denApi.js';
+import { col, log, warn } from '../lib/colors.js';
+import { apiGet, apiPost, getToken, getBase, streamPost } from '../lib/denApi.js';
 import readline from 'readline';
 import path from 'path';
-import { initTui, updateTuiEvent } from '../lib/agentTui.js';
+import { spawn } from 'child_process';
+import { ROOT } from '../lib/env.js';
 
 // ── Permission display ──────────────────────────────────────────────────────
 
 const PERM_ICONS = { safe: '🟢', moderate: '🟡', dangerous: '🔴' };
 const PERM_COLORS = { safe: 'green', moderate: 'yellow', dangerous: 'red' };
+let lastUsage = null;
+
+function usageWithCost(usage) {
+  const model = String(usage.model || '').toLowerCase();
+  const table = [
+    ['gpt-4o-mini', 0.15, 0.60],
+    ['gpt-4o', 2.50, 10.00],
+    ['gpt-4.1-mini', 0.40, 1.60],
+    ['gpt-4.1', 2.00, 8.00],
+    ['claude-3-5-sonnet', 3.00, 15.00],
+    ['claude-3-5-haiku', 0.80, 4.00],
+  ];
+  const hit = table.find(([name]) => model.includes(name));
+  if (!hit || usage.isLocal) return usage;
+  const [, inPerM, outPerM] = hit;
+  return {
+    ...usage,
+    costUsd: ((usage.inputTokens || 0) / 1_000_000 * inPerM) + ((usage.outputTokens || 0) / 1_000_000 * outPerM),
+  };
+}
 
 /**
  * Ask user for permission before a dangerous tool executes.
  * This is called via the SSE 'permission_request' event.
  */
-function askPermission(toolName, args, permission) {
+function askPermission(toolName, args, permission, diff = null) {
   return new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
@@ -44,14 +65,63 @@ function askPermission(toolName, args, permission) {
       log(`    ${col('dim', JSON.stringify(args, null, 2).split('\n').map(l => '    ' + l).join('\n'))}`);
     }
 
+    if (diff) {
+      log('');
+      log(`  ${col('dim', 'Diff preview:')}`);
+      for (const line of diff.split('\n').slice(0, 80)) {
+        const color = line.startsWith('+') ? 'green' : line.startsWith('-') ? 'red' : 'dim';
+        log(`    ${col(color, line)}`);
+      }
+      if (diff.split('\n').length > 80) log(`    ${col('dim', '... [diff preview truncated]')}`);
+    }
+
     log('');
-    log(`  ${col('dim', '[Y/Enter] Allow')}  ${col('dim', '[N] Deny')}  ${col('dim', '[A] Allow all this session')}`);
+    const opts = [
+      `${col('dim', '[Y/Enter]')} Allow once`,
+      `${col('dim', '[N]')} Deny`,
+      `${col('dim', '[A]')} Allow all this session`,
+      `${col('dim', '[T]')} Always allow ${col('cyan', toolName)}`,
+    ];
+    if (toolName === 'run_command') {
+      const first = String(args.command || '').trim().split(/\s+/)[0];
+      if (first) opts.push(`${col('dim', '[C]')} Always allow ${col('cyan', first + ' …')}`);
+    }
+    log(`  ${opts.join('  ')}`);
     rl.question(`  ${col('cyan', '▸')} `, answer => {
       rl.close();
       const a = (answer || '').trim().toLowerCase();
       if (a === 'n' || a === 'no') resolve('deny');
       else if (a === 'a' || a === 'all') resolve('allow_session');
+      else if (a === 't') resolve('allow_always_tool');
+      else if (a === 'c' && toolName === 'run_command') resolve('allow_always_command');
       else resolve('allow'); // Y, Enter, anything else = allow
+    });
+  });
+}
+
+function askUserQuestion(data) {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const question = data.question || 'The agent needs more information.';
+    const choices = Array.isArray(data.choices) ? data.choices : [];
+    const defaultAnswer = data.default || '';
+
+    log('');
+    log(`  ${col('cyan', '?')} ${col('bold', question)}`);
+    if (choices.length > 0) {
+      choices.forEach((choice, idx) => log(`    ${col('dim', `[${idx + 1}]`)} ${choice}`));
+    }
+    if (defaultAnswer) log(`    ${col('dim', `Default: ${defaultAnswer}`)}`);
+
+    rl.question(`  ${col('cyan', '▸')} `, answer => {
+      rl.close();
+      const raw = (answer || '').trim();
+      if (!raw && defaultAnswer) { resolve(defaultAnswer); return; }
+      if (/^\d+$/.test(raw) && choices.length > 0) {
+        const idx = Number(raw) - 1;
+        if (choices[idx]) { resolve(choices[idx]); return; }
+      }
+      resolve(raw);
     });
   });
 }
@@ -146,9 +216,39 @@ function displayEvent(event, opts = {}) {
       log('');
       break;
 
+    case 'usage_update':
+      lastUsage = data;
+      break;
+
     case 'permission_request':
       // This is handled separately (see pendingPermissions below)
       break;
+
+    case 'compaction': {
+      log(`  ${col('dim', `⟲ compacted ${data.droppedMessages} messages (~${data.tokensBefore}→${data.tokensAfter} tokens)`)}`);
+      break;
+    }
+
+    case 'plan_update': {
+      const plan = Array.isArray(data.plan) ? data.plan : [];
+      log('');
+      log(`  ${col('dim', '╭─')} ${col('magenta', '📋 Plan')}`);
+      if (plan.length === 0) {
+        log(`  ${col('dim', '│  (empty)')}`);
+      } else {
+        for (const item of plan) {
+          const icon = item.status === 'completed'
+            ? col('green', '✔')
+            : item.status === 'in_progress'
+              ? col('yellow', '◉')
+              : col('dim', '○');
+          const label = item.status === 'in_progress' && item.activeForm ? item.activeForm : item.content;
+          log(`  ${col('dim', '│')}  ${icon} ${label || ''}`);
+        }
+      }
+      log(`  ${col('dim', '╰─')}`);
+      break;
+    }
   }
 }
 
@@ -168,6 +268,7 @@ async function getProviderInfo(base, token) {
 // ── Core stream runner ──────────────────────────────────────────────────────
 
 async function runAgent(goal, options = {}, tui = null) {
+  lastUsage = null;
   // Auth
   let token, base;
   try {
@@ -216,11 +317,11 @@ async function runAgent(goal, options = {}, tui = null) {
         return;
       }
 
-      let decision;
-      if (tui) decision = await tui.askPermission(toolName, args, permission);
-      else decision = await askPermission(toolName, args, permission);
+      const decision = await askPermission(toolName, args, permission, event.data.diff);
 
-      if (decision === 'allow_session') sessionApprovals.add(toolName);
+      if (decision === 'allow_session' || decision === 'allow_always_tool') {
+        sessionApprovals.add(toolName);
+      }
 
       const res = await fetch(`${base}/api/agent/permissions/${requestId}`, {
         method: 'POST',
@@ -231,73 +332,65 @@ async function runAgent(goal, options = {}, tui = null) {
       return;
     }
 
-    if (tui) {
-      updateTuiEvent(tui, event, { verbose: options.verbose });
-    } else {
-      displayEvent(event, { verbose: options.verbose });
+    if (event.type === 'ask_user') {
+      const answer = await askUserQuestion(event.data);
+      const res = await fetch(`${base}/api/agent/ask/${event.data.requestId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ answer }),
+      });
+      if (!res.ok) throw new Error(`Question response failed (${res.status})`);
+      return;
     }
+
+    displayEvent(event, { verbose: options.verbose });
   });
+
+  if (lastUsage) {
+    const usage = usageWithCost(lastUsage);
+    const cost = usage.costUsd ? `  ~$${usage.costUsd.toFixed(4)}` : '';
+    log(`  ${col('dim', `Usage: ${Number(usage.totalTokens || 0).toLocaleString()} tokens${cost}`)}`);
+  }
 }
 
 // ── Interactive mode ─────────────────────────────────────────────────────────
 
-async function interactiveMode(options) {
-  const mainRl = getRl();
-  const savedListeners = mainRl ? mainRl.rawListeners('line') : [];
-  const savedPrompt = mainRl ? mainRl._prompt : '';
-
-  if (mainRl) {
-    mainRl.removeAllListeners('line');
-    mainRl.pause();
-  }
-
-  return new Promise((resolve) => {
-    let tui;
-    
-    const exit = () => {
-      if (tui) tui.destroy();
-      if (mainRl) {
-        mainRl.resume();
-        for (const l of savedListeners) mainRl.on('line', l);
-        mainRl.setPrompt(savedPrompt);
-        info('Back in REPL. Type ' + col('cyan', 'help') + ' for commands.');
-        mainRl.prompt();
-      } else {
-        console.log(`  ${col('dim', 'Agent exited.')}`);
-        process.exit(0);
-      }
-      resolve();
-    };
-
-    let isRunning = false;
-
-    const onSubmit = async (text) => {
-      if (isRunning) return;
-      
-      if (text === '/exit' || text === '/quit') {
-         exit();
-         return;
-      }
-      
-      tui.chat(`{blue-fg}You ▸{/blue-fg} ${text}`);
-      tui.chat('');
-      
-      isRunning = true;
-      try {
-         await runAgent(text, { ...options, hideModelInfo: true }, tui);
-      } finally {
-         isRunning = false;
-         tui.focusInput();
-      }
-    };
-
-    tui = initTui(onSubmit, exit);
+async function interactiveMode(_options) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(ROOT, 'cat')], {
+      cwd: ROOT,
+      stdio: 'inherit',
+    });
+    child.on('error', reject);
+    child.on('exit', () => resolve());
   });
 }
 
 // ── Exported run ─────────────────────────────────────────────────────────────
 
 export async function run(args = []) {
+  if (args[0] === 'undo') {
+    try {
+      const data = await apiPost('/api/agent/checkpoints/restore', { id: args[1] || null });
+      log(`  ${col('green', '✔')} Restored checkpoint ${data.checkpoint?.id || ''}`);
+    } catch (e) {
+      warn(`  Undo failed: ${e.message}`);
+    }
+    return;
+  }
+
+  if (args[0] === 'checkpoints') {
+    try {
+      const data = await apiGet('/api/agent/checkpoints');
+      const cps = data.checkpoints || [];
+      if (!cps.length) { log(`  ${col('dim', 'No checkpoints yet.')}`); return; }
+      for (const cp of cps) log(`  ${cp.id}  ${cp.kind}  ${cp.workspace}  ${cp.createdAt}`);
+    } catch (e) {
+      warn(`  Checkpoints failed: ${e.message}`);
+    }
+    return;
+  }
+
   const options = {
     autoApprove: args.includes('--auto-approve') || args.includes('-y'),
     verbose:     args.includes('--verbose') || args.includes('-v'),

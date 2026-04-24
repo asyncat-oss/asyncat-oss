@@ -874,6 +874,14 @@ const state = {
 };
 
 const subscribers = new Set();
+const DEFAULT_CTX_SIZE = 32768;
+const MAX_CTX_SIZE = 1048576;
+
+function normalizeCtxSize(value, fallback = DEFAULT_CTX_SIZE) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 512) return fallback;
+  return Math.min(n, MAX_CTX_SIZE);
+}
 
 function pushLog(line) {
   if (!line.trim()) return;
@@ -921,7 +929,7 @@ function snapshot() {
     startedAt:  state.startedAt,
     port:       LLAMA_PORT,
     baseUrl:    state.status === 'ready' ? `http://${LLAMA_HOST}:${LLAMA_PORT}/v1` : null,
-    ctxSize:    state.ctxSize ?? parseInt(process.env.LLAMA_CTX_SIZE ?? '8192', 10),
+    ctxSize:    state.ctxSize ?? normalizeCtxSize(process.env.LLAMA_CTX_SIZE),
     ctxTrain:   state.ctxTrain ?? null,
     logs:       state.status === 'loading' || state.status === 'error'
       ? state.logLines.slice(-20)
@@ -1090,7 +1098,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
   // Default to CPU-only unless the user explicitly opts into GPU offload.
   // This avoids startup failures on builds without a working Metal/CUDA backend.
   const nGpuLayers = process.env.LLAMA_GPU_LAYERS ?? '0';
-  const ctxSize    = ctxSizeOverride ? String(ctxSizeOverride) : (process.env.LLAMA_CTX_SIZE ?? '8192');
+  const ctxSize    = String(normalizeCtxSize(ctxSizeOverride ?? process.env.LLAMA_CTX_SIZE));
 
   emit({
     status:    'loading',

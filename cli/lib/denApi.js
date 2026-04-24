@@ -76,6 +76,24 @@ export async function apiPost(path, body) {
   return res.json();
 }
 
+export async function apiPatch(path, body) {
+  const base  = getBase();
+  const token = await getToken();
+  const res = await fetch(`${base}${path}`, {
+    method:  'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body:    JSON.stringify(body),
+    signal:  AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let detail = text.slice(0, 160);
+    try { detail = JSON.parse(text).error || detail; } catch {}
+    throw new Error(`PATCH ${path} -> ${res.status}${detail ? `: ${detail}` : ''}`);
+  }
+  return res.json();
+}
+
 export async function apiDelete(path) {
   const base  = getBase();
   const token = await getToken();

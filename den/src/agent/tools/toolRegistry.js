@@ -34,6 +34,17 @@ class ToolRegistry {
 
   get(name) { return this._tools.get(name) || null; }
   has(name) { return this._tools.has(name); }
+  unregister(name) { return this._tools.delete(name); }
+  unregisterWhere(predicate) {
+    let removed = 0;
+    for (const [name, tool] of this._tools.entries()) {
+      if (predicate(tool, name)) {
+        this._tools.delete(name);
+        removed++;
+      }
+    }
+    return removed;
+  }
   names() { return [...this._tools.keys()]; }
   all() { return [...this._tools.values()]; }
 

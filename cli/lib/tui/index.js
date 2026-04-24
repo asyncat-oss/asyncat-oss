@@ -13,14 +13,33 @@ import {
   renderStreamingIndicator, renderSelector, filterPalette,
   spinnerFrame, nextCatMsg, setServiceStatus, renderModelSetup,
   renderResult, renderModelsPage, renderProviderSetup,
+  renderAskInput,
   PROVIDER_TYPES, PROVIDER_DEFAULTS,
 } from './views.js';
 import { getTheme } from '../theme.js';
 import { getLiveLogsEnabled } from '../colors.js';
+import { readEnv } from '../env.js';
 
 const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
 const MAX_HISTORY  = 200;
 const LOCAL_ENGINE_MISSING = 'Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+const DEFAULT_LOCAL_CTX_SIZE = 32768;
+const MAX_LOCAL_CTX_SIZE = 1048576;
+
+function normalizeContextSize(value, fallback = DEFAULT_LOCAL_CTX_SIZE) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 512) return fallback;
+  return Math.min(n, MAX_LOCAL_CTX_SIZE);
+}
+
+function defaultContextSize(model = null) {
+  const env = readEnv('den/.env');
+  const envCtx = normalizeContextSize(env.LLAMA_CTX_SIZE, 0);
+  if (envCtx > 0) return envCtx;
+
+  const metadataCtx = normalizeContextSize(model?.contextLength, 0);
+  return Math.max(metadataCtx, DEFAULT_LOCAL_CTX_SIZE);
+}
 
 function localEngineErrorMessage(message) {
   const text = String(message || '');
@@ -101,6 +120,7 @@ export class Tui extends EventEmitter {
 
     // Agent run log: full tool call history for /log viewer
     this._agentLog = [];
+    this._usage = null;
 
     // Message focus & inline expand (Tab nav in chat)
     this._msgFocus = -1;       // index into this.messages, -1 = input active
@@ -232,9 +252,9 @@ export class Tui extends EventEmitter {
   render() {
     if (this._destroyed) return;
     write(ansi.hide);
-    renderStatusBar(this.version, this.streaming ? this._streamMsg : null, this.modelInfo, this._fullControl);
+    renderStatusBar(this.version, this.streaming ? this._streamMsg : null, this.modelInfo, this._fullControl, this._usage);
 
-    const isOverlay = this.mode === 'palette' || this.mode === 'selector' || this.mode === 'model-setup' || this.mode === 'result' || this.mode === 'provider-setup';
+    const isOverlay = this.mode === 'palette' || this.mode === 'selector' || this.mode === 'model-setup' || this.mode === 'result' || this.mode === 'provider-setup' || this.mode === 'ask-input';
 
     // Models page — standalone overlay, no base screen
     if (this.mode === 'models') {
@@ -251,7 +271,7 @@ export class Tui extends EventEmitter {
     }
 
     // Always render base screen first so overlays float on top of it
-    const hideInput = this.mode === 'model-setup' || this.mode === 'provider-setup';
+    const hideInput = this.mode === 'model-setup' || this.mode === 'provider-setup' || this.mode === 'ask-input';
     if ((this.mode === 'chat') || (isOverlay && this.messages.length > 0)) {
       const msgs = this._streamContent ? [...this.messages, { role: 'assistant', content: this._streamContent }] : this.messages;
       renderChat(msgs, this.scrollOff, hideInput ? '' : this.buf, hideInput ? 0 : this.pos, this.modelInfo, this.providerInfo, this.logs, this._msgFocus, this._expandedMsgs, this._contextStatus(hideInput ? '' : this.buf));
@@ -279,6 +299,8 @@ export class Tui extends EventEmitter {
       renderModelSetup(this._setupModel, this.buf, this.pos, true);
     } else if (this.mode === 'provider-setup') {
       renderProviderSetup(this._providerSetup, this.pos);
+    } else if (this.mode === 'ask-input') {
+      renderAskInput(this._askQuestion, this.buf, this.pos, this._askDefault);
     }
 
     write(ansi.show);
@@ -347,13 +369,25 @@ export class Tui extends EventEmitter {
     });
   }
 
+  showAskInput(question, defaultAnswer = '') {
+    return new Promise((resolve) => {
+      this.mode = 'ask-input';
+      this._askQuestion = question;
+      this._askDefault = defaultAnswer || '';
+      this._askResolve = resolve;
+      this.buf = '';
+      this.pos = 0;
+      this.render();
+    });
+  }
+
   // ── Model Setup Wizard ────────────────────────────────────────────────────
   showModelSetup(model) {
     return new Promise((resolve) => {
       this.mode = 'model-setup';
       this._setupModel = model;
       this._setupResolve = resolve;
-      this.buf = String(model.contextLength || 8192);
+      this.buf = String(defaultContextSize(model));
       this.pos = this.buf.length;
       this.render();
     });
@@ -500,6 +534,7 @@ export class Tui extends EventEmitter {
   setCancelStreaming(fn) { this._cancelStreaming = typeof fn === 'function' ? fn : null; }
   lockInput() { this._inputLocked = true; }
   unlockInput() { this._inputLocked = false; this.render(); }
+  setUsage(usage) { this._usage = usage; this.render(); }
 
   // ── Key handler ───────────────────────────────────────────────────────────
   _onKey(str, key) {
@@ -599,6 +634,30 @@ export class Tui extends EventEmitter {
     return;
   }
 
+  // ── Ask input mode ───────────────────────────────────────────────────
+  if (this.mode === 'ask-input') {
+    if (name === 'escape') {
+      const answer = this._askDefault || '';
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      if (this._askResolve) { this._askResolve(answer); this._askResolve = null; }
+      this._askQuestion = '';
+      this._askDefault = '';
+      this.buf = ''; this.pos = 0;
+      this.render();
+      return;
+    }
+    if (name === 'return') {
+      const answer = this.buf.trim() || this._askDefault || '';
+      this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      if (this._askResolve) { this._askResolve(answer); this._askResolve = null; }
+      this._askQuestion = '';
+      this._askDefault = '';
+      this.buf = ''; this.pos = 0;
+      this.render();
+      return;
+    }
+  }
+
   // ── Model Setup mode ─────────────────────────────────────────────────
   if (this.mode === 'model-setup') {
     if (name === 'escape') {
@@ -610,9 +669,7 @@ export class Tui extends EventEmitter {
     }
     if (name === 'return') {
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
-      const rawCtx = parseInt(this.buf.trim() || '8192', 10) || 8192;
-      const maxCtx = this._setupModel?.contextLength ? Number(this._setupModel.contextLength) : null;
-      const ctxSize = String(maxCtx ? Math.min(rawCtx, maxCtx) : rawCtx);
+      const ctxSize = String(normalizeContextSize(this.buf.trim(), defaultContextSize(this._setupModel)));
       if (this._setupResolve) { this._setupResolve(ctxSize); this._setupResolve = null; }
       this.buf = ''; this.pos = 0;
       this.render();
@@ -1382,7 +1439,7 @@ export class Tui extends EventEmitter {
   async _loadSelectedModel(filename, ctxSize) {
     try {
       const { apiPost, apiGet } = await import('../denApi.js');
-      const requestedCtx = parseInt(ctxSize, 10) || 8192;
+      const requestedCtx = normalizeContextSize(ctxSize, defaultContextSize());
       await apiPost('/api/ai/providers/server/start', { filename, ctxSize: requestedCtx });
       this.printOk(`Loading ${filename} with ctx ${requestedCtx}...`);
       for (let i = 0; i < 60; i++) {
@@ -1394,7 +1451,7 @@ export class Tui extends EventEmitter {
             ctxSize: data.ctxSize || requestedCtx,
             ctxTrain: data.ctxTrain || null,
           });
-          this.printOk(`Model ready · ctx ${data.ctxSize || requestedCtx}${data.ctxTrain ? ` / max ${data.ctxTrain}` : ''}`);
+          this.printOk(`Model ready · ctx ${data.ctxSize || requestedCtx}${data.ctxTrain ? ` / metadata ${data.ctxTrain}` : ''}`);
           return;
         }
         if (data.status === 'error') {

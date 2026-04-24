@@ -17,6 +17,8 @@ import { devTools } from './tools/devTools.js';
 import { osTools } from './tools/osTools.js';
 import { screenTools } from './tools/screenTools.js';
 import { dataTools } from './tools/dataTools.js';
+import { planTools } from './tools/planTools.js';
+import { askUserTools } from './tools/askUserTool.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -54,6 +56,8 @@ export async function initializeAgent() {
   toolRegistry.registerAll(osTools);
   toolRegistry.registerAll(screenTools);
   toolRegistry.registerAll(dataTools);
+  toolRegistry.registerAll(planTools);
+  toolRegistry.registerAll(askUserTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

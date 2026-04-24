@@ -6,12 +6,19 @@ import express from 'express';
 import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
 import { attachDb } from '../../db/sqlite.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
+import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { PermissionRules } from '../../agent/PermissionRules.js';
+import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
+import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { randomUUID } from 'crypto';
+import path from 'path';
 
 const router = express.Router();
 const pendingPermissions = new Map();
+const pendingUserQuestions = new Map();
+const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
 
 // Initialize agent tools on first load
 await initializeAgent();
@@ -42,6 +49,11 @@ const authenticate = (req, res, next) => {
     });
   });
 };
+
+function getWorkspaceId(req, db) {
+  return req.workspaceId ||
+    db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+}
 
 function createPermissionRequest(req, res) {
   const ownedRequestIds = new Set();
@@ -84,6 +96,56 @@ function createPermissionRequest(req, res) {
         ...request,
         toolName: request.toolName || request.tool,
         requestId,
+        expiresInMs: 5 * 60 * 1000,
+      }
+    })}\n\n`);
+  });
+}
+
+function createAskUserRequest(req, res) {
+  const ownedRequestIds = new Set();
+
+  res.on('close', () => {
+    for (const requestId of ownedRequestIds) {
+      const pending = pendingUserQuestions.get(requestId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pending.resolve({ success: false, error: 'User did not answer in time' });
+        pendingUserQuestions.delete(requestId);
+      }
+    }
+  });
+
+  return (request) => new Promise((resolve) => {
+    const requestId = randomUUID();
+    ownedRequestIds.add(requestId);
+
+    const timer = setTimeout(() => {
+      pendingUserQuestions.delete(requestId);
+      ownedRequestIds.delete(requestId);
+      resolve({ success: false, error: 'User did not answer in time' });
+    }, 5 * 60 * 1000);
+
+    pendingUserQuestions.set(requestId, {
+      userId: req.user.id,
+      sessionId: request.sessionId,
+      resolve: (answer) => {
+        clearTimeout(timer);
+        ownedRequestIds.delete(requestId);
+        resolve(answer);
+      },
+      timer,
+    });
+
+    res.write(`data: ${JSON.stringify({
+      type: 'ask_user',
+      data: {
+        requestId,
+        sessionId: request.sessionId,
+        question: request.question,
+        choices: Array.isArray(request.choices) ? request.choices.slice(0, 8) : [],
+        default: request.default ?? null,
+        round: request.round,
         expiresInMs: 5 * 60 * 1000,
       }
     })}\n\n`);
@@ -148,6 +210,7 @@ router.post('/run', authenticate, async (req, res) => {
       maxRounds: maxRounds || 25,
       autoApprove: autoApprove === true || autoApprove === 'all',
       requestPermission: createPermissionRequest(req, res),
+      askUser: createAskUserRequest(req, res),
     });
 
     await agent.runStreaming(goal, conversationHistory, res);
@@ -231,7 +294,7 @@ router.post('/permissions/:requestId', authenticate, (req, res) => {
     return res.status(404).json({ success: false, error: 'Permission request not found' });
   }
 
-  const decision = ['allow', 'deny', 'allow_session'].includes(req.body?.decision)
+  const decision = ['allow', 'deny', 'allow_session', 'allow_always_tool', 'allow_always_command'].includes(req.body?.decision)
     ? req.body.decision
     : 'deny';
 
@@ -260,7 +323,7 @@ router.post('/permission', authenticate, (req, res) => {
   }
 
   const [requestId, pending] = found;
-  const decision = ['allow', 'deny', 'allow_session'].includes(req.body?.decision)
+  const decision = ['allow', 'deny', 'allow_session', 'allow_always_tool', 'allow_always_command'].includes(req.body?.decision)
     ? req.body.decision
     : 'deny';
 
@@ -271,6 +334,147 @@ router.post('/permission', authenticate, (req, res) => {
   });
 
   res.json({ success: true, decision });
+});
+
+/**
+ * POST /api/agent/ask/:requestId
+ * Resolve a pending ask_user request.
+ * Body: { answer }
+ */
+router.post('/ask/:requestId', authenticate, (req, res) => {
+  const pending = pendingUserQuestions.get(req.params.requestId);
+  if (!pending || pending.userId !== req.user.id) {
+    return res.status(404).json({ success: false, error: 'Question request not found' });
+  }
+
+  const answer = req.body?.answer === undefined ? '' : String(req.body.answer);
+
+  pendingUserQuestions.delete(req.params.requestId);
+  pending.resolve({ success: true, answer });
+
+  res.json({ success: true });
+});
+
+/**
+ * GET /api/agent/permissions/rules
+ * List saved permission rules for this user.
+ */
+router.get('/permissions/rules', authenticate, (req, res) => {
+  try {
+    const rules = PermissionRules.list({ userId: req.user.id, workspaceId: req.workspaceId });
+    res.json({ success: true, rules });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/agent/permissions/rules
+ * Add a permission rule.
+ * Body: { toolName, argField?, argPattern?, action?, scope?, note? }
+ */
+router.post('/permissions/rules', authenticate, (req, res) => {
+  try {
+    const { toolName, argField, argPattern, action, scope, note } = req.body || {};
+    if (!toolName) return res.status(400).json({ success: false, error: 'toolName is required' });
+    const result = PermissionRules.add({
+      userId: req.user.id,
+      workspaceId: req.workspaceId,
+      toolName,
+      argField: argField ?? null,
+      argPattern: argPattern ?? null,
+      action: action || 'allow',
+      scope: scope || 'workspace',
+      note: note ?? null,
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/agent/permissions/rules/:id
+ */
+router.delete('/permissions/rules/:id', authenticate, (req, res) => {
+  try {
+    const removed = PermissionRules.remove(req.params.id);
+    if (!removed) return res.status(404).json({ success: false, error: 'Rule not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── MCP management ──────────────────────────────────────────────────────────
+router.get('/mcp', authenticate, (_req, res) => {
+  try {
+    res.json({ success: true, servers: listMcpServers(MCP_CONFIG_PATH), status: getMcpStatus() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/mcp', authenticate, async (req, res) => {
+  try {
+    const { name, command, args = [], env = {}, disabled = false } = req.body || {};
+    if (!name || !command) return res.status(400).json({ success: false, error: 'name and command are required' });
+    const config = readMcpConfig(MCP_CONFIG_PATH);
+    config.mcpServers[name] = { command, args: Array.isArray(args) ? args : [], env, disabled: !!disabled };
+    writeMcpConfig(MCP_CONFIG_PATH, config);
+    const status = await reloadMcpTools(MCP_CONFIG_PATH);
+    res.json({ success: true, servers: listMcpServers(MCP_CONFIG_PATH), status });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/mcp/:name', authenticate, async (req, res) => {
+  try {
+    const config = readMcpConfig(MCP_CONFIG_PATH);
+    const server = config.mcpServers?.[req.params.name];
+    if (!server) return res.status(404).json({ success: false, error: 'MCP server not found' });
+    if (req.body?.disabled !== undefined) server.disabled = !!req.body.disabled;
+    if (req.body?.command) server.command = req.body.command;
+    if (Array.isArray(req.body?.args)) server.args = req.body.args;
+    if (req.body?.env && typeof req.body.env === 'object') server.env = req.body.env;
+    writeMcpConfig(MCP_CONFIG_PATH, config);
+    const status = await reloadMcpTools(MCP_CONFIG_PATH);
+    res.json({ success: true, server: req.params.name, status });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/mcp/:name', authenticate, async (req, res) => {
+  try {
+    const config = readMcpConfig(MCP_CONFIG_PATH);
+    if (!config.mcpServers?.[req.params.name]) return res.status(404).json({ success: false, error: 'MCP server not found' });
+    delete config.mcpServers[req.params.name];
+    writeMcpConfig(MCP_CONFIG_PATH, config);
+    const status = await reloadMcpTools(MCP_CONFIG_PATH);
+    res.json({ success: true, status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/mcp/reload', authenticate, async (_req, res) => {
+  try {
+    const status = await reloadMcpTools(MCP_CONFIG_PATH);
+    res.json({ success: true, status, servers: listMcpServers(MCP_CONFIG_PATH) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/checkpoints', authenticate, (_req, res) => {
+  res.json({ success: true, checkpoints: listCheckpoints() });
+});
+
+router.post('/checkpoints/restore', authenticate, (req, res) => {
+  const result = restoreCheckpoint(req.body?.id || null);
+  res.status(result.success ? 200 : 404).json(result);
 });
 
 /**
@@ -403,35 +607,57 @@ router.post('/sessions/:id/correct', authenticate, async (req, res) => {
 router.get('/memory', authenticate, async (req, res) => {
   try {
     const { default: db } = await import('../../db/client.js');
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    const workspaceId = getWorkspaceId(req, db);
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
 
     const q = req.query.q?.trim();
-    let rows;
-    if (q) {
-      try {
-        rows = db.prepare(`
-          SELECT m.id, m.key, m.content, m.memory_type, m.updated_at,
-                 bm25(agent_memory_fts) as rank
-          FROM agent_memory_fts fts
-          JOIN agent_memory m ON m.id = fts.memory_id
-          WHERE fts.agent_memory_fts MATCH ? AND m.user_id = ? AND m.workspace_id = ?
-          ORDER BY rank
-          LIMIT 20
-        `).all(`${q}*`, req.user.id, workspaceId);
-      } catch {
-        rows = db.prepare(
-          `SELECT key, content, memory_type, updated_at FROM agent_memory
-           WHERE user_id = ? AND workspace_id = ? AND (key LIKE ? OR content LIKE ?)
-           ORDER BY updated_at DESC LIMIT 50`
-        ).all(req.user.id, workspaceId, `%${q}%`, `%${q}%`);
-      }
-    } else {
-      rows = db.prepare(
-        'SELECT key, content, memory_type, updated_at FROM agent_memory WHERE user_id = ? AND workspace_id = ? ORDER BY updated_at DESC LIMIT 50'
-      ).all(req.user.id, workspaceId);
-    }
+    const kind = req.query.kind || req.query.memory_type || 'all';
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || (q ? 20 : 50))));
+    const rows = q
+      ? searchMemories({
+        userId: req.user.id,
+        workspaceId,
+        query: q,
+        kind,
+        limit,
+        bumpAccess: true,
+      })
+      : listMemories({
+        userId: req.user.id,
+        workspaceId,
+        kind,
+        limit,
+      });
     res.json({ success: true, count: rows.length, memories: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/agent/memory/:key
+ * Show one memory by key.
+ */
+router.get('/memory/:key', authenticate, async (req, res) => {
+  try {
+    const { default: db } = await import('../../db/client.js');
+    const workspaceId = getWorkspaceId(req, db);
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
+
+    const row = db.prepare(`
+      SELECT id, key, content, memory_type, tags, importance, last_accessed_at,
+             access_count, created_at, updated_at
+      FROM agent_memory
+      WHERE user_id = ? AND workspace_id = ? AND key = ?
+    `).get(req.user.id, workspaceId, req.params.key);
+
+    if (!row) return res.status(404).json({ success: false, error: `No memory found with key: ${req.params.key}` });
+
+    db.prepare(
+      "UPDATE agent_memory SET access_count = access_count + 1, last_accessed_at = datetime('now') WHERE id = ?"
+    ).run(row.id);
+
+    res.json({ success: true, memory: normalizeMemoryRow({ ...row, access_count: Number(row.access_count || 0) + 1 }) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -448,8 +674,8 @@ router.delete('/memory', authenticate, async (req, res) => {
     if (!key) return res.status(400).json({ success: false, error: 'key is required' });
 
     const { default: db } = await import('../../db/client.js');
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    const workspaceId = getWorkspaceId(req, db);
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
 
     const result = db.prepare(
       'DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
@@ -459,6 +685,30 @@ router.delete('/memory', authenticate, async (req, res) => {
       res.json({ success: true, message: `Deleted memory: ${key}` });
     } else {
       res.status(404).json({ success: false, error: `No memory found with key: ${key}` });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/agent/memory/:key
+ * Delete a memory by key.
+ */
+router.delete('/memory/:key', authenticate, async (req, res) => {
+  try {
+    const { default: db } = await import('../../db/client.js');
+    const workspaceId = getWorkspaceId(req, db);
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
+
+    const result = db.prepare(
+      'DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
+    ).run(req.user.id, workspaceId, req.params.key);
+
+    if (result.changes > 0) {
+      res.json({ success: true, message: `Deleted memory: ${req.params.key}` });
+    } else {
+      res.status(404).json({ success: false, error: `No memory found with key: ${req.params.key}` });
     }
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

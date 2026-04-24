@@ -33,6 +33,10 @@ function hasBin(bin) {
   } catch { return false; }
 }
 
+function shellQuote(str) {
+  return `'${String(str).replace(/'/g, "'\\''")}'`;
+}
+
 // ── take_screenshot ───────────────────────────────────────────────────────────
 export const takeScreenshotTool = {
   name: 'take_screenshot',
@@ -299,6 +303,106 @@ export const screenFindWindowTool = {
   },
 };
 
+export const windowListTool = {
+  name: 'window_list',
+  description: 'List open desktop windows with titles and geometry when available.',
+  category: 'screen',
+  permission: PermissionLevel.SAFE,
+  parameters: { type: 'object', properties: {}, required: [] },
+  execute: async () => {
+    try {
+      if (PLATFORM === 'linux') {
+        if (!hasBin('xdotool')) return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
+        const ids = execSync('xdotool search --onlyvisible --name "." 2>/dev/null || true', { encoding: 'utf8', timeout: 3000 })
+          .trim().split('\n').filter(Boolean);
+        const windows = ids.slice(0, 100).map(id => {
+          let title = '(unknown)';
+          let geometry = {};
+          try { title = execSync(`xdotool getwindowname ${id}`, { encoding: 'utf8', timeout: 1000 }).trim(); } catch {}
+          try {
+            const g = execSync(`xdotool getwindowgeometry --shell ${id}`, { encoding: 'utf8', timeout: 1000 });
+            for (const line of g.split('\n')) {
+              const [k, v] = line.split('=');
+              if (k) geometry[k.toLowerCase()] = Number(v) || v;
+            }
+          } catch {}
+          return { id, title, geometry };
+        });
+        return { success: true, count: windows.length, windows };
+      }
+      if (PLATFORM === 'darwin') {
+        const script = 'tell application "System Events" to get name of every process whose background only is false';
+        const out = execSync(`osascript -e ${shellQuote(script)}`, { encoding: 'utf8', timeout: 3000 });
+        const windows = out.split(',').map(s => s.trim()).filter(Boolean).map(title => ({ title }));
+        return { success: true, count: windows.length, windows };
+      }
+      if (IS_WIN) {
+        const cmd = 'Get-Process | Where-Object {$_.MainWindowTitle} | Select-Object Id,MainWindowTitle | ConvertTo-Json';
+        const out = execSync(`powershell -NoProfile -Command ${JSON.stringify(cmd)}`, { encoding: 'utf8', timeout: 5000 });
+        const parsed = JSON.parse(out || '[]');
+        const rows = Array.isArray(parsed) ? parsed : [parsed];
+        return { success: true, count: rows.length, windows: rows.map(r => ({ id: r.Id, title: r.MainWindowTitle })) };
+      }
+      return { success: false, error: `Platform "${PLATFORM}" not supported.` };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const windowFocusTool = {
+  name: 'window_focus',
+  description: 'Focus an open window by title substring or exact window id.',
+  category: 'screen',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Window title substring to focus.' },
+      id: { type: 'string', description: 'Optional exact window id.' },
+    },
+    required: [],
+  },
+  execute: async (args) => {
+    try {
+      if (PLATFORM === 'linux') {
+        if (!hasBin('xdotool')) return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
+        const id = args.id || execSync(`xdotool search --name ${shellQuote(args.title || '')} 2>/dev/null | head -1`, { encoding: 'utf8', timeout: 3000 }).trim();
+        if (!id) return { success: false, error: `No window found for: ${args.title || args.id || '(empty)'}` };
+        execSync(`xdotool windowactivate --sync ${id}`, { timeout: 3000 });
+        return { success: true, id, title: args.title || null };
+      }
+      if (PLATFORM === 'darwin') {
+        if (!args.title) return { success: false, error: 'title is required on macOS' };
+        const script = `tell application "${String(args.title).replace(/"/g, '\\"')}" to activate`;
+        execSync(`osascript -e ${shellQuote(script)}`, { timeout: 3000 });
+        return { success: true, title: args.title };
+      }
+      if (IS_WIN) {
+        return { success: false, error: 'window_focus is not yet reliable on Windows without an additional helper.' };
+      }
+      return { success: false, error: `Platform "${PLATFORM}" not supported.` };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const keySequenceTool = {
+  name: 'key_sequence',
+  description: 'Press a keyboard shortcut sequence such as ctrl+shift+t, alt+tab, Return, or Escape.',
+  category: 'screen',
+  permission: PermissionLevel.DANGEROUS,
+  parameters: {
+    type: 'object',
+    properties: {
+      seq: { type: 'string', description: 'Shortcut sequence to press.' },
+    },
+    required: ['seq'],
+  },
+  execute: async (args) => screenKeyTool.execute({ key: args.seq }),
+};
+
 export const screenTools = [
   takeScreenshotTool,
   screenReadTool,
@@ -306,5 +410,8 @@ export const screenTools = [
   screenTypeTool,
   screenKeyTool,
   screenFindWindowTool,
+  windowListTool,
+  windowFocusTool,
+  keySequenceTool,
 ];
 export default screenTools;

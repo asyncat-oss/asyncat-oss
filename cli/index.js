@@ -37,6 +37,8 @@ import * as _code     from './commands/code.js';
 import * as _agent    from './commands/agent.js';
 import * as _mcp      from './commands/mcp.js';
 import * as _context  from './commands/context.js';
+import * as _permissions from './commands/permissions.js';
+import * as _memory   from './commands/memory.js';
 import { getToken, getBase, apiGet, apiPost } from './lib/denApi.js';
 import { banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
 import { stashAdd, stashList, stashRm, stashClear } from './lib/stash.js';
@@ -374,8 +376,8 @@ async function startTui() {
           if (!Number.isFinite(size) || size < 512) {
             const status = await apiGet('/api/ai/providers/server/status').catch(() => null);
             const current = status?.ctxSize ? `current ${status.ctxSize}` : 'current unknown';
-            const max = status?.ctxTrain ? `, model max ${status.ctxTrain}` : '';
-            tui.printInfo(`Usage: /ctx <tokens>  (${current}${max})`);
+            const metadata = status?.ctxTrain ? `, metadata ${status.ctxTrain}` : '';
+            tui.printInfo(`Usage: /ctx <tokens>  (${current}${metadata})`);
             return;
           }
 
@@ -386,9 +388,9 @@ async function startTui() {
             return;
           }
 
-          const target = status.ctxTrain ? Math.min(size, status.ctxTrain) : size;
-          if (target !== size) {
-            tui.printWarn(`Requested context exceeds model max; using ${target}.`);
+          const target = size;
+          if (status.ctxTrain && size > status.ctxTrain) {
+            tui.printWarn(`Requested context exceeds metadata (${status.ctxTrain}); trying ${target} anyway.`);
           }
           tui.printInfo(`Restarting ${filename} with ctx ${target}...`);
           await apiPost('/api/ai/providers/server/start', { filename, ctxSize: target });
@@ -402,7 +404,7 @@ async function startTui() {
                 ctxSize: next.ctxSize || target,
                 ctxTrain: next.ctxTrain || status.ctxTrain || null,
               });
-              tui.printOk(`Context active: ${next.ctxSize || target}${next.ctxTrain ? ` / max ${next.ctxTrain}` : ''}`);
+              tui.printOk(`Context active: ${next.ctxSize || target}${next.ctxTrain ? ` / metadata ${next.ctxTrain}` : ''}`);
               return;
             }
             if (next.status === 'error') {
@@ -447,6 +449,24 @@ async function startTui() {
           break;
         case 'live-logs':
           handleLiveLogs(args, tui);
+          break;
+        case 'undo':
+          try {
+            const data = await apiPost('/api/agent/checkpoints/restore', { id: args[0] || null });
+            tui.printOk(`Restored checkpoint ${data.checkpoint?.id || ''}`);
+          } catch (e) {
+            tui.printWarn(`Undo failed: ${e.message}`);
+          }
+          break;
+        case 'checkpoints':
+          try {
+            const data = await apiGet('/api/agent/checkpoints');
+            const cps = data.checkpoints || [];
+            if (!cps.length) { tui.printInfo('No checkpoints yet.'); break; }
+            tui.showResult('Checkpoints', cps.map(cp => `${cp.id}  ${cp.kind}  ${cp.workspace}  ${cp.createdAt}`));
+          } catch (e) {
+            tui.printWarn(`Checkpoints: ${e.message}`);
+          }
           break;
         case 'full-control':
         case 'fc':
@@ -701,6 +721,28 @@ case 'tools': {
           const sub  = args[0];
           const rest = args.slice(1).join(' ');
 
+          if (sub === 'show' || sub === 'get') {
+            if (!rest) { tui.printWarn('Usage: /memory show <key>'); return; }
+            try {
+              const token = await getToken();
+              const base = getBase();
+              const res = await fetch(`${base}/api/agent/memory/${encodeURIComponent(rest)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) { tui.printWarn(`No memory found: ${rest}`); return; }
+              const data = await res.json();
+              const m = data.memory;
+              tui.print('');
+              tui.print(`━━ Memory: ${m.key || rest} ━━`);
+              tui.print(`  kind=${m.kind || m.memory_type || 'fact'}  importance=${Number(m.importance ?? 0.5).toFixed(2)}  access=${m.access_count || 0}`);
+              if (Array.isArray(m.tags) && m.tags.length) tui.print(`  tags=${m.tags.join(', ')}`);
+              tui.print('');
+              for (const line of String(m.content || '').split('\n')) tui.print(`  ${line}`);
+              tui.print('');
+            } catch { tui.printWarn('Backend not reachable'); }
+            return;
+          }
+
           if (sub === 'rm' || sub === 'delete' || sub === 'forget') {
             // /memory rm <key>
             if (!rest) { tui.printWarn('Usage: /memory rm <key>'); return; }
@@ -742,8 +784,11 @@ case 'tools': {
             tui.print(`━━ Stored Memories  (${mems.length}) ━━`);
             tui.print('');
             for (const m of mems) {
-              const tag = m.memory_type ? `${ansi?.dim || ''}[${m.memory_type}]` : '';
-              tui.print(`  ${m.key || '–'}  ${tag}`);
+              const kind = m.kind || m.memory_type || 'fact';
+              const tags = Array.isArray(m.tags) && m.tags.length ? `  #${m.tags.join(' #')}` : '';
+              tui.print(`  ${m.key || '-'}  [${kind}]${tags}`);
+              tui.print(`    importance=${Number(m.importance ?? 0.5).toFixed(2)}  access=${m.access_count || 0}  updated=${m.updated_at || 'unknown'}`);
+              if (m.last_accessed_at) tui.print(`    last accessed=${m.last_accessed_at}`);
               tui.print(`    ${(m.content || '').slice(0, 120)}`);
             }
             tui.print('');
@@ -962,7 +1007,7 @@ case 'tools': {
           sizeFormatted: m.sizeFormatted || 'Unknown',
           architecture: m.architecture || 'unknown',
           parameterCount: m.parameterCount || '',
-          contextLength: m.contextLength || 8192,
+          contextLength: m.contextLength || null,
           _file: m.filename,
         }));
       } catch (err) {
@@ -1160,16 +1205,18 @@ async function handleAgentEvent(tui, event, token, base) {
         ? (data.result?.error || data.result?.content || data.result?.message || 'Unknown error')
         : (data.result?.content || data.result?.message || '');
       const fullText = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-      tui.addMessage('tool', fullText, { tool: data.tool || 'tool', success: data.result?.success });
+      const bounded = fullText.length > 250000 ? `${fullText.slice(0, 250000)}\n... [bounded in-memory scrollback truncated]` : fullText;
+      tui.addMessage('tool', bounded, { tool: data.tool || 'tool', success: data.result?.success });
       // Store full entry in run log for /log viewer
       tui._agentLog.push({
         tool: data.tool || 'tool',
         args: data.args || {},
         success: data.result?.success,
-        output: fullText,
+        output: bounded,
         round: data.round,
         ts: new Date().toISOString(),
       });
+      if (tui._agentLog.length > 200) tui._agentLog.splice(0, tui._agentLog.length - 200);
       break;
     }
     case 'done':
@@ -1182,7 +1229,83 @@ async function handleAgentEvent(tui, event, token, base) {
     case 'permission_request':
       await handlePermissionRequest(tui, data, token, base);
       break;
+    case 'ask_user':
+      await handleAskUser(tui, data, token, base);
+      break;
+    case 'plan_update':
+      tui.messages.push({ role: 'plan', plan: Array.isArray(data.plan) ? data.plan : [] });
+      tui.render?.();
+      break;
+    case 'compaction':
+      tui.messages.push({ role: 'system', content: `compacted ${data.droppedMessages} msgs (~${data.tokensBefore}→${data.tokensAfter} tok)` });
+      tui.render?.();
+      break;
+    case 'usage_update':
+      tui.setUsage(withCost(data));
+      break;
+    case 'checkpoint':
+      tui.printInfo(`Checkpoint ${data.id || ''} created (${data.kind || 'snapshot'})`);
+      break;
   }
+}
+
+function withCost(usage) {
+  const model = String(usage.model || '').toLowerCase();
+  const table = [
+    ['gpt-4o-mini', 0.15, 0.60],
+    ['gpt-4o', 2.50, 10.00],
+    ['gpt-4.1-mini', 0.40, 1.60],
+    ['gpt-4.1', 2.00, 8.00],
+    ['claude-3-5-sonnet', 3.00, 15.00],
+    ['claude-3-5-haiku', 0.80, 4.00],
+  ];
+  const hit = table.find(([name]) => model.includes(name));
+  if (!hit || usage.isLocal) return usage;
+  const [, inPerM, outPerM] = hit;
+  return {
+    ...usage,
+    costUsd: ((usage.inputTokens || 0) / 1_000_000 * inPerM) + ((usage.outputTokens || 0) / 1_000_000 * outPerM),
+  };
+}
+
+async function handleAskUser(tui, data, token, base) {
+  const requestId = data.requestId;
+  if (!requestId) {
+    tui.printErr('Agent question missing requestId.');
+    return;
+  }
+
+  const question = data.question || 'The agent needs more information.';
+  const choices = Array.isArray(data.choices) ? data.choices : [];
+  const defaultAnswer = data.default || '';
+
+  tui.setStreamMsg('Waiting for your answer...');
+  tui.printInfo(`Agent asks: ${question}`);
+  tui.unlockInput();
+
+  let answer = defaultAnswer;
+  if (choices.length > 0) {
+    const selected = await tui.showSelector('Agent Question', choices.map(choice => ({
+      name: choice,
+      desc: choice === defaultAnswer ? 'default' : '',
+      answer: choice,
+    })));
+    answer = selected?.answer || defaultAnswer || '';
+  } else {
+    answer = await tui.showAskInput(question, defaultAnswer);
+  }
+
+  tui.lockInput();
+
+  const res = await fetch(`${base}/api/agent/ask/${requestId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ answer }),
+  });
+  if (!res.ok) throw new Error(`Question response failed (${res.status})`);
+
+  tui.print(`Answered: ${answer || '(empty)'}`);
+  tui.setStreamMsg('Agent continuing...');
 }
 
 async function handlePermissionRequest(tui, data, token, base) {
@@ -1197,17 +1320,32 @@ async function handlePermissionRequest(tui, data, token, base) {
   const argPreview = previewPermissionArgs(toolName, data.args || {});
   tui.setStreamMsg(`Permission needed: ${toolName}`);
   tui.printWarn(`Permission needed for ${toolName}: ${argPreview}`);
+  if (data.diff) {
+    tui.addMessage('tool', data.diff, { tool: `${toolName} diff`, success: null });
+  }
 
   let decision = 'deny';
   if (tui._fullControl) {
     decision = 'allow_session';
   } else {
     tui.unlockInput();
-    const selected = await tui.showSelector(`Permission: ${toolName}`, [
-      { name: 'Approve once', desc: argPreview, decision: 'allow' },
+    const firstCmd = toolName === 'run_command'
+      ? String(data.args?.command || '').trim().split(/\s+/)[0]
+      : '';
+    const options = [
+      { name: 'Approve once', desc: data.diff ? 'Review diff in the tool card above' : argPreview, decision: 'allow' },
       { name: 'Deny', desc: 'Do not run this tool call', decision: 'deny' },
       { name: 'Trust this run', desc: 'Approve this tool for the rest of this agent run', decision: 'allow_session' },
-    ]);
+      { name: `Always allow ${toolName}`, desc: 'Save a workspace rule that auto-approves this tool', decision: 'allow_always_tool' },
+    ];
+    if (firstCmd) {
+      options.push({
+        name: `Always allow ${firstCmd} …`,
+        desc: `Save a workspace rule matching: ^${firstCmd}`,
+        decision: 'allow_always_command',
+      });
+    }
+    const selected = await tui.showSelector(`Permission: ${toolName}`, options);
     tui.lockInput();
     decision = selected?.decision || 'deny';
   }
@@ -1364,6 +1502,12 @@ async function runSingleCommand(argv) {
     case 'install': await _install.run(rest); break;
     case 'doctor': _doctor.run(); break;
     case 'version': _version.run(); break;
+    case 'permissions':
+    case 'perms':
+      await _permissions.run(rest); break;
+    case 'memory':
+    case 'mem':
+      await _memory.run(rest); break;
     case 'help': banner(); console.log('  Run asyncat without arguments for interactive TUI.'); break;
     default:
       // Try to handle as goal text for agent

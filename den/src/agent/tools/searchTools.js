@@ -4,6 +4,92 @@
 
 import { PermissionLevel } from './toolRegistry.js';
 
+function decodeEntities(text) {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}
+
+function stripChrome(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+}
+
+function extractSelector(html, selector) {
+  if (!selector) return null;
+  const raw = String(selector).trim();
+  if (!raw) return null;
+
+  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (raw.startsWith('#')) {
+    const id = raw.slice(1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return html.match(new RegExp(`<([a-z0-9-]+)[^>]*\\bid=["']${id}["'][^>]*>([\\s\\S]*?)<\\/\\1>`, 'i'))?.[2] || null;
+  }
+  if (raw.startsWith('.')) {
+    const cls = raw.slice(1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return html.match(new RegExp(`<([a-z0-9-]+)[^>]*\\bclass=["'][^"']*\\b${cls}\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/\\1>`, 'i'))?.[2] || null;
+  }
+  if (/^[a-z][a-z0-9-]*$/i.test(raw)) {
+    return html.match(new RegExp(`<${escaped}[^>]*>([\\s\\S]*?)<\\/${escaped}>`, 'i'))?.[1] || null;
+  }
+  return null;
+}
+
+function extractReadableText(html, selector = null) {
+  let body = stripChrome(html);
+  const selected = extractSelector(body, selector);
+  if (selected) body = selected;
+  else {
+    const article = body.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+    const main = body.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+    const bodyTag = body.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    body = (article || main || bodyTag)?.[1] || body;
+  }
+
+  const text = decodeEntities(body)
+    .replace(/<\/?(h[1-6]|p|li|div|section|article|main|tr|br|blockquote|pre)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[ \t\f\v]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
+  return text || 'No readable content extracted.';
+}
+
+async function fetchTextUrl(url, timeoutMs = 10000) {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,application/json;q=0.7,*/*;q=0.5',
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+    redirect: 'follow',
+  });
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!res.ok) return { success: false, status: res.status, statusText: res.statusText, contentType };
+  if (!contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/json')) {
+    return { success: false, status: res.status, statusText: res.statusText, contentType, error: `Non-text content type: ${contentType}` };
+  }
+  return { success: true, status: res.status, statusText: res.statusText, contentType, body: await res.text(), finalUrl: res.url };
+}
+
 export const webSearchTool = {
   name: 'web_search',
   description: 'Search the web for information. Returns search results with titles, URLs, and page content from top results. Use for current events, documentation, or any factual lookup.',
@@ -58,58 +144,73 @@ export const fetchUrlTool = {
   },
   execute: async (args) => {
     try {
-      const res = await fetch(args.url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-        signal: AbortSignal.timeout(10000),
-        redirect: 'follow',
-      });
+      const fetched = await fetchTextUrl(args.url, 10000);
+      if (!fetched.success) return { success: false, error: fetched.error || `HTTP ${fetched.status}` };
 
-      if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
-
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('text/html') && !ct.includes('text/plain') && !ct.includes('application/json')) {
-        return { success: false, error: `Non-text content type: ${ct}` };
+      if (fetched.contentType.includes('application/json')) {
+        return { success: true, url: fetched.finalUrl || args.url, content_type: 'json', content: fetched.body.slice(0, 8000) };
       }
 
-      let body = await res.text();
-
-      if (ct.includes('application/json')) {
-        return { success: true, url: args.url, content_type: 'json', content: body.slice(0, 8000) };
-      }
-
-      // Extract readable text from HTML
-      body = body
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<nav[\s\S]*?<\/nav>/gi, '')
-        .replace(/<header[\s\S]*?<\/header>/gi, '')
-        .replace(/<footer[\s\S]*?<\/footer>/gi, '')
-        .replace(/<!--[\s\S]*?-->/g, '');
-
-      const article = body.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-      const main = body.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
-      const bodyTag = body.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-      let text = (article || main || bodyTag)?.[1] || body;
-      text = text
-        .replace(/<\/?(h[1-6]|p|li|div|section|tr|br)[^>]*>/gi, '\n')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
-        .replace(/\s+/g, ' ')
-        .split('\n').map(l => l.trim()).filter(l => l.length > 20).join('\n')
-        .replace(/\n{3,}/g, '\n\n').trim();
+      let text = fetched.contentType.includes('text/html')
+        ? extractReadableText(fetched.body)
+        : fetched.body.trim();
 
       if (text.length > 8000) text = text.slice(0, 8000) + '\n... [truncated]';
 
-      return { success: true, url: args.url, content_type: 'html', content: text || 'No readable content extracted.' };
+      return { success: true, url: fetched.finalUrl || args.url, content_type: fetched.contentType.includes('text/html') ? 'html' : 'text', content: text };
     } catch (err) {
       return { success: false, error: err.message };
     }
   },
 };
 
+export const httpGetTool = {
+  name: 'http_get',
+  description: 'Fetch a URL and return cleaned readable text without launching a browser. Optionally extract a simple selector (#id, .class, or tag). Use browser tools for JS-heavy pages.',
+  category: 'search',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', description: 'The URL to fetch.' },
+      selector: { type: 'string', description: 'Optional simple selector: #id, .class, or tag name.' },
+      max_chars: { type: 'number', description: 'Maximum characters to return. Default 12000.' },
+    },
+    required: ['url'],
+  },
+  execute: async (args) => {
+    try {
+      const fetched = await fetchTextUrl(args.url, 12000);
+      if (!fetched.success) return { success: false, error: fetched.error || `HTTP ${fetched.status}` };
+
+      const maxChars = Math.max(1000, Math.min(50000, Number(args.max_chars || 12000)));
+      let content;
+      let contentType = 'text';
+      if (fetched.contentType.includes('application/json')) {
+        contentType = 'json';
+        content = fetched.body;
+      } else if (fetched.contentType.includes('text/html')) {
+        contentType = 'html';
+        content = extractReadableText(fetched.body, args.selector);
+      } else {
+        content = fetched.body.trim();
+      }
+
+      if (content.length > maxChars) content = `${content.slice(0, maxChars)}\n... [truncated]`;
+
+      return {
+        success: true,
+        url: fetched.finalUrl || args.url,
+        status: fetched.status,
+        content_type: contentType,
+        selector: args.selector || null,
+        content,
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
 
 // ── http_request ─────────────────────────────────────────────────────────────
 export const httpRequestTool = {
@@ -183,5 +284,5 @@ export const httpRequestTool = {
   },
 };
 
-export const searchTools = [webSearchTool, fetchUrlTool, httpRequestTool];
+export const searchTools = [webSearchTool, fetchUrlTool, httpGetTool, httpRequestTool];
 export default searchTools;

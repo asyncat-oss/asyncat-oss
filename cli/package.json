@@ -26,7 +26,5 @@
     "self-hosted"
   ],
   "license": "MIT",
-  "dependencies": {
-    "neo-blessed": "^0.2.0"
-  }
+  "dependencies": {}
 }

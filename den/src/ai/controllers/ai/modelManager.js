@@ -117,6 +117,36 @@ function extractGgufMetadata(filePath) {
   }
 }
 
+function getContextLength(meta = {}) {
+  const preferredKeys = [
+    'llama.context_length',
+    'qwen2.context_length',
+    'qwen3.context_length',
+    'qwen3moe.context_length',
+    'gemma.context_length',
+    'gemma2.context_length',
+    'gemma3.context_length',
+    'phi3.context_length',
+    'phi4.context_length',
+    'mistral.context_length',
+    'deepseek2.context_length',
+    'general.context_length',
+  ];
+
+  for (const key of preferredKeys) {
+    const value = Number(meta[key]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+
+  for (const [key, raw] of Object.entries(meta)) {
+    if (!key.endsWith('.context_length')) continue;
+    const value = Number(raw);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+
+  return null;
+}
+
 // Active downloads map: { downloadId -> { progress, total, status, abortController } }
 const activeDownloads = new Map();
 
@@ -140,7 +170,7 @@ export function listModels() {
           sizeBytes: stat.size,
           sizeGb: +(stat.size / 1024 ** 3).toFixed(2),
           sizeFormatted: formatBytes(stat.size),
-          contextLength: meta['llama.context_length'] || meta['qwen2.context_length'] || meta['phi3.context_length'] || 8192,
+          contextLength: getContextLength(meta),
           architecture: meta['general.architecture'] || 'unknown',
           parameterCount: meta['general.parameter_count'] ? formatBytes(meta['general.parameter_count']).replace(/B/g, '') + ' Params' : '',
           createdAt: stat.birthtime.toISOString(),
@@ -170,7 +200,7 @@ export function getModel(filename) {
     sizeBytes: stat.size,
     sizeGb: +(stat.size / 1024 ** 3).toFixed(2),
     sizeFormatted: formatBytes(stat.size),
-    contextLength: meta['llama.context_length'] || meta['qwen2.context_length'] || meta['phi3.context_length'] || 8192,
+    contextLength: getContextLength(meta),
     architecture: meta['general.architecture'] || 'unknown',
     parameterCount: meta['general.parameter_count'] ? formatBytes(meta['general.parameter_count']).replace(/B/g, '') + ' Params' : '',
     createdAt: stat.birthtime.toISOString(),
