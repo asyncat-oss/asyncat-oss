@@ -234,12 +234,12 @@ export class Tui extends EventEmitter {
       process.stdout.removeListener('resize', this._resizeHandler);
       this._resizeHandler = null;
     }
-    // Disable mouse tracking
-    write('\x1b[?1000l');
-    write('\x1b[?1006l');
+    // Disable every mouse mode we may have touched, plus common terminal variants.
+    write('\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1015l');
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
     write(ansi.show);
     write(ansi.mainScreen);
+    write(ansi.clear + ansi.home);
     if (this._origLog) {
       console.log = this._origLog;
       this._origLog = null;
@@ -357,14 +357,17 @@ export class Tui extends EventEmitter {
   printInfo(text)  { this.print(`→  ${text}`); }
 
   // ── Selector (floating panel picker for models/themes) ───────────────────
-  showSelector(title, items) {
+  showSelector(title, items, opts = {}) {
     return new Promise((resolve) => {
       this.mode = 'selector';
       this._selTitle = title;
       this._selItems = items;
       this._selIdx = 0;
       this._selResolve = resolve;
+      this._selOnHighlight = typeof opts.onHighlight === 'function' ? opts.onHighlight : null;
+      this._selOnCancel = typeof opts.onCancel === 'function' ? opts.onCancel : null;
       this.buf = ''; this.pos = 0; // buf used as search input
+      if (this._selOnHighlight) this._selOnHighlight(items[0] ?? null);
       this.render();
     });
   }
@@ -1219,6 +1222,8 @@ export class Tui extends EventEmitter {
         this._selIdx = realIdx;
         this.mode = this.messages.length > 0 ? 'chat' : 'zen';
         if (this._selResolve) { this._selResolve(chosen); this._selResolve = null; }
+        this._selOnHighlight = null;
+        this._selOnCancel = null;
         this.buf = ''; this.pos = 0;
         this.render();
         return;
@@ -1262,7 +1267,10 @@ export class Tui extends EventEmitter {
 
     if (name === 'escape') {
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
+      if (this._selOnCancel) this._selOnCancel();
       if (this._selResolve) { this._selResolve(null); this._selResolve = null; }
+      this._selOnHighlight = null;
+      this._selOnCancel = null;
       this.buf = ''; this.pos = 0;
       this.render();
       return;
@@ -1271,22 +1279,33 @@ export class Tui extends EventEmitter {
       const chosen = filtered[this._selIdx] ?? null;
       this.mode = this.messages.length > 0 ? 'chat' : 'zen';
       if (this._selResolve) { this._selResolve(chosen); this._selResolve = null; }
+      this._selOnHighlight = null;
+      this._selOnCancel = null;
       this.buf = ''; this.pos = 0;
       this.render();
       return;
     }
     if (name === 'up') {
       this._selIdx = Math.max(0, this._selIdx - 1);
+      if (this._selOnHighlight) this._selOnHighlight(filtered[this._selIdx] ?? null);
       this.render(); return;
     }
     if (name === 'down') {
-      this._selIdx = Math.min(filtered.length - 1, this._selIdx + 1);
+      this._selIdx = Math.min(Math.max(0, filtered.length - 1), this._selIdx + 1);
+      if (this._selOnHighlight) this._selOnHighlight(filtered[this._selIdx] ?? null);
       this.render(); return;
     }
     // Search: backspace
     if (name === 'backspace') {
       if (this.pos > 0) { this.buf = this.buf.slice(0, this.pos - 1) + this.buf.slice(this.pos); this.pos--; }
       this._selIdx = 0;
+      if (this._selOnHighlight) {
+        const nextQuery = this.buf.toLowerCase();
+        const nextFiltered = nextQuery
+          ? this._selItems.filter(it => (it.name || it).toLowerCase().includes(nextQuery) || (it.desc || '').toLowerCase().includes(nextQuery))
+          : this._selItems;
+        this._selOnHighlight(nextFiltered[0] ?? null);
+      }
       this.render(); return;
     }
     // Search: typing
@@ -1294,6 +1313,13 @@ export class Tui extends EventEmitter {
       this.buf = this.buf.slice(0, this.pos) + str + this.buf.slice(this.pos);
       this.pos++;
       this._selIdx = 0;
+      if (this._selOnHighlight) {
+        const nextQuery = this.buf.toLowerCase();
+        const nextFiltered = nextQuery
+          ? this._selItems.filter(it => (it.name || it).toLowerCase().includes(nextQuery) || (it.desc || '').toLowerCase().includes(nextQuery))
+          : this._selItems;
+        this._selOnHighlight(nextFiltered[0] ?? null);
+      }
       this.render(); return;
     }
   }

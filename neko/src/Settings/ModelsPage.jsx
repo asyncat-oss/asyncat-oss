@@ -6,11 +6,11 @@ import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 
 const Badge = ({ children, color = 'gray' }) => {
   const colors = {
-    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
-    gray:  'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-gray-800 midnight:text-gray-400',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 midnight:bg-amber-900/30 midnight:text-amber-400',
-    red:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 midnight:bg-red-900/30 midnight:text-red-400',
-    blue:  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-blue-900/30 midnight:text-blue-400',
+    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-slate-900/30 midnight:text-green-400',
+    gray:  'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 midnight:bg-slate-900/30 midnight:text-amber-400',
+    red:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 midnight:bg-slate-900/30 midnight:text-red-400',
+    blue:  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-slate-900/30 midnight:text-blue-400',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[color]}`}>
@@ -119,14 +119,14 @@ const OverviewCard = ({ icon: Icon, label, value, detail, tone = 'gray' }) => {
   };
   const toneClass = tones[tone] || tones.gray;
   return (
-    <div className={`rounded-2xl border bg-white ${toneClass} dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800 p-4 shadow-sm`}>
+    <div className={`rounded-2xl border bg-white ${toneClass} dark:bg-gray-900 dark:border-gray-700 midnight:bg-slate-950 midnight:border-slate-800 p-4 shadow-sm`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">{label}</div>
-          <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">{value}</div>
-          {detail && <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400">{detail}</div>}
+          <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{value}</div>
+          {detail && <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 midnight:text-slate-400">{detail}</div>}
         </div>
-        <div className="rounded-xl bg-white/80 dark:bg-gray-800 midnight:bg-gray-800 p-2 border border-black/5 dark:border-white/5">
+        <div className="rounded-xl bg-white/80 dark:bg-gray-800 midnight:bg-slate-800 p-2 border border-black/5 dark:border-white/5">
           <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" />
         </div>
       </div>
@@ -317,7 +317,7 @@ const capabilityHintForProfile = (profile) => {
 
 const RuntimePill = ({ candidate }) => (
   <div className="flex flex-wrap items-center gap-1.5">
-    <span className="text-xs font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+    <span className="text-xs font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
       {candidate.runtime === 'python' ? 'Python runtime' : 'Native binary'}
     </span>
     {candidate.isCurrent && <Badge color="green">Current</Badge>}
@@ -474,15 +474,15 @@ const EngineAdvisorSection = ({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-2xl p-5 shadow-sm">
+    <div className="bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-4">
         <Wrench className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-200">Engine Advisor</h3>
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">Engine Advisor</h3>
         {loading && <RefreshCw className="w-3 h-3 animate-spin text-gray-400 ml-auto" />}
       </div>
 
       <div className="space-y-4">
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3 bg-gray-50/80 dark:bg-gray-900/40 midnight:bg-gray-950/40">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3 bg-gray-50/80 dark:bg-gray-900/40 midnight:bg-slate-950/40">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -491,9 +491,9 @@ const EngineAdvisorSection = ({
                 ) : (
                   <Zap className="w-4 h-4 text-amber-500" />
                 )}
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100">{stateMeta.title}</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{stateMeta.title}</span>
               </div>
-              <p className={`mt-2 text-xs leading-5 ${actionError ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400 midnight:text-gray-400'}`}>
+              <p className={`mt-2 text-xs leading-5 ${actionError ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'}`}>
                 {actionError || friendlyRecommendationBody(engineData, recommendation)}
               </p>
               {actionSuccess && !actionError && (
@@ -543,7 +543,7 @@ const EngineAdvisorSection = ({
             </button>
           </div>
           {!primaryAction && recommendation?.state === 'not_installed' && !managedProfileAvailable && (
-            <div className="mt-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-gray-950/40 p-3">
+            <div className="mt-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-slate-950/40 p-3">
               <div className="text-xs font-semibold text-amber-900 dark:text-amber-200">
                 {manualPathGuidance.title}
               </div>
@@ -559,10 +559,10 @@ const EngineAdvisorSection = ({
           )}
         </div>
 
-	        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
-          <div className="text-xs font-medium text-gray-700 dark:text-gray-300">This Machine</div>
+	        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
+          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">This Machine</div>
           <div className="mt-3 grid grid-cols-1 gap-3">
-            <div className="rounded-xl bg-gray-50/80 dark:bg-gray-900/50 midnight:bg-gray-950/50 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+            <div className="rounded-xl bg-gray-50/80 dark:bg-gray-900/50 midnight:bg-slate-950/50 border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
               <div className="text-[11px] uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Engine In Use</div>
               {current ? (
                 <div className="mt-2 space-y-1">
@@ -574,7 +574,7 @@ const EngineAdvisorSection = ({
                     </div>
                   )}
                   {showCurrentEnginePath && (
-                    <div className="rounded-lg bg-white dark:bg-gray-900 midnight:bg-black/30 px-3 py-2 text-[11px] font-mono text-gray-600 dark:text-gray-400 break-all">
+                    <div className="rounded-lg bg-white dark:bg-gray-900 midnight:bg-slate-900/30 px-3 py-2 text-[11px] font-mono text-gray-600 dark:text-gray-400 midnight:text-slate-400 break-all">
                       {current.path}
                     </div>
                   )}
@@ -590,9 +590,9 @@ const EngineAdvisorSection = ({
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">No working local engine is configured right now.</p>
               )}
             </div>
-            <div className="rounded-xl bg-gray-50/80 dark:bg-gray-900/50 midnight:bg-gray-950/50 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Hardware</div>
-              <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400">
+            <div className="rounded-xl bg-gray-50/80 dark:bg-gray-900/50 midnight:bg-slate-950/50 border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Hardware</div>
+              <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 midnight:text-slate-400">
                 {hardwareSummary(engineData?.hardware)}
               </p>
               <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-500">
@@ -603,21 +603,21 @@ const EngineAdvisorSection = ({
         </div>
 
         {activeInstallJob && (
-          <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">Managed Install Progress</span>
+                  <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Managed Install Progress</span>
                   <Badge color={installStatusTone(activeInstallJob.status)}>
                     {activeInstallJob.status === 'running' ? 'Running' : activeInstallJob.status === 'complete' ? 'Complete' : activeInstallJob.status === 'error' ? 'Failed' : 'Queued'}
                   </Badge>
                 </div>
-                <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400">
+                <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
                   {activeInstallJob.message || 'Preparing managed engine install…'}
                 </p>
               </div>
               <div className="text-right">
-                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">{Math.round(activeInstallJob.percent || 0)}%</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{Math.round(activeInstallJob.percent || 0)}%</div>
                 {activeInstallJob.assetName && (
                   <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-500">{activeInstallJob.assetName}</div>
                 )}
@@ -636,9 +636,9 @@ const EngineAdvisorSection = ({
         )}
 
         {showAdvancedOptions && (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Advanced Engine Tools</div>
+            <div className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">Advanced Engine Tools</div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-gray-400 dark:text-gray-500">Manual control and version picker</span>
               <button
@@ -653,7 +653,7 @@ const EngineAdvisorSection = ({
           </div>
           <div className="mt-3 space-y-3">
             {showRecommendedInstallCard ? (
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-gray-950/40 p-3">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-slate-950/40 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-xs font-semibold text-blue-900 dark:text-blue-200">
@@ -697,10 +697,10 @@ const EngineAdvisorSection = ({
 
 	            {showManagedInstallerControls ? (
 	            <>
-	            <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+	            <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Advanced Installer</div>
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">Advanced Installer</div>
                   <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
                     Pick a llama.cpp release and exact asset for this machine, then install it directly from Model Studio.
                   </p>
@@ -724,7 +724,7 @@ const EngineAdvisorSection = ({
                       <button
                         type="button"
                         onClick={() => { setReleaseDropdownOpen(prev => !prev); setAssetDropdownOpen(false); }}
-                        className="mt-1 w-full flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 text-left"
+                        className="mt-1 w-full flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 text-left"
                       >
                         <span className="truncate">
                           {selectedRelease
@@ -734,13 +734,13 @@ const EngineAdvisorSection = ({
                         <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2 text-gray-400" />
                       </button>
                       {releaseDropdownOpen && (
-                        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-lg py-1">
+                        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-lg py-1">
                           {releases.map(release => (
                             <button
                               key={release.tagName}
                               type="button"
                               onClick={() => { setSelectedReleaseTag(release.tagName); setReleaseDropdownOpen(false); }}
-                              className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 ${release.tagName === selectedReleaseTag ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                              className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 ${release.tagName === selectedReleaseTag ? 'text-gray-900 dark:text-gray-100 midnight:text-slate-100 font-medium' : 'text-gray-700 dark:text-gray-300 midnight:text-slate-300'}`}
                             >
                               {release.tagName}{release.prerelease ? ' · prerelease' : ''} · {release.compatibleAssetCount} compatible assets
                             </button>
@@ -761,7 +761,7 @@ const EngineAdvisorSection = ({
                       <button
                         type="button"
                         onClick={() => { setAssetDropdownOpen(prev => !prev); setReleaseDropdownOpen(false); }}
-                        className="mt-1 w-full flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 text-left"
+                        className="mt-1 w-full flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 text-left"
                       >
                         <span className="truncate">
                           {selectedAsset
@@ -771,13 +771,13 @@ const EngineAdvisorSection = ({
                         <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2 text-gray-400" />
                       </button>
                       {assetDropdownOpen && (
-                        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-lg py-1">
+                        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-lg py-1">
                           {visibleAssets.map(asset => (
                             <button
                               key={asset.name}
                               type="button"
                               onClick={() => { setSelectedAssetName(asset.name); setAssetDropdownOpen(false); }}
-                              className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 ${asset.name === selectedAssetName ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                              className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 ${asset.name === selectedAssetName ? 'text-gray-900 dark:text-gray-100 midnight:text-slate-100 font-medium' : 'text-gray-700 dark:text-gray-300 midnight:text-slate-300'}`}
                             >
                               {asset.name} · {asset.sizeFormatted}{asset.compatible ? '' : ' · not for this machine'}
                             </button>
@@ -788,10 +788,10 @@ const EngineAdvisorSection = ({
                   </div>
 
                   {selectedAsset && (
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3 bg-gray-50/70 dark:bg-gray-900/50 midnight:bg-gray-950/50">
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3 bg-gray-50/70 dark:bg-gray-900/50 midnight:bg-slate-950/50">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 break-all">{selectedAsset.name}</div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100 break-all">{selectedAsset.name}</div>
                           <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-500">
                             {selectedAsset.sizeFormatted}
                             {selectedRelease?.publishedAt ? ` · ${new Date(selectedRelease.publishedAt).toLocaleDateString()}` : ''}
@@ -836,8 +836,8 @@ const EngineAdvisorSection = ({
             </div>
 
 	            {!hasCpuSafeCandidate && (
-	            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-gray-800 p-3">
-	              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Fallback managed install</div>
+	            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-slate-600 p-3">
+	              <div className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">Fallback managed install</div>
 	              <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
 	                Install the default Asyncat engine if no CPU-safe runtime is already detected.
 	              </p>
@@ -862,7 +862,7 @@ const EngineAdvisorSection = ({
 	            )}
 	            </>
 	            ) : (
-	              <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-gray-950/40 p-3">
+	              <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-slate-950/40 p-3">
 	                <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Installed engines are ready</div>
 	                <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
 	                  The local llama.cpp runtimes are already detected. Switching uses the downloaded engines directly; reinstalling would replace files in the managed runtime folder.
@@ -880,7 +880,7 @@ const EngineAdvisorSection = ({
         )}
 
         {showAdvancedOptions && recommendation?.state === 'not_installed' && (
-          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-900/40 midnight:bg-gray-950/40">
+	          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-slate-600 p-3 bg-gray-50/60 dark:bg-gray-900/40 midnight:bg-slate-950/40">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <TerminalSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -912,7 +912,7 @@ const EngineAdvisorSection = ({
         )}
 
         {showAdvancedOptions && (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+	        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Detected Engines</div>
             <span className="text-[11px] text-gray-400 dark:text-gray-500">{engineData?.candidates?.length || 0} found</span>
@@ -930,7 +930,7 @@ const EngineAdvisorSection = ({
               return (
                 <div
                   key={candidate.id}
-                  className={`rounded-xl border p-3 transition-colors ${candidate.isRecommended ? 'border-gray-300 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/40 midnight:border-gray-800 midnight:bg-gray-950/40' : 'border-gray-200 dark:border-gray-700 midnight:border-gray-800'}`}
+                  className={`rounded-xl border p-3 transition-colors ${candidate.isRecommended ? 'border-gray-300 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/40 midnight:border-slate-800 midnight:bg-slate-950/40' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800'}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -981,21 +981,21 @@ const EngineAdvisorSection = ({
         )}
 
         {showAdvancedOptions && (
-        <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-gray-800 p-3">
+	        <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-slate-800 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Manual Engine Path</div>
             <span className="text-[11px] text-gray-400 dark:text-gray-500">For engines installed outside Asyncat</span>
           </div>
-          <div className="mt-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-gray-950/40 p-3">
-            <div className="text-xs font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-100">
-              {manualPathGuidance.title}
-            </div>
-            <p className="mt-1 text-[11px] leading-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-              {manualPathGuidance.body}
-            </p>
-            <div className="mt-2 space-y-1.5">
-              {manualPathGuidance.steps.map(step => (
-                <p key={step} className="text-[11px] leading-5 text-gray-500 dark:text-gray-400 midnight:text-gray-400">
+	          <div className="mt-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-gray-50/70 dark:bg-gray-900/40 midnight:bg-slate-950/40 p-3">
+	            <div className="text-xs font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-100">
+	              {manualPathGuidance.title}
+	            </div>
+	            <p className="mt-1 text-[11px] leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
+	              {manualPathGuidance.body}
+	            </p>
+	            <div className="mt-2 space-y-1.5">
+	              {manualPathGuidance.steps.map((step, i) => (
+	                <p key={step} className="text-[11px] leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                   {step}
                 </p>
               ))}
@@ -1017,13 +1017,13 @@ const EngineAdvisorSection = ({
                 <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 ml-1 text-gray-400" />
               </button>
               {runtimeDropdownOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-lg py-1">
+                <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-lg py-1">
                   {[{ value: 'binary', label: 'Binary' }, { value: 'python', label: 'Python' }].map(opt => (
                     <button
                       key={opt.value}
                       type="button"
                       onClick={() => { setCustomRuntime(opt.value); setRuntimeDropdownOpen(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 ${opt.value === customRuntime ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 ${opt.value === customRuntime ? 'text-gray-900 dark:text-gray-100 midnight:text-slate-100 font-medium' : 'text-gray-700 dark:text-gray-300 midnight:text-slate-300'}`}
                     >
                       {opt.label}
                     </button>
@@ -1098,10 +1098,10 @@ const SystemInfoSection = () => {
   const gpu = stats?.hardware?.gpu?.[0];
 
   return (
-    <div className="bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-2xl p-5 shadow-sm">
+    <div className="bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-4">
         <Activity className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-200">System Resources</h3>
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">System Resources</h3>
         {loading && <RefreshCw className="w-3 h-3 animate-spin text-gray-400 ml-auto" />}
       </div>
 
@@ -1531,11 +1531,11 @@ const ModelsPage = () => {
   const isReady = status === 'ready';
 
   const bannerClass = {
-    ready:   'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800',
-    loading: 'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800',
-    error:   'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-gray-950 midnight:border-gray-800',
-    idle:    'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700 midnight:bg-gray-800/50 midnight:border-gray-700',
-  }[status] ?? 'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700 midnight:bg-gray-800/50 midnight:border-gray-700';
+    ready:   'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-slate-950 midnight:border-slate-800',
+    loading: 'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-slate-950 midnight:border-slate-800',
+    error:   'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 midnight:bg-slate-950 midnight:border-slate-800',
+    idle:    'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700 midnight:bg-slate-800/50 midnight:border-slate-700',
+  }[status] ?? 'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700 midnight:bg-slate-800/50 midnight:border-slate-700';
 
   const iconClass = {
     ready:   'text-green-600 dark:text-green-400',
@@ -1580,20 +1580,20 @@ const ModelsPage = () => {
   ];
 
   return (
-    <div className="flex h-full w-full bg-gray-50 dark:bg-gray-950 midnight:bg-black font-sans">
+    <div className="flex h-full w-full bg-white dark:bg-gray-900 midnight:bg-slate-950 font-sans">
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800/60 midnight:border-gray-800/60 flex-shrink-0 bg-white/90 dark:bg-gray-900/90 midnight:bg-gray-950/90 backdrop-blur z-10 sticky top-0">
+        <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800/60 midnight:border-slate-800/60 flex-shrink-0 bg-white/90 dark:bg-gray-900/90 midnight:bg-slate-950/90 backdrop-blur z-10 sticky top-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 rounded-lg text-gray-700 dark:text-gray-300">
+              <div className="p-2 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 rounded-lg text-gray-700 dark:text-gray-300 midnight:text-slate-300">
                 <Cpu className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
                   Model Studio
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 mt-0.5">
+                <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5">
                   Load, stop, download, and remove local AI models
                 </p>
               </div>
@@ -1608,7 +1608,7 @@ const ModelsPage = () => {
                 loadEngineCatalog(true);
               }}
               disabled={loadingStatus || loadingModels || loadingEngines || loadingCatalog || Boolean(switchingEngine) || Boolean(installingEngine)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:text-gray-900 dark:hover:text-white midnight:hover:text-white transition-colors bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300 hover:text-gray-900 dark:hover:text-white midnight:hover:text-white transition-colors bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-800/50 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700"
             >
               <RefreshCw className={`w-4 h-4 ${(loadingStatus || loadingModels || loadingEngines || loadingCatalog) ? 'animate-spin' : ''}`} />
               Refresh
@@ -1644,7 +1644,7 @@ const ModelsPage = () => {
             </div>
 
             <div className="space-y-6">
-              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white/80 dark:bg-gray-900/70 midnight:bg-gray-950/70 p-2 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white/80 dark:bg-gray-900/70 midnight:bg-slate-950/70 p-2 shadow-sm">
                 {tabs.map(({ id, label, icon: Icon }) => {
                   const selected = activeTab === id;
                   return (
@@ -1654,8 +1654,8 @@ const ModelsPage = () => {
                       onClick={() => setActiveTab(id)}
                       className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
                         selected
-                          ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-gray-100 midnight:text-gray-900'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 midnight:text-gray-400 midnight:hover:text-gray-100 midnight:hover:bg-gray-800'
+                          ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:text-slate-100 midnight:hover:bg-slate-800'
                       }`}
                     >
                       <Icon className="w-4 h-4" />
@@ -1672,20 +1672,20 @@ const ModelsPage = () => {
                 <div className={`relative overflow-hidden rounded-3xl border p-6 transition-all duration-300 shadow-sm ${bannerClass}`}>
                   <div className="relative z-10 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
                     <div className="flex items-center gap-4">
-                      <div className={`p-3 bg-white dark:bg-gray-900 midnight:bg-gray-900 rounded-xl shadow-sm border border-black/5 dark:border-white/5 midnight:border-white/5`}>
+                      <div className={`p-3 bg-white dark:bg-gray-900 midnight:bg-slate-900 rounded-xl shadow-sm border border-black/5 dark:border-white/5 midnight:border-white/5`}>
                         <Server className={`w-6 h-6 ${iconClass}`} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <h2 className="text-lg font-bold text-gray-900 dark:text-white midnight:text-white">Active Inference Server</h2>
+                          <h2 className="text-lg font-bold text-gray-900 dark:text-white midnight:text-slate-100">Active Inference Server</h2>
                           <Badge color={statusColor}>{statusLabel}</Badge>
                         </div>
                         {serverStatus?.model ? (
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                            {isReady ? 'Running' : 'Loading'}: <span className="text-gray-800 dark:text-gray-200 midnight:text-gray-100 font-semibold">{serverStatus.model}</span>
+                          <p className="text-sm font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
+                            {isReady ? 'Running' : 'Loading'}: <span className="text-gray-800 dark:text-gray-200 midnight:text-slate-100 font-semibold">{serverStatus.model}</span>
                           </p>
                         ) : (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                             No model is currently loaded in memory.
                           </p>
                         )}
@@ -1738,23 +1738,23 @@ const ModelsPage = () => {
                   </div>
 
                   {/* Add Model panel — HF search + custom URL, always visible */}
-                  <div className="mb-6 rounded-3xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 p-6 shadow-sm">
+                  <div className="mb-6 rounded-3xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-6 shadow-sm">
                     <LocalModelsSection storage={storage} onRefresh={loadModelList} hideStorage />
                   </div>
 
                   {loadingModels ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {[1, 2].map(i => (
-                        <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800/50 midnight:bg-gray-800/50 rounded-2xl animate-pulse" />
+                        <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800/50 midnight:bg-slate-800/50 rounded-2xl animate-pulse" />
                       ))}
                     </div>
                   ) : models.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-gray-200 dark:border-gray-800 midnight:border-gray-800 rounded-2xl bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-gray-900/50">
-                      <div className="p-3 bg-white dark:bg-gray-800 midnight:bg-gray-800 rounded-full shadow-sm mb-3">
+                    <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-gray-200 dark:border-gray-800 midnight:border-slate-800 rounded-2xl bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-slate-900/50">
+                      <div className="p-3 bg-white dark:bg-gray-800 midnight:bg-slate-800 rounded-full shadow-sm mb-3">
                         <Box className="w-6 h-6 text-gray-400" />
                       </div>
-                      <p className="text-gray-600 dark:text-gray-300 midnight:text-gray-300 font-medium">Your library is empty</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 mt-1 max-w-sm text-center">
+                      <p className="text-gray-600 dark:text-gray-300 midnight:text-slate-300 font-medium">Your library is empty</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-1 max-w-sm text-center">
                         Use the search above to find and download GGUF models from HuggingFace.
                       </p>
                     </div>
@@ -1767,30 +1767,30 @@ const ModelsPage = () => {
                         const modelContextLimit = getModelContextLimit(m);
                         const modelLoadCtxValue = modelLoadCtxSizes[m.filename] ?? String(Math.min(DEFAULT_LOAD_CTX_SIZE, modelContextLimit));
                         const loadCtxError = modelLoadCtxErrors[m.filename] || getModelLoadCtxError(modelLoadCtxValue, modelContextLimit);
-                        
+
                         return (
-                          <div 
+                          <div
                             key={m.filename}
-                            className={`group relative flex flex-col bg-white dark:bg-gray-800 midnight:bg-gray-900 border rounded-3xl overflow-hidden transition-all duration-200 hover:shadow-md
-                              ${isLoaded ? 'border-gray-400 dark:border-gray-500 midnight:border-gray-600 ring-1 ring-gray-400/30 dark:ring-gray-500/30 midnight:ring-gray-500/20 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 hover:border-gray-300 dark:hover:border-gray-600 midnight:hover:border-gray-700'}`}
+                            className={`group relative flex flex-col bg-white dark:bg-gray-800 midnight:bg-slate-900 border rounded-3xl overflow-hidden transition-all duration-200 hover:shadow-md
+                              ${isLoaded ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-600 ring-1 ring-gray-400/30 dark:ring-gray-500/30 midnight:ring-slate-500/20 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 hover:border-gray-300 dark:hover:border-gray-600 midnight:hover:border-slate-700'}`}
                           >
                             <div className={`absolute inset-x-0 top-0 h-1 ${isLoaded ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
                             <div className="p-5 flex-1">
                               <div className="flex items-start justify-between gap-3 mb-3">
                                 <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? 'bg-gray-700 text-white dark:bg-gray-600 midnight:bg-gray-800' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 midnight:bg-gray-800/50'}`}>
+                                  <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? 'bg-gray-700 text-white dark:bg-gray-600 midnight:bg-slate-800' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800/50 midnight:text-slate-400'}`}>
                                     <Cpu className="w-5 h-5" />
                                   </div>
                                   <div className="min-w-0">
-                                    <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-white truncate" title={m.name || m.filename}>
+                                    <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate" title={m.name || m.filename}>
                                       {m.name || m.filename}
                                     </h3>
                                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 bg-gray-100 dark:bg-gray-900/50 midnight:bg-gray-800/50 px-2 py-0.5 rounded">
+                                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 bg-gray-100 dark:bg-gray-900/50 midnight:bg-slate-800/50 px-2 py-0.5 rounded">
                                         {m.sizeFormatted}
                                       </span>
                                       {m.architecture && (
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 bg-gray-100 dark:bg-gray-900/50 midnight:bg-gray-800/50 px-2 py-0.5 rounded">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 bg-gray-100 dark:bg-gray-900/50 midnight:bg-slate-800/50 px-2 py-0.5 rounded">
                                           {m.architecture}
                                         </span>
                                       )}
@@ -1805,14 +1805,14 @@ const ModelsPage = () => {
                                 )}
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-                                <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800">
-                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Model context</div>
-                                  <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-100">
+                                <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Model context</div>
+                                  <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-100">
                                     {m.contextLength ? `${Number(m.contextLength).toLocaleString()} ctx` : 'Unknown'}
                                   </div>
                                 </div>
-                                <label className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800">
-                                  <span className="block text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Load context</span>
+                                <label className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+                                  <span className="block text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Load context</span>
                                   <input
                                     type="number"
                                     min="512"
@@ -1824,13 +1824,13 @@ const ModelsPage = () => {
                                     className={`mt-1 w-full min-w-0 bg-transparent text-sm font-medium outline-none ${
                                       loadCtxError
                                         ? 'text-red-700 dark:text-red-400 midnight:text-red-400'
-                                        : 'text-gray-800 dark:text-gray-200 midnight:text-gray-100'
+                                        : 'text-gray-800 dark:text-gray-200 midnight:text-slate-100'
                                     }`}
                                   />
                                 </label>
-                                <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800">
-                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Status</div>
-                                  <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-100">
+                                <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Status</div>
+                                  <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-100">
                                     {isLoaded ? 'Loaded now' : 'Ready to load'}
                                   </div>
                                 </div>
@@ -1841,13 +1841,13 @@ const ModelsPage = () => {
                                 </p>
                               )}
                             </div>
-                            
-                            <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700/50 midnight:border-gray-800/50 flex items-center justify-between gap-2">
+
+                            <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 border-t border-gray-100 dark:border-gray-700/50 midnight:border-slate-800/50 flex items-center justify-between gap-2">
                               {!isLoaded ? (
                                 <button
                                   onClick={() => handleStart(m.filename, modelContextLimit)}
                                   disabled={Boolean(loadCtxError) || isStarting || isRunning || Boolean(switchingEngine) || Boolean(installingEngine)}
-                                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-white dark:bg-gray-800 midnight:bg-gray-900 text-gray-700 dark:text-gray-300 midnight:text-gray-400 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 rounded-xl hover:bg-gray-50 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-gray-100 midnight:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200"
+                                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-white dark:bg-gray-800 midnight:bg-slate-900 text-gray-700 dark:text-gray-300 midnight:text-slate-400 border border-gray-200 dark:border-gray-600 midnight:border-slate-700 rounded-xl hover:bg-gray-50 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-gray-100 midnight:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200"
                                 >
                                   {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
                                   {isStarting ? 'Starting...' : 'Load Model'}
@@ -1856,13 +1856,13 @@ const ModelsPage = () => {
                                 <button
                                   onClick={handleStop}
                                   disabled={stopping || Boolean(switchingEngine) || Boolean(installingEngine)}
-                                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 midnight:bg-gray-800 midnight:hover:bg-gray-700 rounded-xl transition-colors shadow-sm"
+                                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 midnight:bg-slate-800 midnight:hover:bg-slate-700 rounded-xl transition-colors shadow-sm"
                                 >
                                   {stopping ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4 fill-current" />}
                                   In Memory
                                 </button>
                               )}
-                              
+
                               <button
                                 onClick={() => handleDelete(m.filename)}
                                 disabled={isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}
@@ -1908,25 +1908,25 @@ const ModelsPage = () => {
               {activeTab === 'system' && (
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] gap-6">
                 <SystemInfoSection />
-                <div className="bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-2xl p-5 shadow-sm">
+                <div className="bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
                   <div className="flex items-center gap-2 mb-4">
                     <HardDriveDownload className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-200">Storage Footprint</h3>
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">Storage Footprint</h3>
                   </div>
                   {storage ? (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 border border-gray-100 dark:border-gray-800 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400">Models</div>
-                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{storage.totalFormatted}</div>
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 p-3">
+                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 midnight:text-slate-500">Models</div>
+                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{storage.totalFormatted}</div>
                         </div>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 border border-gray-100 dark:border-gray-800 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400">Device Free</div>
-                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{storage.disk?.availableFormatted || 'Unknown'}</div>
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 p-3">
+                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 midnight:text-slate-500">Device Free</div>
+                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{storage.disk?.availableFormatted || 'Unknown'}</div>
                         </div>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 border border-gray-100 dark:border-gray-800 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400">Device Total</div>
-                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{storage.disk?.totalFormatted || 'Unknown'}</div>
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 p-3">
+                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 midnight:text-slate-500">Device Total</div>
+                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{storage.disk?.totalFormatted || 'Unknown'}</div>
                         </div>
                       </div>
                       {storage.disk && (

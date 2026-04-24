@@ -12,6 +12,15 @@ const CAT_FACE = [
   '    \\___/    ',
 ];
 
+const ASYNCAT_WORDMARK = [
+  ' █████╗ ███████╗██╗   ██╗███╗   ██╗ ██████╗ █████╗ ████████╗',
+  '██╔══██╗██╔════╝╚██╗ ██╔╝████╗  ██║██╔════╝██╔══██╗╚══██╔══╝',
+  '███████║███████╗ ╚████╔╝ ██╔██╗ ██║██║     ███████║   ██║',
+  '██╔══██║╚════██║  ╚██╔╝  ██║╚██╗██║██║     ██╔══██║   ██║',
+  '██║  ██║███████║   ██║   ██║ ╚████║╚██████╗██║  ██║   ██║',
+  '╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝   ╚═╝',
+];
+
 const CAT_MSGS = [
   'meow! ready to code ✨',
   'purr... what shall we build?',
@@ -42,8 +51,7 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
   const mainW = liveLogs ? Math.floor(W * 0.65) : W;
   const logW = W - mainW - 1;
 
-  // Clear full screen
-  for (let r = 1; r <= H - 1; r++) clearRow(r);
+  clearThemedRows(t, 1, H - 1, W);
 
   // ── Logs sidebar ───────────────────────────────────────────────────────
   if (liveLogs) {
@@ -59,67 +67,50 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
     logLines.slice(startIdx).forEach((l, i) => at(i + 3, mainW + 3, `${ansi.dim}${l}${R}`));
   }
 
-  // ── Vertical centering — cat(4) + brand(1) + msg(1) + gap(1) + input(1) + model(1) + gap(1) + hints(1) = 11
-  const blockH = 11;
-  const startY = Math.max(2, Math.floor((H - blockH) / 2));
+  const layout = getZenLayout(mainW, H);
+  const startY = layout.startY;
   let y = startY;
 
-  // Cat logo
-  for (const line of CAT_FACE) {
-    at(y++, 1, center(`${t.logoDim}${line}${R}`, mainW));
+  // Logo: big wordmark on roomy terminals, compact signature on tight ones.
+  if (layout.bigBrand) {
+    for (const line of ASYNCAT_WORDMARK) {
+      atCentered(y++, `${t.logoDim}${line.slice(0, 40)}${t.logoBright}${line.slice(40)}${R}`, mainW, t);
+    }
+  } else {
+    for (const line of CAT_FACE.slice(1)) {
+      atCentered(y++, `${t.logoDim}${line}${R}`, mainW, t);
+    }
+    const brand = `${t.logoDim}ASYN${R}${t.logoBright}CAT${R}`;
+    atCentered(y++, `${ansi.bold}${brand}${R}`, mainW, t);
   }
-
-  // Brand: "asyn" dim + "cat" bright
-  const brand = `${t.logoDim}asyn${R}${t.logoBright}cat${R}`;
-  at(y++, 1, center(brand, mainW));
 
   // Cat message
   const msg = catMsg || CAT_MSGS[_catMsgIdx];
-  at(y++, 1, center(`${ansi.dim}${ansi.italic}${msg}${R}`, mainW));
+  atCentered(y++, `${ansi.dim}${ansi.italic}${msg}${R}`, mainW, t);
   y += 1; // gap
 
-  // ── Input: clean left accent bar, no background fill ──────────────────
-  const inputW = Math.floor(mainW * 0.5);
-  const inputL = Math.floor((mainW - inputW) / 2);
-  const innerW = inputW - 2;
-
-  const displayBuf = inputBuf || '';
-  const wrappedInput = displayBuf ? wrapInputLine(displayBuf, innerW) : [];
-  const maxInputLines = 4;
-  const showLines = wrappedInput.slice(0, maxInputLines);
-
-  const inputStartY = y;
-
-  if (!displayBuf) {
-    at(y, inputL, `${t.accent}│ ${ansi.dim}Ask the agent anything...${R}`);
-    y++;
-  } else {
-    for (let li = 0; li < showLines.length; li++) {
-      at(y, inputL, `${t.accent}│ ${t.inputFg}${showLines[li]}${R}`);
-      y++;
-    }
-  }
-
-  // Model info — indented below input, no background, no bar
-  const hasModel = modelInfo && modelInfo !== 'no model' && modelInfo.trim();
-  if (hasModel) {
-    const ctxSuffix = formatContextSuffix(contextInfo);
-    const mText = providerInfo
-      ? `  ${t.accent2}${modelInfo}${ansi.dim}  · ${providerInfo}${ctxSuffix}${R}`
-      : `  ${t.accent2}${modelInfo}${ansi.dim}${ctxSuffix}${R}`;
-    at(y, inputL, mText);
-  } else {
-    at(y, inputL, `  ${ansi.dim}no model  ${t.accent}→  ${ansi.dim}/models to pick one${R}`);
-  }
-  y += 2;
+  const prompt = renderPromptPanel({
+    row: y,
+    left: layout.inputL,
+    width: layout.inputW,
+    inputBuf,
+    cursorPos,
+    placeholder: 'Ask the agent anything...',
+    emptyModelText: 'no model  ->  /models',
+    modelInfo,
+    providerInfo,
+    contextInfo,
+    maxInputLines: 3,
+    t,
+  });
+  y += prompt.height + 1;
 
   // Shortcuts — subtle, centered
-  const sc = `${ansi.dim}/${R}${ansi.dim} commands    ${R}${ansi.bold}/open${R}${ansi.dim} web UI    ${R}${ansi.bold}/tools${R}${ansi.dim} skills    ${R}${ansi.bold}esc${R}${ansi.dim} exit${R}`;
-  at(y, 1, center(sc, mainW));
+  const sc = `${ansi.bold}/open${R}${ansi.dim} web UI    ${R}${ansi.bold}esc${R}${ansi.dim} exit${R}`;
+  atCentered(y, sc, mainW, t);
 
   // ── Cursor ────────────────────────────────────────────────────────────
-  const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, innerW);
-  write(ansi.to(inputStartY + cursorLine, inputL + 2 + cursorCol));
+  write(ansi.to(prompt.cursorRow, prompt.cursorCol));
 }
 
 // ── Chat View (messages + centered input at bottom) ─────────────────────────
@@ -133,8 +124,7 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   const mainW = liveLogs ? Math.floor(W * 0.65) : W;
   const logW = W - mainW - 1;
 
-  // Clear full screen to ensure clean layout
-  for (let r = 1; r <= H - 1; r++) clearRow(r);
+  clearThemedRows(t, 1, H - 1, W);
 
   // ── Render logs sidebar if enabled ─────────────────────────────────────
   if (liveLogs) {
@@ -150,7 +140,7 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
     }
     const startIdx = Math.max(0, logLines.length - logH);
     const visibleLogs = logLines.slice(startIdx);
-    
+
     at(1, mainW + 3, `${ansi.bold}Live Logs${R}`);
     for (let i = 0; i < visibleLogs.length; i++) {
       at(i + 3, mainW + 3, `${ansi.dim}${visibleLogs[i]}${R}`);
@@ -159,7 +149,7 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
 
   // Layout: content takes most space, input area at bottom (minimal height)
   const maxInputLines = 4;
-  const inputAreaH = maxInputLines + 3; // input lines + model line + top separator + gap
+  const inputAreaH = maxInputLines + 4; // separator + framed prompt, above status bar
   const statusH = 1;
   const contentH = H - inputAreaH - statusH - 1;
 
@@ -191,42 +181,129 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
     at(1, mainW - 6, `${ansi.dim}${pct}%${R}`);
   }
 
-  // ── Input area: OpenCode-style left accent bar ─────────────────────────
-  const inputW = Math.floor(mainW * 0.8);
+  // ── Input area: compact framed prompt, kept readable on wide terminals ─
+  const inputW = clamp(Math.floor(mainW * 0.62), Math.min(52, mainW - 4), Math.min(96, mainW - 4));
   const inputL = Math.floor((mainW - inputW) / 2);
-  const innerW = inputW - 2; // space after "│ "
 
   // Thin separator line above input area
   const sepRow = H - inputAreaH;
-  at(sepRow, inputL, `${t.dimBorder}${'─'.repeat(inputW)}${R}`);
+  const ruleW = Math.min(inputW, mainW - inputL - 1);
+  at(sepRow, inputL, `${t.screenBg || ''}${t.dimBorder}${'─'.repeat(ruleW)}${R}`);
 
-  const inputStartRow = sepRow + 1;
+  const prompt = renderPromptPanel({
+    row: sepRow + 1,
+    left: inputL,
+    width: inputW,
+    inputBuf,
+    cursorPos,
+    placeholder: 'Type a message...',
+    emptyModelText: 'no model  ->  /models',
+    modelInfo,
+    providerInfo,
+    contextInfo,
+    maxInputLines,
+    t,
+  });
+
+  write(ansi.to(prompt.cursorRow, prompt.cursorCol));
+}
+
+function getZenLayout(mainW, H) {
+  const bigBrand = mainW >= 74 && H >= 24;
+  const logoH = bigBrand ? ASYNCAT_WORDMARK.length : 4;
+  const inputW = clamp(Math.floor(mainW * 0.46), Math.min(44, mainW - 4), Math.min(78, mainW - 4));
+  const inputL = Math.floor((mainW - inputW) / 2);
+  const promptH = 6; // border + 3 input rows + model row + border
+  const blockH = logoH + 1 + 1 + promptH + 1;
+  return {
+    bigBrand,
+    inputW,
+    inputL,
+    startY: Math.max(2, Math.floor((H - blockH) / 2)),
+  };
+}
+
+function renderPromptPanel({
+  row,
+  left,
+  width,
+  inputBuf,
+  cursorPos,
+  placeholder,
+  emptyModelText,
+  modelInfo,
+  providerInfo,
+  contextInfo,
+  maxInputLines,
+  t,
+}) {
+  const R = ansi.reset;
+  const panelBg = t.inputBg || t.panelBg || ansi.bgRgb(24, 24, 28);
+  const textW = Math.max(1, width - 4);
   const displayBuf = inputBuf || '';
-  const wrappedInput = displayBuf ? wrapInputLine(displayBuf, innerW) : [];
+  const wrappedInput = displayBuf ? wrapInputLine(displayBuf, textW) : [];
   const showLines = wrappedInput.slice(0, maxInputLines);
 
-  if (!displayBuf) {
-    at(inputStartRow, inputL, `${t.accent}│ ${ansi.dim}Type a message...${R}`);
-  } else {
-    for (let li = 0; li < showLines.length; li++) {
-      at(inputStartRow + li, inputL, `${t.accent}│ ${t.inputFg}${showLines[li]}${R}`);
-    }
+  const screenBg = t.screenBg || '';
+  at(row, left, `${screenBg}${t.dimBorder}╭${'─'.repeat(width - 2)}╮${R}`);
+
+  for (let li = 0; li < maxInputLines; li++) {
+    const hasText = li < showLines.length;
+    const shown = hasText ? showLines[li] : (li === 0 && !displayBuf ? placeholder : '');
+    const style = hasText ? t.inputFg : ansi.dim;
+    const accent = li === 0 ? `${t.accent}▏${R}${panelBg}` : ' ';
+    const pad = Math.max(0, textW - vis(shown));
+    at(row + 1 + li, left, `${screenBg}${t.dimBorder}│${R}${panelBg}${accent} ${style}${shown}${R}${panelBg}${' '.repeat(pad)}${R}${screenBg}${t.dimBorder}│${R}`);
   }
 
-  // Model info row
-  const mName = modelInfo || 'no model';
-  const pName = providerInfo || '';
-  const ctxSuffix = formatContextSuffix(contextInfo);
-  const mLine = pName
-    ? `  ${t.accent2}${mName}${ansi.dim}  · ${pName}${ctxSuffix}${R}`
-    : `  ${ansi.dim}${mName}${ctxSuffix}${R}`;
-  at(inputStartRow + maxInputLines, inputL, mLine);
+  const meta = formatModelLine(modelInfo, providerInfo, contextInfo, emptyModelText, t);
+  const metaShown = truncateVisible(meta, textW);
+  const metaPad = Math.max(0, textW - vis(metaShown));
+  at(row + 1 + maxInputLines, left, `${screenBg}${t.dimBorder}│${R}${panelBg}  ${metaShown}${R}${panelBg}${' '.repeat(metaPad)}${R}${screenBg}${t.dimBorder}│${R}`);
+  at(row + maxInputLines + 2, left, `${screenBg}${t.dimBorder}╰${'─'.repeat(width - 2)}╯${R}`);
 
-  // Cursor
-  const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, innerW);
-  const cursorRow = inputStartRow + cursorLine;
-  const cursorColAbs = inputL + 2 + cursorCol;
-  write(ansi.to(cursorRow, cursorColAbs));
+  const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, textW);
+  return {
+    height: maxInputLines + 3,
+    cursorRow: row + 1 + cursorLine,
+    cursorCol: left + 3 + cursorCol,
+  };
+}
+
+function formatModelLine(modelInfo, providerInfo, contextInfo, emptyModelText, t) {
+  const hasModel = modelInfo && modelInfo !== 'no model' && modelInfo.trim();
+  if (!hasModel) return `${ansi.dim}${emptyModelText}${ansi.reset}`;
+  const ctxSuffix = formatContextSuffix(contextInfo);
+  return providerInfo
+    ? `${t.accent2}${modelInfo}${ansi.dim}  · ${providerInfo}${ctxSuffix}${ansi.reset}`
+    : `${t.accent2}${modelInfo}${ansi.dim}${ctxSuffix}${ansi.reset}`;
+}
+
+function truncateVisible(text, maxW) {
+  if (vis(text) <= maxW) return text;
+  const plain = strip(text);
+  return `${plain.slice(0, Math.max(0, maxW - 1))}…`;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function clearThemedRows(t, from, to, width) {
+  const bg = t.screenBg || '';
+  const fg = t.screenFg || '';
+  const blank = `${bg}${fg}${' '.repeat(Math.max(0, width))}${ansi.reset}`;
+  for (let r = from; r <= to; r++) at(r, 1, blank);
+}
+
+function atCentered(row, text, width, t) {
+  const col = Math.max(1, Math.floor((width - vis(text)) / 2) + 1);
+  const bg = t.screenBg || '';
+  at(row, col, `${bg}${text.split(ansi.reset).join(`${ansi.reset}${bg}`)}${ansi.reset}`);
+}
+
+function withBg(text, bg) {
+  return `${bg}${text.split(ansi.reset).join(`${ansi.reset}${bg}`)}${ansi.reset}`;
 }
 
 function formatContextSuffix(info = {}) {
@@ -402,33 +479,34 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos, inChatMode = f
   const mainW = liveLogs ? Math.floor(W * 0.65) : W;
 
   // Subtle panel bg — just dark enough to distinguish from terminal default
-  const panelBg = ansi.bgRgb(20, 20, 26);
+  const panelBg = t.panelBg || ansi.bgRgb(20, 20, 26);
   // Use the theme's selection color so highlight matches the accent/palette
   const selBg = t.paletteSel;
 
   // Anchor palette just above the input, matching zen vs chat input position
   let inputRow, inputL, inputW;
   if (inChatMode) {
-    const inputAreaH = 4 + 3; // maxInputLines + top separator + model row + gap
-    inputRow = H - inputAreaH + 1; // first input text row
-    inputW = Math.floor(mainW * 0.8);
+    const inputAreaH = 4 + 4; // separator + framed prompt, above status bar
+    inputRow = H - inputAreaH + 2; // first input text row inside prompt panel
+    inputW = clamp(Math.floor(mainW * 0.62), Math.min(52, mainW - 4), Math.min(96, mainW - 4));
     inputL = Math.floor((mainW - inputW) / 2);
   } else {
-    const startY = Math.max(2, Math.floor((H - 11) / 2));
-    inputRow = startY + 7; // cat(4)+brand(1)+msg(1)+gap(1) = 7 rows before input
-    inputW = Math.floor(mainW * 0.5);
-    inputL = Math.floor((mainW - inputW) / 2);
+    const layout = getZenLayout(mainW, H);
+    const logoH = layout.bigBrand ? ASYNCAT_WORDMARK.length : 4;
+    inputRow = layout.startY + logoH + 2; // message + gap, then first text row inside panel
+    inputW = layout.inputW;
+    inputL = layout.inputL;
   }
-  const innerW = inputW - 2;
+  const innerW = inputW - 4;
 
   // Panel matches the input area width and left edge exactly
   const panelW = inputW;
   const panelL = inputL;
 
   // Show at most 10 items so the panel stays compact and close to the input
-  const maxShow = Math.min(items.length, Math.min(10, inputRow - 4));
+  const maxShow = Math.max(0, Math.min(items.length, Math.min(10, inputRow - 4)));
   let scrollOff = 0;
-  if (selIdx >= maxShow) scrollOff = selIdx - maxShow + 1;
+  if (maxShow > 0 && selIdx >= maxShow) scrollOff = selIdx - maxShow + 1;
   const visible = items.slice(scrollOff, scrollOff + maxShow);
   const colW = items.length > 0 ? Math.max(...items.map(c => c.cmd.length)) + 2 : 10;
 
@@ -440,13 +518,20 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos, inChatMode = f
   for (let r = panelTop; r <= panelTop + panelH; r++) {
     at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
   }
+  for (let r = panelTop; r <= inputRow + 1; r++) {
+    at(r, panelL - 1, `${t.accent}│${R}`);
+  }
+  at(panelTop, panelL - 1, `${t.accent}╭${R}`);
+  at(panelTop + panelH, panelL - 1, `${t.accent}╰${R}`);
 
   // Title uses accent so it visually connects to the │ bar below
   const escPad = Math.max(0, panelW - 8 - 3);
-  at(panelTop, panelL, `${panelBg}${ansi.bold}${t.accent}Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
+  at(panelTop, panelL, `${panelBg}${ansi.bold}${t.accent}Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}${t.accent}╮${R}`);
 
   if (items.length === 0) {
-    at(panelTop + 1, panelL, `${panelBg}  ${ansi.dim}No matching commands${R}`);
+    const emptyText = 'No matching commands';
+    const emptyPad = Math.max(0, panelW - vis(emptyText) - 2);
+    at(panelTop + 1, panelL, `${panelBg}  ${ansi.dim}${emptyText}${R}${panelBg}${' '.repeat(emptyPad)}${t.dimBorder}│${R}`);
   } else {
     for (let i = 0; i < visible.length; i++) {
       const item = visible[i];
@@ -457,17 +542,17 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos, inChatMode = f
       const padded = item.cmd.padEnd(colW);
       const desc = (item.desc || '').slice(0, panelW - colW - 4);
       const pad = Math.max(0, panelW - vis(padded) - vis(desc) - 2);
-      at(panelTop + 1 + i, panelL, `${bg}  ${cmdStyle}${padded}${R}${bg}${ansi.dim}${desc}${' '.repeat(pad)}${R}`);
+      at(panelTop + 1 + i, panelL, `${bg}  ${cmdStyle}${padded}${R}${bg}${ansi.dim}${desc}${' '.repeat(pad)}${R}${t.dimBorder}│${R}`);
     }
     if (items.length > scrollOff + maxShow) {
-      at(panelTop + 1 + maxShow, panelL, `${panelBg}  ${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}`);
+      at(panelTop + 1 + maxShow, panelL, `${panelBg}  ${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}${panelBg}${' '.repeat(Math.max(0, panelW - 10))}${t.dimBorder}│${R}`);
     }
   }
 
   // Cursor at input row (below the palette, where the user is typing)
   const buf = inputBuf || '';
   const { col: cc, line: cl } = calcCursorPosInWrapped(buf, cursorPos, innerW);
-  write(ansi.to(inputRow + cl, inputL + 2 + cc));
+  write(ansi.to(inputRow + cl, inputL + 3 + cc));
 }
 
 // ── Selector — floating panel overlay with search ───────────────────────────
@@ -477,7 +562,7 @@ export function renderSelector(title, items, selIdx, inputBuf, cursorPos) {
   const H = h();
   const R = ansi.reset;
 
-  const panelBg = ansi.bgRgb(18, 18, 24);
+  const panelBg = t.panelBg || ansi.bgRgb(18, 18, 24);
   const panelW = Math.min(Math.floor(W * 0.78), 96);
   const panelL = Math.floor((W - panelW) / 2) + 1;
 
@@ -535,7 +620,8 @@ export function renderAskInput(question, inputBuf, cursorPos, defaultAnswer = ''
   const W = w();
   const H = h();
   const R = ansi.reset;
-  const panelBg = ansi.bgRgb(18, 18, 24);
+  const t = getTheme();
+  const panelBg = t.panelBg || ansi.bgRgb(18, 18, 24);
   const panelW = Math.min(Math.floor(W * 0.78), 96);
   const panelL = Math.floor((W - panelW) / 2) + 1;
   const wrappedQuestion = wrapText(question || 'The agent needs more information.', panelW - 4).slice(0, 6);
@@ -571,8 +657,7 @@ export function renderModelSetup(model, ctxBuf, cursorPos, isFocused) {
   const H = h();
   const R = ansi.reset;
 
-  // Clear full screen
-  for (let r = 1; r <= H - 1; r++) clearRow(r);
+  clearThemedRows(t, 1, H - 1, W);
 
   const boxW = Math.min(60, W - 6);
   const boxL = Math.floor((W - boxW) / 2);
@@ -648,7 +733,7 @@ export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = 
   const H = h();
   const R = ansi.reset;
 
-  clearRow(H);
+  at(H, 1, `${t.statusBg || t.screenBg || ''}${t.statusFg || ''}${' '.repeat(Math.max(0, W))}${R}`);
 
   // ── Streaming mode: OpenCode-style animated bottom bar ────────────────
   if (streamingMsg) {
@@ -660,7 +745,7 @@ export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = 
     const leftVis = vis(` ${spin}`);
     const rightVis = vis(`esc stop  ${usage ? formatUsage(usage) + '  ' : ''}${modelInfo ? modelInfo + '  ' : ''}${version || ''} `);
     const gap = Math.max(1, W - leftVis - rightVis);
-    at(H, 1, `${t.statusFg}${left}${' '.repeat(gap)}${right}${R}`);
+    at(H, 1, withBg(`${t.statusFg}${left}${' '.repeat(gap)}${right}`, t.statusBg || t.screenBg || ''));
     return;
   }
 
@@ -693,7 +778,7 @@ export function renderStatusBar(version, streamingMsg, modelInfo, fullControl = 
   const gap1 = Math.max(1, Math.floor((W - leftVis - midVis - rightVis) / 2));
   const gap2 = Math.max(1, W - leftVis - gap1 - midVis - rightVis);
 
-  at(H, 1, `${t.statusFg}${left}${' '.repeat(gap1)}${mid}${' '.repeat(gap2)}${right}${R}`);
+  at(H, 1, withBg(`${t.statusFg}${left}${' '.repeat(gap1)}${mid}${' '.repeat(gap2)}${right}`, t.statusBg || t.screenBg || ''));
 }
 
 function formatUsage(usage) {
@@ -708,7 +793,7 @@ export function renderResult(title, lines, scrollOff = 0) {
   const H = h();
   const R = ansi.reset;
 
-  const panelBg = ansi.bgRgb(20, 22, 30);
+  const panelBg = t.panelBg || ansi.bgRgb(20, 22, 30);
   const panelW  = Math.min(Math.floor(W * 0.72), 90);
   const panelL  = Math.floor((W - panelW) / 2) + 1;
   const contentH = Math.min(lines.length, H - 10);
@@ -755,11 +840,10 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   const H = h();
   const R = ansi.reset;
 
-  // Clear full screen so old content never bleeds through when panel size changes
-  for (let r = 1; r <= H - 1; r++) clearRow(r);
+  clearThemedRows(t, 1, H - 1, W);
 
   const TAB_NAMES = ['Downloaded', 'Recommended', 'Search'];
-  const panelBg = ansi.bgRgb(18, 18, 24);
+  const panelBg = t.panelBg || ansi.bgRgb(18, 18, 24);
   const panelW = Math.min(Math.floor(W * 0.72), 88);
   const panelL = Math.floor((W - panelW) / 2) + 1;
 
@@ -895,7 +979,7 @@ export function renderProviderSetup(state, cursorPos) {
   const H = h();
   const R = ansi.reset;
 
-  for (let r = 1; r <= H; r++) clearRow(r);
+  clearThemedRows(t, 1, H, W);
 
   const boxW = Math.min(64, W - 4);
   const boxL = Math.floor((W - boxW) / 2);

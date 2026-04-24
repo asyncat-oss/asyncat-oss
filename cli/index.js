@@ -1,7 +1,7 @@
 // Asyncat v2 — TUI Entry Point
 // Premium terminal experience inspired by OpenCode
 import { Tui } from './lib/tui/index.js';
-import { loadTheme, setTheme, getThemeName, THEME_NAMES } from './lib/theme.js';
+import { loadTheme, setTheme, setThemePreview, getThemeName, THEME_NAMES } from './lib/theme.js';
 import { stopAll, procs } from './lib/procs.js';
 import fs from 'fs';
 import path from 'path';
@@ -269,11 +269,23 @@ async function startTui() {
   // Function declarations below are hoisted, so these closures are safe.
   tui.on('command', (cmd, args) => dispatch(cmd, args));
   tui.on('input', (text) => handleAiInput(text));
-  tui.on('exit', () => {
-    tui.destroy();
+  let exiting = false;
+  const cleanupAndExit = (code = 0) => {
+    if (exiting) return;
+    exiting = true;
     stopAll();
-    console.log('  bye ♡');
-    process.exit(0);
+    tui.destroy();
+    process.exit(code);
+  };
+  tui.on('exit', () => cleanupAndExit(0));
+  process.once('SIGINT', () => cleanupAndExit(130));
+  process.once('SIGTERM', () => cleanupAndExit(143));
+  process.once('SIGHUP', () => cleanupAndExit(129));
+  process.once('uncaughtException', (err) => {
+    tui.destroy();
+    console.error(err);
+    stopAll();
+    process.exit(1);
   });
 
   console.log('\x1b[32m[asyncat]\x1b[0m Ready! Starting TUI...\n');
@@ -419,14 +431,20 @@ async function startTui() {
         // ── Theme: inline TUI selector ──────────────────────────────────
         case 'theme': {
           tui.unlockInput();
+          const originalTheme = getThemeName();
           const themeItems = THEME_NAMES.map(n => ({
             name: n,
-            desc: n === getThemeName() ? '(current)' : '',
+            desc: n === originalTheme ? 'current' : 'preview',
           }));
-          const chosen = await tui.showSelector('Select Theme', themeItems);
+          const chosen = await tui.showSelector('Select Theme', themeItems, {
+            onHighlight: item => item?.name && setThemePreview(item.name),
+            onCancel: () => setThemePreview(originalTheme),
+          });
           if (chosen) {
             setTheme(chosen.name);
             tui.printOk(`Theme: ${chosen.name}`);
+          } else {
+            setThemePreview(originalTheme);
           }
           tui.render();
           return;

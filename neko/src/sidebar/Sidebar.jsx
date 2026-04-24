@@ -95,7 +95,7 @@ const AgentsSidebarContent = memo(({ navigate }) => {
 			<div className="px-2 pt-2 pb-1 space-y-0.5">
 				<button
 					onClick={() => navigate('/agents')}
-					className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left group"
+					className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 midnight:hover:text-gray-100 transition-colors text-left group"
 				>
 					<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
 					New Run
@@ -1049,7 +1049,7 @@ const DynamicSidebar = ({
 				style={{ transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' }}
 			>
 				{/* Fixed-width inner so content never reflows during animation */}
-				<div 
+				<div
 					className={`w-[240px] h-full flex flex-col transition-all duration-500 ${isSidebarCollapsed ? 'opacity-0 -translate-x-10 pointer-events-none' : 'opacity-100 translate-x-0'}`}
 					style={{ transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' }}
 				>
@@ -1095,7 +1095,7 @@ const DynamicSidebar = ({
 									<div className="px-2 pt-2 pb-1 space-y-0.5">
 										<button
 											onClick={handleNewChat}
-											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left group"
+											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors text-left group"
 										>
 											<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
 											New Chat
@@ -1103,7 +1103,7 @@ const DynamicSidebar = ({
 										</button>
 										<button
 											onClick={() => setIsSearchOpen(true)}
-											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-left"
+											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors text-left"
 										>
 											<Search className="w-3.5 h-3.5" />
 											Search
@@ -1112,8 +1112,8 @@ const DynamicSidebar = ({
 										<button
 											onClick={() => onPageChange('all-chats')}
 											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${currentPage === 'all-chats'
-													? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-													: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+													? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
 												}`}
 										>
 											<div className="flex items-center gap-2.5">
@@ -1124,8 +1124,8 @@ const DynamicSidebar = ({
 										<button
 											onClick={() => navigate('/packs')}
 											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'packs'
-													? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-													: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+													? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
 												}`}
 										>
 											<div className="flex items-center gap-2.5">
@@ -1133,12 +1133,12 @@ const DynamicSidebar = ({
 												Packs
 											</div>
 										</button>
-										
+
 										<button
 											onClick={() => navigate('/models')}
 											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'models'
-													? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-													: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+													? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
 												}`}
 										>
 											<div className="flex items-center gap-2.5">
@@ -1147,7 +1147,7 @@ const DynamicSidebar = ({
 											</div>
 										</button>
 									</div>
-									<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 mb-1" />
+									<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 mb-1" />
 									<div className="px-1">
 										<ChatExplorer isChatMode={isChatMode} isCollapsed={false} onNewChat={handleNewChat} showNewChatButton={false} />
 									</div>
@@ -1165,7 +1165,7 @@ const DynamicSidebar = ({
 							<div className="px-2 pt-2">
 								<button
 									onClick={() => setIsCalendarExpanded(!isCalendarExpanded)}
-									className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium"
+									className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm text-gray-700 dark:text-gray-200 midnight:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors font-medium"
 								>
 									<div className="flex items-center gap-2.5 text-gray-600 dark:text-gray-300">
 										<CalendarIcon className="w-3.5 h-3.5" />
@@ -1196,7 +1196,7 @@ const DynamicSidebar = ({
 									{permissions?.canCreateProject && (
 										<button
 											onClick={() => setIsCreateProjectModalOpen(true)}
-											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left group"
+											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors text-left group"
 										>
 											<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
 											New Project
@@ -1213,7 +1213,7 @@ const DynamicSidebar = ({
 										All Projects
 									</button>
 								</div>
-								<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 mb-1" />
+								<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 mb-1" />
 								<div className="px-1 pb-4">
 									<ProjectExplorer
 										isCollapsed={false}

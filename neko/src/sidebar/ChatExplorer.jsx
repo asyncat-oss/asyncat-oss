@@ -61,7 +61,7 @@ const TrashConfirmModal = ({ confirm, onClose }) => {
             {!busy && (
               <button
                 onClick={onClose}
-                className="ml-auto p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-red-100/50 dark:hover:bg-gray-800 transition-colors"
+                className="ml-auto p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-red-100/50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -202,7 +202,7 @@ const ConversationMenu = memo(({ conversation, folders, onAssign, onUnassign, on
       {currentFolderId && (
         <button
           onClick={() => { onUnassign(); onClose(); }}
-          className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
         >
           <FolderMinus className="w-3.5 h-3.5 text-gray-400" />
           Remove from folder
@@ -211,8 +211,8 @@ const ConversationMenu = memo(({ conversation, folders, onAssign, onUnassign, on
 
       {folders.length > 0 && (
         <>
-          {currentFolderId && <div className="my-1 border-t border-gray-100 dark:border-gray-800" />}
-          <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-600 font-semibold">
+          {currentFolderId && <div className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800" />}
+          <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-600 midnight:text-gray-600 font-semibold">
             Move to folder
           </div>
           {folders.filter(f => f?.id).map(f => (
@@ -221,8 +221,8 @@ const ConversationMenu = memo(({ conversation, folders, onAssign, onUnassign, on
               onClick={() => { onAssign(f.id); onClose(); }}
               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${
                 f.id === currentFolderId
-                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  ? 'text-blue-600 dark:text-blue-400 midnight:text-blue-400 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20'
+                  : 'text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800'
               }`}
             >
               {f.id === currentFolderId
@@ -295,7 +295,7 @@ const ConversationItem = memo(({ conversation, isSelected, onSelect, isLoading, 
             <button
               ref={btnRef}
               onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
-              className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors"
             >
               <MoreHorizontal className="w-3.5 h-3.5" />
             </button>
@@ -438,7 +438,7 @@ const FolderItem = memo(({ folder, conversations, isExpanded, onToggle, isSelect
           <button
             ref={btnRef}
             onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
-            className="p-0.5 rounded text-gray-400 opacity-70 hover:opacity-100 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-0.5 rounded text-gray-400 opacity-70 hover:opacity-100 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors"
             title="Folder actions"
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
@@ -450,7 +450,7 @@ const FolderItem = memo(({ folder, conversations, isExpanded, onToggle, isSelect
             >
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setRenaming(true); }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
               >
                 <Pencil className="w-3.5 h-3.5 text-gray-400" />
                 Rename
@@ -815,7 +815,7 @@ const ChatExplorer = ({ isChatMode = false, isCollapsed = false, onNewChat, show
               </span>
               <button
                 onClick={() => setShowNewFolder(true)}
-                className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors"
                 title="New folder"
               >
                 <FolderPlus className="w-3.5 h-3.5" />
@@ -920,7 +920,7 @@ const ChatExplorer = ({ isChatMode = false, isCollapsed = false, onNewChat, show
                   finally { setTrashLoading(false); }
                 }
               }}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
             >
               <Trash2 className="w-3 h-3 flex-shrink-0" />
               <span className="flex-1 text-left">Recently Deleted</span>

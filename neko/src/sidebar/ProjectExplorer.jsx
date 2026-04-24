@@ -108,7 +108,7 @@ const ProjectMenu = memo(({ project, folders, onAssign, onUnassign, onClose, anc
       {currentFolderId && (
         <button
           onClick={() => { onUnassign(); onClose(); }}
-          className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
         >
           <FolderMinus className="w-3.5 h-3.5 text-gray-400" />
           Remove from folder
@@ -116,8 +116,8 @@ const ProjectMenu = memo(({ project, folders, onAssign, onUnassign, onClose, anc
       )}
       {folders.length > 0 && (
         <>
-          {currentFolderId && <div className="my-1 border-t border-gray-100 dark:border-gray-800" />}
-          <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-600 font-semibold">
+          {currentFolderId && <div className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800" />}
+          <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-600 midnight:text-gray-600 font-semibold">
             Move to folder
           </div>
           {folders.map(f => (
@@ -126,8 +126,8 @@ const ProjectMenu = memo(({ project, folders, onAssign, onUnassign, onClose, anc
               onClick={() => { onAssign(f.id); onClose(); }}
               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${
                 f.id === currentFolderId
-                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  ? 'text-blue-600 dark:text-blue-400 midnight:text-blue-400 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20'
+                  : 'text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800'
               }`}
             >
               {f.id === currentFolderId
@@ -140,7 +140,7 @@ const ProjectMenu = memo(({ project, folders, onAssign, onUnassign, onClose, anc
         </>
       )}
       {folders.length === 0 && !currentFolderId && (
-        <div className="px-3 py-2 text-gray-400 dark:text-gray-600 text-xs">No folders yet</div>
+        <div className="px-3 py-2 text-gray-400 dark:text-gray-600 midnight:text-gray-600 text-xs">No folders yet</div>
       )}
     </div>
   );
@@ -177,7 +177,7 @@ const ProjectItem = memo(({ project, isSelected, onSelect, isLoading, folders, o
         <span className="flex-1 truncate text-sm" title={project.name || 'Untitled Project'}>
           {project.name || 'Untitled Project'}
         </span>
-        <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 group-hover:hidden">
+        <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-gray-500 flex-shrink-0 group-hover:hidden">
           {getRelativeTime(project.updated_at || project.created_at)}
         </span>
         {/* ⋯ button on hover */}
@@ -185,7 +185,7 @@ const ProjectItem = memo(({ project, isSelected, onSelect, isLoading, folders, o
           <button
             ref={btnRef}
             onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
-            className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors"
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
@@ -254,7 +254,7 @@ const TimeGroup = memo(({ title, projects, isSelected, onSelect, loadingProjectI
     <div className="mb-4">
       {showTitle && (
         <div className="px-3 pb-1">
-          <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+          <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 midnight:text-gray-500 uppercase tracking-widest">
             {title}
           </span>
         </div>
@@ -348,7 +348,7 @@ const ProjectFolderItem = memo(({ folder, projects, isExpanded, onToggle, isSele
           <button
             ref={btnRef}
             onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
-            className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors"
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
@@ -359,14 +359,14 @@ const ProjectFolderItem = memo(({ folder, projects, isExpanded, onToggle, isSele
             >
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setRenaming(true); }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
               >
                 <Pencil className="w-3.5 h-3.5 text-gray-400" />
                 Rename
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(folder.id); }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete folder
@@ -696,7 +696,7 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
             <AlertCircle className="w-4 h-4" />
             <span>{error}</span>
           </div>
-          <button onClick={() => loadAll()} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline">
+          <button onClick={() => loadAll()} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 underline">
             Try again
           </button>
         </div>
@@ -711,7 +711,7 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
                 </span>
                 <button
                   onClick={() => setShowNewFolder(true)}
-                  className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors"
                   title="New folder"
                 >
                   <FolderPlus className="w-3.5 h-3.5" />

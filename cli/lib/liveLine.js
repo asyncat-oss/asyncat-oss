@@ -109,6 +109,9 @@ const SUB_CMDS = {
     { name: 'hacker',  desc: 'Monochrome green hacker style' },
     { name: 'ocean',   desc: 'Blue and cyan palette' },
     { name: 'minimal', desc: 'Low-contrast minimal style' },
+    { name: 'parchment', desc: 'Warm light theme' },
+    { name: 'graphite',  desc: 'Dark orange/cyan theme' },
+    { name: 'aurora',    desc: 'Blue violet night theme' },
   ],
   logs: [
     { name: 'backend',  desc: 'Show backend logs' },
@@ -177,6 +180,9 @@ const SLASH_SUB = {
     { name: 'hacker',  desc: 'Monochrome green hacker style' },
     { name: 'ocean',   desc: 'Blue and cyan palette' },
     { name: 'minimal', desc: 'Low-contrast minimal style' },
+    { name: 'parchment', desc: 'Warm light theme' },
+    { name: 'graphite',  desc: 'Dark orange/cyan theme' },
+    { name: 'aurora',    desc: 'Blue violet night theme' },
   ],
   '/stash': [
     { name: 'list',  desc: 'Show all stashed notes' },
