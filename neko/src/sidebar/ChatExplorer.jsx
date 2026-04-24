@@ -263,7 +263,7 @@ const ConversationItem = memo(({ conversation, isSelected, onSelect, isLoading, 
         isSelected
           ? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-200'
           : 'text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 active:scale-[0.98]'
-      } ${isLoading ? 'opacity-60 pointer-events-none' : ''}`}
+      } ${isLoading ? 'opacity-60 pointer-events-none' : ''} ${menuOpen ? 'z-50' : ''}`}
       title={isBgStreaming ? 'Generating response...' : undefined}
       onClick={() => !menuOpen && !isBgStreaming && onSelect(conversation)}
     >

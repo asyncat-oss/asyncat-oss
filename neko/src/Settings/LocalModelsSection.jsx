@@ -178,7 +178,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
-const LocalModelsSection = ({ storage, onRefresh }) => {
+const LocalModelsSection = ({ storage, onRefresh, hideStorage = false }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
   const [showCustomUrl, setShowCustomUrl] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
@@ -434,7 +434,7 @@ const LocalModelsSection = ({ storage, onRefresh }) => {
       )}
 
       {/* ── Storage info bar ── */}
-      {storage && (
+      {!hideStorage && storage && (
         <div className="px-4 py-3 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div className="flex items-center gap-3">

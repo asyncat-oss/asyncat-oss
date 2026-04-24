@@ -15,7 +15,6 @@ import {
 	Plus,
 	FolderOpen,
 	Compass,
-	Building,
 	ChevronRight,
 	Info,
 	X,
@@ -572,16 +571,6 @@ const UserProfile = memo(
 
 							{/* Workspace Actions */}
 							<div className="space-y-2 mb-3">
-								<button
-									onClick={() => {
-										setShowProfileDropdown(false);
-										onNavigate('workspaces');
-									}}
-									className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 rounded-lg transition-colors"
-								>
-									<Building className="w-4 h-4 mr-2" />
-									Switch Workspace
-								</button>
 								{!hasReachedWorkspaceLimit && (
 									<button
 										onClick={() => {

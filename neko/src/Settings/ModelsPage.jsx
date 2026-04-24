@@ -54,6 +54,52 @@ const INSTALL_PROFILE_HELP = {
   amd_rocm: 'Managed GPU-oriented install for ROCm-capable AMD systems.',
 };
 
+const DEFAULT_LOAD_CTX_SIZE = 32768;
+const MAX_LOAD_CTX_SIZE = 1048576;
+
+const MODEL_LOAD_CONTEXT_STORAGE_KEY = 'asyncat_model_load_contexts';
+
+const normalizeLoadCtxSize = (value, fallback = DEFAULT_LOAD_CTX_SIZE, max = MAX_LOAD_CTX_SIZE) => {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 512) return fallback;
+  return Math.min(n, max);
+};
+
+const getModelContextLimit = (model) => {
+  const n = Number(model?.contextLength);
+  if (!Number.isFinite(n) || n < 512) return MAX_LOAD_CTX_SIZE;
+  return Math.min(n, MAX_LOAD_CTX_SIZE);
+};
+
+const getModelLoadCtxError = (value, max = MAX_LOAD_CTX_SIZE) => {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 512) return 'Set a load context of at least 512.';
+  if (n > max) return `Set within this model's limit: ${max.toLocaleString()} ctx.`;
+  return '';
+};
+
+const loadSavedModelContextSizes = () => {
+  try {
+    const raw = localStorage.getItem(MODEL_LOAD_CONTEXT_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([filename]) => typeof filename === 'string' && filename)
+        .map(([filename, value]) => [filename, String(normalizeLoadCtxSize(value))])
+    );
+  } catch {
+    return {};
+  }
+};
+
+const saveModelContextSizes = (contexts) => {
+  try {
+    localStorage.setItem(MODEL_LOAD_CONTEXT_STORAGE_KEY, JSON.stringify(contexts));
+  } catch {}
+};
+
 const MiniBar = ({ value, color = 'bg-indigo-500', max = 100 }) => {
   const pct = Math.min(100, Math.max(0, Math.round((value / max) * 100)));
   const barColor = pct > 85 ? 'bg-red-500' : pct > 65 ? 'bg-amber-500' : color;
@@ -311,6 +357,12 @@ const EngineAdvisorSection = ({
   const [selectedReleaseTag, setSelectedReleaseTag] = useState('');
   const [selectedAssetName, setSelectedAssetName] = useState('');
   const [showAllCatalogAssets, setShowAllCatalogAssets] = useState(false);
+  const [releaseDropdownOpen, setReleaseDropdownOpen] = useState(false);
+  const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
+  const [runtimeDropdownOpen, setRuntimeDropdownOpen] = useState(false);
+  const releaseDropdownRef = useRef(null);
+  const assetDropdownRef = useRef(null);
+  const runtimeDropdownRef = useRef(null);
 
   const recommendation = engineData?.recommendation || null;
   const current = engineData?.current || null;
@@ -373,6 +425,23 @@ const EngineAdvisorSection = ({
   }, [selectedRelease, selectedAssetName, installProfile]);
 
   const selectedAsset = selectedRelease?.assets?.find(asset => asset.name === selectedAssetName) || null;
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (releaseDropdownRef.current && !releaseDropdownRef.current.contains(e.target)) {
+        setReleaseDropdownOpen(false);
+      }
+      if (assetDropdownRef.current && !assetDropdownRef.current.contains(e.target)) {
+        setAssetDropdownOpen(false);
+      }
+      if (runtimeDropdownRef.current && !runtimeDropdownRef.current.contains(e.target)) {
+        setRuntimeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const installPayload = {
     profile: selectedAsset?.suggestedProfile || installProfile || 'cpu_safe',
     releaseTag: selectedRelease?.tagName || undefined,
@@ -650,21 +719,36 @@ const EngineAdvisorSection = ({
               ) : (
                 <div className="mt-3 space-y-3">
                   <div className="grid grid-cols-1 gap-3">
-                    <div>
+                    <div ref={releaseDropdownRef} className="relative">
                       <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Release version</label>
-                      <select
-                        value={selectedReleaseTag}
-                        onChange={(e) => setSelectedReleaseTag(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100"
+                      <button
+                        type="button"
+                        onClick={() => { setReleaseDropdownOpen(prev => !prev); setAssetDropdownOpen(false); }}
+                        className="mt-1 w-full flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 text-left"
                       >
-                        {releases.map(release => (
-                          <option key={release.tagName} value={release.tagName}>
-                            {release.tagName}{release.prerelease ? ' · prerelease' : ''} · {release.compatibleAssetCount} compatible assets
-                          </option>
-                        ))}
-                      </select>
+                        <span className="truncate">
+                          {selectedRelease
+                            ? `${selectedRelease.tagName}${selectedRelease.prerelease ? ' · prerelease' : ''} · ${selectedRelease.compatibleAssetCount} compatible assets`
+                            : 'Select a release'}
+                        </span>
+                        <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2 text-gray-400" />
+                      </button>
+                      {releaseDropdownOpen && (
+                        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-lg py-1">
+                          {releases.map(release => (
+                            <button
+                              key={release.tagName}
+                              type="button"
+                              onClick={() => { setSelectedReleaseTag(release.tagName); setReleaseDropdownOpen(false); }}
+                              className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 ${release.tagName === selectedReleaseTag ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                            >
+                              {release.tagName}{release.prerelease ? ' · prerelease' : ''} · {release.compatibleAssetCount} compatible assets
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div>
+                    <div ref={assetDropdownRef} className="relative">
                       <div className="flex items-center justify-between gap-2">
                         <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Asset variant</label>
                         <button
@@ -674,17 +758,32 @@ const EngineAdvisorSection = ({
                           {showAllCatalogAssets ? 'Show compatible only' : 'Show all archive assets'}
                         </button>
                       </div>
-                      <select
-                        value={selectedAssetName}
-                        onChange={(e) => setSelectedAssetName(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100"
+                      <button
+                        type="button"
+                        onClick={() => { setAssetDropdownOpen(prev => !prev); setReleaseDropdownOpen(false); }}
+                        className="mt-1 w-full flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 text-left"
                       >
-                        {visibleAssets.map(asset => (
-                          <option key={asset.name} value={asset.name}>
-                            {asset.name} · {asset.sizeFormatted}{asset.compatible ? '' : ' · not for this machine'}
-                          </option>
-                        ))}
-                      </select>
+                        <span className="truncate">
+                          {selectedAsset
+                            ? `${selectedAsset.name} · ${selectedAsset.sizeFormatted}${selectedAsset.compatible ? '' : ' · not for this machine'}`
+                            : 'Select an asset'}
+                        </span>
+                        <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2 text-gray-400" />
+                      </button>
+                      {assetDropdownOpen && (
+                        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-lg py-1">
+                          {visibleAssets.map(asset => (
+                            <button
+                              key={asset.name}
+                              type="button"
+                              onClick={() => { setSelectedAssetName(asset.name); setAssetDropdownOpen(false); }}
+                              className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 ${asset.name === selectedAssetName ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                            >
+                              {asset.name} · {asset.sizeFormatted}{asset.compatible ? '' : ' · not for this machine'}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -908,14 +1007,30 @@ const EngineAdvisorSection = ({
             )}
           </div>
           <div className="mt-3 flex gap-2">
-            <select
-              value={customRuntime}
-              onChange={(e) => setCustomRuntime(e.target.value)}
-              className="w-32 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-700 dark:text-gray-200"
-            >
-              <option value="binary">Binary</option>
-              <option value="python">Python</option>
-            </select>
+            <div ref={runtimeDropdownRef} className="relative w-32 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setRuntimeDropdownOpen(prev => !prev)}
+                className="w-full flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-700 dark:text-gray-200 text-left"
+              >
+                <span>{customRuntime === 'python' ? 'Python' : 'Binary'}</span>
+                <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 ml-1 text-gray-400" />
+              </button>
+              {runtimeDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-lg py-1">
+                  {[{ value: 'binary', label: 'Binary' }, { value: 'python', label: 'Python' }].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { setCustomRuntime(opt.value); setRuntimeDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 ${opt.value === customRuntime ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <input
               value={customPath}
               onChange={(e) => setCustomPath(e.target.value)}
@@ -1057,7 +1172,7 @@ const SystemInfoSection = () => {
 };
 
 const ModelsPage = () => {
-  const { config } = useModelConfig();
+  const { config, setConfig } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
   const [models, setModels] = useState([]);
   const [engineData, setEngineData] = useState(null);
@@ -1079,6 +1194,8 @@ const ModelsPage = () => {
   const [installError, setInstallError] = useState('');
   const [installSuccess, setInstallSuccess] = useState('');
   const [revertSelection, setRevertSelection] = useState(null);
+  const [modelLoadCtxSizes, setModelLoadCtxSizes] = useState(loadSavedModelContextSizes);
+  const [modelLoadCtxErrors, setModelLoadCtxErrors] = useState({});
   const pollCleanup = useRef(null);
   const installPollCleanup = useRef(null);
 
@@ -1099,7 +1216,38 @@ const ModelsPage = () => {
     setInstallError('');
     setInstallSuccess('');
     setRevertSelection(null);
-    setShowInstallerControls(false);
+  };
+
+  const updateModelLoadCtxSize = (filename, value) => {
+    setModelLoadCtxSizes(prev => ({ ...prev, [filename]: value }));
+    setModelLoadCtxErrors(prev => ({ ...prev, [filename]: '' }));
+  };
+
+  const commitModelLoadCtxSize = (filename, max = MAX_LOAD_CTX_SIZE) => {
+    const fallback = Math.min(DEFAULT_LOAD_CTX_SIZE, max);
+    const rawValue = modelLoadCtxSizes[filename] ?? String(fallback);
+    const error = getModelLoadCtxError(rawValue, max);
+    if (error) {
+      setModelLoadCtxErrors(prev => ({ ...prev, [filename]: error }));
+      return null;
+    }
+    const ctxSize = normalizeLoadCtxSize(rawValue, fallback, max);
+    const nextValue = String(ctxSize);
+    setModelLoadCtxSizes(prev => {
+      const next = { ...prev, [filename]: nextValue };
+      saveModelContextSizes(next);
+      return next;
+    });
+    setModelLoadCtxErrors(prev => ({ ...prev, [filename]: '' }));
+    return ctxSize;
+  };
+
+  const getRetryModelContext = () => {
+    const filename = serverStatus?.model;
+    if (!filename) return undefined;
+    const model = models.find(item => item.filename === filename);
+    const ctxSize = commitModelLoadCtxSize(filename, getModelContextLimit(model));
+    return ctxSize || undefined;
   };
 
   const loadStatus = async () => {
@@ -1259,10 +1407,13 @@ const ModelsPage = () => {
     );
   };
 
-  const handleStart = async (filename) => {
+  const handleStart = async (filename, modelContextLimit = MAX_LOAD_CTX_SIZE) => {
+    const ctxSize = commitModelLoadCtxSize(filename, modelContextLimit);
+    if (!ctxSize) return;
     setStartingModel(filename);
+    setConfig({ ctx_size: ctxSize });
     try {
-      await llamaServerApi.start(filename, config.ctx_size);
+      await llamaServerApi.start(filename, ctxSize);
       setServerStatus(prev => ({ ...prev, status: 'loading', model: filename }));
       pollCleanup.current?.();
       pollCleanup.current = llamaServerApi.pollStatus(
@@ -1304,6 +1455,10 @@ const ModelsPage = () => {
 
   const handleEngineSwitch = async (selection, retryModelAfterSwitch) => {
     const key = `${selection.runtime}:${selection.path}${retryModelAfterSwitch ? ':retry' : ''}`;
+    const ctxSize = retryModelAfterSwitch ? getRetryModelContext() : undefined;
+    if (ctxSize) {
+      setConfig({ ctx_size: ctxSize });
+    }
     setSwitchingEngine(key);
     setSwitchError('');
     setSwitchSuccess('');
@@ -1314,7 +1469,7 @@ const ModelsPage = () => {
         runtime: selection.runtime,
         path: selection.path,
         retryModel: retryModelAfterSwitch ? serverStatus?.model || undefined : undefined,
-        ctxSize: retryModelAfterSwitch ? config.ctx_size : undefined,
+        ctxSize,
       });
 
       setEngineData(res.advisor || null);
@@ -1343,6 +1498,10 @@ const ModelsPage = () => {
   const handleManagedInstall = async (selection, retryModelAfterInstall) => {
     const profile = selection?.profile || 'cpu_safe';
     const key = `install:${profile}${retryModelAfterInstall ? ':retry' : ''}`;
+    const ctxSize = retryModelAfterInstall ? getRetryModelContext() : undefined;
+    if (ctxSize) {
+      setConfig({ ctx_size: ctxSize });
+    }
     setInstallingEngine(key);
     setInstallError('');
     setInstallSuccess('');
@@ -1354,7 +1513,7 @@ const ModelsPage = () => {
         releaseTag: selection?.releaseTag,
         assetName: selection?.assetName,
         retryModel: retryModelAfterInstall ? serverStatus?.model || undefined : undefined,
-        ctxSize: retryModelAfterInstall ? config.ctx_size : undefined,
+        ctxSize,
       });
       const job = res.job;
       setInstallJob(job);
@@ -1408,9 +1567,14 @@ const ModelsPage = () => {
     : storage?.totalFormatted
       ? `${storage.totalFormatted} stored locally`
       : 'Ready for GGUF downloads';
+  const hardwareBadgeLabel = engineData?.hardware ? conciseHardwareSummary(engineData.hardware) : '';
+  const currentCapabilityLabel = engineData?.current?.capabilityLabel || '';
+  const showHardwareBadge = Boolean(
+    hardwareBadgeLabel
+    && hardwareBadgeLabel.toLowerCase() !== currentCapabilityLabel.toLowerCase()
+  );
   const tabs = [
-    { id: 'library', label: 'Library', icon: HardDriveDownload },
-    { id: 'discover', label: 'Download', icon: Download },
+    { id: 'library', label: 'Models', icon: HardDriveDownload },
     { id: 'engine', label: 'Engine', icon: Wrench },
     { id: 'system', label: 'System', icon: Activity },
   ];
@@ -1503,7 +1667,7 @@ const ModelsPage = () => {
 
               {activeTab === 'library' && (
               <div className="space-y-8">
-                
+
                 {/* Active Server Banner */}
                 <div className={`relative overflow-hidden rounded-3xl border p-6 transition-all duration-300 shadow-sm ${bannerClass}`}>
                   <div className="relative z-10 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
@@ -1534,16 +1698,16 @@ const ModelsPage = () => {
                               {engineData.current.capabilityLabel}
                             </Badge>
                           )}
-                          {engineData?.hardware && (
-                            <Badge color="gray">{conciseHardwareSummary(engineData.hardware)}</Badge>
-                          )}
+	                          {showHardwareBadge && (
+	                            <Badge color="gray">{hardwareBadgeLabel}</Badge>
+	                          )}
                           {serverStatus?.ctxSize && (
                             <Badge color="blue">{serverStatus.ctxSize.toLocaleString()} ctx</Badge>
                           )}
                         </div>
                       </div>
                     </div>
-                    
+
                     {isRunning && (
                       <button
                         onClick={handleStop}
@@ -1557,16 +1721,27 @@ const ModelsPage = () => {
                   </div>
                 </div>
 
-                {/* Local Library Grid */}
+                {/* Models: Library + Download combined */}
                 <div>
                   <div className="flex items-end justify-between mb-4 gap-4">
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Local Library</h2>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Pick a GGUF model, load it into memory, and iterate from here.</p>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Models</h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {models.length > 0
+                          ? 'Pick a GGUF model, load it into memory, and iterate from here.'
+                          : 'Search HuggingFace above to download your first GGUF model.'}
+                      </p>
                     </div>
-                    <Badge color="blue">{models.length} Models</Badge>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {models.length > 0 && <Badge color="blue">{models.length} Models</Badge>}
+                    </div>
                   </div>
-                  
+
+                  {/* Add Model panel — HF search + custom URL, always visible */}
+                  <div className="mb-6 rounded-3xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 p-6 shadow-sm">
+                    <LocalModelsSection storage={storage} onRefresh={loadModelList} hideStorage />
+                  </div>
+
                   {loadingModels ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {[1, 2].map(i => (
@@ -1580,7 +1755,7 @@ const ModelsPage = () => {
                       </div>
                       <p className="text-gray-600 dark:text-gray-300 midnight:text-gray-300 font-medium">Your library is empty</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 mt-1 max-w-sm text-center">
-                        Open the Download tab to search HuggingFace and add GGUF models.
+                        Use the search above to find and download GGUF models from HuggingFace.
                       </p>
                     </div>
                   ) : (
@@ -1589,6 +1764,9 @@ const ModelsPage = () => {
                         const isLoaded = serverStatus?.model === m.filename && status === 'ready';
                         const isStarting = startingModel === m.filename;
                         const isDeleting = deletingModel === m.filename;
+                        const modelContextLimit = getModelContextLimit(m);
+                        const modelLoadCtxValue = modelLoadCtxSizes[m.filename] ?? String(Math.min(DEFAULT_LOAD_CTX_SIZE, modelContextLimit));
+                        const loadCtxError = modelLoadCtxErrors[m.filename] || getModelLoadCtxError(modelLoadCtxValue, modelContextLimit);
                         
                         return (
                           <div 
@@ -1626,13 +1804,30 @@ const ModelsPage = () => {
                                   </span>
                                 )}
                               </div>
-                              <div className="grid grid-cols-2 gap-3 mt-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
                                 <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800">
-                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Context</div>
+                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Model context</div>
                                   <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-100">
                                     {m.contextLength ? `${Number(m.contextLength).toLocaleString()} ctx` : 'Unknown'}
                                   </div>
                                 </div>
+                                <label className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800">
+                                  <span className="block text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Load context</span>
+                                  <input
+                                    type="number"
+                                    min="512"
+                                    max={modelContextLimit}
+                                    step="1024"
+                                    value={modelLoadCtxValue}
+                                    onChange={(e) => updateModelLoadCtxSize(m.filename, e.target.value)}
+                                    onBlur={() => commitModelLoadCtxSize(m.filename, modelContextLimit)}
+                                    className={`mt-1 w-full min-w-0 bg-transparent text-sm font-medium outline-none ${
+                                      loadCtxError
+                                        ? 'text-red-700 dark:text-red-400 midnight:text-red-400'
+                                        : 'text-gray-800 dark:text-gray-200 midnight:text-gray-100'
+                                    }`}
+                                  />
+                                </label>
                                 <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800">
                                   <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">Status</div>
                                   <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-100">
@@ -1640,13 +1835,18 @@ const ModelsPage = () => {
                                   </div>
                                 </div>
                               </div>
+                              {loadCtxError && (
+                                <p className="mt-3 text-xs font-medium text-red-600 dark:text-red-400">
+                                  {loadCtxError}
+                                </p>
+                              )}
                             </div>
                             
                             <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700/50 midnight:border-gray-800/50 flex items-center justify-between gap-2">
                               {!isLoaded ? (
                                 <button
-                                  onClick={() => handleStart(m.filename)}
-                                  disabled={isStarting || isRunning || Boolean(switchingEngine) || Boolean(installingEngine)}
+                                  onClick={() => handleStart(m.filename, modelContextLimit)}
+                                  disabled={Boolean(loadCtxError) || isStarting || isRunning || Boolean(switchingEngine) || Boolean(installingEngine)}
                                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-white dark:bg-gray-800 midnight:bg-gray-900 text-gray-700 dark:text-gray-300 midnight:text-gray-400 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 rounded-xl hover:bg-gray-50 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-gray-100 midnight:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200"
                                 >
                                   {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
@@ -1678,12 +1878,6 @@ const ModelsPage = () => {
                     </div>
                   )}
                 </div>
-              </div>
-              )}
-
-              {activeTab === 'discover' && (
-              <div className="rounded-3xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white/85 dark:bg-gray-900/75 midnight:bg-gray-950/75 p-6 shadow-sm">
-                <LocalModelsSection storage={storage} onRefresh={loadModelList} />
               </div>
               )}
 

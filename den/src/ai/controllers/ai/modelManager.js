@@ -445,11 +445,11 @@ export function getStorageInfo() {
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
-  const gb = bytes / 1024 ** 3;
+  const gb = bytes / 1e9;
   if (gb >= 1) return `${gb.toFixed(2)} GB`;
-  const mb = bytes / 1024 ** 2;
+  const mb = bytes / 1e6;
   if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  const kb = bytes / 1024;
+  const kb = bytes / 1e3;
   return `${kb.toFixed(0)} KB`;
 }
 
