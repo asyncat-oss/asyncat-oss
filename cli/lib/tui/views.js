@@ -59,8 +59,8 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
     logLines.slice(startIdx).forEach((l, i) => at(i + 3, mainW + 3, `${ansi.dim}${l}${R}`));
   }
 
-  // ── Vertical centering — block is: 4 (cat) + 1 (brand) + 1 (msg) + 2 (gap) + 1 (input) + 1 (model) + 2 (gap) + 1 (hints) = 13
-  const blockH = 13;
+  // ── Vertical centering — cat(4) + brand(1) + msg(1) + gap(1) + input(1) + model(1) + gap(1) + hints(1) = 11
+  const blockH = 11;
   const startY = Math.max(2, Math.floor((H - blockH) / 2));
   let y = startY;
 
@@ -69,22 +69,21 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
     at(y++, 1, center(`${t.logoDim}${line}${R}`, mainW));
   }
 
-  // Brand: "async" dim + "cat" bright
-  const brand = `${t.logoDim}async${R}${t.logoBright}cat${R}`;
+  // Brand: "asyn" dim + "cat" bright
+  const brand = `${t.logoDim}asyn${R}${t.logoBright}cat${R}`;
   at(y++, 1, center(brand, mainW));
 
   // Cat message
   const msg = catMsg || CAT_MSGS[_catMsgIdx];
   at(y++, 1, center(`${ansi.dim}${ansi.italic}${msg}${R}`, mainW));
-  y += 2; // breathing room
+  y += 1; // gap
 
-  // ── Input area: OpenCode-style left accent bar, no box ─────────────────
+  // ── Input: clean left accent bar, no background fill ──────────────────
   const inputW = Math.floor(mainW * 0.5);
   const inputL = Math.floor((mainW - inputW) / 2);
+  const innerW = inputW - 2;
 
   const displayBuf = inputBuf || '';
-  // For display wrap within the available width (inputW - 2 for "│ ")
-  const innerW = inputW - 2;
   const wrappedInput = displayBuf ? wrapInputLine(displayBuf, innerW) : [];
   const maxInputLines = 4;
   const showLines = wrappedInput.slice(0, maxInputLines);
@@ -92,36 +91,35 @@ export function renderZen(inputBuf, cursorPos, modelInfo, providerInfo, catMsg, 
   const inputStartY = y;
 
   if (!displayBuf) {
-    // Single placeholder line
-    at(y, inputL, `${t.accent}│${R} ${ansi.dim}Ask the agent anything...${R}`);
+    at(y, inputL, `${t.accent}│ ${ansi.dim}Ask the agent anything...${R}`);
     y++;
   } else {
     for (let li = 0; li < showLines.length; li++) {
-      at(y, inputL, `${t.accent}│${R} ${t.inputFg}${showLines[li]}${R}`);
+      at(y, inputL, `${t.accent}│ ${t.inputFg}${showLines[li]}${R}`);
       y++;
     }
   }
 
-  // Model info line (same left indent, no bar — just spacing)
+  // Model info — indented below input, no background, no bar
   const hasModel = modelInfo && modelInfo !== 'no model' && modelInfo.trim();
-  const mLine = hasModel
-    ? (providerInfo
-        ? `${t.accent2}${modelInfo}${R}  ${ansi.dim}· ${providerInfo}${formatContextSuffix(contextInfo)}${R}`
-        : `${t.accent2}${modelInfo}${R}${ansi.dim}${formatContextSuffix(contextInfo)}${R}`)
-    : `${ansi.dim}no model${R}  ${t.accent}→${R}  ${ansi.dim}/models to pick one${R}`;
-  at(y, inputL, `${ansi.dim}  ${mLine}`);
+  if (hasModel) {
+    const ctxSuffix = formatContextSuffix(contextInfo);
+    const mText = providerInfo
+      ? `  ${t.accent2}${modelInfo}${ansi.dim}  · ${providerInfo}${ctxSuffix}${R}`
+      : `  ${t.accent2}${modelInfo}${ansi.dim}${ctxSuffix}${R}`;
+    at(y, inputL, mText);
+  } else {
+    at(y, inputL, `  ${ansi.dim}no model  ${t.accent}→  ${ansi.dim}/models to pick one${R}`);
+  }
   y += 2;
 
   // Shortcuts — subtle, centered
   const sc = `${ansi.dim}/${R}${ansi.dim} commands    ${R}${ansi.bold}/open${R}${ansi.dim} web UI    ${R}${ansi.bold}/tools${R}${ansi.dim} skills    ${R}${ansi.bold}esc${R}${ansi.dim} exit${R}`;
   at(y, 1, center(sc, mainW));
 
-  // ── Cursor: placed on the current wrapped input line ──────────────────
+  // ── Cursor ────────────────────────────────────────────────────────────
   const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, innerW);
-  const cursorRow = inputStartY + cursorLine;
-  // "│ " = 2 visible chars before input content
-  const cursorColAbs = inputL + 2 + cursorCol;
-  write(ansi.to(cursorRow, cursorColAbs));
+  write(ansi.to(inputStartY + cursorLine, inputL + 2 + cursorCol));
 }
 
 // ── Chat View (messages + centered input at bottom) ─────────────────────────
@@ -208,20 +206,21 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   const showLines = wrappedInput.slice(0, maxInputLines);
 
   if (!displayBuf) {
-    at(inputStartRow, inputL, `${t.accent}│${R} ${ansi.dim}Type a message...${R}`);
+    at(inputStartRow, inputL, `${t.accent}│ ${ansi.dim}Type a message...${R}`);
   } else {
     for (let li = 0; li < showLines.length; li++) {
-      at(inputStartRow + li, inputL, `${t.accent}│${R} ${t.inputFg}${showLines[li]}${R}`);
+      at(inputStartRow + li, inputL, `${t.accent}│ ${t.inputFg}${showLines[li]}${R}`);
     }
   }
 
   // Model info row
   const mName = modelInfo || 'no model';
   const pName = providerInfo || '';
+  const ctxSuffix = formatContextSuffix(contextInfo);
   const mLine = pName
-    ? `${t.accent2}${mName}${R}  ${ansi.dim}· ${pName}${formatContextSuffix(contextInfo)}${R}`
-    : `${ansi.dim}${mName}${formatContextSuffix(contextInfo)}${R}`;
-  at(inputStartRow + maxInputLines, inputL, `  ${mLine}`);
+    ? `  ${t.accent2}${mName}${ansi.dim}  · ${pName}${ctxSuffix}${R}`
+    : `  ${ansi.dim}${mName}${ctxSuffix}${R}`;
+  at(inputStartRow + maxInputLines, inputL, mLine);
 
   // Cursor
   const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, innerW);
@@ -394,7 +393,7 @@ export function filterPalette(query) {
   );
 }
 
-export function renderPalette(items, selIdx, inputBuf, cursorPos) {
+export function renderPalette(items, selIdx, inputBuf, cursorPos, inChatMode = false) {
   const t = getTheme();
   const W = w();
   const H = h();
@@ -402,31 +401,52 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos) {
   const liveLogs = getLiveLogsEnabled();
   const mainW = liveLogs ? Math.floor(W * 0.65) : W;
 
-  // ── Flat overlay panel — no emoji group headers, clean and compact ──────────
-  const panelBg  = ansi.bgRgb(20, 22, 30);
-  const selBg    = ansi.bgRgb(22, 42, 50); // muted teal, works across all themes
-  const panelW   = Math.min(Math.floor(mainW * 0.55), 68);
-  const panelL   = Math.floor((mainW - panelW) / 2) + 1;
-  const panelTop = 2;
+  // Subtle panel bg — just dark enough to distinguish from terminal default
+  const panelBg = ansi.bgRgb(20, 20, 26);
+  // Use the theme's selection color so highlight matches the accent/palette
+  const selBg = t.paletteSel;
 
-  const maxShow = Math.min(items.length, H - 10);
+  // Anchor palette just above the input, matching zen vs chat input position
+  let inputRow, inputL, inputW;
+  if (inChatMode) {
+    const inputAreaH = 4 + 3; // maxInputLines + top separator + model row + gap
+    inputRow = H - inputAreaH + 1; // first input text row
+    inputW = Math.floor(mainW * 0.8);
+    inputL = Math.floor((mainW - inputW) / 2);
+  } else {
+    const startY = Math.max(2, Math.floor((H - 11) / 2));
+    inputRow = startY + 7; // cat(4)+brand(1)+msg(1)+gap(1) = 7 rows before input
+    inputW = Math.floor(mainW * 0.5);
+    inputL = Math.floor((mainW - inputW) / 2);
+  }
+  const innerW = inputW - 2;
+
+  // Panel matches the input area width and left edge exactly
+  const panelW = inputW;
+  const panelL = inputL;
+
+  // Show at most 10 items so the panel stays compact and close to the input
+  const maxShow = Math.min(items.length, Math.min(10, inputRow - 4));
   let scrollOff = 0;
   if (selIdx >= maxShow) scrollOff = selIdx - maxShow + 1;
   const visible = items.slice(scrollOff, scrollOff + maxShow);
   const colW = items.length > 0 ? Math.max(...items.map(c => c.cmd.length)) + 2 : 10;
 
-  // Paint panel rows
-  const totalRows = maxShow + 2;
-  for (let r = panelTop; r <= panelTop + totalRows; r++) {
+  // panelH: title row + item rows; place it ending one row above input
+  const panelH = maxShow + 2;
+  const panelTop = Math.max(2, inputRow - panelH - 1);
+
+  // Paint panel background
+  for (let r = panelTop; r <= panelTop + panelH; r++) {
     at(r, panelL - 1, `${panelBg}${' '.repeat(panelW + 2)}${R}`);
   }
 
-  // Title + esc hint
+  // Title uses accent so it visually connects to the │ bar below
   const escPad = Math.max(0, panelW - 8 - 3);
-  at(panelTop,     panelL, `${panelBg}${ansi.bold}Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
+  at(panelTop, panelL, `${panelBg}${ansi.bold}${t.accent}Commands${R}${panelBg}${' '.repeat(escPad)}${ansi.dim}esc${R}`);
 
   if (items.length === 0) {
-    at(panelTop + 2, panelL, `${panelBg}  ${ansi.dim}No matching commands${R}`);
+    at(panelTop + 1, panelL, `${panelBg}  ${ansi.dim}No matching commands${R}`);
   } else {
     for (let i = 0; i < visible.length; i++) {
       const item = visible[i];
@@ -437,21 +457,17 @@ export function renderPalette(items, selIdx, inputBuf, cursorPos) {
       const padded = item.cmd.padEnd(colW);
       const desc = (item.desc || '').slice(0, panelW - colW - 4);
       const pad = Math.max(0, panelW - vis(padded) - vis(desc) - 2);
-      at(panelTop + 2 + i, panelL, `${bg}  ${cmdStyle}${padded}${R}${bg}${ansi.dim}${desc}${' '.repeat(pad)}${R}`);
+      at(panelTop + 1 + i, panelL, `${bg}  ${cmdStyle}${padded}${R}${bg}${ansi.dim}${desc}${' '.repeat(pad)}${R}`);
     }
     if (items.length > scrollOff + maxShow) {
-      at(panelTop + 2 + maxShow, panelL, `${panelBg}  ${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}`);
+      at(panelTop + 1 + maxShow, panelL, `${panelBg}  ${ansi.dim}↓ ${items.length - scrollOff - maxShow} more${R}`);
     }
   }
 
-  // Cursor at zen input position (renderZen already drew it, we re-anchor)
-  const inputW = Math.floor(mainW * 0.5);
-  const inputL = Math.floor((mainW - inputW) / 2);
-  const innerW = inputW - 2;
+  // Cursor at input row (below the palette, where the user is typing)
   const buf = inputBuf || '';
   const { col: cc, line: cl } = calcCursorPosInWrapped(buf, cursorPos, innerW);
-  const startY = Math.max(2, Math.floor((H - 13) / 2));
-  write(ansi.to(startY + 8 + cl, inputL + 2 + cc));
+  write(ansi.to(inputRow + cl, inputL + 2 + cc));
 }
 
 // ── Selector — floating panel overlay with search ───────────────────────────
@@ -747,8 +763,9 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   const panelW = Math.min(Math.floor(W * 0.72), 88);
   const panelL = Math.floor((W - panelW) / 2) + 1;
 
-  const maxShow = Math.min(items.length, H - 14);
-  const panelH = maxShow + 8; // title + tabs + divider + items + dl_section + hint
+  const extraRows = tab === 2 ? 1 : 0;
+  const maxShow = Math.min(items.length, H - 14 - extraRows);
+  const panelH = maxShow + 8 + extraRows;
   const panelTop = Math.max(2, Math.floor((H - panelH) / 2));
 
   // Draw panel background
@@ -768,17 +785,28 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   }).join(`  `);
   at(panelTop + 1, panelL, `${panelBg}${tabsStr}${R}`);
 
+  // Search input row — only for Search tab; shows typed query with a visible cursor
+  if (tab === 2) {
+    const sq = searchBuf || '';
+    const displayText = sq || 'Type to search HuggingFace GGUF models...';
+    const sqPad = Math.max(0, panelW - 2 - vis(displayText));
+    const sqStyle = sq ? t.inputFg : ansi.dim;
+    // Do NOT reset after │ — that kills panelBg and leaves a black gap before the text
+    at(panelTop + 2, panelL, `${panelBg}${t.accent}│ ${sqStyle}${displayText}${R}${panelBg}${' '.repeat(sqPad)}${R}`);
+  }
+
   // Item list
+  const itemStartRow = panelTop + 3 + extraRows;
   if (items.length === 0) {
     if (loading) {
-      at(panelTop + 3, panelL, `${panelBg}  ${ansi.dim}Loading...${R}`);
+      at(itemStartRow, panelL, `${panelBg}  ${ansi.dim}Loading...${R}`);
     } else {
       const emptyMsg = tab === 0
         ? 'No models downloaded yet.'
         : tab === 1
           ? 'Select a recommended model below to download.'
-          : 'Type to search HuggingFace GGUF models';
-      at(panelTop + 3, panelL, `${panelBg}  ${ansi.dim}${emptyMsg}${R}`);
+          : searchBuf ? 'No results found. Try a different search.' : '';
+      if (emptyMsg) at(itemStartRow, panelL, `${panelBg}  ${ansi.dim}${emptyMsg}${R}`);
     }
   } else {
     const scrollOff = selectedIdx >= maxShow ? selectedIdx - maxShow + 1 : 0;
@@ -788,7 +816,7 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
       const item = visible[i];
       const realIdx = i + scrollOff;
       const sel = realIdx === selectedIdx;
-      const row = panelTop + 3 + i;
+      const row = itemStartRow + i;
       const bg = sel ? t.paletteSel : panelBg;
       const nameStyle = sel ? `${ansi.bold}${t.paletteCmd}` : '';
       const name = item.name || item.id || item.repoId || '';
@@ -802,7 +830,7 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   }
 
   // Active downloads section
-  const dlTop = panelTop + 2 + maxShow;
+  const dlTop = panelTop + 3 + extraRows + maxShow;
 
   if (activeDownloads && activeDownloads.length > 0) {
     at(dlTop, panelL, `${panelBg}${ansi.bold}  Downloading:${R}`);
@@ -828,9 +856,9 @@ export function renderModelsPage(tab, searchBuf, items, selectedIdx, activeDownl
   const hintRow = panelTop + panelH - 1;
   at(hintRow, panelL, `${panelBg}${ansi.dim}  ↑↓ navigate  · Enter select/download  · Tab switch tabs  · Esc close${R}`);
 
-  // Cursor at search buf position for search tab
+  // Cursor at search input row (not the tabs row)
   if (tab === 2) {
-    write(ansi.to(panelTop + 1, panelL + vis(searchBuf || '') + 2));
+    write(ansi.to(panelTop + 2, panelL + 2 + vis(searchBuf || '')));
   }
 }
 

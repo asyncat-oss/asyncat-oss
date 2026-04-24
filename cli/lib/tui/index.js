@@ -292,7 +292,7 @@ export class Tui extends EventEmitter {
       if (this.paletteIdx >= this.paletteItems.length) {
         this.paletteIdx = Math.max(0, this.paletteItems.length - 1);
       }
-      renderPalette(this.paletteItems, this.paletteIdx, this.buf, this.pos);
+      renderPalette(this.paletteItems, this.paletteIdx, this.buf, this.pos, this.messages.length > 0);
     } else if (this.mode === 'selector') {
       renderSelector(this._selTitle, this._selItems, this._selIdx, this.buf, this.pos);
     } else if (this.mode === 'model-setup') {
