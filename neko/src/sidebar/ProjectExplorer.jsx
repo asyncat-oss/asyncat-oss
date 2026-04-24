@@ -167,7 +167,7 @@ const ProjectItem = memo(({ project, isSelected, onSelect, isLoading, folders, o
             ? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100'
             : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800'
         } ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}
-        onClick={() => { if (menuOpen) return; if (expanded) setExpanded(false); else onSelect(project); }}
+        onClick={() => { if (menuOpen) return; if (expanded) setExpanded(false); else if (isSelected) setExpanded(true); else onSelect(project); }}
       >
         {isLoading ? (
           <div className="w-3.5 h-3.5 border-2 border-gray-300 dark:border-gray-600 border-t-gray-500 dark:border-t-gray-400 rounded-full animate-spin flex-shrink-0" />
