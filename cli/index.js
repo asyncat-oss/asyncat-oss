@@ -9,6 +9,7 @@ import { ROOT, setKey } from './lib/env.js';
 import { PROVIDER_DEFAULTS } from './lib/tui/views.js';
 import { spawn as _spawn } from 'child_process';
 import crypto from 'crypto';
+import { logger } from './lib/logger.js';
 
 // ── Command imports ──────────────────────────────────────────────────────────
 import * as _start    from './commands/start.js';
@@ -333,6 +334,7 @@ async function startTui() {
 
   async function dispatch(cmd, args = []) {
     tui.lockInput();
+    logger.commands.info(`dispatch: ${cmd} ${args.join(' ')}`.trim());
 
     // Commands that are capture-able: run inline, show output in result popup
     const inlineCommands = {

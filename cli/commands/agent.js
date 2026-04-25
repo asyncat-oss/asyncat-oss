@@ -10,6 +10,7 @@
 
 import { col, log, warn } from '../lib/colors.js';
 import { apiGet, apiPost, getToken, getBase, streamPost } from '../lib/denApi.js';
+import { logger } from '../lib/logger.js';
 import readline from 'readline';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -369,6 +370,7 @@ async function interactiveMode(_options) {
 // ── Exported run ─────────────────────────────────────────────────────────────
 
 export async function run(args = []) {
+  logger.agent.info(`Agent command started: ${args.join(' ')}`);
   if (args[0] === 'undo') {
     try {
       const data = await apiPost('/api/agent/checkpoints/restore', { id: args[1] || null });

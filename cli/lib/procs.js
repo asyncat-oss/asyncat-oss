@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { line, warn, ok, info } from "./colors.js";
 import { ROOT } from "./env.js";
+import { logger } from "./logger.js";
 
 export const procs = { backend: null, frontend: null };
 const watchers = { backend: null, frontend: null };
@@ -167,7 +168,8 @@ function spawnProc(key) {
 }
 
 export function startProc(key, cwd, cmd, args, color, options = {}) {
-	if (procs[key]) {
+  logger.commands.info(`Starting service: ${key} (${cmd} ${args.join(' ')})`);
+  if (procs[key]) {
 		warn(`${key} is already running.`);
 		return;
 	}
@@ -186,7 +188,8 @@ export function startProc(key, cwd, cmd, args, color, options = {}) {
 }
 
 export function stopProc(key) {
-	const hadWatcher = Boolean(watchers[key]);
+  logger.commands.info(`Stopping service: ${key}`);
+  const hadWatcher = Boolean(watchers[key]);
 	clearWatcher(key);
 	if (procs[key]) {
 		procState[key].pendingRestart = false;

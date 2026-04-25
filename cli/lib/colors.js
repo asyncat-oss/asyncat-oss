@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { execSync } from 'child_process';
 import { getTheme, getThemeName } from './theme.js';
+import { logger } from './logger.js';
 
 // ── Base ANSI codes ────────────────────────────────────────────────────────────
 export const c = {
@@ -47,13 +48,14 @@ export function log(msg) {
   _rl.prompt(true);
 }
 
-export const ok   = (msg) => log(`  ${col('green',  '✔')}  ${msg}`);
-export const err  = (msg) => log(`  ${col('red',    '✖')}  ${msg}`);
-export const warn = (msg) => log(`  ${col('yellow', '⚠')}  ${msg}`);
-export const info = (msg) => log(`  ${col('cyan',   '→')}  ${msg}`);
+export const ok   = (msg) => { logger.commands.ok(msg); log(`  ${col('green',  '✔')}  ${msg}`); };
+export const err  = (msg) => { logger.error.err(msg); log(`  ${col('red',    '✖')}  ${msg}`); };
+export const warn = (msg) => { logger.commands.warn2(msg); log(`  ${col('yellow', '⚠')}  ${msg}`); };
+export const info = (msg) => { logger.commands.info2(msg); log(`  ${col('cyan',   '→')}  ${msg}`); };
 
 export function line(tag, text, color) {
   const formatted = `${col(color, '[' + tag + ']')} ${text}`;
+  logger.ui.info(`[${tag}] ${text}`);
   if (!_liveLogsEnabled) return;
   if (_ll) {
     _ll.printAbove(formatted);

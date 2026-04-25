@@ -18,6 +18,7 @@ import {
 } from './views.js';
 import { getTheme } from '../theme.js';
 import { getLiveLogsEnabled } from '../colors.js';
+import { logger } from '../logger.js';
 import { readEnv } from '../env.js';
 
 const HISTORY_FILE = path.join(os.homedir(), '.asyncat_history');
@@ -161,6 +162,7 @@ export class Tui extends EventEmitter {
       this._origLog = console.log;
       console.log = (...args) => {
         const text = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+        logger.ui.debug(text);
         text.split('\n').forEach(line => {
           if (this._captureMode) {
             this._captureBuffer.push(line);
@@ -377,6 +379,7 @@ export class Tui extends EventEmitter {
 
   // Startup-only log: renders in zen view without switching to chat mode
   logStartup(icon, text) {
+    logger.startup.info(`${icon} ${text}`);
     this._startupLog.push({ icon, text, ts: Date.now() });
     if (this._startupLog.length > 8) this._startupLog.shift();
     if (this.mode === 'zen') this.render();
