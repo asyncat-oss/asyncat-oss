@@ -328,6 +328,204 @@ const RuntimePill = ({ candidate }) => (
   </div>
 );
 
+const PYTHON_BUILD_PROFILES = {
+  nvidia_gpu:  { label: 'Build CUDA Runtime',  tag: 'CUDA',  color: 'bg-green-600 hover:bg-green-700 text-white' },
+  apple_metal: { label: 'Build Metal Runtime', tag: 'Metal', color: 'bg-purple-600 hover:bg-purple-700 text-white' },
+  amd_rocm:    { label: 'Build ROCm Runtime',  tag: 'ROCm',  color: 'bg-orange-600 hover:bg-orange-700 text-white' },
+};
+
+const PYTHON_BUILD_PHASES = [
+  { id: 'venv',        label: 'Create venv',   percent: 5  },
+  { id: 'pip',         label: 'Upgrade pip',   percent: 10 },
+  { id: 'build_tools', label: 'Build tools',   percent: 20 },
+  { id: 'compile',     label: 'Compile',        percent: 30 },
+  { id: 'finalizing',  label: 'Finalize',       percent: 95 },
+];
+
+function formatElapsed(ms) {
+  if (ms < 1000) return '0s';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+const PythonBuildCard = ({
+  buildMeta, installProfile, isPythonBuilding, pythonDone, pythonError,
+  pythonInstallJob, progressPercent, pythonBuildError, pythonBuildSuccess,
+  retryModel, switchingKey, installingKey, onBuildGpuRuntime,
+}) => {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!isPythonBuilding || !pythonInstallJob?.startedAt) { setElapsed(0); return; }
+    const tick = () => setElapsed(Date.now() - new Date(pythonInstallJob.startedAt).getTime());
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isPythonBuilding, pythonInstallJob?.startedAt]);
+
+  const phaseIdx = PYTHON_BUILD_PHASES.findIndex(p => p.id === pythonInstallJob?.phase);
+
+  return (
+    <div className="mt-3 rounded-xl border border-blue-200 dark:border-blue-800 midnight:border-blue-900 bg-blue-50/60 dark:bg-blue-900/20 midnight:bg-blue-950/20 p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <span className="text-xs font-semibold text-blue-900 dark:text-blue-200">
+            Build {buildMeta.tag} runtime inside Asyncat
+          </span>
+        </div>
+        {isPythonBuilding && elapsed > 0 && (
+          <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400 flex-shrink-0">
+            {formatElapsed(elapsed)} elapsed
+          </span>
+        )}
+      </div>
+
+      {!isPythonBuilding && !pythonDone && !pythonError && (
+        <p className="text-xs text-blue-800/80 dark:text-blue-200/70 leading-5">
+          Asyncat will compile <code className="font-mono text-[11px]">llama-cpp-python</code> with {buildMeta.tag} support
+          inside its own isolated venv — nothing touches your system Python.
+          Requires Python 3.10+ and takes <strong>10–30 minutes</strong>.
+          After that, performance matches Ollama.
+        </p>
+      )}
+
+      {isPythonBuilding && (
+        <div className="space-y-2">
+          {/* Phase steps */}
+          <div className="flex items-center gap-1">
+            {PYTHON_BUILD_PHASES.map((phase, i) => {
+              const done = phaseIdx > i || pythonDone;
+              const active = phaseIdx === i;
+              return (
+                <div key={phase.id} className="flex items-center gap-1 flex-1 min-w-0">
+                  <div className={`h-1.5 flex-1 rounded-full transition-all ${
+                    done ? 'bg-blue-500' : active ? 'bg-blue-400 animate-pulse' : 'bg-gray-200 dark:bg-gray-700'
+                  }`} />
+                  {i < PYTHON_BUILD_PHASES.length - 1 && (
+                    <div className={`w-1 h-1 rounded-full flex-shrink-0 ${done ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Phase labels */}
+          <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500">
+            {PYTHON_BUILD_PHASES.map((phase) => (
+              <span key={phase.id} className={phase.id === pythonInstallJob?.phase ? 'text-blue-500 font-semibold' : ''}>
+                {phase.label}
+              </span>
+            ))}
+          </div>
+
+          {/* Live output terminal */}
+          <div className="rounded-lg bg-gray-950 dark:bg-black p-2.5 font-mono text-[11px] leading-5">
+            <div className="flex items-center gap-2 mb-1.5 text-gray-500">
+              <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
+              <span className="text-blue-400">
+                {pythonInstallJob?.phase === 'compile' ? `Compiling ${buildMeta.tag}…`
+                  : pythonInstallJob?.phase === 'build_tools' ? 'Installing build tools…'
+                  : pythonInstallJob?.phase === 'pip' ? 'Upgrading pip…'
+                  : pythonInstallJob?.phase === 'venv' ? 'Creating venv…'
+                  : 'Working…'}
+              </span>
+            </div>
+            <p className="text-gray-300 truncate pl-4">
+              {pythonInstallJob?.message || '…'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {pythonDone && (
+        <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+          {pythonBuildSuccess || pythonInstallJob?.message || 'GPU runtime built successfully.'}
+        </p>
+      )}
+
+      {(pythonBuildError || pythonError) && (() => {
+        const errText = pythonBuildError || pythonInstallJob?.error || 'Build failed.';
+        const lines = errText.split('\n').filter(Boolean);
+        // CUDA missing: match specific "not found" messages, not just the word "cuda"
+        const isCudaMissing = /cuda toolkit not found|could not find.*nvcc|nvcc.*not found|CUDAToolkit_ROOT|nvcc missing/i.test(errText);
+        // Compiler missing: only when an explicit "not found" message is present, and CUDA isn't the root cause
+        const isCompilerMissing = !isCudaMissing && /c\+\+ compiler.*not found|no c\+\+ compiler|compiler.*not found|CXX.*not found|g\+\+.*not found|clang\+\+.*not found/i.test(errText);
+        return (
+          <div className="space-y-2">
+            <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-2.5 space-y-1">
+              {lines.map((line, i) => (
+                <p key={i} className={`text-xs ${i === 0 ? 'text-red-700 dark:text-red-300 font-medium' : 'font-mono text-red-600 dark:text-red-400'}`}>
+                  {line}
+                </p>
+              ))}
+            </div>
+            {isCompilerMissing && (
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2.5">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">C++ compiler missing</p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 mb-1.5">Install it, then retry:</p>
+                <code className="block text-[11px] font-mono bg-gray-900 text-green-400 rounded px-2 py-1.5">
+                  sudo dnf install gcc-c++ make
+                </code>
+                <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1.5 italic">
+                  On Ubuntu/Debian use: sudo apt install build-essential
+                </p>
+              </div>
+            )}
+            {isCudaMissing && (
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2.5 space-y-2">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">CUDA Toolkit not installed</p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Run the commands shown above in a terminal (they are tailored to your OS version), then come back and click Retry.
+                </p>
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">After install, also run:</p>
+                  <code className="block text-[11px] font-mono bg-gray-900 text-green-400 rounded px-2 py-1.5 whitespace-pre-wrap">
+                    {"echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc\nsource ~/.bashrc"}
+                  </code>
+                </div>
+                <p className="text-[10px] text-amber-600 dark:text-amber-500 italic">
+                  GCC version compatibility is handled automatically by asyncat — no manual compiler flags needed.
+                </p>
+              </div>
+            )}
+            <button
+              onClick={() => onBuildGpuRuntime(installProfile, false)}
+              disabled={Boolean(switchingKey) || Boolean(installingKey)}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 ${buildMeta.color}`}
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Retry Build
+            </button>
+          </div>
+        );
+      })()}
+
+      {!isPythonBuilding && !pythonDone && !pythonError && (
+        <div className="flex gap-2 pt-0.5">
+          <button
+            onClick={() => onBuildGpuRuntime(installProfile, false)}
+            disabled={Boolean(switchingKey) || Boolean(installingKey)}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 ${buildMeta.color}`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {buildMeta.label}
+          </button>
+          {retryModel && (
+            <button
+              onClick={() => onBuildGpuRuntime(installProfile, true)}
+              disabled={Boolean(switchingKey) || Boolean(installingKey)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-200 dark:text-gray-900 disabled:opacity-50"
+            >
+              {buildMeta.label} + Retry Model
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const EngineAdvisorSection = ({
   engineData,
   engineCatalog,
@@ -342,9 +540,13 @@ const EngineAdvisorSection = ({
   installSuccess,
   revertSelection,
   retryModel,
+  pythonInstallJob,
+  pythonBuildError,
+  pythonBuildSuccess,
   onRescan,
   onSwitch,
   onInstall,
+  onBuildGpuRuntime,
   onRefreshCatalog,
 }) => {
   const [customPath, setCustomPath] = useState('');
@@ -557,6 +759,33 @@ const EngineAdvisorSection = ({
               )}
             </div>
           )}
+
+          {/* Python GPU build card — shown when GPU detected but no managed binary available */}
+          {recommendation?.state === 'not_installed' && !managedProfileAvailable && installProfile && PYTHON_BUILD_PROFILES[installProfile] && (() => {
+            const buildMeta = PYTHON_BUILD_PROFILES[installProfile];
+            const isPythonBuilding = pythonInstallJob?.status === 'queued' || pythonInstallJob?.status === 'running';
+            const pythonDone = pythonInstallJob?.status === 'complete';
+            const pythonError = pythonInstallJob?.status === 'error';
+            const currentPhaseIdx = PYTHON_BUILD_PHASES.findIndex(p => p.id === pythonInstallJob?.phase);
+            const progressPercent = pythonInstallJob?.percent ?? (currentPhaseIdx >= 0 ? PYTHON_BUILD_PHASES[currentPhaseIdx].percent : 0);
+            return (
+              <PythonBuildCard
+                buildMeta={buildMeta}
+                installProfile={installProfile}
+                isPythonBuilding={isPythonBuilding}
+                pythonDone={pythonDone}
+                pythonError={pythonError}
+                pythonInstallJob={pythonInstallJob}
+                progressPercent={progressPercent}
+                pythonBuildError={pythonBuildError}
+                pythonBuildSuccess={pythonBuildSuccess}
+                retryModel={retryModel}
+                switchingKey={switchingKey}
+                installingKey={installingKey}
+                onBuildGpuRuntime={onBuildGpuRuntime}
+              />
+            );
+          })()}
         </div>
 
 	        <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 p-3">
@@ -1194,10 +1423,14 @@ const ModelsPage = () => {
   const [installError, setInstallError] = useState('');
   const [installSuccess, setInstallSuccess] = useState('');
   const [revertSelection, setRevertSelection] = useState(null);
+  const [pythonInstallJob, setPythonInstallJob] = useState(null);
+  const [pythonBuildError, setPythonBuildError] = useState('');
+  const [pythonBuildSuccess, setPythonBuildSuccess] = useState('');
   const [modelLoadCtxSizes, setModelLoadCtxSizes] = useState(loadSavedModelContextSizes);
   const [modelLoadCtxErrors, setModelLoadCtxErrors] = useState({});
   const pollCleanup = useRef(null);
   const installPollCleanup = useRef(null);
+  const pythonBuildPollCleanup = useRef(null);
 
   useEffect(() => {
     loadStatus();
@@ -1207,6 +1440,7 @@ const ModelsPage = () => {
     return () => {
       pollCleanup.current?.();
       installPollCleanup.current?.();
+      pythonBuildPollCleanup.current?.();
     };
   }, []);
 
@@ -1333,6 +1567,47 @@ const ModelsPage = () => {
         await loadEngineCatalog(true);
       },
     );
+  };
+
+  const beginPythonInstallJobPolling = (jobId) => {
+    if (!jobId) return;
+    pythonBuildPollCleanup.current?.();
+    pythonBuildPollCleanup.current = llamaServerApi.pollPythonInstallJob(
+      jobId,
+      (job) => setPythonInstallJob(job),
+      async (job) => {
+        setPythonInstallJob(job);
+        pythonBuildPollCleanup.current = null;
+        if (job.advisor) setEngineData(job.advisor);
+        if (job.statusSnapshot) setServerStatus(job.statusSnapshot);
+        await loadEngineData();
+        setPythonBuildSuccess(`GPU runtime built. GPU layers set to ${job.install?.gpuLayers ?? 0}.`);
+        setPythonBuildError('');
+      },
+      async (job) => {
+        setPythonInstallJob(job);
+        pythonBuildPollCleanup.current = null;
+        setPythonBuildError(job?.error || 'GPU runtime build failed.');
+      },
+    );
+  };
+
+  const handleBuildGpuRuntime = async (profile, retryModelAfterBuild) => {
+    setPythonBuildError('');
+    setPythonBuildSuccess('');
+    try {
+      const ctxSize = retryModelAfterBuild ? getRetryModelContext() : undefined;
+      const res = await llamaServerApi.startPythonInstallJob({
+        profile,
+        retryModel: retryModelAfterBuild ? serverStatus?.model || undefined : undefined,
+        ctxSize,
+      });
+      const job = res.job;
+      setPythonInstallJob(job);
+      beginPythonInstallJobPolling(job.id);
+    } catch (err) {
+      setPythonBuildError(err.message || 'Failed to start GPU runtime build.');
+    }
   };
 
   const loadEngineCatalog = async (refresh = false) => {
@@ -1897,9 +2172,13 @@ const ModelsPage = () => {
                   installSuccess={installSuccess}
                   revertSelection={revertSelection}
                   retryModel={serverStatus?.model || null}
+                  pythonInstallJob={pythonInstallJob}
+                  pythonBuildError={pythonBuildError}
+                  pythonBuildSuccess={pythonBuildSuccess}
                   onRescan={loadEngineData}
                   onSwitch={handleEngineSwitch}
                   onInstall={handleManagedInstall}
+                  onBuildGpuRuntime={handleBuildGpuRuntime}
                   onRefreshCatalog={loadEngineCatalog}
                 />
               </div>

@@ -27,6 +27,8 @@ import {
   installEngine,
   startEngineInstallJob,
   getEngineInstallJob,
+  startPythonEngineInstallJob,
+  getPythonEngineInstallJob,
   subscribe as llamaSubscribe,
 } from '../controllers/ai/llamaServerManager.js';
 import db from '../../db/client.js';
@@ -616,6 +618,30 @@ router.get('/server/engines/install-jobs/:id', verifyUser, async (req, res) => {
   if (!job) {
     return res.status(404).json({ success: false, error: 'Install job not found' });
   }
+  res.json({ success: true, job });
+});
+
+// ── POST /server/engines/python-install-jobs — start Python GPU runtime build ─
+router.post('/server/engines/python-install-jobs', verifyUser, async (req, res) => {
+  try {
+    const { profile, retryModel, ctxSize } = req.body || {};
+    const job = await startPythonEngineInstallJob({
+      profile,
+      retryModel,
+      ctxSize,
+      modelsDir: MODELS_DIR,
+    });
+    res.status(202).json({ success: true, job });
+  } catch (err) {
+    const status = /already running/i.test(err.message) ? 409 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /server/engines/python-install-jobs/:id — poll Python build job ───────
+router.get('/server/engines/python-install-jobs/:id', verifyUser, (req, res) => {
+  const job = getPythonEngineInstallJob(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'Python install job not found' });
   res.json({ success: true, job });
 });
 

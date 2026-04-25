@@ -7,7 +7,7 @@ import path from 'path';
 import net from 'net';
 import { PassThrough } from 'stream';
 import { spawn } from 'child_process';
-import { ansi, strip, vis, w, h, write, at, clearRow } from './ansi.js';
+import { ansi, strip, vis, w, h, write, at, clearRow, beginFrame, endFrame } from './ansi.js';
 import {
   renderZen, renderChat, renderPalette, renderStatusBar,
   renderStreamingIndicator, renderSelector, filterPalette,
@@ -266,6 +266,7 @@ export class Tui extends EventEmitter {
   // ── Rendering ─────────────────────────────────────────────────────────────
   render() {
     if (this._destroyed) return;
+    beginFrame();
     write(ansi.hide);
     renderStatusBar(this.version, this.streaming ? this._streamMsg : null, this.modelInfo, this._fullControl, this._usage);
 
@@ -282,6 +283,7 @@ export class Tui extends EventEmitter {
         this._modelsLoading
       );
       write(ansi.show);
+      endFrame();
       return;
     }
 
@@ -298,6 +300,7 @@ export class Tui extends EventEmitter {
     if (this.mode === 'result') {
       renderResult(this._resultTitle, this._resultLines, this._resultScroll);
       write(ansi.show);
+      endFrame();
       return;
     }
 
@@ -319,6 +322,7 @@ export class Tui extends EventEmitter {
     }
 
     write(ansi.show);
+    endFrame();
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -540,7 +544,12 @@ export class Tui extends EventEmitter {
 
   appendStreamContent(delta) {
     this._streamContent = (this._streamContent || '') + delta;
-    this.render();
+    // Throttle to ~30fps — avoid a full redraw for every incoming token
+    const now = Date.now();
+    if (!this._lastStreamRender || now - this._lastStreamRender >= 33) {
+      this._lastStreamRender = now;
+      this.render();
+    }
   }
 
   clearStreamContent() {

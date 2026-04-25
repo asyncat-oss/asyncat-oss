@@ -29,7 +29,26 @@ export const vis = s => strip(s).length;
 export const w = () => process.stdout.columns || 80;
 export const h = () => process.stdout.rows || 24;
 
-export function write(s) { process.stdout.write(s); }
+// ── Frame buffer — batch all writes in a render cycle into one stdout flush ──
+let _frameBuf = null;
+
+export function beginFrame() {
+  _frameBuf = [];
+}
+
+export function endFrame() {
+  if (_frameBuf !== null) {
+    const out = _frameBuf.join('');
+    _frameBuf = null;
+    if (out) process.stdout.write(out);
+  }
+}
+
+export function write(s) {
+  if (_frameBuf !== null) _frameBuf.push(s);
+  else process.stdout.write(s);
+}
+
 export function at(row, col, s) { write(`${ansi.to(row, col)}${s}`); }
 export function clearRow(row) { write(`${ansi.to(row, 1)}${ansi.clearLine}`); }
 export function hline(row, ch, len, style = '') {

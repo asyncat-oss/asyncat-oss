@@ -302,13 +302,13 @@ export function gpuAdvice(gpu = detectGpu()) {
   if (!gpu) return null;
   if (gpu.vendor === 'NVIDIA') {
     const vram = gpu.vramGb ? ` (${gpu.vramGb} GB VRAM)` : '';
-    return `NVIDIA GPU detected: ${gpu.name}${vram}. Asyncat keeps CPU-safe defaults; for CUDA builds use a CUDA llama.cpp binary, or an Asyncat Python venv with CMAKE_ARGS="-DGGML_CUDA=on" python -m pip install "llama-cpp-python[server]".`;
+    return `NVIDIA GPU detected: ${gpu.name}${vram}. Choose option [3] to build a CUDA runtime for full GPU acceleration.`;
   }
   if (gpu.vendor === 'Apple') {
-    return 'Apple Silicon detected. Use the managed macOS llama.cpp build first, then set LLAMA_GPU_LAYERS in den/.env if you want Metal offload.';
+    return 'Apple Silicon detected. Choose option [3] to build a Metal runtime for GPU acceleration.';
   }
   if (gpu.vendor === 'AMD') {
-    return 'AMD/ROCm detected. ROCm llama.cpp builds are advanced/manual; keep LLAMA_GPU_LAYERS=0 unless you configure a ROCm-capable build.';
+    return 'AMD GPU detected. Choose option [3] to build a ROCm runtime (requires ROCm drivers installed).';
   }
   return null;
 }
@@ -882,12 +882,44 @@ export function writeLlamaBinaryEnv(binaryPath) {
   setKey('den/.env', 'LLAMA_BINARY_PATH', binaryPath);
 }
 
-export function installPythonVenvFallback(pythonCmd) {
+const PYTHON_GPU_CMAKE_ARGS = {
+  nvidia_gpu:  '-DGGML_CUDA=on',
+  apple_metal: '-DGGML_METAL=on',
+  amd_rocm:    '-DGGML_HIP=on',
+};
+
+export function installPythonVenvFallback(pythonCmd, { profile = 'cpu_safe' } = {}) {
+  const cmakeArgs = PYTHON_GPU_CMAKE_ARGS[profile] || '';
+  let env = cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env;
+
+  // CUDA 12.6 only supports up to GCC 13. Fedora 40+ ships GCC 14/15.
+  // Auto-fix: use clang++ as host compiler if available, else allow unsupported compiler.
+  if (profile === 'nvidia_gpu') {
+    try {
+      const gccOut = execSync('gcc --version', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      const gccMajor = parseInt((gccOut.match(/\b(\d+)\.\d+\.\d+/) || [])[1] || '0', 10);
+      if (gccMajor >= 14) {
+        let clangAvailable = false;
+        try { execSync('clang++ --version', { stdio: 'ignore' }); clangAvailable = true; } catch {}
+        env = clangAvailable
+          ? { ...env, CUDAHOSTCXX: 'clang++' }
+          : { ...env, CUDAFLAGS: ((env.CUDAFLAGS || '') + ' --allow-unsupported-compiler').trim() };
+      }
+    } catch {}
+  }
+
   fs.mkdirSync(path.dirname(managedPythonDir()), { recursive: true });
   execFileSync(pythonCmd, ['-m', 'venv', managedPythonDir()], { cwd: ROOT, stdio: 'ignore', timeout: 120000 });
   const python = managedPythonBinaryPath();
-  execFileSync(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], { cwd: ROOT, stdio: 'ignore', timeout: 120000 });
-  execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]'], { cwd: ROOT, stdio: 'ignore', timeout: 600000 });
+  execFileSync(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], { env, cwd: ROOT, stdio: 'ignore', timeout: 120000 });
+  if (cmakeArgs) {
+    // Pre-install build tools so --no-build-isolation can find them during compilation
+    execFileSync(python, ['-m', 'pip', 'install', 'ninja', 'cmake', 'scikit-build-core', 'wheel', 'setuptools'], { env, cwd: ROOT, stdio: 'ignore', timeout: 300000 });
+    // CUDA/Metal/ROCm compilation can take 10-30 min
+    execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]', '--no-build-isolation'], { env, cwd: ROOT, stdio: 'ignore', timeout: 3600000 });
+  } else {
+    execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]'], { env, cwd: ROOT, stdio: 'ignore', timeout: 3600000 });
+  }
   setKey('den/.env', 'LLAMA_PYTHON_PATH', python);
   return python;
 }

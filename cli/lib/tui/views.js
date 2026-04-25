@@ -297,11 +297,29 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+// Parse RGB from a bgRgb escape string and return a slightly darker variant
+function _dimBg(bgStr, amount) {
+  if (!bgStr) return bgStr;
+  const m = bgStr.match(/48;2;(\d+);(\d+);(\d+)/);
+  if (!m) return bgStr;
+  const r = Math.max(0, parseInt(m[1]) - amount);
+  const g = Math.max(0, parseInt(m[2]) - amount);
+  const b = Math.max(0, parseInt(m[3]) - amount);
+  return `\x1b[48;2;${r};${g};${b}m`;
+}
+
 function clearThemedRows(t, from, to, width) {
   const bg = t.screenBg || '';
   const fg = t.screenFg || '';
-  const blank = `${bg}${fg}${' '.repeat(Math.max(0, width))}${ansi.reset}`;
-  for (let r = from; r <= to; r++) at(r, 1, blank);
+  // Subtle vignette: top 10% and bottom 10% rows are slightly darker
+  const edgeBg = _dimBg(bg, 9) || bg;
+  const total = to - from + 1;
+  for (let r = from; r <= to; r++) {
+    const pos = (r - from) / total;
+    const rowBg = (pos < 0.10 || pos > 0.90) ? edgeBg : bg;
+    const blank = `${rowBg}${fg}${' '.repeat(Math.max(0, width))}${ansi.reset}`;
+    at(r, 1, blank);
+  }
 }
 
 function atCentered(row, text, width, t) {

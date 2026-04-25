@@ -25,6 +25,7 @@ import {
   LLAMA_ENGINE_PROFILES,
   fetchLlamaReleases,
   buildReleaseCatalog,
+  installPythonVenvFallback,
 } from '../../../../../cli/lib/localEngine.js';
 
 const execAsync = promisify(exec);
@@ -896,6 +897,277 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
 
 export function getEngineInstallJob(jobId) {
   return snapshotInstallJob(installJobs.get(jobId));
+}
+
+// ── Python GPU engine build (async compile via pip) ───────────────────────────
+
+const PYTHON_GPU_CAPABILITY = {
+  nvidia_gpu:  'nvidia',
+  apple_metal: 'apple',
+  amd_rocm:    'amd',
+};
+
+function runCommandStreaming(cmd, args, options = {}, timeoutMs = 120000, onLine = null) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    const timer = setTimeout(() => { child.kill(); reject(new Error(`Timed out: ${cmd}`)); }, timeoutMs);
+    const onChunk = (chunk) => {
+      if (!onLine) return;
+      chunk.toString().split('\n').filter(l => l.trim()).forEach(l => onLine(l.trim()));
+    };
+    child.stdout.on('data', onChunk);
+    child.stderr.on('data', onChunk);
+    let errTail = '';
+    child.stderr.on('data', (c) => { errTail = (errTail + c).slice(-800); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`${cmd} exited ${code}: ${errTail.trim()}`));
+    });
+    child.on('error', (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+async function findPythonCmd() {
+  const cmds = IS_WIN ? ['python', 'python3', 'py'] : ['python3', 'python'];
+  for (const cmd of cmds) {
+    try { await execAsync(`${cmd} --version`, { timeout: 5000 }); return cmd; } catch {}
+  }
+  throw new Error('Python 3 not found. Install Python 3.10+ first.');
+}
+
+async function checkCxxCompiler() {
+  const compilers = IS_WIN ? ['cl', 'clang++', 'g++'] : ['g++', 'c++', 'clang++'];
+  for (const cmd of compilers) {
+    try { await execAsync(`${cmd} --version`, { timeout: 5000 }); return cmd; } catch {}
+  }
+  return null;
+}
+
+function cxxInstallHint() {
+  const p = process.platform;
+  if (p === 'linux') {
+    // Detect distro from /etc/os-release
+    let id = '';
+    try { id = fs.readFileSync('/etc/os-release', 'utf8'); } catch {}
+    if (/fedora|rhel|centos|rocky|alma/i.test(id)) return 'sudo dnf install gcc-c++ make';
+    return 'sudo apt install build-essential';
+  }
+  if (p === 'darwin') return 'xcode-select --install';
+  return 'Install Visual Studio Build Tools (C++ workload) from visualstudio.microsoft.com';
+}
+
+// Compiler/linker output lines we don't need to surface to the user
+const NOISY_OUTPUT_RE = /^\s*$|^#|^\s*\[|nvcc |gcc |g\+\+ |clang|\.cpp$|\.cu$|\.o$|^ninja:|^cmake\s*-|^--\s/i;
+
+// Locate nvcc in PATH or common install directories.
+// Returns { inPath, cudaRoot } or null if not found.
+async function findNvcc() {
+  try { await execAsync('nvcc --version', { timeout: 5000 }); return { inPath: true, cudaRoot: null }; } catch {}
+
+  const candidates = IS_WIN
+    ? [path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'NVIDIA GPU Computing Toolkit', 'CUDA')]
+    : ['/usr/local/cuda', '/opt/cuda'];
+
+  if (!IS_WIN) {
+    try {
+      const dirs = fs.readdirSync('/usr/local').filter(n => /^cuda(-\d[\d.]*)?$/.test(n));
+      candidates.push(...dirs.map(d => path.join('/usr/local', d)));
+    } catch {}
+  }
+
+  for (const base of candidates) {
+    const nvcc = path.join(base, 'bin', IS_WIN ? 'nvcc.exe' : 'nvcc');
+    if (fs.existsSync(nvcc)) return { inPath: false, cudaRoot: base, nvccPath: nvcc };
+  }
+  return null;
+}
+
+function cudaInstallHint() {
+  if (process.platform === 'linux') {
+    let osRelease = '';
+    try { osRelease = fs.readFileSync('/etc/os-release', 'utf8'); } catch {}
+
+    if (/fedora|rhel|centos|rocky|alma/i.test(osRelease)) {
+      const m = osRelease.match(/^VERSION_ID="?(\d+)"?/m);
+      const fedoraVer = parseInt(m ? m[1] : '43', 10);
+      // NVIDIA has repos for fedora39–43; clamp to that range
+      const repoVer = Math.min(Math.max(fedoraVer, 39), 43);
+      // Fedora 41+ uses dnf5 which changed the config-manager syntax
+      const addRepoCmd = fedoraVer >= 41
+        ? `sudo dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora${repoVer}/x86_64/cuda-fedora${repoVer}.repo`
+        : `sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/fedora${repoVer}/x86_64/cuda-fedora${repoVer}.repo`;
+      return [
+        addRepoCmd,
+        'sudo dnf clean all',
+        'sudo dnf install cuda-toolkit',
+        "echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc",
+        'source ~/.bashrc',
+      ].join('\n');
+    }
+
+    // Ubuntu / Debian
+    return [
+      'sudo apt install nvidia-cuda-toolkit',
+      "echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc",
+      'source ~/.bashrc',
+    ].join('\n');
+  }
+  if (process.platform === 'darwin') return 'CUDA is not supported on macOS — use the Metal runtime instead.';
+  return 'Install CUDA Toolkit from developer.nvidia.com/cuda-downloads (select Windows).';
+}
+
+async function installPythonEngine({ profile, retryModel, ctxSize, modelsDir, onProgress = null }) {
+  // Pre-flight: C++ compiler is required to build llama-cpp-python from source
+  const cxx = await checkCxxCompiler();
+  if (!cxx) {
+    const hint = cxxInstallHint();
+    throw new Error(`C++ compiler (g++) not found.\nRun this first: ${hint}`);
+  }
+
+  // Pre-flight for CUDA builds: nvcc must be present before cmake runs
+  let cudaEnvOverrides = {};
+  if (profile === 'nvidia_gpu') {
+    const nvccInfo = await findNvcc();
+    if (!nvccInfo) {
+      const hint = cudaInstallHint();
+      throw new Error(`CUDA Toolkit not found (nvcc missing).\n${hint}`);
+    }
+    if (!nvccInfo.inPath && nvccInfo.cudaRoot) {
+      // nvcc exists but isn't on PATH — tell cmake where to find it
+      const cudaBin = path.join(nvccInfo.cudaRoot, 'bin');
+      cudaEnvOverrides = {
+        CUDAToolkit_ROOT: nvccInfo.cudaRoot,
+        PATH: `${cudaBin}${IS_WIN ? ';' : ':'}${process.env.PATH || ''}`,
+      };
+    }
+
+    // CUDA 12.6 only officially supports up to GCC 13. Fedora 40+ ships GCC 14/15.
+    // Check GCC version and fix automatically: prefer clang++ as host compiler,
+    // fall back to --allow-unsupported-compiler if clang isn't available.
+    try {
+      const { stdout: gccOut } = await execAsync('gcc --version', { timeout: 5000 });
+      const gccMajor = parseInt((gccOut.match(/\b(\d+)\.\d+\.\d+/) || [])[1] || '0', 10);
+      if (gccMajor >= 14) {
+        let clangAvailable = false;
+        try { await execAsync('clang++ --version', { timeout: 5000 }); clangAvailable = true; } catch {}
+        if (clangAvailable) {
+          cudaEnvOverrides.CUDAHOSTCXX = 'clang++';
+        } else {
+          // clang not installed — tell nvcc to skip the version check
+          cudaEnvOverrides.CUDAFLAGS = (cudaEnvOverrides.CUDAFLAGS ? cudaEnvOverrides.CUDAFLAGS + ' ' : '') + '--allow-unsupported-compiler';
+        }
+      }
+    } catch {}
+  }
+
+  const pythonCmd = await findPythonCmd();
+  const capabilityHint = PYTHON_GPU_CAPABILITY[profile] || 'cpu_safe';
+  const pythonVenvDir = path.join(asyncatHome(), 'llama.cpp', 'python');
+
+  onProgress?.({ phase: 'venv', message: 'Creating Python virtual environment…', percent: 5 });
+  await runCommandStreaming(pythonCmd, ['-m', 'venv', pythonVenvDir], {}, 120000);
+
+  const pythonBin = managedPythonBinaryPath();
+
+  onProgress?.({ phase: 'pip', message: 'Upgrading pip…', percent: 10 });
+  await runCommandStreaming(pythonBin, ['-m', 'pip', 'install', '--upgrade', 'pip'], {}, 120000);
+
+  // ninja + cmake must be pre-installed in the venv so llama-cpp-python's build
+  // backend can find them. Without this, pip's isolated build environment tries
+  // to download ninja and fails on restricted networks or older pip.
+  onProgress?.({ phase: 'build_tools', message: 'Installing build tools (ninja, cmake, scikit-build-core)…', percent: 20 });
+  await runCommandStreaming(
+    pythonBin,
+    ['-m', 'pip', 'install', 'ninja', 'cmake', 'scikit-build-core', 'wheel', 'setuptools'],
+    {}, 300000
+  );
+
+  const cmakeArgs = { nvidia_gpu: '-DGGML_CUDA=on', apple_metal: '-DGGML_METAL=on', amd_rocm: '-DGGML_HIP=on' }[profile] || '';
+  const env = { ...(cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env), ...cudaEnvOverrides };
+  const tag = profile === 'nvidia_gpu' ? 'CUDA' : profile === 'apple_metal' ? 'Metal' : profile === 'amd_rocm' ? 'ROCm' : 'CPU';
+
+  onProgress?.({ phase: 'compile', message: `Compiling llama-cpp-python with ${tag} support — takes 10–30 min…`, percent: 30 });
+  await runCommandStreaming(
+    pythonBin,
+    // --no-build-isolation reuses the ninja/cmake we just installed instead of
+    // trying to download them again inside an isolated build env
+    ['-m', 'pip', 'install', 'llama-cpp-python[server]', '--no-build-isolation'],
+    { env }, 3600000,
+    (line) => {
+      if (!NOISY_OUTPUT_RE.test(line)) {
+        onProgress?.({ phase: 'compile', message: line.slice(0, 140), percent: null });
+      }
+    }
+  );
+
+  onProgress?.({ phase: 'finalizing', message: 'Finalizing installation…', percent: 95 });
+  const gpu = await detectGpuInfo();
+  const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
+  const updates = { LLAMA_BINARY_PATH: '', LLAMA_PYTHON_PATH: pythonBin, LLAMA_GPU_LAYERS: gpuLayers };
+  persistEngineEnv(updates);
+  applyProcessEnv(updates);
+
+  return { pythonPath: pythonBin, profile, capabilityHint, gpuLayers: parseInt(gpuLayers, 10) };
+}
+
+const pythonInstallJobs = new Map();
+let latestPythonInstallJobId = null;
+
+export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize, modelsDir }) {
+  const running = [...pythonInstallJobs.values()].find(j => j.status === 'queued' || j.status === 'running');
+  if (running) throw new Error('A Python GPU runtime build is already running.');
+
+  const job = {
+    id: randomUUID(), status: 'queued', phase: 'queued',
+    message: 'Preparing Python GPU runtime build…', percent: 0,
+    profile: profile || null, retryModel: retryModel || null,
+    retry: null, error: null, install: null, advisor: null, statusSnapshot: null,
+    createdAt: nowIso(), startedAt: null, finishedAt: null, updatedAt: nowIso(),
+  };
+
+  pythonInstallJobs.set(job.id, job);
+  latestPythonInstallJobId = job.id;
+
+  const update = (fields) => Object.assign(job, fields, { updatedAt: nowIso() });
+
+  (async () => {
+    update({ status: 'running', phase: 'preparing', message: 'Inspecting hardware…', startedAt: nowIso(), percent: 1 });
+    try {
+      const result = await installPythonEngine({
+        profile, retryModel, ctxSize, modelsDir,
+        onProgress: (p) => update({
+          status: 'running', phase: p.phase || 'running',
+          message: p.message || 'Building…',
+          percent: typeof p.percent === 'number' ? p.percent : job.percent,
+        }),
+      });
+
+      let retry = { attempted: false, success: false, model: retryModel || null, error: null };
+      if (retryModel) {
+        retry.attempted = true;
+        try { await startServer(retryModel, modelsDir, ctxSize); retry.success = true; }
+        catch (e) { retry.error = e.message; }
+      }
+
+      update({
+        status: 'complete', phase: 'complete', percent: 100,
+        message: `GPU runtime built. GPU layers set to ${result.gpuLayers}.`,
+        install: result, retry, advisor: await getEngineAdvisor(),
+        statusSnapshot: getStatus(), finishedAt: nowIso(),
+      });
+    } catch (e) {
+      console.error('[llamaServer] Python GPU build failed:', e.message);
+      update({ status: 'error', phase: 'error', message: e.message || 'Build failed.', error: e.message, finishedAt: nowIso() });
+    }
+  })();
+
+  return { id: job.id, status: job.status, phase: job.phase, message: job.message, percent: job.percent, profile: job.profile };
+}
+
+export function getPythonEngineInstallJob(jobId) {
+  const job = pythonInstallJobs.get(jobId);
+  return job ? { ...job } : null;
 }
 
 // ── Singleton state ───────────────────────────────────────────────────────────

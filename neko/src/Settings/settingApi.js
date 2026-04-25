@@ -348,6 +348,36 @@ export const llamaServerApi = {
     };
   },
 
+  // Start a Python GPU runtime build job (CUDA / Metal / ROCm via pip).
+  startPythonInstallJob: async (payload) => {
+    return apiCall(`${AI_API_BASE}/server/engines/python-install-jobs`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Poll a Python GPU build job until it completes or errors.
+  pollPythonInstallJob: (jobId, onUpdate, onDone, onError) => {
+    let stopped = false;
+    let timerId = null;
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const data = await apiCall(`${AI_API_BASE}/server/engines/python-install-jobs/${encodeURIComponent(jobId)}`);
+        if (stopped) return;
+        const job = data.job;
+        onUpdate?.(job);
+        if (job?.status === 'complete') { stopped = true; onDone?.(job); return; }
+        if (job?.status === 'error')    { stopped = true; onError?.(job); return; }
+      } catch (err) {
+        if (!stopped) { stopped = true; onError?.({ status: 'error', error: err.message }); return; }
+      }
+      if (!stopped) timerId = setTimeout(poll, 1500);
+    };
+    poll();
+    return () => { stopped = true; clearTimeout(timerId); };
+  },
+
   // Poll a managed install job until it completes or errors.
   pollInstallJob: (jobId, onUpdate, onDone, onError) => {
     let stopped = false;

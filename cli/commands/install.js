@@ -239,6 +239,30 @@ export function ensureNativeRuntimeDeps() {
 	}
 }
 
+function checkCxxCompiler() {
+	const compilers = process.platform === "win32"
+		? ["cl", "clang++", "g++"]
+		: ["g++", "c++", "clang++"];
+	for (const cmd of compilers) {
+		try {
+			execSync(`${cmd} --version`, { stdio: "ignore", timeout: 5000 });
+			return cmd;
+		} catch {}
+	}
+	return null;
+}
+
+function cxxInstallHint() {
+	if (process.platform === "linux") {
+		let id = "";
+		try { id = fs.readFileSync("/etc/os-release", "utf8"); } catch {}
+		if (/fedora|rhel|centos|rocky|alma/i.test(id)) return "sudo dnf install gcc-c++ make";
+		return "sudo apt install build-essential";
+	}
+	if (process.platform === "darwin") return "xcode-select --install";
+	return "Install Visual Studio Build Tools (C++ workload) from visualstudio.microsoft.com";
+}
+
 async function checkLlama(python, args = []) {
 	const existing = findExistingLlamaServer();
 	const gpu = detectGpu();
@@ -272,11 +296,32 @@ async function checkLlama(python, args = []) {
 		return;
 	}
 
+	// Map detected GPU to a build profile for llama-cpp-python
+	const gpuProfile = gpu?.vendor === "NVIDIA" ? "nvidia_gpu"
+		: gpu?.vendor === "Apple" ? "apple_metal"
+		: gpu?.vendor === "AMD" ? "amd_rocm"
+		: null;
+
+	// Managed llama.cpp GitHub releases have no CUDA binary for Linux x64,
+	// so recommend the Python GPU build when NVIDIA is detected on Linux.
+	const isNvidiaLinux = gpuProfile === "nvidia_gpu" && process.platform === "linux";
+
+	const opt1Hint = isNvidiaLinux
+		? col("dim", "(CPU only — no CUDA binary for Linux)")
+		: col("dim", "(recommended)");
+	const opt3Label = gpuProfile === "nvidia_gpu" ? "Build CUDA GPU runtime (llama-cpp-python)  "
+		: gpuProfile === "apple_metal" ? "Build Metal GPU runtime (llama-cpp-python)  "
+		: gpuProfile === "amd_rocm"    ? "Build ROCm GPU runtime (llama-cpp-python)   "
+		: "Create Asyncat Python venv fallback       ";
+	const opt3Hint = gpuProfile
+		? (isNvidiaLinux ? col("dim", "(recommended — ~10-30 min compile)") : col("dim", "(~10-30 min compile)"))
+		: col("dim", "(no global pip)");
+
 	log("");
 	log(`  ${col("bold", "Install options:")}`);
-	log(`  ${col("cyan", "[1]")} Install managed llama.cpp binary       ${col("dim", "(recommended)")}`);
+	log(`  ${col("cyan", "[1]")} Install managed llama.cpp binary       ${opt1Hint}`);
 	log(`  ${col("cyan", "[2]")} Set custom LLAMA_BINARY_PATH`);
-	log(`  ${col("cyan", "[3]")} Create Asyncat Python venv fallback   ${col("dim", "(no global pip)")}`);
+	log(`  ${col("cyan", "[3]")} ${opt3Label} ${opt3Hint}`);
 	log(`  ${col("cyan", "[4]")} Skip — use Ollama, LM Studio, or cloud`);
 	log("");
 
@@ -305,16 +350,35 @@ async function checkLlama(python, args = []) {
 			err("Python not found. Install Python 3.10+ first, then rerun install.");
 			return;
 		}
-		if (gpu?.vendor === "NVIDIA") {
-			warn('For CUDA acceleration in the venv, rerun manually with CMAKE_ARGS="-DGGML_CUDA=on" before pip install.');
+		if (gpuProfile) {
+			const cxx = checkCxxCompiler();
+			if (!cxx) {
+				const hint = cxxInstallHint();
+				err("C++ compiler not found — required to compile llama-cpp-python with GPU support.");
+				info(`Install it first: ${col("cyan", hint)}`);
+				info(`Then rerun: ${col("cyan", "asyncat install")}`);
+				return;
+			}
+			const gpuName = gpuProfile === "nvidia_gpu" ? "CUDA"
+				: gpuProfile === "apple_metal" ? "Metal"
+				: "ROCm";
+			warn(`Building ${gpuName} runtime — compiles from source, may take 10-30 minutes.`);
 		}
-		const s = spinner("Creating Asyncat Python venv and installing llama-cpp-python...");
+		const buildMsg = gpuProfile === "nvidia_gpu" ? "Compiling CUDA llama-cpp-python (10-30 min)..."
+			: gpuProfile === "apple_metal" ? "Compiling Metal llama-cpp-python..."
+			: gpuProfile === "amd_rocm"    ? "Compiling ROCm llama-cpp-python..."
+			: "Creating Asyncat Python venv and installing llama-cpp-python...";
+		const s = spinner(buildMsg);
 		try {
-			const venvPython = installPythonVenvFallback(python);
+			const venvPython = installPythonVenvFallback(python, { profile: gpuProfile || "cpu_safe" });
 			s.stop("llama-cpp-python installed in Asyncat venv");
 			info(`venv python: ${col("white", venvPython)}`);
+			if (gpuProfile) {
+				setKey("den/.env", "LLAMA_GPU_LAYERS", "-1");
+				ok("LLAMA_GPU_LAYERS=-1 (all layers offloaded to GPU)");
+			}
 		} catch (e) {
-			s.fail("Python venv fallback failed");
+			s.fail("Python venv build failed");
 			warn(e.message);
 			info("This did not touch system Python packages.");
 		}
