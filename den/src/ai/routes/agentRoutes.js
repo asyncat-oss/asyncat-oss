@@ -7,6 +7,7 @@ import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
 import { attachDb } from '../../db/sqlite.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
+import { loadSkills, listSkills } from '../../agent/skills.js';
 import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
 import { PermissionRules } from '../../agent/PermissionRules.js';
@@ -165,6 +166,48 @@ router.get('/tools', authenticate, async (req, res) => {
     category: t.category || 'general',
   }));
   res.json({ tools });
+});
+
+/**
+ * GET /api/agent/skills
+ * Return all skills (bundled + user) with full detail.
+ */
+router.get('/skills', authenticate, (req, res) => {
+  loadSkills();
+  const skills = listSkills().map(s => ({
+    name: s.name,
+    description: s.description || '',
+    brain_region: s.brain_region || 'unknown',
+    weight: parseFloat(s.weight || 1),
+    tags: Array.isArray(s.tags) ? s.tags : (typeof s.tags === 'string' ? s.tags.split(',').map(t => t.trim()) : []),
+    when_to_use: s.when_to_use || '',
+    body: s.body || '',
+    source: s.source || 'bundled',
+  }));
+  res.json({ success: true, count: skills.length, skills });
+});
+
+/**
+ * GET /api/agent/skills/:name
+ * Return a single skill by name with full body.
+ */
+router.get('/skills/:name', authenticate, (req, res) => {
+  loadSkills();
+  const skill = listSkills().find(s => s.name === req.params.name);
+  if (!skill) return res.status(404).json({ success: false, error: 'Skill not found' });
+  res.json({
+    success: true,
+    skill: {
+      name: skill.name,
+      description: skill.description || '',
+      brain_region: skill.brain_region || 'unknown',
+      weight: parseFloat(skill.weight || 1),
+      tags: Array.isArray(skill.tags) ? skill.tags : (typeof skill.tags === 'string' ? skill.tags.split(',').map(t => t.trim()) : []),
+      when_to_use: skill.when_to_use || '',
+      body: skill.body || '',
+      source: skill.source || 'bundled',
+    },
+  });
 });
 
 /**

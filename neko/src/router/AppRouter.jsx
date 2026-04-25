@@ -23,6 +23,7 @@ import PacksPage from '../Packs/PacksPage';
 import ModelsPage from '../Settings/ModelsPage';
 import AgentPage from '../Agent/AgentPage';
 import AgentToolsPage from '../Agent/ToolsPage';
+import AgentSkillsPage from '../Agent/SkillsPage';
 
 
 const loadingMessages = [
@@ -227,6 +228,11 @@ const createRouter = () => createBrowserRouter([
       {
         path: "agents/tools",
         element: <AgentToolsPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agents/skills",
+        element: <AgentSkillsPage />,
         errorElement: <RouteErrorElement />
       }
     ]

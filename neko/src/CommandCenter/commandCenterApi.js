@@ -1056,6 +1056,14 @@ export const agentApi = {
   getTools: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/tools`);
   },
+
+  getSkills: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills`);
+  },
+
+  getSkill: async (name) => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills/${encodeURIComponent(name)}`);
+  },
 };
 
 // Export default object with all APIs
