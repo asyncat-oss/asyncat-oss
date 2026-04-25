@@ -25,6 +25,7 @@ import {
 	MessageSquare as ChatIcon,
 	Calendar as CalendarIcon,
 	Loader2,
+	Wrench,
 } from "lucide-react";
 
 import ChatExplorer from "./ChatExplorer";
@@ -99,6 +100,13 @@ const AgentsSidebarContent = memo(({ navigate }) => {
 				>
 					<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
 					New Run
+				</button>
+				<button
+					onClick={() => navigate('/agents/tools')}
+					className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors text-left group"
+				>
+					<Wrench className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
+					Tools
 				</button>
 			</div>
 

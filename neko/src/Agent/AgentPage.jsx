@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 import AgentRunFeed from './components/AgentRunFeed';
@@ -15,7 +15,6 @@ const EXAMPLE_GOALS = [
   { label: 'Browse & extract', prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
 ];
 
-// ── Goal input ────────────────────────────────────────────────────────────────
 function GoalInput({ value, onChange, onSubmit, isRunning, autoFocus = false, compact = false }) {
   const ref = useRef(null);
 
@@ -61,7 +60,6 @@ function GoalInput({ value, onChange, onSubmit, isRunning, autoFocus = false, co
   );
 }
 
-// ── Session status badge ──────────────────────────────────────────────────────
 function SessionBadge({ session }) {
   if (!session) return null;
   const hasAnswer = session.scratchpad?.finalAnswer || session.status === 'complete';
@@ -88,7 +86,6 @@ function SessionBadge({ session }) {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AgentPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -104,7 +101,6 @@ export default function AgentPage() {
   const feedEndRef = useRef(null);
   const abortRef = useRef(null);
 
-  // Load a specific session when URL changes
   useEffect(() => {
     if (!sessionId) {
       if (!isRunning) {
@@ -121,16 +117,14 @@ export default function AgentPage() {
       if (session) {
         setCurrentGoal(session.goal || '');
         setCurrentSession(session);
-        // Reconstruct events from persisted tool history + final answer
         let auditRows = [];
         try {
           const auditRes = await agentApi.getSessionAudit(sessionId);
           auditRows = auditRes?.audit || [];
         } catch (err) {
-          // TODO: handle error
           console.error('Failed to audit session:', err);
         }
-    
+
         const sourceRows = auditRows.length ? auditRows.map(row => ({
           tool: row.tool_name,
           args: row.args,
@@ -167,44 +161,38 @@ export default function AgentPage() {
     }).catch(() => {}).finally(() => setLoadingSession(false));
   }, [sessionId]);
 
-  // Auto-scroll on new events or streaming text
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [events, streamingText]);
 
-  // Stop running — abort the fetch stream
-  const handleStop = useCallback(() => {
+  const handleStop = () => {
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
     }
     setIsRunning(false);
     setStreamingText('');
-  }, []);
+  };
 
-  // Delete the currently-viewed session
-  const handleDeleteSession = useCallback(async () => {
+  const handleDeleteSession = async () => {
     if (!sessionId || isDeleting) return;
     setIsDeleting(true);
     try {
       await agentApi.deleteSession(sessionId);
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
       navigate('/agents');
-    } catch {
-      // TODO: handle error
-    }
+    } catch { /* TODO */ }
     setIsDeleting(false);
-  }, [sessionId, isDeleting, navigate]);
+  };
 
-  // Retry — prefill goal from history session
-  const handleRetry = useCallback(() => {
+  const handleRetry = () => {
     if (currentSession?.goal) {
       setGoal(currentSession.goal);
       navigate('/agents');
     }
-  }, [currentSession, navigate]);
+  };
 
-  const handleRun = useCallback(async () => {
+  const handleRun = async () => {
     if (!goal.trim() || isRunning) return;
 
     const submittedGoal = goal.trim();
@@ -215,16 +203,13 @@ export default function AgentPage() {
     setIsRunning(true);
     setCurrentSession(null);
 
-    // Navigate off any loaded session URL
     if (sessionId) navigate('/agents');
 
-    // Create a real AbortController so Stop actually cancels the stream
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
       for await (const event of agentApi.runStream(submittedGoal, [], null, 25, controller.signal)) {
-        // Check abort between events
         if (controller.signal.aborted) break;
 
         if (event.type === 'delta') {
@@ -267,9 +252,9 @@ export default function AgentPage() {
       abortRef.current = null;
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
-  }, [goal, isRunning, sessionId, navigate]);
+  };
 
-  const handlePermissionDecision = useCallback(async (requestId, decision) => {
+  const handlePermissionDecision = async (requestId, decision) => {
     if (!requestId) return;
 
     setEvents(prev => prev.map(ev => (
@@ -292,27 +277,23 @@ export default function AgentPage() {
           : ev
       )));
     }
-  }, []);
+  };
 
   const hasEvents = events.length > 0;
   const isViewingHistory = !!sessionId && !isRunning;
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
-
-      {/* Header — shown when there's a run active or history loaded */}
       {(hasEvents || isRunning || loadingSession) && (
         <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2.5 flex items-center gap-2.5">
           <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex-1 truncate">
             {currentGoal || 'Agent run'}
           </span>
 
-          {/* Status badge for history sessions */}
           {isViewingHistory && !loadingSession && currentSession && (
             <SessionBadge session={currentSession} />
           )}
 
-          {/* Retry button for history view */}
           {isViewingHistory && currentSession?.goal && (
             <button
               onClick={handleRetry}
@@ -323,7 +304,6 @@ export default function AgentPage() {
             </button>
           )}
 
-          {/* Delete button for history view */}
           {isViewingHistory && sessionId && (
             <button
               onClick={handleDeleteSession}
@@ -338,24 +318,13 @@ export default function AgentPage() {
             </button>
           )}
 
-          {/* Stop button when running */}
-          {isRunning && (
-            <button
-              onClick={handleStop}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/60 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            >
-              <Square className="w-3 h-3" /> Stop
-            </button>
-          )}
+          
         </div>
       )}
 
-      {/* Main content */}
       {!hasEvents && !isRunning && !loadingSession ? (
-        // Empty state / new run
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-10 overflow-y-auto">
           <div className="max-w-xl w-full">
-            {/* Title */}
             <div className="mb-7 justify-center">
               <h1 className="text-lg font-medium text-gray-900 dark:text-white text-center">Agent</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-1">Give it a goal — it figures out the steps</p>
@@ -369,7 +338,6 @@ export default function AgentPage() {
               autoFocus
             />
 
-            {/* Example goals */}
             <div className="mt-4">
               <p className="text-xs text-gray-400 dark:text-gray-600 mb-2 text-center">Try one of these</p>
               <div className="grid grid-cols-2 gap-2">
@@ -388,42 +356,38 @@ export default function AgentPage() {
           </div>
         </div>
       ) : (
-        // Event feed
-        <>
-          <div className="flex-1 overflow-y-auto px-5 py-4">
-            {loadingSession ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading session…
-              </div>
-            ) : (
-              <AgentRunFeed
-                events={events}
-                isRunning={isRunning}
-                streamingText={streamingText}
-                onPermissionDecision={handlePermissionDecision}
-              />
-            )}
-            <div ref={feedEndRef} />
-          </div>
-
-          {/* Always-visible goal input at bottom — even for history (allows new run) */}
-          <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-3 bg-white dark:bg-gray-900 midnight:bg-slate-950">
-            {isViewingHistory && (
-              <p className="text-[11px] text-gray-400 dark:text-gray-600 mb-1.5 text-center">
-                Viewing history — start a new run below
-              </p>
-            )}
-            <GoalInput
-              value={goal}
-              onChange={setGoal}
-              onSubmit={handleRun}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {loadingSession ? (
+            <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading session…
+            </div>
+          ) : (
+            <AgentRunFeed
+              events={events}
               isRunning={isRunning}
-              compact
+              streamingText={streamingText}
+              onPermissionDecision={handlePermissionDecision}
             />
-          </div>
-        </>
+          )}
+          <div ref={feedEndRef} />
+        </div>
       )}
+
+      <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-3 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+        {isViewingHistory && (
+          <p className="text-[11px] text-gray-400 dark:text-gray-600 mb-1.5 text-center">
+            Viewing history — start a new run below
+          </p>
+        )}
+        <GoalInput
+          value={goal}
+          onChange={setGoal}
+          onSubmit={handleRun}
+          isRunning={isRunning}
+          compact
+        />
+      </div>
     </div>
   );
 }

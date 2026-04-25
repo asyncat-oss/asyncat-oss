@@ -22,6 +22,7 @@ import SettingsPage from '../Settings/SettingsPage';
 import PacksPage from '../Packs/PacksPage';
 import ModelsPage from '../Settings/ModelsPage';
 import AgentPage from '../Agent/AgentPage';
+import AgentToolsPage from '../Agent/ToolsPage';
 
 
 const loadingMessages = [
@@ -221,6 +222,11 @@ const createRouter = () => createBrowserRouter([
       {
         path: "agents/:sessionId",
         element: <AgentPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agents/tools",
+        element: <AgentToolsPage />,
         errorElement: <RouteErrorElement />
       }
     ]

@@ -133,6 +133,8 @@ export class AgentRuntime {
     // ── ReAct Loop ──────────────────────────────────────────────────────────
     let answer = null;
     let formatRepairAttempts = 0;
+    let lastToolSig = null;
+    let consecutiveDupCount = 0;
 
     for (let round = 0; round < this.maxRounds; round++) {
       this.session.nextRound();
@@ -323,7 +325,23 @@ export class AgentRuntime {
           });
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result, round } });
           messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, this._compactToolResultForContext(tc.tool_name, result)) });
+
+          // Detect infinite loops: same tool + same args called 3 times consecutively.
+          const sig = `${tc.tool_name}:${JSON.stringify(tc.arguments)}`;
+          if (sig === lastToolSig) {
+            consecutiveDupCount++;
+            if (consecutiveDupCount >= 2) {
+              this.onEvent({ type: 'thinking', data: { thought: `Detected repeated tool call (${tc.tool_name}) — stopping loop.`, round } });
+              answer = `I got stuck calling the same tool (${tc.tool_name}) repeatedly. Here's what I found: ${JSON.stringify(result)}`;
+              this.onEvent({ type: 'answer', data: { answer, round } });
+              break;
+            }
+          } else {
+            lastToolSig = sig;
+            consecutiveDupCount = 0;
+          }
         }
+        if (answer) break;
       }
 
       // Save session periodically

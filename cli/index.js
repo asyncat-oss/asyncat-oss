@@ -501,6 +501,15 @@ async function startTui() {
             : '  Full-control OFF — tool permission requests require approval');
           tui.render();
           break;
+        case 'chat': {
+          // Toggle between direct chat (fast, single LLM call) and agent (multi-step, tools)
+          tui._chatMode = !tui._chatMode;
+          tui.print(tui._chatMode
+            ? '  Chat mode ON — messages go directly to the LLM (fast, no tools)'
+            : '  Agent mode ON — messages run through the ReAct agent loop (tools enabled)');
+          tui.render();
+          break;
+        }
         case 'log':
         case 'logs': {
           tui.unlockInput();
@@ -937,7 +946,7 @@ case 'tools': {
         case '?':
           tui.showResult('asyncat  —  help', [
             '── Basics ───────────────────────────────────────────────',
-            '  Type anything       Send goal to AI agent',
+            '  Type anything       Send goal to AI agent (or direct chat if /chat is on)',
             '  /                   Open command palette (browse all)',
             '  esc                 Clear focus → clear input → back → exit',
             '',
@@ -981,6 +990,7 @@ case 'tools': {
             '  /help               Show this',
             '',
             '── Full-control mode ─────────────────────────────────────',
+            '  /chat               Toggle chat mode (fast, no tools) vs agent mode (ReAct loop)',
             '  Ctrl+F or /fc to toggle. When ON (⚡ shown in status bar):',
             '  · All tool calls auto-approved — no permission prompts',
             '  · Agent can run shell commands, write files, etc. freely',
@@ -1101,6 +1111,72 @@ case 'tools': {
     // Now send the message
     tui.addMessage('user', text);
     tui.lockInput();
+
+    // Chat mode: single LLM call, fast. Agent mode: ReAct loop with tools.
+    if (tui._chatMode) {
+      tui.startStreaming('Thinking...');
+      try {
+        const token = await getToken();
+        const base  = getBase();
+        const controller = new AbortController();
+        tui.setCancelStreaming(() => controller.abort());
+
+        const history = tui.messages.slice(0, -1)
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }));
+
+        const res = await fetch(`${base}/api/ai/unified-stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+          body: JSON.stringify({ message: text, conversationHistory: history }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          throw new Error(`Chat ${res.status}: ${body.slice(0, 100)}`);
+        }
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            let event;
+            try { event = JSON.parse(line.slice(6).trim()); } catch { continue; }
+            if (event.type === 'delta' && event.content) {
+              tui.appendStreamContent(event.content);
+              fullText += event.content;
+            } else if (event.type === 'error') {
+              tui.stopStreaming();
+              tui.clearStreamContent();
+              tui.printErr(event.message || 'Unknown error');
+              tui.unlockInput();
+              return;
+            }
+          }
+        }
+
+        tui.stopStreaming();
+        tui.clearStreamContent();
+        if (fullText) tui.addMessage('assistant', fullText);
+      } catch (e) {
+        if (e.name !== 'AbortError') tui.printErr(e.message);
+        tui.stopStreaming();
+        tui.clearStreamContent();
+      }
+      tui.unlockInput();
+      return;
+    }
+
     tui.startStreaming('Agent thinking...');
 
     try {

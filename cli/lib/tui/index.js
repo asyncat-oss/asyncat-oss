@@ -544,9 +544,10 @@ export class Tui extends EventEmitter {
 
   appendStreamContent(delta) {
     this._streamContent = (this._streamContent || '') + delta;
-    // Throttle to ~30fps — avoid a full redraw for every incoming token
+    // Throttle to ~20fps during streaming — full screen clear+redraw is expensive;
+    // 50ms batches tokens visually smoothly while cutting redraws to a manageable rate.
     const now = Date.now();
-    if (!this._lastStreamRender || now - this._lastStreamRender >= 33) {
+    if (!this._lastStreamRender || now - this._lastStreamRender >= 50) {
       this._lastStreamRender = now;
       this.render();
     }

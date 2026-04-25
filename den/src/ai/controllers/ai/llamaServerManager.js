@@ -1533,7 +1533,21 @@ async function waitUntilReady() {
       clearTimeout(timer);
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
-        if (Array.isArray(json.data)) {
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          // Warmup ping: /v1/models goes ready slightly before /v1/chat/completions.
+          // One minimal request flushes any remaining initialization.
+          const modelId = json.data[0].id;
+          try {
+            const wCtrl = new AbortController();
+            const wTimer = setTimeout(() => wCtrl.abort(), 5000);
+            await fetch(`http://${LLAMA_HOST}:${LLAMA_PORT}/v1/chat/completions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: modelId, max_tokens: 1, messages: [{ role: 'user', content: ' ' }] }),
+              signal: wCtrl.signal,
+            });
+            clearTimeout(wTimer);
+          } catch { /* warmup failed — server may still serve real requests fine */ }
           emit({ status: 'ready', ctxTrain: await readCtxTrain() });
           return;
         }

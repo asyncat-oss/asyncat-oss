@@ -291,7 +291,8 @@ router.get('/sessions/:id', authenticate, (req, res) => {
 router.post('/permissions/:requestId', authenticate, (req, res) => {
   const pending = pendingPermissions.get(req.params.requestId);
   if (!pending || pending.userId !== req.user.id) {
-    return res.status(404).json({ success: false, error: 'Permission request not found' });
+    // Already resolved (stream closed, timeout, or duplicate POST) — treat as noop
+    return res.json({ success: true, decision: req.body?.decision || 'deny', note: 'already_resolved' });
   }
 
   const decision = ['allow', 'deny', 'allow_session', 'allow_always_tool', 'allow_always_command'].includes(req.body?.decision)
@@ -319,7 +320,7 @@ router.post('/permission', authenticate, (req, res) => {
   );
 
   if (!found) {
-    return res.status(404).json({ success: false, error: 'Permission request not found' });
+    return res.json({ success: true, decision: req.body?.decision || 'deny', note: 'already_resolved' });
   }
 
   const [requestId, pending] = found;

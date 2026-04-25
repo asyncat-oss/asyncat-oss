@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import db from '../db/client.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
 const MACHINE_TOKEN_PATH = join(homedir(), '.asyncat_machine_token');
@@ -28,10 +29,14 @@ export const verifyUser = async (req, res, next) => {
     return res.status(401).json({ success: false, error: 'Authentication required' });
   }
 
-  // Machine token: local CLI auth without user credentials
+  // Machine token: local CLI auth without user credentials.
+  // Use the real solo user's ID so DB lookups (provider config, sessions, etc.) work correctly.
   const machineToken = getMachineToken();
   if (machineToken && token === machineToken) {
-    req.user = { id: 'cli', email: 'cli@local', role: 'machine' };
+    const soloUser = db.prepare('SELECT id, email FROM users LIMIT 1').get();
+    req.user = soloUser
+      ? { id: soloUser.id, email: soloUser.email, role: 'machine' }
+      : { id: 'cli', email: 'cli@local', role: 'machine' };
     return next();
   }
 

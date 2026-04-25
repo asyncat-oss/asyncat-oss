@@ -1052,6 +1052,10 @@ export const agentApi = {
     });
     return await handleResponse(res);
   },
+
+  getTools: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/tools`);
+  },
 };
 
 // Export default object with all APIs

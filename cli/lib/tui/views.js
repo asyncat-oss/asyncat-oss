@@ -199,7 +199,7 @@ export function renderChat(messages, scrollOffset, inputBuf, cursorPos, modelInf
   // Thin separator line above input area
   const sepRow = H - inputAreaH;
   const ruleW = Math.min(inputW, mainW - inputL - 1);
-  at(sepRow, inputL, `${t.screenBg || ''}${t.dimBorder}${'─'.repeat(ruleW)}${R}`);
+  at(sepRow, inputL, `${t.screenBg || ''}${ansi.dim}${'─'.repeat(ruleW)}${R}`);
 
   const prompt = renderPromptPanel({
     row: sepRow + 1,
@@ -249,26 +249,26 @@ function renderPromptPanel({
   t,
 }) {
   const R = ansi.reset;
-  const panelBg = t.inputBg || t.panelBg || ansi.bgRgb(24, 24, 28);
-  const textW = Math.max(1, width - 4);
+  const screenBg = t.screenBg || '';
+  const textW = Math.max(1, width - 3);
   const displayBuf = inputBuf || '';
   const wrappedInput = displayBuf ? wrapInputLine(displayBuf, textW) : [];
   const showLines = wrappedInput.slice(0, maxInputLines);
-  const screenBg = t.screenBg || '';
 
   for (let li = 0; li < maxInputLines; li++) {
     const hasText = li < showLines.length;
     const shown = hasText ? showLines[li] : (li === 0 && !displayBuf ? placeholder : '');
-    const style = hasText ? t.inputFg : ansi.dim;
-    const accent = li === 0 ? `${t.accent}▏${R}${panelBg}` : ' ';
+    const style = hasText ? (t.inputFg || '') : ansi.dim;
+    // Left accent bar on first line only, plain screen background (no panel box)
+    const accent = li === 0 ? `${t.accent}▏${R}${screenBg}` : `${ansi.dim} ${R}${screenBg}`;
     const pad = Math.max(0, textW - vis(shown));
-    at(row + li, left, `${screenBg}${panelBg} ${accent} ${style}${shown}${R}${panelBg}${' '.repeat(pad)} ${R}`);
+    at(row + li, left, `${screenBg}${accent} ${style}${shown}${R}${screenBg}${' '.repeat(pad)}${R}`);
   }
 
   const meta = formatModelLine(modelInfo, providerInfo, contextInfo, emptyModelText, t);
   const metaShown = truncateVisible(meta, textW);
   const metaPad = Math.max(0, textW - vis(metaShown));
-  at(row + maxInputLines, left, `${screenBg}${panelBg}   ${metaShown}${R}${panelBg}${' '.repeat(metaPad)} ${R}`);
+  at(row + maxInputLines, left, `${screenBg}  ${ansi.dim}${metaShown}${R}${screenBg}${' '.repeat(metaPad)}${R}`);
 
   const { col: cursorCol, line: cursorLine } = calcCursorPosInWrapped(displayBuf, cursorPos, textW);
   return {
@@ -355,12 +355,18 @@ function formatMessage(msg, maxW, t, focused = false, expanded = false) {
 
   if (msg.role === 'user') {
     lines.push('');
-    lines.push(`${t.msgUser}${ansi.bold}You ${R}${ansi.dim}▸${R}`);
-    for (const l of wrapText(msg.content, maxW)) lines.push(`  ${l}`);
+    const userLines = wrapText(msg.content, maxW - 2);
+    for (const l of userLines) lines.push(`${t.msgUser}▏${R} ${l}`);
   } else if (msg.role === 'assistant') {
     lines.push('');
-    lines.push(`${t.msgAi}${ansi.bold}asyncat ${R}${ansi.dim}▸${R}`);
-    for (const l of wrapText(msg.content, maxW)) lines.push(`  ${l}`);
+    const cleaned = cleanResponse(msg.content);
+    const aiLines = wrapText(cleaned, maxW);
+    if (aiLines.length > 0) {
+      // First line: name prefix inline with text
+      lines.push(`${t.msgAi}${ansi.bold}asyncat${R}  ${aiLines[0]}`);
+      // Continuation lines: indented to align under the text
+      for (let i = 1; i < aiLines.length; i++) lines.push(`        ${aiLines[i]}`);
+    }
   } else if (msg.role === 'system') {
     lines.push(`${t.msgSystem}${ansi.dim}  ${msg.content}${R}`);
   } else if (msg.role === 'tool') {
@@ -378,13 +384,13 @@ function formatMessage(msg, maxW, t, focused = false, expanded = false) {
     }
     lines.push(`${ansi.dim}  ╰─${R}`);
   } else if (msg.role === 'thinking') {
-    lines.push(`${ansi.dim}  ╭─ 🧠 Thinking${msg.round ? ` (${msg.round})` : ''}${R}`);
     if (msg.content) {
-      for (const l of msg.content.split('\n').slice(0, 4)) {
-        lines.push(`${ansi.dim}  │  ${l.slice(0, maxW - 6)}${R}`);
+      const firstLine = cleanResponse(msg.content).split('\n').find(l => l.trim()) || '';
+      if (firstLine) {
+        const truncated = firstLine.length > maxW - 14 ? firstLine.slice(0, maxW - 17) + '…' : firstLine;
+        lines.push(`${ansi.dim}${ansi.italic}  Thinking: ${truncated}${R}`);
       }
     }
-    lines.push(`${ansi.dim}  ╰─${R}`);
   } else if (msg.role === 'plan') {
     const plan = Array.isArray(msg.plan) ? msg.plan : [];
     lines.push(`${t.accent}  ╭─ 📋 Plan${R}`);
@@ -405,6 +411,37 @@ function formatMessage(msg, maxW, t, focused = false, expanded = false) {
   }
 
   return lines;
+}
+
+// Strip model thinking markup and raw markdown before display.
+// Handles: <think>...</think> blocks, lone </think> tags,
+// **Thought:** / **thought:** lines that leak into the final answer,
+// and converts **bold** to plain text.
+function cleanResponse(text) {
+  if (!text) return '';
+  let s = text;
+  // Remove complete <think>...</think> blocks (model self-reasoning)
+  s = s.replace(/<think>[\s\S]*?<\/think>/g, '');
+  // Remove partial/unclosed <think> block (still streaming — hide until closed)
+  s = s.replace(/<think>[\s\S]*$/, '');
+  // Remove any lone closing tags left over
+  s = s.replace(/<\/think>/g, '');
+  // Remove lines that are just a **Thought:** marker
+  s = s.replace(/^\s*\*\*[Tt]hought:\*\*.*$/gm, '');
+  // Convert **bold** → plain (avoids asterisk noise)
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '$1');
+  // Collapse runs of 3+ blank lines to two
+  s = s.replace(/\n{3,}/g, '\n\n');
+  const result = s.trim();
+  if (!result) {
+    // Model wrapped everything in <think>...</think> with nothing outside — extract inner content.
+    const m = text.match(/<think>([\s\S]*?)<\/think>/i);
+    if (m) return m[1].replace(/^\s*\*\*[Tt]hought:\*\*.*$/gm, '').replace(/\*\*([^*\n]+)\*\*/g, '$1').trim();
+    // Text was only **Thought:** lines — strip the marker prefix and return bare content.
+    const bare = text.replace(/^\s*\*\*[Tt]hought:\*\*\s*/gm, '').replace(/\*\*([^*\n]+)\*\*/g, '$1').trim();
+    return bare;
+  }
+  return result;
 }
 
 function wrapText(text, maxW) {
