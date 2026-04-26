@@ -77,9 +77,9 @@ const addWorkspaceToUrl = (url, workspaceId) => {
 const apiRequest = async (url, options = {}) => {
   const workspaceId = getCurrentWorkspaceId();
   
-  // For GET and DELETE requests, add workspace ID to URL as query parameter
+  // Add workspace ID to URL as query parameter for all methods
   let finalUrl = url;
-  if (workspaceId && (!options.method || options.method === 'GET' || options.method === 'DELETE')) {
+  if (workspaceId) {
     finalUrl = addWorkspaceToUrl(url, workspaceId);
   }
   
@@ -451,7 +451,7 @@ export const projectsApi = {
 
 export const trashApi = {
   getTrash: async () => apiRequest(`${API_BASE_URL}/ai/chats/trash`),
-  restore:  async (conversationId) => apiRequest(`${API_BASE_URL}/ai/chats/${conversationId}/restore`, { method: 'POST' }),
+  restore:  async (conversationId) => apiRequest(`${API_BASE_URL}/ai/chats/${conversationId}/restore`, { method: 'POST', body: JSON.stringify({}) }),
   deletePermanent: async (conversationId) => apiRequest(`${API_BASE_URL}/ai/chats/${conversationId}/permanent`, { method: 'DELETE' }),
   emptyTrash: async () => apiRequest(`${API_BASE_URL}/ai/chats/trash/empty`, { method: 'DELETE' }),
 };

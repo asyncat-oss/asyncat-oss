@@ -14,6 +14,7 @@ import AppLayout from '../appcontainer/AppLayout';
 import AuthContainer from '../auth/AuthContainer';
 import CommandCenterV2Enhanced from '../CommandCenter/CommandCenterV2EnhancedRouter';
 import ChatsPage from '../CommandCenter/ChatsPage';
+import TrashPage from '../CommandCenter/TrashPage';
 import ProjectsPage from '../projects/ProjectsPage';
 import ProjectOverview from '../projects/ProjectOverview';
 import CalIndex from '../calendar/CalIndex';
@@ -154,6 +155,11 @@ const createRouter = () => createBrowserRouter([
       {
         path: "all-chats",
         element: <ChatsPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "trash",
+        element: <TrashPage />,
         errorElement: <RouteErrorElement />
       },
       {

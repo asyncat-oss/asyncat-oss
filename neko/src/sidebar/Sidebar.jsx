@@ -21,6 +21,7 @@ import {
 	Search,
 	Cpu,
 	Bot,
+	Trash2,
 	MessageSquare as ChatIcon,
 	Calendar as CalendarIcon,
 	Loader2,
@@ -1205,6 +1206,14 @@ const DynamicSidebar = ({
 								{currentWorkspace?.name || 'No workspace'}
 							</div>
 						</div>
+						{/* Trash */}
+						<button
+							onClick={() => navigate('/trash')}
+							className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 dark:text-gray-500 midnight:text-gray-600 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-all duration-150"
+							title="Trash"
+						>
+							<Trash2 className="w-4 h-4" />
+						</button>
 						{/* Settings */}
 						<button
 							onClick={() => onPageChange('settings')}

@@ -14,113 +14,11 @@ import {
   FolderMinus,
   Check,
   X,
-  RotateCcw,
-  AlertTriangle,
-  Loader2,
 } from 'lucide-react';
-import { chatApi, chatFoldersApi, trashApi } from '../CommandCenter/commandCenterApi';
+import { chatApi, chatFoldersApi } from '../CommandCenter/commandCenterApi';
 import { useCommandCenter } from '../CommandCenter/CommandCenterContextEnhanced';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useBackgroundTasks } from '../hooks/useBackgroundTasks';
-import Portal from '../components/Portal';
-
-// ─── Trash confirmation modal ────────────────────────────────────────────────
-
-const TrashConfirmModal = ({ confirm, onClose }) => {
-  const [busy, setBusy] = useState(false);
-
-  if (!confirm) return null;
-
-  const isEmptyAll = confirm.type === 'empty';
-  const title = isEmptyAll ? 'Empty Trash' : 'Delete Permanently';
-  const itemName = confirm.conv?.title || 'this conversation';
-
-  const handleConfirm = async () => {
-    setBusy(true);
-    try {
-      await confirm.onConfirm();
-    } finally {
-      setBusy(false);
-      onClose();
-    }
-  };
-
-  return (
-    <Portal>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-        <div
-          className="bg-white dark:bg-gray-900 midnight:bg-slate-950 w-full max-w-sm rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 midnight:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-150"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex items-center gap-3 bg-red-50/60 dark:bg-red-950/20 midnight:bg-red-950/30">
-            <div className="p-2 bg-red-100 dark:bg-red-900/50 midnight:bg-red-900/40 rounded-full flex-shrink-0">
-              <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
-            </div>
-            <h2 className="text-base font-semibold text-red-700 dark:text-red-400 midnight:text-red-300">{title}</h2>
-            {!busy && (
-              <button
-                onClick={onClose}
-                className="ml-auto p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-red-100/50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Body */}
-          <div className="px-5 py-5 text-sm text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-            {isEmptyAll ? (
-              <>
-                <p className="mb-1.5">
-                  This will permanently delete{' '}
-                  <span className="font-semibold text-gray-900 dark:text-white midnight:text-slate-100">
-                    all {confirm.count} conversation{confirm.count !== 1 ? 's' : ''}
-                  </span>{' '}
-                  in trash.
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">This action cannot be undone.</p>
-              </>
-            ) : (
-              <>
-                <p className="mb-1.5">
-                  Permanently delete{' '}
-                  <span className="font-semibold text-gray-900 dark:text-white midnight:text-slate-100">
-                    "{itemName}"
-                  </span>
-                  ?
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">This action cannot be undone.</p>
-              </>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-5 py-4 bg-gray-50 dark:bg-gray-800/40 midnight:bg-slate-900/50 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex justify-end gap-2.5">
-            <button
-              onClick={onClose}
-              disabled={busy}
-              className="px-4 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-800 midnight:bg-slate-800 text-gray-700 dark:text-gray-300 midnight:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={busy}
-              className="px-4 py-2 text-sm font-medium rounded-xl bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center gap-2 disabled:opacity-70 cursor-pointer"
-            >
-              {busy ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting…</>
-              ) : (
-                <><Trash2 className="w-3.5 h-3.5" /> Delete forever</>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Portal>
-  );
-};
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -546,10 +444,6 @@ const ChatExplorer = ({ isChatMode = false, isCollapsed = false, onNewChat, show
   const [error, setError] = useState(null);
   const [loadingConversationId, setLoadingConversationId] = useState(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
-  const [trashOpen, setTrashOpen] = useState(false);
-  const [trashItems, setTrashItems] = useState([]);
-  const [trashLoading, setTrashLoading] = useState(false);
-  const [trashConfirm, setTrashConfirm] = useState(null);
 
   const {
     loadConversation,
@@ -904,102 +798,8 @@ const ChatExplorer = ({ isChatMode = false, isCollapsed = false, onNewChat, show
               <p className="text-xs text-gray-400 dark:text-gray-500">No conversations yet</p>
             </div>
           )}
-
-          {/* ── Trash ──────────────────────────────────────────────────────── */}
-          <div className="mt-3 mx-1">
-            <button
-              onClick={async () => {
-                const next = !trashOpen;
-                setTrashOpen(next);
-                if (next) {
-                  setTrashLoading(true);
-                  try {
-                    const res = await trashApi.getTrash();
-                    setTrashItems(res?.conversations || []);
-                  } catch (_) {}
-                  finally { setTrashLoading(false); }
-                }
-              }}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
-            >
-              <Trash2 className="w-3 h-3 flex-shrink-0" />
-              <span className="flex-1 text-left">Recently Deleted</span>
-              <ChevronRight className={`w-3 h-3 transition-transform duration-150 ${trashOpen ? 'rotate-90' : ''}`} />
-            </button>
-
-            {trashOpen && (
-              <div className="mt-1 space-y-0.5">
-                {trashLoading && (
-                  <p className="px-4 py-2 text-[11px] text-gray-400">Loading…</p>
-                )}
-
-                {!trashLoading && trashItems.length === 0 && (
-                  <p className="px-4 py-2 text-[11px] text-gray-400 dark:text-gray-500">Trash is empty</p>
-                )}
-
-                {!trashLoading && trashItems.length > 0 && (
-                  <>
-                    {/* Empty trash button */}
-                    <button
-                      onClick={() => setTrashConfirm({
-                        type: 'empty',
-                        count: trashItems.length,
-                        onConfirm: async () => {
-                          await trashApi.emptyTrash();
-                          setTrashItems([]);
-                        }
-                      })}
-                      className="w-full text-left px-4 py-1 text-[11px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
-                    >
-                      Empty trash ({trashItems.length})
-                    </button>
-
-                    {trashItems.map(conv => (
-                      <div
-                        key={conv.id}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-md group"
-                      >
-                        <MessageSquare className="w-3 h-3 text-gray-300 dark:text-gray-600 flex-shrink-0" />
-                        <span className="flex-1 text-[11px] text-gray-400 dark:text-gray-500 truncate min-w-0">
-                          {conv.title || 'Untitled'}
-                        </span>
-                        {/* Restore */}
-                        <button
-                          title="Restore"
-                          onClick={async () => {
-                            await trashApi.restore(conv.id);
-                            setTrashItems(prev => prev.filter(c => c.id !== conv.id));
-                            loadAll(false);
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                        </button>
-                        {/* Permanent delete */}
-                        <button
-                          title="Delete permanently"
-                          onClick={() => setTrashConfirm({
-                            type: 'single',
-                            conv,
-                            onConfirm: async () => {
-                              await trashApi.deletePermanent(conv.id);
-                              setTrashItems(prev => prev.filter(c => c.id !== conv.id));
-                            }
-                          })}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-all"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       ) : null}
-      <TrashConfirmModal confirm={trashConfirm} onClose={() => setTrashConfirm(null)} />
     </div>
   );
 };
