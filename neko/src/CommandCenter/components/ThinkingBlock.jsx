@@ -1,15 +1,9 @@
-// ThinkingBlock.jsx — renders <think>...</think> content as a collapsible reasoning panel
 import { useState } from 'react';
-import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
-/**
- * Parse <think>...</think> block out of a message.
- * Returns { thinking: string|null, answer: string }
-  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function parseThinkingContent(content) {
   if (!content) return { thinking: null, answer: '' };
-  // Match optional leading <think> block (case-insensitive, across newlines)
   const match = content.match(/^<think>([\s\S]*?)<\/think>\s*/i);
   if (!match) return { thinking: null, answer: content };
   return {
@@ -18,10 +12,6 @@ export function parseThinkingContent(content) {
   };
 }
 
-/**
- * Detect if we're currently mid-think (open tag but no close tag yet).
- * Used during streaming to show the thinking indicator without showing raw tags.
- */
 // eslint-disable-next-line react-refresh/only-export-components
 export function isInsideThinkBlock(content) {
   const openIdx  = content.indexOf('<think>');
@@ -29,65 +19,53 @@ export function isInsideThinkBlock(content) {
   return openIdx !== -1 && closeIdx === -1;
 }
 
-/**
- * Strip partial/complete <think> block for display during streaming
- * so raw tags don't bleed into the visible answer.
- */
 // eslint-disable-next-line react-refresh/only-export-components
 export function stripThinkForStreaming(content) {
-  // Complete think block present — show only what comes after
   const afterClose = content.replace(/^<think>[\s\S]*?<\/think>\s*/i, '');
   if (afterClose !== content) return afterClose;
-  // Partial think block — hide everything inside it
   if (content.startsWith('<think>')) return '';
   return content;
 }
-
-// ── UI component ──────────────────────────────────────────────────────────────
 
 export default function ThinkingBlock({ content, isStreaming = false }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!content && !isStreaming) return null;
 
+  const wordCount = content ? content.split(/\s+/).filter(Boolean).length : 0;
+  const isThinking = isStreaming && !content;
+
   return (
-    <div className="mb-3 rounded-lg border border-purple-200 dark:border-purple-800 midnight:border-purple-800 overflow-hidden">
-      {/* Header row */}
+    <div className="mb-3">
       <button
-        onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 midnight:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors text-left"
+        onClick={() => !isThinking && setExpanded(v => !v)}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors text-left ${
+          isThinking
+            ? 'cursor-default'
+            : 'hover:bg-gray-100 dark:hover:bg-gray-800/60 midnight:hover:bg-slate-800/60'
+        }`}
       >
-        <Brain className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
-        <span className="text-xs font-medium text-purple-700 dark:text-purple-300 midnight:text-purple-300 flex-1">
-          Reasoning
+        {isThinking ? (
+          <span className="flex gap-0.5 items-center">
+            <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </span>
+        ) : expanded ? (
+          <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+        )}
+        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-gray-500 tracking-wide select-none">
+          {isThinking ? 'Thinking…' : `Reasoning · ${wordCount} words`}
         </span>
-        {isStreaming && !content ? (
-          <span className="text-xs text-purple-400 dark:text-purple-500 italic animate-pulse">thinking…</span>
-        ) : content ? (
-          <>
-            <span className="text-xs text-purple-400 dark:text-purple-500 mr-1">
-              {content.split(' ').length} words
-            </span>
-            {expanded
-              ? <ChevronDown className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-              : <ChevronRight className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-            }
-          </>
-        ) : null}
       </button>
 
-      {/* Content — expanded or streaming */}
-      {(expanded || (isStreaming && !content)) && (
-        <div className="px-3 py-3 bg-purple-50/40 dark:bg-purple-950/20 midnight:bg-purple-950/30 border-t border-purple-100 dark:border-purple-800/50 midnight:border-purple-800/50">
-          {content ? (
-            <pre className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400 whitespace-pre-wrap font-mono leading-relaxed max-h-72 overflow-y-auto">
-              {content}
-            </pre>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-purple-500 dark:text-purple-400 italic">
-              <span className="animate-pulse">Model is reasoning…</span>
-            </div>
-          )}
+      {expanded && content && (
+        <div className="mt-1 ml-2 pl-3 border-l-2 border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+          <pre className="text-[11px] text-gray-400 dark:text-gray-500 midnight:text-gray-500 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto py-1 pr-1">
+            {content}
+          </pre>
         </div>
       )}
     </div>

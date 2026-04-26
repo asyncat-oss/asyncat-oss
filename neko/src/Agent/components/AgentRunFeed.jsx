@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import {
-  Brain, ChevronDown, ChevronRight, CheckCircle2, XCircle,
+  ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 
-// ── Tool icon / label map ────────────────────────────────────────────────────
+// ── Tool icon / label map ─────────────────────────────────────────────────────
 const TOOL_META = {
   read_file:         { icon: File,        label: 'Read file' },
   write_file:        { icon: Pencil,      label: 'Write file' },
@@ -55,29 +55,28 @@ function getResultSummary(result) {
 
 // ── Individual event components ───────────────────────────────────────────────
 
+// Minimal inline reasoning disclosure — matches ThinkingBlock in chat
 function ThinkingEvent({ data }) {
   const [expanded, setExpanded] = useState(false);
   const thought = data?.thought || '';
-  const words = thought.trim().split(/\s+/).length;
+  const words = thought.trim().split(/\s+/).filter(Boolean).length;
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 overflow-hidden mb-2">
+    <div className="mb-2">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors text-left"
+        className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors text-left"
       >
-        <Brain className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 flex-1">
-          Reasoning · Round {data?.round}
-        </span>
-        <span className="text-xs text-gray-400 mr-1">{words}w</span>
         {expanded
-          ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-          : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
+          ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+          : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />}
+        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 tracking-wide select-none">
+          Reasoning · Round {data?.round} · {words}w
+        </span>
       </button>
       {expanded && (
-        <div className="px-3 py-3 bg-gray-50/50 dark:bg-gray-800/20 border-t border-gray-100 dark:border-gray-700/50">
-          <pre className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap font-mono leading-relaxed max-h-72 overflow-y-auto">
+        <div className="mt-1 ml-2 pl-3 border-l-2 border-gray-100 dark:border-gray-800">
+          <pre className="text-[11px] text-gray-400 dark:text-gray-500 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto py-1 pr-1">
             {thought}
           </pre>
         </div>
@@ -95,58 +94,58 @@ function ToolEvent({ data, result }) {
   const argsStr = truncateArgs(data?.args);
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700/60 overflow-hidden mb-2">
-      <button
-        onClick={() => result && setExpanded(v => !v)}
-        className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors bg-white dark:bg-gray-800/30 ${result ? 'hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer' : 'cursor-default'}`}
-      >
-        <div className={`flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center ${
-          isError ? 'bg-red-100 dark:bg-red-900/30 text-red-500'
-          : isPending ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-500'
-          : 'bg-green-100 dark:bg-green-900/30 text-green-600'
-        }`}>
-          <Icon className="w-3.5 h-3.5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-800 dark:text-gray-200">{label}</span>
-            <code className="text-[10px] text-gray-400 dark:text-gray-600 font-mono">{data?.tool}</code>
-          </div>
+    <div className="flex items-start gap-2.5 mb-1.5 group">
+      {/* Status dot / icon */}
+      <div className={`flex-shrink-0 w-5 h-5 rounded flex items-center justify-center mt-0.5 ${
+        isError   ? 'text-red-400'
+        : isPending ? 'text-amber-400'
+        : 'text-green-500'
+      }`}>
+        {isPending
+          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          : isError
+            ? <XCircle className="w-3.5 h-3.5" />
+            : <CheckCircle2 className="w-3.5 h-3.5" />}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <button
+          onClick={() => result && setExpanded(v => !v)}
+          className={`w-full flex items-center gap-2 text-left ${result ? 'cursor-pointer' : 'cursor-default'}`}
+        >
+          <Icon className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{label}</span>
           {argsStr && (
-            <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate mt-0.5">{argsStr}</div>
+            <code className="text-[10px] text-gray-400 dark:text-gray-600 font-mono truncate">{argsStr}</code>
           )}
-          {summary && !expanded && (
-            <div className={`text-[10px] mt-0.5 truncate ${isError ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
-              {summary}
-            </div>
+          {result && (
+            expanded
+              ? <ChevronDown className="w-3 h-3 text-gray-400 ml-auto flex-shrink-0" />
+              : <ChevronRight className="w-3 h-3 text-gray-400 ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
           )}
-          {data?.permissionDecision && (
-            <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
-              Permission: {data.permissionDecision}
-              {data.workingDir ? ` · ${data.workingDir}` : ''}
-            </div>
-          )}
-        </div>
-        <div className="flex-shrink-0 ml-1">
-          {isPending
-            ? <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-            : isError
-              ? <XCircle className="w-3.5 h-3.5 text-red-400" />
-              : <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
-        </div>
-        {result && (
-          expanded
-            ? <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
-            : <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
+        </button>
+
+        {summary && !expanded && (
+          <p className={`text-[10px] font-mono mt-0.5 pl-5 truncate ${isError ? 'text-red-400' : 'text-gray-400 dark:text-gray-600'}`}>
+            {summary}
+          </p>
         )}
-      </button>
-      {expanded && result && (
-        <div className="border-t border-gray-100 dark:border-gray-700/50 px-3 py-2 bg-gray-50/50 dark:bg-gray-800/20">
-          <pre className="text-[10px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto leading-relaxed">
-            {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-          </pre>
-        </div>
-      )}
+
+        {data?.permissionDecision && (
+          <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-0.5 pl-5">
+            Permission: {data.permissionDecision}
+            {data.workingDir ? ` · ${data.workingDir}` : ''}
+          </p>
+        )}
+
+        {expanded && result && (
+          <div className="mt-1 ml-5 pl-2 border-l border-gray-100 dark:border-gray-800">
+            <pre className="text-[10px] text-gray-500 dark:text-gray-500 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto leading-relaxed py-1">
+              {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -159,41 +158,37 @@ function PermissionEvent({ data, onDecision }) {
   const isDenied = decision === 'deny';
 
   return (
-    <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/10 overflow-hidden mb-2">
+    <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/10 overflow-hidden mb-3">
       <div className="px-3 py-3 flex items-start gap-2.5">
-        <div className="flex-shrink-0 w-7 h-7 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 flex items-center justify-center">
-          <ShieldAlert className="w-4 h-4" />
+        <div className="flex-shrink-0 w-6 h-6 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 flex items-center justify-center">
+          <ShieldAlert className="w-3.5 h-3.5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <Icon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300" />
-            <span className="text-xs font-semibold text-amber-900 dark:text-amber-100">
-              Approve tool access
-            </span>
+          <div className="flex items-center gap-1.5">
+            <Icon className="w-3 h-3 text-amber-600 dark:text-amber-300" />
+            <span className="text-xs font-semibold text-amber-900 dark:text-amber-100">Approve tool access</span>
             <code className="text-[10px] text-amber-700/70 dark:text-amber-300/70">{data?.tool}</code>
           </div>
-          <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
-            {data?.description || label}
-          </p>
-          <pre className="text-[10px] text-amber-700 dark:text-amber-300 whitespace-pre-wrap font-mono mt-2 max-h-28 overflow-y-auto">
+          <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">{data?.description || label}</p>
+          <pre className="text-[10px] text-amber-700 dark:text-amber-300 whitespace-pre-wrap font-mono mt-1.5 max-h-24 overflow-y-auto">
             {truncateArgs(data?.args)}
           </pre>
           {data?.workingDir && (
-            <div className="text-[10px] text-amber-700/70 dark:text-amber-300/70 mt-1 truncate">
-              Working directory: {data.workingDir}
-            </div>
+            <p className="text-[10px] text-amber-700/70 dark:text-amber-300/70 mt-1 truncate">
+              Working dir: {data.workingDir}
+            </p>
           )}
           {data?.error && (
-            <div className="text-[10px] text-red-600 dark:text-red-300 mt-2">{data.error}</div>
+            <p className="text-[10px] text-red-600 dark:text-red-300 mt-1">{data.error}</p>
           )}
         </div>
       </div>
       <div className="border-t border-amber-200/70 dark:border-amber-800/40 px-3 py-2 flex items-center justify-end gap-2">
         {resolved ? (
           <span className={`text-xs font-medium ${
-            isAllowed ? 'text-green-700 dark:text-green-300' :
-            isDenied ? 'text-red-700 dark:text-red-300' :
-            'text-amber-700 dark:text-amber-300'
+            isAllowed ? 'text-green-700 dark:text-green-300'
+            : isDenied ? 'text-red-700 dark:text-red-300'
+            : 'text-amber-700 dark:text-amber-300'
           }`}>
             {isAllowed ? 'Approved' : isDenied ? 'Denied' : 'Resolved'}
           </span>
@@ -202,14 +197,14 @@ function PermissionEvent({ data, onDecision }) {
             <button
               onClick={() => onDecision?.(data?.requestId, 'deny')}
               disabled={data?.resolving}
-              className="px-2.5 py-1 text-xs rounded-md border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60"
+              className="px-2.5 py-1 text-xs rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60"
             >
               Deny
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow')}
               disabled={data?.resolving}
-              className="px-2.5 py-1 text-xs rounded-md bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white flex items-center gap-1.5"
+              className="px-2.5 py-1 text-xs rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white flex items-center gap-1.5"
             >
               {data?.resolving && <Loader2 className="w-3 h-3 animate-spin" />}
               Approve once
@@ -217,7 +212,7 @@ function PermissionEvent({ data, onDecision }) {
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow_session')}
               disabled={data?.resolving}
-              className="px-2.5 py-1 text-xs rounded-md bg-gray-800 hover:bg-gray-900 dark:bg-gray-200 dark:hover:bg-white disabled:opacity-60 text-white dark:text-gray-900"
+              className="px-2.5 py-1 text-xs rounded bg-gray-800 hover:bg-gray-900 dark:bg-gray-200 dark:hover:bg-white disabled:opacity-60 text-white dark:text-gray-900"
             >
               Trust this run
             </button>
@@ -228,6 +223,7 @@ function PermissionEvent({ data, onDecision }) {
   );
 }
 
+// Clean chat-like agent response — no "Agent response" header bar
 function AnswerEvent({ data }) {
   const answer = data?.answer || '';
   if (!answer.trim()) return null;
@@ -238,45 +234,48 @@ function AnswerEvent({ data }) {
   } catch { blocks = []; }
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 overflow-hidden mb-3">
-      {/* Subtle header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/60 dark:bg-gray-800/60">
-        <div className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-          <CheckCircle2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-        </div>
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Agent response</span>
-        {data?.round && data.round > 1 && (
-          <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-600">
-            {data.round} rounds
-          </span>
-        )}
-      </div>
-      {/* Answer body */}
-      <div className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+    <div className="mt-3 mb-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+      <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
         {blocks.length > 0
           ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
           : <p className="whitespace-pre-wrap">{answer}</p>}
       </div>
+      {data?.round && data.round > 1 && (
+        <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
+      )}
     </div>
   );
 }
 
 function ErrorEvent({ data }) {
   return (
-    <div className="rounded-lg border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10 p-3 mb-2 flex items-start gap-2">
-      <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-      <div className="text-sm text-red-700 dark:text-red-300">
-        {data?.message || 'Agent encountered an error.'}
-      </div>
+    <div className="rounded border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10 p-2.5 mb-2 flex items-start gap-2">
+      <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+      <p className="text-xs text-red-700 dark:text-red-300">{data?.message || 'Agent encountered an error.'}</p>
     </div>
   );
 }
 
-// Live streaming preview — shown while LLM is generating before structured events arrive
+// Visual separator between consecutive goals in a single session
+function RunDivider({ data }) {
+  return (
+    <div className="my-6">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
+        <span className="text-[10px] text-gray-300 dark:text-gray-700 font-medium tracking-widest uppercase">New goal</span>
+        <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
+      </div>
+      {data?.goal && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 text-center font-medium">{data.goal}</p>
+      )}
+    </div>
+  );
+}
+
+// Live streaming preview — shown while LLM is generating
 function StreamingPreview({ text }) {
   if (!text?.trim()) return null;
 
-  // Strip raw tool_call blocks and Thought: prefixes so only "real" text shows
   const clean = text
     .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
     .replace(/\*\*Thought:\*\*[\s\S]*?(?=\*\*[A-Z]|$)/g, '')
@@ -285,8 +284,12 @@ function StreamingPreview({ text }) {
 
   if (!clean) {
     return (
-      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-600 py-1 pl-1 mb-1 animate-pulse">
-        <Brain className="w-3.5 h-3.5 flex-shrink-0" />
+      <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-1 pl-1 mb-1">
+        <span className="flex gap-0.5">
+          <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+        </span>
         Reasoning…
       </div>
     );
@@ -302,37 +305,39 @@ function StreamingPreview({ text }) {
 
 function RunningIndicator() {
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-600 py-2 pl-1">
-      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-2 pl-1">
+      <span className="flex gap-0.5">
+        <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+        <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+        <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+      </span>
       Agent is working…
     </div>
   );
 }
 
-// ── Main feed component ────────────────────────────────────────────────────────
+// ── Main feed component ───────────────────────────────────────────────────────
 
 export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0">
       {(events || []).map((ev, i) => {
         switch (ev.type) {
-          case 'thinking':    return <ThinkingEvent key={i} data={ev.data} />;
+          case 'thinking':           return <ThinkingEvent key={i} data={ev.data} />;
           case 'permission_request': return <PermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
-          case 'tool_start':  return <ToolEvent key={i} data={ev.data} result={ev.result} />;
-          case 'answer':      return <AnswerEvent key={i} data={ev.data} />;
-          case 'error':       return <ErrorEvent key={i} data={ev.data} />;
-          default:            return null;
+          case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} />;
+          case 'answer':             return <AnswerEvent key={i} data={ev.data} />;
+          case 'error':              return <ErrorEvent key={i} data={ev.data} />;
+          case 'run_start':          return <RunDivider key={i} data={ev.data} />;
+          default:                   return null;
         }
       })}
 
-      {/* Live streaming text preview */}
       {isRunning && <StreamingPreview text={streamingText} />}
-
-      {/* Generic running indicator when no streaming text yet */}
-      {isRunning && !streamingText && events.length === 0 && <RunningIndicator />}
+      {isRunning && !streamingText && (events || []).length === 0 && <RunningIndicator />}
     </div>
   );
 }

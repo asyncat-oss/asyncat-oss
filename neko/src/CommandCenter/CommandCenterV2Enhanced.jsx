@@ -120,6 +120,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
   const [agentCurrentGoal, setAgentCurrentGoal] = useState('');
   const [agentCurrentSession, setAgentCurrentSession] = useState(null);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
+  const [agentConversationHistory, setAgentConversationHistory] = useState([]);
   const agentAbortRef = useRef(null);
   const agentFeedEndRef = useRef(null);
   const [agentView, setAgentView] = useState(initialAgentView); // 'run' | 'tools' | 'skills'
@@ -334,11 +335,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
 
   useEffect(() => {
     setMode(initialMode);
-    // Clear agent state when switching to chat mode
     if (initialMode === 'chat') {
       setAgentEvents([]);
       setAgentCurrentGoal('');
       setAgentCurrentSession(null);
+      setAgentConversationHistory([]);
     }
   }, [initialMode]);
 
@@ -422,14 +423,24 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
     setAgentCurrentGoal(submittedGoal);
-    setAgentEvents([]);
+
+    // If continuing a session, append a divider; otherwise start fresh
+    setAgentEvents(prev =>
+      prev.length > 0
+        ? [...prev, { type: 'run_start', data: { goal: submittedGoal } }]
+        : []
+    );
+
     setAgentStreamingText('');
     setAgentRunning(true);
     setAgentCurrentSession(null);
     const controller = new AbortController();
     agentAbortRef.current = controller;
+
+    let capturedFinalAnswer = '';
+
     try {
-      for await (const event of agentApi.runStream(submittedGoal, [], null, 25, controller.signal)) {
+      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal)) {
         if (controller.signal.aborted) break;
         if (event.type === 'delta') {
           setAgentStreamingText(prev => prev + (event.data?.content || ''));
@@ -437,6 +448,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         }
         if (event.type === 'thinking' || event.type === 'tool_start' || event.type === 'answer') {
           setAgentStreamingText('');
+        }
+        if (event.type === 'answer') {
+          capturedFinalAnswer = event.data?.answer || '';
         }
         if (event.type === 'tool_result') {
           setAgentEvents(prev => {
@@ -459,12 +473,20 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         setAgentEvents(prev => [...prev, { type: 'error', data: { message: err.message } }]);
       }
     } finally {
+      // Accumulate history so follow-up goals have context
+      if (capturedFinalAnswer) {
+        setAgentConversationHistory(prev => [
+          ...prev,
+          { role: 'user', content: submittedGoal },
+          { role: 'assistant', content: capturedFinalAnswer },
+        ]);
+      }
       setAgentStreamingText('');
       setAgentRunning(false);
       agentAbortRef.current = null;
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
-  }, [agentRunning]);
+  }, [agentRunning, agentConversationHistory]);
 
   const handleAgentPermission = useCallback(async (requestId, decision) => {
     if (!requestId) return;
@@ -1065,7 +1087,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
                 <>
                   {agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} />}
                   <button
-                    onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); }}
+                    onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); setAgentConversationHistory([]); }}
                     className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <RotateCcw className="w-3 h-3" /> New run
@@ -1118,21 +1140,34 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
               </div>
             ) : (
               // Run tab — active/history
-              <div className="flex-1 overflow-y-auto px-5 py-4">
-                {agentLoadingSession ? (
-                  <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading session…
+              <>
+                <div className="flex-1 overflow-y-auto px-5 py-4">
+                  {agentLoadingSession ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading session…
+                    </div>
+                  ) : (
+                    <AgentRunFeed
+                      events={agentEvents}
+                      isRunning={agentRunning}
+                      streamingText={agentStreamingText}
+                      onPermissionDecision={handleAgentPermission}
+                    />
+                  )}
+                  <div ref={agentFeedEndRef} />
+                </div>
+                {!agentRunning && !agentLoadingSession && (
+                  <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-3">
+                    <MessageInputV2
+                      onSubmit={handleAgentRun}
+                      disabled={agentRunning}
+                      placeholder="Run another goal…"
+                      hasMessages={false}
+                      conversationTokens={0}
+                    />
                   </div>
-                ) : (
-                  <AgentRunFeed
-                    events={agentEvents}
-                    isRunning={agentRunning}
-                    streamingText={agentStreamingText}
-                    onPermissionDecision={handleAgentPermission}
-                  />
                 )}
-                <div ref={agentFeedEndRef} />
-              </div>
+              </>
             )}
           </>
         ) : isConversationLoading ? (
