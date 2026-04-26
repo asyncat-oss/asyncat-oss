@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import {
 	SortableContext,
 	verticalListSortingStrategy,
@@ -12,7 +12,6 @@ import LoadingCard from "../../shared/components/LoadingCard";
 import ColumnSettingsModal from "./ColumnSettingsModal";
 import AddCardModal from "../../cards/AddCardModal";
 import { useColumnActions } from "../hooks/useColumnActions";
-import { useUser } from "../../../../../contexts/UserContext";
 
 const Column = ({
 	column,
@@ -29,24 +28,10 @@ const Column = ({
 }) => {
 	const { columns } = useColumnContext();
 	const { handleColumnDelete } = useColumnActions();
-	const { getUserRole, user } = useUser();
 	const [showSettings, setShowSettings] = useState(false);
 	const [showAddCard, setShowAddCard] = useState(false);
 
-	// Get current user's ID and project details
-	const currentUserId = user?.id || sessionStorage.getItem("userId");
-	const projectId = column?.projectId || sessionStorage.getItem("projectId");
-
-	// Check if user can manage this column
-	// User can manage if they are:
-	// 1. The column creator (createdBy)
-	// 2. The project owner
-	const canManageColumn = useMemo(() => {
-		const userRole = getUserRole(projectId);
-		const isProjectOwner = userRole === "owner";
-		const isColumnCreator = column?.createdBy === currentUserId;
-		return isProjectOwner || isColumnCreator;
-	}, [getUserRole, projectId, column?.createdBy, currentUserId]);
+	const canManageColumn = true;
 
 	// Create a single ref for the entire column element
 	const columnRef = useRef(null);

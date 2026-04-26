@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import {
-	KanbanSquare,
-	List,
-	Clock,
-	GanttChartSquare,
-	FileText,
-	Link2,
-	LayoutGrid,
-	Target,
-} from "lucide-react";
+import { LayoutGrid } from "lucide-react";
 
 // Import view components directly here
 import KanIndex from "../views/kanban/KanIndex";
@@ -25,36 +16,9 @@ import { ColumnProvider } from "../views/context/ColumnProvider";
 import { CardProvider } from "../views/context/CardProvider";
 
 import ProjectSettingsModal from "./components/ProjectSettingsModal";
-import { useUser } from "../contexts/UserContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 
-// Import default profile pictures
-import catDP from "../assets/dp/CAT.webp";
-import dogDP from "../assets/dp/DOG.webp";
-import dolphinDP from "../assets/dp/DOLPHIN.webp";
-import dragonDP from "../assets/dp/DRAGON.webp";
-import elephantDP from "../assets/dp/ELEPHANT.webp";
-import foxDP from "../assets/dp/FOX.webp";
-import lionDP from "../assets/dp/LION.webp";
-import owlDP from "../assets/dp/OWL.webp";
-import penguinDP from "../assets/dp/PENGUIN.webp";
-import wolfDP from "../assets/dp/WOLF.webp";
-
 import { projectViewsApi } from "./projectApi";
-
-// Create a mapping object for easier lookup
-const profilePictureMapping = {
-	CAT: catDP,
-	DOG: dogDP,
-	DOLPHIN: dolphinDP,
-	DRAGON: dragonDP,
-	ELEPHANT: elephantDP,
-	FOX: foxDP,
-	LION: lionDP,
-	OWL: owlDP,
-	PENGUIN: penguinDP,
-	WOLF: wolfDP,
-};
 
 const soraFontBase = "font-sora";
 
@@ -171,48 +135,11 @@ const ProjectOverview = React.memo(({
 }) => {
 	const [projectInfo, setProjectInfo] = useState(null);
 	const [loading, setLoading] = useState(true);
-	const [projectMembers, setProjectMembers] = useState([]);
-	const [loadingMembers, setLoadingMembers] = useState(false);
-
 	// Master loading state - true when any essential data is loading
 	const [masterLoading, setMasterLoading] = useState(true);
 
 	// Calculate skeleton state
 	const shouldShowSkeleton = masterLoading || !selectedProject || (projectId && String(selectedProject.id) !== String(projectId));
-
-	const { getUserRole } = useUser();
-	const getCurrentUserRole = () => {
-		if (
-			selectedProject?.owner_id === session?.user?.id ||
-			projectInfo?.owner_id === session?.user?.id
-		) {
-			return "owner";
-		}
-		// Check user_role from selectedProject (important for newly created projects)
-		if (selectedProject?.user_role) {
-			return selectedProject.user_role;
-		}
-		// Check user_role from projectInfo
-		if (projectInfo?.user_role) {
-			return projectInfo.user_role;
-		}
-		const contextRole = getUserRole(selectedProject?.id);
-		if (contextRole && contextRole !== "owner") {
-			return contextRole;
-		}
-		if (session?.user?.id && projectMembers.length > 0) {
-			const currentUserMember = projectMembers.find(
-				(member) => member.id === session.user.id
-			);
-			if (currentUserMember) {
-				return currentUserMember.role;
-			}
-		}
-		return "viewer";
-	};
-	const userRole = getCurrentUserRole();
-	const isViewer = userRole === "viewer";
-	// Resolve permissions from role for conditional UI (e.g., show settings button)
 
 	const { getWorkspaceProjects } = useWorkspace();
 
@@ -222,7 +149,6 @@ const ProjectOverview = React.memo(({
 				// Reset states immediately when project changes
 				setMasterLoading(true);
 				setLoading(true);
-				setLoadingMembers(true);
 
 				// CRITICAL: Preserve owner_id and user_role from selectedProject
 				// These are set immediately after project creation and must not be lost
@@ -247,18 +173,7 @@ const ProjectOverview = React.memo(({
 
 				setProjectInfo(projectData);
 				setLoading(false);
-
-				// Load all essential data in parallel
-				try {
-					await Promise.all([
-						fetchProjectMembers()
-					]);
-} catch {
-					// Surface friendly error state without console logs
-				} finally {
-					// Clear loading immediately for faster experience
-					setMasterLoading(false);
-				}
+				setMasterLoading(false);
 			} else {
 				// If no project, reset to loading state
 				setMasterLoading(true);
@@ -267,13 +182,6 @@ const ProjectOverview = React.memo(({
 
 		loadProjectData();
 	}, [selectedProject?.id]);  // Only depend on selectedProject.id, not projectId prop
-
-	// Track master loading state based on individual loading states
-	useEffect(() => {
-		if (loading || loadingMembers) {
-			setMasterLoading(true);
-		}
-	}, [loading, loadingMembers]);
 
 	const refreshProjectData = async () => {
 		if (!selectedProject?.id) return;
@@ -315,13 +223,6 @@ const ProjectOverview = React.memo(({
 	}, [currentTab, selectedProject?.id]);
 
 
-	const fetchProjectMembers = async () => {
-		// Single-user mode: no project members to fetch — owner is always the only member.
-		setProjectMembers([]);
-		setLoadingMembers(false);
-	};
-
-
 	const handleSaveEdit = async (editedProject) => {
 		// Check if this is a refresh request
 		if (editedProject && editedProject._refreshRequired) {
@@ -357,173 +258,6 @@ const ProjectOverview = React.memo(({
 	};
 
 
-	// Get available features for the project based on user's preferences and role
-	const getProjectFeatures = () => {
-		if (!projectInfo) return [];
-
-		// Determine user's view preferences
-		const userViewPreferences = projectInfo.user_view_preferences || projectInfo.user_visible_views;
-		const hasUserPreferences = userViewPreferences !== undefined && userViewPreferences !== null;
-
-		// If no user preferences are set, show all available views
-		// If user preferences are set (even if empty), respect them
-		const userVisibleViews = hasUserPreferences
-			? userViewPreferences
-			: (projectInfo.available_views || [
-				"kanban", "list", "timeline",
-				"gantt", "network", "gallery", "notes", "habits"
-			]);
-
-
-		const allFeatures = [
-			// Work-focused sections
-			{
-				key: "kanban",
-				label: "Kanban",
-				icon: KanbanSquare,
-				viewerAllowed: true,
-				priority: 2,
-			},
-			{
-				key: "list",
-				label: "List",
-				icon: List,
-				viewerAllowed: true,
-				priority: 3,
-			},
-			{
-				key: "timeline",
-				label: "Timeline",
-				icon: Clock,
-				viewerAllowed: true,
-				priority: 4,
-			},
-			{
-				key: "gantt",
-				label: "Gantt",
-				icon: GanttChartSquare,
-				viewerAllowed: true,
-				priority: 5,
-			},
-			{
-				key: "network",
-				label: "Network",
-				icon: Link2,
-				viewerAllowed: true,
-				priority: 6,
-			},
-			{
-				key: "gallery",
-				label: "Gallery",
-				icon: LayoutGrid,
-				viewerAllowed: true,
-				priority: 7,
-			},
-			{
-				key: "notes",
-				label: "Notes",
-				icon: FileText,
-				viewerAllowed: true,
-				priority: 8,
-			},
-			{
-				key: "habits",
-				label: "Habits",
-				icon: Target,
-				viewerAllowed: true,
-				priority: 9,
-			},
-		];
-
-		// Filter based on enabled views and user visibility
-		let filteredFeatures = allFeatures.filter((feature) =>
-			userVisibleViews.includes(feature.key)
-		);
-
-		if (isViewer) {
-			filteredFeatures = filteredFeatures.filter(
-				(feature) => feature.viewerAllowed
-			);
-		}
-
-		// Sort by priority to maintain the desired order
-		return filteredFeatures.sort((a, b) => a.priority - b.priority);
-	};
-
-	const features = getProjectFeatures();
-
-	const metrics = {
-		tasksTotal: 0,
-		tasksCompleted: 0,
-		upcomingDeadlines: 0,
-		teamSize: projectMembers.length,
-		progressPercent: 0,
-		totalChecklists: 0,
-		completedChecklists: 0,
-	};
-
-	const deadlines = [];
-
-	// Team member display (solo mode - no presence)
-	const renderTeamMember = (member, index) => {
-		const memberName =
-			member.name || member.email?.split("@")[0] || "Unknown";
-		const memberRole = member.role || "Member";
-
-		const getProfilePicture = () => {
-			const profilePicId = member.profile_picture;
-			if (!profilePicId) return null;
-
-			if (profilePicId.startsWith("https://")) {
-				return profilePicId;
-			}
-
-			return profilePictureMapping[profilePicId] || null;
-		};
-
-		const profilePictureSrc = getProfilePicture();
-		const hasProfilePicture = profilePictureSrc !== null;
-
-		return (
-			<div
-				key={member.id || index}
-				className="relative group"
-				title={`${memberName} (${memberRole})`}
-			>
-				<div
-					className={`w-8 h-8 rounded-full border-2 border-white/70 dark:border-gray-800/50 midnight:border-slate-800/50
-          flex items-center justify-center text-xs font-medium
-          transition-transform duration-200 hover:scale-110 hover:z-10 overflow-hidden cursor-pointer
-          ${
-				hasProfilePicture
-					? "bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700"
-					: "bg-gradient-to-br from-indigo-400 to-purple-500 text-white"
-			}`}
-				>
-					{hasProfilePicture ? (
-						<img
-							src={profilePictureSrc}
-							alt={memberName}
-							className="w-full h-full object-cover"
-							onError={(e) => {
-								e.target.style.display = "none";
-								e.target.nextSibling.style.display = "flex";
-							}}
-						/>
-					) : null}
-					<div
-						className={`w-full h-full flex items-center justify-center text-white bg-gradient-to-br from-indigo-400 to-purple-500 ${
-							hasProfilePicture ? "hidden" : ""
-						}`}
-					>
-						{memberName.charAt(0).toUpperCase()}
-					</div>
-				</div>
-			</div>
-		);
-};
-
-	// Enhanced team member display with online status and current view
 	const renderViewContent = () => {
 		// CRITICAL: Prefer selectedProject when it has fresh metadata (user_role, owner_id)
 		// This prevents losing permission data during the initial load after project creation
@@ -646,13 +380,6 @@ const ProjectOverview = React.memo(({
 				);
 
 			case "settings":
-				if (isViewer) {
-					return (
-						<div className="flex items-center justify-center h-full">
-							<p className="text-sm text-gray-500 dark:text-gray-400">You don't have access to project settings.</p>
-						</div>
-					);
-				}
 				return (
 					<ProjectSettingsModal
 						isPage

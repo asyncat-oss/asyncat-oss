@@ -39,7 +39,6 @@ import { useCardActions } from "../../../hooks/useCardActions";
 import { keyframes } from "framer-motion";
 
 import { BoardSkeleton } from "../../../context/ColumnProvider";
-import { useUser } from "../../../../contexts/UserContext";
 import { useParams } from "react-router-dom";
 
 const KanbanBoard = () => {
@@ -52,7 +51,6 @@ const KanbanBoard = () => {
 	} = useColumnContext();
 	useCardContext();
 	const { moveCard } = useCardActions();
-	const { getUserRole, hasPermission, userId } = useUser();
 	keyframes;
 
 	const [showAddColumnModal, setShowAddColumnModal] = useState(false);
@@ -110,36 +108,8 @@ const KanbanBoard = () => {
 		}
 	}, [projectId]);
 
-	// Derive user role: prefer selectedProject metadata, then user context
-	const derivedUserRole = useMemo(() => {
-		if (selectedProject) {
-			// Prefer owner_id match (most reliable for newly created projects)
-			if (
-				selectedProject.owner_id &&
-				userId &&
-				String(selectedProject.owner_id) === String(userId)
-			) {
-				return "owner";
-			}
-			// Use user_role if available
-			if (selectedProject.user_role) return selectedProject.user_role;
-		}
-
-		// Fallback to global user role mapping
-		return getUserRole(projectId);
-	}, [
-		selectedProject,
-		userId,
-		getUserRole,
-		projectId,
-	]);
-
-	const canManageColumns = useMemo(() => {
-		if (derivedUserRole === "owner") return true;
-		return hasPermission("canManageFeatures", projectId);
-	}, [derivedUserRole, hasPermission, projectId]);
-
-	const isOwner = derivedUserRole === "owner";
+	const canManageColumns = true;
+	const isOwner = true;
 
 	useEffect(() => {
 		// Reset filtered columns when switching projects so the filter state doesn't bleed between projects
@@ -1037,36 +1007,19 @@ const KanbanBoard = () => {
 								{pendingOperations.addingColumn && (
 									<LoadingColumn />
 								)}{" "}
-								{/* Only show Add Column button if user has permissions and no conflicting filters */}
-								{shouldShowAddColumnButton &&
-									(isOwner ? (
-										<button
-											onClick={handleAddColumn}
-											className="flex-shrink-0 w-72 h-16 rounded-xl flex items-center justify-center
-                        text-gray-500 dark:text-gray-400 midnight:text-gray-500
-                        hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300
-                        hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-900
-                        transition-all duration-200 group"
-										>
-											<Plus className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform duration-200" />
-											<span className="font-medium">
-												Add Column
-											</span>
-										</button>
-									) : (
-										<div
-											className="flex-shrink-0 w-72 h-16 rounded-xl flex items-center justify-center
-                        text-gray-300 dark:text-gray-600 midnight:text-gray-700
-                        bg-gray-50 dark:bg-gray-800 midnight:bg-gray-900
-                        cursor-not-allowed opacity-50"
-											title={`Only owners can add columns. Your role: ${derivedUserRole}`}
-										>
-											<Plus className="w-5 h-5 mr-2" />
-											<span className="font-medium">
-												Add Column
-											</span>
-										</div>
-									))}
+								{shouldShowAddColumnButton && (
+									<button
+										onClick={handleAddColumn}
+										className="flex-shrink-0 w-72 h-16 rounded-xl flex items-center justify-center
+                      text-gray-500 dark:text-gray-400 midnight:text-gray-500
+                      hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300
+                      hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-900
+                      transition-all duration-200 group"
+									>
+										<Plus className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform duration-200" />
+										<span className="font-medium">Add Column</span>
+									</button>
+								)}
 							</div>
 						</div>
 						{createPortal(

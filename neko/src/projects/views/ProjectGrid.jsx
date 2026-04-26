@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Grid, List, Star, Filter, ChevronDown, User, Users, Search, Folder, FolderOpen } from 'lucide-react';
+import { Grid, List, Star, Filter, ChevronDown, Search, Folder, FolderOpen } from 'lucide-react';
 import ProjectCard from "../projectCard/ProjectCard";
 import ProjectListView from "./ProjectListView";
 
@@ -111,25 +111,20 @@ const ProjectSkeleton = ({ viewMode = 'grid' }) => {
 const ProjectGrid = ({
   projects,
   projectFolders = [],
-  projectMembers = {}, // Add projectMembers prop
   loading,
   error,
   selectedProject,
   onOpenProjectDetail,
-  onOpenGanttView,
   onCreateClick,
   onProjectDelete,
   onProjectUpdate,
   viewMode = 'grid',
   onViewModeChange = () => {},
   workspaceName = "Projects",
-  session
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [starFilter, setStarFilter] = useState("all"); // "all", "starred", "unstarred"
-  const [ownershipFilter, setOwnershipFilter] = useState("all"); // "all", "owned", "shared"
+  const [starFilter, setStarFilter] = useState("all");
   const [showStarFilterDropdown, setShowStarFilterDropdown] = useState(false);
-  const [showOwnershipFilterDropdown, setShowOwnershipFilterDropdown] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState({});
 
   useEffect(() => {
@@ -153,36 +148,15 @@ const ProjectGrid = ({
     setExpandedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
   };
 
-  const currentUserId = session?.user?.id;
-
-  // Helper to check if current user is the owner of a project
-  const isProjectOwner = (project) => {
-    // Check user_role first (most reliable)
-    if (project.user_role?.toLowerCase() === 'owner') return true;
-    // Fallback to owner_id comparison
-    if (currentUserId && project.owner_id === currentUserId) return true;
-    return false;
-  };
-
-  // Filter projects by search query, star status, and ownership
   const filteredProjects = useMemo(() => {
     let filtered = projects;
-    
-    // Apply star filter
+
     if (starFilter === "starred") {
       filtered = filtered.filter(p => p.starred);
     } else if (starFilter === "unstarred") {
       filtered = filtered.filter(p => !p.starred);
     }
 
-    // Apply ownership filter
-    if (ownershipFilter === "owned") {
-      filtered = filtered.filter(p => isProjectOwner(p));
-    } else if (ownershipFilter === "member") {
-      filtered = filtered.filter(p => !isProjectOwner(p));
-    }
-    
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -191,14 +165,11 @@ const ProjectGrid = ({
           p.description?.toLowerCase().includes(query)
       );
     }
-    
+
     return filtered;
-  }, [projects, searchQuery, starFilter, ownershipFilter, currentUserId]);
+  }, [projects, searchQuery, starFilter]);
 
   const starredCount = useMemo(() => projects.filter(p => p.starred).length, [projects]);
-  const ownedCount = useMemo(() => {
-    return projects.filter(p => isProjectOwner(p)).length;
-  }, [projects, currentUserId]);
 
   const { folderMap, unfiledProjects } = useMemo(() => {
     const map = {};
@@ -233,17 +204,14 @@ const ProjectGrid = ({
           <ProjectCard
             key={project.id}
             project={project}
-            members={projectMembers[project.id] || []}
             isSelected={selectedProject?.id === project.id}
             onOpenDetail={onOpenProjectDetail}
-            session={session}
           />
         ))}
       </div>
     ) : (
-      <ProjectListView 
+      <ProjectListView
         projects={projectsList}
-        projectMembers={projectMembers}
         selectedProject={selectedProject}
         onOpenProjectDetail={onOpenProjectDetail}
       />
@@ -294,7 +262,7 @@ const ProjectGrid = ({
             {/* Star Filter Dropdown */}
             <div className="relative">
               <button
-                onClick={() => { setShowStarFilterDropdown(!showStarFilterDropdown); setShowOwnershipFilterDropdown(false); }}
+                onClick={() => setShowStarFilterDropdown(!showStarFilterDropdown)}
                 className={`flex items-center justify-between gap-2 px-4 py-2.5 min-w-[130px] rounded-xl transition-all border shadow-sm ${
                   starFilter !== "all"
                     ? 'bg-yellow-50 dark:bg-yellow-900/30 midnight:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 midnight:text-yellow-300 border-yellow-200 dark:border-yellow-800/50'
@@ -346,67 +314,6 @@ const ProjectGrid = ({
                       <Star className="w-4 h-4 text-gray-400" />
                       <span className="flex-1 font-medium">Unstarred</span>
                       <span className="text-xs text-gray-400">{projects.length - starredCount}</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Ownership Filter Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => { setShowOwnershipFilterDropdown(!showOwnershipFilterDropdown); setShowStarFilterDropdown(false); }}
-                className={`flex items-center justify-between gap-2 px-4 py-2.5 min-w-[130px] rounded-xl transition-all border shadow-sm ${
-                  ownershipFilter !== "all"
-                    ? 'bg-blue-50 dark:bg-blue-900/30 midnight:bg-blue-900/20 text-blue-700 dark:text-blue-400 midnight:text-blue-300 border-blue-200 dark:border-blue-800/50'
-                    : 'bg-white dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <User className={`w-4 h-4 ${ownershipFilter !== 'all' ? 'text-current' : 'text-gray-400'}`} />
-                  <span className="text-sm font-medium">
-                    {ownershipFilter === "all" ? "Owner: Any" : ownershipFilter === "owned" ? "Owner" : "Member"}
-                  </span>
-                </div>
-                <ChevronDown className="w-3 h-3 text-gray-400" />
-              </button>
-              
-              {showOwnershipFilterDropdown && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setShowOwnershipFilterDropdown(false)}
-                  />
-                  <div className="absolute top-full right-0 mt-1.5 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden py-1">
-                    <button
-                      onClick={() => { setOwnershipFilter("all"); setShowOwnershipFilterDropdown(false); }}
-                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        ownershipFilter === "all" ? 'bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      <Filter className="w-4 h-4 text-gray-400" />
-                      <span className="flex-1 font-medium">All Projects</span>
-                      <span className="text-xs text-gray-400">{projects.length}</span>
-                    </button>
-                    <button
-                      onClick={() => { setOwnershipFilter("owned"); setShowOwnershipFilterDropdown(false); }}
-                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        ownershipFilter === "owned" ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      <User className="w-4 h-4 text-blue-500" />
-                      <span className="flex-1 font-medium">I am Owner</span>
-                      <span className="text-xs text-gray-400">{ownedCount}</span>
-                    </button>
-                    <button
-                      onClick={() => { setOwnershipFilter("member"); setShowOwnershipFilterDropdown(false); }}
-                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        ownershipFilter === "member" ? 'bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      <Users className="w-4 h-4 text-gray-400" />
-                      <span className="flex-1 font-medium">I am Member</span>
-                      <span className="text-xs text-gray-400">{projects.length - ownedCount}</span>
                     </button>
                   </div>
                 </>

@@ -18,7 +18,6 @@ const ProjectOverview = () => {
     'gallery',
     'notes',
     'habits',
-    'storage',
     'settings',
   ];
 

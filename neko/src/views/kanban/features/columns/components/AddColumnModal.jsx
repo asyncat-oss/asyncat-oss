@@ -2,11 +2,10 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Check, Info } from "lucide-react";
 import { useColumnActions } from "../hooks/useColumnActions";
-import { useUser } from "../../../../../contexts/UserContext";
 
 const defaultSettings = {
 	title: "",
-	isCompletionColumn: false, // Add isCompletionColumn with default false
+	isCompletionColumn: false,
 	styles: {
 		headerFontFamily: "sans-serif",
 		headerFontSize: "16px",
@@ -17,91 +16,10 @@ const defaultSettings = {
 	},
 };
 
-const AddColumnModal = ({ onClose, onSuccess, projectId }) => {
+const AddColumnModal = ({ onClose, onSuccess }) => {
 	const { handleColumnAdd } = useColumnActions();
-	const { getUserRole, hasPermission } = useUser();
 	const [settings, setSettings] = useState(defaultSettings);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-
-	// Get user role and permissions for this project
-	const userRole = getUserRole(projectId);
-	const canManageColumns = hasPermission("canManageFeatures", projectId);
-	const isOwner = userRole === "owner";
-
-	// If user doesn't have permission, show unauthorized message
-	if (!canManageColumns && !isOwner) {
-		return createPortal(
-			<div className="fixed inset-0 z-40 flex items-center justify-center overflow-hidden">
-				<div
-					className="fixed inset-0 bg-black/20 dark:bg-black/50 midnight:bg-black/70 backdrop-blur-[2px]"
-					onClick={onClose}
-				/>
-				<div className="relative z-10 bg-white/95 dark:bg-gray-900/95 midnight:bg-gray-950/95 backdrop-blur-sm rounded-xl w-full max-w-md mx-6 shadow-2xl border border-gray-200/80 dark:border-gray-700 midnight:border-gray-800 flex flex-col overflow-hidden">
-					<div className="flex items-center justify-between p-6 border-b border-gray-200/80 dark:border-gray-700 midnight:border-gray-800">
-						<div>
-							<h2 className="text-xl font-medium text-gray-900 dark:text-white midnight:text-indigo-200">
-								Access Restricted
-							</h2>
-							<p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-500 mt-1">
-								Owner permission required
-							</p>
-						</div>
-						<button
-							onClick={onClose}
-							className="p-2 rounded-lg text-gray-500 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900"
-						>
-							<X className="w-5 h-5" />
-						</button>
-					</div>
-					<div className="p-6">
-						<div className="flex items-center space-x-3 mb-4">
-							<div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/20 midnight:bg-red-900/10 flex items-center justify-center">
-								<span className="text-red-600 dark:text-red-400 midnight:text-red-300">
-									🔒
-								</span>
-							</div>
-							<div>
-								<h3 className="font-medium text-gray-900 dark:text-white midnight:text-gray-100">
-									Owner Permission Required
-								</h3>
-								<p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-									Your role: {userRole}
-								</p>
-							</div>
-						</div>
-						<p className="text-gray-600 dark:text-gray-300 midnight:text-gray-400 mb-4">
-							Only project owners can create new columns. Contact
-							the project owner to request this change.
-						</p>
-						
-						{/* Beta sync issue notice */}
-						<div className="bg-amber-50 dark:bg-amber-900/10 midnight:bg-amber-900/5 border border-amber-200 dark:border-amber-800/30 midnight:border-amber-800/20 rounded-lg p-4 mb-6">
-							<div className="flex items-start space-x-2">
-								<Info className="w-4 h-4 text-amber-600 dark:text-amber-500 midnight:text-amber-400 mt-0.5 flex-shrink-0" />
-								<div className="text-sm">
-									<p className="text-amber-800 dark:text-amber-300 midnight:text-amber-300 font-medium mb-1">
-										Beta Notice: Sync Issue
-									</p>
-									<p className="text-amber-700 dark:text-amber-400 midnight:text-amber-400 text-xs leading-relaxed">
-										If you just created this project and should be the owner, try refreshing the page. 
-										We're working on fixing this sync delay. Thank you for your patience! 
-									</p>
-								</div>
-							</div>
-						</div>
-						
-						<button
-							onClick={onClose}
-							className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 text-gray-700 dark:text-gray-300 midnight:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-700 transition-colors"
-						>
-							Close
-						</button>
-					</div>
-				</div>
-			</div>,
-			document.body
-		);
-	}
 
 	const handleChange = (e) => {
 		const { name, value } = e.target;
