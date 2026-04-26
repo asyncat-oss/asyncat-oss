@@ -225,8 +225,10 @@ function PermissionEvent({ data, onDecision }) {
 
 // Clean chat-like agent response — no "Agent response" header bar
 function AnswerEvent({ data }) {
-  const answer = data?.answer || '';
-  if (!answer.trim()) return null;
+  // Strip raw <think>...</think> blocks the model may have left in the answer
+  const raw = data?.answer || '';
+  const answer = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  if (!answer) return null;
 
   let blocks = [];
   try {
@@ -240,7 +242,7 @@ function AnswerEvent({ data }) {
           ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
           : <p className="whitespace-pre-wrap">{answer}</p>}
       </div>
-      {data?.round && data.round > 1 && (
+      {data?.round > 1 && (
         <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
       )}
     </div>

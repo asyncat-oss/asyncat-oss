@@ -943,7 +943,7 @@ export const agentApi = {
    * Run an agent with a goal — returns an async generator of SSE events.
    * Event types: thinking, tool_start, tool_result, delta, answer, error, done
    */
-  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null) {
+  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null, continueSessionId = null) {
     const workspaceId = getCurrentWorkspaceId();
     const token = await authService.getSession();
 
@@ -954,7 +954,7 @@ export const agentApi = {
         'Authorization': `Bearer ${token?.access_token}`
       },
       signal,
-      body: JSON.stringify({ goal, conversationHistory, workingDir, maxRounds, workspaceId })
+      body: JSON.stringify({ goal, conversationHistory, workingDir, maxRounds, workspaceId, continueSessionId })
     });
 
     if (!response.ok) {
@@ -985,7 +985,7 @@ export const agentApi = {
           if (line.startsWith('data: ')) {
             try {
               const parsed = JSON.parse(line.slice(6));
-              if (parsed.type === 'done') return;
+              if (parsed.type === 'done') { yield parsed; return; }
               yield parsed;
             } catch (e) {
               console.warn('Failed to parse agent SSE:', e);
@@ -1011,6 +1011,16 @@ export const agentApi = {
     const res = await fetch(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token?.access_token}` },
+    });
+    return res.json();
+  },
+
+  renameSession: async (sessionId, goal) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token?.access_token}` },
+      body: JSON.stringify({ goal }),
     });
     return res.json();
   },

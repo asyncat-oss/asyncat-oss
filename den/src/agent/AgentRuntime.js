@@ -46,6 +46,7 @@ export class AgentRuntime {
    * @param {string} opts.workingDir - Working directory for file/shell tools
    * @param {number} [opts.maxRounds] - Max ReAct iterations
    * @param {(event: AgentEvent) => void} [opts.onEvent] - Event callback for streaming
+   * @param {string} [opts.continueSessionId] - Existing session ID to continue
    */
   constructor(opts) {
     this.aiClient = opts.aiClient;
@@ -62,6 +63,7 @@ export class AgentRuntime {
     this.askUser = opts.askUser || null;
     this.sessionApprovedTools = new Set();
     this.session = null;
+    this.continueSessionId = opts.continueSessionId || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Local models handle much smaller contexts than cloud models — compact sooner.
@@ -80,14 +82,39 @@ export class AgentRuntime {
    * @returns {Promise<{answer: string, session: AgentSession, toolCalls: Array}>}
    */
   async run(goal, conversationHistory = []) {
-    // Create session
-    this.session = new AgentSession({
-      userId: this.userId,
-      workspaceId: this.workspaceId,
-      goal,
-      workingDir: this.workingDir,
-    });
-    this.session.save();
+    // Load or create session
+    if (this.continueSessionId) {
+      this.session = AgentSession.load(this.continueSessionId);
+      if (this.session && this.session.userId === this.userId) {
+        // Reuse existing session — update goal and reset to active
+        this.session.goal = goal;
+        this.session.status = 'active';
+        this.session.updatedAt = new Date().toISOString();
+        // Track conversation rounds for UI reconstruction after refresh
+        const rounds = this.session.scratchpad.conversationRounds || [];
+        this.session.setScratchpad('conversationRounds', rounds);
+        this.session.save();
+      } else {
+        // Session not found or access denied — create new
+        this.continueSessionId = null;
+        this.session = new AgentSession({
+          userId: this.userId,
+          workspaceId: this.workspaceId,
+          goal,
+          workingDir: this.workingDir,
+        });
+        this.session.save();
+      }
+    } else {
+      // Create new session
+      this.session = new AgentSession({
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        goal,
+        workingDir: this.workingDir,
+      });
+      this.session.save();
+    }
 
     // Load relevant memories
     const memories = this._loadMemories(goal);
@@ -358,6 +385,12 @@ export class AgentRuntime {
     }
 
     this.session.setScratchpad('finalAnswer', answer);
+
+    // Track conversation rounds for UI reconstruction after refresh
+    const rounds = this.session.scratchpad.conversationRounds || [];
+    rounds.push({ goal, answer, timestamp: new Date().toISOString() });
+    this.session.setScratchpad('conversationRounds', rounds);
+
     this.session.complete();
 
     this._trackWorkflow(goal);
@@ -381,7 +414,15 @@ export class AgentRuntime {
 
     const result = await this.run(goal, conversationHistory);
 
-    res.write(`data: ${JSON.stringify({ type: 'done', data: { answer: result.answer, sessionId: result.session.id, rounds: result.session.totalRounds } })}\n\n`);
+    res.write(`data: ${JSON.stringify({
+      type: 'done',
+      data: {
+        answer: result.answer,
+        sessionId: result.session.id,
+        rounds: result.session.totalRounds,
+        conversationRounds: result.session.scratchpad.conversationRounds || []
+      }
+    })}\n\n`);
     res.end();
 
     return result;

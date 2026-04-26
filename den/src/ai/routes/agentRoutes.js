@@ -218,7 +218,7 @@ router.get('/skills/:name', authenticate, (req, res) => {
  */
 router.post('/run', authenticate, async (req, res) => {
   try {
-    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove } = req.body;
+    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId } = req.body;
 
     if (!goal || !goal.trim()) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
@@ -255,6 +255,7 @@ router.post('/run', authenticate, async (req, res) => {
       autoApprove: autoApprove === true || autoApprove === 'all',
       requestPermission: createPermissionRequest(req, res),
       askUser: createAskUserRequest(req, res),
+      continueSessionId,
     });
 
     await agent.runStreaming(goal, conversationHistory, res);
@@ -535,6 +536,28 @@ router.delete('/sessions/:id', authenticate, async (req, res) => {
 
     if (result.changes > 0) {
       res.json({ success: true, message: 'Session deleted' });
+    } else {
+      res.status(404).json({ success: false, error: 'Session not found or access denied' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/agent/sessions/:id
+ * Rename an agent session (update goal text used as display title).
+ */
+router.patch('/sessions/:id', authenticate, async (req, res) => {
+  try {
+    const { goal } = req.body;
+    if (!goal?.trim()) return res.status(400).json({ success: false, error: 'Goal is required' });
+    const { default: db } = await import('../../db/client.js');
+    const result = db.prepare(
+      'UPDATE agent_sessions SET goal = ?, updated_at = ? WHERE id = ? AND user_id = ?'
+    ).run(goal.trim(), new Date().toISOString(), req.params.id, req.user.id);
+    if (result.changes > 0) {
+      res.json({ success: true, goal: goal.trim() });
     } else {
       res.status(404).json({ success: false, error: 'Session not found or access denied' });
     }

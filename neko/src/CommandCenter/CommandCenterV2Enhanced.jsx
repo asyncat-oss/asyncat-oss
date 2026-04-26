@@ -121,6 +121,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
   const [agentCurrentSession, setAgentCurrentSession] = useState(null);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
   const [agentConversationHistory, setAgentConversationHistory] = useState([]);
+  const [agentCurrentSessionId, setAgentCurrentSessionId] = useState(null);
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [editGoalText, setEditGoalText] = useState('');
+  const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const agentAbortRef = useRef(null);
   const agentFeedEndRef = useRef(null);
   const [agentView, setAgentView] = useState(initialAgentView); // 'run' | 'tools' | 'skills'
@@ -228,6 +232,55 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         console.error('Failed to parse clarify questions:', err);
       }
   }, [messages, isStreaming, isProcessing]);
+
+  // Load agent session on mount if agentSessionId provided
+  useEffect(() => {
+    if (!agentSessionId || mode !== 'agent') return;
+
+    const loadSession = async () => {
+      setAgentLoadingSession(true);
+      try {
+        const res = await agentApi.getSession(agentSessionId);
+        if (res?.success && res.session) {
+          const session = res.session;
+          setAgentCurrentSessionId(session.id);
+          setAgentCurrentGoal(session.goal || 'Agent session');
+          setAgentCurrentSession(session);
+
+          // Reconstruct event feed from conversation rounds
+          const rounds = session.scratchpad?.conversationRounds || [];
+          const reconstructedEvents = [];
+          rounds.forEach((round, idx) => {
+            if (idx > 0) {
+              reconstructedEvents.push({
+                type: 'run_start',
+                data: { goal: round.goal }
+              });
+            }
+            reconstructedEvents.push({
+              type: 'answer',
+              data: { answer: round.answer, round: idx }
+            });
+          });
+          setAgentEvents(reconstructedEvents);
+
+          // Reconstruct conversation history for context
+          const history = [];
+          rounds.forEach(round => {
+            history.push({ role: 'user', content: round.goal });
+            history.push({ role: 'assistant', content: round.answer });
+          });
+          setAgentConversationHistory(history);
+        }
+      } catch (err) {
+        console.error('Failed to load agent session:', err);
+      } finally {
+        setAgentLoadingSession(false);
+      }
+    };
+
+    loadSession();
+  }, [agentSessionId, mode]);
 
   // Close export menu on outside click
   useEffect(() => {
@@ -340,6 +393,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
       setAgentCurrentGoal('');
       setAgentCurrentSession(null);
       setAgentConversationHistory([]);
+      setAgentCurrentSessionId(null);
+      setIsEditingGoal(false);
     }
   }, [initialMode]);
 
@@ -348,6 +403,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
     if (mode !== 'agent' || !agentSessionId) return;
     setAgentLoadingSession(true);
     setAgentCurrentSession(null);
+    setAgentCurrentSessionId(agentSessionId);
     agentApi.getSession(agentSessionId).then(async res => {
       const sess = res?.session;
       if (!sess) return;
@@ -440,7 +496,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
     let capturedFinalAnswer = '';
 
     try {
-      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal)) {
+      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId)) {
         if (controller.signal.aborted) break;
         if (event.type === 'delta') {
           setAgentStreamingText(prev => prev + (event.data?.content || ''));
@@ -448,6 +504,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         }
         if (event.type === 'thinking' || event.type === 'tool_start' || event.type === 'answer') {
           setAgentStreamingText('');
+        }
+        if (event.type === 'done') {
+          if (event.data?.sessionId) setAgentCurrentSessionId(event.data.sessionId);
+          continue;
         }
         if (event.type === 'answer') {
           capturedFinalAnswer = event.data?.answer || '';
@@ -507,6 +567,32 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
       ));
     }
   }, []);
+
+  const handleAgentRename = useCallback(async () => {
+    const newGoal = editGoalText.trim();
+    if (newGoal && newGoal !== agentCurrentGoal && agentCurrentSessionId) {
+      try {
+        await agentApi.renameSession(agentCurrentSessionId, newGoal);
+        setAgentCurrentGoal(newGoal);
+        triggerConversationRefresh();
+      } catch { /* non-fatal */ }
+    }
+    setIsEditingGoal(false);
+  }, [editGoalText, agentCurrentGoal, agentCurrentSessionId, triggerConversationRefresh]);
+
+  const handleAgentDelete = useCallback(async () => {
+    if (!agentCurrentSessionId) return;
+    try {
+      await agentApi.deleteSession(agentCurrentSessionId);
+      setAgentEvents([]);
+      setAgentCurrentGoal('');
+      setAgentCurrentSession(null);
+      setAgentCurrentSessionId(null);
+      setAgentConversationHistory([]);
+      triggerConversationRefresh();
+    } catch { /* non-fatal */ }
+    setShowDeleteAgentConfirm(false);
+  }, [agentCurrentSessionId, triggerConversationRefresh]);
 
   // Export conversation as Markdown
   const handleExportMarkdown = useCallback(() => {
@@ -1087,19 +1173,59 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
                 <>
                   {agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} />}
                   <button
-                    onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); setAgentConversationHistory([]); }}
+                    onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); setAgentConversationHistory([]); setAgentCurrentSessionId(null); setIsEditingGoal(false); }}
                     className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <RotateCcw className="w-3 h-3" /> New run
                   </button>
                 </>
               )}
-              {agentView === 'run' && agentEvents.length > 0 && (
-                <span className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1 text-right">
-                  {agentCurrentGoal}
-                </span>
-              )}
             </div>
+
+            {/* Goal title bar — shown when there's an active/completed run, mirrors chat header */}
+            {agentView === 'run' && agentEvents.length > 0 && (
+              <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2.5 flex items-center gap-2">
+                {isEditingGoal ? (
+                  <>
+                    <input
+                      type="text"
+                      value={editGoalText}
+                      onChange={e => setEditGoalText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAgentRename(); if (e.key === 'Escape') setIsEditingGoal(false); }}
+                      onBlur={handleAgentRename}
+                      className="flex-1 text-sm bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-300 dark:border-gray-600 midnight:border-slate-600 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                      autoFocus
+                    />
+                    <button onClick={handleAgentRename} className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setIsEditingGoal(false)} className="p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { setEditGoalText(agentCurrentGoal); setIsEditingGoal(true); }}
+                      className="group flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors cursor-text min-w-0 flex-1 text-left"
+                      title="Click to rename"
+                    >
+                      <span className="truncate">{agentCurrentGoal || 'Agent run'}</span>
+                      <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
+                    </button>
+                    {agentCurrentSessionId && !agentRunning && (
+                      <button
+                        onClick={() => setShowDeleteAgentConfirm(true)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
+                        title="Delete this run"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Sub-view content */}
             {agentView === 'tools' ? (
@@ -1459,6 +1585,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDeleteConversation}
         title={conversationTitle}
+      />
+
+      {/* Delete Agent Run Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteAgentConfirm}
+        onClose={() => setShowDeleteAgentConfirm(false)}
+        onConfirm={handleAgentDelete}
+        title={agentCurrentGoal}
       />
 
       {/* Glossary Modal */}
