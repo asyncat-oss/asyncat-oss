@@ -1,37 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import {
- 	KanbanSquare,
- 	List,
- 	Clock,
- 	GanttChartSquare,
- 	FileText,
- 	FolderGit2,
- 	Link2,
  	AlertCircle,
  	CheckCircle,
  	AlertTriangle,
  	Trash2,
- 	LayoutGrid,
- 	Target,
  	Check,
  } from "lucide-react";
 import { usePermissions } from "../../utils/permissions";
-import { projectApi, projectViewsApi } from "../projectApi";
+import { projectApi } from "../projectApi";
 import eventBus from "../../utils/eventBus.js";
-
-const popularEmojis = ["📁", "🚀", "💡", "⚡", "🎯", "📊", "🔧", "🎨", "📱", "💻", "🌟", "🔥", "⭐", "🎉", "🏆", "💎", "📈", "🎮", "🎵", "📚", "🔬", "🏠", "🌱", "⚽", "🍕", "☕", "🎪", "🎭", "🔮", "🎲"];
-
-const allViewsConfig = {
-	kanban:    { label: "Kanban",    icon: KanbanSquare,     description: "Board view with columns and cards" },
-	list:      { label: "List",      icon: List,              description: "Simple list view of tasks and items" },
-	timeline:  { label: "Timeline",  icon: Clock,             description: "Chronological timeline view" },
-	gantt:     { label: "Gantt",     icon: GanttChartSquare,   description: "Gantt chart for project planning" },
-	network:   { label: "Network",   icon: Link2,             description: "Network diagram and dependencies" },
-	notes:     { label: "Notes",     icon: FileText,          description: "Project notes and documentation" },
-	habits:    { label: "Habits",    icon: Target,            description: "Track recurring activities and build healthy habits" },
-	storage:   { label: "Storage",   icon: FolderGit2,         description: "File storage and attachments" },
-	gallery:   { label: "Gallery",   icon: LayoutGrid,        description: "Visual gallery view of tasks and items" },
-};
 
 const ProjectSettingsPage = ({ project, session, onClose, onSave, onDelete }) => {
 	const [saveStatus, setSaveStatus] = useState(null);
@@ -41,22 +18,20 @@ const ProjectSettingsPage = ({ project, session, onClose, onSave, onDelete }) =>
 	const [pendingDelete, setPendingDelete] = useState(false);
 	const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 	const [hasDueDate, setHasDueDate] = useState(false);
-	const [selectedViews, setSelectedViews] = useState([]);
-	const [editedProject, setEditedProject] = useState({ name: "", description: "", due_date: "", enabled_views: [], emoji: "📁" });
+	const [editedProject, setEditedProject] = useState({ name: "", description: "", due_date: "", emoji: "📁" });
 
 	const currentUserId = session?.user?.id;
 	const userRole = project?.owner_id && currentUserId && project.owner_id === currentUserId ? "owner" : project?.user_role || "viewer";
 	const permissions = usePermissions(userRole);
 	const isOwner = userRole === "owner";
 
+	const popularEmojis = ["📁", "🚀", "💡", "⚡", "🎯", "📊", "🔧", "🎨", "📱", "💻", "🌟", "🔥", "⭐", "🎉", "🏆", "💎", "📈", "🎮", "🎵", "📚", "🔬", "🏠", "🌱", "⚽", "🍕", "☕", "🎪", "🎭", "🔮", "🎲"];
+
 	useEffect(() => {
 		if (project) {
 			const projectDueDate = project.due_date ? project.due_date.split("T")[0] : "";
 			setHasDueDate(Boolean(project.due_date));
-			const projectEnabledViews = project.enabled_views || Object.keys(allViewsConfig);
-			setEditedProject({ name: project.name || "", description: project.description || "", due_date: projectDueDate, enabled_views: projectEnabledViews, emoji: project.emoji || "📁" });
-			const userPrefs = project.user_view_preferences || project.user_visible_views || projectEnabledViews;
-			setSelectedViews([...userPrefs]);
+			setEditedProject({ name: project.name || "", description: project.description || "", due_date: projectDueDate, emoji: project.emoji || "📁" });
 			setError(null);
 			setSuccess(null);
 			setPendingDelete(false);
@@ -71,20 +46,6 @@ const ProjectSettingsPage = ({ project, session, onClose, onSave, onDelete }) =>
 	const handleEmojiSelect = (emoji) => {
 		setEditedProject((prev) => ({ ...prev, emoji }));
 		setShowEmojiPicker(false);
-	};
-
-	const toggleProjectView = (viewKey) => {
-		setEditedProject((prev) => {
-			const currentEnabledViews = prev.enabled_views || [];
-			const isCurrentlyEnabled = currentEnabledViews.includes(viewKey);
-			const newEnabledViews = isCurrentlyEnabled ? currentEnabledViews.filter((v) => v !== viewKey) : [...currentEnabledViews, viewKey];
-			if (isCurrentlyEnabled) setSelectedViews((p) => p.filter((v) => v !== viewKey));
-			return { ...prev, enabled_views: newEnabledViews };
-		});
-	};
-
-	const toggleViewPreference = (viewKey) => {
-		setSelectedViews((prev) => prev.includes(viewKey) ? prev.filter((v) => v !== viewKey) : [...prev, viewKey]);
 	};
 
 	const handleSave = useCallback(async () => {
@@ -103,21 +64,6 @@ const ProjectSettingsPage = ({ project, session, onClose, onSave, onDelete }) =>
 					eventBus.emit("projectsUpdated");
 				}
 			}
-			if (isOwner && editedProject.enabled_views) {
-				const originalEnabledViews = project.enabled_views || [];
-				if (JSON.stringify(editedProject.enabled_views.sort()) !== JSON.stringify(originalEnabledViews.sort())) {
-					const result = await onSave({ enabled_views: editedProject.enabled_views });
-					if (!result) throw new Error("Failed to save components");
-					sessionStorage.removeItem("asyncat-projects-cache");
-					eventBus.emit("projectsUpdated");
-				}
-			}
-			const originalViewPrefs = project.user_view_preferences || project.user_visible_views || [];
-			if (JSON.stringify(selectedViews.sort()) !== JSON.stringify(originalViewPrefs.sort())) {
-				await projectViewsApi.updateUserViewPreferences(project.id, selectedViews);
-				sessionStorage.removeItem("asyncat-projects-cache");
-				eventBus.emit("projectsUpdated");
-			}
 			setSaveStatus("saved");
 			setTimeout(() => setSaveStatus(null), 2000);
 		} catch (error) {
@@ -127,7 +73,7 @@ const ProjectSettingsPage = ({ project, session, onClose, onSave, onDelete }) =>
 		} finally {
 			setIsSubmitting(false);
 		}
-	}, [editedProject, selectedViews, project, permissions, onSave, isOwner, hasDueDate]);
+	}, [editedProject, project, permissions, onSave, hasDueDate]);
 
 	const handleDelete = async () => {
 		if (!pendingDelete) { setPendingDelete(true); return; }
@@ -144,8 +90,6 @@ const ProjectSettingsPage = ({ project, session, onClose, onSave, onDelete }) =>
 			setIsSubmitting(false);
 		}
 	};
-
-	const enabledViews = editedProject.enabled_views || [];
 
 	return (
 		<div className="flex h-full bg-white dark:bg-gray-900 midnight:bg-gray-950 font-sora">
@@ -228,55 +172,6 @@ const ProjectSettingsPage = ({ project, session, onClose, onSave, onDelete }) =>
 									</label>
 								</div>
 								{hasDueDate && <input type="date" name="due_date" value={editedProject.due_date} onChange={handleChange} className="w-full border border-gray-200 dark:border-gray-600 midnight:border-gray-700 rounded-xl py-3 px-5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-white" disabled={!permissions.canEditProject} />}
-							</div>
-						</div>
-
-						{/* Views Section */}
-						<div className="space-y-6">
-							<div>
-								<h2 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-1">Views & Components</h2>
-								<p className="text-sm text-gray-500 dark:text-gray-400">{isOwner ? "Enable views for the project and choose your sidebar." : "Choose which views appear in your sidebar."}</p>
-							</div>
-
-							<div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-700 overflow-hidden">
-								<div className={`grid ${isOwner ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} gap-x-8 px-5 py-3 bg-gray-50 dark:bg-gray-800/60 midnight:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-700`}>
-									<span className="text-xs font-medium text-gray-500 uppercase tracking-wide">View</span>
-									{isOwner && <span className="text-xs font-medium text-gray-500 uppercase tracking-wide text-center">Project</span>}
-									<span className="text-xs font-medium text-gray-500 uppercase tracking-wide text-center">Sidebar</span>
-								</div>
-								{Object.keys(allViewsConfig).map((viewKey, idx, arr) => {
-									const config = allViewsConfig[viewKey];
-									if (!config) return null;
-									const isEnabled = enabledViews.includes(viewKey);
-									const isInMyView = selectedViews.includes(viewKey);
-									const IconComponent = config.icon;
-									const isLast = idx === arr.length - 1;
-									return (
-										<div key={viewKey} className={`grid ${isOwner ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} gap-x-8 items-center px-5 py-4 ${!isLast ? "border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800" : ""} ${!isEnabled && isOwner ? "opacity-50" : ""} bg-white dark:bg-gray-900 midnight:bg-gray-950`}>
-											<div className="flex items-center gap-4">
-												<div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 flex items-center justify-center">
-													<IconComponent className="w-5 h-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400" />
-												</div>
-												<div>
-													<span className="text-sm font-medium text-gray-900 dark:text-gray-100">{config.label}</span>
-													<p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{config.description}</p>
-												</div>
-											</div>
-											{isOwner && (
-												<div className="flex justify-center">
-													<button onClick={() => toggleProjectView(viewKey)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${isEnabled ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600 midnight:bg-gray-600"}`}>
-														<span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ${isEnabled ? "translate-x-5" : "translate-x-0"}`} />
-													</button>
-												</div>
-											)}
-											<div className="flex justify-center">
-												<button onClick={() => isEnabled && toggleViewPreference(viewKey)} disabled={!isEnabled} title={isEnabled ? (isInMyView ? "Hide from sidebar" : "Show in sidebar") : "Disabled at project level"} className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${!isEnabled ? "cursor-default" : "cursor-pointer"} ${isInMyView ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600 midnight:bg-gray-600"}`}>
-													<span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ${isInMyView ? "translate-x-5" : "translate-x-0"}`} />
-												</button>
-											</div>
-										</div>
-									);
-								})}
 							</div>
 						</div>
 

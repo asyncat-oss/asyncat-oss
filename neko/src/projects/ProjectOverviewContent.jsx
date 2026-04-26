@@ -18,8 +18,6 @@ import { CardProvider } from "../views/context/CardProvider";
 import ProjectSettingsModal from "./components/ProjectSettingsModal";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 
-import { projectViewsApi } from "./projectApi";
-
 const soraFontBase = "font-sora";
 
 // Comprehensive skeleton component for the project overview
@@ -154,22 +152,9 @@ const ProjectOverview = React.memo(({
 				// These are set immediately after project creation and must not be lost
 				let projectData = { 
 					...selectedProject,
-					// Explicitly preserve these critical fields
 					owner_id: selectedProject.owner_id,
 					user_role: selectedProject.user_role
 				};
-
-				if (!projectData.user_view_preferences && !projectData.user_visible_views) {
-					try {
-						const prefsResponse = await projectViewsApi.getUserViewPreferences(selectedProject.id);
-						if (prefsResponse?.data?.view_preferences) {
-							projectData.user_view_preferences = prefsResponse.data.view_preferences;
-							projectData.user_visible_views = prefsResponse.data.view_preferences;
-						}
-					} catch {
-						// Don't log to console in production flow; just continue with defaults
-					}
-				}
 
 				setProjectInfo(projectData);
 				setLoading(false);
@@ -191,16 +176,6 @@ const ProjectOverview = React.memo(({
 				(p) => p.id === selectedProject.id
 			);
 			if (updatedProject) {
-				// Always fetch fresh view preferences for the new project, don't carry over from previous project
-				try {
-					const prefsResponse = await projectViewsApi.getUserViewPreferences(selectedProject.id);
-					if (prefsResponse?.data?.view_preferences) {
-						updatedProject.user_view_preferences = prefsResponse.data.view_preferences;
-						updatedProject.user_visible_views = prefsResponse.data.view_preferences;
-					}
-				} catch {
-					// Don't log to console in production flow; just continue with defaults
-				}
 				setProjectInfo(updatedProject);
 			} else {
 				console.warn(

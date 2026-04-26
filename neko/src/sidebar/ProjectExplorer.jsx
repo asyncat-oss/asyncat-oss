@@ -208,16 +208,6 @@ const ProjectItem = memo(({ project, isSelected, onSelect, isLoading, folders, o
               if (view.key === 'divider') {
                 return <div key="divider" className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800" />;
               }
-              // Always show settings; filter content views by project prefs
-              const isUtilityView = view.key === 'settings';
-              if (!isUtilityView) {
-                // Hide if owner disabled it at project level
-                const enabledViews = project.enabled_views;
-                if (enabledViews && enabledViews.length > 0 && !enabledViews.includes(view.key)) return null;
-                // Hide if user hid it in their personal preferences
-                const userPrefs = project.user_view_preferences || project.user_visible_views;
-                if (userPrefs && userPrefs.length > 0 && !userPrefs.includes(view.key)) return null;
-              }
               const ViewIcon = view.icon;
               const isActive = isSelected && currentTab === view.key;
               return (

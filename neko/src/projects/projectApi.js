@@ -147,59 +147,6 @@ export const projectMembersApi = {
   },
 };
 
-// Project Views & Widgets APIs
-export const projectViewsApi = {
-  // Update project enabled views
-  async updateProjectViews(projectId, enabledViews) {
-    return apiFetch(
-      `${API_URL}/api/projects/${projectId}/views`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ enabled_views: enabledViews }),
-      }
-    );
-  },
-
-  // Update user view preferences
-  async updateUserViewPreferences(projectId, viewPreferences) {
-    return apiFetch(
-      `${API_URL}/api/projects/${projectId}/user/view-preferences`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ view_preferences: viewPreferences }),
-      }
-    );
-  },
-
-  // Get user view preferences
-  async getUserViewPreferences(projectId) {
-    return apiFetch(`${API_URL}/api/projects/${projectId}/user/view-preferences`);
-  },
-
-  // Update project enabled widgets
-  async updateProjectWidgets(projectId, enabledWidgets) {
-    return apiFetch(
-      `${API_URL}/api/projects/${projectId}/enabled-widgets`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ enabled_widgets: enabledWidgets }),
-      }
-    );
-  },
-
-  // Update user widget preferences
-  async updateUserWidgetPreferences(projectId, widgetPreferences) {
-    return apiFetch(
-      `${API_URL}/api/projects/${projectId}/user/widget-preferences`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ widget_preferences: widgetPreferences }),
-      }
-    );
-  },
-};
-
-
 // AI APIs
 export const aiApi = {
   // Create project with AI assistance
@@ -328,7 +275,6 @@ export const formatRelativeTime = (dateString) => {
 export default {
   project: projectApi,
   members: projectMembersApi,
-  views: projectViewsApi,
   ai: aiApi,
   viewAccess: viewAccessUtils,
   utils: {
