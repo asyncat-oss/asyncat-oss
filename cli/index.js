@@ -166,6 +166,25 @@ async function doChatGPTOAuth(tui) {
 }
 
 // ── Detect model info ───────────────────────────────────────────────────────
+function providerDisplayName(config = {}) {
+  const id = config.provider_id || config.providerId || '';
+  const names = {
+    'llamacpp-builtin': 'llama.cpp',
+    ollama: 'Ollama',
+    lmstudio: 'LM Studio',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    gemini: 'Gemini',
+    minimax: 'MiniMax',
+    'minimax-cn': 'MiniMax CN',
+    groq: 'Groq',
+    openrouter: 'OpenRouter',
+    azure: 'Azure',
+    custom: 'Custom',
+  };
+  return names[id] || id || config.provider_type || 'provider';
+}
+
 async function detectModel() {
   try {
     const token = await getToken();
@@ -186,13 +205,25 @@ async function detectModel() {
     if (res.ok) {
       const data = await res.json();
       const isLocal = data.provider_type === 'local';
-      if (isLocal && localStatus?.status !== 'ready') {
-        return { model: '', provider: '', context: {} };
+      const isBuiltin = data.provider_id === 'llamacpp-builtin';
+      const localState = isBuiltin ? (localStatus?.status || 'idle') : null;
+      const loadingPrefix = localState === 'loading' ? 'loading ' : '';
+      if (isBuiltin && localState !== 'ready') {
+        return {
+          model: localStatus?.model || data.model || '',
+          provider: `${loadingPrefix}local · ${providerDisplayName(data)} · ${localState}`,
+          context: {
+            ctxSize: localStatus?.ctxSize || null,
+            ctxTrain: localStatus?.ctxTrain || null,
+          },
+        };
       }
+      const mode = isLocal ? 'local' : (data.provider_type === 'cloud' ? 'cloud' : 'custom');
+      const tools = data.supports_tools ? ' · tools' : '';
       return {
-        model: data.model || 'default',
-        provider: data.provider_type || 'local',
-        context: isLocal ? {
+        model: (isBuiltin ? localStatus?.model : data.model) || data.model || 'default',
+        provider: `${mode} · ${providerDisplayName(data)}${isBuiltin ? ` · ${localState}` : ''}${tools}`,
+        context: isBuiltin ? {
           ctxSize: localStatus?.ctxSize || null,
           ctxTrain: localStatus?.ctxTrain || null,
         } : {},

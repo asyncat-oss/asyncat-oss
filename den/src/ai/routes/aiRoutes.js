@@ -72,7 +72,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
     const { searchWeb, formatSearchResults } = await import('../controllers/ai/webSearch.js');
 
     // Use the same per-user provider lookup as the non-streaming route
-    const { client: aiClient, model: AI_MODEL, isLocal } = getAiClientForUser(req.user.id);
+    const { client: aiClient, model: AI_MODEL, isLocal, supportsNativeTools } = getAiClientForUser(req.user.id);
 
     // Web search — fetch results before building prompt so they go into context
     let searchContext = '';
@@ -133,9 +133,9 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
       ? modelConfig.system_prompt_prefix.trim() + '\n\n'
       : '';
 
-    const systemPrompt = isLocal
-      ? promptPrefix + baseSystemPrompt
-      : promptPrefix + baseSystemPrompt + buildToolsSystemSection(contextData);
+    const systemPrompt = supportsNativeTools
+      ? promptPrefix + baseSystemPrompt + buildToolsSystemSection(contextData)
+      : promptPrefix + baseSystemPrompt;
 
     // Local models: trim conversation history more aggressively to stay within context
     const historySlice = isLocal ? 3 : 6;
@@ -168,7 +168,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
     let threadMessages = [...messages];
     let fullContent = '';
     let continueLoop = true;
-    const MAX_TOOL_ROUNDS = isLocal ? 1 : 5;
+    const MAX_TOOL_ROUNDS = supportsNativeTools ? 5 : 1;
     let toolRound = 0;
 
     while (continueLoop && toolRound < MAX_TOOL_ROUNDS) {
@@ -189,8 +189,8 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
         } : {}),
       };
 
-      // Only send tool definitions for cloud providers that support them
-      if (!isLocal) {
+      // Only send tool definitions for providers that support native OpenAI-format tools.
+      if (supportsNativeTools) {
         streamParams.tools = TOOL_DEFINITIONS;
         streamParams.tool_choice = 'auto';
         streamParams.max_completion_tokens = maxTokens;

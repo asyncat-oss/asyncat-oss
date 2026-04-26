@@ -1,8 +1,9 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Search, X } from "lucide-react";
+import { Cloud, Cpu, Loader2, Send, Search, X } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
+import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
 
 export const MessageInputV2 = ({
   onSubmit,
@@ -21,6 +22,7 @@ export const MessageInputV2 = ({
   const [isComposing, setIsComposing] = useState(false);
 
   const localModel = useLocalModelStatus();
+  const activeBrain = useActiveBrainStatus();
   const { config: modelConfig } = useModelConfig();
   const textareaRef = useRef(null);
 
@@ -100,6 +102,7 @@ export const MessageInputV2 = ({
   );
 
   const canSubmit = value.trim() && !disabled;
+  const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
 
   const getBorderColor = () => {
     return "border-gray-200 dark:border-gray-700 midnight:border-gray-700";
@@ -209,6 +212,26 @@ export const MessageInputV2 = ({
 
               <div className="flex items-center justify-between gap-4 pt-3">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <div
+                    title={`${activeBrain.label}${activeBrain.supportsTools ? " · native tools enabled" : ""}`}
+                    className={`inline-flex items-center gap-1.5 max-w-full px-2.5 py-1.5 rounded-lg text-xs font-medium border ${
+                      activeBrain.isLoadingModel
+                        ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60"
+                        : activeBrain.isReady
+                          ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    {activeBrain.isLoadingModel || activeBrain.loading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    ) : (
+                      <BrainIcon className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span className="truncate max-w-[14rem]">
+                      {activeBrain.isLoadingModel ? "Loading" : activeBrain.mode} · {activeBrain.providerName}
+                      {activeBrain.model ? ` · ${activeBrain.model}` : ""}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setWebSearchEnabled((v) => !v)}

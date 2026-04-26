@@ -1,9 +1,11 @@
 import { up as agentFeedbackAudit } from './001_agent_feedback_audit.js';
 import { up as permissionRules } from './002_permission_rules.js';
+import { up as aiProviderProfiles } from './003_ai_provider_profiles.js';
 
 const migrations = [
   ['001_agent_feedback_audit', agentFeedbackAudit],
   ['002_permission_rules', permissionRules],
+  ['003_ai_provider_profiles', aiProviderProfiles],
 ];
 
 export function runMigrations(db) {

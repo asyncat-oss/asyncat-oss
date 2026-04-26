@@ -40,6 +40,7 @@ export class AgentRuntime {
    * @param {object} opts.aiClient - OpenAIClient instance
    * @param {string} opts.model - Model name
    * @param {boolean} opts.isLocal - Whether using a local model
+   * @param {boolean} opts.supportsNativeTools - Whether provider accepts OpenAI tool definitions
    * @param {string} opts.userId
    * @param {string} opts.workspaceId
    * @param {string} opts.workingDir - Working directory for file/shell tools
@@ -50,6 +51,7 @@ export class AgentRuntime {
     this.aiClient = opts.aiClient;
     this.model = opts.model;
     this.isLocal = opts.isLocal || false;
+    this.supportsNativeTools = opts.supportsNativeTools ?? !this.isLocal;
     this.userId = opts.userId;
     this.workspaceId = opts.workspaceId;
     this.workingDir = opts.workingDir || process.cwd();
@@ -491,7 +493,7 @@ export class AgentRuntime {
   }
 
   async _callLLM(systemPrompt, messages) {
-    const useNativeTools = !this.isLocal;
+    const useNativeTools = this.supportsNativeTools;
 
     const params = {
       model: this.model,

@@ -146,6 +146,56 @@ export const aiProviderApi = {
   getStats: async () => {
     return apiCall(`${AI_API_BASE}/stats`);
   },
+
+  getConfig: async () => {
+    return apiCall(`${AI_API_BASE}/config`);
+  },
+
+  getCatalog: async () => {
+    return apiCall(`${AI_API_BASE}/catalog`);
+  },
+
+  listProfiles: async () => {
+    return apiCall(`${AI_API_BASE}/profiles`);
+  },
+
+  createProfile: async (profile) => {
+    return apiCall(`${AI_API_BASE}/profiles`, {
+      method: 'POST',
+      body: JSON.stringify(profile),
+    });
+  },
+
+  updateProfile: async (id, profile) => {
+    return apiCall(`${AI_API_BASE}/profiles/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(profile),
+    });
+  },
+
+  deleteProfile: async (id) => {
+    return apiCall(`${AI_API_BASE}/profiles/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  testProfile: async (id) => {
+    return apiCall(`${AI_API_BASE}/profiles/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+    });
+  },
+
+  activateProfile: async (id, { stopLocal = false } = {}) => {
+    return apiCall(`${AI_API_BASE}/profiles/${encodeURIComponent(id)}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({ stopLocal }),
+    });
+  },
+
+  listProviderModels: async (profileId) => {
+    const suffix = profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
+    return apiCall(`${AI_API_BASE}/models${suffix}`);
+  },
 };
 
 // ===========================================

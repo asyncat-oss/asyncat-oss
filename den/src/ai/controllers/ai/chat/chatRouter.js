@@ -16,17 +16,28 @@ import { artifactParser } from '../artifactParser.js';
 import { TOOL_DEFINITIONS, buildToolsSystemSection } from '../toolDefinitions.js';
 import { executeTool } from '../toolExecutor.js';
 import { getStatus as getLlamaStatus } from '../llamaServerManager.js';
+import {
+  LLAMA_BASE_URL,
+  normalizeBaseUrl,
+  parseSettings,
+  providerRequiresBuiltinServer,
+  providerSupportsTools,
+} from '../providerCatalog.js';
 
 config();
 
 // Global fallback: built-in llama server (no cloud provider by default)
-const LLAMA_PORT = parseInt(process.env.LLAMA_SERVER_PORT ?? '8765', 10);
 const GLOBAL_AI_MODEL = process.env.AI_MODEL || 'local';
-const GLOBAL_AI_BASE_URL = process.env.AI_BASE_URL || `http://127.0.0.1:${LLAMA_PORT}/v1`;
+const GLOBAL_AI_BASE_URL = process.env.AI_BASE_URL || LLAMA_BASE_URL;
 const GLOBAL_AI_API_KEY = process.env.AI_API_KEY || 'local';
 
 function isLocalBaseUrl(baseUrl) {
   return /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(baseUrl || '');
+}
+
+function isBuiltinLlamaBaseUrl(baseUrl) {
+  const port = process.env.LLAMA_SERVER_PORT ?? '8765';
+  return new RegExp(`^(https?:\\/\\/)?(127\\.0\\.0\\.1|localhost):${port}(\\/|$)`, 'i').test(baseUrl || '');
 }
 
 function assertLocalModelReady() {
@@ -53,30 +64,30 @@ const aiClient = new OpenAIClient({
 export function getAiClientForUser(userId) {
   try {
     const row = db
-      .prepare('SELECT provider_type, provider_id, base_url, model, api_key FROM ai_provider_config WHERE user_id = ?')
+      .prepare('SELECT profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools FROM ai_provider_config WHERE user_id = ?')
       .get(userId);
 
     if (!row) {
       console.log(`🤖 [chat] No provider config for user ${userId} — using global defaults (${GLOBAL_AI_BASE_URL}, model=${GLOBAL_AI_MODEL})`);
       const isLocal = isLocalBaseUrl(GLOBAL_AI_BASE_URL);
-      const localStatus = isLocal ? assertLocalModelReady() : null;
+      const requiresLocalServer = isBuiltinLlamaBaseUrl(GLOBAL_AI_BASE_URL);
+      const localStatus = requiresLocalServer ? assertLocalModelReady() : null;
       return {
         client: aiClient,
         model: localStatus?.model || GLOBAL_AI_MODEL,
         isLocal,
+        requiresLocalServer,
+        supportsNativeTools: !isLocal,
         providerInfo: null,
       };
     }
 
-    const isLocal = row.provider_type === 'local' || row.provider_id === 'llamacpp-builtin';
-
-    // Build the base URL: append /v1 only if not already present
-    let baseUrl = row.base_url;
-    if (!baseUrl.includes('/v1')) {
-      baseUrl = baseUrl.replace(/\/$/, '') + '/v1';
-    }
-
-    const localStatus = isLocal ? assertLocalModelReady() : null;
+    const isLocal = row.provider_type === 'local';
+    const requiresLocalServer = providerRequiresBuiltinServer(row);
+    const baseUrl = normalizeBaseUrl(row.base_url, row.provider_id);
+    const settings = parseSettings(row.settings);
+    const supportsNativeTools = providerSupportsTools(row);
+    const localStatus = requiresLocalServer ? assertLocalModelReady() : null;
 
     // Use 'local' as the API key for local providers (llama-server ignores auth)
     // Fixed: operator precedence bug — was `key || type === 'local' ? ... : global`
@@ -88,23 +99,36 @@ export function getAiClientForUser(userId) {
       endpoint: baseUrl,
       apiKey,
       defaultModel: localStatus?.model || row.model,
+      providerId: row.provider_id,
+      settings,
+      defaultHeaders: row.provider_id === 'openrouter'
+        ? {
+            'HTTP-Referer': 'https://asyncat.local',
+            'X-OpenRouter-Title': 'Asyncat',
+          }
+        : undefined,
     });
 
     return {
       client: userClient,
       model: localStatus?.model || row.model,
       isLocal,
+      requiresLocalServer,
+      supportsNativeTools,
+      provider_type: row.provider_type,
       providerInfo: {
         type: row.provider_type,
         providerId: row.provider_id,
         baseUrl: row.base_url,
         model: row.model,
+        profileId: row.profile_id,
+        supportsNativeTools,
       },
     };
   } catch (err) {
     if (err.message?.startsWith('Local model is not ready')) throw err;
     console.warn('Failed to load user AI config, using global defaults:', err.message);
-    return { client: aiClient, model: GLOBAL_AI_MODEL, isLocal: false, providerInfo: null };
+    return { client: aiClient, model: GLOBAL_AI_MODEL, isLocal: false, requiresLocalServer: false, supportsNativeTools: true, providerInfo: null };
   }
 }
 
@@ -198,7 +222,7 @@ export const enhancedRouter = async (req, res) => {
     }
 
     // Resolve per-user AI client + model (falls back to global .env if not configured)
-    const { client: userAiClient, model: AI_MODEL, isLocal, providerInfo } = getAiClientForUser(user.id);
+    const { client: userAiClient, model: AI_MODEL, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(user.id);
     console.log(`🤖 Using model: ${AI_MODEL}${isLocal ? ' (local)' : ''}`);
 
     // Get authenticated Supabase client
@@ -300,7 +324,7 @@ export const enhancedRouter = async (req, res) => {
     });
 
     // Append tool awareness section with project IDs
-    const toolsSection = buildToolsSystemSection(contextData);
+    const toolsSection = supportsNativeTools ? buildToolsSystemSection(contextData) : '';
     const systemPrompt = baseSystemPrompt + toolsSection;
 
     // Determine token limits - Smart allocation based on request type
@@ -330,16 +354,26 @@ export const enhancedRouter = async (req, res) => {
       workspaceId
     };
 
-    // Run agentic loop with user's AI client (handles tool calls automatically)
-    const { responseText: agenticResponse, toolCalls: executedToolCalls } = await runAgenticLoop(
-      systemPrompt,
-      openAIMessages,
-      toolContext,
-      maxTokens,
-      5,
-      userAiClient,
-      AI_MODEL
-    );
+    // Run agentic loop only for providers that support native OpenAI-format tools.
+    const { responseText: agenticResponse, toolCalls: executedToolCalls } = supportsNativeTools
+      ? await runAgenticLoop(
+          systemPrompt,
+          openAIMessages,
+          toolContext,
+          maxTokens,
+          5,
+          userAiClient,
+          AI_MODEL
+        )
+      : {
+          responseText: (await userAiClient.messages.create({
+            model: AI_MODEL,
+            max_completion_tokens: maxTokens,
+            system: systemPrompt,
+            messages: openAIMessages,
+          })).content?.[0]?.text || '',
+          toolCalls: [],
+        };
 
     responseText = agenticResponse || "I understand your request. How can I help you further?";
 

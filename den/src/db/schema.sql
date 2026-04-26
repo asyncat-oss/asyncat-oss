@@ -353,14 +353,38 @@ CREATE INDEX IF NOT EXISTS idx_conversations_deleted    ON conversations(deleted
 
 CREATE TABLE IF NOT EXISTS ai_provider_config (
   user_id       TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  profile_id    TEXT,
   provider_type TEXT NOT NULL DEFAULT 'cloud'
                   CHECK (provider_type IN ('cloud', 'local', 'custom')),
   provider_id   TEXT,          -- 'ollama' | 'lmstudio' | 'llamacpp' | null for cloud/custom
   base_url      TEXT NOT NULL, -- e.g. http://localhost:11434/v1
   model         TEXT NOT NULL, -- e.g. llama3.2:latest
   api_key       TEXT,          -- optional; stored for custom cloud endpoints
+  settings      TEXT NOT NULL DEFAULT '{}',
+  supports_tools INTEGER NOT NULL DEFAULT 0,
   updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS ai_provider_profiles (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  provider_type     TEXT NOT NULL DEFAULT 'cloud'
+                       CHECK (provider_type IN ('cloud', 'local', 'custom')),
+  provider_id       TEXT NOT NULL,
+  base_url          TEXT NOT NULL,
+  model             TEXT NOT NULL,
+  api_key           TEXT,
+  settings          TEXT NOT NULL DEFAULT '{}',
+  supports_tools    INTEGER NOT NULL DEFAULT 0,
+  last_test_status  TEXT,
+  last_test_message TEXT,
+  last_test_at      TEXT,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ai_provider_profiles_user ON ai_provider_profiles(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_ai_provider_profiles_provider ON ai_provider_profiles(user_id, provider_id);
 
 -- ─── MCP OAuth (was mcp schema in Supabase) ──────────────────────────────────
 -- Stores short-lived auth codes and long-lived access tokens for MCP clients.

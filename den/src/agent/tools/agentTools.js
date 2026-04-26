@@ -30,7 +30,8 @@ export const agentTools = [
       const subAgent = new AgentRuntime({
         aiClient: providerInfo.client,
         model: providerInfo.model,
-        isLocal: providerInfo.provider_type === 'local',
+        isLocal: providerInfo.isLocal,
+        supportsNativeTools: providerInfo.supportsNativeTools,
         userId: context.userId,
         workspaceId: context.workspaceId,
         workingDir: context.workingDir,

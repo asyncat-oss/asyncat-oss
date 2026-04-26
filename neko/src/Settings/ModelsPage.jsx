@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download } from 'lucide-react';
+import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2 } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
@@ -1400,6 +1400,380 @@ const SystemInfoSection = () => {
   );
 };
 
+const providerLabel = (profile, catalog = []) => {
+  const preset = catalog.find(item => item.providerId === profile?.provider_id || item.id === profile?.provider_id);
+  return preset?.name || profile?.name || profile?.provider_id || 'Provider';
+};
+
+const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, saving }) => {
+  const seed = profile || preset || {};
+  const [form, setForm] = useState({
+    name: seed.name || '',
+    provider_id: seed.provider_id || seed.providerId || seed.id || 'custom',
+    base_url: seed.base_url || seed.baseUrl || '',
+    model: seed.model || '',
+    api_key: '',
+    supports_tools: seed.supports_tools ?? seed.supportsTools ?? true,
+    settings: seed.settings || {},
+  });
+  const [apiKeyTouched, setApiKeyTouched] = useState(false);
+
+  const selectedPreset = catalog.find(item => item.providerId === form.provider_id || item.id === form.provider_id);
+  const isAzure = form.provider_id === 'azure';
+  const isLocalManaged = form.provider_id === 'llamacpp-builtin';
+  const requiresKey = selectedPreset?.requiresApiKey;
+
+  const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+  const updateSetting = (key, value) => setForm(prev => ({ ...prev, settings: { ...(prev.settings || {}), [key]: value } }));
+
+  const submit = (e) => {
+    e.preventDefault();
+    const payload = {
+      name: form.name,
+      provider_id: form.provider_id,
+      base_url: form.base_url,
+      model: form.model,
+      supports_tools: Boolean(form.supports_tools),
+      settings: form.settings || {},
+    };
+    if (!profile || apiKeyTouched) payload.api_key = form.api_key;
+    onSave(payload);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <form onSubmit={submit} className="w-full max-w-2xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{profile ? 'Edit Provider' : 'Connect Provider'}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedPreset?.description || 'Configure an OpenAI-compatible endpoint.'}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+            Provider
+            <select
+              value={form.provider_id}
+              onChange={(e) => {
+                const next = catalog.find(item => item.providerId === e.target.value || item.id === e.target.value);
+                setForm(prev => ({
+                  ...prev,
+                  provider_id: e.target.value,
+                  name: prev.name || next?.name || '',
+                  base_url: next?.baseUrl || prev.base_url,
+                  model: next?.model || prev.model,
+                  supports_tools: next?.supportsTools ?? prev.supports_tools,
+                  settings: next?.settings || prev.settings || {},
+                }));
+              }}
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+            >
+              {catalog.filter(item => !item.managed).map(item => (
+                <option key={item.id} value={item.providerId}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+            Name
+            <input
+              value={form.name}
+              onChange={(e) => update('name', e.target.value)}
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+              placeholder={selectedPreset?.name || 'Provider name'}
+            />
+          </label>
+
+          <label className="md:col-span-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+            Base URL
+            <input
+              value={form.base_url}
+              onChange={(e) => update('base_url', e.target.value)}
+              disabled={isLocalManaged}
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none disabled:opacity-60"
+              placeholder={selectedPreset?.baseUrl || 'https://.../v1'}
+            />
+          </label>
+
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+            Model
+            <input
+              value={form.model}
+              onChange={(e) => update('model', e.target.value)}
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+              placeholder={selectedPreset?.model || 'model-id'}
+            />
+          </label>
+
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+            API Key {profile?.api_key_set && !apiKeyTouched ? <span className="text-gray-400">(saved)</span> : null}
+            <input
+              value={form.api_key}
+              onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
+              type="password"
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+              placeholder={requiresKey ? 'Required' : 'Optional'}
+            />
+          </label>
+
+          {isAzure && (
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+              API Version
+              <input
+                value={form.settings?.apiVersion || '2024-10-21'}
+                onChange={(e) => updateSetting('apiVersion', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+              />
+            </label>
+          )}
+
+          <label className="md:col-span-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input
+              type="checkbox"
+              checked={Boolean(form.supports_tools)}
+              onChange={(e) => update('supports_tools', e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Enable native tool calling for chat and agents
+          </label>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">Cancel</button>
+          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
+            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const LocalSwitchPrompt = ({ profile, serverStatus, onChoose, onClose, busy }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+    <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-5">
+      <div className="flex items-start gap-3">
+        <div className="p-2 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+          <Zap className="w-5 h-5" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Local model is still loaded</h3>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Switch to {profile?.name || 'this provider'} and choose whether to keep {serverStatus?.model || 'the local model'} in memory.
+          </p>
+        </div>
+      </div>
+      <div className="mt-5 flex flex-col sm:flex-row gap-2">
+        <button disabled={busy} onClick={() => onChoose(true)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">Stop local server</button>
+        <button disabled={busy} onClick={() => onChoose(false)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">Keep it running</button>
+        <button disabled={busy} onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+      </div>
+    </div>
+  </div>
+);
+
+const ProvidersSection = ({
+  catalog,
+  profiles,
+  activeConfig,
+  serverStatus,
+  loading,
+  providerAction,
+  providerError,
+  onRefresh,
+  onSave,
+  onDelete,
+  onTest,
+  onActivate,
+  onLoadModels,
+}) => {
+  const [modalState, setModalState] = useState(null);
+  const [pendingActivate, setPendingActivate] = useState(null);
+  const [modelLists, setModelLists] = useState({});
+  const [modelLoading, setModelLoading] = useState(null);
+  const activeProfileId = activeConfig?.profile_id;
+  const activeProviderName = activeConfig?.provider_id === 'llamacpp-builtin'
+    ? 'Built-in llama.cpp'
+    : providerLabel({ provider_id: activeConfig?.provider_id }, catalog);
+  const cloudPresets = catalog.filter(item => !item.managed);
+  const localServerRunning = serverStatus?.status === 'ready' || serverStatus?.status === 'loading';
+
+  const activate = (profile) => {
+    if (profile.provider_id !== 'llamacpp-builtin' && profile.provider_type !== 'local' && localServerRunning) {
+      setPendingActivate(profile);
+      return;
+    }
+    onActivate(profile.id, false);
+  };
+
+  const fetchModels = async (profile) => {
+    setModelLoading(profile.id);
+    try {
+      const models = await onLoadModels(profile.id);
+      setModelLists(prev => ({ ...prev, [profile.id]: models }));
+    } finally {
+      setModelLoading(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 text-gray-700 dark:text-gray-300">
+              <Cloud className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white midnight:text-slate-100">Active AI Brain</h2>
+                {activeConfig?.supports_tools ? <Badge color="green">Tools enabled</Badge> : <Badge color="gray">Prompt tools only</Badge>}
+              </div>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 midnight:text-slate-300">
+                {activeConfig?.model ? `${activeProviderName} · ${activeConfig.model}` : 'No provider profile is active yet.'}
+              </p>
+              {activeConfig?.base_url && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 break-all">{activeConfig.base_url}</p>
+              )}
+            </div>
+          </div>
+          <button onClick={onRefresh} disabled={loading} className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+        {providerError && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{providerError}</p>}
+      </div>
+
+      <div>
+        <div className="flex items-end justify-between gap-4 mb-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Connect Providers</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Save providers once, then switch the shared chat and agent model from here.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {cloudPresets.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setModalState({ preset: item })}
+              className="text-left rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-4 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{item.name}</div>
+                {item.requiresApiKey ? <KeyRound className="w-4 h-4 text-gray-400" /> : <Link2 className="w-4 h-4 text-gray-400" />}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge color={item.local ? 'gray' : 'blue'}>{item.local ? 'Local' : 'Cloud'}</Badge>
+                {item.supportsTools && <Badge color="green">Tools</Badge>}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Saved Profiles</h2>
+          <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
+            <Plus className="w-4 h-4" />
+            Add Custom
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="h-32 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+        ) : profiles.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800 p-8 text-center text-sm text-gray-500 dark:text-gray-400">No saved provider profiles yet.</div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {profiles.map(profile => {
+              const isActive = activeProfileId === profile.id;
+              const busy = providerAction === profile.id;
+              const list = modelLists[profile.id] || [];
+              return (
+                <div key={profile.id} className={`rounded-3xl border bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm ${isActive ? 'border-green-400 dark:border-green-500' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{profile.name}</h3>
+                        {isActive && <Badge color="green">Active</Badge>}
+                        {profile.api_key_set && <Badge color="gray">Key saved</Badge>}
+                      </div>
+                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{providerLabel(profile, catalog)} · {profile.model || 'No model selected'}</p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 break-all">{profile.base_url}</p>
+                      {profile.last_test_message && (
+                        <p className={`mt-2 text-xs ${profile.last_test_status === 'ok' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{profile.last_test_message}</p>
+                      )}
+                    </div>
+                    {isActive ? <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" /> : <Cloud className="w-5 h-5 text-gray-400 flex-shrink-0" />}
+                  </div>
+
+                  {list.length > 0 && (
+                    <div className="mt-4 max-h-40 overflow-y-auto rounded-2xl border border-gray-100 dark:border-gray-800 p-2 space-y-1">
+                      {list.slice(0, 20).map(model => (
+                        <button key={model.id} onClick={() => onSave(profile.id, { model: model.id })} className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
+                          {model.id}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button onClick={() => activate(profile)} disabled={busy || isActive} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
+                      {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                      Activate
+                    </button>
+                    <button onClick={() => onTest(profile.id)} disabled={busy} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">Test</button>
+                    <button onClick={() => fetchModels(profile)} disabled={modelLoading === profile.id} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
+                      {modelLoading === profile.id ? 'Loading...' : 'Models'}
+                    </button>
+                    <button onClick={() => setModalState({ profile })} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">Edit</button>
+                    <button onClick={() => onDelete(profile.id)} disabled={busy} className="px-3 py-1.5 text-xs font-medium rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/10 disabled:opacity-50">Delete</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {modalState && (
+        <ProviderProfileModal
+          catalog={catalog}
+          profile={modalState.profile || null}
+          preset={modalState.preset || null}
+          saving={Boolean(providerAction)}
+          onClose={() => setModalState(null)}
+          onSave={async (payload) => {
+            await onSave(modalState.profile?.id || null, payload);
+            setModalState(null);
+          }}
+        />
+      )}
+
+      {pendingActivate && (
+        <LocalSwitchPrompt
+          profile={pendingActivate}
+          serverStatus={serverStatus}
+          busy={providerAction === pendingActivate.id}
+          onClose={() => setPendingActivate(null)}
+          onChoose={async (stopLocal) => {
+            await onActivate(pendingActivate.id, stopLocal);
+            setPendingActivate(null);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 const ModelsPage = () => {
   const { config, setConfig } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
@@ -1428,6 +1802,12 @@ const ModelsPage = () => {
   const [pythonBuildSuccess, setPythonBuildSuccess] = useState('');
   const [modelLoadCtxSizes, setModelLoadCtxSizes] = useState(loadSavedModelContextSizes);
   const [modelLoadCtxErrors, setModelLoadCtxErrors] = useState({});
+  const [providerCatalog, setProviderCatalog] = useState([]);
+  const [providerProfiles, setProviderProfiles] = useState([]);
+  const [providerConfig, setProviderConfig] = useState(null);
+  const [loadingProviders, setLoadingProviders] = useState(true);
+  const [providerAction, setProviderAction] = useState(null);
+  const [providerError, setProviderError] = useState('');
   const pollCleanup = useRef(null);
   const installPollCleanup = useRef(null);
   const pythonBuildPollCleanup = useRef(null);
@@ -1437,6 +1817,7 @@ const ModelsPage = () => {
     loadModelList();
     loadEngineData();
     loadEngineCatalog();
+    loadProviderData();
     return () => {
       pollCleanup.current?.();
       installPollCleanup.current?.();
@@ -1638,6 +2019,94 @@ const ModelsPage = () => {
     }
   };
 
+  const loadProviderData = async () => {
+    setLoadingProviders(true);
+    setProviderError('');
+    try {
+      const [catalogRes, profilesRes, configRes] = await Promise.all([
+        aiProviderApi.getCatalog(),
+        aiProviderApi.listProfiles(),
+        aiProviderApi.getConfig(),
+      ]);
+      setProviderCatalog(catalogRes.providers || []);
+      setProviderProfiles(profilesRes.profiles || []);
+      setProviderConfig(configRes || null);
+    } catch (err) {
+      setProviderError(err.message || 'Failed to load providers.');
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  const handleProviderSave = async (id, payload) => {
+    const actionId = id || 'new';
+    setProviderAction(actionId);
+    setProviderError('');
+    try {
+      if (id) {
+        await aiProviderApi.updateProfile(id, payload);
+      } else {
+        await aiProviderApi.createProfile(payload);
+      }
+      await loadProviderData();
+    } catch (err) {
+      setProviderError(err.message || 'Failed to save provider.');
+      throw err;
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handleProviderDelete = async (id) => {
+    setProviderAction(id);
+    setProviderError('');
+    try {
+      await aiProviderApi.deleteProfile(id);
+      await loadProviderData();
+    } catch (err) {
+      setProviderError(err.message || 'Failed to delete provider.');
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handleProviderTest = async (id) => {
+    setProviderAction(id);
+    setProviderError('');
+    try {
+      await aiProviderApi.testProfile(id);
+      await loadProviderData();
+    } catch (err) {
+      setProviderError(err.message || 'Provider test failed.');
+      await loadProviderData();
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handleProviderActivate = async (id, stopLocal = false) => {
+    setProviderAction(id);
+    setProviderError('');
+    try {
+      await aiProviderApi.activateProfile(id, { stopLocal });
+      await Promise.all([loadProviderData(), loadStatus()]);
+    } catch (err) {
+      setProviderError(err.message || 'Failed to activate provider.');
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handleLoadProviderModels = async (id) => {
+    try {
+      const res = await aiProviderApi.listProviderModels(id);
+      return res.models || [];
+    } catch (err) {
+      setProviderError(err.message || 'Failed to load provider models.');
+      return [];
+    }
+  };
+
   const pollEngineRetry = (previousSelection = null) => {
     pollCleanup.current?.();
     pollCleanup.current = llamaServerApi.pollStatus(
@@ -1693,7 +2162,7 @@ const ModelsPage = () => {
       pollCleanup.current?.();
       pollCleanup.current = llamaServerApi.pollStatus(
         (snap) => setServerStatus(snap),
-        (snap) => { setServerStatus(snap); setStartingModel(null); pollCleanup.current = null; },
+        async (snap) => { setServerStatus(snap); setStartingModel(null); pollCleanup.current = null; await loadProviderData(); },
         (snap) => { setServerStatus(snap); setStartingModel(null); pollCleanup.current = null; },
       );
     } catch (err) {
@@ -1709,6 +2178,7 @@ const ModelsPage = () => {
     try {
       await llamaServerApi.stop();
       setServerStatus({ status: 'idle', model: null });
+      await loadProviderData();
     } catch (err) {
       console.error('Failed to stop server:', err);
     } finally {
@@ -1850,6 +2320,7 @@ const ModelsPage = () => {
   );
   const tabs = [
     { id: 'library', label: 'Models', icon: HardDriveDownload },
+    { id: 'providers', label: 'Providers', icon: Cloud },
     { id: 'engine', label: 'Engine', icon: Wrench },
     { id: 'system', label: 'System', icon: Activity },
   ];
@@ -1869,7 +2340,7 @@ const ModelsPage = () => {
                   Model Studio
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5">
-                  Load, stop, download, and remove local AI models
+                  Manage the shared AI brain for chat, agents, cloud providers, and local models
                 </p>
               </div>
             </div>
@@ -1881,11 +2352,12 @@ const ModelsPage = () => {
                 loadModelList();
                 loadEngineData({ clearActions: true });
                 loadEngineCatalog(true);
+                loadProviderData();
               }}
-              disabled={loadingStatus || loadingModels || loadingEngines || loadingCatalog || Boolean(switchingEngine) || Boolean(installingEngine)}
+              disabled={loadingStatus || loadingModels || loadingEngines || loadingCatalog || loadingProviders || Boolean(switchingEngine) || Boolean(installingEngine)}
               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300 hover:text-gray-900 dark:hover:text-white midnight:hover:text-white transition-colors bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-800/50 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700"
             >
-              <RefreshCw className={`w-4 h-4 ${(loadingStatus || loadingModels || loadingEngines || loadingCatalog) ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${(loadingStatus || loadingModels || loadingEngines || loadingCatalog || loadingProviders) ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>
@@ -2154,6 +2626,24 @@ const ModelsPage = () => {
                   )}
                 </div>
               </div>
+              )}
+
+              {activeTab === 'providers' && (
+                <ProvidersSection
+                  catalog={providerCatalog}
+                  profiles={providerProfiles}
+                  activeConfig={providerConfig}
+                  serverStatus={serverStatus}
+                  loading={loadingProviders}
+                  providerAction={providerAction}
+                  providerError={providerError}
+                  onRefresh={loadProviderData}
+                  onSave={handleProviderSave}
+                  onDelete={handleProviderDelete}
+                  onTest={handleProviderTest}
+                  onActivate={handleProviderActivate}
+                  onLoadModels={handleLoadProviderModels}
+                />
               )}
 
               {activeTab === 'engine' && (

@@ -27,9 +27,9 @@ await initializeAgent();
 // Initialize scheduler — pass a runAgent function so jobs can call the agent
 initScheduler(async ({ goal, userId, workspaceId, workingDir }) => {
   try {
-    const { client: aiClient, model, isLocal } = getAiClientForUser(userId);
+    const { client: aiClient, model, isLocal, supportsNativeTools } = getAiClientForUser(userId);
     const agent = new AgentRuntime({
-      aiClient, model, isLocal,
+      aiClient, model, isLocal, supportsNativeTools,
       userId, workspaceId,
       workingDir: workingDir || process.cwd(),
       maxRounds: 20,
@@ -225,7 +225,7 @@ router.post('/run', authenticate, async (req, res) => {
     }
 
     // Get user's AI provider
-    const { client: aiClient, model, isLocal } = getAiClientForUser(req.user.id);
+    const { client: aiClient, model, isLocal, supportsNativeTools } = getAiClientForUser(req.user.id);
 
     // Resolve workspace
     const workspaceId = req.workspaceId;
@@ -247,6 +247,7 @@ router.post('/run', authenticate, async (req, res) => {
       aiClient,
       model,
       isLocal,
+      supportsNativeTools,
       userId: req.user.id,
       workspaceId: req.workspaceId,
       workingDir: workingDir || process.cwd(),
@@ -860,7 +861,7 @@ router.post('/multi', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Maximum 10 parallel tasks per request' });
     }
 
-    const { client: aiClient, model, isLocal } = getAiClientForUser(req.user.id);
+    const { client: aiClient, model, isLocal, supportsNativeTools } = getAiClientForUser(req.user.id);
     const { default: db } = await import('../../db/client.js');
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -872,7 +873,7 @@ router.post('/multi', authenticate, async (req, res) => {
       const batchResults = await Promise.allSettled(
         batch.map(async (task) => {
           const agent = new AgentRuntime({
-            aiClient, model, isLocal,
+            aiClient, model, isLocal, supportsNativeTools,
             userId: req.user.id,
             workspaceId,
             workingDir: task.workingDir || process.cwd(),

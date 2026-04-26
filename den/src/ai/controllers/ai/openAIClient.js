@@ -8,17 +8,31 @@ export class OpenAIClient {
     this.endpoint = config.endpoint;
     this.apiKey = config.apiKey;
     this.defaultModel = config.defaultModel || 'gpt-4o';
+    this.providerId = config.providerId || 'custom';
+    this.settings = config.settings || {};
 
     const isAnthropic = this.endpoint?.includes('anthropic.com');
+    const isAzure = this.providerId === 'azure';
+    const azureEndpoint = isAzure ? String(this.endpoint || '').replace(/\/+$/, '') : '';
+    const azureDeployment = isAzure ? (this.settings.deployment || this.defaultModel) : '';
+    const azureApiVersion = isAzure ? (this.settings.apiVersion || '2024-10-21') : '';
+
     this.client = new OpenAI({
       apiKey: this.apiKey || 'not-configured',
-      baseURL: this.endpoint,
+      baseURL: isAzure
+        ? `${azureEndpoint}/openai/deployments/${encodeURIComponent(azureDeployment)}`
+        : this.endpoint,
+      ...(isAzure && {
+        defaultQuery: { 'api-version': azureApiVersion },
+        defaultHeaders: { 'api-key': this.apiKey },
+      }),
       ...(isAnthropic && {
         defaultHeaders: {
           'x-api-key': this.apiKey,
           'anthropic-version': '2023-06-01',
         },
       }),
+      ...(config.defaultHeaders && { defaultHeaders: config.defaultHeaders }),
     });
     
     // Maintain compatibility with existing code structure

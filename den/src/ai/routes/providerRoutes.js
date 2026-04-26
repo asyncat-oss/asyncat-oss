@@ -4,8 +4,10 @@
 // POST /api/ai/providers/server/*           — built-in llama.cpp server control
 
 import express from 'express';
+import { randomUUID } from 'crypto';
 import { verifyUser } from '../../auth/authMiddleware.js';
 import { getProviderStats } from '../controllers/ai/providerManager.js';
+import OpenAIClient from '../controllers/ai/openAIClient.js';
 import {
   listModels,
   deleteModel,
@@ -31,24 +33,152 @@ import {
   getPythonEngineInstallJob,
   subscribe as llamaSubscribe,
 } from '../controllers/ai/llamaServerManager.js';
+import {
+  LLAMA_BASE_URL,
+  LLAMA_PROVIDER_ID,
+  PROVIDER_CATALOG,
+  getProviderPreset,
+  normalizeBaseUrl,
+  normalizeProviderType,
+  parseSettings,
+  providerRequiresBuiltinServer,
+  providerSupportsTools,
+  publicProvider,
+} from '../controllers/ai/providerCatalog.js';
 import db from '../../db/client.js';
-
-const LLAMA_BASE_URL = `http://127.0.0.1:${process.env.LLAMA_SERVER_PORT ?? '8765'}/v1`;
 
 const router = express.Router();
 
 function saveBuiltinProviderConfig(userId, filename) {
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO ai_provider_config (user_id, provider_type, provider_id, base_url, model, api_key, updated_at)
-    VALUES (?, 'local', 'llamacpp-builtin', ?, ?, NULL, ?)
+    INSERT INTO ai_provider_config (user_id, profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools, updated_at)
+    VALUES (?, NULL, 'local', 'llamacpp-builtin', ?, ?, NULL, '{}', 0, ?)
     ON CONFLICT(user_id) DO UPDATE SET
+      profile_id     = NULL,
       provider_type = 'local',
       provider_id   = 'llamacpp-builtin',
       base_url      = excluded.base_url,
       model         = excluded.model,
+      api_key       = NULL,
+      settings      = '{}',
+      supports_tools = 0,
       updated_at    = excluded.updated_at
   `).run(userId, LLAMA_BASE_URL, filename, now);
+}
+
+function providerHeaders(providerId) {
+  if (providerId === 'openrouter') {
+    return {
+      'HTTP-Referer': 'https://asyncat.local',
+      'X-OpenRouter-Title': 'Asyncat',
+    };
+  }
+  return undefined;
+}
+
+function normalizeProfilePayload(body = {}, existing = null) {
+  const providerId = String(body.provider_id || body.providerId || existing?.provider_id || 'custom').trim();
+  const preset = getProviderPreset(providerId) || getProviderPreset('custom');
+  const settings = {
+    ...parseSettings(preset?.settings),
+    ...parseSettings(existing?.settings),
+    ...parseSettings(body.settings),
+  };
+  const providerType = normalizeProviderType(body.provider_type || body.providerType || existing?.provider_type || preset.providerType, providerId);
+  const supportsTools = body.supports_tools !== undefined
+    ? Boolean(body.supports_tools)
+    : body.supportsTools !== undefined
+      ? Boolean(body.supportsTools)
+      : existing?.supports_tools !== undefined
+        ? Boolean(Number(existing.supports_tools))
+        : Boolean(preset.supportsTools);
+
+  return {
+    name: String(body.name ?? existing?.name ?? preset.name ?? providerId).trim() || providerId,
+    provider_type: providerType,
+    provider_id: providerId,
+    base_url: normalizeBaseUrl(body.base_url ?? body.baseUrl ?? existing?.base_url ?? preset.baseUrl ?? '', providerId),
+    model: String(body.model ?? existing?.model ?? preset.model ?? '').trim(),
+    api_key: Object.prototype.hasOwnProperty.call(body, 'api_key')
+      ? String(body.api_key || '')
+      : Object.prototype.hasOwnProperty.call(body, 'apiKey')
+        ? String(body.apiKey || '')
+        : existing?.api_key || '',
+    settings,
+    supports_tools: supportsTools ? 1 : 0,
+  };
+}
+
+function rowByProfileId(userId, profileId) {
+  return db.prepare('SELECT * FROM ai_provider_profiles WHERE user_id = ? AND id = ?').get(userId, profileId);
+}
+
+function clientForProvider(row) {
+  const settings = parseSettings(row.settings);
+  return new OpenAIClient({
+    endpoint: normalizeBaseUrl(row.base_url, row.provider_id),
+    apiKey: row.provider_type === 'local' ? (row.api_key || 'local') : (row.api_key || process.env.AI_API_KEY || 'not-configured'),
+    defaultModel: row.model,
+    providerId: row.provider_id,
+    settings,
+    defaultHeaders: providerHeaders(row.provider_id),
+  });
+}
+
+async function withTimeout(promise, ms, label = 'Provider request') {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function listProviderModels(row) {
+  if (row.provider_id === LLAMA_PROVIDER_ID) {
+    return listModels().map(model => ({
+      id: model.filename,
+      name: model.name || model.filename,
+      owned_by: 'local',
+    }));
+  }
+  const client = clientForProvider(row);
+  const result = await withTimeout(client.client.models.list(), 8000, 'Model list');
+  const data = Array.isArray(result?.data) ? result.data : [];
+  return data.map(model => ({
+    id: model.id,
+    name: model.id,
+    owned_by: model.owned_by || model.owner || '',
+  }));
+}
+
+async function testProvider(row) {
+  if (row.provider_id === LLAMA_PROVIDER_ID) {
+    const snap = getLlamaStatus();
+    if (snap.status !== 'ready') {
+      throw new Error(`Built-in llama.cpp is ${snap.status}; load a model first.`);
+    }
+    return `Built-in llama.cpp is ready with ${snap.model || row.model}.`;
+  }
+
+  const preset = getProviderPreset(row.provider_id);
+  if (preset?.supportsModelList) {
+    const models = await listProviderModels(row);
+    return models.length ? `Connected. ${models.length} model${models.length === 1 ? '' : 's'} visible.` : 'Connected. No models were returned.';
+  }
+
+  const client = clientForProvider(row);
+  const response = await withTimeout(client.client.chat.completions.create({
+    model: row.model,
+    messages: [{ role: 'user', content: 'Reply with exactly: ok' }],
+    max_completion_tokens: 8,
+  }), 10000, 'Chat test');
+  const text = response.choices?.[0]?.message?.content?.trim();
+  return text ? `Connected. Test response: ${text.slice(0, 80)}` : 'Connected.';
 }
 
 router.use((_req, res, next) => {
@@ -71,17 +201,214 @@ router.get('/stats', verifyUser, async (req, res) => {
   }
 });
 
+// ── GET /catalog — built-in provider presets ────────────────────────────────
+router.get('/catalog', verifyUser, (_req, res) => {
+  res.json({ success: true, providers: PROVIDER_CATALOG });
+});
+
 // ── GET /config — get user provider config ──────────────────────────────────
 router.get('/config', verifyUser, (req, res) => {
   try {
-    const row = db.prepare('SELECT provider_type, provider_id, base_url, model FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
+    const row = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
     if (row) {
-      res.json(row);
+      res.json({ ...row, settings: parseSettings(row.settings), supports_tools: Boolean(row.supports_tools) });
     } else {
-      res.json({ provider_type: 'local', provider_id: 'llamacpp-builtin', base_url: '', model: '' });
+      res.json({ profile_id: null, provider_type: 'local', provider_id: LLAMA_PROVIDER_ID, base_url: LLAMA_BASE_URL, model: '', settings: {}, supports_tools: false });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Provider profiles — saved local/cloud/custom endpoints ──────────────────
+router.get('/profiles', verifyUser, (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM ai_provider_profiles WHERE user_id = ? ORDER BY updated_at DESC').all(req.user.id);
+    const active = db.prepare('SELECT profile_id, provider_id, model, base_url, supports_tools FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
+    res.json({
+      success: true,
+      profiles: rows.map(publicProvider),
+      active: active ? { ...active, supports_tools: Boolean(active.supports_tools) } : null,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/profiles', verifyUser, (req, res) => {
+  try {
+    const profile = normalizeProfilePayload(req.body || {});
+    if (!profile.base_url && profile.provider_id !== LLAMA_PROVIDER_ID) {
+      return res.status(400).json({ success: false, error: 'base_url is required' });
+    }
+    if (!profile.model && profile.provider_id !== LLAMA_PROVIDER_ID) {
+      return res.status(400).json({ success: false, error: 'model is required' });
+    }
+
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO ai_provider_profiles (
+        id, user_id, name, provider_type, provider_id, base_url, model,
+        api_key, settings, supports_tools, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      req.user.id,
+      profile.name,
+      profile.provider_type,
+      profile.provider_id,
+      profile.base_url,
+      profile.model,
+      profile.api_key || null,
+      JSON.stringify(profile.settings || {}),
+      profile.supports_tools,
+      now,
+      now,
+    );
+
+    res.status(201).json({ success: true, profile: publicProvider(rowByProfileId(req.user.id, id)) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/profiles/:id', verifyUser, (req, res) => {
+  try {
+    const existing = rowByProfileId(req.user.id, req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Profile not found' });
+
+    const profile = normalizeProfilePayload(req.body || {}, existing);
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE ai_provider_profiles
+      SET name = ?, provider_type = ?, provider_id = ?, base_url = ?, model = ?,
+          api_key = ?, settings = ?, supports_tools = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `).run(
+      profile.name,
+      profile.provider_type,
+      profile.provider_id,
+      profile.base_url,
+      profile.model,
+      profile.api_key || null,
+      JSON.stringify(profile.settings || {}),
+      profile.supports_tools,
+      now,
+      req.params.id,
+      req.user.id,
+    );
+
+    res.json({ success: true, profile: publicProvider(rowByProfileId(req.user.id, req.params.id)) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/profiles/:id', verifyUser, (req, res) => {
+  try {
+    const existing = rowByProfileId(req.user.id, req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Profile not found' });
+
+    const active = db.prepare('SELECT profile_id FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
+    if (active?.profile_id === req.params.id) {
+      db.prepare('DELETE FROM ai_provider_config WHERE user_id = ?').run(req.user.id);
+    }
+    db.prepare('DELETE FROM ai_provider_profiles WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/profiles/:id/test', verifyUser, async (req, res) => {
+  const row = rowByProfileId(req.user.id, req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: 'Profile not found' });
+
+  const now = new Date().toISOString();
+  try {
+    const message = await testProvider(row);
+    db.prepare(`
+      UPDATE ai_provider_profiles
+      SET last_test_status = 'ok', last_test_message = ?, last_test_at = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `).run(message, now, now, req.params.id, req.user.id);
+    res.json({ success: true, ok: true, message, profile: publicProvider(rowByProfileId(req.user.id, req.params.id)) });
+  } catch (err) {
+    const message = err.message || 'Connection test failed';
+    db.prepare(`
+      UPDATE ai_provider_profiles
+      SET last_test_status = 'error', last_test_message = ?, last_test_at = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `).run(message, now, now, req.params.id, req.user.id);
+    res.status(400).json({ success: false, ok: false, error: message, profile: publicProvider(rowByProfileId(req.user.id, req.params.id)) });
+  }
+});
+
+router.post('/profiles/:id/activate', verifyUser, async (req, res) => {
+  try {
+    const row = rowByProfileId(req.user.id, req.params.id);
+    if (!row) return res.status(404).json({ success: false, error: 'Profile not found' });
+
+    if (req.body?.stopLocal === true && !providerRequiresBuiltinServer(row)) {
+      const snap = getLlamaStatus();
+      if (snap.status === 'ready' || snap.status === 'loading') {
+        await stopServer();
+      }
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO ai_provider_config (
+        user_id, profile_id, provider_type, provider_id, base_url, model,
+        api_key, settings, supports_tools, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        profile_id = excluded.profile_id,
+        provider_type = excluded.provider_type,
+        provider_id = excluded.provider_id,
+        base_url = excluded.base_url,
+        model = excluded.model,
+        api_key = excluded.api_key,
+        settings = excluded.settings,
+        supports_tools = excluded.supports_tools,
+        updated_at = excluded.updated_at
+    `).run(
+      req.user.id,
+      row.id,
+      row.provider_type,
+      row.provider_id,
+      row.base_url,
+      row.model,
+      row.api_key || null,
+      row.settings || '{}',
+      providerSupportsTools(row) ? 1 : 0,
+      now,
+    );
+
+    db.prepare('UPDATE ai_provider_profiles SET updated_at = ? WHERE id = ? AND user_id = ?').run(now, row.id, req.user.id);
+    const active = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
+    res.json({ success: true, active: { ...active, settings: parseSettings(active.settings), supports_tools: Boolean(active.supports_tools) } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/models', verifyUser, async (req, res) => {
+  try {
+    const profileId = req.query.profileId;
+    let row = null;
+    if (profileId) {
+      row = rowByProfileId(req.user.id, profileId);
+      if (!row) return res.status(404).json({ success: false, error: 'Profile not found' });
+    } else {
+      row = db.prepare('SELECT * FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
+      if (!row) return res.json({ success: true, models: [] });
+    }
+
+    res.json({ success: true, models: await listProviderModels(row) });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
