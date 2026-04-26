@@ -5,7 +5,7 @@ import React, {
 	useCallback,
 	useMemo,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import authService from "../services/authService.js";
 import {
 	Settings,
@@ -17,125 +17,117 @@ import {
 	Compass,
 	ChevronRight,
 	Info,
-	X,
 	Search,
 	Cpu,
-	Bot,
 	Trash2,
+	Bot,
+	History,
 	MessageSquare as ChatIcon,
 	Calendar as CalendarIcon,
-	Loader2,
 } from "lucide-react";
 
-import ChatExplorer from "./ChatExplorer";
 import ProjectExplorer from "./ProjectExplorer";
 import CreateProjectFlow from "../projects/components/CreateProjectFlow";
 import CalendarContent from "./CalendarContent";
 import UniversalSearch from "./UniversalSearch";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { usePermissions } from "../utils/permissions";
-import { agentApi } from "../CommandCenter/commandCenterApi";
+import { agentApi, chatApi } from "../CommandCenter/commandCenterApi";
 
-// ── Agent sessions panel (embedded in Chat tab) ───────────────────────────────
-function agentSessionStatus(s) {
-  if (s.status === 'error' || s.status === 'failed') return 'error';
-  if (s.scratchpad?.finalAnswer || s.status === 'complete') return 'complete';
-  return 'incomplete';
-}
+// ── Recent chats strip (compact, last 5) ─────────────────────────────────────
 
-const AgentSessionsList = memo(({ navigate }) => {
-	const [sessions, setSessions]     = useState([]);
-	const [deletingId, setDeletingId] = useState(null);
-	const [hoveredId, setHoveredId]   = useState(null);
+const getRecentTime = (dateString) => {
+	const diffH = Math.floor((Date.now() - new Date(dateString)) / 3_600_000);
+	if (diffH < 1) return 'now';
+	if (diffH < 24) return `${diffH}h`;
+	const diffD = Math.floor(diffH / 24);
+	return diffD < 7 ? `${diffD}d` : new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
-	const loadSessions = useCallback(() => {
-		agentApi.getSessions(40).then(res => {
-			if (res?.sessions) setSessions(res.sessions);
-		}).catch(() => {});
-	}, []);
+const RecentChats = memo(({ navigate }) => {
+	const location = useLocation();
+	const { currentWorkspace } = useWorkspace();
+	const [items, setItems] = useState([]);
+	const [loading, setLoading] = useState(true);
+
+	const currentConversationId = useMemo(() => {
+		const m = location.pathname.match(/^\/conversations\/([^/]+)/);
+		return m ? m[1] : null;
+	}, [location.pathname]);
+
+	const currentAgentId = useMemo(() => {
+		const m = location.pathname.match(/^\/agents\/([^/]+)/);
+		return m ? m[1] : null;
+	}, [location.pathname]);
+
+	const load = useCallback(() => {
+		if (!currentWorkspace?.id) { setLoading(false); return; }
+		Promise.all([
+			chatApi.getConversationHistory({ limit: 10, archived: false }),
+			agentApi.getSessions(10),
+		]).then(([convRes, sessRes]) => {
+			const chats = (convRes?.conversations || []).map(c => ({
+				id: c.id, type: 'chat',
+				title: c.title || 'Untitled Chat',
+				date: new Date(c.updated_at),
+				path: `/conversations/${c.id}`,
+			}));
+			const agents = (sessRes?.sessions || []).map(s => ({
+				id: s.id, type: 'agent',
+				title: s.goal || '(untitled)',
+				date: new Date(s.created_at),
+				path: `/agents/${s.id}`,
+			}));
+			setItems([...chats, ...agents].sort((a, b) => b.date - a.date).slice(0, 7));
+		}).catch(() => {}).finally(() => setLoading(false));
+	}, [currentWorkspace?.id]);
+
+	useEffect(() => { load(); }, [load]);
 
 	useEffect(() => {
-		loadSessions();
-		window.addEventListener('agent-run-complete', loadSessions);
-		return () => window.removeEventListener('agent-run-complete', loadSessions);
-	}, [loadSessions]);
+		const t = setTimeout(load, 700);
+		return () => clearTimeout(t);
+	}, [currentConversationId, currentAgentId, load]);
 
-	const handleDelete = useCallback(async (e, id) => {
-		e.stopPropagation();
-		setDeletingId(id);
-		try {
-			await agentApi.deleteSession(id);
-			setSessions(prev => prev.filter(s => s.id !== id));
-			if (window.location.pathname.includes(id)) navigate('/agents');
-		} catch {}
-		setDeletingId(null);
-	}, [navigate]);
-
-	const today = new Date().toDateString();
-	const yesterday = new Date(Date.now() - 86400000).toDateString();
-	const formatDate = (d) => {
-		const dt = new Date(d).toDateString();
-		if (dt === today) return 'Today';
-		if (dt === yesterday) return 'Yesterday';
-		return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-	};
-
-	if (sessions.length === 0) return null;
-
-	let lastDateLabel = null;
+	if (loading) return (
+		<div className="px-2 pt-1 space-y-1 animate-pulse">
+			{[...Array(3)].map((_, i) => (
+				<div key={i} className="h-7 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800" />
+			))}
+		</div>
+	);
 
 	return (
-		<div className="px-1 pb-2 space-y-0.5">
-			{sessions.map(s => {
-				const status = agentSessionStatus(s);
-				const dateLabel = s.created_at ? formatDate(s.created_at) : null;
-				const showLabel = dateLabel !== lastDateLabel;
-				lastDateLabel = dateLabel;
-				const active = window.location.pathname.startsWith(`/agents/${s.id}`);
-				const label = s.goal ? s.goal.slice(0, 60) : '(untitled)';
-				const isDeleting = deletingId === s.id;
-
+		<div className="space-y-0.5 px-1">
+			{items.length === 0 ? (
+				<p className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No recent activity</p>
+			) : items.map(item => {
+				const isChat = item.type === 'chat';
+				const active = isChat ? item.id === currentConversationId : item.id === currentAgentId;
 				return (
-					<React.Fragment key={s.id}>
-						{showLabel && dateLabel && (
-							<div className="px-3 py-1 mt-2 mb-0.5">
-								<span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{dateLabel}</span>
-							</div>
-						)}
-						<div
-							className={`group relative flex items-center gap-2 rounded-lg px-3 py-2 transition-all duration-150 cursor-pointer ${
-								active
-									? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-									: 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-[0.98]'
-							}`}
-							onClick={() => navigate(`/agents/${s.id}`)}
-							onMouseEnter={() => setHoveredId(s.id)}
-							onMouseLeave={() => setHoveredId(null)}
-						>
-							<div className={`flex-shrink-0 w-2 h-2 rounded-full ${
-								status === 'error' ? 'bg-red-400' : status === 'incomplete' ? 'bg-amber-400' : 'bg-emerald-400'
-							}`} />
-							<span className={`flex-1 min-w-0 truncate text-sm ${active ? 'font-medium' : ''}`}>
-								{label}
-							</span>
-							{(hoveredId === s.id || isDeleting) && (
-								<button
-									onClick={(e) => handleDelete(e, s.id)}
-									disabled={isDeleting}
-									className="flex-shrink-0 p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-									title="Delete session"
-								>
-									{isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-								</button>
-							)}
-						</div>
-					</React.Fragment>
+					<div
+						key={`${item.type}-${item.id}`}
+						onClick={() => navigate(item.path)}
+						className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-150 ${
+							active
+								? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
+								: 'text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800'
+						}`}
+					>
+						{isChat
+							? <MessageSquare className="w-3 h-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+							: <Bot className="w-3 h-3 flex-shrink-0 text-indigo-400 dark:text-indigo-500" />
+						}
+						<span className="flex-1 min-w-0 truncate text-sm">{item.title}</span>
+						<span className="flex-shrink-0 text-[10px] text-gray-400 dark:text-gray-500">{getRecentTime(item.date)}</span>
+					</div>
 				);
 			})}
 		</div>
 	);
 });
-AgentSessionsList.displayName = 'AgentSessionsList';
+
+RecentChats.displayName = 'RecentChats';
 
 
 // Clean Navigation Item Component
@@ -1059,13 +1051,6 @@ const DynamicSidebar = ({
 											<span className="ml-auto font-mono text-[10px] text-gray-300 dark:text-gray-600">⌘N</span>
 										</button>
 										<button
-											onClick={() => navigate('/agents')}
-											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors text-left group"
-										>
-											<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
-											Agent Runs
-										</button>
-										<button
 											onClick={() => setIsSearchOpen(true)}
 											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors text-left"
 										>
@@ -1074,37 +1059,28 @@ const DynamicSidebar = ({
 											<span className="ml-auto font-mono text-[10px] text-gray-300 dark:text-gray-600">⌘K</span>
 										</button>
 										<button
-											onClick={() => onPageChange('all-chats')}
-											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${currentPage === 'all-chats'
+											onClick={() => navigate('/all-chats')}
+											className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'all-chats'
 													? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
 													: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
 												}`}
 										>
-											<div className="flex items-center gap-2.5">
-												<MessageSquare className="w-3.5 h-3.5" />
-												Chats
-											</div>
+											<History className="w-3.5 h-3.5" />
+											All chats & runs
 										</button>
-
 										<button
 											onClick={() => navigate('/models')}
-											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'models'
+											className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'models'
 													? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
 													: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
 												}`}
 										>
-											<div className="flex items-center gap-2.5">
-												<Cpu className="w-3.5 h-3.5" />
-												Models
-											</div>
+											<Cpu className="w-3.5 h-3.5" />
+											Models
 										</button>
 									</div>
 									<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 mb-1" />
-									<div className="px-1">
-										<ChatExplorer isChatMode={isChatMode} isCollapsed={false} onNewChat={handleNewChat} showNewChatButton={false} />
-									</div>
-									{/* Agent Runs section */}
-									<AgentSessionsList navigate={navigate} />
+									<RecentChats navigate={navigate} />
 								</>
 							) : (
 								<p className="text-xs text-gray-400 dark:text-gray-500 text-center px-3 py-8">
