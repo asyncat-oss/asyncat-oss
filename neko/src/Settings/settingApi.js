@@ -139,6 +139,7 @@ export const integrationsApi = {
 // ===========================================
 
 const AI_API_BASE = import.meta.env.VITE_MAIN_URL + '/api/ai/providers';
+const AI_API_URL = AI_API_BASE;
 
 // Minimal API — only hardware stats are needed by the sidebar HardwareWidget
 export const aiProviderApi = {
@@ -149,6 +150,12 @@ export const aiProviderApi = {
 
   getConfig: async () => {
     return apiCall(`${AI_API_BASE}/config`);
+  },
+
+  deactivate: async () => {
+    return apiCall(`${AI_API_BASE}/config`, {
+      method: 'DELETE',
+    });
   },
 
   getCatalog: async () => {
@@ -195,6 +202,24 @@ export const aiProviderApi = {
   listProviderModels: async (profileId) => {
     const suffix = profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
     return apiCall(`${AI_API_BASE}/models${suffix}`);
+  },
+
+  streamStatus: (onStatus, onError) => {
+    const token = authService.getAccessToken();
+    if (!token || typeof EventSource === 'undefined') return null;
+    const source = new EventSource(`${AI_API_URL}/status/stream?token=${encodeURIComponent(token)}`);
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'provider_status') onStatus?.(payload);
+      } catch (err) {
+        onError?.(err);
+      }
+    };
+    source.onerror = (err) => {
+      onError?.(err);
+    };
+    return () => source.close();
   },
 };
 

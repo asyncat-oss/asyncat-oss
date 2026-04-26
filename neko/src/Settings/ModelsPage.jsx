@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2 } from 'lucide-react';
+import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
+import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 const Badge = ({ children, color = 'gray' }) => {
   const colors = {
@@ -1577,6 +1578,102 @@ const LocalSwitchPrompt = ({ profile, serverStatus, onChoose, onClose, busy }) =
   </div>
 );
 
+const RemoteModelPickerModal = ({
+  profile,
+  models,
+  loading,
+  onClose,
+  onRefresh,
+  onSelect,
+  onSelectAndActivate,
+}) => {
+  const [query, setQuery] = useState('');
+  const normalized = query.trim().toLowerCase();
+  const filtered = normalized
+    ? models.filter(model => String(model.id || model.name || '').toLowerCase().includes(normalized))
+    : models;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-3xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Choose Remote Model</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{profile?.name} · {profile?.base_url}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <label className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search models..."
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                autoFocus
+              />
+            </label>
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          <div className="mt-4 max-h-[420px] overflow-y-auto rounded-2xl border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+            {loading ? (
+              <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Loading models...</div>
+            ) : filtered.length === 0 ? (
+              <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">No models matched.</div>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
+                {filtered.map(model => {
+                  const modelId = model.id || model.name;
+                  const isCurrent = profile?.model === modelId;
+                  return (
+                    <div key={modelId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{modelId}</p>
+                          {isCurrent && <Badge color="green">Current</Badge>}
+                        </div>
+                        {model.owned_by && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{model.owned_by}</p>}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => onSelect(modelId)}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
+                        >
+                          Set Model
+                        </button>
+                        <button
+                          onClick={() => onSelectAndActivate(modelId)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Set + Activate
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ProvidersSection = ({
   catalog,
   profiles,
@@ -1590,18 +1687,23 @@ const ProvidersSection = ({
   onDelete,
   onTest,
   onActivate,
+  onDeactivate,
   onLoadModels,
 }) => {
+  const network = useNetworkStatus();
   const [modalState, setModalState] = useState(null);
   const [pendingActivate, setPendingActivate] = useState(null);
   const [modelLists, setModelLists] = useState({});
   const [modelLoading, setModelLoading] = useState(null);
+  const [modelPickerProfile, setModelPickerProfile] = useState(null);
   const activeProfileId = activeConfig?.profile_id;
   const activeProviderName = activeConfig?.provider_id === 'llamacpp-builtin'
     ? 'Built-in llama.cpp'
     : providerLabel({ provider_id: activeConfig?.provider_id }, catalog);
   const cloudPresets = catalog.filter(item => !item.managed);
   const localServerRunning = serverStatus?.status === 'ready' || serverStatus?.status === 'loading';
+  const activeIsCloud = activeConfig?.provider_type === 'cloud' || activeConfig?.provider_type === 'custom';
+  const NetworkIcon = network.fullyOnline ? Wifi : WifiOff;
 
   const activate = (profile) => {
     if (profile.provider_id !== 'llamacpp-builtin' && profile.provider_type !== 'local' && localServerRunning) {
@@ -1611,14 +1713,23 @@ const ProvidersSection = ({
     onActivate(profile.id, false);
   };
 
-  const fetchModels = async (profile) => {
+  const fetchModels = async (profile, openPicker = false) => {
     setModelLoading(profile.id);
     try {
       const models = await onLoadModels(profile.id);
       setModelLists(prev => ({ ...prev, [profile.id]: models }));
+      if (openPicker) setModelPickerProfile(profile);
     } finally {
       setModelLoading(null);
     }
+  };
+
+  const openModelPicker = (profile) => {
+    if (modelLists[profile.id]) {
+      setModelPickerProfile(profile);
+      return;
+    }
+    fetchModels(profile, true);
   };
 
   return (
@@ -1633,6 +1744,12 @@ const ProvidersSection = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white midnight:text-slate-100">Active AI Brain</h2>
                 {activeConfig?.supports_tools ? <Badge color="green">Tools enabled</Badge> : <Badge color="gray">Prompt tools only</Badge>}
+                <Badge color={network.fullyOnline ? 'green' : 'red'}>
+                  <span className="inline-flex items-center gap-1">
+                    <NetworkIcon className="w-3 h-3" />
+                    {network.fullyOnline ? 'Online' : 'Offline'}
+                  </span>
+                </Badge>
               </div>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 midnight:text-slate-300">
                 {activeConfig?.model ? `${activeProviderName} · ${activeConfig.model}` : 'No provider profile is active yet.'}
@@ -1640,12 +1757,28 @@ const ProvidersSection = ({
               {activeConfig?.base_url && (
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 break-all">{activeConfig.base_url}</p>
               )}
+              {activeIsCloud && (
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Cloud models do not stay loaded on this machine. Deactivate to stop using this provider as the shared brain.
+                </p>
+              )}
+              {network.needsNetworkMessage && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">{network.needsNetworkMessage}</p>
+              )}
             </div>
           </div>
-          <button onClick={onRefresh} disabled={loading} className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {activeIsCloud && (
+              <button onClick={onDeactivate} disabled={loading || Boolean(providerAction)} className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 disabled:opacity-50">
+                <Square className="w-4 h-4" />
+                Deactivate Cloud
+              </button>
+            )}
+            <button onClick={onRefresh} disabled={loading} className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
         {providerError && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{providerError}</p>}
       </div>
@@ -1696,7 +1829,6 @@ const ProvidersSection = ({
             {profiles.map(profile => {
               const isActive = activeProfileId === profile.id;
               const busy = providerAction === profile.id;
-              const list = modelLists[profile.id] || [];
               return (
                 <div key={profile.id} className={`rounded-3xl border bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm ${isActive ? 'border-green-400 dark:border-green-500' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800'}`}>
                   <div className="flex items-start justify-between gap-3">
@@ -1715,23 +1847,13 @@ const ProvidersSection = ({
                     {isActive ? <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" /> : <Cloud className="w-5 h-5 text-gray-400 flex-shrink-0" />}
                   </div>
 
-                  {list.length > 0 && (
-                    <div className="mt-4 max-h-40 overflow-y-auto rounded-2xl border border-gray-100 dark:border-gray-800 p-2 space-y-1">
-                      {list.slice(0, 20).map(model => (
-                        <button key={model.id} onClick={() => onSave(profile.id, { model: model.id })} className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
-                          {model.id}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button onClick={() => activate(profile)} disabled={busy || isActive} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
                       {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
                       Activate
                     </button>
                     <button onClick={() => onTest(profile.id)} disabled={busy} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">Test</button>
-                    <button onClick={() => fetchModels(profile)} disabled={modelLoading === profile.id} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
+                    <button onClick={() => openModelPicker(profile)} disabled={modelLoading === profile.id} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
                       {modelLoading === profile.id ? 'Loading...' : 'Models'}
                     </button>
                     <button onClick={() => setModalState({ profile })} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">Edit</button>
@@ -1754,6 +1876,26 @@ const ProvidersSection = ({
           onSave={async (payload) => {
             await onSave(modalState.profile?.id || null, payload);
             setModalState(null);
+          }}
+        />
+      )}
+
+      {modelPickerProfile && (
+        <RemoteModelPickerModal
+          profile={modelPickerProfile}
+          models={modelLists[modelPickerProfile.id] || []}
+          loading={modelLoading === modelPickerProfile.id}
+          onClose={() => setModelPickerProfile(null)}
+          onRefresh={() => fetchModels(modelPickerProfile, true)}
+          onSelect={async (modelId) => {
+            await onSave(modelPickerProfile.id, { model: modelId });
+            setModelPickerProfile(prev => prev ? { ...prev, model: modelId } : prev);
+          }}
+          onSelectAndActivate={async (modelId) => {
+            await onSave(modelPickerProfile.id, { model: modelId });
+            const nextProfile = { ...modelPickerProfile, model: modelId };
+            setModelPickerProfile(null);
+            activate(nextProfile);
           }}
         />
       )}
@@ -2092,6 +2234,19 @@ const ModelsPage = () => {
       await Promise.all([loadProviderData(), loadStatus()]);
     } catch (err) {
       setProviderError(err.message || 'Failed to activate provider.');
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handleProviderDeactivate = async () => {
+    setProviderAction('deactivate');
+    setProviderError('');
+    try {
+      await aiProviderApi.deactivate();
+      await loadProviderData();
+    } catch (err) {
+      setProviderError(err.message || 'Failed to deactivate provider.');
     } finally {
       setProviderAction(null);
     }
@@ -2642,6 +2797,7 @@ const ModelsPage = () => {
                   onDelete={handleProviderDelete}
                   onTest={handleProviderTest}
                   onActivate={handleProviderActivate}
+                  onDeactivate={handleProviderDeactivate}
                   onLoadModels={handleLoadProviderModels}
                 />
               )}

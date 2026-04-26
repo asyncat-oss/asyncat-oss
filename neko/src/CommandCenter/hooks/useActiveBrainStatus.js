@@ -21,7 +21,7 @@ const shortModelName = (model) => {
   return String(model).replace(/\.(gguf|bin)$/i, "").replace(/[-_]?Q\d+[_-]?[A-Z0-9]*$/i, "");
 };
 
-export function useActiveBrainStatus({ pollMs = 8000 } = {}) {
+export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
   const [config, setConfig] = useState(null);
   const [localStatus, setLocalStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +29,7 @@ export function useActiveBrainStatus({ pollMs = 8000 } = {}) {
   useEffect(() => {
     let cancelled = false;
     let timer = null;
+    let cleanupStream = null;
 
     const load = async () => {
       try {
@@ -48,9 +49,19 @@ export function useActiveBrainStatus({ pollMs = 8000 } = {}) {
     };
 
     load();
+    cleanupStream = aiProviderApi.streamStatus?.((payload) => {
+      if (cancelled) return;
+      setConfig(payload.config || null);
+      setLocalStatus(payload.localStatus || null);
+      setLoading(false);
+    }, () => {
+      // Keep the polling fallback alive if EventSource drops.
+    });
+
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      cleanupStream?.();
     };
   }, [pollMs]);
 

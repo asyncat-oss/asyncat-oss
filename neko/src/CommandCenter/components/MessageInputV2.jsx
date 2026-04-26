@@ -1,9 +1,10 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Cloud, Cpu, Loader2, Send, Search, X } from "lucide-react";
+import { Cloud, Cpu, Loader2, Send, Search, Wifi, WifiOff, X } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus.js";
 
 export const MessageInputV2 = ({
   onSubmit,
@@ -23,6 +24,7 @@ export const MessageInputV2 = ({
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
+  const network = useNetworkStatus();
   const { config: modelConfig } = useModelConfig();
   const textareaRef = useRef(null);
 
@@ -103,6 +105,7 @@ export const MessageInputV2 = ({
 
   const canSubmit = value.trim() && !disabled;
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
+  const NetworkIcon = network.fullyOnline ? Wifi : WifiOff;
 
   const getBorderColor = () => {
     return "border-gray-200 dark:border-gray-700 midnight:border-gray-700";
@@ -231,6 +234,17 @@ export const MessageInputV2 = ({
                       {activeBrain.isLoadingModel ? "Loading" : activeBrain.mode} · {activeBrain.providerName}
                       {activeBrain.model ? ` · ${activeBrain.model}` : ""}
                     </span>
+                  </div>
+                  <div
+                    title={network.needsNetworkMessage || "Network ready"}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border ${
+                      network.fullyOnline
+                        ? "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-500 dark:text-gray-400 midnight:text-gray-400 border-gray-200 dark:border-gray-700"
+                        : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/60"
+                    }`}
+                  >
+                    <NetworkIcon className="w-3.5 h-3.5" />
+                    {network.fullyOnline ? "Online" : "Offline"}
                   </div>
                   <button
                     type="button"
