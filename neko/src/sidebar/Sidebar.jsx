@@ -18,7 +18,6 @@ import {
 	ChevronRight,
 	Info,
 	X,
-	Library,
 	Search,
 	Cpu,
 	Bot,
@@ -1135,18 +1134,6 @@ const DynamicSidebar = ({
 											<div className="flex items-center gap-2.5">
 												<MessageSquare className="w-3.5 h-3.5" />
 												Chats
-											</div>
-										</button>
-										<button
-											onClick={() => navigate('/packs')}
-											className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'packs'
-													? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
-													: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
-												}`}
-										>
-											<div className="flex items-center gap-2.5">
-												<Library className="w-3.5 h-3.5" />
-												Packs
 											</div>
 										</button>
 

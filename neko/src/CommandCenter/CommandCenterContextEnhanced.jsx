@@ -817,7 +817,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       dispatch({ type: ActionTypes.SET_JUST_LOADED });
 
       // For messages loaded from DB where artifacts weren't extracted at save time
-      // (e.g. lab/pack sessions), parse <artifact> tags out of the content field now.
+      // (e.g. lab sessions), parse <artifact> tags out of the content field now.
       // The backend convertFromJsonbFormat already mapped cat→content, so we check content.
       const processedMessages = (conversation.messages || []).map(msg => {
         if (

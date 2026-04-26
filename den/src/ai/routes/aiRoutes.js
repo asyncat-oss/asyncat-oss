@@ -6,7 +6,6 @@ import db from '../../db/client.js';
 import { enhancedRouter } from '../controllers/ai/chat/chatRouter.js';
 import { dataLayer } from '../controllers/ai/DataLayer.js';
 import { chatService } from '../controllers/ai/chatService.js';
-import { getPacks, launchPack } from '../controllers/ai/packsController.js';
 import { randomUUID } from 'crypto';
 
 const router = express.Router();
@@ -1009,14 +1008,6 @@ router.delete('/chats/trash/empty', addAuthenticatedClient, async (req, res) => 
     res.status(500).json({ success: false, error: 'Failed to empty trash' });
   }
 });
-
-// ── Packs ─────────────────────────────────────────────────────────────────────
-
-// Get all available packs (no auth required — static pack metadata)
-router.get('/packs', getPacks);
-
-// Launch a pack — creates folder + pre-seeded conversations
-router.post('/packs/launch', addAuthenticatedClient, launchPack);
 
 
 // 404 handler

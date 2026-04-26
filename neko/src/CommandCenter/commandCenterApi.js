@@ -460,24 +460,6 @@ export const trashApi = {
 };
 
 // =====================================================
-// PACKS API
-// =====================================================
-
-export const packsApi = {
-  /**
-   * Launch a pack — creates a folder + pre-seeded conversations
-   * @param {string} packId
-   * @param {string} workspaceId
-   */
-  launch: async (packId, workspaceId) => {
-    return await apiRequest(`${API_BASE_URL}/ai/packs/launch`, {
-      method: 'POST',
-      body: JSON.stringify({ packId, workspaceId }),
-    });
-  },
-};
-
-// =====================================================
 // CHAT FOLDER API METHODS (user-specific)
 // =====================================================
 
@@ -1076,7 +1058,6 @@ export default {
   feed: feedApi,
   chatFolders: chatFoldersApi,
   projectFolders: projectFoldersApi,
-  packs: packsApi,
   trash: trashApi,
   agent: agentApi,
 

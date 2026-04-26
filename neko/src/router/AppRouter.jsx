@@ -19,7 +19,6 @@ import ProjectOverview from '../projects/ProjectOverview';
 import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
-import PacksPage from '../Packs/PacksPage';
 import ModelsPage from '../Settings/ModelsPage';
 import AgentPage from '../Agent/AgentPage';
 import AgentToolsPage from '../Agent/ToolsPage';
@@ -203,11 +202,6 @@ const createRouter = () => createBrowserRouter([
       {
         path: "settings/:tab",
         element: <SettingsPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "packs",
-        element: <PacksPage />,
         errorElement: <RouteErrorElement />
       },
       {

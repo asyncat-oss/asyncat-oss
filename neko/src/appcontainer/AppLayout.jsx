@@ -64,8 +64,6 @@ const AppLayout = ({ session, onSignOut }) => {
         return 'calendar';
       case 'teams':
         return 'teams';
-      case 'packs':
-        return 'packs';
       case 'lab':
         return 'lab';
       case 'models':
