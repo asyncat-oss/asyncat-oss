@@ -3,15 +3,10 @@ import {
   FileText,
   Clock,
   Check,
-  Hash,
-  List,
-  Quote,
-  Info,
   ArrowUpDown,
   ArrowDownAZ,
   ArrowUpAZ,
   UserRound,
-  CheckCircle,
 } from "lucide-react";
 import { attachmentApi } from "../attachmentApi";
 

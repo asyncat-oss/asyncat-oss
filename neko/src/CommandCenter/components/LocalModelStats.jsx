@@ -61,7 +61,7 @@ export { tokenTracker };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-const LocalModelStats = ({ isStreaming, isProcessing }) => {
+const LocalModelStats = ({ isStreaming }) => {
   const [llamaStatus, setLlamaStatus] = useState({ status: 'idle', model: null });
   const [tokensPerSec, setTokensPerSec] = useState(null);
   const [ttft, setTtft] = useState(null); // time to first token ms
@@ -117,7 +117,6 @@ const LocalModelStats = ({ isStreaming, isProcessing }) => {
     return () => clearInterval(hwIntervalRef.current);
   }, [expanded, fetchHwStats]);
 
-  const modelShort = llamaStatus.model?.replace(/\.(gguf|bin)$/, '') || '';
   const gpu = hwStats?.hardware?.gpu?.[0];
   const ram = hwStats?.hardware?.ram;
   const modelActive = llamaStatus.status === 'ready' || llamaStatus.status === 'loading';

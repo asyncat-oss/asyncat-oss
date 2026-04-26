@@ -190,9 +190,7 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
   }, [isDropdownOpen]);
 
   // Close dropdown when mouse leaves the callout block
-  const handleMouseLeave = () => {
-    setIsDropdownOpen(false);
-  };
+  // (handleMouseLeave logic is handled by onMouseLeave on the div)
 
   const handleTypeChange = (newType) => {
     onChange(block.id, {

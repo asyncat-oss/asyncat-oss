@@ -22,14 +22,14 @@ const Layout = ({ selectedProject, session }) => {
 		} catch { return "month"; }
 	});
 	const [currentDate, setCurrentDate] = useState(new Date());
-	const [selectedDate, setSelectedDate] = useState(null);
+	const [_selectedDate, _setSelectedDate] = useState(null);
 	const [showAddEvent, setShowAddEvent] = useState(false);
 	const [events, setEvents] = useState([]);
 	const [cards, setCards] = useState([]);
 	const [isInitialLoading, setIsInitialLoading] = useState(true);
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [isMutating, setIsMutating] = useState(false);
-	const [loadingType, setLoadingType] = useState("");
+	const [_loadingType, _setLoadingType] = useState("");
 
 	const isFirstLoad = useRef(true);
 	const prevViewRef = useRef(view);
@@ -150,14 +150,14 @@ const Layout = ({ selectedProject, session }) => {
 		if (!isInitialLoading) {
 			if (view !== prevViewRef.current) {
 				setIsRefreshing(true);
-				setLoadingType("viewChange");
+				_setLoadingType("viewChange");
 			} else if (
 				view === "month" &&
 				(currentDate.getMonth() !== prevDateRef.current.getMonth() ||
 					currentDate.getFullYear() !== prevDateRef.current.getFullYear())
 			) {
 				setIsRefreshing(true);
-				setLoadingType("dateChange");
+				_setLoadingType("dateChange");
 			}
 		}
 		prevViewRef.current = view;
@@ -214,7 +214,7 @@ const Layout = ({ selectedProject, session }) => {
 
 	const smartRefresh = async () => {
 		setIsRefreshing(true);
-		setLoadingType("manual");
+		_setLoadingType("manual");
 		try {
 			calendarDataApi.invalidateCache(projectFilter);
 			setFetchTrigger((prev) => prev + 1);
@@ -231,7 +231,7 @@ const Layout = ({ selectedProject, session }) => {
 
 	const handleAddEvent = async (newEvent) => {
 		setIsMutating(true);
-		setLoadingType("adding");
+		_setLoadingType("adding");
 		try {
 			let projectId = newEvent.projectId;
 			if (!projectId && !newEvent.isPersonalEvent) {
@@ -300,7 +300,7 @@ const Layout = ({ selectedProject, session }) => {
 
 	const handleDeleteEvent = async (eventToDelete) => {
 		setIsMutating(true);
-		setLoadingType("deleting");
+		_setLoadingType("deleting");
 		try {
 			setEvents((prev) => prev.filter((e) => e.id !== eventToDelete.id));
 			await calendarEventsApi.deleteEvent(eventToDelete.id, eventToDelete.projectId);
@@ -322,7 +322,7 @@ const Layout = ({ selectedProject, session }) => {
 
 	const handleEventUpdate = async (updatedEvent) => {
 		setIsMutating(true);
-		setLoadingType("updating");
+		_setLoadingType("updating");
 		const originalEvent = events.find((e) => e.id === updatedEvent.id);
 
 		try {
@@ -371,7 +371,7 @@ const Layout = ({ selectedProject, session }) => {
 
 	const handleCardUpdate = async (updatedCard) => {
 		setIsMutating(true);
-		setLoadingType("updating");
+		_setLoadingType("updating");
 		const originalCard = cards.find((c) => c.id === updatedCard.id);
 
 		try {

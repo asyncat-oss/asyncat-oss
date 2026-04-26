@@ -418,8 +418,6 @@ export const calendarDataApi = {
 		const startTime = performance.now();
 
 		try {
-			const cacheKey = calendarCache.generateCacheKey(filters);
-
 			// Check cache first
 			const cachedEvents = calendarCache.getEvents(filters);
 			const cachedCards = calendarCache.getCards(filters);
@@ -608,20 +606,20 @@ export const calendarDataApi = {
 
 			// Prefetch in background (don't await)
 			adjacentFilters.forEach((filters) => {
-				this.fetchCalendarData(filters).catch((err) => {
+				this.fetchCalendarData(filters).catch((_err) => {
 					// Prefetch failed
 				});
 			});
-		} catch (error) {
+		} catch (_error) {
 			// Prefetch error
 		}
 	},
 
 	// Enhanced cache invalidation with timestamp tracking
-	invalidateCache: (
+		invalidateCache: (
 		identifier = null,
 		type = "project",
-		reason = "unknown"
+		_reason = "unknown"
 	) => {
 		const timestamp = new Date().toISOString();
 
@@ -661,8 +659,8 @@ export const calendarDataApi = {
 
 						calendarDataApi.backgroundSync.lastSyncTime =
 							new Date();
-					} catch (error) {
-						console.error("Background sync failed:", error);
+					} catch (_error) {
+						console.error("Background sync failed:", _error);
 					}
 				}
 			}, 10 * 60 * 1000); // Every 10 minutes
@@ -811,7 +809,7 @@ export const calendarProjectsApi = {
 
 // calendarTeamsApi removed — single-user mode has no team members
 export const calendarTeamsApi = {
-	getTeamMembers: async (_teamId) => ({ data: [] }),
+	getTeamMembers: async () => ({ data: [] }),
 };
 
 // Users API (communicates with main backend service)

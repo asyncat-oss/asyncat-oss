@@ -1,20 +1,16 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-	X,
-	Clock,
-	Calendar,
-	AlignLeft,
-	Edit2,
-	Trash2,
-	Users,
-	CheckSquare,
-	Tag,
-	AlertCircle,
-	Activity,
-	ExternalLink,
-	Briefcase,
-} from "lucide-react";
+ 	X,
+ 	Calendar,
+ 	AlignLeft,
+ 	Users,
+ 	CheckSquare,
+ 	Tag,
+ 	AlertCircle,
+ 	Activity,
+ 	Briefcase,
+ } from "lucide-react";
 import UserAvatar from "../shared/UserAvatar";
 import { calendarUsersApi } from "../../api/calendarApi";
 
@@ -22,8 +18,8 @@ const ViewCardModal = ({
 	isOpen,
 	onClose,
 	card,
-	onEdit,
-	onDelete,
+	_onEdit,
+	_onDelete,
 	currentUserId,
 	projectsMap = {},
 }) => {
@@ -95,7 +91,7 @@ const ViewCardModal = ({
 	};
 
 	// Calculate task completion percentage
-	const taskCompletion =
+	const _taskCompletion =
 		card.tasks && card.tasks.total > 0
 			? Math.round((card.tasks.completed / card.tasks.total) * 100)
 			: 0;

@@ -1,37 +1,35 @@
 import { useState, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-	X,
-	Clock,
-	Calendar,
-	AlignLeft,
-	Edit2,
-	Trash2,
-	Users,
-	Share2,
-	ExternalLink,
-	MapPin,
-	Briefcase,
-	ChevronDown,
-	ChevronRight,
-	Check,
-	HelpCircle,
-	Crown,
-} from "lucide-react";
+ 	X,
+ 	Clock,
+ 	Calendar,
+ 	AlignLeft,
+ 	Edit2,
+ 	Trash2,
+ 	Users,
+ 	MapPin,
+ 	Briefcase,
+ 	ChevronDown,
+ 	ChevronRight,
+ 	Check,
+ 	HelpCircle,
+ 	Crown,
+ } from "lucide-react";
 import { COLORS } from "../../data/ColourConstants";
 import UserAvatar from "../shared/UserAvatar";
-import { calendarEventsApi, calendarUsersApi } from "../../api/calendarApi";
+import { calendarUsersApi } from "../../api/calendarApi";
 
 const ViewEventModal = ({
 	isOpen,
 	onClose,
 	event,
-	onEdit,
-	onDelete,
+	_onEdit,
+	_onDelete,
 	currentUserId,
-	currentUserEmail, // Add this prop for debugging
+	_currentUserEmail, // Add this prop for debugging
 	allProjects = [], // Add allProjects prop
-	fetchEvents, // Add fetch events callback
+	_fetchEvents, // Add fetch events callback
 }) => {
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -133,7 +131,7 @@ const ViewEventModal = ({
 		if (!event?.id || !currentUserId || isUpdatingResponse) return;
 
 		// Store the previous response in case we need to rollback
-		const previousResponse = currentUserResponse;
+		const _previousResponse = currentUserResponse;
 
 		// OPTIMISTIC UPDATE: Update UI immediately
 		setCurrentUserResponse(newResponse);
@@ -156,8 +154,8 @@ const ViewEventModal = ({
 
 		// Optimistic update already applied above - no backend sync needed in solo mode
 		// Optional: Refresh events in the background (non-blocking)
-		if (fetchEvents) {
-			setTimeout(() => fetchEvents(), 100);
+		if (_fetchEvents) {
+			setTimeout(() => _fetchEvents(), 100);
 		}
 
 		setIsUpdatingResponse(false);

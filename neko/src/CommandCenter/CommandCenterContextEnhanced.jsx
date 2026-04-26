@@ -200,7 +200,7 @@ function commandCenterReducer(state, action) {
 
     // Conversation file cases
     case ActionTypes.ADD_CONVERSATION_FILES: {
-      const newFiles = action.payload;
+      const newFiles = action.payload || [];
       const existingFiles = state.conversationFiles || [];
       const combinedFiles = [...existingFiles, ...newFiles];
       

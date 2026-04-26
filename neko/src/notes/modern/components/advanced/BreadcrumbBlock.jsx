@@ -1,6 +1,6 @@
 import { Navigation } from 'lucide-react';
 
-const BreadcrumbBlock = ({ block, onChange }) => {
+const BreadcrumbBlock = ({ block }) => {
   const items = block.properties?.items || [
     { label: 'Home', url: '/' },
     { label: 'Documentation', url: '/docs' },

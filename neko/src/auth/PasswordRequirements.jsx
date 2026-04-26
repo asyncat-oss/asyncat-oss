@@ -52,7 +52,7 @@ const PasswordRequirements = ({ password, email = "", fullName = "" }) => {
   ).length;
   const totalCount = mainRequirements.length;
 
-  const getStrengthInfo = () => {
+  const _getStrengthInfo = () => {
     if (validCount <= 1) return { level: "Weak", color: "red", width: "w-1/4" };
     if (validCount <= 2)
       return { level: "Fair", color: "yellow", width: "w-1/2" };

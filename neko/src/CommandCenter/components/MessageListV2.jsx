@@ -518,12 +518,11 @@ const MessageComponent = ({
 
 // Main MessageListV2 component - REMOVED DUPLICATE WARNING
 const MessageListV2 = forwardRef(({
-  messages,
-  isLoading,
   isConversationLoading = false,
   onRegenerate,
   onEdit,
   messagesEndRef,
+  messages = [],
   onQuestionClick = null,
   mode = 'chat',
   projectIds = [],

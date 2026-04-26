@@ -25,7 +25,7 @@ export function EditEventModal({ isOpen, onClose, onEditEvent, event }) {
 		formState: { errors },
 		watch,
 		setValue,
-		reset,
+		_reset,
 	} = useForm({
 		defaultValues: {
 			title: "",

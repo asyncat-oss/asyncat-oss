@@ -64,7 +64,7 @@ const MathSpan = ({ latex, displayMode = false }) => {
         trust: false,
         strict: 'warn'
       });
-    } catch (e) {
+    } catch {
       return `<span style="color:#cc0000">${latex}</span>`;
     }
   }, [latex, displayMode]);
@@ -152,7 +152,7 @@ const splitMath = (text) => {
 
 // ─── Safe inline link component ─────────────────────────────────────────────
 
-const InlineLinkModal = ({ href, label, onClose }) => {
+const InlineLinkModal = ({ href, onClose }) => {
   const getDomain = (url) => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } };
   const domain = getDomain(href);
   const handleOpen = () => { window.open(href, '_blank', 'noopener,noreferrer'); onClose(); };
@@ -510,7 +510,7 @@ const MathBlock = ({ latex }) => {
       await navigator.clipboard.writeText(latex);
       setCopyStatus('copied');
       setTimeout(() => setCopyStatus(null), 2000);
-    } catch (e) {
+    } catch {
       setCopyStatus('failed');
       setTimeout(() => setCopyStatus(null), 2000);
     }
@@ -995,18 +995,18 @@ export const parseAIResponseToBlocks = (content) => {
 const BlockBasedMessageRenderer = memo(({
   content,
   onRegenerate,
-  onEdit,
-  onQuestionClick = null,
-  mode = 'chat',
-  projectIds = [],
-  userContext = null,
-  isLastMessage = false,
-  suggestions = [],
+  _onEdit,
+  _onQuestionClick = null,
+  _mode = 'chat',
+  _projectIds = [],
+  _userContext = null,
+  _isLastMessage = false,
+  _suggestions = [],
   isPublicView = false,
   artifacts = null,
   artifactExplanation = null,
-  onSaveArtifactToNotes = null,
-  onArtifactOpen = null,
+  _onSaveArtifactToNotes = null,
+  _onArtifactOpen = null,
   onTermClick = null,
   isStreaming = false
 }) => {
@@ -1062,7 +1062,7 @@ const BlockBasedMessageRenderer = memo(({
     }
   }, [content]);
 
-  const handleSaveAsNote = useCallback(() => {
+  const _handleSaveAsNote = useCallback(() => {
     setShowSaveModal(true);
   }, []);
 

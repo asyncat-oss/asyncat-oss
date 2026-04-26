@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Command as CommandIcon,
   Keyboard,
-  X,
 } from "lucide-react";
 
 const KeyboardShortcutsDropdown = ({ isVisible, onClose, triggerRef }) => {

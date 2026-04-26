@@ -17,13 +17,13 @@ const readOnlyCls =
   'bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 ' +
   'text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-sm cursor-default select-none';
 
-const ServerSection = ({ session }) => {
+const ServerSection = ({ session: _session }) => {
   const [config, setConfig] = useState({});
-  const [secrets, setSecrets] = useState({});
+  const [_secrets, _setSecrets] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
-  const [showSecrets, setShowSecrets] = useState({});
+  const [_showSecrets, _setShowSecrets] = useState({});
 
   const [editValues, setEditValues] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
@@ -106,7 +106,7 @@ const ServerSection = ({ session }) => {
     );
   }
 
-  const getDisplayValue = (key, value) => {
+  const _getDisplayValue = (key, value) => {
     if (showPasswords[key]) return value;
     if (!value || value.length < 8) return '••••••••';
     return value.slice(0, 4) + '••••••••' + value.slice(-4);

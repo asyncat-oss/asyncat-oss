@@ -48,7 +48,7 @@ const AppLayout = ({ session, onSignOut }) => {
   const basePage = pathSegments[0] || 'home';
   
   // Map routes to the correct page identifiers for sidebar
-  const getPageFromRoute = (basePage, pathSegments) => {
+  const getPageFromRoute = (basePage, _pathSegments) => {
     switch (basePage) {
       case 'conversations':
         return 'home'; // these should map to home in sidebar

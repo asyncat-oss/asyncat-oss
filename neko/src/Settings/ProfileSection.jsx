@@ -65,7 +65,7 @@ const ProfileSkeleton = () => {
   );
 };
 
-const ProfileSection = ({ session }) => {
+const ProfileSection = ({ session: _session }) => {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({

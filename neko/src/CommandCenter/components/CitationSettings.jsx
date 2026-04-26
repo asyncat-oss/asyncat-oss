@@ -1,6 +1,5 @@
 // CitationSettings.jsx - Optional user controls for citation display
-import { useState } from 'react';
-import { Settings, Eye, EyeOff, List, Grid } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 
 const CitationSettings = ({ settings, onSettingsChange }) => {
   const toggleSources = () => {

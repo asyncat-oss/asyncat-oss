@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Edit3,
-  Settings,
   Download,
   RefreshCw,
   X,

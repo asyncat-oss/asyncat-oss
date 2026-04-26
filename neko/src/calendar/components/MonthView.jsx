@@ -18,9 +18,9 @@ const MonthView = ({
 	events,
 	cards = [], // Added cards prop with default empty array
 	isToday,
-	isSelectedDate,
+	_isSelectedDate,
 	monthDays,
-	firstDayOfMonth,
+	_firstDayOfMonth,
 	onEventClick,
 	onCardClick, // Added handler for card clicks
 	onShowMoreClick,
@@ -29,7 +29,7 @@ const MonthView = ({
 	setShowAddEvent,
 	onEventUpdate,
 	onCardUpdate, // Added handler for card updates
-	fetchEvents,
+	_fetchEvents,
 	currentDate, // Add currentDate prop for navigation
 	onDateChange, // Add onDateChange prop for navigation
 	currentUserId, // Add current user ID

@@ -72,8 +72,7 @@ export const ProjectBadges = memo(({
   projectIds = [],
   maxDisplay = 3,
   showLabel = true,
-  variant = "default",
-  onProjectRemove = null // Callback for removing individual projects
+  onProjectRemove = null
 }) => {
   const { projects, loading, error } = useProjectsData(projectIds);
   

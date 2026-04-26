@@ -1,5 +1,5 @@
 // SaveAsNoteModal.jsx - Enhanced with Block Support
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Save, FileText, Loader, Check, AlertCircle } from 'lucide-react';
 import { notesApi } from '../../notes/noteApi';
 import { blocksToHtml } from '../../notes/utils/blockConverter';

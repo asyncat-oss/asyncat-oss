@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Sparkles,
   TrendingUp,
-  Award,
   Flame,
 } from 'lucide-react';
 import StatDetailsModal from './StatDetailsModal';

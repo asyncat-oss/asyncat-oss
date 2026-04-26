@@ -144,13 +144,13 @@ export const ProjectSelectorV2 = ({
       fetchProjects();
     };
 
-    const handleProjectInviteAccepted = (event) => {
+    const handleProjectInviteAccepted = (_event) => {
       setTimeout(() => {
         fetchProjects();
       }, 500);
     };
 
-    const handleWorkspaceInviteAccepted = (event) => {
+    const handleWorkspaceInviteAccepted = (_event) => {
       setTimeout(() => {
         fetchProjects();
       }, 1000);

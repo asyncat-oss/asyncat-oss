@@ -1,9 +1,10 @@
-import { useState } from 'react';
 import { AlertTriangle, X, Trash2, Loader2 } from 'lucide-react';
 import Portal from '../../components/Portal';
 
-const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, title, isDeleting }) => {
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, title, isDeleting: _isDeleting }) => {
   if (!isOpen) return null;
+
+  const isProcessing = _isDeleting;
 
   return (
     <Portal>
@@ -20,11 +21,11 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, title, isDeleting
               </div>
               <h2 className="text-xl font-semibold">Delete Conversation</h2>
             </div>
-            {!isDeleting && (
+              {!isProcessing && (
               <button 
                 onClick={onClose}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-transparent hover:bg-red-100/50 dark:hover:bg-gray-800 rounded-full p-2 transition-colors"
-                disabled={isDeleting}
+                disabled={isProcessing}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -45,17 +46,17 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, title, isDeleting
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex justify-end gap-3 rounded-b-2xl">
             <button
               onClick={onClose}
-              disabled={isDeleting}
-              className="px-4 py-2 bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors font-medium cursor-pointer disabled:opacity-50"
+              disabled={isProcessing}
+              className="px-4 py-2 bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors font-medium cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              disabled={isDeleting}
+              disabled={isProcessing}
               className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors font-medium flex items-center gap-2 cursor-pointer disabled:opacity-70"
             >
-              {isDeleting ? (
+              {isProcessing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Deleting...</span>

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, Loader2, AlertCircle, ChevronDown, ChevronRight,
-  Brain, BookOpen, Shield, Cpu, Lightbulb, LayoutList, Tag, ArrowRight
+  Brain, BookOpen, Shield, Cpu, Lightbulb, LayoutList, Tag
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 
@@ -25,7 +25,6 @@ function renderMarkdown(text) {
   if (!text) return null;
   const lines = text.split('\n');
   const elements = [];
-  let inList = false;
   let listItems = [];
 
   const flushList = () => {
@@ -33,7 +32,7 @@ function renderMarkdown(text) {
       elements.push(<ul key={elements.length} className="list-disc pl-5 space-y-0.5 mt-1">{listItems}</ul>);
       listItems = [];
     }
-    inList = false;
+    _inList = false;
   };
 
   for (const line of lines) {
@@ -47,7 +46,7 @@ function renderMarkdown(text) {
       flushList();
       elements.push(<h4 key={elements.length} className="text-xs font-semibold text-gray-700 dark:text-gray-200 mt-2 mb-0.5">{trimmed.slice(3)}</h4>);
     } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-      inList = true;
+      _inList = true;
       listItems.push(<li key={listItems.length} className="text-xs text-gray-600 dark:text-gray-300">{trimmed.slice(2)}</li>);
     } else if (/^\d+\.\s/.test(trimmed)) {
       flushList();

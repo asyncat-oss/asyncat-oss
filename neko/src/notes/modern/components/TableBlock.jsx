@@ -7,7 +7,7 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Plus, Minus, MoreHorizontal, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { sanitizeTableCell } from "../../../utils/sanitizer";
 
 // Memoized Table Cell component to prevent cursor jumping

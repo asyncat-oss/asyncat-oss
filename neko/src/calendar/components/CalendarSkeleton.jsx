@@ -4,7 +4,7 @@ import { DAYS_OF_WEEK } from '../data/CalendarConstants';
 const CalendarSkeleton = ({ view = 'month' }) => {
   // Generate array of skeletons based on view
   const generateSkeletonItems = (count) => {
-    return Array(count).fill(0).map((_, index) => index);
+    return Array(count).fill(0).map((_, _index) => _index);
   };
   // Enhanced shimmer animation with better performance
   const shimmerClass = "relative overflow-hidden before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_4.5s_ease-in-out_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/30 dark:before:via-gray-400/20 midnight:before:via-indigo-400/10 before:to-transparent";

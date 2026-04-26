@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 import AgentRunFeed from './components/AgentRunFeed';
 import {
-  Send, Square, Loader2, Trash2, RotateCcw, Clock, CheckCircle2, AlertCircle
+  Send, Loader2, Trash2, RotateCcw, Clock, CheckCircle2, AlertCircle
 } from 'lucide-react';
 
 const EXAMPLE_GOALS = [
@@ -164,15 +164,6 @@ export default function AgentPage() {
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [events, streamingText]);
-
-  const handleStop = () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-    }
-    setIsRunning(false);
-    setStreamingText('');
-  };
 
   const handleDeleteSession = async () => {
     if (!sessionId || isDeleting) return;

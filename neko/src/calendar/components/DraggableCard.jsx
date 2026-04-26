@@ -69,7 +69,7 @@ const DraggableCard = ({
 		);
 
 	// Check if user has any relationship to this card
-	const hasUserRelationship =
+	const _hasUserRelationship =
 		isAdministrator || isAssignedToCurrentUser || isAssignedToSubtask;
 
 	return (

@@ -25,7 +25,7 @@ const HabitsIndex = ({ selectedProject, session, currentPage }) => {
   const [selectedHabit, setSelectedHabit] = useState(null);
   const [errorTimeout, setErrorTimeout] = useState(null);
 
-  const { currentWorkspace } = useWorkspace();
+  const { } = useWorkspace();
 
   // Clear error with cleanup
   const clearError = useCallback(() => {

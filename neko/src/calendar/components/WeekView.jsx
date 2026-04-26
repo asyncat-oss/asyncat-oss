@@ -84,7 +84,7 @@ const WeekView = ({
 	events = [],
 	cards = [],
 	isToday,
-	isSelectedDate,
+	_isSelectedDate,
 	getEventStyle,
 	onEventClick,
 	onCardClick,
@@ -93,7 +93,7 @@ const WeekView = ({
 	getCurrentTimePosition,
 	onEventUpdate,
 	onCardUpdate, // Add handler for card updates
-	fetchEvents,
+	_fetchEvents,
 	currentTime, // Add currentTime prop
 	onDateChange, // Add onDateChange prop for navigation
 	currentUserId, // Add current user ID

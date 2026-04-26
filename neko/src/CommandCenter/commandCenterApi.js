@@ -47,7 +47,7 @@ const handleResponse = async (response) => {
       if (response.status === 413) {
         errorMessage = errorData.message || 'The file is too large to process. Please use a smaller image.';
       }
-    } catch (_e) {
+    } catch {
       // If we can't parse JSON, handle payload errors by status code
       if (response.status === 413) {
         errorMessage = 'The file is too large to process. Please use a smaller image.';
@@ -638,7 +638,7 @@ export const feedApi = {
     if (forceRefresh) {
       try {
         localStorage.removeItem(cacheKey);
-      } catch (_e) {
+      } catch {
         // Ignore cache errors
       }
     } else {
@@ -653,7 +653,7 @@ export const feedApi = {
             return { success: true, feed: parsed, fromCache: true };
           }
         }
-      } catch (_e) {
+      } catch {
         // Ignore cache errors
       }
     }
@@ -664,7 +664,7 @@ export const feedApi = {
     if (result.success && result.feed) {
       try {
         localStorage.setItem(cacheKey, JSON.stringify(result.feed));
-      } catch (_e) {
+      } catch {
         // Ignore storage errors
       }
     }
@@ -691,7 +691,7 @@ export const feedApi = {
         const cacheKey = workspaceId ? `asyncat-feed-cache-${workspaceId}` : 'asyncat-feed-cache';
         localStorage.removeItem(cacheKey);
       }
-    } catch (_e) {
+    } catch {
       // Ignore errors
     }
   }

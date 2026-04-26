@@ -134,7 +134,7 @@ const OverviewCard = ({ icon: Icon, label, value, detail, tone = 'gray' }) => {
   );
 };
 
-const formatEnginePath = (value) => {
+const _formatEnginePath = (value) => {
   if (!value) return 'Unknown';
   return value.length > 54 ? `…${value.slice(-54)}` : value;
 };
@@ -767,7 +767,7 @@ const EngineAdvisorSection = ({
             const pythonDone = pythonInstallJob?.status === 'complete';
             const pythonError = pythonInstallJob?.status === 'error';
             const currentPhaseIdx = PYTHON_BUILD_PHASES.findIndex(p => p.id === pythonInstallJob?.phase);
-            const progressPercent = pythonInstallJob?.percent ?? (currentPhaseIdx >= 0 ? PYTHON_BUILD_PHASES[currentPhaseIdx].percent : 0);
+            const _progressPercent = pythonInstallJob?.percent ?? (currentPhaseIdx >= 0 ? PYTHON_BUILD_PHASES[currentPhaseIdx].percent : 0);
             return (
               <PythonBuildCard
                 buildMeta={buildMeta}
@@ -776,7 +776,7 @@ const EngineAdvisorSection = ({
                 pythonDone={pythonDone}
                 pythonError={pythonError}
                 pythonInstallJob={pythonInstallJob}
-                progressPercent={progressPercent}
+                progressPercent={_progressPercent}
                 pythonBuildError={pythonBuildError}
                 pythonBuildSuccess={pythonBuildSuccess}
                 retryModel={retryModel}

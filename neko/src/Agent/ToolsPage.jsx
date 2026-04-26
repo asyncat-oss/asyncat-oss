@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  X, Search, Wrench, Terminal, File, Globe, Database,
+  Search, Wrench, Terminal, File, Globe, Database,
   Brain, Loader2, AlertCircle, ChevronDown, ChevronRight,
   BookOpen, Cpu, ShieldAlert, Monitor, ArrowLeft
 } from 'lucide-react';

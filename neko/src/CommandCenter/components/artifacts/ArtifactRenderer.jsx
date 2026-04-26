@@ -1,18 +1,14 @@
 // ArtifactRenderer.jsx - Main artifact display component
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Code, FileText, Download, Copy, Check, Play, Edit3, Eye, EyeOff, Save, BarChart2, Sigma, RotateCcw } from 'lucide-react';
+import { Code, FileText, Download, Copy, Check, Play, Edit3, Eye, EyeOff, Save, BarChart2, RotateCcw } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../BlockBasedMessageRenderer';
 import {
   BarChart, Bar,
   LineChart, Line,
-  AreaChart, Area,
   PieChart, Pie, Cell,
-  ScatterChart, Scatter,
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { GenUIArtifact } from './GenUIArtifact';
-import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';

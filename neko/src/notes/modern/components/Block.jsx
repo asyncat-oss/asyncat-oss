@@ -1,5 +1,4 @@
 import {
-  useState,
   useRef,
   useImperativeHandle,
   useEffect,
@@ -192,7 +191,6 @@ const Block = forwardRef(
       onBlur, // NEW: Blur handler
       onMouseDown, // NEW: Mouse down handler
       onAction,
-      isActive,
       allBlocks,
       onCopy,
       onTypeChange,
@@ -202,7 +200,6 @@ const Block = forwardRef(
       isSelected = false,
       dragListeners,
       dragAttributes,
-      ...otherProps
     },
     ref
   ) => {
@@ -1062,7 +1059,6 @@ const Block = forwardRef(
     useEffect(() => {
       // Detect manual type changes
       if (prevBlockTypeRef.current !== block.type) {
-        const wasTextBlock = prevBlockTypeRef.current === BlockType.TEXT;
         manualTypeChangeRef.current = true;
         prevBlockTypeRef.current = block.type;
 
@@ -1070,13 +1066,6 @@ const Block = forwardRef(
         setTimeout(() => {
           manualTypeChangeRef.current = false;
         }, 300);
-
-        // CRITICAL FIX: When converting FROM text blocks, immediately force clean content
-        const isListType = [
-          BlockType.BULLET_LIST,
-          BlockType.NUMBERED_LIST,
-          BlockType.TODO,
-        ].includes(block.type);
 
         // Universal fix: ensure content synchronization for ALL block type changes
         if (contentRef.current) {

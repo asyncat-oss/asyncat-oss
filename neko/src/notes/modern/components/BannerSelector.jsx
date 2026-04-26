@@ -70,7 +70,7 @@ const BannerSelector = ({ note, onBannerChange, onClose }) => {
     try {
       await attachmentApi.setBanner(note.id, "color", { color });
       onBannerChange({ type: "color", color });
-    } catch (error) {
+    } catch {
       // Silently handle error
     }
   };
@@ -79,13 +79,9 @@ const BannerSelector = ({ note, onBannerChange, onClose }) => {
     try {
       await attachmentApi.setBanner(note.id, "gradient", { gradient });
       onBannerChange({ type: "gradient", gradient });
-    } catch (error) {
+} catch {
       // Silently handle error
     }
-  };
-
-  const handleCloseUploadAlert = () => {
-    setUploadAlert(createInitialUploadAlert());
   };
 
   const handleImageUpload = async (event) => {
@@ -188,7 +184,7 @@ const BannerSelector = ({ note, onBannerChange, onClose }) => {
     try {
       await attachmentApi.removeBanner(note.id);
       onBannerChange(null);
-    } catch (error) {
+    } catch {
       // Silently handle error
     }
   };

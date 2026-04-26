@@ -1,22 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-	X,
-	KanbanSquare,
-	List,
-	Clock,
-	GanttChartSquare,
-	FileText,
-	FolderGit2,
-	Link2,
-	AlertCircle,
-	CheckCircle,
-	AlertTriangle,
-	Trash2,
-	LayoutGrid,
-	Target,
-	Check,
-	Settings,
-} from "lucide-react";
+ 	KanbanSquare,
+ 	List,
+ 	Clock,
+ 	GanttChartSquare,
+ 	FileText,
+ 	FolderGit2,
+ 	Link2,
+ 	AlertCircle,
+ 	CheckCircle,
+ 	AlertTriangle,
+ 	Trash2,
+ 	LayoutGrid,
+ 	Target,
+ 	Check,
+ } from "lucide-react";
 import { usePermissions } from "../../utils/permissions";
 import { projectApi, projectViewsApi } from "../projectApi";
 import eventBus from "../../utils/eventBus.js";

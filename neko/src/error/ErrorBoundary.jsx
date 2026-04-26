@@ -95,7 +95,7 @@ export const UnauthorizedErrorProvider = ({ children }) => {
 };
 
 // Friendly Session Expired Page
-const UnauthorizedErrorPage = ({ onClear, details }) => {
+const UnauthorizedErrorPage = ({ details }) => {
   const navigate = useNavigate();
 
   // Detect the reason for the unauthorized error
@@ -279,10 +279,10 @@ const UnauthorizedErrorPage = ({ onClear, details }) => {
 // Route Error Element component for React Router
 export const RouteErrorElement = () => {
   useRouteError();
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
 
   const handleGoHome = () => {
-    navigate('/home');
+    _navigate('/home');
   };
 
   const handleReload = () => {

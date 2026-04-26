@@ -94,7 +94,6 @@ const GeneralSection = ({
   workspace,
   onWorkspaceUpdated,
   onWorkspaceDeleted,
-  onWorkspaceLeft,
 }) => {
   // ── profile state ──
   const [userData,       setUserData]       = useState(null);

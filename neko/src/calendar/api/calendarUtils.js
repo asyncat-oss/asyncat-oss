@@ -99,9 +99,6 @@ export const formatEventForBackend = (eventData) => {
     }
   }
   
-  const isMultiDay = Boolean(eventData.isMultiDay || 
-                            (eventData.startDate && eventData.endDate && eventData.startDate !== eventData.endDate));
-  
   let startDate, endDate;
   
   if (eventData.startDate && eventData.endDate && 

@@ -1,16 +1,15 @@
 // ArtifactViewer.jsx - Container for artifacts with explanation
 import { useState, useEffect } from 'react';
 import ArtifactRenderer from './ArtifactRenderer';
-import { ChevronDown, ChevronUp, Code, FileText, Maximize2, Copy, Download, Save, Eye, GitBranch, Cpu, BarChart2, Play } from 'lucide-react';
+import { Code, FileText, Maximize2, Copy, Download, Save, Eye, GitBranch, Cpu, BarChart2 } from 'lucide-react';
 
 /**
  * ArtifactViewer displays one or more artifacts as compact cards
  * Clicking a card opens it in full modal view
  */
 
-const ArtifactViewer = ({ artifacts = [], explanation = '', showExplanation = true, onSaveToNotes, onArtifactOpen }) => {
+const ArtifactViewer = ({ artifacts = [], onSaveToNotes, onArtifactOpen }) => {
   const [selectedArtifact, setSelectedArtifact] = useState(null);
-  const [showExplanationSection, setShowExplanationSection] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -67,9 +66,7 @@ const ArtifactViewer = ({ artifacts = [], explanation = '', showExplanation = tr
     }
   };
 
-  const formatLineCount = (content) => {
-    return content.split('\n').length;
-  };
+  
 
   // Helper functions for full view
   const handleCopy = async () => {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X, Sparkles, Flame, TrendingUp, Users, Award, Target, Trophy, Star } from 'lucide-react';
+import { X, Sparkles, Flame, TrendingUp, Users, Award, Target, Trophy } from 'lucide-react';
 
 /**
  * Compact Stat Details Modal - Shows detailed analytics for each stat card

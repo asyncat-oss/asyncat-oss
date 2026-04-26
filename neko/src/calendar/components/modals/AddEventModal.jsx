@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Calendar, Clock, User, FolderOpen } from "lucide-react";
+import { X, User, FolderOpen } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { COLORS } from "../../data/ColourConstants";
 import ProjectSelection from "./ProjectSelection";
@@ -25,7 +25,7 @@ export function AddEventModal({
 
 	const [isPersonalEvent, setIsPersonalEvent] = useState(true);
 	const [projectId, setProjectId] = useState(initialProject || null);
-	const [isMultiDay, setIsMultiDay] = useState(false);
+	const [_isMultiDay, setIsMultiDay] = useState(false);
 	const [isCreating, setIsCreating] = useState(false);
 
 	const {

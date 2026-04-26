@@ -5,15 +5,15 @@
 import { Users } from "lucide-react";
 
 const AttendeesSelection = ({
-	projectId,
-	isPersonalEvent,
-	selectedAttendees,
-	setSelectedAttendees,
-	availableAttendees,
-	setAvailableAttendees,
+	_projectId,
+	_isPersonalEvent,
+	_selectedAttendees,
+	_setSelectedAttendees,
+	_availableAttendees,
+	_setAvailableAttendees,
 }) => {
 	// Single-user mode: no attendees to select
-	if (isPersonalEvent) {
+	if (_isPersonalEvent) {
 		return (
 			<div className="text-center py-6 flex flex-col items-center">
 				<Users className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" />

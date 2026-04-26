@@ -124,10 +124,10 @@ const NetworkViewSkeleton = () => {
 };
 
 // The NetworkView component visualizes task dependencies as a network diagram
-const NetworkView = ({ selectedProject, session }) => {
+const NetworkView = ({ selectedProject }) => {
   const { columns, isLoading, error } = useColumnContext();
   const { setSelectedCard, selectedCard } = useCardContext();
-  const { addDependency, removeDependency } = useCardActions(); // Get dependency actions
+  const { addDependency } = useCardActions();
 
   // Refs
   const networkRef = useRef(null);
@@ -140,7 +140,7 @@ const NetworkView = ({ selectedProject, session }) => {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [cardDependencies, setCardDependencies] = useState({});
-  const [dependentCards, setDependentCards] = useState({});
+  const [dependentCards] = useState({});
   const [isLoadingDependencies, setIsLoadingDependencies] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterConfig, setFilterConfig] = useState({
@@ -200,6 +200,7 @@ const NetworkView = ({ selectedProject, session }) => {
     if (!networkRef.current) return;
 
     const updateSize = () => {
+      if (!networkRef.current) return;
       const { width, height } = networkRef.current.getBoundingClientRect();
       setContainerSize({ width, height });
     };
@@ -257,53 +258,19 @@ const NetworkView = ({ selectedProject, session }) => {
     setIsLoadingDependencies(true);
     try {
       const dependenciesMap = {};
-      const dependentsMap = {};
-
-      console.log("🔍 Fetching dependencies for", cards.length, "cards");
 
       for (const card of cards) {
-        // Fetch dependencies (cards this card depends on)
-        const [dependencies, dependents] = await Promise.all([
-          viewsApi.dependency.getCardDependencies(card.id).catch((err) => {
-            console.error(
-              `Error fetching dependencies for card ${card.id}:`,
-              err
-            );
-            return [];
-          }),
-          viewsApi.dependency.getDependentCards(card.id).catch((err) => {
-            console.error(
-              `Error fetching dependents for card ${card.id}:`,
-              err
-            );
-            return [];
-          }),
+        const [dependencies] = await Promise.all([
+          viewsApi.dependency.getCardDependencies(card.id).catch(() => []),
+          viewsApi.dependency.getDependentCards(card.id).catch(() => []),
         ]);
 
         if (dependencies && dependencies.length > 0) {
-          console.log(
-            `Card ${card.title} (${card.id}) depends on:`,
-            dependencies
-          );
           dependenciesMap[card.id] = dependencies;
-        }
-
-        if (dependents && dependents.length > 0) {
-          console.log(
-            `Card ${card.title} (${card.id}) is depended on by:`,
-            dependents
-          );
-          dependentsMap[card.id] = dependents;
         }
       }
 
-      console.log("📊 Final dependencies map:", dependenciesMap);
-      console.log("📊 Final dependents map:", dependentsMap);
-
       setCardDependencies(dependenciesMap);
-      setDependentCards(dependentsMap);
-    } catch (error) {
-      console.error("Error fetching dependencies:", error);
     } finally {
       setIsLoadingDependencies(false);
     }
@@ -336,11 +303,6 @@ const NetworkView = ({ selectedProject, session }) => {
 
       // Debounce to avoid multiple rapid refreshes
       const timeoutId = setTimeout(() => {
-        console.log("🔄 Refreshing dependencies...", {
-          firstLoad: previousCardIds === "",
-          idsChanged: currentCardIds !== previousCardIds,
-          arrayChanged: cardsArrayChanged,
-        });
         fetchDependencies();
       }, 200);
 
@@ -351,33 +313,13 @@ const NetworkView = ({ selectedProject, session }) => {
   // Check if a card is blocked by dependencies
   const isCardBlocked = useCallback(
     (card) => {
-      console.log(`🔍 Checking if card "${card.title}" is blocked:`, {
-        hasCardDependenciesData: !!cardDependencies[card.id],
-        cardDependenciesData: cardDependencies[card.id],
-      });
-
-      // Check if we have dependency data for this card
       if (cardDependencies[card.id] && cardDependencies[card.id].length > 0) {
-        // Check if any dependency is not in a completion column
         const isBlocked = cardDependencies[card.id].some((dep) => {
           const notCompleted = !dep.Column?.isCompletionColumn;
-          console.log(
-            `  → Dependency "${dep.title || dep.Card?.title}" in column "${
-              dep.Column?.title
-            }":`,
-            {
-              isCompletionColumn: dep.Column?.isCompletionColumn,
-              isBlocking: notCompleted,
-            }
-          );
           return notCompleted;
         });
-        console.log(
-          `  ✅ Final result: ${isBlocked ? "BLOCKED" : "NOT BLOCKED"}`
-        );
         return isBlocked;
       }
-      console.log(`  ❌ No dependency data - NOT BLOCKED`);
       return false;
     },
     [cardDependencies]
@@ -537,16 +479,6 @@ const NetworkView = ({ selectedProject, session }) => {
           (dep) => !dep.Column?.isCompletionColumn
         ) || false;
 
-      // Debug logging for blocked status
-      if (isBlocked) {
-        console.log(`🚫 Card "${card.title}" is BLOCKED:`, {
-          cardId: card.id,
-          hasDependencies,
-          dependencies: cardDependencies[card.id],
-          isCompleted,
-        });
-      }
-
       return {
         id: card.id,
         card,
@@ -568,69 +500,35 @@ const NetworkView = ({ selectedProject, session }) => {
     const newEdges = [];
     const edgeSet = new Set(); // Track unique edges to prevent duplicates
 
-    console.log("🔗 Creating edges. Total nodes:", newNodes.length);
-    console.log(
-      "🔗 Card dependencies available:",
-      Object.keys(cardDependencies).length
-    );
-
-    // Iterate through all nodes
     newNodes.forEach((sourceNode) => {
-      // Use cardDependencies state which is fetched earlier
       const cardDepsData = cardDependencies[sourceNode.id] || [];
 
-      if (cardDepsData.length > 0) {
-        console.log(
-          `Processing ${cardDepsData.length} dependencies for card ${sourceNode.card.title}:`,
-          cardDepsData
-        );
-      }
-
       cardDepsData.forEach((depInfo) => {
-        console.log("Dependency info structure:", depInfo);
-
-        // Use targetCardId from the API response
         const targetId = depInfo.targetCardId;
-
-        // Create unique edge ID
         const edgeId = `${sourceNode.id}-${depInfo.type || "FS"}-${targetId}`;
 
-        // Check for duplicate edges
         if (edgeSet.has(edgeId)) {
-          console.warn(`⚠️ Duplicate edge detected: ${edgeId}`);
           return;
         }
 
-        // Find target node and create edge
         const targetNode = newNodes.find((n) => n.id === targetId);
         if (targetNode) {
           const edge = {
-            id: edgeId, // Unique edge ID including type
+            id: edgeId,
             source: sourceNode.id,
-            target: targetId, // Use targetCardId from fetched data
-            type: depInfo.type || "FS", // Include type if available
-            lag: depInfo.lag || 0, // Include lag if available
-            isBlocking: !targetNode.isCompleted, // Blocking if the dependency (target) is not completed
+            target: targetId,
+            type: depInfo.type || "FS",
+            lag: depInfo.lag || 0,
+            isBlocking: !targetNode.isCompleted,
           };
-          console.log("✅ Created edge:", edge);
           edgeSet.add(edgeId);
           newEdges.push(edge);
-        } else {
-          console.warn(`⚠️ Target node not found for dependency ${targetId}`);
         }
       });
     });
 
     setNodes(newNodes);
     setEdges(newEdges);
-
-    // Debug: Log edges and dependencies
-    console.log("Network View Debug:", {
-      nodesCount: newNodes.length,
-      edgesCount: newEdges.length,
-      cardDependencies,
-      edges: newEdges,
-    });
   }, [
     cards,
     searchTerm,
@@ -880,13 +778,12 @@ const NetworkView = ({ selectedProject, session }) => {
 
     // Now make the API call in the background
     try {
-      const result = await addDependency(
+      await addDependency(
         sourceId,
         targetId,
         pendingDependency.type,
         pendingDependency.lag
       );
-      console.log("Dependency added:", result);
       showNotification("Dependency added successfully.", "success");
 
       // Refresh the card detail modal if it's open for either source or target card
@@ -901,7 +798,6 @@ const NetworkView = ({ selectedProject, session }) => {
         }));
       }
     } catch (error) {
-      console.error("Error adding dependency:", error);
       showNotification(`Failed to add dependency: ${error.message}`, "error");
 
       // Rollback the optimistic update on error
@@ -913,49 +809,6 @@ const NetworkView = ({ selectedProject, session }) => {
             dep.targetCardId !== targetId || dep.type !== pendingDependency.type
         ),
       }));
-    }
-  };
-
-  // Remove dependency action
-  const handleRemoveDependency = async (edge, event) => {
-    event.stopPropagation(); // Prevent other clicks
-    // Find node titles for confirmation message
-    const sourceTitle =
-      nodes.find((n) => n.id === edge.source)?.card.title || "Unknown Task";
-    const targetTitle =
-      nodes.find((n) => n.id === edge.target)?.card.title || "Unknown Task";
-
-    if (
-      window.confirm(
-        `Remove dependency from task "${sourceTitle}" to task "${targetTitle}"?`
-      )
-    ) {
-      try {
-        console.log(
-          `Attempting to remove dependency: ${edge.source} no longer depends on ${edge.target}`
-        );
-        await removeDependency(edge.source, edge.target);
-        console.log("Dependency removed");
-        // Refresh dependencies locally (or refetch)
-        setCardDependencies((prev) => {
-          const updatedDeps = { ...prev };
-          if (updatedDeps[edge.source]) {
-            updatedDeps[edge.source] = updatedDeps[edge.source].filter(
-              (dep) => dep.targetCardId !== edge.target
-            );
-          }
-          return updatedDeps;
-        });
-        // Update edges state
-        setEdges((prev) => prev.filter((e) => e.id !== edge.id));
-        showNotification("Dependency removed successfully.", "success"); // Show success notification
-      } catch (error) {
-        console.error("Error removing dependency:", error);
-        showNotification(
-          `Failed to remove dependency: ${error.message}`,
-          "error"
-        ); // Show error notification
-      }
     }
   };
 
@@ -2548,17 +2401,7 @@ const NetworkView = ({ selectedProject, session }) => {
                             <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 text-white" />
                           )}
                           {node.isBlocked && !node.isCompleted && (
-                            <>
-                              {console.log(
-                                "🎨 Rendering AlertTriangle for:",
-                                node.card.title,
-                                {
-                                  isBlocked: node.isBlocked,
-                                  isCompleted: node.isCompleted,
-                                }
-                              )}
-                              <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0 stroke-yellow-500 dark:stroke-yellow-400 midnight:stroke-yellow-300" />
-                            </>
+                            <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0 stroke-yellow-500 dark:stroke-yellow-400 midnight:stroke-yellow-300" />
                           )}
                           {/* Linking Indicator */}
                           {isLinkingSource && (

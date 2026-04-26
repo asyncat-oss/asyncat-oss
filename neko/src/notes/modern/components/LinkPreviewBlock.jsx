@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, ExternalLink, RefreshCw, Globe, Copy, Check, Edit3 } from "lucide-react";
+import { ExternalLink, RefreshCw, Globe, Copy, Check, Edit3 } from "lucide-react";
 import authService from "../../../services/authService";
 
 const LinkPreviewBlock = ({

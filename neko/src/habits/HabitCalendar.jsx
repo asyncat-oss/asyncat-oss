@@ -5,9 +5,7 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2,
   Circle,
-  Flame,
   TrendingUp,
-  Award,
   MessageSquare
 } from 'lucide-react';
 

@@ -1,18 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-	ChevronLeft,
-	ChevronRight,
-	RefreshCw,
-	Filter,
-	X,
-	CheckSquare,
-	AlertTriangle,
-	FolderOpen,
-	User,
-	Search,
-	CheckCircle,
-	Target,
+ 	ChevronLeft,
+ 	ChevronRight,
+ 	RefreshCw,
+ 	Filter,
+ 	CheckSquare,
+ 	AlertTriangle,
+ 	FolderOpen,
+ 	User,
+ 	Search,
+ 	CheckCircle,
+ 	Target,
 } from "lucide-react";
 
 const TopBar = ({

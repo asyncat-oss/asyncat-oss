@@ -12,11 +12,7 @@ import {
   Image,
   Video,
   Music,
-  File,
   AlertTriangle,
-  ChevronRight,
-  Link,
-  Calculator,
   FileText,
   TrendingUp,
   BarChart3,
@@ -24,9 +20,6 @@ import {
   Activity,
   StampIcon,
   CircleDot,
-  Navigation,
-  MousePointer,
-  BarChart,
 } from "lucide-react";
 
 const BlockType = {

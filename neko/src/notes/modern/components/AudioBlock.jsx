@@ -51,7 +51,7 @@ const createInitialUploadAlert = () => ({
   allowedFormats: "",
 });
 
-const AudioBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
+const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
   // Add CSS animation styles
   React.useEffect(() => {
     const style = document.createElement("style");
@@ -90,7 +90,6 @@ const AudioBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
   const [showControls, setShowControls] = useState(false);
   const filename = block.properties?.filename || "";
   const caption = block.properties?.caption || "";
-  const originalName = block.properties?.originalName || "";
 
   // Custom audio controls state
   const [isPlaying, setIsPlaying] = useState(false);

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import {
-  Hash, Type, List, ListOrdered, CheckSquare, Quote, Table, Minus, Image, Video, File,
-  AlertTriangle, ChevronRight, Link, Calculator, FileText, TrendingUp, BarChart3,
-  PieChart, Activity, StampIcon, CircleDot, Navigation, MousePointer, BarChart,
+  Hash, Type, List, ListOrdered, CheckSquare, Quote, Table, Minus, Image, Video,
+  AlertTriangle, FileText, TrendingUp, BarChart3,
+  PieChart, Activity, StampIcon, CircleDot,
   Clock, Star, Music
 } from 'lucide-react';
 

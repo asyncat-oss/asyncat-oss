@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, Download, Trash2, File, ExternalLink, Loader, AlertCircle } from 'lucide-react';
+import { Upload, Trash2, File, ExternalLink, Loader, AlertCircle } from 'lucide-react';
 import { attachmentsApi } from '../../noteApi';
 import { useNoteContext } from '../../context/NoteContext';
 

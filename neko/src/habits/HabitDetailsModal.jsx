@@ -2,17 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Flame,
-  TrendingUp,
-  Calendar,
   Target,
   CheckCircle2,
   Circle,
   Clock,
   Hash,
   Timer,
-  Award,
-  BarChart3,
-  Edit2,
   Trash2,
   FileText
 } from 'lucide-react';
@@ -25,11 +20,9 @@ const HabitDetailsModal = ({
   onClose,
   onToggleCompletion,
   onAddProgress,
-  onDelete,
-  session
+  onDelete
 }) => {
   const [activeTab, setActiveTab] = useState('overview');
-  const [completionHistory, setCompletionHistory] = useState([]);
   const [isCompleting, setIsCompleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);

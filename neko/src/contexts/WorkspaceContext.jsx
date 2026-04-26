@@ -116,10 +116,10 @@ export const WorkspaceProvider = ({ children }) => {
       }
     } catch (err) {
       console.error('Error fetching workspaces:', err);
-      
+
       // Categorize errors for better handling
       let errorMessage = err.message;
-      
+
       // Check if it's a network error
       if (err.message?.includes('fetch') || err.name === 'TypeError') {
         errorMessage = 'Network error - Please check your internet connection';
@@ -285,7 +285,7 @@ export const WorkspaceProvider = ({ children }) => {
 
   // Listen for workspace invite acceptance events
   useEffect(() => {
-    const handleWorkspaceInviteAccepted = (event) => {
+    const handleWorkspaceInviteAccepted = (_event) => {
       // Refresh workspaces when a team invite is accepted
       // Add a small delay to ensure the backend has processed the invite
       setTimeout(() => {
@@ -293,7 +293,7 @@ export const WorkspaceProvider = ({ children }) => {
       }, 500);
     };
 
-    const handleProjectInviteAccepted = (event) => {
+    const handleProjectInviteAccepted = (_event) => {
       // Invalidate projects cache when a project invite is accepted
       // Add a small delay to ensure the backend has processed the invite
       setTimeout(() => {

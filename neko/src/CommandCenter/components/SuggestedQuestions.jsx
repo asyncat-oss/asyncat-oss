@@ -1,5 +1,5 @@
 // SuggestedQuestions.jsx - Spacious, flat, web search style
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronRight, Lightbulb, MessageCircle, Zap, BarChart3, Wrench, Calendar, Users, Target } from 'lucide-react';
 
 // Add keyframe animations via style tag

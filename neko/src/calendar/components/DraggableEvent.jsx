@@ -169,12 +169,12 @@ const DraggableEvent = ({
 	const startTime = formatTime(event.startTime || event.time);
 	const endTime = formatTime(event.endTime);
 
-	const hasTimeInfo = startTime || endTime;
+	const _hasTimeInfo = startTime || endTime;
 	const timeDisplay = endTime ? `${startTime} - ${endTime}` : startTime;
 
 	// Calculate progress if available
 	const progressPercentage = event.progress || 0;
-	const hasProgress = progressPercentage > 0;
+	const _hasProgress = progressPercentage > 0;
 	// Get base color for event styling
 	const getBaseColor = () => {
 		const style = getEventStyle(event);

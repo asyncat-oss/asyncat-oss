@@ -1,6 +1,6 @@
 // ArtifactsGallery.jsx - View all artifacts from the conversation
 import { useState, useEffect } from 'react';
-import { X, Code, FileText, Download, Copy, Check, Search } from 'lucide-react';
+import { X, Code, FileText, Search } from 'lucide-react';
 import ArtifactRenderer from './ArtifactRenderer';
 
 /**

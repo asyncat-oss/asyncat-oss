@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Calculator, Eye, EyeOff } from "lucide-react";
 
 const MathBlock = ({ block, onChange, contentRef, commonProps }) => {

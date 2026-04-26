@@ -114,8 +114,8 @@ const DayView = ({
 	events = [],
 	cards = [],
 	isToday,
-	isSelectedDate,
-	getEventStyle,
+	_isSelectedDate,
+	_getEventStyle,
 	onEventClick,
 	onCardClick,
 	handleTimeSlotClick,
@@ -123,7 +123,7 @@ const DayView = ({
 	getCurrentTimePosition,
 	onEventUpdate,
 	onCardUpdate, // Add handler for card updates
-	fetchEvents,
+	_fetchEvents,
 	currentTime, // Add currentTime prop
 	onDateChange, // Add onDateChange prop for navigation
 	currentUserId, // Add current user ID
@@ -1020,7 +1020,7 @@ const DayView = ({
 
 											handleShowMoreClick(
 												currentDate,
-												position
+												_position
 											);
 										}}
 									>

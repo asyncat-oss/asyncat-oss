@@ -190,7 +190,7 @@ const HabitCard = ({
 
 
   // Handle card click (open details modal)
-  const handleCardClick = useCallback((e) => {
+  const handleCardClick = useCallback(() => {
     if (onClick) {
       onClick(habit);
     }

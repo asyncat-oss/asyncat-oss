@@ -52,7 +52,6 @@ const NoteGrid = ({
   setSearchQuery,
   onDeleteNotes,
   getProjectNameForNote,
-  isAllNotesView,
   isLoading = false,
 }) => {
   const [selectedNotes, setSelectedNotes] = useState([]);

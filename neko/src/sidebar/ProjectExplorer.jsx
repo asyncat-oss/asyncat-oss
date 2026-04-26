@@ -12,7 +12,6 @@ import {
   FolderMinus,
   Check,
   X,
-  Info,
   KanbanSquare,
   List,
   Clock,

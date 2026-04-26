@@ -1,9 +1,9 @@
 // NoteProvider.jsx - Simplified without versioning
-import { createContext, useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { notesApi } from "../noteApi";
 import { NoteContext } from "./NoteContext";
 
-export const NoteProvider = ({ children, session }) => {
+export const NoteProvider = ({ children }) => {
   // Core state
   const [notes, setNotes] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
@@ -18,7 +18,7 @@ export const NoteProvider = ({ children, session }) => {
   const [operationQueue, setOperationQueue] = useState([]);
 
   // Delta tracking state (simplified - no versioning)
-  const [deltaSupport, setDeltaSupport] = useState(true);
+  const [deltaSupport] = useState(true);
 
   // Network status monitoring
   useEffect(() => {

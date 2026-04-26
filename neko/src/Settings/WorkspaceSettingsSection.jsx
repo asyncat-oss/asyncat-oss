@@ -189,7 +189,7 @@ const WorkspaceSettingsSection = ({
 	workspace,
 	onWorkspaceUpdated,
 	onWorkspaceDeleted,
-	onWorkspaceLeft,
+	_onWorkspaceLeft,
 	session,
 }) => {
 	// Form state for general settings
