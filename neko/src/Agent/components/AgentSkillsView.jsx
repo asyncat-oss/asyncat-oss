@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import PropTypes from 'prop-types';
 import {
   Search, Loader2, AlertCircle, ChevronDown, ChevronRight,
   Brain, BookOpen, Shield, Cpu, Lightbulb, LayoutList, Tag,
@@ -54,7 +55,6 @@ function renderMarkdown(text) {
   return elements;
 }
 
-// eslint-disable-next-line react/prop-types
 function SkillCard({ skill }) {
   const [expanded, setExpanded] = useState(false);
   const meta = getRegionMeta(skill.brain_region);
@@ -116,6 +116,18 @@ function SkillCard({ skill }) {
     </div>
   );
 }
+
+SkillCard.propTypes = {
+  skill: PropTypes.shape({
+    brain_region: PropTypes.string,
+    name: PropTypes.string.isRequired,
+    source: PropTypes.string,
+    description: PropTypes.string,
+    tags: PropTypes.arrayOf(PropTypes.string),
+    when_to_use: PropTypes.string,
+    body: PropTypes.string,
+  }).isRequired,
+};
 
 export default function AgentSkillsView() {
   const [skills, setSkills] = useState([]);
