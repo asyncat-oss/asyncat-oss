@@ -19,7 +19,6 @@ const CreateHabitModal = ({ isOpen, onClose, onHabitCreated, selectedProject }) 
     category: 'general',
     color: '#6366f1',
     icon: '🎯',
-    is_private: true
   };
 
   const [formData, setFormData] = useState(initialFormData);
@@ -322,7 +321,7 @@ const CreateHabitModal = ({ isOpen, onClose, onHabitCreated, selectedProject }) 
                 className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 midnight:border-gray-700 bg-white dark:bg-gray-700 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors resize-none"
                 rows="3"
                 maxLength={MAX_DESCRIPTION_LENGTH}
-                placeholder="Add a description to help your team understand this habit..."
+                placeholder="Add a description for this habit..."
               />
             </div>
 
@@ -463,7 +462,6 @@ const CreateHabitModal = ({ isOpen, onClose, onHabitCreated, selectedProject }) 
                     <option value="productivity">📈 Productivity</option>
                     <option value="quality">✨ Quality</option>
                     <option value="learning">📚 Learning</option>
-                    <option value="collaboration">🤝 Collaboration</option>
                     <option value="health">❤️ Health & Wellness</option>
                     <option value="custom">✏️ Custom...</option>
                   </select>
@@ -499,53 +497,6 @@ const CreateHabitModal = ({ isOpen, onClose, onHabitCreated, selectedProject }) 
               )}
             </div>
 
-            {/* Privacy Toggle - NEW */}
-            <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-800/50 dark:to-gray-700/50 midnight:from-gray-800/30 midnight:to-gray-700/30 rounded-lg border border-indigo-200 dark:border-gray-600 midnight:border-gray-700">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 mt-1">
-                  <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-700 midnight:bg-gray-800 border-2 border-indigo-300 dark:border-indigo-500 midnight:border-indigo-600 flex items-center justify-center text-xl">
-                    {formData.is_private ? '🔒' : '👥'}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white">
-                      {formData.is_private ? 'Private Habit' : 'Team Habit'}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange('is_private', !formData.is_private)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                        formData.is_private 
-                          ? 'bg-gray-300 dark:bg-gray-600 midnight:bg-gray-600' 
-                          : 'bg-indigo-600 dark:bg-indigo-500 midnight:bg-indigo-600'
-                      }`}
-                      role="switch"
-                      aria-checked={!formData.is_private}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          formData.is_private ? 'translate-x-1' : 'translate-x-6'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-600 dark:text-gray-300 midnight:text-gray-300 leading-relaxed">
-                    {formData.is_private ? (
-                      <>
-                        <strong>Private:</strong> Only you can complete and edit this habit. 
-                        Great for personal goals and individual accountability.
-                      </>
-                    ) : (
-                      <>
-                        <strong>Team:</strong> All project members can complete this habit and contribute to shared progress. 
-                        Perfect for collaborative goals and team challenges.
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Right Column - Icon Picker & Live Preview */}

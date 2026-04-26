@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { 
-  CheckCircle2, 
+import {
+  CheckCircle2,
   Flame,
   Trash2,
   Circle,
@@ -9,8 +9,6 @@ import {
   X,
   Edit2,
   MessageSquare,
-  Lock,
-  Users
 } from 'lucide-react';
 import AddProgressModal from './AddProgressModal';
 import EditHabitModal from './EditHabitModal';
@@ -21,9 +19,6 @@ const DEBOUNCE_DELAY = 300;
 
 const HabitCard = ({ 
   habit, 
-  teamMembers, 
-  teamCompletions, 
-  currentUserId, 
   onToggleCompletion, 
   onAddProgress,
   onUpdateHabit,
@@ -193,20 +188,6 @@ const HabitCard = ({
   // Get the habit color with fallback
   const habitColor = habit.color || '#6366f1';
 
-  // Check if current user can complete this habit
-  const canComplete = useMemo(() => {
-    // If habit is private, only creator can complete
-    if (habit.is_private) {
-      return habit.created_by === currentUserId;
-    }
-    // Team habits can be completed by anyone
-    return true;
-  }, [habit.is_private, habit.created_by, currentUserId]);
-
-  // Check if current user can edit/delete this habit
-  const canEdit = useMemo(() => {
-    return habit.created_by === currentUserId;
-  }, [habit.created_by, currentUserId]);
 
   // Handle card click (open details modal)
   const handleCardClick = useCallback((e) => {
@@ -271,17 +252,6 @@ const HabitCard = ({
               </div>
             )}
 
-            {/* Privacy Badge — subtle */}
-            {habit.is_private !== undefined && (
-              <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
-                habit.is_private 
-                  ? 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 bg-gray-100 dark:bg-gray-700/50 midnight:bg-gray-800/50'
-                  : 'text-blue-600 dark:text-blue-400 midnight:text-blue-400 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/15'
-              }`}>
-                {habit.is_private ? <Lock className="w-3 h-3" /> : <Users className="w-3 h-3" />}
-                <span>{habit.is_private ? 'Private' : 'Team'}</span>
-              </div>
-            )}
           </div>
 
           {/* Action buttons — visible on hover, compact */}
@@ -302,20 +272,18 @@ const HabitCard = ({
             
             <button
               onClick={(e) => { e.stopPropagation(); setShowEditHabitModal(true); }}
-              disabled={!canEdit}
-              title={!canEdit ? 'Only the creator can edit this habit' : 'Edit habit'}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Edit habit"
+              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors"
               aria-label="Edit"
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
-            
+
             {!showDeleteConfirm ? (
               <button
                 onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
-                disabled={!canEdit}
-                title={!canEdit ? 'Only the creator can delete this habit' : 'Delete habit'}
-                className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Delete habit"
+                className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors"
                 aria-label="Delete"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -356,179 +324,106 @@ const HabitCard = ({
           )}
         </div>
 
-        {/* Team Stats — clean inline bar */}
-        {habit.team_stats && !habit.is_private && (
-          <div className="mb-3 pl-12">
-            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-750/40 midnight:bg-gray-800/30 border border-gray-100 dark:border-gray-700/30 midnight:border-gray-700/20">
+        {/* Progress + Action — clean bottom row */}
+        <div className="flex items-center gap-3 pl-12">
+          {habit.tracking_type !== 'boolean' ? (
+            <>
+              {/* Numeric/Duration Progress */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-                    Team Progress
-                    {habit.tracking_type !== 'boolean' && habit.team_stats.total_team_value > 0 && (
-                      <span className="ml-1 text-gray-400 dark:text-gray-500">
-                        • Total: {habit.team_stats.total_team_value} {habit.unit || ''}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 midnight:text-gray-300 tabular-nums">
-                    {habit.team_stats.completed_members}/{habit.team_stats.total_members}
+                  <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-gray-500">Progress</span>
+                  <span className="text-[11px] font-semibold tabular-nums" style={{ color: getProgressPercentage() >= 100 ? '#10B981' : habitColor }}>
+                    {getProgressText()}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200/60 dark:bg-gray-700/40 midnight:bg-gray-700/30 rounded-full h-1.5 overflow-hidden">
-                  <div 
+                  <div
                     className="h-1.5 rounded-full transition-all duration-500"
-                    style={{ 
-                      width: `${habit.team_stats.completion_percentage || 0}%`,
-                      backgroundColor: habitColor 
+                    style={{
+                      width: `${getProgressPercentage()}%`,
+                      backgroundColor: getProgressPercentage() >= 100 ? '#10B981' : habitColor
                     }}
                   />
                 </div>
               </div>
-              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 midnight:text-gray-400 tabular-nums w-8 text-right">
-                {habit.team_stats.completion_percentage || 0}%
-              </span>
-            </div>
-          </div>
-        )}
 
-        {/* Private habit: Creator Status for non-creators */}
-        {habit.is_private && habit.team_stats && habit.created_by !== currentUserId && (
-          <div className="pl-12">
-            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-750/40 midnight:bg-gray-800/30 border border-gray-100 dark:border-gray-700/30 midnight:border-gray-700/20">
-              <Lock className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400">Creator Status</span>
-                  <span className={`text-[11px] font-semibold ${
-                    habit.team_stats.creator_completed 
-                      ? 'text-emerald-600 dark:text-emerald-400' 
-                      : 'text-gray-400 dark:text-gray-500'
-                  }`}>
-                    {habit.team_stats.creator_completed ? 'Done' : 'Pending'}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200/60 dark:bg-gray-700/40 rounded-full h-1.5 overflow-hidden">
-                  <div 
-                    className="h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 transition-all duration-500"
-                    style={{ width: `${habit.team_stats.completion_percentage || 0}%` }}
-                  />
-                </div>
-              </div>
-              <span className="text-xs font-semibold text-gray-400 tabular-nums w-8 text-right">
-                {habit.team_stats.completion_percentage || 0}%
-              </span>
-            </div>
-          </div>
-        )}
-            
-        {/* Progress + Action — clean bottom row */}
-        {!(habit.is_private && habit.created_by !== currentUserId) && (
-          <div className="flex items-center gap-3 pl-12">
-            {habit.tracking_type !== 'boolean' ? (
-              <>
-                {/* Numeric/Duration Progress */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-gray-500">Progress</span>
-                    <span className="text-[11px] font-semibold tabular-nums" style={{ color: getProgressPercentage() >= 100 ? '#10B981' : habitColor }}>
-                      {getProgressText()}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200/60 dark:bg-gray-700/40 midnight:bg-gray-700/30 rounded-full h-1.5 overflow-hidden">
-                    <div 
-                      className="h-1.5 rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${getProgressPercentage()}%`,
-                        backgroundColor: getProgressPercentage() >= 100 ? '#10B981' : habitColor
-                      }}
-                    />
-                  </div>
-                </div>
-                
-                {/* Track button */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleToggleCompletion(); }}
-                  disabled={isCompleting || isLoading || !canComplete}
-                  title={!canComplete ? 'Only the creator can complete this private habit' : ''}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 ${
-                    (habit.today_value || 0) >= (habit.target_value || 1)
-                      ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                      : 'text-white hover:opacity-90'
-                  }`}
-                  style={!((habit.today_value || 0) >= (habit.target_value || 1)) ? {
-                    backgroundColor: habitColor
-                  } : {}}
-                >
-                  {isCompleting ? (
-                    <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  ) : (habit.today_value || 0) >= (habit.target_value || 1) ? (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Done</span>
-                    </>
-                  ) : (
-                    <>
-                      {React.cloneElement(getTrackingIcon(), { className: 'w-3.5 h-3.5' })}
-                      <span>{habit.today_value > 0 ? 'Add More' : 'Track'}</span>
-                    </>
-                  )}
-                </button>
-              </>
-            ) : (
-              <>
-                {/* Boolean Progress */}
-                {(!habit.is_private || habit.created_by === currentUserId) && (
+              {/* Track button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleToggleCompletion(); }}
+                disabled={isCompleting || isLoading}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 ${
+                  (habit.today_value || 0) >= (habit.target_value || 1)
+                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                    : 'text-white hover:opacity-90'
+                }`}
+                style={!((habit.today_value || 0) >= (habit.target_value || 1)) ? {
+                  backgroundColor: habitColor
+                } : {}}
+              >
+                {isCompleting ? (
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (habit.today_value || 0) >= (habit.target_value || 1) ? (
                   <>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-gray-500">Progress</span>
-                        <span className={`text-[11px] font-semibold ${
-                          userCompleted 
-                            ? 'text-emerald-500 dark:text-emerald-400' 
-                            : 'text-gray-400 dark:text-gray-500'
-                        }`}>
-                          {userCompleted ? 'Completed' : 'Pending'}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200/60 dark:bg-gray-700/40 midnight:bg-gray-700/30 rounded-full h-1.5 overflow-hidden">
-                        {userCompleted && (
-                          <div className="h-1.5 rounded-full bg-emerald-500 transition-all duration-500 w-full" />
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Complete button */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleToggleCompletion(); }}
-                      disabled={isCompleting || isLoading || !canComplete}
-                      title={!canComplete ? 'Only the creator can complete this private habit' : ''}
-                      className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 ${
-                        userCompleted
-                          ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                          : 'text-white hover:opacity-90'
-                      }`}
-                      style={!userCompleted ? { backgroundColor: habitColor } : {}}
-                    >
-                      {isCompleting ? (
-                        <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : userCompleted ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Done</span>
-                        </>
-                      ) : (
-                        <>
-                          <Circle className="w-3.5 h-3.5" />
-                          <span>Mark Done</span>
-                        </>
-                      )}
-                    </button>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Done</span>
+                  </>
+                ) : (
+                  <>
+                    {React.cloneElement(getTrackingIcon(), { className: 'w-3.5 h-3.5' })}
+                    <span>{habit.today_value > 0 ? 'Add More' : 'Track'}</span>
                   </>
                 )}
-              </>
-            )}
-          </div>
-        )}
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Boolean Progress */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-gray-500">Progress</span>
+                  <span className={`text-[11px] font-semibold ${
+                    userCompleted
+                      ? 'text-emerald-500 dark:text-emerald-400'
+                      : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {userCompleted ? 'Completed' : 'Pending'}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200/60 dark:bg-gray-700/40 midnight:bg-gray-700/30 rounded-full h-1.5 overflow-hidden">
+                  {userCompleted && (
+                    <div className="h-1.5 rounded-full bg-emerald-500 transition-all duration-500 w-full" />
+                  )}
+                </div>
+              </div>
+
+              {/* Complete button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleToggleCompletion(); }}
+                disabled={isCompleting || isLoading}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 ${
+                  userCompleted
+                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                    : 'text-white hover:opacity-90'
+                }`}
+                style={!userCompleted ? { backgroundColor: habitColor } : {}}
+              >
+                {isCompleting ? (
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : userCompleted ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Done</span>
+                  </>
+                ) : (
+                  <>
+                    <Circle className="w-3.5 h-3.5" />
+                    <span>Mark Done</span>
+                  </>
+                )}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Modals */}

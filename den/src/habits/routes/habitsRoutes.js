@@ -9,8 +9,6 @@ import {
   completeHabit,
   uncompleteHabit,
   getHabitAnalytics,
-  getTeamCompletions,
-  getPerformerDetails,
   updateHabitProgress,
   addHabitNote,
   deleteHabitNote
@@ -24,12 +22,6 @@ router.get('/', authenticate, getWorkspaceHabits);
 
 // Get habit analytics for the workspace
 router.get('/analytics', authenticate, getHabitAnalytics);
-
-// Get performer details (stats and completions)
-router.get('/performer/:userId', authenticate, getPerformerDetails);
-
-// Get team completions for a specific habit
-router.get('/:habitId/team-completions', authenticate, getTeamCompletions);
 
 // Create a new habit
 router.post('/', authenticate, createHabit);

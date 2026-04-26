@@ -65,7 +65,6 @@ const HabitCommentsModal = ({ habit, onClose, onRefresh }) => {
               date: completion.completed_date,
               comment: comment.trim(),
               value: completion.value,
-              user: completion.user || null, // User details for team habit comments
               user_id: completion.user_id,
               formattedDate: new Date(completion.completed_date).toLocaleDateString('en-US', {
                 weekday: 'short',
@@ -155,12 +154,7 @@ const HabitCommentsModal = ({ habit, onClose, onRefresh }) => {
       setDeletingCommentKey(commentKey);
       setError(null);
       
-      console.log('Deleting comment:', { habitId: habit.id, date, commentIndex, commentKey });
-      
-      // Call the delete API (backend still uses 'note' terminology)
       const response = await habitApi.deleteHabitNote(habit.id, date, commentIndex);
-      
-      console.log('Delete response:', response);
       
       if (!response.success) {
         throw new Error(response.error || 'Failed to delete comment');
@@ -374,13 +368,7 @@ const HabitCommentsModal = ({ habit, onClose, onRefresh }) => {
                   const commentKey = `${item.date}-${item.displayIndex}-${index}`;
                   const isDeleting = deletingCommentKey === commentKey;
                   
-                  // Check if current user can delete this comment
-                  // For private habits: only creator can delete
-                  // For team habits: only the comment owner can delete
-                  const canDelete = currentUserId && (
-                    (habit.is_private && habit.created_by === currentUserId) ||
-                    (!habit.is_private && item.user_id === currentUserId)
-                  );
+                  const canDelete = currentUserId && item.user_id === currentUserId;
                   
                   return (
                     <div 
@@ -400,12 +388,6 @@ const HabitCommentsModal = ({ habit, onClose, onRefresh }) => {
                               border: `1px solid ${habit.color}60`
                             }}>
                               Today
-                            </span>
-                          )}
-                          {/* Show user name for team habits */}
-                          {!habit.is_private && item.user && (
-                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-50 dark:bg-indigo-900/20 midnight:bg-indigo-900/10 text-indigo-700 dark:text-indigo-300 midnight:text-indigo-300 border border-indigo-200 dark:border-indigo-700 midnight:border-indigo-700">
-                              👤 {item.user.name || item.user.email?.split('@')[0] || 'Team Member'}
                             </span>
                           )}
                         </div>

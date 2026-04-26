@@ -113,12 +113,6 @@ export const habitApi = {
     const response = await authService.authenticatedFetch(`${Habit_API_URL}/api/habits/analytics?project_id=${projectId}`, withTimezone());
     return handleResponse(response);
   },
-
-  // Get performer details
-  getPerformerDetails: async (projectId, userId) => {
-    const response = await authService.authenticatedFetch(`${Habit_API_URL}/api/habits/performer/${userId}?project_id=${projectId}`, withTimezone());
-    return handleResponse(response);
-  },
 };
 
 // Combined operations for convenience

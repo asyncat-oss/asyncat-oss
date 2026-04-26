@@ -14,7 +14,7 @@ const MIN_TARGET_VALUE = 1;
 const MAX_TARGET_VALUE = 10000;
 const VALID_FREQUENCIES = ['daily', 'weekly', 'monthly'];
 const VALID_TRACKING_TYPES = ['boolean', 'numeric', 'duration'];
-const VALID_CATEGORIES = ['general', 'development', 'communication', 'productivity', 'quality', 'learning', 'collaboration', 'health'];
+const VALID_CATEGORIES = ['general', 'development', 'communication', 'productivity', 'quality', 'learning', 'health'];
 
 // ─── XP / Gamification ────────────────────────────────────────────────────────
 
@@ -956,7 +956,6 @@ async function getHabitAnalytics(req, res) {
           xpToNextLevel: levelInfo.nextLevelXP,
           levelProgress: levelInfo.progressPercent,
           completionRate: Math.min(100, userCompletionRate),
-          rank: 1
         },
         habitPerformance
       }
@@ -974,152 +973,10 @@ function emptyAnalytics() {
       completionsToday: 0, completionsThisWeek: 0,
       currentStreak: 0, longestStreak: 0, bestHabitStreak: null,
       level: 1, xp: 0, xpInCurrentLevel: 0, xpToNextLevel: 50,
-      levelProgress: 0, completionRate: 0, rank: 1
+      levelProgress: 0, completionRate: 0,
     },
     habitPerformance: []
   };
-}
-
-/**
- * GET /api/habits/:habitId/team-completions
- * Kept for API compatibility — returns only the current user's completions.
- */
-async function getTeamCompletions(req, res) {
-  try {
-    const user = req.user;
-    const db = req.db;
-    const { habitId } = req.params;
-    const { date } = req.query;
-    const targetDate = date || new Date().toISOString().split('T')[0];
-
-    const { data: habit, error: habitError } = await db
-      .from('habits')
-      .select('*')
-      .eq('id', habitId)
-      .single();
-
-    if (habitError || !habit) {
-      return res.status(404).json({ success: false, error: 'Habit not found' });
-    }
-
-    await verifyProjectAccess(user, db, habit.project_id);
-
-    const { data: completions, error } = await db
-      .from('habit_completions')
-      .select('*')
-      .eq('habit_id', habitId)
-      .eq('user_id', user.id)
-      .eq('completed_date', targetDate);
-
-    if (error) throw error;
-
-    res.json({ success: true, data: completions || [] });
-  } catch (error) {
-    console.error('Get team completions error:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to fetch completions' });
-  }
-}
-
-/**
- * GET /api/habits/performer/:userId
- */
-async function getPerformerDetails(req, res) {
-  try {
-    const user = req.user;
-    const db = req.db;
-    const { project_id } = req.query;
-
-    if (!project_id) {
-      return res.status(400).json({ success: false, error: 'Project ID is required' });
-    }
-
-    await verifyProjectAccess(user, db, project_id);
-
-    const { data: habits } = await db
-      .from('habits')
-      .select('id, name, icon, color, category, tracking_type, target_value, frequency')
-      .eq('project_id', project_id)
-      .eq('is_active', true);
-
-    if (!habits || habits.length === 0) {
-      return res.json({ success: true, data: { completionsThisWeek: 0, currentStreak: 0, level: 1, recentCompletions: [], topHabits: [] } });
-    }
-
-    const habitIds = habits.map(h => h.id);
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-
-    const { data: weekCompletions } = await db
-      .from('habit_completions')
-      .select('*')
-      .in('habit_id', habitIds)
-      .eq('user_id', user.id)
-      .gte('completed_date', weekAgo.toISOString().split('T')[0]);
-
-    const { data: allCompletions } = await db
-      .from('habit_completions')
-      .select('*')
-      .in('habit_id', habitIds)
-      .eq('user_id', user.id);
-
-    const { data: streaks } = await db
-      .from('habit_streaks')
-      .select('*')
-      .in('habit_id', habitIds)
-      .eq('user_id', user.id);
-
-    const { data: recentCompletions } = await db
-      .from('habit_completions')
-      .select('habit_id, completed_date, value')
-      .in('habit_id', habitIds)
-      .eq('user_id', user.id)
-      .order('completed_date', { ascending: false })
-      .limit(10);
-
-    const recentWithDetails = (recentCompletions || []).map(c => {
-      const habit = habits.find(h => h.id === c.habit_id);
-      return { habit_id: c.habit_id, habit_name: habit?.name || 'Unknown', icon: habit?.icon || '🎯', color: habit?.color || '#6366f1', completed_date: c.completed_date, value: c.value };
-    });
-
-    const habitCompletionCounts = {};
-    (allCompletions || []).forEach(c => {
-      habitCompletionCounts[c.habit_id] = (habitCompletionCounts[c.habit_id] || 0) + 1;
-    });
-
-    const topHabits = Object.entries(habitCompletionCounts)
-      .map(([habitId, count]) => {
-        const habit = habits.find(h => h.id === habitId);
-        return { habit_id: habitId, habit_name: habit?.name || 'Unknown', icon: habit?.icon || '🎯', color: habit?.color || '#6366f1', category: habit?.category || 'general', completions: count };
-      })
-      .sort((a, b) => b.completions - a.completions)
-      .slice(0, 5);
-
-    let totalXP = 0;
-    (allCompletions || []).forEach((c, i) => {
-      const habit = habits.find(h => h.id === c.habit_id);
-      if (habit) totalXP += calculateCompletionXP(habit, c.value || 1, Math.min(i, 10));
-    });
-
-    const levelInfo = calculateLevelFromXP(totalXP);
-    const currentStreak = Math.max(0, ...(streaks?.map(s => s.current_streak) || [0]));
-
-    res.json({
-      success: true,
-      data: {
-        completionsThisWeek: weekCompletions?.length || 0,
-        currentStreak,
-        level: levelInfo.level,
-        xp: totalXP,
-        levelProgress: levelInfo.progressPercent,
-        xpToNextLevel: levelInfo.nextLevelXP,
-        recentCompletions: recentWithDetails,
-        topHabits
-      }
-    });
-  } catch (error) {
-    console.error('Get performer details error:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to fetch performer details' });
-  }
 }
 
 /**
@@ -1292,8 +1149,6 @@ export {
   completeHabit,
   uncompleteHabit,
   getHabitAnalytics,
-  getTeamCompletions,
-  getPerformerDetails,
   updateHabitProgress,
   addHabitNote,
   deleteHabitNote

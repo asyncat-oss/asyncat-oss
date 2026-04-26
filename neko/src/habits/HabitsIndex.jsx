@@ -308,7 +308,6 @@ const HabitsIndex = ({ selectedProject, session, currentPage }) => {
           analytics={analytics}
           session={session}
           loading={loading.analytics}
-          selectedProject={selectedProject}
         />
 
         {/* Habits list */}
@@ -336,9 +335,6 @@ const HabitsIndex = ({ selectedProject, session, currentPage }) => {
                 <HabitCard
                   key={`${habit.id}-${habit.completed_today}-${habit.today_notes || ''}-${habit.updated_at || Date.now()}`}
                   habit={habit}
-                  teamMembers={[]}
-                  teamCompletions={[]}
-                  currentUserId={session?.user?.id}
                   onToggleCompletion={toggleHabitCompletion}
                   onAddProgress={addHabitProgress}
                   onUpdateHabit={updateHabit}
@@ -378,9 +374,6 @@ const HabitsIndex = ({ selectedProject, session, currentPage }) => {
           onToggleCompletion={toggleHabitCompletion}
           onAddProgress={addHabitProgress}
           onDelete={deleteHabit}
-          teamMembers={[]}
-          teamCompletions={[]}
-          currentUserId={session?.user?.id}
           session={session}
         />
       )}

@@ -1,10 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  X, 
-  Flame, 
-  TrendingUp, 
-  Calendar, 
-  Users, 
+import {
+  X,
+  Flame,
+  TrendingUp,
+  Calendar,
   Target,
   CheckCircle2,
   Circle,
@@ -20,16 +19,13 @@ import {
 import AddProgressModal from './AddProgressModal';
 import HabitCalendarView from './HabitCalendarView';
 
-const HabitDetailsModal = ({ 
-  habit, 
-  isOpen, 
-  onClose, 
+const HabitDetailsModal = ({
+  habit,
+  isOpen,
+  onClose,
   onToggleCompletion,
   onAddProgress,
   onDelete,
-  teamMembers,
-  teamCompletions,
-  currentUserId,
   session
 }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -87,17 +83,6 @@ const HabitDetailsModal = ({
     return Math.round((completed / 30) * 100);
   }, [habit.recent_completions]);
 
-  // Get team completion stats for this habit
-  const teamStats = useMemo(() => {
-    const total = teamMembers.length;
-    const completed = teamCompletions.length;
-    return {
-      total,
-      completed,
-      percentage: total > 0 ? Math.round((completed / total) * 100) : 0
-    };
-  }, [teamMembers, teamCompletions]);
-
   // Get tracking icon
   const getTrackingIcon = () => {
     switch (habit.tracking_type) {
@@ -107,24 +92,9 @@ const HabitDetailsModal = ({
     }
   };
 
-  // Check if current user can complete this habit - NEW
-  const canComplete = useMemo(() => {
-    // If habit is private, only creator can complete
-    if (habit.is_private) {
-      return habit.created_by === currentUserId;
-    }
-    // Team habits can be completed by anyone
-    return true;
-  }, [habit.is_private, habit.created_by, currentUserId]);
-
-  // Check if current user can edit/delete this habit - NEW
-  const canEdit = useMemo(() => {
-    return habit.created_by === currentUserId;
-  }, [habit.created_by, currentUserId]);
-
   // Handle habit completion with optimistic update
   const handleToggle = async () => {
-    if (isCompleting || !canComplete) return; // Add canComplete check
+    if (isCompleting) return;
     
     // For boolean habits, toggle completion (complete/uncomplete)
     if (habit.tracking_type === 'boolean') {
@@ -271,7 +241,7 @@ const HabitDetailsModal = ({
 
           {/* Tabs */}
           <div className="flex space-x-1 px-6 border-t border-gray-200 dark:border-gray-700 midnight:border-gray-800">
-            {['overview', 'progress', 'team'].map((tab) => (
+            {['overview', 'progress'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -334,7 +304,6 @@ const HabitDetailsModal = ({
                   <DetailItem label="Target" value={`${habit.target_value} ${habit.unit || ''}`} />
                   <DetailItem label="Tracking Type" value={habit.tracking_type} />
                   <DetailItem label="Frequency" value={habit.frequency?.charAt(0).toUpperCase() + habit.frequency?.slice(1) || 'Daily'} />
-                  <DetailItem label="Privacy" value={habit.is_private ? 'Private 🔒' : 'Team 👥'} />
                   <DetailItem 
                     label="Created" 
                     value={new Date(habit.created_at).toLocaleDateString()} 
@@ -346,9 +315,8 @@ const HabitDetailsModal = ({
                 </div>
               </div>
 
-              {/* Today's Status - Only show if user can complete this habit */}
-              {canComplete && (
-                <div className="bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg p-4">
+              {/* Today's Status */}
+              <div className="bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg p-4">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white mb-3">
                     Today's Status
                   </h3>
@@ -370,8 +338,8 @@ const HabitDetailsModal = ({
                       {habit.tracking_type !== 'boolean' && (
                         <button
                           onClick={() => setShowAddProgressModal(true)}
-                          disabled={isCompleting || !canComplete}
-                          title={!canComplete ? 'Only the creator can complete this private habit' : 'Adjust progress'}
+                          disabled={isCompleting}
+                          title="Adjust progress"
                           className="px-3 py-2 rounded-lg font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-600 midnight:bg-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500 midnight:hover:bg-gray-600 border border-gray-300 dark:border-gray-500 midnight:border-gray-600"
                         >
                           Adjust Progress
@@ -379,8 +347,7 @@ const HabitDetailsModal = ({
                       )}
                       <button
                         onClick={handleToggle}
-                        disabled={isCompleting || !canComplete}
-                        title={!canComplete ? 'Only the creator can complete this private habit' : ''}
+                        disabled={isCompleting}
                         className={`px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                           currentCompleted
                             ? 'bg-gray-200 dark:bg-gray-600 midnight:bg-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500 midnight:hover:bg-gray-600'
@@ -410,7 +377,6 @@ const HabitDetailsModal = ({
                     </div>
                   )}
                 </div>
-              )}
             </div>
           )}
 
@@ -507,224 +473,6 @@ const HabitDetailsModal = ({
             </div>
           )}
 
-          {activeTab === 'team' && (
-            <div className="space-y-6">
-              {/* Privacy Badge */}
-              <div className={`p-4 rounded-lg border ${
-                habit.is_private 
-                  ? 'bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800 border-gray-300 dark:border-gray-600 midnight:border-gray-700'
-                  : 'bg-indigo-50 dark:bg-indigo-900/20 midnight:bg-indigo-900/10 border-indigo-200 dark:border-indigo-700 midnight:border-indigo-700'
-              }`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{habit.is_private ? '🔒' : '👥'}</span>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white">
-                      {habit.is_private ? 'Private Habit' : 'Team Habit'}
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400 mt-1">
-                      {habit.is_private 
-                        ? 'Only you can complete and edit this habit. Your progress is private.'
-                        : 'All project members can complete this habit and contribute to shared progress.'
-                      }
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Show team progress only for non-private habits */}
-              {!habit.is_private && (
-                <>
-                  {/* Team Progress */}
-                  <div className="bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg p-6">
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white mb-4">
-                      Team Progress Today
-                    </h3>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-                        {teamStats.completed} of {teamStats.total} members completed
-                      </span>
-                      <span className="text-2xl font-bold text-gray-900 dark:text-gray-100 midnight:text-white">
-                        {teamStats.percentage}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-600 midnight:bg-gray-700 rounded-full h-3">
-                      <div 
-                        className="h-3 rounded-full transition-all"
-                        style={{ 
-                          width: `${teamStats.percentage}%`,
-                          backgroundColor: habitColor
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Team Members */}
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white mb-4">
-                      Team Members
-                    </h3>
-                    <div className="space-y-2">
-                      {teamMembers.map((member) => {
-                        const hasCompleted = teamCompletions.some(c => c.user_id === member.user_id || c.user_id === member.id);
-                        const isCurrentUser = (member.user_id || member.id) === currentUserId;
-                        
-                        return (
-                          <div
-                            key={member.user_id || member.id}
-                            className={`flex items-center justify-between p-3 rounded-lg ${
-                              isCurrentUser
-                                ? 'bg-indigo-50 dark:bg-indigo-900/20 midnight:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-800 midnight:border-indigo-800'
-                                : 'bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                                hasCompleted
-                                  ? 'text-white'
-                                  : 'bg-gray-200 dark:bg-gray-600 midnight:bg-gray-700 text-gray-600 dark:text-gray-300 midnight:text-gray-300'
-                              }`}
-                              style={hasCompleted ? { backgroundColor: habitColor } : {}}>
-                                {(member.users?.name || member.user?.name || member.name || 'U').charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900 dark:text-gray-100 midnight:text-white">
-                                  {member.users?.name || member.user?.name || member.name || 'Unknown'}
-                                  {isCurrentUser && ' (You)'}
-                                </div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-                                  {member.users?.email || member.user?.email || member.email || ''}
-                                </div>
-                              </div>
-                            </div>
-                            {hasCompleted && (
-                              <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
-                                <CheckCircle2 className="w-5 h-5" />
-                                <span className="text-sm font-medium">Completed</span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Show creator info and completion status for private habits */}
-              {habit.is_private && (
-                <>
-                  {/* Creator's Today Status - Only show to creator */}
-                  {habit.team_stats && habit.created_by === currentUserId && (
-                    <div className="bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg p-6">
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white mb-4">
-                        Today's Status
-                      </h3>
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-                          Your progress today
-                        </span>
-                        <span className="text-2xl font-bold text-gray-900 dark:text-gray-100 midnight:text-white">
-                          {habit.team_stats.completion_percentage}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-600 midnight:bg-gray-700 rounded-full h-3">
-                        <div 
-                          className="h-3 rounded-full transition-all bg-gradient-to-r from-gray-500 to-gray-600"
-                          style={{ 
-                            width: `${habit.team_stats.completion_percentage}%`
-                          }}
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        {habit.team_stats.creator_completed ? (
-                          <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
-                            <CheckCircle2 className="w-5 h-5" />
-                            <span className="text-sm font-medium">Completed today</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
-                            <Circle className="w-5 h-5" />
-                            <span className="text-sm font-medium">Not completed yet</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Creator Status - Only show to non-creator team members */}
-                  {habit.team_stats && habit.created_by !== currentUserId && (
-                    <div className="bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg p-6">
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white mb-4">
-                        Creator Status
-                      </h3>
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-                          Creator's progress today
-                        </span>
-                        <span className="text-2xl font-bold text-gray-900 dark:text-gray-100 midnight:text-white">
-                          {habit.team_stats.completion_percentage}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-600 midnight:bg-gray-700 rounded-full h-3">
-                        <div 
-                          className="h-3 rounded-full transition-all bg-gradient-to-r from-gray-500 to-gray-600"
-                          style={{ 
-                            width: `${habit.team_stats.completion_percentage}%`
-                          }}
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        {habit.team_stats.creator_completed ? (
-                          <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
-                            <CheckCircle2 className="w-5 h-5" />
-                            <span className="text-sm font-medium">Creator completed today</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
-                            <Circle className="w-5 h-5" />
-                            <span className="text-sm font-medium">Not completed yet</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Habit Owner Info */}
-                  <div className="bg-gray-50 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg p-6">
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white mb-4">
-                      Habit Owner
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-medium text-lg ${
-                          habit.team_stats?.creator_completed ? '' : 'opacity-60'
-                        }`}
-                        style={{ 
-                          backgroundColor: habit.team_stats?.creator_completed ? habitColor : '#6b7280'
-                        }}
-                      >
-                        {(habit.created_by_user?.name || habit.created_by_user?.email || 'U').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900 dark:text-gray-100 midnight:text-white">
-                          {habit.created_by_user?.name || 'Unknown User'}
-                          {habit.created_by === currentUserId && ' (You)'}
-                        </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-                          {habit.created_by_user?.email || ''}
-                        </div>
-                      </div>
-                      {habit.team_stats?.creator_completed && (
-                        <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
-                          <CheckCircle2 className="w-5 h-5" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Footer Actions - Always visible at bottom */}
@@ -733,9 +481,8 @@ const HabitDetailsModal = ({
             {!showDeleteConfirm ? (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                disabled={!canEdit}
-                title={!canEdit ? 'Only the creator can delete this habit' : 'Delete habit'}
-                className="flex items-center space-x-2 px-4 py-2 text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete habit"
+                className="flex items-center space-x-2 px-4 py-2 text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/10 rounded-lg transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Delete Habit</span>
