@@ -11,13 +11,6 @@ const CommandCenterV2Enhanced = () => {
   const isAgentRoute = location.pathname.startsWith('/agents');
   const initialMode = isAgentRoute ? 'agent' : 'chat';
 
-  // Derive sub-view for agent routes
-  const initialAgentView = location.pathname.startsWith('/agents/tools')
-    ? 'tools'
-    : location.pathname.startsWith('/agents/skills')
-    ? 'skills'
-    : 'run';
-
   useEffect(() => {
     if (conversationId && conversationId !== currentConversationId) {
       loadConversation(conversationId);
@@ -28,7 +21,6 @@ const CommandCenterV2Enhanced = () => {
     <CommandCenterV2EnhancedOriginal
       initialMode={initialMode}
       agentSessionId={sessionId || null}
-      initialAgentView={initialAgentView}
     />
   );
 };

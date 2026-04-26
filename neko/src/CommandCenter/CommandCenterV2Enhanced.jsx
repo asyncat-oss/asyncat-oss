@@ -31,6 +31,50 @@ const AGENT_EXAMPLES = [
   { label: 'Browse & extract',     prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
 ];
 
+const AGENT_CATEGORIES = [
+  {
+    id: 'research',
+    icon: BookOpen,
+    label: 'Research',
+    prompts: [
+      { label: 'Research & summarize', prompt: 'Search the web for the latest AI agent frameworks in 2025 and write a concise comparison.' },
+      { label: 'Browse & extract', prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
+    ],
+  },
+  {
+    id: 'plan',
+    icon: LayoutList,
+    label: 'Plan',
+    prompts: [
+      { label: 'Plan my week', prompt: 'Review my tasks and calendar, then build a prioritized daily plan for the week ahead.' },
+    ],
+  },
+  {
+    id: 'notes',
+    icon: PenLine,
+    label: 'Notes',
+    prompts: [
+      { label: 'Save a note', prompt: 'Research the key differences between REST and GraphQL APIs and save a concise reference note.' },
+    ],
+  },
+  {
+    id: 'code',
+    icon: Terminal,
+    label: 'Code',
+    prompts: [
+      { label: 'Shell task', prompt: 'List all files larger than 10MB in the current directory and show their sizes.' },
+    ],
+  },
+  {
+    id: 'memory',
+    icon: Brain,
+    label: 'Memory',
+    prompts: [
+      { label: 'Remember context', prompt: 'Remember that I prefer TypeScript over JavaScript and concise, commented code style.' },
+    ],
+  },
+];
+
 function normalizeAgentToolRows(rows = []) {
   return rows.map(row => ({
     tool: row.tool_name || row.tool,
@@ -144,8 +188,6 @@ import {
 import { MessageListV2 } from "./components/MessageListV2";
 import { MessageInputV2 } from "./components/MessageInputV2";
 import AgentRunFeed from '../Agent/components/AgentRunFeed';
-import AgentToolsView from '../Agent/components/AgentToolsView';
-import AgentSkillsView from '../Agent/components/AgentSkillsView';
 import ArtifactsGallery from "./components/artifacts/ArtifactsGallery";
 import SaveAsNoteModal from "./components/SaveAsNoteModal";
 import ClarifyingQuestionsWidget from "./components/ClarifyingQuestionsWidget";
@@ -180,9 +222,11 @@ import {
   Square,
   Wrench,
   ShieldCheck,
+  Brain,
+  Terminal,
 } from "lucide-react";
 
-const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, initialAgentView = 'run' }) => {
+const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
   const { userName } = useUser();
 
@@ -234,7 +278,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const agentAbortRef = useRef(null);
   const agentFeedEndRef = useRef(null);
-  const [agentView, setAgentView] = useState(initialAgentView); // 'run' | 'tools' | 'skills'
 
   const conversationTokens = useMemo(() => {
     const historyChars = (conversationHistory || []).reduce(
@@ -511,11 +554,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
     setExplainPanel(null);
     setShowGlossary(false);
   }, [currentConversationId]);
-
-  // Sync mode + agentView when route changes
-  useEffect(() => {
-    setAgentView(initialAgentView);
-  }, [initialAgentView]);
 
   useEffect(() => {
     setMode(initialMode);
@@ -1102,6 +1140,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
   ];
 
   const [activeCategory, setActiveCategory] = useState(null);
+  const [agentActiveCategory, setAgentActiveCategory] = useState(null);
 
   // ── Unified top bar ──────────────────────────────────────────────────────────
   const TopBar = (
@@ -1277,113 +1316,85 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         {mode === 'agent' ? (
           // ── Agent mode ────────────────────────────────────────────────────────
           <>
-            {/* Agent sub-nav bar */}
-            <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2 flex items-center gap-2">
-              {/* Sub-tabs: Run | Tools | Skills */}
-              <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
-                {[
-                  { id: 'run',    label: 'Run' },
-                  { id: 'tools',  label: 'Tools' },
-                  { id: 'skills', label: 'Skills' },
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setAgentView(tab.id)}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                      agentView === tab.id
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+            {/* Goal title bar — shown when there's an active/completed run */}
+            {agentEvents.length > 0 && (
+              <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2 flex items-center gap-2">
+                {/* Status */}
+                {agentRunning ? (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Running
+                  </span>
+                ) : agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} />}
 
-              {/* Run tab extras */}
-              {agentView === 'run' && agentEvents.length > 0 && (
-                <>
-                  {agentRunning ? (
-                    <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Running
-                    </span>
-                  ) : agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} />}
-                  {agentRunning ? (
-                    <button
-                      onClick={handleAgentStop}
-                      className="flex items-center gap-1.5 px-2 py-1 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/60 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    >
-                      <Square className="w-3 h-3" /> Stop
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); setAgentConversationHistory([]); setAgentCurrentSessionId(null); setIsEditingGoal(false); }}
-                      className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      <RotateCcw className="w-3 h-3" /> New run
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Goal title bar — shown when there's an active/completed run, mirrors chat header */}
-            {agentView === 'run' && agentEvents.length > 0 && (
-              <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2.5 flex items-center gap-2">
-                {isEditingGoal ? (
-                  <>
-                    <input
-                      type="text"
-                      value={editGoalText}
-                      onChange={e => setEditGoalText(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleAgentRename(); if (e.key === 'Escape') setIsEditingGoal(false); }}
-                      onBlur={handleAgentRename}
-                      className="flex-1 text-sm bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-300 dark:border-gray-600 midnight:border-slate-600 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
-                      autoFocus
-                    />
-                    <button onClick={handleAgentRename} className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors">
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => setIsEditingGoal(false)} className="p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => { setEditGoalText(agentCurrentGoal); setIsEditingGoal(true); }}
-                      className="group flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors cursor-text min-w-0 flex-1 text-left"
-                      title="Click to rename"
-                    >
-                      <span className="truncate">{agentCurrentGoal || 'Agent run'}</span>
-                      <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
-                    </button>
-                    {agentCurrentSessionId && !agentRunning && (
-                      <button
-                        onClick={() => setShowDeleteAgentConfirm(true)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
-                        title="Delete this run"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
+                {/* Goal title */}
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  {isEditingGoal ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editGoalText}
+                        onChange={e => setEditGoalText(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAgentRename(); if (e.key === 'Escape') setIsEditingGoal(false); }}
+                        onBlur={handleAgentRename}
+                        className="flex-1 text-sm bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-300 dark:border-gray-600 midnight:border-slate-600 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                        autoFocus
+                      />
+                      <button onClick={handleAgentRename} className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors">
+                        <Check className="w-3.5 h-3.5" />
                       </button>
-                    )}
-                  </>
-                )}
+                      <button onClick={() => setIsEditingGoal(false)} className="p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => { setEditGoalText(agentCurrentGoal); setIsEditingGoal(true); }}
+                        className="group flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors cursor-text min-w-0 flex-1 text-left"
+                        title="Click to rename"
+                      >
+                        <span className="truncate">{agentCurrentGoal || 'Agent run'}</span>
+                        <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
+                      </button>
+                      {agentCurrentSessionId && !agentRunning && (
+                        <>
+                          <button
+                            onClick={handleAgentStop}
+                            className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            title="Stop"
+                          >
+                            <Square className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); setAgentConversationHistory([]); setAgentCurrentSessionId(null); setIsEditingGoal(false); }}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            title="New run"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => setShowDeleteAgentConfirm(true)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            title="Delete this run"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Sub-view content */}
-            {agentView === 'tools' ? (
-              <AgentToolsView />
-            ) : agentView === 'skills' ? (
-              <AgentSkillsView />
-            ) : agentEvents.length === 0 && !agentRunning && !agentLoadingSession ? (
-              // Run tab — empty state
-              <div className="flex flex-col items-center justify-center flex-1 px-6 py-10 overflow-y-auto">
-                <div className="max-w-xl w-full">
-                  <div className="mb-7 text-center">
+            {/* Main content */}
+            {agentEvents.length === 0 && !agentRunning && !agentLoadingSession ? (
+              <div className="flex flex-col items-center justify-center flex-1 px-6 py-8 overflow-y-auto">
+                <div className="max-w-2xl w-full">
+                  <div className="mb-6 text-center">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Give it a goal — it figures out the steps</p>
                   </div>
+
                   <MessageInputV2
                     onSubmit={handleAgentRun}
                     disabled={agentRunning}
@@ -1392,25 +1403,50 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
                     hasMessages={false}
                     conversationTokens={0}
                   />
+
                   <div className="mt-4">
-                    <p className="text-xs text-gray-400 dark:text-gray-600 mb-2 text-center">Try one of these</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {AGENT_EXAMPLES.map((eg, i) => (
-                        <button
-                          key={i}
-                          onClick={() => handleAgentRun({ content: eg.prompt })}
-                          className="text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
-                        >
-                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">{eg.label}</p>
-                          <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-snug">{eg.prompt}</p>
-                        </button>
-                      ))}
+                    <div className="flex gap-2 flex-wrap justify-center mb-3">
+                      {AGENT_CATEGORIES.map((cat) => {
+                        const Icon = cat.icon;
+                        const isActive = agentActiveCategory === cat.id;
+                        return (
+                          <button
+                            key={cat.id}
+                            onClick={() => setAgentActiveCategory(isActive ? null : cat.id)}
+                            className={'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all duration-150 ' +
+                              (isActive
+                                ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-500 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 text-gray-900 dark:text-white midnight:text-slate-100'
+                                : 'border-gray-200 dark:border-gray-800 midnight:border-slate-800 text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:border-gray-300 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-slate-300')}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                            {cat.label}
+                          </button>
+                        );
+                      })}
                     </div>
+
+                    {agentActiveCategory && (
+                      <div className="flex flex-col border border-gray-200 dark:border-gray-800 midnight:border-slate-800 rounded-xl overflow-hidden">
+                        {AGENT_CATEGORIES.find(c => c.id === agentActiveCategory)?.prompts.map((p, i) => (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              handleAgentRun({ content: p.prompt });
+                              setAgentActiveCategory(null);
+                            }}
+                            className={'px-4 py-2.5 text-sm text-left text-gray-600 dark:text-gray-400 midnight:text-slate-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 midnight:hover:bg-slate-800/40 hover:text-gray-900 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors duration-100 ' +
+                              (i < AGENT_CATEGORIES.find(c => c.id === agentActiveCategory).prompts.length - 1 ? 'border-b border-gray-100 dark:border-gray-800/80 midnight:border-slate-800/80' : '')}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             ) : (
-              // Run tab — active/history
+              // Active run
               <>
                 <div className="flex-1 min-h-0 flex">
                   <div className="flex-1 min-w-0 overflow-y-auto px-5 py-4">

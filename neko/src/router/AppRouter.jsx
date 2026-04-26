@@ -21,6 +21,7 @@ import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Settings/ModelsPage';
+import AgentToolsSkillsPage from '../Agent/AgentToolsSkillsPage';
 
 
 const loadingMessages = [
@@ -219,12 +220,12 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "agents/tools",
-        element: <CommandCenterV2Enhanced />,
+        element: <AgentToolsSkillsPage initialTab="tools" />,
         errorElement: <RouteErrorElement />
       },
       {
         path: "agents/skills",
-        element: <CommandCenterV2Enhanced />,
+        element: <AgentToolsSkillsPage initialTab="skills" />,
         errorElement: <RouteErrorElement />
       },
       {

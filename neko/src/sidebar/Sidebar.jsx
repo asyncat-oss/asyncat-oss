@@ -18,12 +18,13 @@ import {
 	ChevronRight,
 	Info,
 	Search,
-	Cpu,
-	Trash2,
-	Bot,
-	History,
-	MessageSquare as ChatIcon,
-	Calendar as CalendarIcon,
+Cpu,
+  Trash2,
+  Bot,
+  History,
+  Wrench,
+  MessageSquare as ChatIcon,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 
 import ProjectExplorer from "./ProjectExplorer";
@@ -1077,6 +1078,16 @@ const DynamicSidebar = ({
 										>
 											<Cpu className="w-3.5 h-3.5" />
 											Models
+										</button>
+										<button
+											onClick={() => navigate('/agents/tools')}
+											className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition-colors text-left ${basePage === 'agents'
+													? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
+													: 'text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
+												}`}
+										>
+											<Wrench className="w-3.5 h-3.5" />
+											Tools & Skills
 										</button>
 									</div>
 									<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 mb-1" />
