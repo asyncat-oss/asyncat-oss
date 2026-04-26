@@ -1,4 +1,36 @@
 // CommandCenterV2Enhanced.jsx
+
+// ── Agent status badge (module-level to avoid re-mount on every render) ────────
+function AgentStatusBadge({ session }) {
+  if (!session) return null;
+  const hasAnswer = session.scratchpad?.finalAnswer || session.status === 'complete';
+  const hasError  = session.status === 'error' || session.status === 'failed';
+  if (hasError) return (
+    <span className="flex items-center gap-1 text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800/50">
+      <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Failed
+    </span>
+  );
+  if (!hasAnswer) return (
+    <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/50">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Incomplete
+    </span>
+  );
+  return (
+    <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/50">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Complete
+    </span>
+  );
+}
+
+const AGENT_EXAMPLES = [
+  { label: 'Research & summarize', prompt: 'Search the web for the latest AI agent frameworks in 2025 and write a concise comparison.' },
+  { label: 'Plan my week',         prompt: 'Review my tasks and calendar, then build a prioritized daily plan for the week ahead.' },
+  { label: 'Save a note',          prompt: 'Research the key differences between REST and GraphQL APIs and save a concise reference note.' },
+  { label: 'Shell task',           prompt: 'List all files larger than 10MB in the current directory and show their sizes.' },
+  { label: 'Remember context',     prompt: 'Remember that I prefer TypeScript over JavaScript and concise, commented code style.' },
+  { label: 'Browse & extract',     prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
+];
+
 import {
   useState,
   useRef,
@@ -8,6 +40,9 @@ import {
 } from "react";
 import { MessageListV2 } from "./components/MessageListV2";
 import { MessageInputV2 } from "./components/MessageInputV2";
+import AgentRunFeed from '../Agent/components/AgentRunFeed';
+import AgentToolsView from '../Agent/components/AgentToolsView';
+import AgentSkillsView from '../Agent/components/AgentSkillsView';
 import ArtifactsGallery from "./components/artifacts/ArtifactsGallery";
 import SaveAsNoteModal from "./components/SaveAsNoteModal";
 import ClarifyingQuestionsWidget from "./components/ClarifyingQuestionsWidget";
@@ -17,7 +52,7 @@ import ExplainTermPanel from "./components/ExplainTermPanel";
 import GlossaryGallery from "./components/GlossaryGallery";
 import ConversationNavigation from "./components/ConversationNavigation";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
-import { chatApi } from "./commandCenterApi";
+import { chatApi, agentApi } from "./commandCenterApi";
 import { useUser } from "../contexts/UserContext";
 import {
   Edit2,
@@ -34,9 +69,13 @@ import {
   Library,
   Menu,
   BookOpen,
+  Bot,
+  MessageSquare,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
 
-const CommandCenterV2Enhanced = () => {
+const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, initialAgentView = 'run' }) => {
   const commandCenterContext = useCommandCenter();
   const { userName } = useUser();
 
@@ -72,6 +111,18 @@ const CommandCenterV2Enhanced = () => {
   const [showGlossary, setShowGlossary] = useState(false);
   const [showNavigation, setShowNavigation] = useState(true);
   const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // ── Agent mode ──────────────────────────────────────────────────────────────
+  const [mode, setMode] = useState(initialMode);
+  const [agentEvents, setAgentEvents] = useState([]);
+  const [agentStreamingText, setAgentStreamingText] = useState('');
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentCurrentGoal, setAgentCurrentGoal] = useState('');
+  const [agentCurrentSession, setAgentCurrentSession] = useState(null);
+  const [agentLoadingSession, setAgentLoadingSession] = useState(false);
+  const agentAbortRef = useRef(null);
+  const agentFeedEndRef = useRef(null);
+  const [agentView, setAgentView] = useState(initialAgentView); // 'run' | 'tools' | 'skills'
 
   const conversationTokens = useMemo(() => {
     const historyChars = (conversationHistory || []).reduce(
@@ -276,6 +327,56 @@ const CommandCenterV2Enhanced = () => {
     setShowGlossary(false);
   }, [currentConversationId]);
 
+  // Sync mode + agentView when route changes
+  useEffect(() => {
+    setAgentView(initialAgentView);
+  }, [initialAgentView]);
+
+  useEffect(() => {
+    setMode(initialMode);
+    // Clear agent state when switching to chat mode
+    if (initialMode === 'chat') {
+      setAgentEvents([]);
+      setAgentCurrentGoal('');
+      setAgentCurrentSession(null);
+    }
+  }, [initialMode]);
+
+  // Load agent session from URL param
+  useEffect(() => {
+    if (mode !== 'agent' || !agentSessionId) return;
+    setAgentLoadingSession(true);
+    setAgentCurrentSession(null);
+    agentApi.getSession(agentSessionId).then(async res => {
+      const sess = res?.session;
+      if (!sess) return;
+      setAgentCurrentGoal(sess.goal || '');
+      setAgentCurrentSession(sess);
+      let auditRows = [];
+      try {
+        const auditRes = await agentApi.getSessionAudit(agentSessionId);
+        auditRows = auditRes?.audit || [];
+      } catch { /* ignore */ }
+      const sourceRows = auditRows.length
+        ? auditRows.map(r => ({ tool: r.tool_name, args: r.args, result: r.result, round: r.round,
+            permission: r.permission_level, permissionDecision: r.permission_decision,
+            permissionReason: r.permission_reason, workingDir: r.working_dir }))
+        : (sess.toolHistory || []);
+      const toolEvents = sourceRows.map(tc => ({
+        type: 'tool_start',
+        data: { tool: tc.tool, args: tc.args, round: tc.round, permission: tc.permission,
+          permissionDecision: tc.permissionDecision, permissionReason: tc.permissionReason, workingDir: tc.workingDir },
+        result: tc.result,
+      }));
+      const finalAnswer = sess.scratchpad?.finalAnswer;
+      const answerEvents = finalAnswer
+        ? [{ type: 'answer', data: { answer: finalAnswer, round: sess.totalRounds } }] : [];
+      const errorEvents = (sess.status === 'error' || sess.status === 'failed')
+        ? [{ type: 'error', data: { message: sess.error || 'This run encountered an error.' } }] : [];
+      setAgentEvents([...toolEvents, ...answerEvents, ...errorEvents]);
+    }).catch(() => {}).finally(() => setAgentLoadingSession(false));
+  }, [agentSessionId, mode]);
+
   // Handler for annotated term clicks — opens explain panel with pre-baked data
   const handleTermClick = useCallback((term, definition) => {
     setExplainPanel({ term, definition });
@@ -314,6 +415,76 @@ const CommandCenterV2Enhanced = () => {
       [],
     );
   }, [handleSendMessage]);
+
+  // ── Agent handlers ──────────────────────────────────────────────────────────
+  const handleAgentRun = useCallback(async (messageObj) => {
+    const goal = typeof messageObj === 'string' ? messageObj : messageObj?.content;
+    if (!goal?.trim() || agentRunning) return;
+    const submittedGoal = goal.trim();
+    setAgentCurrentGoal(submittedGoal);
+    setAgentEvents([]);
+    setAgentStreamingText('');
+    setAgentRunning(true);
+    setAgentCurrentSession(null);
+    const controller = new AbortController();
+    agentAbortRef.current = controller;
+    try {
+      for await (const event of agentApi.runStream(submittedGoal, [], null, 25, controller.signal)) {
+        if (controller.signal.aborted) break;
+        if (event.type === 'delta') {
+          setAgentStreamingText(prev => prev + (event.data?.content || ''));
+          continue;
+        }
+        if (event.type === 'thinking' || event.type === 'tool_start' || event.type === 'answer') {
+          setAgentStreamingText('');
+        }
+        if (event.type === 'tool_result') {
+          setAgentEvents(prev => {
+            const updated = [...prev];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].type === 'tool_start' && updated[i].data?.tool === event.data?.tool && updated[i].result === undefined) {
+                updated[i] = { ...updated[i], result: event.data?.result };
+                return updated;
+              }
+            }
+            return updated;
+          });
+          continue;
+        }
+        setAgentEvents(prev => [...prev, event]);
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setAgentStreamingText('');
+        setAgentEvents(prev => [...prev, { type: 'error', data: { message: err.message } }]);
+      }
+    } finally {
+      setAgentStreamingText('');
+      setAgentRunning(false);
+      agentAbortRef.current = null;
+      window.dispatchEvent(new CustomEvent('agent-run-complete'));
+    }
+  }, [agentRunning]);
+
+  const handleAgentPermission = useCallback(async (requestId, decision) => {
+    if (!requestId) return;
+    setAgentEvents(prev => prev.map(ev =>
+      ev.type === 'permission_request' && ev.data?.requestId === requestId
+        ? { ...ev, data: { ...ev.data, resolving: true } } : ev
+    ));
+    try {
+      await agentApi.respondPermission(requestId, decision);
+      setAgentEvents(prev => prev.map(ev =>
+        ev.type === 'permission_request' && ev.data?.requestId === requestId
+          ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision } } : ev
+      ));
+    } catch (err) {
+      setAgentEvents(prev => prev.map(ev =>
+        ev.type === 'permission_request' && ev.data?.requestId === requestId
+          ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision: 'error', error: err.message } } : ev
+      ));
+    }
+  }, []);
 
   // Export conversation as Markdown
   const handleExportMarkdown = useCallback(() => {
@@ -692,6 +863,33 @@ const CommandCenterV2Enhanced = () => {
 
   const [activeCategory, setActiveCategory] = useState(null);
 
+  // ── Mode toggle pill ────────────────────────────────────────────────────────
+  const ModePill = (
+    <div className="inline-flex rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 p-0.5">
+      <button
+        onClick={() => setMode('chat')}
+        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+          mode === 'chat'
+            ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+        }`}
+      >
+        <MessageSquare className="w-3 h-3" /> Chat
+      </button>
+      <button
+        onClick={() => setMode('agent')}
+        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+          mode === 'agent'
+            ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+        }`}
+      >
+        <Bot className="w-3 h-3" /> Agent
+      </button>
+    </div>
+  );
+
+
   if (!commandCenterContext) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -724,8 +922,9 @@ const CommandCenterV2Enhanced = () => {
   const welcomeScreenJSX =
     messages.length === 0 ? (
       <div className="flex flex-col min-h-full p-8 relative">
-        {/* Top bar: ghost mode toggle */}
-        <div className="flex items-center justify-end mb-2">
+        {/* Top bar: mode toggle + ghost mode toggle */}
+        <div className="flex items-center justify-between mb-2">
+          {ModePill}
           <button
             onClick={toggleGhostMode}
             className="p-2 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50"
@@ -830,9 +1029,112 @@ const CommandCenterV2Enhanced = () => {
   // Chat Layout
   return (
     <div className="flex h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
-      {/* Chat column — always flex-1, side panel takes its own fixed width */}
+      {/* Main column */}
       <div className="flex flex-col h-full transition-all duration-300 min-w-0 flex-1">
-        {isConversationLoading ? (
+        {mode === 'agent' ? (
+          // ── Agent mode ────────────────────────────────────────────────────────
+          <>
+            {/* Agent sub-nav bar */}
+            <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2 flex items-center gap-2">
+              {/* Sub-tabs: Run | Tools | Skills */}
+              <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                {[
+                  { id: 'run',    label: 'Run' },
+                  { id: 'tools',  label: 'Tools' },
+                  { id: 'skills', label: 'Skills' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setAgentView(tab.id)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                      agentView === tab.id
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Run tab extras */}
+              {agentView === 'run' && agentEvents.length > 0 && !agentRunning && (
+                <>
+                  {agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} />}
+                  <button
+                    onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); }}
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" /> New run
+                  </button>
+                </>
+              )}
+              {agentView === 'run' && agentEvents.length > 0 && (
+                <span className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1 text-right">
+                  {agentCurrentGoal}
+                </span>
+              )}
+
+              <div className="ml-auto">{ModePill}</div>
+            </div>
+
+            {/* Sub-view content */}
+            {agentView === 'tools' ? (
+              <AgentToolsView />
+            ) : agentView === 'skills' ? (
+              <AgentSkillsView />
+            ) : agentEvents.length === 0 && !agentRunning && !agentLoadingSession ? (
+              // Run tab — empty state
+              <div className="flex flex-col items-center justify-center flex-1 px-6 py-10 overflow-y-auto">
+                <div className="max-w-xl w-full">
+                  <div className="mb-7 text-center">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Give it a goal — it figures out the steps</p>
+                  </div>
+                  <MessageInputV2
+                    onSubmit={handleAgentRun}
+                    disabled={agentRunning}
+                    autoFocus
+                    placeholder="Give the agent a goal…"
+                    hasMessages={false}
+                    conversationTokens={0}
+                  />
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-400 dark:text-gray-600 mb-2 text-center">Try one of these</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {AGENT_EXAMPLES.map((eg, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleAgentRun({ content: eg.prompt })}
+                          className="text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+                        >
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">{eg.label}</p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-snug">{eg.prompt}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // Run tab — active/history
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {agentLoadingSession ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading session…
+                  </div>
+                ) : (
+                  <AgentRunFeed
+                    events={agentEvents}
+                    isRunning={agentRunning}
+                    streamingText={agentStreamingText}
+                    onPermissionDecision={handleAgentPermission}
+                  />
+                )}
+                <div ref={agentFeedEndRef} />
+              </div>
+            )}
+          </>
+        ) : isConversationLoading ? (
           <ConversationLoadingSkeleton />
         ) : messages.length === 0 ? (
           welcomeScreenJSX
@@ -875,6 +1177,7 @@ const CommandCenterV2Enhanced = () => {
                   </div>
 
                   <div className="flex items-center gap-3">
+                    {ModePill}
                     {/* Export Dropdown */}
                     {messages.length > 0 && (
                       <div className="relative">
@@ -1073,8 +1376,8 @@ const CommandCenterV2Enhanced = () => {
         )}
       </div>
 
-      {/* Center: artifact/explain panel (when open) */}
-      {(sideArtifact || explainPanel) && (
+      {/* Center: artifact/explain panel (chat mode only) */}
+      {mode !== 'agent' && (sideArtifact || explainPanel) && (
         <div className="w-[45%] max-w-[640px] border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex flex-col h-full">
           {explainPanel ? (
             <ExplainTermPanel
@@ -1096,8 +1399,8 @@ const CommandCenterV2Enhanced = () => {
         </div>
       )}
 
-      {/* Right: "On this page" navigation sidebar */}
-      {hasNavigableHeadings && showNavigation && (
+      {/* Right: "On this page" navigation sidebar (chat mode only) */}
+      {mode !== 'agent' && hasNavigableHeadings && showNavigation && (
         <div className="w-60 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50/30 dark:bg-gray-900/30 midnight:bg-slate-950/30">
           <ConversationNavigation
             messages={messages}

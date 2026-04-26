@@ -1,14 +1,23 @@
 import { useEffect } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { useCommandCenter } from './CommandCenterContextEnhanced';
 import CommandCenterV2EnhancedOriginal from "./CommandCenterV2Enhanced.jsx";
 
 const CommandCenterV2Enhanced = () => {
-  const { selectedProject, session } = useOutletContext();
-  const { conversationId } = useParams();
+  const { conversationId, sessionId } = useParams();
+  const location = useLocation();
   const { loadConversation, currentConversationId } = useCommandCenter();
 
-  // Load conversation when conversationId changes
+  const isAgentRoute = location.pathname.startsWith('/agents');
+  const initialMode = isAgentRoute ? 'agent' : 'chat';
+
+  // Derive sub-view for agent routes
+  const initialAgentView = location.pathname.startsWith('/agents/tools')
+    ? 'tools'
+    : location.pathname.startsWith('/agents/skills')
+    ? 'skills'
+    : 'run';
+
   useEffect(() => {
     if (conversationId && conversationId !== currentConversationId) {
       loadConversation(conversationId);
@@ -17,8 +26,9 @@ const CommandCenterV2Enhanced = () => {
 
   return (
     <CommandCenterV2EnhancedOriginal
-      selectedProject={selectedProject}
-      session={session}
+      initialMode={initialMode}
+      agentSessionId={sessionId || null}
+      initialAgentView={initialAgentView}
     />
   );
 };

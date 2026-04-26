@@ -21,11 +21,9 @@ import {
 	Search,
 	Cpu,
 	Bot,
-	Brain,
 	MessageSquare as ChatIcon,
 	Calendar as CalendarIcon,
 	Loader2,
-	Wrench,
 } from "lucide-react";
 
 import ChatExplorer from "./ChatExplorer";
@@ -37,20 +35,17 @@ import { useWorkspace } from "../contexts/WorkspaceContext";
 import { usePermissions } from "../utils/permissions";
 import { agentApi } from "../CommandCenter/commandCenterApi";
 
-// ── Agents sidebar panel ──────────────────────────────────────────────────────
-function sessionStatus(s) {
-  const hasAnswer = s.scratchpad?.finalAnswer || s.status === 'complete';
-  const hasError  = s.status === 'error' || s.status === 'failed';
-  const isEmpty   = !s.goal || s.goal.trim() === '';
-  if (hasError)  return 'error';
-  if (!hasAnswer && !hasError) return 'incomplete';
-  return 'complete';
+// ── Agent sessions panel (embedded in Chat tab) ───────────────────────────────
+function agentSessionStatus(s) {
+  if (s.status === 'error' || s.status === 'failed') return 'error';
+  if (s.scratchpad?.finalAnswer || s.status === 'complete') return 'complete';
+  return 'incomplete';
 }
 
-const AgentsSidebarContent = memo(({ navigate }) => {
-	const [sessions, setSessions]       = useState([]);
-	const [deletingId, setDeletingId]   = useState(null);
-	const [hoveredId, setHoveredId]     = useState(null);
+const AgentSessionsList = memo(({ navigate }) => {
+	const [sessions, setSessions]     = useState([]);
+	const [deletingId, setDeletingId] = useState(null);
+	const [hoveredId, setHoveredId]   = useState(null);
 
 	const loadSessions = useCallback(() => {
 		agentApi.getSessions(40).then(res => {
@@ -70,15 +65,11 @@ const AgentsSidebarContent = memo(({ navigate }) => {
 		try {
 			await agentApi.deleteSession(id);
 			setSessions(prev => prev.filter(s => s.id !== id));
-			// If we were viewing this session, go back to /agents
 			if (window.location.pathname.includes(id)) navigate('/agents');
 		} catch {}
 		setDeletingId(null);
 	}, [navigate]);
 
-	const isActive = (path) => typeof window !== 'undefined' && window.location.pathname.startsWith(path);
-
-	// Group by date for cleaner display
 	const today = new Date().toDateString();
 	const yesterday = new Date(Date.now() - 86400000).toDateString();
 	const formatDate = (d) => {
@@ -88,110 +79,62 @@ const AgentsSidebarContent = memo(({ navigate }) => {
 		return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 	};
 
+	if (sessions.length === 0) return null;
+
 	let lastDateLabel = null;
 
 	return (
-		<div className="flex flex-col h-full">
-			{/* New Run button */}
-			<div className="px-2 pt-2 pb-1 space-y-0.5">
-				<button
-					onClick={() => navigate('/agents')}
-					className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 midnight:hover:text-gray-100 transition-colors text-left group"
-				>
-					<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
-					New Run
-				</button>
-				<button
-					onClick={() => navigate('/agents/tools')}
-					className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors text-left group"
-				>
-					<Wrench className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
-					Tools
-				</button>
-				<button
-					onClick={() => navigate('/agents/skills')}
-					className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors text-left group"
-				>
-					<Brain className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
-					Skills
-				</button>
-			</div>
+		<div className="px-1 pb-2 space-y-0.5">
+			{sessions.map(s => {
+				const status = agentSessionStatus(s);
+				const dateLabel = s.created_at ? formatDate(s.created_at) : null;
+				const showLabel = dateLabel !== lastDateLabel;
+				lastDateLabel = dateLabel;
+				const active = window.location.pathname.startsWith(`/agents/${s.id}`);
+				const label = s.goal ? s.goal.slice(0, 60) : '(untitled)';
+				const isDeleting = deletingId === s.id;
 
-			{/* Sessions list */}
-			<div className="flex-1 overflow-y-auto px-1 pb-4 space-y-0.5">
-				{sessions.length === 0 && (
-					<p className="text-xs text-gray-400 dark:text-gray-600 text-center py-8 px-3 leading-relaxed">
-						No runs yet.<br />Give the agent a goal above.
-					</p>
-				)}
-
-				{sessions.map(s => {
-					const status  = sessionStatus(s);
-					const dateLabel = s.created_at ? formatDate(s.created_at) : null;
-					const showLabel = dateLabel !== lastDateLabel;
-					lastDateLabel = dateLabel;
-					const active  = isActive(`/agents/${s.id}`);
-					const label   = s.goal ? s.goal.slice(0, 60) : '(untitled)';
-					const isDeleting = deletingId === s.id;
-
-					return (
-						<React.Fragment key={s.id}>
-							{showLabel && dateLabel && (
-								<div className="px-3 py-1.5 mt-3 mb-1 first:mt-1">
-									<span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{dateLabel}</span>
-								</div>
-							)}
-							<div
-								className={`group relative flex items-center gap-2 rounded-lg px-3 py-2 transition-all duration-150 cursor-pointer ${
-									active
-										? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-200'
-										: 'text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 active:scale-[0.98]'
-								}`}
-								onClick={() => navigate(`/agents/${s.id}`)}
-								onMouseEnter={() => setHoveredId(s.id)}
-								onMouseLeave={() => setHoveredId(null)}
-							>
-								{/* Status dot */}
-								<div
-									title={status === 'error' ? 'Error' : status === 'incomplete' ? 'Partial' : 'Done'}
-									className={`flex-shrink-0 w-2 h-2 rounded-full ${
-									status === 'error'      ? 'bg-red-400'
-									: status === 'incomplete' ? 'bg-amber-400'
-									: 'bg-emerald-400'
-								}`}
-								/>
-
-								{/* Label */}
-								<span className={`flex-1 min-w-0 truncate text-sm ${
-									active
-										? 'text-gray-900 dark:text-gray-100 font-medium'
-										: 'text-gray-700 dark:text-gray-300 midnight:text-gray-300'
-								}`}>
-									{label}
-								</span>
-
-								{/* Delete button — visible on hover */}
-								{(hoveredId === s.id || isDeleting) && (
-									<button
-										onClick={(e) => handleDelete(e, s.id)}
-										disabled={isDeleting}
-										className="flex-shrink-0 p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-										title="Delete session"
-									>
-										{isDeleting
-											? <Loader2 className="w-3 h-3 animate-spin" />
-											: <X className="w-3 h-3" />}
-									</button>
-								)}
+				return (
+					<React.Fragment key={s.id}>
+						{showLabel && dateLabel && (
+							<div className="px-3 py-1 mt-2 mb-0.5">
+								<span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{dateLabel}</span>
 							</div>
-						</React.Fragment>
-					);
-				})}
-			</div>
+						)}
+						<div
+							className={`group relative flex items-center gap-2 rounded-lg px-3 py-2 transition-all duration-150 cursor-pointer ${
+								active
+									? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+									: 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-[0.98]'
+							}`}
+							onClick={() => navigate(`/agents/${s.id}`)}
+							onMouseEnter={() => setHoveredId(s.id)}
+							onMouseLeave={() => setHoveredId(null)}
+						>
+							<div className={`flex-shrink-0 w-2 h-2 rounded-full ${
+								status === 'error' ? 'bg-red-400' : status === 'incomplete' ? 'bg-amber-400' : 'bg-emerald-400'
+							}`} />
+							<span className={`flex-1 min-w-0 truncate text-sm ${active ? 'font-medium' : ''}`}>
+								{label}
+							</span>
+							{(hoveredId === s.id || isDeleting) && (
+								<button
+									onClick={(e) => handleDelete(e, s.id)}
+									disabled={isDeleting}
+									className="flex-shrink-0 p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+									title="Delete session"
+								>
+									{isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+								</button>
+							)}
+						</div>
+					</React.Fragment>
+				);
+			})}
 		</div>
 	);
 });
-AgentsSidebarContent.displayName = 'AgentsSidebarContent';
+AgentSessionsList.displayName = 'AgentSessionsList';
 
 
 // Clean Navigation Item Component
@@ -1008,10 +951,9 @@ const DynamicSidebar = ({
 		: null;
 
 
-	// Active mode derived from URL
+	// Active mode derived from URL — only chat and workspace
 	const getMode = (bp) => {
 		if (bp === 'projects' || bp === 'workspace' || bp === 'calendar') return 'workspace';
-		if (bp === 'agents') return 'agents';
 		return 'chat';
 	};
 	const [activeMode, setActiveMode] = useState(() => getMode(basePage));
@@ -1083,7 +1025,6 @@ const DynamicSidebar = ({
 						{[
 							{ mode: 'chat', Icon: ChatIcon, label: 'Chat', path: '/home' },
 							{ mode: 'workspace', Icon: Compass, label: 'Workspace', path: '/workspace' },
-							{ mode: 'agents', Icon: Bot, label: 'Agents', path: '/agents' },
 						].map(({ mode, Icon, label, path }) => (
 							<button
 								key={mode}
@@ -1154,6 +1095,19 @@ const DynamicSidebar = ({
 									<div className="px-1">
 										<ChatExplorer isChatMode={isChatMode} isCollapsed={false} onNewChat={handleNewChat} showNewChatButton={false} />
 									</div>
+									{/* Agent Runs section */}
+									<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 my-1" />
+									<div className="px-2 pb-1">
+										<button
+											onClick={() => navigate('/agents')}
+											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-left group"
+										>
+											<Bot className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
+											Agent Runs
+											<Plus className="w-3 h-3 ml-auto text-gray-300 group-hover:text-gray-500 transition-colors" />
+										</button>
+									</div>
+									<AgentSessionsList navigate={navigate} />
 								</>
 							) : (
 								<p className="text-xs text-gray-400 dark:text-gray-500 text-center px-3 py-8">
@@ -1227,13 +1181,6 @@ const DynamicSidebar = ({
 									/>
 								</div>
 							</div>
-						</div>
-
-						{/* Agents mode */}
-						<div className={`${activeMode !== 'agents' ? 'hidden' : ''}`}>
-							<AgentsSidebarContent
-								navigate={navigate}
-							/>
 						</div>
 
 					</div>
