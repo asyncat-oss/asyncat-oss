@@ -53,6 +53,14 @@ function getResultSummary(result) {
   try { const s = JSON.stringify(result); return s.length > 100 ? s.slice(0, 100) + '…' : s; } catch { return null; }
 }
 
+function FeedFrame({ children, className = '' }) {
+  return (
+    <div className={`max-w-4xl mx-auto ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 // ── Individual event components ───────────────────────────────────────────────
 
 function UserGoalEvent({ data }) {
@@ -79,26 +87,26 @@ function ThinkingEvent({ data }) {
   const words = thought.trim().split(/\s+/).filter(Boolean).length;
 
   return (
-    <div className="mb-2">
+    <FeedFrame className="mb-2">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors text-left"
+        className="flex items-center gap-1.5 py-1 rounded-md hover:text-gray-500 dark:hover:text-gray-400 transition-colors text-left"
       >
         {expanded
           ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
           : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />}
         <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 tracking-wide select-none">
-          Reasoning · Round {data?.round} · {words}w
+          Reasoning · {words} words
         </span>
       </button>
       {expanded && (
-        <div className="mt-1 ml-2 pl-3 border-l-2 border-gray-100 dark:border-gray-800">
+        <div className="mt-1 pl-3 border-l-2 border-gray-100 dark:border-gray-800">
           <pre className="text-[11px] text-gray-400 dark:text-gray-500 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto py-1 pr-1">
             {thought}
           </pre>
         </div>
       )}
-    </div>
+    </FeedFrame>
   );
 }
 
@@ -111,7 +119,8 @@ function ToolEvent({ data, result }) {
   const argsStr = truncateArgs(data?.args);
 
   return (
-    <div className="flex items-start gap-2.5 mb-1.5 group">
+    <FeedFrame className="mb-1.5">
+    <div className="flex items-start gap-2.5 group">
       {/* Status dot / icon */}
       <div className={`flex-shrink-0 w-5 h-5 rounded flex items-center justify-center mt-0.5 ${
         isError   ? 'text-red-400'
@@ -164,6 +173,7 @@ function ToolEvent({ data, result }) {
         )}
       </div>
     </div>
+    </FeedFrame>
   );
 }
 
@@ -175,7 +185,8 @@ function PermissionEvent({ data, onDecision }) {
   const isDenied = decision === 'deny';
 
   return (
-    <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/10 overflow-hidden mb-3">
+    <FeedFrame className="mb-4">
+    <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/10 overflow-hidden">
       <div className="px-3 py-3 flex items-start gap-2.5">
         <div className="flex-shrink-0 w-6 h-6 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 flex items-center justify-center">
           <ShieldAlert className="w-3.5 h-3.5" />
@@ -237,6 +248,7 @@ function PermissionEvent({ data, onDecision }) {
         )}
       </div>
     </div>
+    </FeedFrame>
   );
 }
 
@@ -270,10 +282,22 @@ function AnswerEvent({ data }) {
 
 function ErrorEvent({ data }) {
   return (
-    <div className="rounded border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10 p-2.5 mb-2 flex items-start gap-2">
+    <FeedFrame className="mb-3">
+    <div className="rounded border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10 p-2.5 flex items-start gap-2">
       <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
       <p className="text-xs text-red-700 dark:text-red-300">{data?.message || 'Agent encountered an error.'}</p>
     </div>
+    </FeedFrame>
+  );
+}
+
+function StatusEvent({ data }) {
+  return (
+    <FeedFrame className="mb-3">
+      <div className="text-xs text-gray-400 dark:text-gray-500">
+        {data?.message || 'Agent stopped.'}
+      </div>
+    </FeedFrame>
   );
 }
 
@@ -317,16 +341,19 @@ function StreamingPreview({ text }) {
   }
 
   return (
-    <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-2 pl-1 whitespace-pre-wrap">
+    <FeedFrame className="mb-3">
+    <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
       {clean}
       <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-text-bottom" />
     </div>
+    </FeedFrame>
   );
 }
 
 function RunningIndicator() {
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-2 pl-1">
+    <FeedFrame>
+    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-2">
       <span className="flex gap-0.5">
         <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
         <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -334,6 +361,7 @@ function RunningIndicator() {
       </span>
       Agent is working…
     </div>
+    </FeedFrame>
   );
 }
 
@@ -353,6 +381,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
           case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} />;
           case 'answer':             return <AnswerEvent key={i} data={ev.data} />;
           case 'error':              return <ErrorEvent key={i} data={ev.data} />;
+          case 'status':             return <StatusEvent key={i} data={ev.data} />;
           case 'run_start':          return <RunDivider key={i} data={ev.data} />;
           default:                   return null;
         }

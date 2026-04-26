@@ -84,6 +84,7 @@ export class AgentRuntime {
   async run(goal, conversationHistory = []) {
     let conversationRoundStart = 0;
     let conversationToolStart = 0;
+    const reasoningEvents = [];
 
     // Load or create session
     if (this.continueSessionId) {
@@ -226,6 +227,7 @@ export class AgentRuntime {
       const { thinking, finalAnswer } = this._parseResponse(responseText);
 
       if (thinking) {
+        reasoningEvents.push({ thought: thinking, round, timestamp: new Date().toISOString() });
         this.onEvent({ type: 'thinking', data: { thought: thinking, round } });
       }
 
@@ -255,6 +257,11 @@ export class AgentRuntime {
           this.onEvent({
             type: 'thinking',
             data: { thought: 'The model did not output a valid tool call. Asking for the required tool_call format.', round },
+          });
+          reasoningEvents.push({
+            thought: 'The model did not output a valid tool call. Asking for the required tool_call format.',
+            round,
+            timestamp: new Date().toISOString(),
           });
           continue;
         }
@@ -366,7 +373,9 @@ export class AgentRuntime {
           if (sig === lastToolSig) {
             consecutiveDupCount++;
             if (consecutiveDupCount >= 2) {
-              this.onEvent({ type: 'thinking', data: { thought: `Detected repeated tool call (${tc.tool_name}) — stopping loop.`, round } });
+              const repeatedToolThought = `Detected repeated tool call (${tc.tool_name}) — stopping loop.`;
+              reasoningEvents.push({ thought: repeatedToolThought, round, timestamp: new Date().toISOString() });
+              this.onEvent({ type: 'thinking', data: { thought: repeatedToolThought, round } });
               answer = `I got stuck calling the same tool (${tc.tool_name}) repeatedly. Here's what I found: ${JSON.stringify(result)}`;
               this.onEvent({ type: 'answer', data: { answer, round } });
               break;
@@ -402,6 +411,7 @@ export class AgentRuntime {
       endRound: this.session.totalRounds || conversationRoundStart,
       toolStartIndex: conversationToolStart,
       toolEndIndex: this.session.toolHistory?.length || conversationToolStart,
+      reasoning: reasoningEvents,
     });
     this.session.setScratchpad('conversationRounds', rounds);
 
