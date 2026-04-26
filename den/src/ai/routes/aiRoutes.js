@@ -45,9 +45,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
       message,
       conversationHistory = [],
       projectIds = [],
-      responseStyle = 'normal',
       webSearch = false,
-      thinking = false,
       modelConfig = null,
     } = req.body;
 
@@ -124,7 +122,6 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
     const baseSystemPrompt = generateSystemPrompt({
       workspaceContext,
       projectContext,
-      responseStyleInstructions: responseStyle === 'concise' ? 'Be concise and direct.' : 'Be helpful and thorough.',
       userTimezone: req.body.userTimezone || 'UTC',
       userLocalDateTime: req.body.userLocalDateTime || new Date().toISOString(),
       contextData: contextPrompt,
@@ -136,14 +133,8 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
       ? modelConfig.system_prompt_prefix.trim() + '\n\n'
       : '';
 
-    // Thinking instruction for models that don't natively emit <think> blocks
-    // Native thinking models (QwQ, DeepSeek-R1, etc.) don't need this — they think automatically.
-    const thinkingInstruction = thinking
-      ? '\n\nIMPORTANT: Before giving your final answer, reason step-by-step inside <think>...</think> tags. Think through the problem thoroughly. Then give your clean answer after the closing tag.'
-      : '';
-
     const systemPrompt = isLocal
-      ? promptPrefix + baseSystemPrompt + thinkingInstruction
+      ? promptPrefix + baseSystemPrompt
       : promptPrefix + baseSystemPrompt + buildToolsSystemSection(contextData);
 
     // Local models: trim conversation history more aggressively to stay within context
@@ -169,9 +160,7 @@ router.post('/unified-stream', addAuthenticatedClient, async (req, res, next) =>
     };
 
     // Local models: smaller max tokens to fit within context window
-    const maxTokens = isLocal
-      ? (responseStyle === 'concise' ? 512 : 1024)
-      : (responseStyle === 'concise' ? 1500 : 4000);
+    const maxTokens = isLocal ? 1024 : 4000;
 
     // ── Agentic streaming loop ──────────────────────────────────────────────
     // We iterate: stream → detect tool_calls → execute → stream again

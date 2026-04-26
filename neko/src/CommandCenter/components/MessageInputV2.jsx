@@ -1,24 +1,8 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
-import {
-  Send,
-  Search,
-  Brain,
-  X,
-  Target,
-  BookOpen,
-  GraduationCap,
-} from "lucide-react";
-import ResponseStyleController from "./ResponseStyleController";
+import { Send, Search, X } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
-
-const RESPONSE_STYLES = {
-  normal: { name: "Chillax", icon: Target },
-  concise: { name: "Speedrun", icon: Target },
-  explanatory: { name: "Storyteller", icon: BookOpen },
-  learning: { name: "Professor", icon: GraduationCap },
-};
 
 export const MessageInputV2 = ({
   onSubmit,
@@ -29,21 +13,17 @@ export const MessageInputV2 = ({
   maxLength = 50000,
   hasMessages = false,
   conversationTooLong = false,
-  responseStyle = "normal",
-  onResponseStyleChange,
   conversationTokens = 0,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
 
   const localModel = useLocalModelStatus();
   const { config: modelConfig } = useModelConfig();
   const textareaRef = useRef(null);
 
-  // Token estimation: ~4 chars per token (rough approximation)
   const inputTokens = Math.ceil(value.length / 4);
   const totalTokens = conversationTokens + inputTokens;
   const ctxSize = localModel.ctxSize || modelConfig.ctx_size || 8192;
@@ -52,7 +32,6 @@ export const MessageInputV2 = ({
     Math.round((totalTokens / ctxSize) * 100),
   );
 
-  // Focus on mount if autoFocus
   useEffect(() => {
     if (!textareaRef.current) return;
     if (autoFocus && !disabled) {
@@ -60,7 +39,6 @@ export const MessageInputV2 = ({
     }
   }, [autoFocus]);
 
-  // Re-focus when AI finishes
   const prevDisabledRef = useRef(disabled);
   useEffect(() => {
     if (prevDisabledRef.current && !disabled && textareaRef.current) {
@@ -89,7 +67,6 @@ export const MessageInputV2 = ({
         const messageToSend = {
           content: value.trim(),
           webSearch: webSearchEnabled,
-          thinking: thinkingEnabled,
           modelConfig,
         };
 
@@ -102,14 +79,13 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, webSearchEnabled, thinkingEnabled, modelConfig, onSubmit],
+    [value, disabled, webSearchEnabled, modelConfig, onSubmit],
   );
 
   const handleKeyDown = useCallback(
     (e) => {
       const nativeIsComposing = Boolean(e.nativeEvent?.isComposing);
 
-      // Avoid submitting while composing IME text (Japanese/Chinese/Korean, etc).
       if (
         e.key === "Enter" &&
         !e.shiftKey &&
@@ -125,7 +101,6 @@ export const MessageInputV2 = ({
 
   const canSubmit = value.trim() && !disabled;
 
-  // Border color based on context usage
   const getBorderColor = () => {
     if (!localModel.isReady)
       return "border-gray-200 dark:border-gray-700 midnight:border-gray-700";
@@ -139,7 +114,6 @@ export const MessageInputV2 = ({
   return (
     <div className="bg-transparent">
       <div className="max-w-4xl mx-auto px-6 py-3">
-        {/* Context warning banner — shown when >90% */}
         {localModel.isReady && contextPercent > 90 && (
           <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border-l-4 border-red-500 rounded-lg">
             <div className="flex items-start gap-2">
@@ -195,7 +169,6 @@ export const MessageInputV2 = ({
             <div
               className={`p-4 bg-white dark:bg-gray-800 midnight:bg-gray-900 border-2 rounded-lg transition-colors ${getBorderColor()}`}
             >
-              {/* Error Message */}
               {error && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
                   <p className="text-sm text-red-800 dark:text-red-200 flex-1">
@@ -211,7 +184,6 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              {/* Textarea */}
               <textarea
                 ref={textareaRef}
                 value={value}
@@ -230,7 +202,6 @@ export const MessageInputV2 = ({
                 className="w-full resize-none bg-transparent text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-500 focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50"
               />
 
-              {/* Token counter + draft saved indicator */}
               {localModel.isReady && (
                 <div className="mt-2 flex items-center justify-between text-[10px]">
                   <span
@@ -250,16 +221,8 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              {/* Toolbar */}
               <div className="flex items-center justify-between gap-4 pt-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <ResponseStyleController
-                    currentStyle={responseStyle}
-                    onStyleChange={onResponseStyleChange}
-                    disabled={disabled}
-                  />
-
-                  {/* Web Search Toggle */}
                   <button
                     type="button"
                     onClick={() => setWebSearchEnabled((v) => !v)}
@@ -278,51 +241,8 @@ export const MessageInputV2 = ({
                     <Search className="w-3.5 h-3.5" />
                     Search
                   </button>
-
-                  {/* Think Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setThinkingEnabled((v) => !v)}
-                    disabled={disabled}
-                    title={
-                      thinkingEnabled
-                        ? "Thinking ON — click to disable"
-                        : "Enable step-by-step reasoning"
-                    }
-                    className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                      thinkingEnabled
-                        ? "bg-purple-100 dark:bg-purple-900/40 midnight:bg-purple-900/40 text-purple-700 dark:text-purple-300 midnight:text-purple-300 ring-1 ring-purple-400 dark:ring-purple-500"
-                        : localModel.supportsThinking
-                          ? "bg-purple-50 dark:bg-purple-900/20 midnight:bg-purple-900/20 text-purple-600 dark:text-purple-400 midnight:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30"
-                          : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
-                    }`}
-                  >
-                    <Brain className="w-3.5 h-3.5" />
-                    Think
-                    {localModel.supportsThinking && !thinkingEnabled && (
-                      <span
-                        className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-purple-400"
-                        title="Native thinking model"
-                      />
-                    )}
-                  </button>
-
-                  {/* Active response style pill */}
-                  {responseStyle !== "normal" && (
-                    <div className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900/30 midnight:bg-green-900/30 text-green-700 dark:text-green-300 midnight:text-green-300 rounded-full text-sm">
-                      <span>{RESPONSE_STYLES[responseStyle]?.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => onResponseStyleChange("normal")}
-                        className="ml-1 hover:bg-green-200 dark:hover:bg-green-800/50 rounded-full p-0.5 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
                 </div>
 
-                {/* Send button */}
                 <div className="shrink-0">
                   <button
                     type="submit"

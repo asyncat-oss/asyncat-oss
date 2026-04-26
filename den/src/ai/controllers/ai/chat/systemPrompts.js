@@ -9,7 +9,6 @@ export const generateSystemPrompt = (options = {}) => {
   const {
     workspaceContext = 'Current Workspace',
     projectContext = 'All projects in workspace',
-    responseStyleInstructions = '',
     userTimezone = 'UTC',
     userLocalDateTime = new Date().toISOString(),
     contextData = '',
@@ -95,8 +94,6 @@ ${projectContext}
 Timezone: ${userTimezone} | Time: ${userLocalDateTime}
 
 ${artifactInstruction}
-
-${responseStyleInstructions}
 
 --- USER CONTEXT ---
 ${contextData}

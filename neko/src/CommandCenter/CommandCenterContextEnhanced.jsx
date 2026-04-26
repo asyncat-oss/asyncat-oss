@@ -73,14 +73,6 @@ const ActionTypes = {
   // Workspace actions
   SET_CURRENT_WORKSPACE: 'SET_CURRENT_WORKSPACE',
   
-  // Response style actions
-  SET_RESPONSE_STYLE: 'SET_RESPONSE_STYLE',
-  
-  
-  // Conversation file actions
-  ADD_CONVERSATION_FILES: 'ADD_CONVERSATION_FILES',
-  CLEAR_CONVERSATION_FILES: 'CLEAR_CONVERSATION_FILES',
-  
   // Ghost mode actions
   SET_GHOST_MODE: 'SET_GHOST_MODE',
   
@@ -110,9 +102,6 @@ const initialState = {
   
   // Workspace state
   currentWorkspace: null,
-  
-  // Response style state
-  responseStyle: 'normal',
   
   isGhostMode: false,
   
@@ -161,7 +150,6 @@ function commandCenterReducer(state, action) {
       return {
         ...initialState,
         currentWorkspace: state.currentWorkspace,
-        responseStyle: state.responseStyle,
         isGhostMode: action.payload?.keepMode ? state.isGhostMode : false,
         conversationFiles: [],
         conversationFileContent: '',
@@ -181,9 +169,6 @@ function commandCenterReducer(state, action) {
     case ActionTypes.SET_CURRENT_WORKSPACE:
       return { ...state, currentWorkspace: action.payload };
     
-    case ActionTypes.SET_RESPONSE_STYLE:
-      return { ...state, responseStyle: action.payload };
-
     case ActionTypes.SET_GHOST_MODE:
       if (action.payload === true) {
         return { 
@@ -371,7 +356,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const handleStreamingMessage = useCallback(async (content, selectedProjectIds = []) => {
     let messageContent = typeof content === 'object' && content.content ? content.content : content;
     const webSearch   = typeof content === 'object' ? (content.webSearch   ?? false) : false;
-    const thinking    = typeof content === 'object' ? (content.thinking    ?? false) : false;
     const modelConfig = typeof content === 'object' ? (content.modelConfig ?? null)  : null;
 
     if (!messageContent || !messageContent.trim()) return;
@@ -385,7 +369,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     // === Capture everything needed for background-safe save (before any await) ===
     const capturedWorkspaceId = currentWorkspace.id;
     const capturedConversationId = state.currentConversationId;
-    const capturedResponseStyle = state.responseStyle;
     const capturedShouldSave = shouldSaveConversations() && !state.isGhostMode;
     const capturedPreviousMessages = [...state.messages];
     const effectiveProjectIds = selectedProjectIds.length > 0 ? selectedProjectIds : state.selectedProjects;
@@ -414,7 +397,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       type: "user",
       projectIds: effectiveProjectIds,
       workspaceId: capturedWorkspaceId,
-      responseStyle: capturedResponseStyle,
       timestamp: new Date().toISOString()
     };
 
@@ -444,9 +426,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         messageContent,
         state.conversationHistory,
         effectiveProjectIds,
-        state.responseStyle,
         webSearch,
-        thinking,
         modelConfig
       )) {
         // Handle tool call events and search events (objects, not strings)
@@ -599,7 +579,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
             conversationId: capturedConversationId || null,
             metadata: {
               workspaceId: capturedWorkspaceId,
-              responseStyle: capturedResponseStyle,
             }
           });
 
@@ -674,7 +653,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       dispatch({ type: ActionTypes.SET_IS_STREAMING, payload: { isStreaming: false, messageId: null } });
       dispatch({ type: ActionTypes.SET_PROCESSING, payload: false });
     }
-  }, [state.conversationHistory, state.selectedProjects, state.currentConversationId, state.responseStyle, state.isProcessing, state.isStreaming, state.messages.length, state.isGhostMode, state.conversationTitle, onProjectsChange, currentWorkspace?.id, shouldSaveConversations, triggerConversationRefresh]);
+  }, [state.conversationHistory, state.selectedProjects, state.currentConversationId, state.isProcessing, state.isStreaming, state.messages.length, state.isGhostMode, state.conversationTitle, onProjectsChange, currentWorkspace?.id, shouldSaveConversations, triggerConversationRefresh]);
 
   // Save conversation (only for saveable modes)
   const saveCurrentConversation = useCallback(async (title = null) => {
@@ -705,7 +684,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         conversationId: state.currentConversationId,
         metadata: {
           workspaceId: currentWorkspace?.id,
-          responseStyle: state.responseStyle,
           conversationSummaries: state.conversationSummaries || []
         },
         fileAttachments: state.conversationFiles || []
@@ -737,7 +715,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     } finally {
       isSavingRef.current = false;
     }
-  }, [state.messages, state.selectedProjects, state.currentConversationId, state.conversationTitle, state.responseStyle, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations]);
+  }, [state.messages, state.selectedProjects, state.currentConversationId, state.conversationTitle, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations]);
 
   // Auto-save (only for saveable modes)
   useEffect(() => {
@@ -856,10 +834,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: apiHistory.slice(-8) });
       
       if (conversation.metadata) {
-        if (conversation.metadata.responseStyle) {
-          dispatch({ type: ActionTypes.SET_RESPONSE_STYLE, payload: conversation.metadata.responseStyle });
-        }
-        
         dispatch({ type: ActionTypes.CLEAR_CONVERSATION_FILES });
         if (conversation.metadata.fileAttachments && Array.isArray(conversation.metadata.fileAttachments)) {
           dispatch({ type: ActionTypes.ADD_CONVERSATION_FILES, payload: conversation.metadata.fileAttachments });
@@ -914,7 +888,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           updatedHistory,
           userMessage.projectIds || [],
           'chat',
-          state.responseStyle,
           state.conversationFiles,
           conversationFileContent
         );
@@ -959,7 +932,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     } finally {
       dispatch({ type: ActionTypes.SET_PROCESSING, payload: false });
     }
-  }, [state.messages, state.conversationHistory, state.currentConversationId, state.responseStyle, state.conversationFiles, state.conversationFileContent, currentWorkspace?.id, shouldSaveConversations]);
+  }, [state.messages, state.conversationHistory, state.currentConversationId, state.conversationFiles, state.conversationFileContent, currentWorkspace?.id, shouldSaveConversations]);
 
   const handleClearConversation = useCallback(() => {
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
@@ -971,10 +944,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
 
   const setSelectedProjects = useCallback((projectIds) => {
     dispatch({ type: ActionTypes.SET_SELECTED_PROJECTS, payload: projectIds || [] });
-  }, []);
-
-  const setResponseStyle = useCallback((style) => {
-    dispatch({ type: ActionTypes.SET_RESPONSE_STYLE, payload: style });
   }, []);
 
   const toggleGhostMode = useCallback(() => {
@@ -998,7 +967,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     currentConversationId: state.currentConversationId,
     conversationTitle: state.conversationTitle,
     currentWorkspace: state.currentWorkspace,
-    responseStyle: state.responseStyle,
     isGhostMode: state.isGhostMode,
     conversationSummaries: state.conversationSummaries,
     conversationFiles: state.conversationFiles || [],
@@ -1020,7 +988,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     saveCurrentConversation,
     setConversationListRefresh,
     triggerConversationRefresh,
-    setResponseStyle,
     toggleGhostMode,
     setGhostMode
   };

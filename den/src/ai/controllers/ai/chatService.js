@@ -110,7 +110,6 @@ class ChatService {
         [role]: msg.content,
         id: msg.id,
         timestamp: msg.timestamp,
-        responseStyle: msg.responseStyle || 'normal'
       };
 
       // Preserve image data and image mode properties
@@ -176,8 +175,6 @@ class ChatService {
         type: isUser ? 'user' : 'assistant',
         role: isUser ? 'user' : 'assistant',
         content: isUser ? msg.user : msg.cat,
-        responseStyle: msg.responseStyle || 'normal',
-        // Use original timestamp if available, otherwise use a past timestamp to prevent auto-save issues
         timestamp: msg.timestamp || new Date(Date.now() - (60000 * (index + 1))).toISOString()
       };
       

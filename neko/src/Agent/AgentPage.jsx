@@ -374,20 +374,7 @@ export default function AgentPage() {
         </div>
       )}
 
-      <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-3 bg-white dark:bg-gray-900 midnight:bg-slate-950">
-        {isViewingHistory && (
-          <p className="text-[11px] text-gray-400 dark:text-gray-600 mb-1.5 text-center">
-            Viewing history — start a new run below
-          </p>
-        )}
-        <GoalInput
-          value={goal}
-          onChange={setGoal}
-          onSubmit={handleRun}
-          isRunning={isRunning}
-          compact
-        />
-      </div>
+      
     </div>
   );
 }

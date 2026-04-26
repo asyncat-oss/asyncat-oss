@@ -143,7 +143,7 @@ export const chatApi = {
    * Send a unified chat message
    * Note: AI automatically detects when comprehensive/note-worthy responses are needed
    */
-  sendMessage: async (message, conversationHistory = [], projectIds = [], mode = 'chat', responseStyle = 'normal', uploadedFiles = null, fileContentsForAI = null) => {
+  sendMessage: async (message, conversationHistory = [], projectIds = [], mode = 'chat', uploadedFiles = null, fileContentsForAI = null) => {
     const { userTimezone, userLocalDateTime } = getUserTimeContext();
 
     const payload = {
@@ -151,7 +151,6 @@ export const chatApi = {
       conversationHistory,
       projectIds,
       mode,
-      responseStyle,
       userTimezone,
       userLocalDateTime
     };
@@ -175,7 +174,7 @@ export const chatApi = {
    * Send a streaming chat message
    * Returns an async generator that yields content chunks
    */
-  sendMessageStream: async function* (message, conversationHistory = [], projectIds = [], responseStyle = 'normal', webSearch = false, thinking = false, modelConfig = null) {
+  sendMessageStream: async function* (message, conversationHistory = [], projectIds = [], webSearch = false, modelConfig = null) {
     const { userTimezone, userLocalDateTime } = getUserTimeContext();
     const workspaceId = getCurrentWorkspaceId();
 
@@ -183,12 +182,10 @@ export const chatApi = {
       message: message.trim(),
       conversationHistory,
       projectIds,
-      responseStyle,
       userTimezone,
       userLocalDateTime,
       workspaceId,
       webSearch,
-      thinking,
       ...(modelConfig ? { modelConfig } : {}),
     };
 

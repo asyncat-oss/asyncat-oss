@@ -12,9 +12,6 @@ import {
   validateInput,
   getWorkspaceContext,
 } from './requestAnalysis.js';
-import {
-  getResponseStyleInstructions
-} from './responseFormatting.js';
 import { artifactParser } from '../artifactParser.js';
 import { TOOL_DEFINITIONS, buildToolsSystemSection } from '../toolDefinitions.js';
 import { executeTool } from '../toolExecutor.js';
@@ -190,7 +187,6 @@ export const enhancedRouter = async (req, res) => {
       userTimezone,
       userLocalDateTime,
       conversationId = null,
-      responseStyle = 'normal',
       uploadedFiles = null,
       fileContentsForAI = null
     } = req.body;
@@ -272,9 +268,6 @@ export const enhancedRouter = async (req, res) => {
     let animationBlocks = null;
     let chartBlocks = null;
 
-    // Get response style instructions
-    const responseStyleInstructions = getResponseStyleInstructions(responseStyle, noteOptimizedMode);
-
     // Check if user is editing an existing artifact
     const editCheck = artifactParser.isArtifactEditRequest(actualMessage, conversationHistory);
     const isArtifactEdit = editCheck.isEdit;
@@ -294,12 +287,11 @@ export const enhancedRouter = async (req, res) => {
     const baseSystemPrompt = generateSystemPrompt({
       workspaceContext,
       projectContext,
-      responseStyleInstructions,
       userTimezone: timezone,
       userLocalDateTime: userLocalTime,
       contextData: contextPrompt,
-      enableArtifacts: true, // Always enable smart artifact mode so AI can decide
-      forceArtifact: isArtifactEdit, // Only force for edits
+      enableArtifacts: true,
+      forceArtifact: isArtifactEdit,
       artifactType: artifactType,
       existingArtifacts: existingArtifacts,
       isArtifactEdit: isArtifactEdit,
@@ -312,19 +304,15 @@ export const enhancedRouter = async (req, res) => {
     const systemPrompt = baseSystemPrompt + toolsSection;
 
     // Determine token limits - Smart allocation based on request type
-    let maxTokens = 4000; // Default for normal chat responses (increased from 1500)
+    let maxTokens = 4000;
     if (noteOptimizedMode) {
-      maxTokens = 8000; // More comprehensive responses (increased from 3000)
+      maxTokens = 8000;
     } else if (shouldGenerateMultiple) {
-      maxTokens = 10000; // Multiple artifacts need more space (increased from 6000)
+      maxTokens = 10000;
     } else if (strictArtifactCheck) {
-      maxTokens = 6000; // Single artifact (code, document, diagram) (increased from 4000)
+      maxTokens = 6000;
     } else if (isArtifactEdit) {
-      maxTokens = 5000; // Edits typically smaller than full generation (increased from 3000)
-    } else if (responseStyle === 'concise') {
-      maxTokens = 1500; // Concise mode (increased from 800)
-    } else if (responseStyle === 'learning') {
-      maxTokens = 6000; // Learning mode - detailed explanations (increased from 2000)
+      maxTokens = 5000;
     }
 
     // Build OpenAI-format messages for the agentic loop
@@ -418,7 +406,6 @@ export const enhancedRouter = async (req, res) => {
       workspaceId: contextData.workspaceId,
       workspaceName: contextData.workspaceName || 'Current Workspace',
       suggestions: [],
-      responseStyle: responseStyle,
       blocks: null, // Visual blocks now handled by dedicated visual mode
       artifacts: artifacts, // NEW: Artifacts from AI response
       artifactExplanation: artifactExplanation, // NEW: Explanation for artifacts

@@ -52,8 +52,6 @@ const CommandCenterV2Enhanced = () => {
     conversationTitle = "",
     triggerConversationRefresh = () => {},
     setConversationTitle = () => {},
-    responseStyle = "concise",
-    setResponseStyle = () => {},
     isGhostMode = false,
     toggleGhostMode = () => {},
     conversationSummaries = null,
@@ -769,8 +767,6 @@ const CommandCenterV2Enhanced = () => {
                   : "Ask anything, or create tasks, events, notes..."
               }
               hasMessages={messages.length > 0}
-              responseStyle={responseStyle}
-              onResponseStyleChange={setResponseStyle}
               conversationTokens={conversationTokens}
             />
 
@@ -1070,8 +1066,6 @@ const CommandCenterV2Enhanced = () => {
                     : "Ask anything..."
                 }
                 hasMessages={messages.length > 0}
-                responseStyle={responseStyle}
-                onResponseStyleChange={setResponseStyle}
                 conversationTokens={conversationTokens}
               />
             </div>

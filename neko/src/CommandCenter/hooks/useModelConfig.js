@@ -7,8 +7,7 @@ export const DEFAULT_CONFIG = {
   top_k:           40,
   min_p:           0.05,
   repeat_penalty:  1.1,
-  ctx_size:        32768, // context window size (requires model restart to apply)
-  // max_tokens is driven by responseStyle in the backend, not overridden here by default
+  ctx_size:        32768,
   system_prompt_prefix: '',  // injected before the main system prompt
 };
 

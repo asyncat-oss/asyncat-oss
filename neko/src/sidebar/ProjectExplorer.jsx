@@ -4,7 +4,6 @@ import {
   Folder,
   FolderOpen,
   AlertCircle,
-  Search,
   ChevronRight,
   MoreHorizontal,
   FolderPlus,
@@ -458,7 +457,6 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [loadingProjectId, setLoadingProjectId] = useState(null);
-  const [search, setSearch] = useState('');
   const [showNewFolder, setShowNewFolder] = useState(false);
 
   const { currentWorkspace, getWorkspaceProjects, bustProjectsCache } = useWorkspace();
@@ -620,27 +618,18 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
     [projects, projectFolderMap]
   );
 
-  const filteredProjects = useMemo(() => {
-    if (!search.trim()) return annotatedProjects;
-    const q = search.toLowerCase();
-    return annotatedProjects.filter(p =>
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.description || '').toLowerCase().includes(q)
-    );
-  }, [annotatedProjects, search]);
-
   const folderProjects = useMemo(() => {
     const map = {};
     folders.forEach(f => { map[f.id] = []; });
-    filteredProjects.forEach(p => {
+    annotatedProjects.forEach(p => {
       if (p._folderId && map[p._folderId]) map[p._folderId].push(p);
     });
     return map;
-  }, [folders, filteredProjects]);
+  }, [folders, annotatedProjects]);
 
   const unfiledProjects = useMemo(
-    () => filteredProjects.filter(p => !p._folderId),
-    [filteredProjects]
+    () => annotatedProjects.filter(p => !p._folderId),
+    [annotatedProjects]
   );
 
   const timeGroups = useMemo(() => groupProjectsByTime(unfiledProjects), [unfiledProjects]);
@@ -670,22 +659,6 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
 
   return (
     <div className="w-full">
-      {/* Search */}
-      {projects.length > 0 && (
-        <div className="px-2 pb-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search projects…"
-              className="w-full pl-7 pr-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 rounded-md border-0 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 transition-all"
-            />
-          </div>
-        </div>
-      )}
-
       {loading ? (
         <div className="space-y-1 px-1">
           {[...Array(4)].map((_, i) => <ProjectSkeleton key={i} />)}
@@ -774,9 +747,6 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
               )}
               {timeGroups.older?.length > 0 && (
                 <TimeGroup title="Older" projects={timeGroups.older} isSelected={isSelected} onSelect={handleSelectProject} loadingProjectId={loadingProjectId} folders={folders} onAssign={handleAssign} onUnassign={handleUnassign} currentTab={currentTab} onTabChange={handleTabChange} />
-              )}
-              {search && filteredProjects.length === 0 && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-6">No projects match "{search}"</p>
               )}
             </div>
           )}
