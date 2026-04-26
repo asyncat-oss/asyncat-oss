@@ -1058,6 +1058,13 @@ const DynamicSidebar = ({
 											<span className="ml-auto font-mono text-[10px] text-gray-300 dark:text-gray-600">⌘N</span>
 										</button>
 										<button
+											onClick={() => navigate('/agents')}
+											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors text-left group"
+										>
+											<Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
+											Agent Runs
+										</button>
+										<button
 											onClick={() => setIsSearchOpen(true)}
 											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors text-left"
 										>
@@ -1096,17 +1103,6 @@ const DynamicSidebar = ({
 										<ChatExplorer isChatMode={isChatMode} isCollapsed={false} onNewChat={handleNewChat} showNewChatButton={false} />
 									</div>
 									{/* Agent Runs section */}
-									<div className="mx-3 h-px bg-gray-100 dark:bg-gray-800 my-1" />
-									<div className="px-2 pb-1">
-										<button
-											onClick={() => navigate('/agents')}
-											className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-left group"
-										>
-											<Bot className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
-											Agent Runs
-											<Plus className="w-3 h-3 ml-auto text-gray-300 group-hover:text-gray-500 transition-colors" />
-										</button>
-									</div>
 									<AgentSessionsList navigate={navigate} />
 								</>
 							) : (

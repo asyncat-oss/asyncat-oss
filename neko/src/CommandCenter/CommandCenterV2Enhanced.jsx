@@ -863,29 +863,45 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
 
   const [activeCategory, setActiveCategory] = useState(null);
 
-  // ── Mode toggle pill ────────────────────────────────────────────────────────
-  const ModePill = (
-    <div className="inline-flex rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 p-0.5">
-      <button
-        onClick={() => setMode('chat')}
-        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-          mode === 'chat'
-            ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
-            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-        }`}
-      >
-        <MessageSquare className="w-3 h-3" /> Chat
-      </button>
-      <button
-        onClick={() => setMode('agent')}
-        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-          mode === 'agent'
-            ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
-            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-        }`}
-      >
-        <Bot className="w-3 h-3" /> Agent
-      </button>
+  // ── Unified top bar ──────────────────────────────────────────────────────────
+  const TopBar = (
+    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+      <div className="flex items-center gap-2">
+        <img src="/cat.svg" alt="The Cat" className="w-6 h-6" />
+      </div>
+      <div className="flex items-center gap-2">
+        {isGhostMode && (
+          <button
+            onClick={toggleGhostMode}
+            className="p-1.5 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50"
+            title={isGhostMode ? "Exit Ghost Mode" : "Ghost Mode"}
+          >
+            <Ghost className={`w-4 h-4 ${isGhostMode ? "text-gray-600 dark:text-gray-400" : "text-gray-300 dark:text-gray-600"}`} />
+          </button>
+        )}
+        <div className="inline-flex rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 p-0.5">
+          <button
+            onClick={() => setMode('chat')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              mode === 'chat'
+                ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            <MessageSquare className="w-3 h-3" /> Chat
+          </button>
+          <button
+            onClick={() => setMode('agent')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              mode === 'agent'
+                ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            <Bot className="w-3 h-3" /> Agent
+          </button>
+        </div>
+      </div>
     </div>
   );
 
@@ -921,26 +937,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
   };
   const welcomeScreenJSX =
     messages.length === 0 ? (
-      <div className="flex flex-col min-h-full p-8 relative">
-        {/* Top bar: mode toggle + ghost mode toggle */}
-        <div className="flex items-center justify-between mb-2">
-          {ModePill}
-          <button
-            onClick={toggleGhostMode}
-            className="p-2 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50"
-            title={isGhostMode ? "Exit Ghost Mode" : "Ghost Mode — no history saved"}
-          >
-            <Ghost
-              className={`w-5 h-5 transition-colors ${isGhostMode ? "text-gray-600 dark:text-gray-400" : "text-gray-300 dark:text-gray-600"}`}
-            />
-          </button>
-        </div>
-
-        <div className="flex flex-col items-center justify-center flex-1 px-6">
+      <div className="flex flex-col min-h-full relative">
+        <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
           <div className="max-w-2xl w-full">
             {/* Greeting */}
             <div className="flex items-center gap-3 mb-6 justify-center">
-              <img src="/cat.svg" alt="The Cat" className="w-10 h-10" />
               <h1 className="text-xl font-medium text-gray-900 dark:text-white midnight:text-slate-100">
                 {getGreeting()}
               </h1>
@@ -1031,6 +1032,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
     <div className="flex h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
       {/* Main column */}
       <div className="flex flex-col h-full transition-all duration-300 min-w-0 flex-1">
+        {/* Unified top bar — consistent across all modes */}
+        {TopBar}
         {mode === 'agent' ? (
           // ── Agent mode ────────────────────────────────────────────────────────
           <>
@@ -1074,8 +1077,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
                   {agentCurrentGoal}
                 </span>
               )}
-
-              <div className="ml-auto">{ModePill}</div>
             </div>
 
             {/* Sub-view content */}
@@ -1177,7 +1178,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {ModePill}
                     {/* Export Dropdown */}
                     {messages.length > 0 && (
                       <div className="relative">

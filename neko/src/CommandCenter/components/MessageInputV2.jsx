@@ -102,13 +102,7 @@ export const MessageInputV2 = ({
   const canSubmit = value.trim() && !disabled;
 
   const getBorderColor = () => {
-    if (!localModel.isReady)
-      return "border-gray-200 dark:border-gray-700 midnight:border-gray-700";
-    if (contextPercent >= 85)
-      return "border-red-400 dark:border-red-500 midnight:border-red-500";
-    if (contextPercent >= 50)
-      return "border-amber-400 dark:border-amber-500 midnight:border-amber-500";
-    return "border-green-400 dark:border-green-500 midnight:border-green-500";
+    return "border-gray-200 dark:border-gray-700 midnight:border-gray-700";
   };
 
   return (
@@ -204,20 +198,12 @@ export const MessageInputV2 = ({
 
               {localModel.isReady && (
                 <div className="mt-2 flex items-center justify-between text-[10px]">
-                  <span
-                    className={`${contextPercent > 85 ? "text-red-600 dark:text-red-400" : contextPercent > 50 ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}`}
-                  >
+                  <span className="text-gray-400 dark:text-gray-500">
                     {value.length > 0 && `+${inputTokens.toLocaleString()} · `}~
                     {totalTokens.toLocaleString()} / {ctxSize.toLocaleString()}{" "}
                     tokens ({contextPercent}%)
                   </span>
-                  <div className="flex items-center gap-2">
-                    {contextPercent > 85 && (
-                      <span className="text-red-500 dark:text-red-400 font-medium">
-                        Context nearly full
-                      </span>
-                    )}
-                  </div>
+                  <div className="flex items-center gap-2" />
                 </div>
               )}
 
