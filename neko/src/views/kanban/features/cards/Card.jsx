@@ -18,7 +18,6 @@ import {
   MoveRight,
   Edit3,
   Lock,
-  WifiOff,
   Link2,
   Link,
   Loader,
@@ -123,8 +122,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     // New real-time features (with fallbacks for backward compatibility)
     canUserEditCard = () => true,
     getCardEditingUser = () => null,
-    isRealtimeConnected = false, // Fixed: Should default to false when connection fails
-    updateCardOptimistically = () => {},
   } = useCardContext();
 
   const { columns, onCardStatusChange } = useColumnContext();
@@ -194,7 +191,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
           ...prev,
           readOnly: true,
           editingUser,
-          isRealtimeConnected,
         }));
         return;
       }
@@ -929,14 +925,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
           </div>
         )}
 
-        {/* NEW: Connection status indicator (only show when disconnected) */}
-        {!isRealtimeConnected && (
-          <div className="mb-2 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 midnight:bg-yellow-950/20 rounded-md flex items-center text-yellow-700 dark:text-yellow-400 midnight:text-yellow-500 text-xs">
-            <WifiOff className="w-3 h-3 mr-1" />
-            Offline - changes may not sync
-          </div>
-        )}
-
         {/* Header with title and menu button */}
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center">
@@ -1121,14 +1109,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
               <Lock className="w-3 h-3" />
             </div>
           </div>
-        </div>
-      )}
-
-      {/* NEW: Connection status indicator (only show when disconnected) */}
-      {!isRealtimeConnected && (
-        <div className="mb-2 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 midnight:bg-yellow-950/20 rounded-md flex items-center text-yellow-700 dark:text-yellow-400 midnight:text-yellow-500 text-xs">
-          <WifiOff className="w-3 h-3 mr-1" />
-          Offline - changes may not sync
         </div>
       )}
 

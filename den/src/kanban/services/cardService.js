@@ -579,10 +579,10 @@ const moveCard = async (
 						await db
 							.schema("kanban")
 							.from("Cards")
-							.select('id, "order"')
+							.select("id, order")
 							.eq("columnId", sourceColumnId)
-							.filter('"order"', "gte", newOrder)
-							.filter('"order"', "lt", oldOrder);
+							.gte("order", newOrder)
+							.lt("order", oldOrder);
 
 					if (fetchError) throw fetchError;
 
@@ -605,10 +605,10 @@ const moveCard = async (
 						await db
 							.schema("kanban")
 							.from("Cards")
-							.select('id, "order"')
+							.select("id, order")
 							.eq("columnId", sourceColumnId)
-							.filter('"order"', "gt", oldOrder)
-							.filter('"order"', "lte", newOrder);
+							.gt("order", oldOrder)
+							.lte("order", newOrder);
 
 					if (fetchError) throw fetchError;
 
@@ -634,9 +634,9 @@ const moveCard = async (
 					await db
 						.schema("kanban")
 						.from("Cards")
-						.select('id, "order"')
+						.select("id, order")
 						.eq("columnId", sourceColumnId)
-						.filter('"order"', "gt", oldOrder);
+						.gt("order", oldOrder);
 
 				if (sourceFetchError) throw sourceFetchError;
 
@@ -658,9 +658,9 @@ const moveCard = async (
 					await db
 						.schema("kanban")
 						.from("Cards")
-						.select('id, "order"')
+						.select("id, order")
 						.eq("columnId", destinationColumnId)
-						.filter('"order"', "gte", newOrder);
+						.gte("order", newOrder);
 
 				if (destFetchError) throw destFetchError;
 

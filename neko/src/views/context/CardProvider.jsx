@@ -230,8 +230,7 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 		});
 	}, [setColumns]);
 
-	// Real-time card management - solo mode (no realtime)
-	const isConnected = false;
+	// Card edit locking hooks are no-ops in solo mode.
 	const editingSessions = new Map();
 	const startEditingCard = async (cardId) => true;
 	const stopEditingCard = async (cardId) => {};
@@ -360,8 +359,7 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 		userId,
 		createdBy: userId,
 
-		// New real-time features (additions)
-		isRealtimeConnected: isConnected,
+		// Edit-locking hooks retained for components that share this context.
 		editingSessions,
 		isEditingCard,
 		updateCardOptimistically,
@@ -385,10 +383,8 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 					card={selectedCard}
 					onClose={handleCardClose}
 					onDeleteStart={handleCardDeleteStart}
-					// Pass additional props for real-time features
 					readOnly={selectedCard.readOnly}
 					editingUser={selectedCard.editingUser}
-					isRealtimeConnected={isConnected}
 					onOptimisticUpdate={updateCardOptimistically}
 				/>
 			)}

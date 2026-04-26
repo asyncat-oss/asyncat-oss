@@ -33,8 +33,6 @@ import {
 	Lock,
 	Eye,
 	Edit3,
-	Wifi,
-	WifiOff,
 	User,
 	Link2,
 	GitBranch,
@@ -231,7 +229,6 @@ const CardDetailModal = ({
 	// New props for real-time features (with fallbacks for backward compatibility)
 	readOnly = false,
 	editingUser = null,
-	isRealtimeConnected = false, // Fixed: Should default to false when connection fails
 	onOptimisticUpdate = () => {},
 }) => {
 	const { columns, setColumns } = useColumnContext();
@@ -980,30 +977,6 @@ const CardDetailModal = ({
 											</div>
 										)}
 
-										{/* Connection Status */}
-										<div
-											className={`flex items-center gap-1 px-2 py-1 rounded-md ${
-												isRealtimeConnected
-													? "bg-green-100 dark:bg-green-900/20 midnight:bg-green-950/20"
-													: "bg-red-100 dark:bg-red-900/20 midnight:bg-red-950/20"
-											}`}
-										>
-											{isRealtimeConnected ? (
-												<>
-													<Wifi className="w-3 h-3 text-green-600 dark:text-green-400 midnight:text-green-400" />
-													<span className="text-xs text-green-700 dark:text-green-400 midnight:text-green-400">
-														Live
-													</span>
-												</>
-											) : (
-												<>
-													<WifiOff className="w-3 h-3 text-red-600 dark:text-red-400 midnight:text-red-400" />
-													<span className="text-xs text-red-700 dark:text-red-400 midnight:text-red-400">
-														Offline
-													</span>
-												</>
-											)}
-										</div>
 									</div>
 								</div>
 
@@ -1020,17 +993,6 @@ const CardDetailModal = ({
 									</div>
 								)}
 
-								{/* Offline Warning */}
-								{!isRealtimeConnected && (
-									<div className="mt-2 flex items-center gap-2 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/10 midnight:bg-yellow-950/10 rounded-lg border border-yellow-200 dark:border-yellow-800 midnight:border-yellow-800">
-										<AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-500 midnight:text-yellow-500" />
-										<span className="text-sm text-yellow-700 dark:text-yellow-400 midnight:text-yellow-400">
-											You're in offline mode. Changes may
-											not sync until connection is
-											restored.
-										</span>
-									</div>
-								)}
 							</div>
 
 							{/* Action Buttons */}

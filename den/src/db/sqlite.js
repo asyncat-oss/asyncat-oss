@@ -65,8 +65,13 @@ function quotedCols(cols) {
     const t = c.trim();
     if (t === '*') return '*';
     if (t.includes('(')) return t; // aggregate functions — leave as-is
-    return `"${t}"`;
+    return quoteIdent(t);
   }).join(', ');
+}
+
+function quoteIdent(col) {
+  const raw = String(col).trim().replace(/^"+|"+$/g, '').replace(/"/g, '""');
+  return `"${raw}"`;
 }
 
 // ─── QueryBuilder ─────────────────────────────────────────────────────────────
@@ -91,37 +96,37 @@ class QueryBuilder {
   // ── Filter ──────────────────────────────────────────────────────────────────
 
   eq(col, val) {
-    this._conditions.push(`"${col}" = ?`);
+    this._conditions.push(`${quoteIdent(col)} = ?`);
     this._condParams.push(sqlVal(val));
     return this;
   }
 
   neq(col, val) {
-    this._conditions.push(`"${col}" != ?`);
+    this._conditions.push(`${quoteIdent(col)} != ?`);
     this._condParams.push(sqlVal(val));
     return this;
   }
 
   gt(col, val) {
-    this._conditions.push(`"${col}" > ?`);
+    this._conditions.push(`${quoteIdent(col)} > ?`);
     this._condParams.push(sqlVal(val));
     return this;
   }
 
   gte(col, val) {
-    this._conditions.push(`"${col}" >= ?`);
+    this._conditions.push(`${quoteIdent(col)} >= ?`);
     this._condParams.push(sqlVal(val));
     return this;
   }
 
   lt(col, val) {
-    this._conditions.push(`"${col}" < ?`);
+    this._conditions.push(`${quoteIdent(col)} < ?`);
     this._condParams.push(sqlVal(val));
     return this;
   }
 
   lte(col, val) {
-    this._conditions.push(`"${col}" <= ?`);
+    this._conditions.push(`${quoteIdent(col)} <= ?`);
     this._condParams.push(sqlVal(val));
     return this;
   }
@@ -131,34 +136,34 @@ class QueryBuilder {
       this._conditions.push('0 = 1'); // empty IN → always false
       return this;
     }
-    this._conditions.push(`"${col}" IN (${vals.map(() => '?').join(', ')})`);
+    this._conditions.push(`${quoteIdent(col)} IN (${vals.map(() => '?').join(', ')})`);
     this._condParams.push(...vals.map(sqlVal));
     return this;
   }
 
   is(col, val) {
     if (val === null || val === undefined) {
-      this._conditions.push(`"${col}" IS NULL`);
+      this._conditions.push(`${quoteIdent(col)} IS NULL`);
     } else {
-      this._conditions.push(`"${col}" IS NOT NULL`);
+      this._conditions.push(`${quoteIdent(col)} IS NOT NULL`);
     }
     return this;
   }
 
   ilike(col, pattern) {
-    this._conditions.push(`lower("${col}") LIKE lower(?)`);
+    this._conditions.push(`lower(${quoteIdent(col)}) LIKE lower(?)`);
     this._condParams.push(pattern);
     return this;
   }
 
   not(col, operator, val) {
     if (operator === 'is' && (val === null || val === undefined)) {
-      this._conditions.push(`"${col}" IS NOT NULL`);
+      this._conditions.push(`${quoteIdent(col)} IS NOT NULL`);
     } else if (operator === 'eq') {
-      this._conditions.push(`"${col}" != ?`);
+      this._conditions.push(`${quoteIdent(col)} != ?`);
       this._condParams.push(sqlVal(val));
     } else {
-      this._conditions.push(`"${col}" IS NOT NULL`);
+      this._conditions.push(`${quoteIdent(col)} IS NOT NULL`);
     }
     return this;
   }
