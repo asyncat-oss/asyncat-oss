@@ -157,7 +157,6 @@ const NoteListView = ({
   selectedNotes = [],
   onToggleSelect,
   loading = false,
-  isMyNotesFilterActive = false,
 }) => {
   const [sortByCreated, setSortByCreated] = useState(false);
   const [titleSortOrder, setTitleSortOrder] = useState(null); // null, 'asc', or 'desc'
@@ -411,9 +410,7 @@ const NoteListView = ({
             <FileText className="w-full h-full text-gray-400 dark:text-gray-500 midnight:text-indigo-400" />
           </div>
           <p className="text-gray-500 dark:text-gray-400 midnight:text-indigo-300">
-            {isMyNotesFilterActive
-              ? "You haven't created any notes yet."
-              : "No notes to display"}
+            No notes to display
           </p>
         </div>
       )}

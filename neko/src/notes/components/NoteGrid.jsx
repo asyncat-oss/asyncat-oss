@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Plus, Search, Trash2, Grid, List, UserRound } from "lucide-react";
+import { Plus, Search, Trash2, Grid, List } from "lucide-react";
 import NoteCard from "./NoteCard";
 import NoteListView, { NoteListSkeleton } from "./NoteListView";
-import { useUser } from "../../contexts/UserContext";
 
 // Import stock profile pictures
 import catDP from "../../assets/dp/CAT.webp";
@@ -16,19 +15,6 @@ import owlDP from "../../assets/dp/OWL.webp";
 import penguinDP from "../../assets/dp/PENGUIN.webp";
 import wolfDP from "../../assets/dp/WOLF.webp";
 
-const profilePictureMap = {
-  CAT: catDP,
-  DOG: dogDP,
-  DOLPHIN: dolphinDP,
-  DRAGON: dragonDP,
-  ELEPHANT: elephantDP,
-  FOX: foxDP,
-  LION: lionDP,
-  OWL: owlDP,
-  PENGUIN: penguinDP,
-  WOLF: wolfDP,
-};
-
 // Helper function to get profile picture URL
 const getProfilePicture = (profilePicId) => {
   if (!profilePicId) return null;
@@ -39,64 +25,23 @@ const getProfilePicture = (profilePicId) => {
   }
 
   // Handle predefined avatars
+  const profilePictureMap = {
+    CAT: catDP,
+    DOG: dogDP,
+    DOLPHIN: dolphinDP,
+    DRAGON: dragonDP,
+    ELEPHANT: elephantDP,
+    FOX: foxDP,
+    LION: lionDP,
+    OWL: owlDP,
+    PENGUIN: penguinDP,
+    WOLF: wolfDP,
+  };
+
   if (profilePictureMap[profilePicId]) {
     return profilePictureMap[profilePicId];
   }
   return null;
-};
-
-const possibleOwnerKeys = [
-  "userId",
-  "user_id",
-  "ownerId",
-  "owner_id",
-  "authorId",
-  "author_id",
-  "createdBy",
-  "created_by",
-  "createdById",
-  "created_by_id",
-  "createdByUserId",
-  "created_by_user_id",
-];
-
-const isNoteCreatedByUser = (note, userId) => {
-  if (!note || !userId) return false;
-
-  const normalizedUserId = String(userId);
-  const candidates = new Set();
-
-  possibleOwnerKeys.forEach((key) => {
-    if (note?.[key] !== undefined && note?.[key] !== null) {
-      candidates.add(String(note[key]));
-    }
-  });
-
-  if (note?.users) {
-    if (note.users.id !== undefined && note.users.id !== null) {
-      candidates.add(String(note.users.id));
-    }
-    if (note.users.user_id !== undefined && note.users.user_id !== null) {
-      candidates.add(String(note.users.user_id));
-    }
-    if (note.users.userId !== undefined && note.users.userId !== null) {
-      candidates.add(String(note.users.userId));
-    }
-  }
-
-  if (note?.createdBy && typeof note.createdBy === "object") {
-    if (note.createdBy.id !== undefined && note.createdBy.id !== null) {
-      candidates.add(String(note.createdBy.id));
-    }
-    if (
-      note.createdBy.user_id !== undefined &&
-      note.createdBy.user_id !== null
-    ) {
-      candidates.add(String(note.createdBy.user_id));
-    }
-  }
-
-  return candidates.has(normalizedUserId);
 };
 
 const NoteGrid = ({
@@ -111,16 +56,12 @@ const NoteGrid = ({
   isLoading = false,
 }) => {
   const [selectedNotes, setSelectedNotes] = useState([]);
-  const [showMyNotesOnly, setShowMyNotesOnly] = useState(false);
 
   // Add view mode state with localStorage persistence
   const [viewMode, setViewMode] = useState(() => {
     const savedViewMode = localStorage.getItem("noteViewMode");
     return savedViewMode || "grid";
   });
-
-  const { user } = useUser();
-  const currentUserId = user?.id ? String(user.id) : null;
 
   // Add delete confirmation state
   const [deleteConfirming, setDeleteConfirming] = useState(false);
@@ -145,24 +86,8 @@ const NoteGrid = ({
       );
     }
 
-    if (showMyNotesOnly && currentUserId) {
-      filtered = filtered.filter((note) =>
-        isNoteCreatedByUser(note, currentUserId)
-      );
-    }
-
     return filtered;
-  }, [notes, searchQuery, showMyNotesOnly, currentUserId]);
-
-  useEffect(() => {
-    if (!showMyNotesOnly) return;
-
-    setSelectedNotes((prev) => {
-      const visibleIds = new Set(filteredNotes.map((note) => note.id));
-      const next = prev.filter((note) => visibleIds.has(note.id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [showMyNotesOnly, filteredNotes]);
+  }, [notes, searchQuery]);
 
   // Toggle selection of a single note
   const toggleNoteSelection = (note) => {
@@ -241,11 +166,6 @@ const NoteGrid = ({
     setViewMode(mode);
   };
 
-  const toggleMyNotesFilter = () => {
-    if (!currentUserId) return;
-    setShowMyNotesOnly((prev) => !prev);
-  };
-
   // Grid skeleton component
   const NoteGridSkeleton = () => (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 p-6 overflow-y-auto">
@@ -292,26 +212,6 @@ const NoteGrid = ({
             />
             <Search className="absolute left-2 top-2.5 w-4 h-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
           </div>
-          <button
-            onClick={toggleMyNotesFilter}
-            disabled={!currentUserId}
-            className={`group px-3 py-2 text-xs font-medium border rounded-lg transition-all duration-200 flex items-center gap-1.5 ${
-              showMyNotesOnly && currentUserId
-                ? "bg-indigo-50 dark:bg-indigo-700/20 midnight:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 midnight:text-indigo-200 border-indigo-200 dark:border-indigo-600 midnight:border-indigo-700 shadow-sm"
-                : "bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-600 dark:text-gray-400 midnight:text-gray-500 border-gray-200 dark:border-gray-600 midnight:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
-            } ${!currentUserId ? "opacity-60 cursor-not-allowed" : ""}`}
-            title={
-              currentUserId
-                ? showMyNotesOnly
-                  ? "Show All Notes"
-                  : "Show Only Notes You Created"
-                : "Sign In to Filter by Creator"
-            }
-            type="button"
-          >
-            <UserRound className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Created By Me</span>
-          </button>
         </div>
         {/* Actions on the right */}
         <div className="flex items-center gap-3">
@@ -413,7 +313,6 @@ const NoteGrid = ({
               selectedNotes={selectedNotes}
               onToggleSelect={toggleNoteSelection}
               getProjectNameForNote={getProjectNameForNote}
-              isMyNotesFilterActive={showMyNotesOnly && Boolean(currentUserId)}
             />
           </div>
         )
