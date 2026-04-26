@@ -36,7 +36,6 @@ import dependencyRoutes from './kanban/routes/dependencyRoutes.js';
 // ─── Notes (from asy_b_notes) ─────────────────────────────────────────────────
 import noteRoutes from './notes/routes/noteRoutes.js';
 import attachmentRoutes from './notes/routes/attachmentRoutes.js';
-import sharedAttachmentRoutes from './notes/routes/sharedAttachmentRoutes.js';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 import configRouter from './config/configRouter.js';
@@ -122,7 +121,6 @@ app.use('/api', timeRoutes); // timeRoutes defines its own sub-paths under /api
 // ─── Routes: Notes ────────────────────────────────────────────────────────────
 app.use('/api/notes', noteRoutes);
 app.use('/api/attachments', attachmentRoutes);
-app.use('/api/shared-attachments', sharedAttachmentRoutes);
 
 // ─── Routes: Config ──────────────────────────────────────────────────────────
 app.use('/api/config', configRouter);

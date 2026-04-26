@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
-import { getSupabase } from "../config/supabase.js";
+import { sqliteDb } from "../../db/sqlite.js";
+
+const getSupabase = () => sqliteDb;
 
 // UUID validation helper
 const isValidUUID = (uuid) => {

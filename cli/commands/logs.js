@@ -80,7 +80,7 @@ export function run(args) {
   if (sub !== 'backend' && sub !== 'frontend' && sub !== 'all' && sub !== 'cli') {
     warn(`Unknown logs subcommand: ${col('white', sub)}`);
     log(`  Usage: ${col('cyan', 'logs')} ${col('dim', '[backend|frontend|cli|cli-view|all]')}`);
-    log(`  ${col('dim', 'cli-view options:')} ${col('white', CLI_LOG_TYPES.join(' | ')}`);
+    log(`  ${col('dim', 'cli-view options:')} ${col('white', CLI_LOG_TYPES.join(' | '))}`);
     return;
   }
 

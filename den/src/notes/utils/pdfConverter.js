@@ -2,11 +2,6 @@
 import puppeteer from 'puppeteer';
 import { renderChartToImage } from './chartRenderer.js';
 import { sanitizeTableCell } from './sanitizer.js';
-import {
-  buildSharedAttachmentPath,
-  createAttachmentShareId,
-} from './sharedAttachmentUtils.js';
-
 const PUBLIC_ATTACHMENT_BASE_URL = process.env.PUBLIC_ATTACHMENT_BASE_URL
   ? process.env.PUBLIC_ATTACHMENT_BASE_URL.replace(/\/$/, '')
   : '';
@@ -980,53 +975,20 @@ async function convertImageToHtml(properties, blobServiceClient, noteId) {
   return `<p><em>[Image: ${escapeHtml(filename || alt || caption || 'Untitled')}]</em></p>`;
 }
 
-const resolveSharedMediaUrl = (
-  type,
-  properties,
-  noteId,
-  projectId,
-  attachmentBaseUrl
-) => {
+const resolveMediaUrl = (type, properties, noteId, attachmentBaseUrl) => {
   const fallbackUrl = properties.url;
+  const filename = properties.filename;
 
-  if (!noteId || !projectId) {
-    return fallbackUrl || '#';
-  }
+  if (!noteId || !filename) return fallbackUrl || '#';
 
-  const explicitFilename = properties.filename;
-  let derivedFilename = explicitFilename;
-
-  if (!derivedFilename && fallbackUrl) {
-    const urlPathSegment = fallbackUrl.split('?')[0];
-    const segments = urlPathSegment.split('/');
-    derivedFilename = decodeURIComponent(segments[segments.length - 1] || '');
-  }
-
-  if (!derivedFilename) {
-    return fallbackUrl || '#';
-  }
-
-  try {
-    const shareId = createAttachmentShareId({
-      noteId,
-      projectId,
-      filename: derivedFilename,
-    });
-    const path = buildSharedAttachmentPath({ type, shareId });
-    const preferredBase = attachmentBaseUrl
-      ? attachmentBaseUrl.replace(/\/$/, '')
-      : PUBLIC_ATTACHMENT_BASE_URL;
-    return preferredBase ? `${preferredBase}${path}` : path;
-  } catch (error) {
-    console.error(`[PdfConverter] Failed to create shared ${type} link:`, error.message);
-    return fallbackUrl || '#';
-  }
+  const base = (attachmentBaseUrl || PUBLIC_ATTACHMENT_BASE_URL || '').replace(/\/$/, '');
+  return `${base}/api/attachments/notes/${noteId}/${encodeURIComponent(filename)}`;
 };
 
 function convertVideoToHtml(properties, { noteId, projectId, attachmentBaseUrl }) {
   const { filename, caption } = properties;
   const displayName = filename || 'Untitled Video';
-  const sharedUrl = resolveSharedMediaUrl('video', properties, noteId, projectId, attachmentBaseUrl);
+  const sharedUrl = resolveMediaUrl('video', properties, noteId, attachmentBaseUrl);
 
   return `
     <div>
@@ -1041,7 +1003,7 @@ function convertVideoToHtml(properties, { noteId, projectId, attachmentBaseUrl }
 function convertAudioToHtml(properties, { noteId, projectId, attachmentBaseUrl }) {
   const { filename, caption } = properties;
   const displayName = filename || 'Untitled Audio';
-  const sharedUrl = resolveSharedMediaUrl('audio', properties, noteId, projectId, attachmentBaseUrl);
+  const sharedUrl = resolveMediaUrl('audio', properties, noteId, attachmentBaseUrl);
 
   return `
     <div>
