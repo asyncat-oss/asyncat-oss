@@ -3,7 +3,7 @@
 // ── Agent status badge (module-level to avoid re-mount on every render) ────────
 function AgentStatusBadge({ session }) {
   if (!session) return null;
-  const hasAnswer = session.scratchpad?.finalAnswer || session.status === 'complete';
+  const hasAnswer = session.scratchpad?.finalAnswer || session.status === 'complete' || session.status === 'completed';
   const hasError  = session.status === 'error' || session.status === 'failed';
   if (hasError) return (
     <span className="flex items-center gap-1 text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800/50">
@@ -30,6 +30,87 @@ const AGENT_EXAMPLES = [
   { label: 'Remember context',     prompt: 'Remember that I prefer TypeScript over JavaScript and concise, commented code style.' },
   { label: 'Browse & extract',     prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
 ];
+
+function normalizeAgentToolRows(rows = []) {
+  return rows.map(row => ({
+    tool: row.tool_name || row.tool,
+    args: row.args,
+    result: row.result,
+    round: row.round,
+    permission: row.permission_level || row.permission,
+    permissionDecision: row.permission_decision || row.permissionDecision,
+    permissionReason: row.permission_reason || row.permissionReason,
+    workingDir: row.working_dir || row.workingDir,
+    timestamp: row.started_at || row.timestamp,
+  }));
+}
+
+function buildAgentEventsFromSession(session, auditRows = []) {
+  const rounds = Array.isArray(session?.scratchpad?.conversationRounds)
+    ? session.scratchpad.conversationRounds
+    : [];
+  const toolRows = normalizeAgentToolRows(
+    auditRows.length ? auditRows : (session?.toolHistory || [])
+  );
+
+  if (!rounds.length) {
+    const events = [];
+    if (session?.goal) events.push({ type: 'user_goal', data: { goal: session.goal } });
+    toolRows.forEach(tc => {
+      events.push({
+        type: 'tool_start',
+        data: {
+          tool: tc.tool,
+          args: tc.args,
+          round: tc.round,
+          permission: tc.permission,
+          permissionDecision: tc.permissionDecision,
+          permissionReason: tc.permissionReason,
+          workingDir: tc.workingDir,
+        },
+        result: tc.result,
+      });
+    });
+    const finalAnswer = session?.scratchpad?.finalAnswer;
+    if (finalAnswer) {
+      events.push({ type: 'answer', data: { answer: finalAnswer, round: session?.totalRounds } });
+    }
+    return events;
+  }
+
+  const events = [];
+  rounds.forEach((round, idx) => {
+    events.push({ type: 'user_goal', data: { goal: round.goal, timestamp: round.timestamp } });
+
+    const hasRange = Number.isFinite(round.startRound) && Number.isFinite(round.endRound);
+    const scopedTools = hasRange
+      ? toolRows.filter(tc => tc.round > round.startRound && tc.round <= round.endRound)
+      : [];
+
+    scopedTools.forEach(tc => {
+      events.push({
+        type: 'tool_start',
+        data: {
+          tool: tc.tool,
+          args: tc.args,
+          round: tc.round,
+          permission: tc.permission,
+          permissionDecision: tc.permissionDecision,
+          permissionReason: tc.permissionReason,
+          workingDir: tc.workingDir,
+        },
+        result: tc.result,
+      });
+    });
+
+    if (round.answer) {
+      const displayRound = hasRange ? Math.max(1, round.endRound - round.startRound) : idx + 1;
+      events.push({ type: 'answer', data: { answer: round.answer, round: displayRound } });
+    }
+  });
+
+  return events;
+}
 
 import {
   useState,
@@ -209,6 +290,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
     }
   }, [messages, scrollToBottom]);
 
+  useEffect(() => {
+    if (mode !== 'agent') return;
+    requestAnimationFrame(() => {
+      agentFeedEndRef.current?.scrollIntoView({
+        behavior: agentEvents.at(-1)?.type === 'user_goal' ? 'smooth' : 'auto',
+        block: 'end',
+      });
+    });
+  }, [mode, agentEvents, agentStreamingText]);
+
 
   // Handler for saving artifacts to notes - opens modal
   const handleSaveArtifactToNotes = useCallback(async (artifact) => {
@@ -232,55 +323,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         console.error('Failed to parse clarify questions:', err);
       }
   }, [messages, isStreaming, isProcessing]);
-
-  // Load agent session on mount if agentSessionId provided
-  useEffect(() => {
-    if (!agentSessionId || mode !== 'agent') return;
-
-    const loadSession = async () => {
-      setAgentLoadingSession(true);
-      try {
-        const res = await agentApi.getSession(agentSessionId);
-        if (res?.success && res.session) {
-          const session = res.session;
-          setAgentCurrentSessionId(session.id);
-          setAgentCurrentGoal(session.goal || 'Agent session');
-          setAgentCurrentSession(session);
-
-          // Reconstruct event feed from conversation rounds
-          const rounds = session.scratchpad?.conversationRounds || [];
-          const reconstructedEvents = [];
-          rounds.forEach((round, idx) => {
-            if (idx > 0) {
-              reconstructedEvents.push({
-                type: 'run_start',
-                data: { goal: round.goal }
-              });
-            }
-            reconstructedEvents.push({
-              type: 'answer',
-              data: { answer: round.answer, round: idx }
-            });
-          });
-          setAgentEvents(reconstructedEvents);
-
-          // Reconstruct conversation history for context
-          const history = [];
-          rounds.forEach(round => {
-            history.push({ role: 'user', content: round.goal });
-            history.push({ role: 'assistant', content: round.answer });
-          });
-          setAgentConversationHistory(history);
-        }
-      } catch (err) {
-        console.error('Failed to load agent session:', err);
-      } finally {
-        setAgentLoadingSession(false);
-      }
-    };
-
-    loadSession();
-  }, [agentSessionId, mode]);
 
   // Close export menu on outside click
   useEffect(() => {
@@ -414,23 +456,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
         const auditRes = await agentApi.getSessionAudit(agentSessionId);
         auditRows = auditRes?.audit || [];
       } catch { /* ignore */ }
-      const sourceRows = auditRows.length
-        ? auditRows.map(r => ({ tool: r.tool_name, args: r.args, result: r.result, round: r.round,
-            permission: r.permission_level, permissionDecision: r.permission_decision,
-            permissionReason: r.permission_reason, workingDir: r.working_dir }))
-        : (sess.toolHistory || []);
-      const toolEvents = sourceRows.map(tc => ({
-        type: 'tool_start',
-        data: { tool: tc.tool, args: tc.args, round: tc.round, permission: tc.permission,
-          permissionDecision: tc.permissionDecision, permissionReason: tc.permissionReason, workingDir: tc.workingDir },
-        result: tc.result,
-      }));
-      const finalAnswer = sess.scratchpad?.finalAnswer;
-      const answerEvents = finalAnswer
-        ? [{ type: 'answer', data: { answer: finalAnswer, round: sess.totalRounds } }] : [];
+      const events = buildAgentEventsFromSession(sess, auditRows);
       const errorEvents = (sess.status === 'error' || sess.status === 'failed')
-        ? [{ type: 'error', data: { message: sess.error || 'This run encountered an error.' } }] : [];
-      setAgentEvents([...toolEvents, ...answerEvents, ...errorEvents]);
+        ? [{ type: 'error', data: { message: sess.scratchpad?._error || 'This run encountered an error.' } }] : [];
+      setAgentEvents([...events, ...errorEvents]);
+
+      const history = [];
+      (sess.scratchpad?.conversationRounds || []).forEach(round => {
+        if (round.goal) history.push({ role: 'user', content: round.goal });
+        if (round.answer) history.push({ role: 'assistant', content: round.answer });
+      });
+      setAgentConversationHistory(history);
     }).catch(() => {}).finally(() => setAgentLoadingSession(false));
   }, [agentSessionId, mode]);
 
@@ -480,12 +516,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
     const submittedGoal = goal.trim();
     setAgentCurrentGoal(submittedGoal);
 
-    // If continuing a session, append a divider; otherwise start fresh
-    setAgentEvents(prev =>
-      prev.length > 0
-        ? [...prev, { type: 'run_start', data: { goal: submittedGoal } }]
-        : []
-    );
+    setAgentEvents(prev => [
+      ...prev,
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString() } },
+    ]);
 
     setAgentStreamingText('');
     setAgentRunning(true);
@@ -546,7 +580,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null, 
       agentAbortRef.current = null;
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
-  }, [agentRunning, agentConversationHistory]);
+  }, [agentRunning, agentConversationHistory, agentCurrentSessionId]);
 
   const handleAgentPermission = useCallback(async (requestId, decision) => {
     if (!requestId) return;

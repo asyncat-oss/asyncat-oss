@@ -55,6 +55,23 @@ function getResultSummary(result) {
 
 // ── Individual event components ───────────────────────────────────────────────
 
+function UserGoalEvent({ data }) {
+  const goal = data?.goal || data?.content || '';
+  if (!goal.trim()) return null;
+
+  return (
+    <div className="group mb-6">
+      <div className="max-w-4xl mx-auto flex justify-end">
+        <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
+          <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
+            {goal}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Minimal inline reasoning disclosure — matches ThinkingBlock in chat
 function ThinkingEvent({ data }) {
   const [expanded, setExpanded] = useState(false);
@@ -236,15 +253,17 @@ function AnswerEvent({ data }) {
   } catch { blocks = []; }
 
   return (
-    <div className="mt-3 mb-4 pt-3 border-t border-gray-100 dark:border-gray-800">
-      <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
-        {blocks.length > 0
-          ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
-          : <p className="whitespace-pre-wrap">{answer}</p>}
+    <div className="group mb-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+          {blocks.length > 0
+            ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
+            : <p className="whitespace-pre-wrap">{answer}</p>}
+        </div>
+        {data?.round > 1 && (
+          <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
+        )}
       </div>
-      {data?.round > 1 && (
-        <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
-      )}
     </div>
   );
 }
@@ -328,6 +347,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
     <div className="space-y-0">
       {(events || []).map((ev, i) => {
         switch (ev.type) {
+          case 'user_goal':          return <UserGoalEvent key={i} data={ev.data} />;
           case 'thinking':           return <ThinkingEvent key={i} data={ev.data} />;
           case 'permission_request': return <PermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
           case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} />;
@@ -339,7 +359,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
       })}
 
       {isRunning && <StreamingPreview text={streamingText} />}
-      {isRunning && !streamingText && (events || []).length === 0 && <RunningIndicator />}
+      {isRunning && !streamingText && <RunningIndicator />}
     </div>
   );
 }

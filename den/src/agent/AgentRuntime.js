@@ -82,6 +82,9 @@ export class AgentRuntime {
    * @returns {Promise<{answer: string, session: AgentSession, toolCalls: Array}>}
    */
   async run(goal, conversationHistory = []) {
+    let conversationRoundStart = 0;
+    let conversationToolStart = 0;
+
     // Load or create session
     if (this.continueSessionId) {
       this.session = AgentSession.load(this.continueSessionId);
@@ -115,6 +118,9 @@ export class AgentRuntime {
       });
       this.session.save();
     }
+
+    conversationRoundStart = this.session.totalRounds || 0;
+    conversationToolStart = this.session.toolHistory?.length || 0;
 
     // Load relevant memories
     const memories = this._loadMemories(goal);
@@ -388,7 +394,15 @@ export class AgentRuntime {
 
     // Track conversation rounds for UI reconstruction after refresh
     const rounds = this.session.scratchpad.conversationRounds || [];
-    rounds.push({ goal, answer, timestamp: new Date().toISOString() });
+    rounds.push({
+      goal,
+      answer,
+      timestamp: new Date().toISOString(),
+      startRound: conversationRoundStart,
+      endRound: this.session.totalRounds || conversationRoundStart,
+      toolStartIndex: conversationToolStart,
+      toolEndIndex: this.session.toolHistory?.length || conversationToolStart,
+    });
     this.session.setScratchpad('conversationRounds', rounds);
 
     this.session.complete();
