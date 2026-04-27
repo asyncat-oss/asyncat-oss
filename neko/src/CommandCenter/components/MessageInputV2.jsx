@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Bot, ChevronDown, Cloud, Cpu, Loader2, MessageSquare, Send, Search, X } from "lucide-react";
+import { Bot, ChevronDown, Cloud, Cpu, Loader2, MessageSquare, Send, Search, X, ShieldOff, Shield } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -18,6 +18,9 @@ export const MessageInputV2 = ({
   conversationTokens = 0,
   mode = 'chat',
   onModeChange,
+  agentAutoApprove = false,
+  onAgentAutoApproveChange,
+  prefillValue,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
@@ -49,6 +52,12 @@ export const MessageInputV2 = ({
       requestAnimationFrame(() => textareaRef.current?.focus());
     }
   }, [autoFocus]);
+
+  useEffect(() => {
+    if (!prefillValue) return;
+    setValue(prefillValue);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [prefillValue]);
 
   const prevDisabledRef = useRef(disabled);
   useEffect(() => {
@@ -413,6 +422,29 @@ export const MessageInputV2 = ({
                     <Search className="w-3.5 h-3.5" />
                     Search
                   </button>
+
+                  {mode === 'agent' && onAgentAutoApproveChange && (
+                    <button
+                      type="button"
+                      onClick={() => onAgentAutoApproveChange(!agentAutoApprove)}
+                      disabled={disabled}
+                      title={agentAutoApprove
+                        ? "Unrestricted mode ON — agent runs all tools without asking. Click to turn off."
+                        : "Restricted mode — agent will ask permission for sensitive tools. Click to enable unrestricted mode."
+                      }
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                        agentAutoApprove
+                          ? "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 ring-1 ring-orange-400 dark:ring-orange-500"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                    >
+                      {agentAutoApprove
+                        ? <ShieldOff className="w-3.5 h-3.5" />
+                        : <Shield className="w-3.5 h-3.5" />
+                      }
+                      {agentAutoApprove ? "Unrestricted" : "Restricted"}
+                    </button>
+                  )}
                 </div>
 
                 <div className="shrink-0">

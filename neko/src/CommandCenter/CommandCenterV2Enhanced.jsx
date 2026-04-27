@@ -179,7 +179,11 @@ function buildAgentEventsFromSession(session, auditRows = []) {
 }
 
 function cleanAgentActivityDetail(detail) {
-  return String(detail || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  return String(detail || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/\s*<tool_call>[\s\S]*?<\/(?:\w+:)?tool_call>/gi, '')
+    .replace(/\s*<tool_call[\s\S]*$/i, '')
+    .trim();
 }
 
 function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false }) {
@@ -265,6 +269,7 @@ import {
 import { MessageListV2 } from "./components/MessageListV2";
 import { MessageInputV2 } from "./components/MessageInputV2";
 import AgentRunFeed from '../Agent/components/AgentRunFeed';
+import AgentChangesPanel from '../Agent/components/AgentChangesPanel';
 import ArtifactsGallery from "./components/artifacts/ArtifactsGallery";
 import SaveAsNoteModal from "./components/SaveAsNoteModal";
 import ClarifyingQuestionsWidget from "./components/ClarifyingQuestionsWidget";
@@ -299,6 +304,7 @@ import {
   Square,
   Wrench,
   ShieldCheck,
+  ShieldOff,
   Brain,
   Terminal,
 } from "lucide-react";
@@ -353,8 +359,24 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [editGoalText, setEditGoalText] = useState('');
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
+  const [agentAutoApprove, setAgentAutoApprove] = useState(false);
+  const [agentPrefill, setAgentPrefill] = useState('');
+  const [alwaysAllowedTools, setAlwaysAllowedTools] = useState(() => {
+    try {
+      const stored = localStorage.getItem('asyncat_always_allow_tools');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
   const agentAbortRef = useRef(null);
   const agentFeedEndRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.prompt) setAgentPrefill(e.detail.prompt);
+    };
+    window.addEventListener('asyncat:prefill-agent', handler);
+    return () => window.removeEventListener('asyncat:prefill-agent', handler);
+  }, []);
 
   const conversationTokens = useMemo(() => {
     const historyChars = (conversationHistory || []).reduce(
@@ -641,6 +663,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       setAgentConversationHistory([]);
       setAgentCurrentSessionId(null);
       setIsEditingGoal(false);
+      setAgentAutoApprove(false);
     }
   }, [initialMode]);
 
@@ -734,7 +757,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let capturedFinalAnswer = '';
 
     try {
-      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId)) {
+      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId, { autoApprove: agentAutoApprove, preApprovedTools: [...alwaysAllowedTools] })) {
         if (controller.signal.aborted) break;
         if (event.type === 'delta') {
           setAgentStreamingText(prev => prev + (event.data?.content || ''));
@@ -784,7 +807,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       agentAbortRef.current = null;
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
-  }, [agentRunning, agentConversationHistory, agentCurrentSessionId]);
+  }, [agentRunning, agentConversationHistory, agentCurrentSessionId, agentAutoApprove, alwaysAllowedTools]);
 
   const handleAgentStop = useCallback(() => {
     if (!agentAbortRef.current) return;
@@ -797,12 +820,30 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const handleAgentPermission = useCallback(async (requestId, decision) => {
     if (!requestId) return;
+
+    // "Always allow" — persist to localStorage and resolve as allow_session for this request
+    let resolvedDecision = decision;
+    if (decision === 'allow_always') {
+      const toolName = agentEvents.find(
+        ev => ev.type === 'permission_request' && ev.data?.requestId === requestId
+      )?.data?.tool;
+      if (toolName) {
+        setAlwaysAllowedTools(prev => {
+          const next = new Set(prev);
+          next.add(toolName);
+          try { localStorage.setItem('asyncat_always_allow_tools', JSON.stringify([...next])); } catch {}
+          return next;
+        });
+      }
+      resolvedDecision = 'allow_session';
+    }
+
     setAgentEvents(prev => prev.map(ev =>
       ev.type === 'permission_request' && ev.data?.requestId === requestId
         ? { ...ev, data: { ...ev.data, resolving: true } } : ev
     ));
     try {
-      await agentApi.respondPermission(requestId, decision);
+      await agentApi.respondPermission(requestId, resolvedDecision);
       setAgentEvents(prev => prev.map(ev =>
         ev.type === 'permission_request' && ev.data?.requestId === requestId
           ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision } } : ev
@@ -812,6 +853,19 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         ev.type === 'permission_request' && ev.data?.requestId === requestId
           ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision: 'error', error: err.message } } : ev
       ));
+    }
+  }, [agentEvents]);
+
+  const handleAgentAskUser = useCallback(async (requestId, answer) => {
+    if (!requestId) return;
+    setAgentEvents(prev => prev.map(ev =>
+      ev.type === 'ask_user' && ev.data?.requestId === requestId
+        ? { ...ev, data: { ...ev.data, answered: true } } : ev
+    ));
+    try {
+      await agentApi.respondAskUser(requestId, answer);
+    } catch (err) {
+      console.error('Failed to respond to ask_user:', err);
     }
   }, []);
 
@@ -1381,6 +1435,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Running
                   </span>
                 ) : agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} />}
+                {agentAutoApprove && (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800/50">
+                    <ShieldOff className="w-2.5 h-2.5" /> Unrestricted
+                  </span>
+                )}
 
                 {/* Goal title */}
                 <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -1464,6 +1523,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     conversationTokens={0}
                     mode={mode}
                     onModeChange={setMode}
+                    agentAutoApprove={agentAutoApprove}
+                    onAgentAutoApproveChange={setAgentAutoApprove}
+                    prefillValue={agentPrefill}
                   />
 
                   <div className="mt-4 px-4 sm:px-6">
@@ -1517,12 +1579,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         <Loader2 className="w-4 h-4 animate-spin" /> Loading session…
                       </div>
                     ) : (
-                      <AgentRunFeed
-                        events={agentEvents}
-                        isRunning={agentRunning}
-                        streamingText={agentStreamingText}
-                        onPermissionDecision={handleAgentPermission}
-                      />
+                      <>
+                        <AgentRunFeed
+                          events={agentEvents}
+                          isRunning={agentRunning}
+                          streamingText={agentStreamingText}
+                          onPermissionDecision={handleAgentPermission}
+                          onAskUserAnswer={handleAgentAskUser}
+                        />
+                        {!agentRunning && <AgentChangesPanel events={agentEvents} />}
+                      </>
                     )}
                     <div ref={agentFeedEndRef} />
                   </div>
@@ -1551,6 +1617,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       conversationTokens={0}
                       mode={mode}
                       onModeChange={setMode}
+                      agentAutoApprove={agentAutoApprove}
+                      onAgentAutoApproveChange={setAgentAutoApprove}
                     />
                   </div>
                 )}

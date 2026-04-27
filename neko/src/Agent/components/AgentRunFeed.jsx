@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
-  FileText, Calendar, LayoutList, ShieldAlert
+  FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send,
+  ShieldOff,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 
@@ -181,8 +182,9 @@ function PermissionEvent({ data, onDecision }) {
   const { icon: Icon, label } = getToolMeta(data?.tool);
   const resolved = data?.resolved;
   const decision = data?.decision;
-  const isAllowed = decision === 'allow' || decision === 'allow_session';
+  const isAllowed = decision === 'allow' || decision === 'allow_session' || decision === 'allow_always';
   const isDenied = decision === 'deny';
+  const [showDiff, setShowDiff] = useState(false);
 
   return (
     <FeedFrame className="mb-4">
@@ -195,15 +197,38 @@ function PermissionEvent({ data, onDecision }) {
           <div className="flex items-center gap-1.5">
             <Icon className="w-3 h-3 text-amber-600 dark:text-amber-300" />
             <span className="text-xs font-semibold text-amber-900 dark:text-amber-100">Approve tool access</span>
-            <code className="text-[10px] text-amber-700/70 dark:text-amber-300/70">{data?.tool}</code>
+            <code className="text-[10px] px-1 py-0.5 rounded bg-amber-200/50 dark:bg-amber-800/30 text-amber-700 dark:text-amber-300">{data?.tool}</code>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+              data?.permission === 'dangerous'
+                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+            }`}>
+              {data?.permission || 'moderate'}
+            </span>
           </div>
           <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">{data?.description || label}</p>
-          <pre className="text-[10px] text-amber-700 dark:text-amber-300 whitespace-pre-wrap font-mono mt-1.5 max-h-24 overflow-y-auto">
+          <pre className="text-[10px] text-amber-700 dark:text-amber-300 whitespace-pre-wrap font-mono mt-1.5 max-h-24 overflow-y-auto bg-amber-100/50 dark:bg-amber-900/20 rounded p-1.5">
             {truncateArgs(data?.args)}
           </pre>
+          {data?.diff && (
+            <div className="mt-2">
+              <button
+                onClick={() => setShowDiff(v => !v)}
+                className="text-[10px] text-amber-700 dark:text-amber-400 flex items-center gap-1 hover:underline"
+              >
+                {showDiff ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                Show diff
+              </button>
+              {showDiff && (
+                <pre className="mt-1 text-[10px] font-mono bg-gray-900 text-gray-200 rounded p-2 max-h-48 overflow-y-auto whitespace-pre leading-relaxed">
+                  {data.diff}
+                </pre>
+              )}
+            </div>
+          )}
           {data?.workingDir && (
-            <p className="text-[10px] text-amber-700/70 dark:text-amber-300/70 mt-1 truncate">
-              Working dir: {data.workingDir}
+            <p className="text-[10px] text-amber-700/60 dark:text-amber-300/60 mt-1 truncate">
+              {data.workingDir}
             </p>
           )}
           {data?.error && (
@@ -211,28 +236,30 @@ function PermissionEvent({ data, onDecision }) {
           )}
         </div>
       </div>
-      <div className="border-t border-amber-200/70 dark:border-amber-800/40 px-3 py-2 flex items-center justify-end gap-2">
+      <div className="border-t border-amber-200/70 dark:border-amber-800/40 px-3 py-2 flex items-center justify-end gap-2 flex-wrap">
         {resolved ? (
-          <span className={`text-xs font-medium ${
+          <span className={`text-xs font-medium flex items-center gap-1 ${
             isAllowed ? 'text-green-700 dark:text-green-300'
             : isDenied ? 'text-red-700 dark:text-red-300'
             : 'text-amber-700 dark:text-amber-300'
           }`}>
-            {isAllowed ? 'Approved' : isDenied ? 'Denied' : 'Resolved'}
+            {isAllowed ? '✓ Approved' : isDenied ? '✗ Denied' : 'Resolved'}
+            {decision === 'allow_always' && <span className="text-[10px] opacity-70">(always)</span>}
+            {decision === 'allow_session' && <span className="text-[10px] opacity-70">(this run)</span>}
           </span>
         ) : (
           <>
             <button
               onClick={() => onDecision?.(data?.requestId, 'deny')}
               disabled={data?.resolving}
-              className="px-2.5 py-1 text-xs rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60"
+              className="px-2.5 py-1 text-xs rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60 transition-colors"
             >
               Deny
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow')}
               disabled={data?.resolving}
-              className="px-2.5 py-1 text-xs rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white flex items-center gap-1.5"
+              className="px-2.5 py-1 text-xs rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white flex items-center gap-1.5 transition-colors"
             >
               {data?.resolving && <Loader2 className="w-3 h-3 animate-spin" />}
               Approve once
@@ -240,12 +267,99 @@ function PermissionEvent({ data, onDecision }) {
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow_session')}
               disabled={data?.resolving}
-              className="px-2.5 py-1 text-xs rounded bg-gray-800 hover:bg-gray-900 dark:bg-gray-200 dark:hover:bg-white disabled:opacity-60 text-white dark:text-gray-900"
+              className="px-2.5 py-1 text-xs rounded bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 disabled:opacity-60 text-white transition-colors"
             >
               Trust this run
             </button>
+            <button
+              onClick={() => onDecision?.(data?.requestId, 'allow_always')}
+              disabled={data?.resolving}
+              title={`Always allow ${data?.tool} without asking`}
+              className="px-2.5 py-1 text-xs rounded border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 flex items-center gap-1 transition-colors"
+            >
+              <ShieldOff className="w-3 h-3" />
+              Always allow
+            </button>
           </>
         )}
+      </div>
+    </div>
+    </FeedFrame>
+  );
+}
+
+function AskUserEvent({ data, onAnswer }) {
+  const [inputValue, setInputValue] = useState('');
+  const [answered, setAnswered] = useState(false);
+  const [chosenAnswer, setChosenAnswer] = useState('');
+  const inputRef = useRef(null);
+
+  const submit = (answer) => {
+    const val = (answer ?? inputValue).trim();
+    if (!val) return;
+    setChosenAnswer(val);
+    setAnswered(true);
+    onAnswer?.(data?.requestId, val);
+  };
+
+  return (
+    <FeedFrame className="mb-4">
+    <div className="rounded-lg border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-900/10 overflow-hidden">
+      <div className="px-3 py-3 flex items-start gap-2.5">
+        <div className="flex-shrink-0 w-6 h-6 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 flex items-center justify-center">
+          <MessageCircle className="w-3.5 h-3.5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-semibold text-blue-900 dark:text-blue-100">Agent question</span>
+          <p className="text-sm text-blue-800 dark:text-blue-200 mt-1 leading-relaxed">{data?.question}</p>
+
+          {answered ? (
+            <p className="mt-2 text-xs text-blue-600 dark:text-blue-400 italic">You replied: "{chosenAnswer}"</p>
+          ) : (
+            <>
+              {data?.choices?.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {data.choices.map((choice, i) => (
+                    <button
+                      key={i}
+                      onClick={() => submit(choice)}
+                      className="px-2.5 py-1 text-xs rounded-full border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    >
+                      {choice}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 flex gap-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={e => setInputValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                  placeholder={data?.default ? `Default: ${data.default}` : 'Type your answer…'}
+                  className="flex-1 text-xs bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  autoFocus
+                />
+                <button
+                  onClick={() => submit()}
+                  disabled={!inputValue.trim() && !data?.default}
+                  className="px-2.5 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white flex items-center gap-1 transition-colors"
+                >
+                  <Send className="w-3 h-3" />
+                </button>
+              </div>
+              {data?.default && (
+                <button
+                  onClick={() => submit(data.default)}
+                  className="mt-1 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Use default: "{data.default}"
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
     </FeedFrame>
@@ -256,7 +370,11 @@ function PermissionEvent({ data, onDecision }) {
 function AnswerEvent({ data }) {
   // Strip raw <think>...</think> blocks the model may have left in the answer
   const raw = data?.answer || '';
-  const answer = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const answer = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/\s*<tool_call>[\s\S]*?<\/(?:\w+:)?tool_call>/gi, '')
+    .replace(/\s*<tool_call[\s\S]*$/i, '')
+    .trim();
   if (!answer) return null;
 
   let blocks = [];
@@ -367,7 +485,7 @@ function RunningIndicator() {
 
 // ── Main feed component ───────────────────────────────────────────────────────
 
-export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision }) {
+export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision, onAskUserAnswer }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
@@ -378,6 +496,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
           case 'user_goal':          return <UserGoalEvent key={i} data={ev.data} />;
           case 'thinking':           return <ThinkingEvent key={i} data={ev.data} />;
           case 'permission_request': return <PermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
+          case 'ask_user':           return <AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />;
           case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} />;
           case 'answer':             return <AnswerEvent key={i} data={ev.data} />;
           case 'error':              return <ErrorEvent key={i} data={ev.data} />;

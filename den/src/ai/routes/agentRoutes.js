@@ -14,6 +14,7 @@ import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/to
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { randomUUID } from 'crypto';
 import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -217,7 +218,7 @@ router.get('/skills/:name', authenticate, (req, res) => {
  */
 router.post('/run', authenticate, async (req, res) => {
   try {
-    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId } = req.body;
+    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [] } = req.body;
 
     if (!goal || !goal.trim()) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
@@ -256,6 +257,14 @@ router.post('/run', authenticate, async (req, res) => {
       askUser: createAskUserRequest(req, res),
       continueSessionId,
     });
+
+    if (Array.isArray(preApprovedTools) && preApprovedTools.length > 0) {
+      preApprovedTools.forEach(tool => {
+        if (typeof tool === 'string' && tool.trim()) {
+          agent.sessionApprovedTools.add(tool.trim());
+        }
+      });
+    }
 
     await agent.runStreaming(goal, conversationHistory, res);
 
@@ -863,6 +872,153 @@ router.post('/multi', authenticate, async (req, res) => {
     res.json({ success: true, count: results.length, results });
   } catch (err) {
     console.error('Multi-agent error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/agent/files/list?path=<relative-dir>&depth=<1-3>
+ * List directory contents (lazy, depth-limited).
+ */
+router.get('/files/list', authenticate, (req, res) => {
+  const dirPath = req.query.path || '.';
+  const depth   = Math.min(Math.max(Number(req.query.depth || 1), 0), 3);
+
+  const workingDir = path.resolve(process.cwd());
+  const resolved   = path.resolve(workingDir, dirPath);
+
+  if (!resolved.startsWith(workingDir + path.sep) && resolved !== workingDir) {
+    return res.status(403).json({ success: false, error: 'Path outside working directory' });
+  }
+  if (!fs.existsSync(resolved)) {
+    return res.status(404).json({ success: false, error: 'Directory not found' });
+  }
+  if (!fs.statSync(resolved).isDirectory()) {
+    return res.status(400).json({ success: false, error: 'Not a directory' });
+  }
+
+  const SKIP = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dist', 'build', 'venv', '.venv']);
+
+  function walk(dir, currentDepth) {
+    let items;
+    try {
+      items = fs.readdirSync(dir).filter(n => !n.startsWith('.') && !SKIP.has(n)).sort();
+    } catch { return []; }
+
+    return items.map(name => {
+      const full = path.join(dir, name);
+      const rel  = path.relative(workingDir, full);
+      let stat;
+      try { stat = fs.statSync(full); } catch { return null; }
+      if (!stat) return null;
+
+      if (stat.isDirectory()) {
+        return {
+          name, path: rel, type: 'dir',
+          children: currentDepth < depth ? walk(full, currentDepth + 1) : null,
+        };
+      }
+      return {
+        name, path: rel, type: 'file',
+        size: stat.size,
+        mtime: stat.mtime,
+        ext: path.extname(name).slice(1).toLowerCase(),
+      };
+    }).filter(Boolean);
+  }
+
+  try {
+    res.json({ success: true, path: dirPath, entries: walk(resolved, 0) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/agent/files/entry?path=<path>
+ * Returns directory listing OR file content depending on what the path is.
+ * One round-trip for the FilesPage to determine what to render.
+ */
+router.get('/files/entry', authenticate, (req, res) => {
+  const entryPath = req.query.path || '.';
+  const workingDir = path.resolve(process.cwd());
+  const resolved   = path.resolve(workingDir, entryPath);
+
+  if (!resolved.startsWith(workingDir + path.sep) && resolved !== workingDir) {
+    return res.status(403).json({ success: false, error: 'Path outside working directory' });
+  }
+  if (!fs.existsSync(resolved)) {
+    return res.status(404).json({ success: false, error: 'Path not found' });
+  }
+
+  const SKIP = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dist', 'build', 'venv', '.venv']);
+
+  try {
+    const stat = fs.statSync(resolved);
+
+    if (stat.isDirectory()) {
+      let items;
+      try { items = fs.readdirSync(resolved).filter(n => !n.startsWith('.') && !SKIP.has(n)).sort(); }
+      catch { items = []; }
+
+      const entries = items.map(name => {
+        const full = path.join(resolved, name);
+        const rel  = path.relative(workingDir, full);
+        let s;
+        try { s = fs.statSync(full); } catch { return null; }
+        if (!s) return null;
+        if (s.isDirectory()) return { name, path: rel, type: 'dir', mtime: s.mtime };
+        return { name, path: rel, type: 'file', size: s.size, mtime: s.mtime, ext: path.extname(name).slice(1).toLowerCase() };
+      }).filter(Boolean);
+
+      const dirs  = entries.filter(e => e.type === 'dir');
+      const files = entries.filter(e => e.type === 'file');
+
+      return res.json({ success: true, type: 'dir', path: entryPath, entries: [...dirs, ...files] });
+    }
+
+    // File
+    if (stat.size > 1024 * 1024) {
+      return res.json({ success: true, type: 'file', path: entryPath, tooLarge: true,
+        size: stat.size, mtime: stat.mtime, ext: path.extname(entryPath).slice(1).toLowerCase() });
+    }
+    const content = fs.readFileSync(resolved, 'utf8');
+    res.json({ success: true, type: 'file', path: entryPath,
+      content, size: stat.size, mtime: stat.mtime, ext: path.extname(entryPath).slice(1).toLowerCase() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/agent/files/read?path=<relative-path>
+ * Read a file from the agent's working directory.
+ */
+router.get('/files/read', authenticate, (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath) return res.status(400).json({ success: false, error: 'path is required' });
+
+  const workingDir = path.resolve(process.cwd());
+  const resolved = path.resolve(workingDir, filePath);
+
+  if (!resolved.startsWith(workingDir + path.sep) && resolved !== workingDir) {
+    return res.status(403).json({ success: false, error: 'Path outside working directory' });
+  }
+
+  try {
+    if (!fs.existsSync(resolved)) {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) {
+      return res.status(400).json({ success: false, error: 'Path is a directory' });
+    }
+    if (stat.size > 1024 * 1024) {
+      return res.status(400).json({ success: false, error: 'File too large to preview (>1MB)' });
+    }
+    const content = fs.readFileSync(resolved, 'utf8');
+    res.json({ success: true, content, path: filePath, size: stat.size, mtime: stat.mtime });
+  } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });

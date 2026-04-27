@@ -943,7 +943,7 @@ export const agentApi = {
    * Run an agent with a goal — returns an async generator of SSE events.
    * Event types: thinking, tool_start, tool_result, delta, answer, error, done
    */
-  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null, continueSessionId = null) {
+  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null, continueSessionId = null, opts = {}) {
     const workspaceId = getCurrentWorkspaceId();
     const token = await authService.getSession();
 
@@ -954,7 +954,11 @@ export const agentApi = {
         'Authorization': `Bearer ${token?.access_token}`
       },
       signal,
-      body: JSON.stringify({ goal, conversationHistory, workingDir, maxRounds, workspaceId, continueSessionId })
+      body: JSON.stringify({
+        goal, conversationHistory, workingDir, maxRounds, workspaceId, continueSessionId,
+        autoApprove: opts.autoApprove || false,
+        preApprovedTools: opts.preApprovedTools || [],
+      })
     });
 
     if (!response.ok) {
@@ -1040,6 +1044,33 @@ export const agentApi = {
       body: JSON.stringify({ decision, reason })
     });
     return await handleResponse(res);
+  },
+
+  respondAskUser: async (requestId, answer) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/ask/${requestId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token?.access_token}`
+      },
+      body: JSON.stringify({ answer })
+    });
+    return await handleResponse(res);
+  },
+
+  readFile: async (filePath) => {
+    return await apiRequest(`${API_BASE_URL}/agent/files/read?path=${encodeURIComponent(filePath)}`);
+  },
+
+  listDirectory: async (dirPath = '.', depth = 1) => {
+    const params = new URLSearchParams({ path: dirPath, depth: String(depth) });
+    return await apiRequest(`${API_BASE_URL}/agent/files/list?${params}`);
+  },
+
+  loadEntry: async (entryPath = '.') => {
+    const params = new URLSearchParams({ path: entryPath });
+    return await apiRequest(`${API_BASE_URL}/agent/files/entry?${params}`);
   },
 
   getTools: async () => {

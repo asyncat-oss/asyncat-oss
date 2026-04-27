@@ -65,6 +65,8 @@ const AppLayout = ({ session, onSignOut }) => {
         return 'models';
       case 'agents':
         return 'agents';
+      case 'files':
+        return 'files';
       default:
         return 'home';
     }

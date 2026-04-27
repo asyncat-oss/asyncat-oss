@@ -23,6 +23,7 @@ import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Settings/ModelsPage';
 import AgentToolsSkillsPage from '../Agent/AgentToolsSkillsPage';
+import FilesPage from '../files/FilesPage';
 
 
 const loadingMessages = [
@@ -236,6 +237,11 @@ const createRouter = () => createBrowserRouter([
       {
         path: "agents/:sessionId",
         element: <CommandCenterV2Enhanced />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "files",
+        element: <FilesPage />,
         errorElement: <RouteErrorElement />
       }
     ]

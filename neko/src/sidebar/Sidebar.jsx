@@ -25,12 +25,14 @@ Cpu,
   Wrench,
   MessageSquare as ChatIcon,
   Calendar as CalendarIcon,
+  HardDrive,
 } from "lucide-react";
 
 import ProjectExplorer from "./ProjectExplorer";
 import CreateProjectFlow from "../projects/components/CreateProjectFlow";
 import CalendarContent from "./CalendarContent";
 import UniversalSearch from "./UniversalSearch";
+import LocalFileTree from "./LocalFileTree";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { usePermissions } from "../utils/permissions";
 import { agentApi, chatApi } from "../CommandCenter/commandCenterApi";
@@ -911,6 +913,7 @@ const DynamicSidebar = ({
 
 	// Active mode derived from URL — only chat and workspace
 	const getMode = (bp) => {
+		if (bp === 'files') return 'files';
 		if (bp === 'projects' || bp === 'workspace' || bp === 'calendar') return 'workspace';
 		return 'chat';
 	};
@@ -981,12 +984,13 @@ const DynamicSidebar = ({
 						</button>
 						{/* Mode tabs */}
 						{[
-							{ mode: 'chat', Icon: ChatIcon, label: 'Chat', path: '/home' },
-							{ mode: 'workspace', Icon: Compass, label: 'Workspace', path: '/workspace' },
+							{ mode: 'chat',      Icon: ChatIcon,   label: 'Chat',      path: '/home' },
+							{ mode: 'workspace', Icon: Compass,    label: 'Workspace', path: '/workspace' },
+							{ mode: 'files',     Icon: HardDrive,  label: 'Files',     path: null },
 						].map(({ mode, Icon, label, path }) => (
 							<button
 								key={mode}
-								onClick={() => { setActiveMode(mode); navigate(path); }}
+								onClick={() => { setActiveMode(mode); if (path) navigate(path); }}
 								title={label}
 								className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-all duration-150 ${activeMode === mode
 										? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100'
@@ -1115,6 +1119,11 @@ const DynamicSidebar = ({
 									/>
 								</div>
 							</div>
+						</div>
+
+						{/* Files mode */}
+						<div className={`${activeMode !== 'files' ? 'hidden' : ''}`}>
+							<LocalFileTree />
 						</div>
 
 					</div>
