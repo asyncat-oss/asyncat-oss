@@ -10,7 +10,6 @@ import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js'
 import { loadSkills, listSkills } from '../../agent/skills.js';
 import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
-import { PermissionRules } from '../../agent/PermissionRules.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { randomUUID } from 'crypto';
@@ -399,57 +398,6 @@ router.post('/ask/:requestId', authenticate, (req, res) => {
   pending.resolve({ success: true, answer });
 
   res.json({ success: true });
-});
-
-/**
- * GET /api/agent/permissions/rules
- * List saved permission rules for this user.
- */
-router.get('/permissions/rules', authenticate, (req, res) => {
-  try {
-    const rules = PermissionRules.list({ userId: req.user.id, workspaceId: req.workspaceId });
-    res.json({ success: true, rules });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * POST /api/agent/permissions/rules
- * Add a permission rule.
- * Body: { toolName, argField?, argPattern?, action?, scope?, note? }
- */
-router.post('/permissions/rules', authenticate, (req, res) => {
-  try {
-    const { toolName, argField, argPattern, action, scope, note } = req.body || {};
-    if (!toolName) return res.status(400).json({ success: false, error: 'toolName is required' });
-    const result = PermissionRules.add({
-      userId: req.user.id,
-      workspaceId: req.workspaceId,
-      toolName,
-      argField: argField ?? null,
-      argPattern: argPattern ?? null,
-      action: action || 'allow',
-      scope: scope || 'workspace',
-      note: note ?? null,
-    });
-    res.json({ success: true, ...result });
-  } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * DELETE /api/agent/permissions/rules/:id
- */
-router.delete('/permissions/rules/:id', authenticate, (req, res) => {
-  try {
-    const removed = PermissionRules.remove(req.params.id);
-    if (!removed) return res.status(404).json({ success: false, error: 'Rule not found' });
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
 });
 
 // ── MCP management ──────────────────────────────────────────────────────────

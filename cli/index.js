@@ -38,7 +38,6 @@ import * as _code     from './commands/code.js';
 import * as _agent    from './commands/agent.js';
 import * as _mcp      from './commands/mcp.js';
 import * as _context  from './commands/context.js';
-import * as _permissions from './commands/permissions.js';
 import * as _memory   from './commands/memory.js';
 import { getToken, getBase, apiGet, apiPost } from './lib/denApi.js';
 import { banner, setLiveLogsEnabled, getLiveLogsEnabled } from './lib/colors.js';
@@ -1636,9 +1635,6 @@ async function runSingleCommand(argv) {
     case 'install': await _install.run(rest); break;
     case 'doctor': _doctor.run(); break;
     case 'version': _version.run(); break;
-    case 'permissions':
-    case 'perms':
-      await _permissions.run(rest); break;
     case 'memory':
     case 'mem':
       await _memory.run(rest); break;

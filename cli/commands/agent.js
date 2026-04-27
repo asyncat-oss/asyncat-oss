@@ -41,65 +41,6 @@ function usageWithCost(usage) {
   };
 }
 
-/**
- * Ask user for permission before a dangerous tool executes.
- * This is called via the SSE 'permission_request' event.
- */
-function askPermission(toolName, args, permission, diff = null) {
-  return new Promise(resolve => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-    log('');
-    log(`  ${PERM_ICONS[permission] || '🔴'} ${col(PERM_COLORS[permission] || 'red', `Agent wants to run: ${toolName}`)}`);
-
-    // Show a readable description of the action
-    if (toolName === 'run_command') {
-      log(`    ${col('cyan', '$')} ${col('white', args.command || '')}`);
-      if (args.cwd) log(`    ${col('dim', `in: ${args.cwd}`)}`);
-    } else if (toolName === 'write_file' || toolName === 'edit_file') {
-      log(`    ${col('dim', `file: ${args.path}`)}`);
-    } else if (toolName === 'run_python' || toolName === 'run_node') {
-      const lines = (args.code || '').split('\n').slice(0, 6);
-      log(`    ${col('dim', lines.join('\n    '))}`);
-      if ((args.code || '').split('\n').length > 6) log(`    ${col('dim', '...')}`);
-    } else {
-      log(`    ${col('dim', JSON.stringify(args, null, 2).split('\n').map(l => '    ' + l).join('\n'))}`);
-    }
-
-    if (diff) {
-      log('');
-      log(`  ${col('dim', 'Diff preview:')}`);
-      for (const line of diff.split('\n').slice(0, 80)) {
-        const color = line.startsWith('+') ? 'green' : line.startsWith('-') ? 'red' : 'dim';
-        log(`    ${col(color, line)}`);
-      }
-      if (diff.split('\n').length > 80) log(`    ${col('dim', '... [diff preview truncated]')}`);
-    }
-
-    log('');
-    const opts = [
-      `${col('dim', '[Y/Enter]')} Allow once`,
-      `${col('dim', '[N]')} Deny`,
-      `${col('dim', '[A]')} Allow all this session`,
-      `${col('dim', '[T]')} Always allow ${col('cyan', toolName)}`,
-    ];
-    if (toolName === 'run_command') {
-      const first = String(args.command || '').trim().split(/\s+/)[0];
-      if (first) opts.push(`${col('dim', '[C]')} Always allow ${col('cyan', first + ' …')}`);
-    }
-    log(`  ${opts.join('  ')}`);
-    rl.question(`  ${col('cyan', '▸')} `, answer => {
-      rl.close();
-      const a = (answer || '').trim().toLowerCase();
-      if (a === 'n' || a === 'no') resolve('deny');
-      else if (a === 'a' || a === 'all') resolve('allow_session');
-      else if (a === 't') resolve('allow_always_tool');
-      else if (a === 'c' && toolName === 'run_command') resolve('allow_always_command');
-      else resolve('allow'); // Y, Enter, anything else = allow
-    });
-  });
-}
-
 function askUserQuestion(data) {
   return new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -293,46 +234,12 @@ async function runAgent(goal, options = {}, tui = null) {
     log('');
   }
 
-  // Permission decisions tracked per session (allow_session)
-  const sessionApprovals = new Set();
-
   await streamPost('/api/agent/run', {
     goal,
     workingDir: options.workingDir || process.cwd(),
     maxRounds: options.maxRounds || 25,
     autoApprove: options.autoApprove || false,
   }, async (event) => {
-    // Permission requests need interactive response
-    if (event.type === 'permission_request') {
-      const { requestId, args, permission } = event.data;
-      const toolName = event.data.toolName || event.data.tool;
-
-      if (options.autoApprove || sessionApprovals.has(toolName)) {
-        // Respond to the API that permission is granted
-        const res = await fetch(`${base}/api/agent/permissions/${requestId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ decision: options.autoApprove ? 'allow_session' : 'allow' }),
-        });
-        if (!res.ok) throw new Error(`Permission response failed (${res.status})`);
-        return;
-      }
-
-      const decision = await askPermission(toolName, args, permission, event.data.diff);
-
-      if (decision === 'allow_session' || decision === 'allow_always_tool') {
-        sessionApprovals.add(toolName);
-      }
-
-      const res = await fetch(`${base}/api/agent/permissions/${requestId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ decision }),
-      });
-      if (!res.ok) throw new Error(`Permission response failed (${res.status})`);
-      return;
-    }
-
     if (event.type === 'ask_user') {
       const answer = await askUserQuestion(event.data);
       const res = await fetch(`${base}/api/agent/ask/${event.data.requestId}`, {

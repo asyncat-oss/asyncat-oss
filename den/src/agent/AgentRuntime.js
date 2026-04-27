@@ -17,7 +17,6 @@ import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt } from './prompts/agentSystemPrompt.js';
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
-import { PermissionRules } from './PermissionRules.js';
 import { findRelevantSkills } from './skills.js';
 import { listMemories, searchMemories } from './tools/memoryTools.js';
 import fs from 'fs';
@@ -467,22 +466,6 @@ export class AgentRuntime {
       return { allowed: true, decision: 'session_approved' };
     }
 
-    // Persistent allowlist check — workspace- or global-scope rules the user has saved.
-    if (this.userId) {
-      const ruleResult = PermissionRules.evaluate({
-        userId: this.userId,
-        workspaceId: this.workspaceId,
-        toolName: toolCall.tool_name,
-        args: toolCall.arguments || {},
-      });
-      if (ruleResult.decision === 'allow') {
-        return { allowed: true, decision: 'rule_allow', reason: ruleResult.rule?.note || null };
-      }
-      if (ruleResult.decision === 'deny') {
-        return { allowed: false, decision: 'rule_deny', reason: ruleResult.rule?.note || 'Denied by saved rule' };
-      }
-    }
-
     if (this.requestPermission) {
       const request = {
         sessionId: this.session?.id,
@@ -498,49 +481,10 @@ export class AgentRuntime {
       const decision = await this.requestPermission(request);
       const decisionName = decision?.decision || 'deny';
       const allowed = decisionName === 'allow'
-        || decisionName === 'allow_session'
-        || decisionName === 'allow_always_tool'
-        || decisionName === 'allow_always_command';
+        || decisionName === 'allow_session';
 
       if (decisionName === 'allow_session') {
         this.sessionApprovedTools.add(toolCall.tool_name);
-      }
-      if (decisionName === 'allow_always_tool' && this.userId) {
-        try {
-          PermissionRules.add({
-            userId: this.userId,
-            workspaceId: this.workspaceId,
-            toolName: toolCall.tool_name,
-            action: 'allow',
-            scope: 'workspace',
-            note: 'Allowed via TUI — Always allow this tool',
-          });
-          this.sessionApprovedTools.add(toolCall.tool_name);
-        } catch (err) {
-          console.error('[permission] Failed to save allow_always_tool rule:', err.message);
-        }
-      }
-      if (decisionName === 'allow_always_command' && this.userId && toolCall.tool_name === 'run_command') {
-        try {
-          const cmd = String(toolCall.arguments?.command || '').trim();
-          const first = cmd.split(/\s+/)[0] || cmd;
-          if (first) {
-            const safe = first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            PermissionRules.add({
-              userId: this.userId,
-              workspaceId: this.workspaceId,
-              toolName: 'run_command',
-              argField: 'command',
-              argPattern: `^${safe}( |$)`,
-              action: 'allow',
-              scope: 'workspace',
-              note: `Allowed via TUI — always allow: ${first}`,
-            });
-            this.sessionApprovedTools.add(toolCall.tool_name);
-          }
-        } catch (err) {
-          console.error('[permission] Failed to save allow_always_command rule:', err.message);
-        }
       }
 
       return {
@@ -550,13 +494,8 @@ export class AgentRuntime {
       };
     }
 
-    const result = await permissionManager.check(toolCall.tool_name, toolCall.arguments, permission);
-    return {
-      ...result,
-      decision: result.allowed ? `auto_${permission}` : 'denied',
-    };
+    return { allowed: true, decision: 'local_auto' };
   }
-
   async _callLLM(systemPrompt, messages) {
     const useNativeTools = this.supportsNativeTools;
 
