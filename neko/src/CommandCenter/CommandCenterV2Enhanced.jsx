@@ -1145,9 +1145,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   // ── Unified top bar ──────────────────────────────────────────────────────────
   const TopBar = (
     <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-      <div className="flex items-center gap-2">
-        <img src="/cat.svg" alt="The Cat" className="w-6 h-6" />
-      </div>
+      <div />
       <div className="flex items-center gap-2">
         {isGhostMode && (
           <button
@@ -1158,28 +1156,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             <Ghost className={`w-4 h-4 ${isGhostMode ? "text-gray-600 dark:text-gray-400" : "text-gray-300 dark:text-gray-600"}`} />
           </button>
         )}
-        <div className="inline-flex rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 p-0.5">
-          <button
-            onClick={() => setMode('chat')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              mode === 'chat'
-                ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            <MessageSquare className="w-3 h-3" /> Chat
-          </button>
-          <button
-            onClick={() => setMode('agent')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              mode === 'agent'
-                ? 'bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            <Bot className="w-3 h-3" /> Agent
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -1218,9 +1194,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     messages.length === 0 ? (
       <div className="flex flex-col min-h-full relative">
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
-          <div className="max-w-2xl w-full">
+          <div className="max-w-3xl w-full">
             {/* Greeting */}
-            <div className="flex items-center gap-3 mb-6 justify-center">
+            <div className="flex flex-col items-center gap-3 mb-6 text-center">
+              <img src="/cat.svg" alt="The Cat" className="w-10 h-10" />
               <h1 className="text-xl font-medium text-gray-900 dark:text-white midnight:text-slate-100">
                 {getGreeting()}
               </h1>
@@ -1247,11 +1224,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               }
               hasMessages={messages.length > 0}
               conversationTokens={conversationTokens}
+              mode={mode}
+              onModeChange={setMode}
             />
 
             {/* Categorised suggestions — below input */}
             {!isGhostMode && (
-              <div className="mt-4">
+              <div className="mt-4 px-4 sm:px-6">
                 {/* Category tabs */}
                 <div className="flex gap-2 flex-wrap justify-center mb-3">
                   {CATEGORIES.map((cat) => {
@@ -1390,9 +1369,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             {/* Main content */}
             {agentEvents.length === 0 && !agentRunning && !agentLoadingSession ? (
               <div className="flex flex-col items-center justify-center flex-1 px-6 py-8 overflow-y-auto">
-                <div className="max-w-2xl w-full">
-                  <div className="mb-6 text-center">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Give it a goal — it figures out the steps</p>
+                <div className="max-w-3xl w-full">
+                  <div className="flex flex-col items-center gap-3 mb-6 text-center">
+                    <img src="/cat.svg" alt="The Cat" className="w-10 h-10" />
+                    <h1 className="text-xl font-medium text-gray-900 dark:text-white midnight:text-slate-100">
+                      Give it a goal
+                    </h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">It figures out the steps</p>
                   </div>
 
                   <MessageInputV2
@@ -1402,9 +1385,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     placeholder="Give the agent a goal…"
                     hasMessages={false}
                     conversationTokens={0}
+                    mode={mode}
+                    onModeChange={setMode}
                   />
 
-                  <div className="mt-4">
+                  <div className="mt-4 px-4 sm:px-6">
                     <div className="flex gap-2 flex-wrap justify-center mb-3">
                       {AGENT_CATEGORIES.map((cat) => {
                         const Icon = cat.icon;
@@ -1517,6 +1502,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       placeholder={agentRunning ? "Agent is running…" : "Run another goal…"}
                       hasMessages={false}
                       conversationTokens={0}
+                      mode={mode}
+                      onModeChange={setMode}
                     />
                   </div>
                 )}
@@ -1758,6 +1745,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 }
                 hasMessages={messages.length > 0}
                 conversationTokens={conversationTokens}
+                mode={mode}
+                onModeChange={setMode}
               />
             </div>
           </>
