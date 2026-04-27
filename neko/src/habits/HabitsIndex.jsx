@@ -3,7 +3,6 @@ import { useWorkspace } from '../contexts/WorkspaceContext';
 import CreateHabitModal from './CreateHabitModal';
 import HabitCard from './HabitCard';
 import HabitDetailsModal from './HabitDetailsModal';
-import GamificationStats from './GamificationStats';
 import HabitCardSkeleton from './HabitCardSkeleton';
 import { habitApi, habitOperations } from './habitApi';
 import {
@@ -17,8 +16,7 @@ const ERROR_DISPLAY_DURATION = 5000;
 
 const HabitsIndex = ({ selectedProject, session, currentPage }) => {
   const [habits, setHabits] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
-  const [loading, setLoading] = useState({ habits: true, analytics: true });
+  const [loading, setLoading] = useState({ habits: true });
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -73,33 +71,14 @@ const HabitsIndex = ({ selectedProject, session, currentPage }) => {
     }
   }, [selectedProject?.id]);
 
-  // Fetch analytics
-  const fetchAnalytics = useCallback(async () => {
-    if (!selectedProject?.id) {
-      setAnalytics(null);
-      setLoading(prev => ({ ...prev, analytics: false }));
-      return;
-    }
-    try {
-      setLoading(prev => ({ ...prev, analytics: true }));
-      const data = await habitApi.getHabitAnalytics(selectedProject.id);
-      if (data.success) setAnalytics(data.data);
-    } catch (err) {
-      console.error('Error fetching analytics:', err);
-    } finally {
-      setLoading(prev => ({ ...prev, analytics: false }));
-    }
-  }, [selectedProject?.id]);
-
   // Refresh all data
   const refreshData = useCallback(async () => {
-    await Promise.all([fetchHabits(), fetchAnalytics()]);
-  }, [fetchHabits, fetchAnalytics]);
+    await fetchHabits();
+  }, [fetchHabits]);
 
   useEffect(() => {
     fetchHabits();
-    fetchAnalytics();
-  }, [fetchHabits, fetchAnalytics]);
+  }, [fetchHabits]);
 
   // Check for create trigger from Universal Search
   useEffect(() => {
@@ -262,7 +241,7 @@ const HabitsIndex = ({ selectedProject, session, currentPage }) => {
               <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 midnight:text-white">
                 Project Habits
               </h1>
-              {(loading.habits || loading.analytics) && (
+              {(loading.habits) && (
                 <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin opacity-50" />
               )}
             </div>
@@ -302,13 +281,6 @@ const HabitsIndex = ({ selectedProject, session, currentPage }) => {
             </button>
           </div>
         )}
-
-        {/* Gamification Stats */}
-        <GamificationStats
-          analytics={analytics}
-          session={session}
-          loading={loading.analytics}
-        />
 
         {/* Habits list */}
         <div>

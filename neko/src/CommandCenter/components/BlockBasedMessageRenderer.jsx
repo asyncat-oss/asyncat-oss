@@ -1,8 +1,6 @@
 // BlockBasedMessageRenderer.jsx - Updated for New Mode System
 import { useMemo, useState, useCallback, memo, useEffect } from 'react';
 import SaveAsNoteModal from './SaveAsNoteModal';
-import SourcesSection, { stripBonusLinks } from './SourcesSection';
-import CitationSettings, { defaultCitationSettings } from './CitationSettings';
 import ArtifactViewer from './artifacts/ArtifactViewer';
 import { Copy, Check, RotateCcw, Zap } from 'lucide-react';
 import { useCommandCenter } from '../CommandCenterContextEnhanced';
@@ -1012,7 +1010,6 @@ const BlockBasedMessageRenderer = memo(({
 }) => {
   const [copyStatus, setCopyStatus] = useState(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const [citationSettings, setCitationSettings] = useState(defaultCitationSettings);
   const [tokensPerSec, setTokensPerSec] = useState(null);
 
   const { shouldSaveConversations } = useCommandCenter();
@@ -1035,12 +1032,9 @@ const BlockBasedMessageRenderer = memo(({
   // Check if message has artifacts
   const hasArtifacts = artifacts && artifacts.length > 0;
 
-  // Strip bonus_links block from content before parsing blocks
-  const cleanContent = useMemo(() => stripBonusLinks(content), [content]);
-
-  // Parse AI response into blocks (using cleaned content)
+  // Parse AI response into blocks
   const blocks = useMemo(() => {
-    const parsedBlocks = parseAIResponseToBlocks(cleanContent);
+    const parsedBlocks = parseAIResponseToBlocks(content);
 
     // When artifacts exist, filter out code blocks from content (they're shown as artifacts)
     if (hasArtifacts) {
@@ -1048,7 +1042,7 @@ const BlockBasedMessageRenderer = memo(({
     }
 
     return parsedBlocks;
-  }, [cleanContent, hasArtifacts]);
+  }, [content, hasArtifacts]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -1115,14 +1109,6 @@ const BlockBasedMessageRenderer = memo(({
         </div>
       )}
 
-      {/* Unified info footer: data sources + bonus links + knowledge cutoff */}
-      {!isPublicView && content && content.trim() !== '' && (
-        <SourcesSection
-          content={content}
-          settings={citationSettings}
-        />
-      )}
-
 
       {/* Action Bar - Placed at top for quick access */}
       {!isPublicView && (
@@ -1165,13 +1151,6 @@ const BlockBasedMessageRenderer = memo(({
                 </span>
               </div>
             )}
-          </div>
-
-          <div className="flex items-center">
-            <CitationSettings
-              settings={citationSettings}
-              onSettingsChange={setCitationSettings}
-            />
           </div>
         </div>
       )}
