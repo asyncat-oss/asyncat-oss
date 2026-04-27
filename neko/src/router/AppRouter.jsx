@@ -1,5 +1,6 @@
 // router/AppRouter.jsx - AppRouter using Supabase Auth
 import React, { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import { UserProvider } from '../contexts/UserContext';
@@ -111,6 +112,10 @@ const ProtectedRoute = ({ children }) => {
       </WorkspaceProvider>
     </UserProvider>
   );
+};
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node,
 };
 
 

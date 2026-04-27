@@ -27,17 +27,40 @@ function extractHeadings(messages) {
   return headings;
 }
 
+function normalizeHeadingText(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function scrollElementIntoContainer(element, container) {
+  if (!element) return;
+
+  if (!container) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  const elementRect = element.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const top = container.scrollTop + elementRect.top - containerRect.top - 24;
+
+  container.scrollTo({
+    top: Math.max(0, top),
+    behavior: 'smooth',
+  });
+}
+
 // Find the rendered heading element by message index + text content
 function findHeadingEl(messageIndex, text) {
   const msgEl = document.getElementById(`message-${messageIndex}`);
   if (!msgEl) return null;
+  const targetText = normalizeHeadingText(text);
   for (const el of msgEl.querySelectorAll('h2, h3')) {
-    if (el.textContent.trim() === text) return el;
+    if (normalizeHeadingText(el.textContent) === targetText) return el;
   }
   return null;
 }
 
-const ConversationNavigation = ({ messages = [], onClose }) => {
+const ConversationNavigation = ({ messages = [], onClose, scrollContainerRef }) => {
   const [activeId, setActiveId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -52,15 +75,18 @@ const ConversationNavigation = ({ messages = [], onClose }) => {
 
   const handleClick = useCallback((heading) => {
     const el = findHeadingEl(heading.messageIndex, heading.text);
+    const container = scrollContainerRef?.current;
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scrollElementIntoContainer(el, container);
     } else {
       // Fallback: scroll to message
-      document.getElementById(`message-${heading.messageIndex}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scrollElementIntoContainer(
+        document.getElementById(`message-${heading.messageIndex}`),
+        container,
+      );
     }
     setActiveId(heading.id);
-  }, []);
+  }, [scrollContainerRef]);
 
   // Track active heading with IntersectionObserver
   useEffect(() => {
@@ -86,7 +112,11 @@ const ConversationNavigation = ({ messages = [], onClose }) => {
             if (found) setActiveId(found.h.id);
           }
         },
-        { threshold: 0.1, rootMargin: '0px 0px -70% 0px' }
+        {
+          root: scrollContainerRef?.current || null,
+          threshold: 0.1,
+          rootMargin: '0px 0px -70% 0px',
+        }
       );
 
       elements.forEach(({ el }) => observer.observe(el));
@@ -94,7 +124,7 @@ const ConversationNavigation = ({ messages = [], onClose }) => {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [headings]);
+  }, [headings, scrollContainerRef]);
 
   if (headings.length === 0) return null;
 
