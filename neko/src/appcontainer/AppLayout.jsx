@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { PanelLeft } from "lucide-react";
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
@@ -24,10 +24,8 @@ const AppLayout = ({ session, onSignOut }) => {
     loading: workspacesLoading, 
     error: workspacesError, 
     refreshWorkspaces, 
-    switchWorkspace, 
     currentWorkspace,
     getWorkspaceProjects,
-    hasWorkspaceAccess 
   } = useWorkspace();
   
 
@@ -39,9 +37,6 @@ const AppLayout = ({ session, onSignOut }) => {
   
   // Project state
   const [selectedProject, setSelectedProject] = useState(null);
-  
-  // ADD: Current page state to handle invites selection
-  const [currentPageOverride, setCurrentPageOverride] = useState(null);
   
   // Determine current page from location - FIXED LOGIC
   const pathSegments = location.pathname.split('/').filter(Boolean); // Remove empty strings
@@ -75,16 +70,9 @@ const AppLayout = ({ session, onSignOut }) => {
     }
   };
   
-  // Use override if available, otherwise use route-based logic
-  const currentPage = currentPageOverride || getPageFromRoute(basePage, pathSegments);
+  // Use route-based page determination
+  const currentPage = getPageFromRoute(basePage, pathSegments);
   const isChatMode = basePage === 'home' || basePage === 'conversations' || basePage === 'all-chats';
-  
-  // Clear page override when route changes (except for invites)
-  useEffect(() => {
-    if (currentPageOverride && currentPageOverride !== 'invites') {
-      setCurrentPageOverride(null);
-    }
-  }, [location.pathname]);
   
   // Check if user has any workspaces
   const hasWorkspaces = workspaces && workspaces.length > 0;
@@ -95,10 +83,7 @@ const AppLayout = ({ session, onSignOut }) => {
   // Handle workspace creation
   const handleWorkspaceCreated = useCallback((newWorkspace) => {
     refreshWorkspaces();
-    if (newWorkspace && switchWorkspace) {
-      switchWorkspace(newWorkspace.id);
-    }
-  }, [refreshWorkspaces, switchWorkspace]);
+  }, [refreshWorkspaces]);
 
   // Function to trigger project list refresh in sidebar
   const refreshProjects = useCallback(() => {
@@ -148,60 +133,37 @@ const AppLayout = ({ session, onSignOut }) => {
       setSelectedProject(null);
       sessionStorage.removeItem('projectId');
     }
-  }, [params.projectId, getWorkspaceProjects]); // selectedProject intentionally excluded to prevent loops
+}, [params.projectId, getWorkspaceProjects]); // selectedProject intentionally excluded to prevent loops
   
-
-  // Redirect project-only users (viewers/guests) away from workspace-level routes
-  useEffect(() => {
-    // Only check after workspace is loaded and not loading
-    if (!workspacesLoading && currentWorkspace && !hasWorkspaceAccess()) {
-      const workspaceOnlyRoutes = ['home', 'conversations', 'calendar', 'invites', 'teams'];
-      if (workspaceOnlyRoutes.includes(basePage)) {
-        navigate('/workspace', { replace: true });
-      }
-    }
-  }, [basePage, currentWorkspace, hasWorkspaceAccess, workspacesLoading, navigate]);
-
   // Reset project selection when workspace changes
+  // FIX: Skip redirect on initial mount - let URL/router handle initial navigation
+  const isFirstWorkspaceLoad = useRef(true);
   useEffect(() => {
+    if (isFirstWorkspaceLoad.current) {
+      isFirstWorkspaceLoad.current = false;
+      // On first load, just clear project state, don't redirect
+      setSelectedProject(null);
+      sessionStorage.removeItem('projectId');
+      return;
+    }
+    
+    // Only redirect on subsequent workspace changes (not initial mount)
     setSelectedProject(null);
     sessionStorage.removeItem('projectId');
-    // Redirect to appropriate page based on workspace access
-    if (hasWorkspaceAccess()) {
-      navigate('/home');
-    } else {
-      navigate('/workspace');
-    }
-  }, [currentWorkspace, navigate, hasWorkspaceAccess]);
+  }, [currentWorkspace]);
 
-  // Listen for invite acceptance events to refresh data
+  // Listen for project creation event
   useEffect(() => {
-    const handleProjectInviteAccepted = (data) => {
-      if (data?.projectId) {
-        refreshProjects();
-      }
-    };
-
-    const handleWorkspaceInviteAccepted = (data) => {
-      if (data?.teamId) {
-        refreshWorkspaces();
-      }
-    };
-
     const handleOpenCreateProject = () => {
       setIsCreateProjectModalOpen(true);
     };
 
-    const unsubProject = eventBus.on('projectInviteAccepted', handleProjectInviteAccepted);
-    const unsubWorkspace = eventBus.on('workspaceInviteAccepted', handleWorkspaceInviteAccepted);
     const unsubCreateProject = eventBus.on('openCreateProjectModal', handleOpenCreateProject);
 
     return () => {
-      unsubProject();
-      unsubWorkspace();
       unsubCreateProject();
     };
-  }, [refreshProjects, refreshWorkspaces]);
+  }, []);
 
   // Helper function to get project ID or full project as needed
   const getProjectValue = (needsFullObject = false) => {
@@ -267,7 +229,7 @@ const AppLayout = ({ session, onSignOut }) => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [navigate]);
 
-  // Navigation handler - FIXED TO HANDLE INVITES
+  // Navigation handler
   const handleNavigate = useCallback(async (page, options = {}) => {
     // Handle settings specially - navigate to the settings route instead of a modal
     if (page === 'settings') {
@@ -275,24 +237,6 @@ const AppLayout = ({ session, onSignOut }) => {
       navigate(`/settings/${tab}`);
       return;
     }
-
-    // Handle workspaces navigation - use client-side routing
-    if (page === 'workspaces') {
-      navigate('/workspaces');
-      return;
-    }
-
-    // FIXED: Handle invites navigation properly
-    if (page === 'invites') {
-      setCurrentPageOverride('invites');
-      // Clear any other selections to make invites standalone
-      setSelectedProject(null);
-      sessionStorage.removeItem('projectId');
-      return;
-    }
-
-    // Clear page override for non-invite navigation
-    setCurrentPageOverride(null);
 
     // Handle home navigation - ALWAYS create new conversation
     if (page === 'home') {
@@ -307,11 +251,6 @@ const AppLayout = ({ session, onSignOut }) => {
     // Handle specific navigation cases
     if (page === 'notes' && options.noteId) {
       navigate(`/workspace/${selectedProject?.id}/notes?noteId=${options.noteId}`);
-      return;
-    }
-
-    if (page === 'teams' && options.teamId) {
-      navigate(`/teams?teamId=${options.teamId}`);
       return;
     }
 
@@ -335,8 +274,6 @@ const AppLayout = ({ session, onSignOut }) => {
 
   // Enhanced new chat handler that also navigates to home and creates new conversation
   const handleNewChatWithNavigation = useCallback(async () => {
-    // Clear page override when navigating to chat
-    setCurrentPageOverride(null);
     navigate('/home');
     if (handleNewConversation) {
       await handleNewConversation();
