@@ -986,7 +986,7 @@ const DynamicSidebar = ({
 						{[
 							{ mode: 'chat',      Icon: ChatIcon,   label: 'Chat',      path: '/home' },
 							{ mode: 'workspace', Icon: Compass,    label: 'Workspace', path: '/workspace' },
-							{ mode: 'files',     Icon: HardDrive,  label: 'Files',     path: null },
+								{ mode: 'files',     Icon: HardDrive,  label: 'Files',     path: '/files' },
 						].map(({ mode, Icon, label, path }) => (
 							<button
 								key={mode}

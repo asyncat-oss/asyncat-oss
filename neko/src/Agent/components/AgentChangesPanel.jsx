@@ -5,10 +5,12 @@ import {
 } from 'lucide-react';
 import { agentApi } from '../../CommandCenter/commandCenterApi';
 
-const FILE_WRITE_TOOLS  = new Set(['write_file']);
+const FILE_WRITE_TOOLS  = new Set(['write_file', 'create_file']);
 const FILE_EDIT_TOOLS   = new Set(['edit_file']);
-const FILE_DELETE_TOOLS = new Set(['delete_file']);
+const FILE_DELETE_TOOLS = new Set(['file_delete', 'delete_file']);
 const FILE_CREATE_TOOLS = new Set(['create_directory']);
+const FILE_COPY_TOOLS   = new Set(['file_copy', 'copy_file']);
+const FILE_MOVE_TOOLS   = new Set(['file_move', 'move_file']);
 const SHELL_TOOLS       = new Set(['run_command', 'run_python', 'run_node']);
 
 const TYPE_META = {
@@ -16,6 +18,8 @@ const TYPE_META = {
   edited:    { label: 'Edited',     icon: Pencil,     dot: 'bg-amber-400',   text: 'text-amber-600 dark:text-amber-400' },
   deleted:   { label: 'Deleted',    icon: Trash2,     dot: 'bg-red-400',     text: 'text-red-600 dark:text-red-400'     },
   created:   { label: 'Created',    icon: FilePlus,   dot: 'bg-emerald-400', text: 'text-emerald-600 dark:text-emerald-400' },
+  copied:    { label: 'Copied',     icon: FilePlus,   dot: 'bg-cyan-400',    text: 'text-cyan-600 dark:text-cyan-400' },
+  moved:     { label: 'Moved',      icon: Pencil,     dot: 'bg-violet-400',  text: 'text-violet-600 dark:text-violet-400' },
   directory: { label: 'Dir',        icon: FolderPlus, dot: 'bg-indigo-400',  text: 'text-indigo-600 dark:text-indigo-400'  },
   command:   { label: 'Command',    icon: Terminal,   dot: 'bg-gray-400',    text: 'text-gray-600 dark:text-gray-400'   },
 };
@@ -40,6 +44,10 @@ function extractChanges(events) {
       seen.set(args.path, { type: 'deleted', path: args.path, tool });
     } else if (FILE_CREATE_TOOLS.has(tool) && args.path) {
       seen.set(args.path, { type: 'directory', path: args.path, tool });
+    } else if (FILE_COPY_TOOLS.has(tool) && args.destination) {
+      seen.set(args.destination, { type: 'copied', path: args.destination, tool });
+    } else if (FILE_MOVE_TOOLS.has(tool) && args.destination) {
+      seen.set(args.destination, { type: 'moved', path: `${args.source || '?'} -> ${args.destination}`, tool });
     } else if (SHELL_TOOLS.has(tool)) {
       commands.push({
         type: 'command',

@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  HardDrive, ChevronRight, Folder, FolderOpen,
-  File, FileText, FileCode, Terminal,
-  RefreshCw, AlertCircle, Loader2,
-  Copy, Check, ArrowLeft, Bot,
-  Clock, Database,
+  AlertCircle, ArrowLeft, Bot, Check, ChevronRight, Copy, Edit3,
+  Eye, EyeOff, FilePlus, Folder, FolderPlus, Grid3X3, List, Loader2, MoreHorizontal,
+  RefreshCw, Save, Search, Trash2, X,
 } from 'lucide-react';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -21,12 +19,19 @@ import cpp from 'highlight.js/lib/languages/cpp';
 import go from 'highlight.js/lib/languages/go';
 import rust from 'highlight.js/lib/languages/rust';
 import 'highlight.js/styles/github-dark-dimmed.css';
-import { agentApi } from '../CommandCenter/commandCenterApi';
+import { filesApi } from '../CommandCenter/commandCenterApi';
+import {
+  BINARY_EXTS,
+  basename,
+  dirname,
+  fileIconMeta,
+  formatDate,
+  formatSize,
+  joinPath,
+} from './fileUtils';
 
-hljs.registerLanguage('javascript', javascript); hljs.registerLanguage('js', javascript);
-hljs.registerLanguage('jsx', javascript);
-hljs.registerLanguage('typescript', typescript); hljs.registerLanguage('ts', typescript);
-hljs.registerLanguage('tsx', typescript);
+hljs.registerLanguage('javascript', javascript); hljs.registerLanguage('js', javascript); hljs.registerLanguage('jsx', javascript);
+hljs.registerLanguage('typescript', typescript); hljs.registerLanguage('ts', typescript); hljs.registerLanguage('tsx', typescript);
 hljs.registerLanguage('python', python); hljs.registerLanguage('py', python);
 hljs.registerLanguage('html', xml); hljs.registerLanguage('xml', xml);
 hljs.registerLanguage('css', css); hljs.registerLanguage('scss', css);
@@ -38,44 +43,9 @@ hljs.registerLanguage('cpp', cpp); hljs.registerLanguage('c', cpp);
 hljs.registerLanguage('go', go);
 hljs.registerLanguage('rust', rust); hljs.registerLanguage('rs', rust);
 
-const BINARY_EXTS = new Set([
-  'png','jpg','jpeg','gif','bmp','ico','webp','svg',
-  'woff','woff2','ttf','eot','otf',
-  'pdf','zip','tar','gz','rar','7z',
-  'exe','dll','so','dylib','bin',
-  'mp3','mp4','wav','ogg','mov','avi','mkv',
-]);
-
-function formatSize(bytes) {
-  if (bytes == null) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
+function escapeHtml(text) {
+  return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-
-function formatDate(mtime) {
-  if (!mtime) return '';
-  const d = new Date(mtime);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    + ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-}
-
-function fileIconMeta(ext) {
-  const codeExts  = ['js','jsx','ts','tsx','py','go','rs','rb','java','c','cpp','h','cs','php','swift','kt','vue','astro'];
-  const docExts   = ['md','mdx','txt','rst','csv'];
-  const dataExts  = ['json','yaml','yml','toml','ini','env','xml'];
-  const styleExts = ['css','scss','less','sass'];
-  const shellExts = ['sh','bash','zsh','fish','ps1','bat','cmd'];
-  if (codeExts.includes(ext))  return { Icon: FileCode, color: 'text-blue-400' };
-  if (docExts.includes(ext))   return { Icon: FileText, color: 'text-gray-400' };
-  if (dataExts.includes(ext))  return { Icon: Database, color: 'text-orange-400' };
-  if (styleExts.includes(ext)) return { Icon: FileCode, color: 'text-pink-400' };
-  if (shellExts.includes(ext)) return { Icon: Terminal, color: 'text-green-400' };
-  if (ext === 'html' || ext === 'htm') return { Icon: FileCode, color: 'text-orange-500' };
-  return { Icon: File, color: 'text-gray-400' };
-}
-
-// ── Breadcrumb ─────────────────────────────────────────────────────────────────
 
 function Breadcrumb({ path, onNavigate }) {
   const parts = (!path || path === '.') ? [] : path.split('/').filter(Boolean);
@@ -83,25 +53,24 @@ function Breadcrumb({ path, onNavigate }) {
     <nav className="flex items-center gap-0.5 min-w-0 flex-wrap">
       <button
         onClick={() => onNavigate('.')}
-        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
+        className="px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
       >
-        <HardDrive className="w-3.5 h-3.5" />
-        <span>root</span>
+        root
       </button>
       {parts.map((part, i) => {
         const partPath = parts.slice(0, i + 1).join('/');
-        const isLast   = i === parts.length - 1;
+        const isLast = i === parts.length - 1;
         return (
           <span key={partPath} className="flex items-center gap-0.5 min-w-0">
-            <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-600 flex-shrink-0" />
+            <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-600" />
             {isLast ? (
-              <span className="px-1.5 py-0.5 text-sm font-medium text-gray-800 dark:text-gray-200 truncate max-w-[200px]">
+              <span className="px-1.5 py-0.5 text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[220px]">
                 {part}
               </span>
             ) : (
               <button
                 onClick={() => onNavigate(partPath)}
-                className="px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors truncate max-w-[120px]"
+                className="px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors truncate max-w-[140px]"
               >
                 {part}
               </button>
@@ -113,316 +82,524 @@ function Breadcrumb({ path, onNavigate }) {
   );
 }
 
-// ── Directory view ─────────────────────────────────────────────────────────────
-
-function DirEntry({ entry, onNavigate }) {
-  const isDir = entry.type === 'dir';
-  const { Icon, color } = isDir
-    ? { Icon: FolderOpen, color: 'text-amber-400' }
-    : fileIconMeta(entry.ext || '');
-
+function DirectoryRow({ entry, selected, onSelect, onOpen }) {
+  const { Icon, color } = fileIconMeta(entry.ext || '', entry.type);
   return (
     <button
-      onClick={() => onNavigate(entry.path)}
-      className="w-full flex items-center gap-3 px-6 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left group"
+      onClick={() => onSelect(entry)}
+      onDoubleClick={() => onOpen(entry)}
+      className={`w-full grid grid-cols-[minmax(0,1fr)_96px_172px_64px] items-center gap-3 px-4 py-2 text-left border-b border-gray-100 dark:border-gray-800/60 transition-colors ${
+        selected ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+      }`}
     >
-      <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
-      <span className="flex-1 text-sm font-mono text-gray-800 dark:text-gray-200 truncate group-hover:text-gray-900 dark:group-hover:text-white">
-        {entry.name}{isDir ? '/' : ''}
-      </span>
-      {!isDir && entry.size != null && (
-        <span className="text-xs text-gray-400 tabular-nums w-20 text-right flex-shrink-0">
-          {formatSize(entry.size)}
+      <span className="flex items-center gap-3 min-w-0">
+        <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
+        <span className="text-sm font-mono text-gray-800 dark:text-gray-200 truncate">
+          {entry.name}{entry.type === 'dir' ? '/' : ''}
         </span>
-      )}
-      {isDir && <span className="w-20 flex-shrink-0" />}
-      <span className="text-xs text-gray-400 w-44 text-right flex-shrink-0 hidden md:block">
-        {formatDate(entry.mtime)}
       </span>
+      <span className="text-xs text-gray-400 tabular-nums text-right">{entry.type === 'dir' ? '--' : formatSize(entry.size)}</span>
+      <span className="text-xs text-gray-400 text-right hidden md:block">{formatDate(entry.mtime)}</span>
+      <span className="text-[10px] text-gray-400 uppercase text-right">{entry.type}</span>
     </button>
   );
 }
 
-function DirectoryView({ entries, onNavigate }) {
-  const dirs  = entries.filter(e => e.type === 'dir');
-  const files = entries.filter(e => e.type === 'file');
+function DirectoryGrid({ entries, selectedPath, onSelect, onOpen }) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2 p-4">
+      {entries.map(entry => {
+        const { Icon, color } = fileIconMeta(entry.ext || '', entry.type);
+        const selected = selectedPath === entry.path;
+        return (
+          <button
+            key={entry.path}
+            onClick={() => onSelect(entry)}
+            onDoubleClick={() => onOpen(entry)}
+            className={`min-h-[104px] flex flex-col items-center justify-center gap-2 rounded-md border px-3 py-3 transition-colors ${
+              selected
+                ? 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30'
+                : 'border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+            }`}
+          >
+            <Icon className={`w-8 h-8 ${color}`} />
+            <span className="w-full text-xs font-mono text-gray-800 dark:text-gray-200 text-center truncate">
+              {entry.name}{entry.type === 'dir' ? '/' : ''}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-  if (entries.length === 0) {
+function DirectoryView({ entries, viewMode, selectedPath, onSelect, onOpen }) {
+  if (!entries.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-gray-400">
+      <div className="h-full flex flex-col items-center justify-center text-gray-400">
         <Folder className="w-12 h-12 mb-3 opacity-30" />
         <p className="text-sm">Empty directory</p>
       </div>
     );
   }
 
+  if (viewMode === 'grid') {
+    return <DirectoryGrid entries={entries} selectedPath={selectedPath} onSelect={onSelect} onOpen={onOpen} />;
+  }
+
   return (
     <div>
-      {/* Column headers */}
-      <div className="flex items-center gap-3 px-6 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
-        <div className="w-4 flex-shrink-0" />
-        <span className="flex-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Name</span>
-        <span className="w-20 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex-shrink-0">Size</span>
-        <span className="w-44 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex-shrink-0 hidden md:block">Modified</span>
+      <div className="grid grid-cols-[minmax(0,1fr)_96px_172px_64px] items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Name</span>
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-right">Size</span>
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-right hidden md:block">Modified</span>
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-right">Kind</span>
       </div>
-
-      <div className="divide-y divide-gray-50 dark:divide-gray-800/50">
-        {dirs.map(e => <DirEntry key={e.path} entry={e} onNavigate={onNavigate} />)}
-        {dirs.length > 0 && files.length > 0 && (
-          <div className="h-px bg-gray-100 dark:bg-gray-800 my-1" />
-        )}
-        {files.map(e => <DirEntry key={e.path} entry={e} onNavigate={onNavigate} />)}
-      </div>
+      {entries.map(entry => (
+        <DirectoryRow
+          key={entry.path}
+          entry={entry}
+          selected={selectedPath === entry.path}
+          onSelect={onSelect}
+          onOpen={onOpen}
+        />
+      ))}
     </div>
   );
 }
 
-// ── File viewer ────────────────────────────────────────────────────────────────
-
-function FileView({ data }) {
-  const [highlighted, setHighlighted] = useState('');
-  const [copied, setCopied]           = useState(false);
-
-  const isBinary = BINARY_EXTS.has(data.ext || '');
-
-  useEffect(() => {
-    if (isBinary || data.tooLarge || !data.content) return;
-    const lang = data.ext || '';
-    let result;
+function FilePreview({ entry, onCopy }) {
+  const highlighted = useMemo(() => {
+    if (!entry?.content || entry.tooLarge || entry.binary || BINARY_EXTS.has(entry.ext || '')) return '';
     try {
-      if (hljs.getLanguage(lang)) {
-        result = hljs.highlight(data.content, { language: lang }).value;
-      } else {
-        const auto = hljs.highlightAuto(data.content);
-        result = auto.value;
-      }
+      if (hljs.getLanguage(entry.ext || '')) return hljs.highlight(entry.content, { language: entry.ext }).value;
+      return hljs.highlightAuto(entry.content).value;
     } catch {
-      result = data.content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+      return escapeHtml(entry.content);
     }
-    setHighlighted(result);
-  }, [data.content, data.ext, isBinary, data.tooLarge]);
+  }, [entry]);
 
-  if (isBinary) {
+  if (!entry) return null;
+  if (entry.tooLarge) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-gray-400">
-        <File className="w-12 h-12 mb-3 opacity-20" />
-        <p className="text-sm font-medium mb-1">Binary file</p>
-        <p className="text-xs">.{data.ext} files cannot be previewed as text</p>
+      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-6 text-center">
+        <AlertCircle className="w-8 h-8 mb-2 opacity-40" />
+        <p className="text-sm font-medium">File too large to preview</p>
+        <p className="text-xs mt-1">{formatSize(entry.size)} · preview limit is 1 MB</p>
       </div>
     );
   }
-
-  if (data.tooLarge) {
+  if (entry.binary || BINARY_EXTS.has(entry.ext || '')) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-gray-400">
-        <AlertCircle className="w-10 h-10 mb-3 opacity-30" />
-        <p className="text-sm font-medium mb-1">File too large to preview</p>
-        <p className="text-xs">{formatSize(data.size)} — limit is 1 MB</p>
+      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-6 text-center">
+        <FilePlus className="w-8 h-8 mb-2 opacity-30" />
+        <p className="text-sm font-medium">Preview unavailable</p>
+        <p className="text-xs mt-1">This file is handled as binary or media.</p>
       </div>
     );
   }
-
-  const lineCount = (data.content || '').split('\n').length;
-
   return (
-    <div className="relative bg-[#22272e]">
-      {/* Top-right toolbar */}
-      <div className="absolute top-3 right-4 z-10 flex items-center gap-1.5">
-        {data.ext && (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-gray-300 border border-white/10">
-            .{data.ext}
-          </span>
-        )}
-        <button
-          onClick={() => {
-            navigator.clipboard?.writeText(data.content || '');
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-white/10 text-gray-300 hover:bg-white/20 border border-white/10 transition-colors"
-        >
-          {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
-      </div>
-
-      {/* Line numbers + code — flex side by side */}
-      <div className="flex overflow-auto min-h-full text-[13px] font-mono leading-5">
-        {/* Line numbers column */}
-        <div className="select-none text-right text-[#636e7b] bg-[#1c2128] px-4 py-4 border-r border-[#30363d] flex-shrink-0">
-          {Array.from({ length: lineCount }, (_, i) => (
-            <div key={i} className="leading-5 tabular-nums">{i + 1}</div>
-          ))}
-        </div>
-
-        {/* Code column */}
-        <pre className="flex-1 m-0 py-4 px-5 overflow-x-auto bg-[#22272e]">
-          <code
-            className="hljs text-[13px] leading-5 block whitespace-pre"
-            dangerouslySetInnerHTML={{
-              __html: highlighted || (data.content || '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;'),
-            }}
-          />
-        </pre>
-      </div>
+    <div className="flex-1 min-h-0 bg-[#22272e] relative">
+      <button
+        onClick={onCopy}
+        className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/10 text-gray-300 hover:bg-white/20 border border-white/10"
+      >
+        <Copy className="w-3 h-3" />
+        Copy
+      </button>
+      <pre className="h-full overflow-auto m-0 p-4 pt-10 text-[12px] font-mono leading-5">
+        <code className="hljs block whitespace-pre" dangerouslySetInnerHTML={{ __html: highlighted || escapeHtml(entry.content || '') }} />
+      </pre>
     </div>
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
+function Inspector({ selected, activeEntry, saving, onCopyPath, onAgent, onEdit, onSave, editText, setEditText, editing }) {
+  if (!selected && !activeEntry) {
+    return (
+      <aside className="hidden xl:flex w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex-col">
+        <div className="flex-1 flex items-center justify-center text-sm text-gray-400">Select a file or folder</div>
+      </aside>
+    );
+  }
+
+  const item = activeEntry?.type === 'file' ? activeEntry : selected;
+  const { Icon, color } = fileIconMeta(item?.ext || '', item?.type);
+  return (
+    <aside className="hidden xl:flex w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex-col min-h-0">
+      <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-start gap-3">
+          <Icon className={`w-8 h-8 flex-shrink-0 ${color}`} />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100 truncate">{item?.name || basename(item?.path)}</div>
+            <div className="text-xs text-gray-400 truncate">{item?.path}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
+          <div className="rounded border border-gray-200 dark:border-gray-800 p-2">
+            <div className="text-gray-400">Kind</div>
+            <div className="text-gray-800 dark:text-gray-200 uppercase">{item?.type}</div>
+          </div>
+          <div className="rounded border border-gray-200 dark:border-gray-800 p-2">
+            <div className="text-gray-400">Size</div>
+            <div className="text-gray-800 dark:text-gray-200">{item?.type === 'file' ? formatSize(item.size) : '--'}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-4">
+          <button onClick={onAgent} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-indigo-600 text-white hover:bg-indigo-700">
+            <Bot className="w-3.5 h-3.5" />
+            Agent
+          </button>
+          <button onClick={onCopyPath} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+            <Copy className="w-3.5 h-3.5" />
+            Path
+          </button>
+          {activeEntry?.type === 'file' && !BINARY_EXTS.has(activeEntry.ext || '') && !activeEntry.tooLarge && (
+            <button onClick={editing ? onSave : onEdit} disabled={saving} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60">
+              {editing ? <Save className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+              {editing ? 'Save' : 'Edit'}
+            </button>
+          )}
+        </div>
+      </div>
+      {editing ? (
+        <textarea
+          value={editText}
+          onChange={e => setEditText(e.target.value)}
+          className="flex-1 min-h-0 resize-none bg-gray-950 text-gray-100 font-mono text-xs leading-5 p-4 outline-none"
+          spellCheck={false}
+        />
+      ) : (
+        <FilePreview entry={activeEntry?.type === 'file' ? activeEntry : null} onCopy={() => navigator.clipboard?.writeText(activeEntry?.content || '')} />
+      )}
+    </aside>
+  );
+}
 
 export default function FilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const rootId = searchParams.get('rootId') || 'workspace';
   const currentPath = searchParams.get('path') || '.';
+  const viewMode = searchParams.get('view') || 'list';
+  const showHidden = searchParams.get('hidden') === 'true';
 
-  const [entry, setEntry]     = useState(null);
+  const [roots, setRoots] = useState([]);
+  const [entry, setEntry] = useState(null);
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [selectedPreview, setSelectedPreview] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async (p) => {
+  const activeRoot = roots.find(root => root.id === rootId) || roots[0];
+  const activeEntry = entry?.type === 'file' ? entry : selectedPreview;
+  const entries = searchResults || (entry?.type === 'dir' ? entry.entries : []);
+  const isRoot = currentPath === '.';
+
+  const navigateTo = useCallback((path, nextRootId = rootId, extra = {}) => {
+    const nextParams = {
+      rootId: nextRootId,
+      path: path || '.',
+      view: extra.view || viewMode,
+    };
+    const hidden = extra.hidden ?? showHidden;
+    if (hidden) nextParams.hidden = 'true';
+    setSearchParams(nextParams);
+  }, [rootId, setSearchParams, showHidden, viewMode]);
+
+  const loadRoots = useCallback(async () => {
+    const res = await filesApi.getRoots();
+    if (res.success) setRoots(res.roots || []);
+  }, []);
+
+  const loadEntry = useCallback(async () => {
     setLoading(true);
     setError(null);
     setEntry(null);
+    setSearchResults(null);
+    setSelectedPreview(null);
+    setEditing(false);
     try {
-      const res = await agentApi.loadEntry(p);
-      if (res.success) setEntry(res);
-      else setError(res.error || 'Could not load path');
+      const res = await filesApi.loadEntry(rootId, currentPath, showHidden);
+      if (res.success) {
+        setEntry(res);
+        setSelected(res.type === 'file' ? res : null);
+        setEditText(res.type === 'file' ? (res.content || '') : '');
+      } else {
+        setError(res.error || 'Could not load path');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load');
+      setError(err.message || 'Failed to load path');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [rootId, currentPath, showHidden]);
 
-  useEffect(() => { load(currentPath); }, [currentPath, load]);
+  useEffect(() => { loadRoots().catch(() => {}); }, [loadRoots]);
+  useEffect(() => { loadEntry(); }, [loadEntry]);
 
-  const handleNavigate = useCallback((p) => {
-    setSearchParams({ path: p });
-  }, [setSearchParams]);
+  useEffect(() => {
+    let cancelled = false;
+    setSelectedPreview(null);
+    if (!selected || selected.type !== 'file' || entry?.type !== 'dir') return undefined;
+
+    filesApi.loadEntry(rootId, selected.path, showHidden)
+      .then(res => {
+        if (!cancelled && res.success && res.type === 'file') {
+          setSelectedPreview(res);
+          setEditText(res.content || '');
+        }
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [entry?.type, rootId, selected, showHidden]);
 
   const goUp = useCallback(() => {
-    if (!currentPath || currentPath === '.') return;
-    const parts = currentPath.split('/').filter(Boolean);
-    if (parts.length <= 1) handleNavigate('.');
-    else handleNavigate(parts.slice(0, -1).join('/'));
-  }, [currentPath, handleNavigate]);
+    if (isRoot) return;
+    navigateTo(dirname(currentPath));
+  }, [currentPath, isRoot, navigateTo]);
 
-  const handleOpenInAgent = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('asyncat:prefill-agent', {
-      detail: { prompt: currentPath }
-    }));
+  const openEntry = useCallback((item) => {
+    if (item.type === 'dir') navigateTo(item.path);
+    else navigateTo(item.path);
+  }, [navigateTo]);
+
+  const setViewMode = useCallback((nextMode) => {
+    navigateTo(currentPath, rootId, { view: nextMode });
+  }, [currentPath, navigateTo, rootId]);
+
+  const toggleHidden = useCallback(() => {
+    navigateTo(currentPath, rootId, { hidden: !showHidden });
+  }, [currentPath, navigateTo, rootId, showHidden]);
+
+  const copyPath = useCallback(() => {
+    const target = selected?.path || currentPath;
+    navigator.clipboard?.writeText(target);
+    setNotice('Path copied');
+    setTimeout(() => setNotice(null), 1200);
+  }, [currentPath, selected]);
+
+  const agentPrompt = useCallback(() => {
+    const target = selected || entry;
+    const prompt = `Use the file explorer selection as context.\nRoot: ${activeRoot?.label || rootId} (${rootId})\nPath: ${target?.path || currentPath}\nType: ${target?.type || entry?.type || 'path'}\n\nHelp me work with this path.`;
+    window.dispatchEvent(new CustomEvent('asyncat:prefill-agent', { detail: { prompt, rootId, path: target?.path || currentPath } }));
     navigate('/agents');
-  }, [currentPath, navigate]);
+  }, [activeRoot, currentPath, entry, navigate, rootId, selected]);
 
-  const isRoot = !currentPath || currentPath === '.';
-  const isFile = entry?.type === 'file';
-  const isDir  = entry?.type === 'dir';
-  const dirCount  = isDir ? entry.entries.filter(e => e.type === 'dir').length : 0;
-  const fileCount = isDir ? entry.entries.filter(e => e.type === 'file').length : 0;
+  const makeName = useCallback((label, fallback) => {
+    const name = window.prompt(label, fallback);
+    return name?.trim();
+  }, []);
+
+  const createFolder = useCallback(async () => {
+    const name = makeName('Folder name', 'New Folder');
+    if (!name) return;
+    await filesApi.createFolder(rootId, joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name));
+    await loadEntry();
+  }, [currentPath, entry, loadEntry, makeName, rootId]);
+
+  const createFile = useCallback(async () => {
+    const name = makeName('File name', 'untitled.txt');
+    if (!name) return;
+    const filePath = joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name);
+    await filesApi.writeFile(rootId, filePath, '');
+    navigateTo(filePath);
+  }, [currentPath, entry, makeName, navigateTo, rootId]);
+
+  const renameSelected = useCallback(async () => {
+    if (!selected) return;
+    const name = makeName('Rename to', selected.name);
+    if (!name || name === selected.name) return;
+    const dest = joinPath(dirname(selected.path), name);
+    await filesApi.move(rootId, selected.path, dest);
+    navigateTo(dest);
+  }, [makeName, navigateTo, rootId, selected]);
+
+  const copySelected = useCallback(async () => {
+    if (!selected) return;
+    const base = selected.name || basename(selected.path);
+    const name = makeName('Copy as', `Copy of ${base}`);
+    if (!name) return;
+    await filesApi.copy(rootId, selected.path, joinPath(dirname(selected.path), name));
+    await loadEntry();
+  }, [loadEntry, makeName, rootId, selected]);
+
+  const deleteSelected = useCallback(async () => {
+    if (!selected) return;
+    const ok = window.confirm(`Delete ${selected.name}? This cannot be undone from Asyncat yet.`);
+    if (!ok) return;
+    await filesApi.delete(rootId, selected.path, selected.type === 'dir');
+    const nextPath = selected.type === 'file' && currentPath === selected.path ? dirname(selected.path) : currentPath;
+    setSelected(null);
+    if (nextPath !== currentPath) navigateTo(nextPath);
+    else await loadEntry();
+  }, [currentPath, loadEntry, navigateTo, rootId, selected]);
+
+  const runSearch = useCallback(async () => {
+    if (!search.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    const res = await filesApi.search(rootId, entry?.type === 'dir' ? currentPath : dirname(currentPath), search, showHidden);
+    if (res.success) setSearchResults(res.entries || []);
+  }, [currentPath, entry, rootId, search, showHidden]);
+
+  const saveEdit = useCallback(async () => {
+    if (!activeEntry) return;
+    setSaving(true);
+    try {
+      await filesApi.writeFile(rootId, activeEntry.path, editText);
+      setEditing(false);
+      await loadEntry();
+    } finally {
+      setSaving(false);
+    }
+  }, [activeEntry, editText, loadEntry, rootId]);
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900 midnight:bg-gray-950 overflow-hidden">
-
-      {/* ── Header bar ── */}
-      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center gap-2 px-4 py-3">
-          {!isRoot && (
+    <div className="h-full flex bg-white dark:bg-gray-900 midnight:bg-gray-950 overflow-hidden">
+      <main className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+          <div className="flex items-center gap-2 px-4 py-3">
             <button
               onClick={goUp}
-              title="Go up one level"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
+              disabled={isRoot}
+              title="Go up"
+              className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:hover:bg-transparent"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-          )}
-
-          <div className="flex-1 min-w-0">
-            <Breadcrumb path={currentPath} onNavigate={handleNavigate} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <select
+                  value={rootId}
+                  onChange={e => navigateTo('.', e.target.value)}
+                  className="max-w-40 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 outline-none"
+                  title={activeRoot?.path || 'File root'}
+                >
+                  {roots.map(root => <option key={root.id} value={root.id}>{root.label}</option>)}
+                </select>
+                <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-700" />
+                <Breadcrumb path={currentPath} onNavigate={navigateTo} />
+              </div>
+            </div>
+            {notice && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                <Check className="w-3 h-3" />
+                {notice}
+              </span>
+            )}
+            <div className="flex items-center gap-1">
+              <button onClick={() => setViewMode('list')} title="List view" className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                <List className="w-4 h-4" />
+              </button>
+              <button onClick={() => setViewMode('grid')} title="Grid view" className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                <Grid3X3 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={toggleHidden}
+                title={showHidden ? 'Hide hidden files' : 'Show hidden files'}
+                className={`p-1.5 rounded-md ${showHidden ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+              >
+                {showHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </button>
+              <button onClick={loadEntry} title="Refresh" className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {isFile && (
-              <button
-                onClick={handleOpenInAgent}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
-              >
-                <Bot className="w-3.5 h-3.5" />
-                Open in agent
-              </button>
-            )}
-            <button
-              onClick={() => load(currentPath)}
-              title="Refresh"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2 px-4 pb-3">
+            <div className="flex-1 min-w-0 flex items-center gap-2 rounded-md border border-gray-200 dark:border-gray-800 px-2 py-1.5 bg-gray-50 dark:bg-gray-950">
+              <Search className="w-3.5 h-3.5 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') runSearch(); if (e.key === 'Escape') { setSearch(''); setSearchResults(null); } }}
+                placeholder="Search in this folder"
+                className="w-full bg-transparent outline-none text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400"
+              />
+              {searchResults && (
+                <button onClick={() => { setSearch(''); setSearchResults(null); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <button onClick={createFile} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+              <FilePlus className="w-3.5 h-3.5" />
+              File
             </button>
+            <button onClick={createFolder} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+              <FolderPlus className="w-3.5 h-3.5" />
+              Folder
+            </button>
+            <button onClick={agentPrompt} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-indigo-600 text-white hover:bg-indigo-700">
+              <Bot className="w-3.5 h-3.5" />
+              Agent
+            </button>
+            <div className="relative group">
+              <button disabled={!selected} className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+              {selected && (
+                <div className="absolute right-0 top-8 z-20 hidden group-hover:block w-40 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1">
+                  <button onClick={renameSelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"><Edit3 className="w-3 h-3" />Rename</button>
+                  <button onClick={copySelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"><Copy className="w-3 h-3" />Copy</button>
+                  <button onClick={deleteSelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"><Trash2 className="w-3 h-3" />Delete</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Sub-header: file meta or dir summary */}
-        {isFile && entry && (
-          <div className="flex items-center gap-4 px-5 pb-2 text-xs text-gray-400">
-            {entry.size != null && (
-              <span className="flex items-center gap-1.5">
-                <Database className="w-3 h-3" />
-                {formatSize(entry.size)}
-              </span>
-            )}
-            {entry.mtime && (
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3 h-3" />
-                Modified {formatDate(entry.mtime)}
-              </span>
-            )}
-          </div>
-        )}
-        {isDir && (dirCount > 0 || fileCount > 0) && (
-          <div className="px-5 pb-2 text-xs text-gray-400">
-            {dirCount > 0 && `${dirCount} folder${dirCount !== 1 ? 's' : ''}`}
-            {dirCount > 0 && fileCount > 0 && ' · '}
-            {fileCount > 0 && `${fileCount} file${fileCount !== 1 ? 's' : ''}`}
-          </div>
-        )}
-      </div>
+        <div className="flex-1 min-h-0 overflow-auto">
+          {loading && (
+            <div className="h-full flex items-center justify-center gap-2 text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading files</span>
+            </div>
+          )}
+          {!loading && error && (
+            <div className="h-full flex flex-col items-center justify-center text-center px-6">
+              <AlertCircle className="w-9 h-9 text-red-400 mb-3" />
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{error}</p>
+              <button onClick={loadEntry} className="text-xs underline text-gray-500 hover:text-gray-900 dark:hover:text-gray-100">Try again</button>
+            </div>
+          )}
+          {!loading && !error && entry?.type === 'dir' && (
+            <DirectoryView
+              entries={entries}
+              viewMode={viewMode}
+              selectedPath={selected?.path}
+              onSelect={setSelected}
+              onOpen={openEntry}
+            />
+          )}
+          {!loading && !error && entry?.type === 'file' && (
+            <FilePreview entry={entry} onCopy={() => navigator.clipboard?.writeText(entry.content || '')} />
+          )}
+        </div>
+      </main>
 
-      {/* ── Main content ── */}
-      <div className="flex-1 overflow-auto min-h-0">
-        {loading && (
-          <div className="flex items-center justify-center gap-2 py-32 text-gray-400">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Loading…</span>
-          </div>
-        )}
-
-        {!loading && error && (
-          <div className="flex flex-col items-center justify-center py-32">
-            <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{error}</p>
-            <button
-              onClick={() => load(currentPath)}
-              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {!loading && !error && isDir && (
-          <DirectoryView entries={entry.entries} onNavigate={handleNavigate} />
-        )}
-
-        {!loading && !error && isFile && (
-          <FileView data={entry} />
-        )}
-      </div>
+      <Inspector
+        selected={selected}
+        activeEntry={activeEntry}
+        saving={saving}
+        onCopyPath={copyPath}
+        onAgent={agentPrompt}
+        onEdit={() => setEditing(true)}
+        onSave={saveEdit}
+        editing={editing}
+        editText={editText}
+        setEditText={setEditText}
+      />
     </div>
   );
 }

@@ -2,25 +2,10 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronRight, Folder, FolderOpen,
-  File, FileText, FileCode, Terminal, Database,
   RefreshCw, HardDrive, AlertCircle, Loader2,
 } from 'lucide-react';
-import { agentApi } from '../CommandCenter/commandCenterApi';
-
-function fileIconMeta(ext) {
-  const code  = ['js','jsx','ts','tsx','py','go','rs','rb','java','c','cpp','h','cs','php','swift','kt','vue','astro'];
-  const doc   = ['md','mdx','txt','rst','csv'];
-  const data  = ['json','yaml','yml','toml','ini','env','xml'];
-  const style = ['css','scss','less','sass'];
-  const shell = ['sh','bash','zsh','fish','ps1','bat','cmd'];
-  if (code.includes(ext))  return { Icon: FileCode, color: 'text-blue-400' };
-  if (doc.includes(ext))   return { Icon: FileText, color: 'text-gray-400' };
-  if (data.includes(ext))  return { Icon: Database, color: 'text-orange-400' };
-  if (style.includes(ext)) return { Icon: FileCode, color: 'text-pink-400' };
-  if (shell.includes(ext)) return { Icon: Terminal, color: 'text-green-400' };
-  if (ext === 'html' || ext === 'htm') return { Icon: FileCode, color: 'text-orange-500' };
-  return { Icon: File, color: 'text-gray-400' };
-}
+import { filesApi } from '../CommandCenter/commandCenterApi';
+import { fileIconMeta } from '../files/fileUtils';
 
 // ── Single tree node ──────────────────────────────────────────────────────────
 
@@ -29,7 +14,7 @@ const FileNode = memo(({ node, depth, expanded, onToggleDir, lazyChildren, onFil
 
   if (node.type === 'dir') {
     const isOpen = !!expanded[node.path];
-    const kids   = lazyChildren[node.path] ?? node.children;
+    const kids   = lazyChildren[node.path] ?? node.children ?? null;
 
     return (
       <div>
@@ -143,6 +128,8 @@ function RootInput({ value, onSubmit }) {
 export default function LocalFileTree() {
   const navigate = useNavigate();
 
+  const [rootId, setRootId]             = useState('workspace');
+  const [roots, setRoots]               = useState([]);
   const [rootDir, setRootDir]           = useState('.');
   const [tree, setTree]                 = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -156,7 +143,7 @@ export default function LocalFileTree() {
     setExpanded({});
     setLazyChildren({});
     try {
-      const res = await agentApi.listDirectory(dir, 1);
+      const res = await filesApi.listDirectory(rootId, dir);
       if (res.success) {
         setTree(res.entries);
         setRootDir(dir);
@@ -168,6 +155,12 @@ export default function LocalFileTree() {
     } finally {
       setLoading(false);
     }
+  }, [rootId]);
+
+  useEffect(() => {
+    filesApi.getRoots()
+      .then(res => { if (res.success) setRoots(res.roots || []); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { loadRoot('.'); }, [loadRoot]);
@@ -185,26 +178,36 @@ export default function LocalFileTree() {
     const nowOpen = !expanded[node.path];
     setExpanded(prev => ({ ...prev, [node.path]: nowOpen }));
 
-    if (nowOpen && node.children === null && lazyChildren[node.path] === undefined) {
+    if (nowOpen && node.children == null && lazyChildren[node.path] === undefined) {
       setLazyChildren(prev => ({ ...prev, [node.path]: null }));
       try {
-        const res = await agentApi.listDirectory(node.path, 1);
+        const res = await filesApi.listDirectory(rootId, node.path);
         setLazyChildren(prev => ({ ...prev, [node.path]: res.success ? res.entries : [] }));
       } catch {
         setLazyChildren(prev => ({ ...prev, [node.path]: [] }));
       }
     }
-  }, [expanded, lazyChildren]);
+  }, [expanded, lazyChildren, rootId]);
 
   const handleFileClick = useCallback((filePath) => {
-    navigate(`/files?path=${encodeURIComponent(filePath)}`);
-  }, [navigate]);
+    navigate(`/files?rootId=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`);
+  }, [navigate, rootId]);
 
   return (
     <div className="w-full">
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800">
         <HardDrive className="w-3 h-3 flex-shrink-0 text-gray-400" />
+        {roots.length > 1 && (
+          <select
+            value={rootId}
+            onChange={(e) => setRootId(e.target.value)}
+            className="max-w-20 text-[10px] bg-transparent text-gray-500 dark:text-gray-400 outline-none"
+            title="File root"
+          >
+            {roots.map(root => <option key={root.id} value={root.id}>{root.label}</option>)}
+          </select>
+        )}
         <RootInput value={rootDir} onSubmit={loadRoot} />
         <button
           onClick={() => loadRoot(rootDir)}
