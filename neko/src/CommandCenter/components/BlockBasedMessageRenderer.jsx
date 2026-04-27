@@ -1103,14 +1103,14 @@ const BlockBasedMessageRenderer = memo(({
       )}
 
       {/* Artifacts — only show inline card when no side panel handler exists */}
-      {hasArtifacts && !onArtifactOpen && (
+      {hasArtifacts && !_onArtifactOpen && (
         <div className="artifacts-section">
           <ArtifactViewer
             artifacts={artifacts}
             explanation={artifactExplanation}
             showExplanation={!!artifactExplanation}
-            onSaveToNotes={onSaveArtifactToNotes}
-            onArtifactOpen={onArtifactOpen}
+            onSaveToNotes={_onSaveArtifactToNotes}
+            onArtifactOpen={_onArtifactOpen}
           />
         </div>
       )}

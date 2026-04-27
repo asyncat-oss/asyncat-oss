@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import { trashApi } from "./commandCenterApi";
-import { Trash2, RotateCcw, MessageSquare, X, AlertTriangle } from "lucide-react";
+import { Trash2, RotateCcw, MessageSquare, AlertTriangle } from "lucide-react";
 
 const TrashPage = () => {
-  const navigate = useNavigate();
   const [trashItems, setTrashItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -57,23 +55,15 @@ const TrashPage = () => {
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 midnight:bg-gray-950">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-4 py-4">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-lg font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100">
-                Trash
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-                Deleted conversations are kept for 30 days
-              </p>
-            </div>
+      <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+              Trash
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">
+              Deleted conversations are kept for 30 days
+            </p>
           </div>
           {trashItems.length > 0 && (
             <button
@@ -88,9 +78,9 @@ const TrashPage = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-4 py-6">
+        <div className="px-6 py-6">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center py-12">
               <div className="text-gray-400 dark:text-gray-500">Loading...</div>
             </div>
           ) : trashItems.length === 0 ? (
