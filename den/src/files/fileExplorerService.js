@@ -22,9 +22,17 @@ export function getFileRoots() {
   const candidates = [
     { id: 'workspace', label: 'Workspace', path: process.cwd(), kind: 'workspace' },
     { id: 'home', label: 'Home', path: home, kind: 'home' },
+    { id: 'dev', label: 'Dev', path: path.join(home, 'Dev'), kind: 'dev' },
+    { id: 'hermes', label: 'Hermes', path: path.join(home, 'Hermes'), kind: 'folder' },
     { id: 'desktop', label: 'Desktop', path: path.join(home, 'Desktop'), kind: 'place' },
-    { id: 'downloads', label: 'Downloads', path: path.join(home, 'Downloads'), kind: 'place' },
     { id: 'documents', label: 'Documents', path: path.join(home, 'Documents'), kind: 'place' },
+    { id: 'downloads', label: 'Downloads', path: path.join(home, 'Downloads'), kind: 'downloads' },
+    { id: 'music', label: 'Music', path: path.join(home, 'Music'), kind: 'music' },
+    { id: 'pictures', label: 'Pictures', path: path.join(home, 'Pictures'), kind: 'pictures' },
+    { id: 'videos', label: 'Videos', path: path.join(home, 'Videos'), kind: 'videos' },
+    { id: 'public', label: 'Public', path: path.join(home, 'Public'), kind: 'public' },
+    { id: 'templates', label: 'Templates', path: path.join(home, 'Templates'), kind: 'templates' },
+    { id: 'trash', label: 'Trash', path: path.join(home, '.local', 'share', 'Trash', 'files'), kind: 'trash' },
   ];
 
   const seen = new Set();

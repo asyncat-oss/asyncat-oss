@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronRight, Folder, FolderOpen,
-  RefreshCw, HardDrive, AlertCircle, Loader2,
+  RefreshCw, HardDrive, AlertCircle, Loader2, Clock, Star, Network,
 } from 'lucide-react';
 import { filesApi } from '../CommandCenter/commandCenterApi';
-import { fileIconMeta } from '../files/fileUtils';
+import { fileIconMeta, rootIcon } from '../files/fileUtils';
 
 // ── Single tree node ──────────────────────────────────────────────────────────
 
@@ -137,6 +137,12 @@ export default function LocalFileTree() {
   const [expanded, setExpanded]         = useState({});
   const [lazyChildren, setLazyChildren] = useState({});
 
+  const navigateRoot = useCallback((nextRootId) => {
+    setRootId(nextRootId);
+    setRootDir('.');
+    navigate(`/files?rootId=${encodeURIComponent(nextRootId)}&path=.`);
+  }, [navigate]);
+
   const loadRoot = useCallback(async (dir) => {
     setLoading(true);
     setError(null);
@@ -193,21 +199,19 @@ export default function LocalFileTree() {
     navigate(`/files?rootId=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`);
   }, [navigate, rootId]);
 
+  const activeRoot = roots.find(root => root.id === rootId);
+  const primaryRoots = roots.filter(root => ['home', 'workspace', 'dev'].includes(root.id));
+  const placeRoots = roots.filter(root => !['home', 'workspace', 'dev', 'trash'].includes(root.id));
+  const trashRoot = roots.find(root => root.id === 'trash');
+
   return (
     <div className="w-full">
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800">
         <HardDrive className="w-3 h-3 flex-shrink-0 text-gray-400" />
-        {roots.length > 1 && (
-          <select
-            value={rootId}
-            onChange={(e) => setRootId(e.target.value)}
-            className="max-w-20 text-[10px] bg-transparent text-gray-500 dark:text-gray-400 outline-none"
-            title="File root"
-          >
-            {roots.map(root => <option key={root.id} value={root.id}>{root.label}</option>)}
-          </select>
-        )}
+        <span className="max-w-24 truncate text-[10px] text-gray-500 dark:text-gray-400" title={activeRoot?.path}>
+          {activeRoot?.label || 'Files'}
+        </span>
         <RootInput value={rootDir} onSubmit={loadRoot} />
         <button
           onClick={() => loadRoot(rootDir)}
@@ -217,6 +221,93 @@ export default function LocalFileTree() {
           <RefreshCw className="w-3 h-3" />
         </button>
       </div>
+
+      <div className="py-1 border-b border-gray-100 dark:border-gray-800">
+        {primaryRoots.map(root => {
+          const Icon = rootIcon(root.kind);
+          const active = root.id === rootId && rootDir === '.';
+          return (
+            <button
+              key={root.id}
+              onClick={() => navigateRoot(root.id)}
+              title={root.path}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                active
+                  ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{root.label}</span>
+            </button>
+          );
+        })}
+        <button
+          disabled
+          title="Recent files needs a local activity index"
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-300 dark:text-gray-600 cursor-not-allowed"
+        >
+          <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">Recent</span>
+        </button>
+        <button
+          disabled
+          title="Starred files needs saved favorites"
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-300 dark:text-gray-600 cursor-not-allowed"
+        >
+          <Star className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">Starred</span>
+        </button>
+        <button
+          disabled
+          title="Network locations need mounted share discovery"
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-300 dark:text-gray-600 cursor-not-allowed"
+        >
+          <Network className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">Network</span>
+        </button>
+        {trashRoot && (
+          <button
+            onClick={() => navigateRoot(trashRoot.id)}
+            title={trashRoot.path}
+            className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+              trashRoot.id === rootId && rootDir === '.'
+                ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            {(() => {
+              const Icon = rootIcon(trashRoot.kind);
+              return <Icon className="w-3.5 h-3.5 flex-shrink-0" />;
+            })()}
+            <span className="truncate">{trashRoot.label}</span>
+          </button>
+        )}
+      </div>
+
+      {placeRoots.length > 0 && (
+        <div className="py-1 border-b border-gray-100 dark:border-gray-800">
+          {placeRoots.map(root => {
+            const Icon = rootIcon(root.kind);
+            const active = root.id === rootId && rootDir === '.';
+            return (
+              <button
+                key={root.id}
+                onClick={() => navigateRoot(root.id)}
+                title={root.path}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                  active
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{root.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading && (
         <div className="flex items-center justify-center gap-2 py-8 text-gray-400">

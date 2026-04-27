@@ -10,8 +10,15 @@ import {
   FolderOpen,
   HardDrive,
   Home,
+  Download,
+  Music,
+  Image,
   Monitor,
+  Network,
+  Star,
   Terminal,
+  Trash2,
+  Clock,
 } from 'lucide-react';
 
 export const BINARY_EXTS = new Set([
@@ -58,6 +65,14 @@ export function basename(filePath) {
 export function rootIcon(kind) {
   if (kind === 'home') return Home;
   if (kind === 'workspace') return HardDrive;
+  if (kind === 'downloads') return Download;
+  if (kind === 'music') return Music;
+  if (kind === 'pictures') return Image;
+  if (kind === 'videos') return FileVideo;
+  if (kind === 'trash') return Trash2;
+  if (kind === 'recent') return Clock;
+  if (kind === 'starred') return Star;
+  if (kind === 'network') return Network;
   if (kind === 'place') return Monitor;
   return FolderOpen;
 }
