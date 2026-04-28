@@ -14,7 +14,7 @@ import { ToolCallFormatter } from './ToolCallFormatter.js';
 import { toolRegistry } from './tools/toolRegistry.js';
 import { permissionManager, PermissionManager } from './PermissionManager.js';
 import { AgentSession } from './AgentSession.js';
-import { buildAgentSystemPrompt } from './prompts/agentSystemPrompt.js';
+import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js';
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { findRelevantSkills } from './skills.js';
@@ -149,6 +149,23 @@ export class AgentRuntime {
     // Get relevant skills based on the goal (Cerebellum)
     const relevantSkills = findRelevantSkills(goal);
 
+    if (relevantSkills.length > 0) {
+      this.onEvent({
+        type: 'skills_loaded',
+        data: {
+          skills: relevantSkills.map(s => ({
+            name: s.name,
+            description: s.description || '',
+            tags: Array.isArray(s.tags) ? s.tags : [],
+            source: s.source || 'bundled',
+          })),
+        },
+      });
+    }
+
+    // Load soul for this run
+    const soul = loadSoul('default');
+
     const systemPrompt = buildAgentSystemPrompt({
       goal,
       workingDir: this.workingDir,
@@ -156,6 +173,7 @@ export class AgentRuntime {
       memories,
       scratchpad: '',
       skills: relevantSkills,
+      soul,
     });
 
     // Build conversation thread (filter out UI system messages)

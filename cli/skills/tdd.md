@@ -34,8 +34,11 @@ function doX() {
 
 ### Refactor: Improve
 ```javascript
-function doX() { // Better implementation
-  // ...
+function doX() {
+  // Better, clean implementation
+  // Tests still pass
+}
+```
 
 ## Pitfalls
 - Don't write implementation before tests

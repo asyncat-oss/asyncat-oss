@@ -8,6 +8,7 @@ import { attachDb } from '../../db/sqlite.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import { loadSkills, listSkills } from '../../agent/skills.js';
+import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
@@ -409,6 +410,45 @@ router.get('/skills/:name', authenticate, (req, res) => {
       source: skill.source || 'bundled',
     },
   });
+});
+
+/**
+ * GET /api/agent/souls
+ * List all available soul names.
+ */
+router.get('/souls', authenticate, (req, res) => {
+  res.json({ success: true, souls: listSouls() });
+});
+
+/**
+ * GET /api/agent/soul
+ * Return the raw soul file content (with frontmatter, for editing).
+ */
+router.get('/soul', authenticate, (req, res) => {
+  const { name = 'default' } = req.query;
+  const content = readSoulRaw(name);
+  if (content === null) {
+    return res.status(404).json({ success: false, error: `Soul "${name}" not found` });
+  }
+  res.json({ success: true, name, content });
+});
+
+/**
+ * PUT /api/agent/soul
+ * Save updated soul file content.
+ */
+router.put('/soul', authenticate, (req, res) => {
+  try {
+    const { name = 'default', content } = req.body;
+    if (typeof content !== 'string') {
+      return res.status(400).json({ success: false, error: 'content is required' });
+    }
+    writeSoul(name, content);
+    res.json({ success: true, name });
+  } catch (err) {
+    res.status(err.message.includes('not found') ? 404 : 500)
+      .json({ success: false, error: err.message });
+  }
 });
 
 /**

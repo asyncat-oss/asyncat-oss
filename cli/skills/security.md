@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 ### Password Storage
 ```js
 // BAD
-const hash = crypto.createHash('md5').password)
+const hash = crypto.createHash('md5').update(password).digest('hex')
 
 // GOOD
 const hash = await bcrypt.hash(password, 12)

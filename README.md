@@ -31,6 +31,8 @@ Asyncat gives your local model:
 - **Clipboard & notifications** — system integration
 - **Memory that persists** — across sessions, across restarts
 - **MCP integration** — connect external tools
+- **Skills (Cerebellum)** — procedural knowledge loaded per task
+- **Soul** — editable agent persona, principles, and safety rules
 
 ---
 
@@ -103,12 +105,12 @@ Done. The AI has keys to your kingdom.
 
 ```bash
 asyncat start        # fire it up
-asyncat stop        # kill it
-asyncat status      # what's running
-asyncat restart     # bounce
-asyncat logs        # tail logs
-asyncat doctor      # health check
-asyncat config      # mess with env
+asyncat stop         # kill it
+asyncat status       # what's running
+asyncat restart      # bounce
+asyncat logs         # tail logs
+asyncat doctor       # health check
+asyncat config       # mess with env
 ```
 
 ---
@@ -134,7 +136,7 @@ Managed install locations:
 
 Asyncat writes `LLAMA_BINARY_PATH` into `den/.env` after a managed install. This avoids global Python package installs, including Linux `externally-managed-environment` / PEP 668 failures.
 
-The managed install is intentionally CPU-safe by default. Asyncat's Models page can now inspect the current machine, recommend a better local engine when one fits the hardware, switch to already-installed runtimes, or trigger a managed install from the UI for supported engine profiles.
+The managed install is intentionally CPU-safe by default. Asyncat's Models page can inspect the current machine, recommend a better local engine when one fits the hardware, switch to already-installed runtimes, or trigger a managed install from the UI for supported engine profiles.
 
 ```env
 LLAMA_SERVER_PORT=8765
@@ -157,32 +159,6 @@ If you prefer a manually downloaded llama.cpp release, set:
 LLAMA_BINARY_PATH=/full/path/to/llama-server
 ```
 
-On Windows:
-
-```env
-LLAMA_BINARY_PATH=C:\path\to\llama-server.exe
-```
-
-For GPU-capable local engines, Asyncat can switch to already-installed/custom runtimes and can also trigger supported managed installs from Model Studio. Manual paths are still available for custom CUDA/ROCm/Metal runtimes when you want a specific build.
-
-#### Python fallback without global pip
-
-Asyncat no longer recommends:
-
-```bash
-pip install "llama-cpp-python[server]"
-```
-
-That can fail on modern Linux distributions with PEP 668 because system Python is externally managed. If you explicitly choose the Python fallback, Asyncat creates its own venv under your Asyncat user data directory and installs there.
-
-For NVIDIA CUDA experiments inside that venv, use the CUDA build flag manually:
-
-```bash
-CMAKE_ARGS="-DGGML_CUDA=on" python -m pip install "llama-cpp-python[server]"
-```
-
-Ollama and LM Studio solve this differently: they ship or manage their own local runtime and expose an OpenAI-compatible endpoint. Asyncat supports both through `/provider`, while the built-in GGUF path uses Asyncat's managed `llama-server`.
-
 ### Cloud
 
 Any OpenAI-compatible API:
@@ -196,33 +172,76 @@ AI_MODEL=gpt-4o
 | Provider | URL | Model |
 |---|---|---|
 | OpenAI | `https://api.openai.com/v1` | gpt-4o |
-| Anthropic | `https://api.anthropic.com/v1` | claude-sonnet-4-5 |
+| Anthropic | `https://api.anthropic.com/v1` | claude-sonnet-4-6 |
 | Ollama | `http://localhost:11434/v1` | llama3.1 |
 | Anything else | your endpoint | your model |
 
 ---
 
-## Tools the Agent Has
+## Agent System
 
-- `read_file` — read any file
-- `write_file` — write or overwrite
-- `edit_file` — patch specific lines
-- `delete_file` — rm -rf (with permission)
-- `list_dir` — ls anything
-- `grep_search` — regex search
-- `run_command` — execute shell
-- `run_python` — sandboxed Python
-- `run_node` — sandboxed JS
-- `web_search` — DuckDuckGo / SearXNG
-- `fetch_url` — read any webpage
-- `http_request` — full HTTP client
-- `sys_info` — CPU, RAM, disk, uptime
-- `ps_list` — running processes
-- `env_get` — read env vars (secrets masked)
-- `notify` — desktop notifications
-- `clipboard_read` / `clipboard_write`
-- `store_memory` / `recall_memory` — persistent storage
-- `mcp_call` — external MCP tools
+Asyncat runs a real agentic loop — not a chatbot wrapper.
+
+```
+/agents  →  AgentRuntime  →  toolRegistry  →  PermissionManager  →  SSE stream
+```
+
+### Tools
+
+The agent has access to 60+ tools across categories:
+
+| Category | Tools |
+|---|---|
+| File | read, write, edit, delete, move, copy, search, diff, watch |
+| Shell | run_command, run_python, run_node |
+| Git | status, diff, log, commit, branch, push, pull, stash, clone |
+| Web | web_search, fetch_url, http_request, browse_url, screenshot_page |
+| Memory | save_memory, recall_memory, list_memories, forget_memory |
+| Skills | list_skills, load_skill |
+| System | sys_info, ps_list, env_get, notify, clipboard_read/write, run_tests |
+| Dev | linter_run, code_fix, package_manager, build_runner |
+| Docker | sandbox_exec, docker_build, docker_ps, docker_run, docker_stop |
+| OS/Process | process_spawn, process_kill, port_scan, disk_usage |
+| Screen | take_screenshot, screen_click, screen_type, window_list |
+| Data | read_pdf, read_csv, json_query, diff_apply, image_describe, ssh_exec |
+| Workspace | get_notes, create_note, get_tasks, get_events |
+| Plan | todo_write, list_plan |
+| Agent | delegate_task |
+| MCP | dynamic tools from connected MCP servers |
+
+### Skills (Cerebellum)
+
+27 bundled markdown skills in `cli/skills/`. Each skill is a procedural guide loaded when relevant to the current task. The agent can also call `list_skills` / `load_skill` to fetch any skill on demand mid-run.
+
+Skills cover: debugging, git, testing, TDD, refactoring, API design, security, performance, CI/CD, Docker, deployment, SQL, logging, and more.
+
+### Soul
+
+The agent's persona, principles, and operating rules live in `den/src/agent/souls/default.md`. Editable from the UI at `/agents/tools` → Soul tab.
+
+### Memory
+
+The agent stores durable facts across sessions in a local SQLite table. Browse, search, and delete memories from `/agents/tools` → Memory tab.
+
+### Sessions
+
+Every agent run is persisted as a session with a full audit trail of tool calls, changes, and the conversation. View, continue, rename, or delete sessions from the session history panel.
+
+### Permissions
+
+Tools are classified as safe / moderate / dangerous. The agent asks for permission before running moderate/dangerous tools. You can approve once, approve for the session, or set a tool as always-allowed.
+
+### Changes & Revert
+
+File writes and shell commands are tracked per session. View the changes panel to see what the agent touched. Revert a session to roll back file changes using a git stash or directory snapshot checkpoint.
+
+### MCP
+
+Connect external tool servers via `data/mcp.json`. MCP tools are loaded dynamically into the tool registry.
+
+### Scheduler
+
+Schedule agent goals to run on a cron-style schedule via `POST /api/agent/schedule`.
 
 ---
 
@@ -273,8 +292,6 @@ Good luck. Have fun. Don't blame us if your quantized baby model deletes your ho
 
 ### Running from Source
 
-If you cloned the repo instead of installing via npm, here's how to run:
-
 ```bash
 # 1. Install dependencies
 npm install
@@ -289,31 +306,39 @@ npm run dev:backend    # den/ server only (port 8716)
 npm run dev:frontend   # neko/ UI only (port 8717)
 ```
 
-### Why `./cat` Doesn't Work on Windows
-
-The `cat` file starts with `#!/usr/bin/env node` — this is a **shebang**, a Unix/Mac/Linux feature that tells the OS to run the script with Node.js. Windows doesn't understand shebangs.
-
-**On Windows:** Use `node cat` instead.
-
 ### Project Architecture
 
 ```
 asyncat-oss/
-├── cat          # Simple launcher script (shebang → cli/index.js)
-├── cli/         # Terminal User Interface (TUI)
-│   ├── index.js # Main CLI entry
-│   ├── commands/  # Individual commands (start, stop, models, etc.)
-│   ├── lib/     # TUI helpers, themes, colors
-│   └── skills/  # Brain skills (45 bundled)
-├── den/         # Backend API server
-│   └── src/     # Agent runtime, tools, database
-├── neko/        # Frontend web UI (Vite + React)
-└── data/        # Models, MCP config
+├── cat              # Simple launcher script (shebang → cli/index.js)
+├── cli/             # Terminal User Interface (TUI)
+│   ├── index.js     # Main CLI entry
+│   ├── commands/    # Individual commands (start, stop, models, etc.)
+│   ├── lib/         # TUI helpers, themes, colors
+│   └── skills/      # 27 bundled Cerebellum skills
+├── den/             # Backend API server (Express + SQLite)
+│   └── src/
+│       ├── agent/
+│       │   ├── AgentRuntime.js     # ReAct loop orchestration
+│       │   ├── AgentSession.js     # Session persistence
+│       │   ├── PermissionManager.js
+│       │   ├── Compactor.js        # Context window management
+│       │   ├── Scheduler.js        # Cron-style goal scheduling
+│       │   ├── skills.js           # Cerebellum skill loader
+│       │   ├── souls/              # Agent persona files (default.md)
+│       │   ├── prompts/            # System prompt builder
+│       │   └── tools/              # 60+ tool implementations
+│       └── ai/routes/agentRoutes.js
+├── neko/            # Frontend web UI (Vite + React)
+│   └── src/
+│       ├── Agent/   # Agent UI: run feed, changes panel, tools/skills/soul/memory pages
+│       └── CommandCenter/  # Main agent run interface
+└── data/            # SQLite DB, MCP config
 ```
 
 | Directory | Purpose | Port |
 |-----------|---------|------|
-| `cli/` | Terminal interface | N/A (runs in terminal) |
+| `cli/` | Terminal interface | N/A |
 | `den/` | Backend API | 8716 |
 | `neko/` | Web UI | 8717 |
 
@@ -329,15 +354,17 @@ npm run build         # Build frontend for production
 
 ### Key Files
 
-- `cat` — 2-line launcher: `#!/usr/bin/env node` + `import('./cli/index.js')`
-- `cli/index.js` — Main TUI with all commands
-- `cli/commands/` — Individual command implementations
-- `den/src/` — Backend agent, tools, database
-- `neko/src/` — React frontend components
+- `cat` — 2-line launcher
+- `cli/skills/` — 27 bundled skill markdown files
+- `den/src/agent/souls/default.md` — agent persona (editable from UI)
+- `den/src/agent/AgentRuntime.js` — ReAct loop, SSE streaming, tool execution
+- `den/src/ai/routes/agentRoutes.js` — all agent HTTP/SSE routes
+- `neko/src/Agent/AgentToolsSkillsPage.jsx` — Tools / Skills / Soul / Memory tabs
+- `neko/src/CommandCenter/CommandCenterV2Enhanced.jsx` — main agent run UI
 
 ### Database
 
-The backend uses SQLite (`den/data/`). It's created automatically on first run.
+SQLite at `data/asyncat.db`, created automatically on first run. Tables include agent sessions, tool audit log, agent memory, and workspace data.
 
 ### Environment
 

@@ -2,6 +2,54 @@
 // ─── Agent System Prompt ─────────────────────────────────────────────────────
 // Generates the system prompt for the ReAct agent loop.
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SOULS_DIR = path.join(__dirname, '..', 'souls');
+
+const DEFAULT_IDENTITY = `You are an autonomous AI agent running locally on the user's machine. You can think, plan, execute tools, and iterate until the task is complete.`;
+
+export function loadSoul(name = 'default') {
+  try {
+    const filePath = path.join(SOULS_DIR, `${name}.md`);
+    if (!fs.existsSync(filePath)) return null;
+    const content = fs.readFileSync(filePath, 'utf8');
+    // Strip frontmatter for prompt injection
+    const withoutFrontmatter = content.replace(/^---[\s\S]*?---\n?/, '').trim();
+    return withoutFrontmatter;
+  } catch {
+    return null;
+  }
+}
+
+export function readSoulRaw(name = 'default') {
+  try {
+    const filePath = path.join(SOULS_DIR, `${name}.md`);
+    if (!fs.existsSync(filePath)) return null;
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+export function writeSoul(name = 'default', content) {
+  const filePath = path.join(SOULS_DIR, `${name}.md`);
+  if (!fs.existsSync(filePath)) throw new Error(`Soul "${name}" not found`);
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
+export function listSouls() {
+  try {
+    return fs.readdirSync(SOULS_DIR)
+      .filter(f => f.endsWith('.md'))
+      .map(f => f.replace(/\.md$/, ''));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Build the agent system prompt.
  * @param {object} opts
@@ -11,6 +59,7 @@
  * @param {object[]} opts.memories - Relevant memories from store
  * @param {string} opts.scratchpad - Current scratchpad state
  * @param {object[]} opts.skills - Relevant skills from Cerebellum
+ * @param {string} [opts.soul] - Soul/persona content loaded from souls/*.md
  * @returns {string}
  */
 function getShellName(platform) {
@@ -27,10 +76,13 @@ export function buildAgentSystemPrompt(opts = {}) {
     memories = [],
     scratchpad = '',
     skills = [],
+    soul = null,
     platform = process.platform,
   } = opts;
 
   const shellName = getShellName(platform);
+
+  const identity = soul || DEFAULT_IDENTITY;
 
   const memorySection = memories.length > 0
     ? `\n## Stored Memories\n${memories.map(m => {
@@ -45,10 +97,13 @@ export function buildAgentSystemPrompt(opts = {}) {
     : '';
 
   const skillsSection = skills.length > 0
-    ? `\n## Relevant Skills (Cerebellum)\n${skills.map(s => `### ${s.name}\n${s.description || s.body?.slice(0, 200) || ''}`).join('\n\n')}\n`
+    ? `\n## Relevant Skills (Cerebellum)\n${skills.map(s => {
+      const body = s.body || s.description || '';
+      return `### ${s.name}\n${s.description ? `_${s.description}_\n\n` : ''}${body}`;
+    }).join('\n\n---\n\n')}\n`
     : '';
 
-  return `You are an autonomous AI agent running locally on the user's machine. You can think, plan, execute tools, and iterate until the task is complete.
+  return `${identity}
 
 ## Environment
 - **Platform**: ${platform}

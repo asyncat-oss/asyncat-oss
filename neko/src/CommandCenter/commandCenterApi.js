@@ -1095,6 +1095,34 @@ export const agentApi = {
   getSkill: async (name) => {
     return await apiRequest(`${API_BASE_URL}/agent/skills/${encodeURIComponent(name)}`);
   },
+
+  getSoul: async (name = 'default') => {
+    return await apiRequest(`${API_BASE_URL}/agent/soul?name=${encodeURIComponent(name)}`);
+  },
+
+  updateSoul: async (content, name = 'default') => {
+    return await apiRequest(`${API_BASE_URL}/agent/soul`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content }),
+    });
+  },
+
+  listSouls: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/souls`);
+  },
+
+  getMemories: async ({ q = '', kind = 'all', limit = 50 } = {}) => {
+    const params = new URLSearchParams({ kind, limit: String(limit) });
+    if (q) params.set('q', q);
+    return await apiRequest(`${API_BASE_URL}/agent/memory?${params}`);
+  },
+
+  deleteMemory: async (key) => {
+    return await apiRequest(`${API_BASE_URL}/agent/memory/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 export const filesApi = {

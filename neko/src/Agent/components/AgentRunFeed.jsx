@@ -4,7 +4,7 @@ import {
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send,
-  ShieldOff,
+  ShieldOff, Brain,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 
@@ -516,6 +516,41 @@ function RunDivider({ data }) {
   );
 }
 
+function SkillsLoadedEvent({ data }) {
+  const [expanded, setExpanded] = useState(false);
+  const skills = data?.skills || [];
+  if (skills.length === 0) return null;
+
+  return (
+    <FeedFrame className="mb-2">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-1.5 py-1 rounded-md hover:text-gray-500 dark:hover:text-gray-400 transition-colors text-left"
+      >
+        {expanded
+          ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+          : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />}
+        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 tracking-wide select-none">
+          Skills loaded · {skills.map(s => s.name).join(', ')}
+        </span>
+      </button>
+   515cebc
+   {expanded && (
+        <div className="mt-1 pl-5 space-y-1">
+          {skills.map(s => (
+            <div key={s.name} className="flex items-start gap-1.5">
+              <span className="text-[10px] font-medium text-indigo-500 dark:text-indigo-400">{s.name}</span>
+              {s.description && (
+                <span className="text-[10px] text-gray-400 dark:text-gray-600">— {s.description}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </FeedFrame>
+  );
+}
+
 // Live streaming preview — shown while LLM is generating
 function StreamingPreview({ text }) {
   if (!text?.trim()) return null;
@@ -583,6 +618,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
           case 'error':              return <ErrorEvent key={i} data={ev.data} />;
           case 'status':             return <StatusEvent key={i} data={ev.data} />;
           case 'run_start':          return <RunDivider key={i} data={ev.data} />;
+          case 'skills_loaded':      return <SkillsLoadedEvent key={i} data={ev.data} />;
           default:                   return null;
         }
       })}

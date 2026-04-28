@@ -4,7 +4,7 @@ import {
   Search, Wrench, Terminal, File, Globe, Database,
   Brain, Loader2, AlertCircle, ChevronDown, ChevronRight,
   BookOpen, Cpu, ShieldAlert, Monitor,
-  Bot,
+  Bot, Sparkles, Save, Edit2, X, Check, BookMarked, Trash2,
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 
@@ -225,6 +225,22 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const toolsFetchedRef = useRef(false);
   const skillsFetchedRef = useRef(false);
 
+  const [soulContent, setSoulContent] = useState('');
+  const [soulEdited, setSoulEdited] = useState('');
+  const [loadingSoul, setLoadingSoul] = useState(false);
+  const [errorSoul, setErrorSoul] = useState(null);
+  const [editingSoul, setEditingSoul] = useState(false);
+  const [savingSoul, setSavingSoul] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const soulFetchedRef = useRef(false);
+
+  const [memories, setMemories] = useState([]);
+  const [memorySearch, setMemorySearch] = useState('');
+  const [memoryKind, setMemoryKind] = useState('all');
+  const [loadingMemory, setLoadingMemory] = useState(false);
+  const [errorMemory, setErrorMemory] = useState(null);
+  const [deletingKey, setDeletingKey] = useState(null);
+
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
@@ -240,6 +256,17 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     skillsFetchedRef.current = true;
     fetchSkills();
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'soul' || soulFetchedRef.current) return;
+    soulFetchedRef.current = true;
+    fetchSoul();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'memory') return;
+    fetchMemories();
+  }, [activeTab, memorySearch, memoryKind]);
 
   async function fetchTools() {
     setLoadingTools(true);
@@ -264,6 +291,66 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       setErrorSkills(err.message || 'Failed to load skills');
     } finally {
       setLoadingSkills(false);
+    }
+  }
+
+  async function fetchSoul() {
+    setLoadingSoul(true);
+    setErrorSoul(null);
+    try {
+      const res = await agentApi.getSoul();
+      setSoulContent(res.content || '');
+      setSoulEdited(res.content || '');
+    } catch (err) {
+      setErrorSoul(err.message || 'Failed to load soul');
+    } finally {
+      setLoadingSoul(false);
+    }
+  }
+
+  async function saveSoul() {
+    setSavingSoul(true);
+    setSaveSuccess(false);
+    try {
+      await agentApi.updateSoul(soulEdited);
+      setSoulContent(soulEdited);
+      setEditingSoul(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      setErrorSoul(err.message || 'Failed to save soul');
+    } finally {
+      setSavingSoul(false);
+    }
+  }
+
+  function cancelEdit() {
+    setSoulEdited(soulContent);
+    setEditingSoul(false);
+  }
+
+  async function fetchMemories() {
+    setLoadingMemory(true);
+    setErrorMemory(null);
+    try {
+      const res = await agentApi.getMemories({ q: memorySearch.trim(), kind: memoryKind });
+      setMemories(res.memories || []);
+    } catch (err) {
+      setErrorMemory(err.message || 'Failed to load memories');
+    } finally {
+      setLoadingMemory(false);
+    }
+  }
+
+  async function deleteMemory(key) {
+    setDeletingKey(key);
+    try {
+      await agentApi.deleteMemory(key);
+      setMemories(prev => prev.filter(m => m.key !== key));
+    } catch (err) {
+      setErrorMemory(err.message || 'Failed to delete memory');
+    } finally {
+      setDeletingKey(null);
     }
   }
 
@@ -312,7 +399,16 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const modCount    = tools.filter(t => t.permission === 'moderate').length;
   const dangerCount = tools.filter(t => t.permission === 'dangerous').length;
 
-  const toolsTabActive = activeTab === 'tools';
+  const toolsTabActive   = activeTab === 'tools';
+  const skillsTabActive  = activeTab === 'skills';
+  const soulTabActive    = activeTab === 'soul';
+  const memoryTabActive  = activeTab === 'memory';
+
+  function tabClass(isActive) {
+    return isActive
+      ? 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white midnight:text-slate-100 shadow-sm'
+      : 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300';
+  }
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
@@ -326,6 +422,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
           <div className="flex items-center gap-4 text-xs text-gray-500">
             <span>{tools.length} tools</span>
             <span>{skills.length} skills</span>
+            {saveSuccess && <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3" />Soul saved</span>}
           </div>
         </div>
       </div>
@@ -333,23 +430,21 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       {/* Tabs */}
       <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-slate-950/50">
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 rounded-lg w-fit">
-          <button
-            onClick={() => setActiveTab('tools')}
-            className={toolsTabActive
-              ? 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white midnight:text-slate-100 shadow-sm'
-              : 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}
-          >
+          <button onClick={() => setActiveTab('tools')} className={tabClass(toolsTabActive)}>
             <Wrench className="w-3.5 h-3.5" />
             Tools
           </button>
-          <button
-            onClick={() => setActiveTab('skills')}
-            className={!toolsTabActive
-              ? 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white midnight:text-slate-100 shadow-sm'
-              : 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}
-          >
+          <button onClick={() => setActiveTab('skills')} className={tabClass(skillsTabActive)}>
             <Bot className="w-3.5 h-3.5" />
             Skills
+          </button>
+          <button onClick={() => setActiveTab('soul')} className={tabClass(soulTabActive)}>
+            <Sparkles className="w-3.5 h-3.5" />
+            Soul
+          </button>
+          <button onClick={() => setActiveTab('memory')} className={tabClass(memoryTabActive)}>
+            <BookMarked className="w-3.5 h-3.5" />
+            Memory
           </button>
         </div>
       </div>
@@ -403,7 +498,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
           </>
         )}
 
-        {!toolsTabActive && (
+        {skillsTabActive && (
           <>
             {/* Search */}
             <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-slate-950/50">
@@ -446,11 +541,224 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             })}
           </>
         )}
+
+        {soulTabActive && (
+          <div className="px-6 py-5">
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm font-semibold text-gray-800 dark:text-white">default.md</span>
+                <span className="text-xs text-gray-400 dark:text-gray-600 ml-1">Agent persona &amp; operating rules</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {!editingSoul && !loadingSoul && !errorSoul && (
+                  <button
+                    onClick={() => setEditingSoul(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    Edit
+                  </button>
+                )}
+                {editingSoul && (
+                  <>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={savingSoul}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+                    >
+                      <X className="w-3 h-3" />
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveSoul}
+                      disabled={savingSoul || soulEdited === soulContent}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white transition-colors"
+                    >
+                      {savingSoul ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      Save
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {loadingSoul && (
+              <div className="flex items-center gap-2 py-10 justify-center text-gray-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm">Loading soul…</span>
+              </div>
+            )}
+
+            {errorSoul && (
+              <div className="flex flex-col items-center gap-2 py-10 text-red-500">
+                <AlertCircle className="w-5 h-5" />
+                <p className="text-sm">{errorSoul}</p>
+                <button
+                  onClick={() => { soulFetchedRef.current = false; fetchSoul(); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 underline mt-1"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!loadingSoul && !errorSoul && !editingSoul && soulContent && (
+              <pre className="text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+                {soulContent}
+              </pre>
+            )}
+
+            {!loadingSoul && !errorSoul && editingSoul && (
+              <textarea
+                value={soulEdited}
+                onChange={e => setSoulEdited(e.target.value)}
+                className="w-full h-[60vh] text-xs font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed bg-white dark:bg-gray-800 rounded-xl p-4 border border-indigo-200 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                spellCheck={false}
+              />
+            )}
+
+            {!loadingSoul && !errorSoul && !soulContent && (
+              <div className="text-sm text-gray-400 py-10 text-center">No soul file found.</div>
+            )}
+          </div>
+        )}
+
+        {memoryTabActive && (
+          <div className="flex flex-col h-full">
+            {/* Search + filter bar */}
+            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex gap-2 items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={memorySearch}
+                  onChange={e => setMemorySearch(e.target.value)}
+                  placeholder="Search memories…"
+                  className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600"
+                />
+              </div>
+              <select
+                value={memoryKind}
+                onChange={e => setMemoryKind(e.target.value)}
+                className="text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-2 text-gray-600 dark:text-gray-300 focus:outline-none"
+              >
+                <option value="all">All types</option>
+                <option value="user">user</option>
+                <option value="feedback">feedback</option>
+                <option value="project">project</option>
+                <option value="reference">reference</option>
+                <option value="fact">fact</option>
+                <option value="preference">preference</option>
+                <option value="context">context</option>
+                <option value="task_state">task_state</option>
+              </select>
+              <span className="text-xs text-gray-400 whitespace-nowrap">{memories.length} entries</span>
+            </div>
+
+            {/* Memory list */}
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-800/60">
+              {loadingMemory && (
+                <div className="flex items-center gap-2 py-16 justify-center text-gray-400">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Loading memories…</span>
+                </div>
+              )}
+              {errorMemory && (
+                <div className="flex flex-col items-center gap-2 py-16 text-red-500">
+                  <AlertCircle className="w-5 h-5" />
+                  <p className="text-sm">{errorMemory}</p>
+                  <button onClick={fetchMemories} className="text-xs text-gray-400 hover:text-gray-600 underline mt-1">Retry</button>
+                </div>
+              )}
+              {!loadingMemory && !errorMemory && memories.length === 0 && (
+                <div className="flex flex-col items-center gap-2 py-16 text-gray-400">
+                  <BookMarked className="w-6 h-6" />
+                  <p className="text-sm">{memorySearch ? 'No memories match your search' : 'No memories stored yet'}</p>
+                </div>
+              )}
+              {!loadingMemory && !errorMemory && memories.map(mem => (
+                <MemoryRow key={mem.key} mem={mem} onDelete={deleteMemory} deleting={deletingKey === mem.key} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const KIND_COLORS = {
+  user:       'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+  feedback:   'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+  project:    'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+  reference:  'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+  fact:       'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
+  preference: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+  context:    'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
+  task_state: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300',
+};
+
+function MemoryRow({ mem, onDelete, deleting }) {
+  const [expanded, setExpanded] = useState(false);
+  const kindColor = KIND_COLORS[mem.kind || mem.memory_type] || KIND_COLORS.fact;
+  const tags = Array.isArray(mem.tags) ? mem.tags : (typeof mem.tags === 'string' ? mem.tags.replace(/[\[\]]/g, '').split(',').map(t => t.trim()).filter(Boolean) : []);
+  const importance = Number(mem.importance ?? 0.5);
+  const importanceDots = Math.round(importance * 5);
+
+  return (
+    <div className="px-6 py-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group">
+      <div className="flex items-start gap-3">
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="flex-shrink-0 mt-0.5 text-gray-300 dark:text-gray-700 hover:text-gray-500 dark:hover:text-gray-500"
+        >
+          {expanded
+            ? <ChevronDown className="w-3.5 h-3.5" />
+            : <ChevronRight className="w-3.5 h-3.5" />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-200 font-mono">{mem.key}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${kindColor}`}>
+              {mem.kind || mem.memory_type || 'fact'}
+            </span>
+            {tags.map(tag => (
+              <span key={tag} className="text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500">{tag}</span>
+            ))}
+            <span className="text-[10px] text-gray-300 dark:text-gray-700 ml-auto flex items-center gap-0.5" title={`Importance: ${importance.toFixed(1)}`}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <span key={i} className={`w-1 h-1 rounded-full ${i < importanceDots ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
+              ))}
+            </span>
+          </div>
+          <p className={`text-xs text-gray-500 dark:text-gray-400 mt-0.5 ${expanded ? '' : 'truncate'}`}>
+            {mem.content}
+          </p>
+          {expanded && (
+            <div className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-600 flex gap-3 flex-wrap">
+              {mem.last_accessed_at && <span>Last used: {new Date(mem.last_accessed_at).toLocaleDateString()}</span>}
+              {mem.access_count > 0 && <span>Used {mem.access_count}×</span>}
+              {mem.created_at && <span>Created: {new Date(mem.created_at).toLocaleDateString()}</span>}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => onDelete(mem.key)}
+          disabled={deleting}
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+          title="Delete memory"
+        >
+          {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+        </button>
       </div>
     </div>
   );
 }
 
 AgentToolsSkillsPage.propTypes = {
-  initialTab: PropTypes.oneOf(['tools', 'skills']),
+  initialTab: PropTypes.oneOf(['tools', 'skills', 'soul', 'memory']),
 };
