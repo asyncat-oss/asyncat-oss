@@ -17,13 +17,13 @@ import { chatApi } from '../CommandCenter/commandCenterApi';
 const TYPE_CONFIG = {
   project: {
     icon: FolderOpen,
-    color: 'text-indigo-500 dark:text-indigo-400',
-    bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+    color: 'text-gray-400 dark:text-gray-500',
+    bg: 'bg-gray-100 dark:bg-white/[0.05]',
   },
   conversation: {
     icon: MessageSquare,
-    color: 'text-blue-500 dark:text-blue-400',
-    bg: 'bg-blue-50 dark:bg-blue-900/20',
+    color: 'text-gray-400 dark:text-gray-500',
+    bg: 'bg-gray-100 dark:bg-white/[0.05]',
   },
 };
 
@@ -40,30 +40,30 @@ const SearchResultItem = memo(
         ref={ref}
         className={`flex items-center gap-3 px-3 py-[7px] mx-1.5 rounded-lg cursor-default transition-colors duration-75 ${
           isSelected
-            ? 'bg-indigo-500 dark:bg-indigo-600 midnight:bg-indigo-600'
+            ? 'bg-gray-200/80 dark:bg-white/[0.07] midnight:bg-white/[0.07]'
             : 'hover:bg-gray-100 dark:hover:bg-white/[0.05] midnight:hover:bg-white/[0.05]'
         }`}
         onClick={() => onSelect(item)}
       >
         <span className={`flex-shrink-0 w-[26px] h-[26px] rounded-[7px] flex items-center justify-center ${
-          isSelected ? 'bg-white/20' : cfg.bg
+          isSelected ? 'bg-white/[0.12] dark:bg-white/[0.10]' : cfg.bg
         }`}>
           {item._type === 'project' && item.emoji ? (
             <span className="text-sm leading-none">{item.emoji}</span>
           ) : (
-            <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : cfg.color}`} />
+            <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white dark:text-white/90' : cfg.color}`} />
           )}
         </span>
 
         <div className="flex-1 min-w-0">
           <div className={`text-[13px] font-medium truncate leading-tight ${
-            isSelected ? 'text-white' : 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
+            isSelected ? 'text-gray-700 dark:text-gray-200 midnight:text-gray-200' : 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
           }`}>
             {label}
           </div>
           {item.description && (
             <div className={`text-[11px] truncate leading-snug mt-px ${
-              isSelected ? 'text-white/70' : 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
+              isSelected ? 'text-gray-400 dark:text-gray-400 midnight:text-gray-400' : 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
             }`}>
               {item.description}
             </div>
