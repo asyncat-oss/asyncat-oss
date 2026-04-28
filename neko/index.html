@@ -33,6 +33,122 @@
         } catch (_) {}
       })();
     </script>
+    <script>
+      (function () {
+        const ATTEMPTS_KEY = 'asyncatResourceRecoveryAttempts';
+        const LAST_ATTEMPT_KEY = 'asyncatResourceRecoveryLastAttempt';
+        const MAX_ATTEMPTS = 2;
+        const ATTEMPT_WINDOW_MS = 2 * 60 * 1000;
+        const RETRY_DELAY_MS = 1200;
+        let scheduled = false;
+
+        const isRecoverableMessage = (message) => {
+          if (!message) return false;
+          return /ERR_NETWORK_CHANGED|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Load failed/i.test(message);
+        };
+
+        const isAppResource = (target) => {
+          if (!target || target === window) return false;
+          const tagName = target.tagName;
+          if (tagName !== 'SCRIPT' && tagName !== 'LINK') return false;
+          const url = target.src || target.href || '';
+          return url.startsWith(window.location.origin) || url.startsWith('/') || url.includes('/src/');
+        };
+
+        const showRecoveryMessage = (canAutoRefresh) => {
+          const existingRecovery = document.getElementById('asyncat-resource-recovery');
+          if (existingRecovery) return;
+
+          const recovery = document.createElement('div');
+          recovery.id = 'asyncat-resource-recovery';
+          recovery.setAttribute('role', 'status');
+          recovery.style.cssText = [
+            'position:fixed',
+            'inset:0',
+            'z-index:2147483647',
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+            'background:#fff',
+            'color:#111827',
+            'font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+            'text-align:center',
+            'padding:24px'
+          ].join(';');
+          recovery.innerHTML = canAutoRefresh
+            ? '<div><strong style="display:block;font-size:18px;margin-bottom:8px">Reconnecting...</strong><span>The network changed while Asyncat was loading. We are refreshing the app for you.</span></div>'
+            : '<div><strong style="display:block;font-size:18px;margin-bottom:8px">Connection changed</strong><span style="display:block;margin-bottom:16px">Asyncat could not finish loading after the network changed.</span><button type="button" style="border:0;border-radius:10px;background:#111827;color:#fff;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer">Refresh Asyncat</button></div>';
+
+          const button = recovery.querySelector('button');
+          if (button) {
+            button.addEventListener('click', () => window.location.reload());
+          }
+
+          if (document.body) {
+            document.body.appendChild(recovery);
+          } else {
+            window.addEventListener('DOMContentLoaded', () => document.body.appendChild(recovery), { once: true });
+          }
+        };
+
+        const scheduleReload = () => {
+          if (scheduled) return;
+          scheduled = true;
+
+          const now = Date.now();
+          const lastAttempt = Number(sessionStorage.getItem(LAST_ATTEMPT_KEY) || 0);
+          const attempts = now - lastAttempt > ATTEMPT_WINDOW_MS
+            ? 0
+            : Number(sessionStorage.getItem(ATTEMPTS_KEY) || 0);
+
+          if (attempts >= MAX_ATTEMPTS) {
+            showRecoveryMessage(false);
+            return;
+          }
+
+          showRecoveryMessage(true);
+
+          sessionStorage.setItem(ATTEMPTS_KEY, String(attempts + 1));
+          sessionStorage.setItem(LAST_ATTEMPT_KEY, String(now));
+
+          const reloadWhenReady = () => {
+            if (document.visibilityState === 'hidden' || navigator.onLine === false) {
+              return;
+            }
+            window.removeEventListener('online', reloadWhenReady);
+            document.removeEventListener('visibilitychange', reloadWhenReady);
+            window.setTimeout(() => window.location.reload(), RETRY_DELAY_MS);
+          };
+
+          if (document.visibilityState === 'hidden' || navigator.onLine === false) {
+            window.addEventListener('online', reloadWhenReady);
+            document.addEventListener('visibilitychange', reloadWhenReady);
+            return;
+          }
+
+          reloadWhenReady();
+        };
+
+        window.addEventListener('error', (event) => {
+          if (isAppResource(event.target) || isRecoverableMessage(event.message)) {
+            scheduleReload();
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason;
+          const message = typeof reason === 'string' ? reason : reason && (reason.message || reason.stack);
+          if (isRecoverableMessage(message)) {
+            scheduleReload();
+          }
+        });
+
+        window.addEventListener('load', () => {
+          sessionStorage.removeItem(ATTEMPTS_KEY);
+          sessionStorage.removeItem(LAST_ATTEMPT_KEY);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

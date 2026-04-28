@@ -1033,6 +1033,17 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/audit`);
   },
 
+  getSessionChangesState: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/changes/state`);
+  },
+
+  revertSession: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/revert`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
   respondPermission: async (requestId, decision, reason = null) => {
     const token = await authService.getSession();
     const res = await fetch(`${API_BASE_URL}/agent/permissions/${requestId}`, {

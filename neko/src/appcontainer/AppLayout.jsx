@@ -1,16 +1,111 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
+import { Clock3, ServerCrash, Wifi, WifiOff } from "lucide-react";
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
 import eventBus from '../utils/eventBus.js';
 import { useCommandCenter } from '../CommandCenter/CommandCenterContextEnhanced.jsx';
 import { useUnauthorizedError } from '../error/ErrorBoundary.jsx';
 import { initializeTheme, setupThemeListener } from '../auth/utils.js';
+import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
 import CreateProjectFlow from '../projects/components/CreateProjectFlow.jsx';
 import CreateWorkspaceModal from '../sidebar/CreateWorkSpaceModal.jsx';
+
+const formatSystemTime = (date) => (
+  new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+);
+
+const SystemClockPill = () => {
+  const [time, setTime] = useState(() => formatSystemTime(new Date()));
+
+  useEffect(() => {
+    const updateTime = () => setTime(formatSystemTime(new Date()));
+    const now = new Date();
+    const delayUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    let interval = null;
+
+    const timeout = window.setTimeout(() => {
+      updateTime();
+      interval = window.setInterval(updateTime, 60 * 1000);
+    }, delayUntilNextMinute);
+
+    return () => {
+      window.clearTimeout(timeout);
+      if (interval) window.clearInterval(interval);
+    };
+  }, []);
+
+  return (
+    <div
+      title={`Local time ${time}`}
+      className="inline-flex h-9 items-center gap-2 rounded-full border border-gray-200/80 bg-white/85 px-3 text-xs font-medium text-gray-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-gray-900/80 dark:text-gray-300 midnight:border-white/10 midnight:bg-black/80 midnight:text-gray-300"
+    >
+      <Clock3 className="h-4 w-4 text-gray-500 dark:text-gray-400 midnight:text-gray-500" aria-hidden="true" />
+      <time dateTime={new Date().toISOString()}>{time}</time>
+    </div>
+  );
+};
+
+const NetworkStatusPill = () => {
+  const network = useNetworkStatus({ pollMs: 6000 });
+
+  const status = !network.online
+    ? {
+        label: "No internet",
+        detail: "This device is offline.",
+        Icon: WifiOff,
+        className: "border-red-200 bg-red-50 text-red-700 dark:border-red-900/70 dark:bg-red-950/70 dark:text-red-300 midnight:border-red-900 midnight:bg-red-950/80 midnight:text-red-300",
+        dotClassName: "bg-red-500",
+      }
+    : !network.backendOnline
+      ? {
+          label: "Backend offline",
+          detail: "Local Asyncat services are unreachable.",
+          Icon: ServerCrash,
+          className: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/70 dark:text-amber-300 midnight:border-amber-900 midnight:bg-amber-950/80 midnight:text-amber-300",
+          dotClassName: "bg-amber-500",
+        }
+      : {
+          label: "Online",
+          detail: "Browser and backend are reachable.",
+          Icon: Wifi,
+          className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/70 dark:text-emerald-300 midnight:border-emerald-900 midnight:bg-emerald-950/80 midnight:text-emerald-300",
+          dotClassName: "bg-emerald-500",
+        };
+
+  const Icon = status.Icon;
+
+  return (
+    <div className="relative group">
+      <div
+        role="status"
+        aria-label={`${status.label}. ${status.detail}`}
+        title={`${status.label} - ${status.detail}`}
+        className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium shadow-sm backdrop-blur ${status.className}`}
+      >
+        <span className={`h-2 w-2 rounded-full ${status.dotClassName}`} />
+        <Icon className="h-4 w-4" aria-hidden="true" />
+        <span className="hidden sm:inline">{status.label}</span>
+      </div>
+      <div className="pointer-events-none absolute right-0 top-full mt-2 w-max max-w-64 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium leading-relaxed text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 dark:bg-gray-800 midnight:bg-gray-800">
+        {status.detail}
+      </div>
+    </div>
+  );
+};
+
+const SystemStatusCluster = () => (
+  <div className="fixed right-4 top-4 z-[60] flex items-center gap-2">
+    <SystemClockPill />
+    <NetworkStatusPill />
+  </div>
+);
 
 const AppLayout = ({ session, onSignOut }) => {
   const navigate = useNavigate();
@@ -412,6 +507,7 @@ const AppLayout = ({ session, onSignOut }) => {
   // Normal dashboard when user has workspaces
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
+      <SystemStatusCluster />
 
       {/* Dock — renders as fixed overlay, no flex space consumed */}
       <Sidebar

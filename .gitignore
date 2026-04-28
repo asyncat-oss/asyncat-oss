@@ -28,6 +28,8 @@ pnpm-debug.log*
 data/asyncat.db
 data/asyncat.db-shm
 data/asyncat.db-wal
+.asyncat/snapshots/
+den/.asyncat/snapshots/
 *.db
 *.db-shm
 *.db-wal

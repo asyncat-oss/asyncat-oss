@@ -25,7 +25,12 @@ import { execSync } from 'child_process';
 
 const MAX_ROUNDS_DEFAULT = 25;
 const CHECKPOINTS = new Map();
-const SNAPSHOT_SKIP = new Set(['.git', 'node_modules']);
+const SNAPSHOT_SKIP = new Set(['.git', 'node_modules', 'dist', 'build', 'data', 'logs']);
+const MUTATING_FILE_TOOLS = new Set([
+  'write_file', 'create_file', 'edit_file', 'create_directory',
+  'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
+]);
+const MUTATING_SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
 
 /**
  * @typedef {Object} AgentEvent
@@ -355,11 +360,8 @@ export class AgentRuntime {
           messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, this._compactToolResultForContext(tc.tool_name, deniedResult)) });
         } else {
           let checkpoint = null;
-          if (permission === 'dangerous') {
-            checkpoint = this._createCheckpoint({ round, toolName: tc.tool_name });
-            if (checkpoint) {
-              this.onEvent({ type: 'checkpoint', data: checkpoint });
-            }
+          if (this._isMutatingTool(tc.tool_name)) {
+            checkpoint = this._ensureBaselineCheckpoint({ round, toolName: tc.tool_name });
           }
           this.onEvent({
             type: 'tool_start',
@@ -654,24 +656,57 @@ export class AgentRuntime {
     return Math.ceil(String(value || '').length / 4);
   }
 
-  _createCheckpoint({ round, toolName }) {
+  _isMutatingTool(toolName) {
+    return MUTATING_FILE_TOOLS.has(toolName) || MUTATING_SHELL_TOOLS.has(toolName);
+  }
+
+  _ensureBaselineCheckpoint({ round, toolName }) {
+    const existing = this.session?.scratchpad?.baselineCheckpoint;
+    if (existing?.id) return existing;
+
+    const checkpoint = this._createCheckpoint({ round, toolName, baseline: true, forceSnapshot: true });
+    if (checkpoint && this.session) {
+      this.session.setScratchpad('baselineCheckpoint', checkpoint);
+      this.session.save();
+      this.onEvent({ type: 'checkpoint', data: checkpoint });
+    }
+    return checkpoint;
+  }
+
+  _createCheckpoint({ round, toolName, baseline = false, forceSnapshot = false }) {
     try {
       const id = `cp_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
       const workspace = path.resolve(this.workingDir);
-      const message = `asyncat checkpoint ${this.session?.id || 'session'} round ${round} ${toolName}`;
+      const message = `asyncat ${baseline ? 'baseline' : 'checkpoint'} ${this.session?.id || 'session'} round ${round} ${toolName}`;
       let checkpoint;
       try {
+        if (forceSnapshot) throw new Error('snapshot requested');
         execSync('git rev-parse --is-inside-work-tree', { cwd: workspace, stdio: 'ignore', timeout: 3000 });
         execSync(`git stash push --include-untracked -m ${JSON.stringify(message)}`, { cwd: workspace, stdio: 'ignore', timeout: 15000 });
         const list = execSync('git stash list', { cwd: workspace, encoding: 'utf8', timeout: 3000 });
         const first = list.split('\n').find(line => line.includes(message));
-        checkpoint = { id, kind: 'git_stash', workspace, message, ref: first?.split(':')[0] || 'stash@{0}', createdAt: new Date().toISOString() };
+        checkpoint = {
+          id,
+          kind: 'git_stash',
+          workspace,
+          message,
+          ref: first?.split(':')[0] || 'stash@{0}',
+          createdAt: new Date().toISOString(),
+          baseline,
+        };
       } catch {
         const snapRoot = path.join(workspace, '.asyncat', 'snapshots');
         const dir = path.join(snapRoot, id);
         fs.mkdirSync(dir, { recursive: true });
         this._copySnapshot(workspace, dir, workspace);
-        checkpoint = { id, kind: 'dir_snapshot', workspace, dir, createdAt: new Date().toISOString() };
+        checkpoint = {
+          id,
+          kind: 'dir_snapshot',
+          workspace,
+          dir,
+          createdAt: new Date().toISOString(),
+          baseline,
+        };
       }
       CHECKPOINTS.set(id, checkpoint);
       return checkpoint;
@@ -785,13 +820,18 @@ export function listCheckpoints() {
 }
 
 export function restoreCheckpoint(id) {
-  const cp = id ? CHECKPOINTS.get(id) : listCheckpoints()[0];
+  const cp = typeof id === 'object' && id !== null
+    ? id
+    : (id ? CHECKPOINTS.get(id) : listCheckpoints()[0]);
   if (!cp) return { success: false, error: 'No checkpoint found' };
   try {
     if (cp.kind === 'git_stash') {
       execSync(`git stash apply ${cp.ref}`, { cwd: cp.workspace, stdio: 'pipe', timeout: 30000 });
     } else if (cp.kind === 'dir_snapshot') {
-      restoreDirectorySnapshot(cp.dir, cp.workspace);
+      if (!cp.dir || !fs.existsSync(cp.dir)) {
+        return { success: false, error: 'Checkpoint snapshot is missing', checkpoint: cp };
+      }
+      restoreDirectorySnapshot(cp.dir, cp.workspace, cp.workspace);
     }
     return { success: true, checkpoint: cp };
   } catch (err) {
@@ -799,17 +839,36 @@ export function restoreCheckpoint(id) {
   }
 }
 
-function restoreDirectorySnapshot(src, dest) {
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-  for (const entry of entries) {
+function restoreDirectorySnapshot(src, dest, root = dest) {
+  fs.mkdirSync(dest, { recursive: true });
+
+  const snapshotNames = new Set();
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (SNAPSHOT_SKIP.has(entry.name)) continue;
+    snapshotNames.add(entry.name);
     const from = path.join(src, entry.name);
     const to = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      fs.mkdirSync(to, { recursive: true });
-      restoreDirectorySnapshot(from, to);
+      if (fs.existsSync(to) && !fs.statSync(to).isDirectory()) {
+        fs.rmSync(to, { recursive: true, force: true });
+      }
+      restoreDirectorySnapshot(from, to, root);
     } else if (entry.isFile()) {
+      if (fs.existsSync(to) && fs.statSync(to).isDirectory()) {
+        fs.rmSync(to, { recursive: true, force: true });
+      }
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.copyFileSync(from, to);
+    }
+  }
+
+  for (const entry of fs.readdirSync(dest, { withFileTypes: true })) {
+    if (SNAPSHOT_SKIP.has(entry.name)) continue;
+    const current = path.join(dest, entry.name);
+    const rel = path.relative(root, current);
+    if (rel === '.asyncat' || rel.startsWith(`.asyncat${path.sep}snapshots`)) continue;
+    if (!snapshotNames.has(entry.name)) {
+      fs.rmSync(current, { recursive: true, force: true });
     }
   }
 }

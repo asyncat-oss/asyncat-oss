@@ -13,9 +13,10 @@ import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler 
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import db from '../../db/client.js';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -95,6 +96,151 @@ const authenticate = (req, res, next) => {
 function getWorkspaceId(req, db) {
   return req.workspaceId ||
     db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+}
+
+const FILE_WRITE_TOOLS = new Set(['write_file', 'create_file']);
+const FILE_EDIT_TOOLS = new Set(['edit_file']);
+const FILE_DELETE_TOOLS = new Set(['file_delete', 'delete_file']);
+const FILE_CREATE_TOOLS = new Set(['create_directory']);
+const FILE_COPY_TOOLS = new Set(['file_copy', 'copy_file']);
+const FILE_MOVE_TOOLS = new Set(['file_move', 'move_file']);
+const SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
+
+function loadOwnedSession(sessionId, userId) {
+  const session = AgentSession.load(sessionId);
+  if (!session || session.userId !== userId) return null;
+  return session;
+}
+
+function getSessionAuditRows(sessionId, userId) {
+  return db.prepare(`
+    SELECT id, session_id, tool_name, permission_level, permission_decision,
+           permission_reason, working_dir, args, result, success, round,
+           started_at, completed_at
+    FROM agent_tool_audit
+    WHERE session_id = ? AND user_id = ?
+    ORDER BY started_at ASC
+  `).all(sessionId, userId).map(row => ({
+    ...row,
+    args: JSON.parse(row.args || '{}'),
+    result: row.result ? JSON.parse(row.result) : null,
+    success: row.success === null ? null : Boolean(row.success),
+  }));
+}
+
+function deriveAgentChanges(rows = []) {
+  const files = new Map();
+  const commands = [];
+
+  for (const row of rows) {
+    const tool = row.tool_name || row.tool;
+    const args = row.args || {};
+    const result = row.result || {};
+    const succeeded = row.success === true || (row.success === null && result.success !== false && !result.error);
+    if (!succeeded) continue;
+
+    const base = {
+      tool,
+      workingDir: row.working_dir || row.workingDir || null,
+      timestamp: row.completed_at || row.started_at || row.timestamp || null,
+      auditId: row.id || null,
+    };
+
+    if (FILE_WRITE_TOOLS.has(tool) && args.path) {
+      files.set(args.path, { ...base, type: result.action === 'created' ? 'created' : 'written', path: args.path });
+    } else if (FILE_EDIT_TOOLS.has(tool) && args.path) {
+      if (!files.has(args.path)) files.set(args.path, { ...base, type: 'edited', path: args.path });
+    } else if (FILE_DELETE_TOOLS.has(tool) && args.path) {
+      files.set(args.path, { ...base, type: 'deleted', path: args.path });
+    } else if (FILE_CREATE_TOOLS.has(tool) && args.path) {
+      files.set(args.path, { ...base, type: 'directory', path: args.path });
+    } else if (FILE_COPY_TOOLS.has(tool) && args.destination) {
+      files.set(args.destination, { ...base, type: 'copied', path: args.destination, source: args.source || null });
+    } else if (FILE_MOVE_TOOLS.has(tool) && args.destination) {
+      files.set(args.destination, { ...base, type: 'moved', path: args.destination, source: args.source || null });
+    } else if (SHELL_TOOLS.has(tool)) {
+      commands.push({
+        ...base,
+        type: 'command',
+        command: args.command || args.code || '',
+        output: result.output || result.stdout || '',
+      });
+    }
+  }
+
+  return { files: [...files.values()], commands };
+}
+
+function resolveWithin(root, relPath) {
+  const workingDir = path.resolve(root || process.cwd());
+  const resolved = path.resolve(workingDir, relPath || '.');
+  if (!resolved.startsWith(workingDir + path.sep) && resolved !== workingDir) return null;
+  return { workingDir, resolved };
+}
+
+function fileStateFor(change, fallbackWorkingDir) {
+  const root = change.workingDir || fallbackWorkingDir || process.cwd();
+  const resolvedInfo = resolveWithin(root, change.path);
+  if (!resolvedInfo) return { path: change.path, state: 'unknown', error: 'Path outside working directory' };
+
+  const { resolved } = resolvedInfo;
+  if (!fs.existsSync(resolved)) {
+    return {
+      path: change.path,
+      state: change.type === 'deleted' ? 'deleted' : 'missing',
+      exists: false,
+      workingDir: root,
+    };
+  }
+
+  const stat = fs.statSync(resolved);
+  const changedAtMs = change.timestamp ? Date.parse(change.timestamp) : null;
+  const changedSinceAgent = Number.isFinite(changedAtMs) && stat.mtimeMs > changedAtMs + 1500;
+  const state = stat.isDirectory()
+    ? 'directory'
+    : changedSinceAgent ? 'changed_since_agent' : 'exists';
+  let hash = null;
+  if (stat.isFile() && stat.size <= 5 * 1024 * 1024) {
+    try {
+      hash = createHash('sha256').update(fs.readFileSync(resolved)).digest('hex');
+    } catch { /* ignore */ }
+  }
+
+  return {
+    path: change.path,
+    state,
+    exists: true,
+    kind: stat.isDirectory() ? 'directory' : 'file',
+    size: stat.isFile() ? stat.size : null,
+    mtime: stat.mtime.toISOString(),
+    hash,
+    workingDir: root,
+  };
+}
+
+function checkpointAvailability(checkpoint) {
+  if (!checkpoint?.id) return { available: false, reason: 'No baseline checkpoint was recorded for this run.' };
+  if (checkpoint.kind === 'dir_snapshot') {
+    if (!checkpoint.dir || !fs.existsSync(checkpoint.dir)) {
+      return { available: false, reason: 'The baseline snapshot is missing from disk.' };
+    }
+    return { available: true, reason: null };
+  }
+  if (checkpoint.kind === 'git_stash') {
+    try {
+      const list = execGitStashList(checkpoint.workspace);
+      return list.includes(checkpoint.ref)
+        ? { available: true, reason: null }
+        : { available: false, reason: 'The git stash checkpoint is no longer present.' };
+    } catch (err) {
+      return { available: false, reason: err.message };
+    }
+  }
+  return { available: false, reason: 'Unsupported checkpoint type.' };
+}
+
+function execGitStashList(cwd) {
+  return execSync('git stash list', { cwd: cwd || process.cwd(), encoding: 'utf8', timeout: 3000 });
 }
 
 function createPermissionRequest(req, res) {
@@ -403,6 +549,87 @@ router.get('/sessions/:id', authenticate, (req, res) => {
     return res.status(404).json({ success: false, error: 'Session not found' });
   }
   res.json({ success: true, session });
+});
+
+/**
+ * GET /api/agent/sessions/:id/changes/state
+ * Return historical changes for a run plus current filesystem state.
+ */
+router.get('/sessions/:id/changes/state', authenticate, (req, res) => {
+  try {
+    const session = loadOwnedSession(req.params.id, req.user.id);
+    if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+
+    const rows = getSessionAuditRows(req.params.id, req.user.id);
+    const changes = deriveAgentChanges(rows);
+    const fileStates = Object.fromEntries(
+      changes.files.map(change => [change.path, fileStateFor(change, session.workingDir)])
+    );
+    const checkpoint = session.scratchpad?.baselineCheckpoint || null;
+    const availability = checkpointAvailability(checkpoint);
+
+    res.json({
+      success: true,
+      sessionId: session.id,
+      goal: session.goal,
+      changes,
+      fileStates,
+      checkpoint: checkpoint ? {
+        id: checkpoint.id,
+        kind: checkpoint.kind,
+        workspace: checkpoint.workspace,
+        createdAt: checkpoint.createdAt,
+        baseline: Boolean(checkpoint.baseline),
+      } : null,
+      revert: {
+        available: availability.available,
+        reason: availability.reason,
+        revertedAt: session.scratchpad?.revertedAt || null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/agent/sessions/:id/revert
+ * Restore the run's baseline checkpoint.
+ */
+router.post('/sessions/:id/revert', authenticate, (req, res) => {
+  try {
+    const session = loadOwnedSession(req.params.id, req.user.id);
+    if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+
+    const checkpoint = session.scratchpad?.baselineCheckpoint || null;
+    const availability = checkpointAvailability(checkpoint);
+    if (!availability.available) {
+      return res.status(409).json({ success: false, error: availability.reason || 'Revert unavailable' });
+    }
+
+    const result = restoreCheckpoint(checkpoint);
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error || 'Revert failed', checkpoint: result.checkpoint });
+    }
+
+    session.setScratchpad('revertedAt', new Date().toISOString());
+    session.setScratchpad('revertCheckpointId', checkpoint.id);
+    session.save();
+
+    res.json({
+      success: true,
+      message: 'Run reverted to its baseline checkpoint.',
+      checkpoint: {
+        id: checkpoint.id,
+        kind: checkpoint.kind,
+        workspace: checkpoint.workspace,
+        createdAt: checkpoint.createdAt,
+      },
+      revertedAt: session.scratchpad.revertedAt,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**

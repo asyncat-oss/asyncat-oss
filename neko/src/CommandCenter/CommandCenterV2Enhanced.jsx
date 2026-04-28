@@ -1600,7 +1600,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                           onPermissionDecision={handleAgentPermission}
                           onAskUserAnswer={handleAgentAskUser}
                         />
-                        {!agentRunning && <AgentChangesPanel events={agentEvents} />}
+                        {!agentRunning && (
+                          <AgentChangesPanel
+                            events={agentEvents}
+                            sessionId={agentCurrentSessionId}
+                            session={agentCurrentSession}
+                          />
+                        )}
                       </>
                     )}
                     <div ref={agentFeedEndRef} />
