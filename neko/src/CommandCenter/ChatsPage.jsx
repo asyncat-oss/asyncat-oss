@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi, chatFoldersApi, agentApi } from './commandCenterApi';
-import { MessageSquare, Clock, Search, Folder, FolderOpen, Bot } from 'lucide-react';
+import { useCommandCenter } from './CommandCenterContextEnhanced';
+import { MessageSquare, Clock, Search, Folder, FolderOpen, Bot, Plus } from 'lucide-react';
 
 const getRelativeTime = (dateString) => {
   const date = new Date(dateString);
@@ -24,6 +25,12 @@ const agentSessionStatus = (s) => {
 const ChatsPage = () => {
   const navigate = useNavigate();
   const { currentWorkspace } = useWorkspace();
+  const { handleNewConversation } = useCommandCenter();
+
+  const handleNewChat = useCallback(async () => {
+    if (handleNewConversation) await handleNewConversation();
+    navigate('/home');
+  }, [handleNewConversation, navigate]);
 
   const [activeTab, setActiveTab] = useState('chats');
 
@@ -214,6 +221,13 @@ const ChatsPage = () => {
           <h1 className="text-2xl font-serif text-gray-900 dark:text-white midnight:text-slate-100">
             History
           </h1>
+          <button
+            onClick={handleNewChat}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Chat
+          </button>
         </div>
 
         {/* Tabs */}

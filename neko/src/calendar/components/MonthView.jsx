@@ -18,7 +18,7 @@ const MonthView = ({
 	events,
 	cards = [], // Added cards prop with default empty array
 	isToday,
-	_isSelectedDate,
+	isSelectedDate,
 	monthDays,
 	_firstDayOfMonth,
 	onEventClick,

@@ -471,7 +471,7 @@ const Layout = ({ selectedProject, session }) => {
 						view={view}
 						currentDate={currentDate}
 						onDateChange={setCurrentDate}
-						selectedDate={selectedDate}
+						selectedDate={_selectedDate}
 						events={events}
 						cards={filteredCards}
 						onAddEvent={handleAddEvent}
@@ -497,7 +497,7 @@ const Layout = ({ selectedProject, session }) => {
 						isOpen={showAddEvent}
 						onClose={() => setShowAddEvent(false)}
 						onAddEvent={handleAddEvent}
-						initialDate={selectedDate}
+						initialDate={_selectedDate}
 						initialTitle=""
 						initialeventid={null}
 						initialProject={projectFilter && projectFilter !== "personal" ? projectFilter : null}

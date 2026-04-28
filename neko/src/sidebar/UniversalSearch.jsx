@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, FolderOpen, MessageSquare, ArrowRight } from 'lucide-react';
+import { Search, X, FolderOpen, MessageSquare } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi } from '../CommandCenter/commandCenterApi';
 
@@ -38,39 +38,37 @@ const SearchResultItem = memo(
     return (
       <div
         ref={ref}
-        className={`group flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg cursor-pointer transition-all duration-75 ${
+        className={`flex items-center gap-3 px-3 py-[7px] mx-1.5 rounded-lg cursor-default transition-colors duration-75 ${
           isSelected
-            ? 'bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800'
-            : 'hover:bg-gray-50 dark:hover:bg-gray-800/60 midnight:hover:bg-gray-800/60'
+            ? 'bg-indigo-500 dark:bg-indigo-600 midnight:bg-indigo-600'
+            : 'hover:bg-gray-100 dark:hover:bg-white/[0.05] midnight:hover:bg-white/[0.05]'
         }`}
         onClick={() => onSelect(item)}
       >
-        <span
-          className={`flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center ${cfg.bg}`}
-        >
+        <span className={`flex-shrink-0 w-[26px] h-[26px] rounded-[7px] flex items-center justify-center ${
+          isSelected ? 'bg-white/20' : cfg.bg
+        }`}>
           {item._type === 'project' && item.emoji ? (
             <span className="text-sm leading-none">{item.emoji}</span>
           ) : (
-            <Icon className={`w-3 h-3 ${cfg.color}`} />
+            <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : cfg.color}`} />
           )}
         </span>
 
         <div className="flex-1 min-w-0">
-          <div className="text-sm text-gray-800 dark:text-gray-100 midnight:text-gray-100 truncate font-medium">
+          <div className={`text-[13px] font-medium truncate leading-tight ${
+            isSelected ? 'text-white' : 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
+          }`}>
             {label}
           </div>
           {item.description && (
-            <div className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5 leading-snug">
+            <div className={`text-[11px] truncate leading-snug mt-px ${
+              isSelected ? 'text-white/70' : 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
+            }`}>
               {item.description}
             </div>
           )}
         </div>
-
-        <ArrowRight
-          className={`w-3.5 h-3.5 flex-shrink-0 transition-all ${
-            isSelected ? 'opacity-40 translate-x-0' : 'opacity-0 -translate-x-1 group-hover:opacity-30 group-hover:translate-x-0'
-          } text-gray-400`}
-        />
       </div>
     );
   })
@@ -80,12 +78,11 @@ SearchResultItem.displayName = 'SearchResultItem';
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 
-const SectionHeader = ({ label, count }) => (
-  <div className="flex items-center justify-between px-5 pt-3 pb-1">
-    <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 midnight:text-gray-500 uppercase tracking-widest">
+const SectionHeader = ({ label }) => (
+  <div className="px-4 py-1.5">
+    <span className="text-[10px] font-semibold tracking-[0.1em] text-gray-400 dark:text-gray-600 midnight:text-gray-600 uppercase">
       {label}
     </span>
-    <span className="text-[10px] text-gray-300 dark:text-gray-700">{count}</span>
   </div>
 );
 
@@ -269,116 +266,108 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const isEmpty = filteredResults.length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/30 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[16vh] px-4 bg-black/25 backdrop-blur-sm">
       <div
         ref={modalRef}
-        className="w-full max-w-lg bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-xl shadow-2xl overflow-hidden border border-gray-200/80 dark:border-gray-700/60 midnight:border-gray-800"
+        className="w-full max-w-[620px] rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.07] midnight:border-white/[0.04] bg-white/[0.9] dark:bg-gray-900/[0.97] midnight:bg-gray-950/[0.97] backdrop-blur-3xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.5)] midnight:shadow-[0_12px_40px_rgba(0,0,0,0.6)]"
       >
         {/* ── Search input ───────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2.5 px-4 py-3.5">
-          <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <div className="flex items-center gap-3 px-4 h-[52px]">
+          {loading
+            ? <div className="w-4 h-4 border-[1.5px] border-gray-300 dark:border-gray-600 midnight:border-gray-600 border-t-gray-600 dark:border-t-gray-300 midnight:border-t-gray-300 rounded-full animate-spin flex-shrink-0" />
+            : <Search className="w-[17px] h-[17px] text-gray-400 dark:text-gray-500 midnight:text-gray-500 flex-shrink-0" />
+          }
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search projects and conversations…"
+            placeholder="Search"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 dark:placeholder-gray-600 text-sm"
+            className="flex-1 bg-transparent border-none outline-none text-[15px] text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 midnight:placeholder-gray-600"
           />
-          {searchTerm ? (
+          {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
-              className="w-5 h-5 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors flex-shrink-0"
+              className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200/80 dark:bg-gray-700/80 midnight:bg-gray-700/80 hover:bg-gray-300/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-600/80 flex-shrink-0 transition-colors"
             >
-              <X className="w-3 h-3 text-gray-400" />
+              <X className="w-2.5 h-2.5 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
             </button>
-          ) : (
-            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700/60 flex-shrink-0">
-              ESC
-            </kbd>
           )}
         </div>
 
-        {/* ── Divider ────────────────────────────────────────────────────── */}
-        <div className="h-px bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 mx-0" />
-
-        {/* ── Results list ───────────────────────────────────────────────── */}
-        <div className="max-h-[50vh] overflow-y-auto py-1.5">
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <div className="w-4 h-4 border-2 border-gray-200 dark:border-gray-700 border-t-indigo-500 rounded-full animate-spin" />
-            </div>
-          ) : isEmpty ? (
-            <div className="py-10 text-center">
-              <Search className="w-4 h-4 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-400 dark:text-gray-500">
-                {searchTerm ? (
-                  <>No results for <span className="text-gray-600 dark:text-gray-300">"{searchTerm}"</span></>
-                ) : (
-                  'Start typing to search…'
+        {/* ── Results area ───────────────────────────────────────────────── */}
+        {(!isEmpty || (isEmpty && searchTerm && !loading)) && (
+          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+            {isEmpty && searchTerm ? (
+              <div className="py-10 text-center">
+                <p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
+                  No results for{' '}
+                  <span className="text-gray-600 dark:text-gray-300 midnight:text-gray-300">
+                    "{searchTerm}"
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <div className="py-2 max-h-[420px] overflow-y-auto">
+                {projectResults.length > 0 && (
+                  <div className="mb-1">
+                    <SectionHeader label="Projects" />
+                    {projectResults.map((item) => {
+                      const gi = filteredResults.indexOf(item);
+                      return (
+                        <SearchResultItem
+                          key={`project-${item.id}-${item._tab || 'main'}`}
+                          ref={(el) => (itemRefs.current[gi] = el)}
+                          item={item}
+                          isSelected={selectedIndex === gi}
+                          onSelect={handleSelect}
+                        />
+                      );
+                    })}
+                  </div>
                 )}
-              </p>
-            </div>
-          ) : (
-            <div className="pb-1">
-              {projectResults.length > 0 && (
-                <div>
-                  <SectionHeader label="Projects" count={projectResults.length} />
-                  {projectResults.map((item) => {
-                    const gi = filteredResults.indexOf(item);
-                    return (
-                      <SearchResultItem
-                        key={`project-${item.id}-${item._tab || 'main'}`}
-                        ref={(el) => (itemRefs.current[gi] = el)}
-                        item={item}
-                        isSelected={selectedIndex === gi}
-                        onSelect={handleSelect}
-                      />
-                    );
-                  })}
-                </div>
-              )}
 
-              {conversationResults.length > 0 && (
-                <div className={projectResults.length > 0 ? 'mt-1' : ''}>
-                  <SectionHeader label="Conversations" count={conversationResults.length} />
-                  {conversationResults.map((item) => {
-                    const gi = filteredResults.indexOf(item);
-                    return (
-                      <SearchResultItem
-                        key={`conversation-${item.id}`}
-                        ref={(el) => (itemRefs.current[gi] = el)}
-                        item={item}
-                        isSelected={selectedIndex === gi}
-                        onSelect={handleSelect}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                {conversationResults.length > 0 && (
+                  <div className={projectResults.length > 0 ? 'mt-2' : ''}>
+                    <SectionHeader label="Conversations" />
+                    {conversationResults.map((item) => {
+                      const gi = filteredResults.indexOf(item);
+                      return (
+                        <SearchResultItem
+                          key={`conversation-${item.id}`}
+                          ref={(el) => (itemRefs.current[gi] = el)}
+                          item={item}
+                          isSelected={selectedIndex === gi}
+                          onSelect={handleSelect}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Footer ─────────────────────────────────────────────────────── */}
         {!isEmpty && !loading && (
-          <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800">
-            <div className="flex items-center gap-2.5 text-[10px] text-gray-400 dark:text-gray-600">
+          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-600 midnight:text-gray-600">
               <span className="flex items-center gap-1">
-                <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700/60">↑↓</kbd>
+                <kbd className="px-1 py-px rounded text-[9px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 border border-gray-200 dark:border-gray-700/60 midnight:border-gray-700/60">↑↓</kbd>
                 navigate
               </span>
               <span className="flex items-center gap-1">
-                <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700/60">↵</kbd>
+                <kbd className="px-1 py-px rounded text-[9px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 border border-gray-200 dark:border-gray-700/60 midnight:border-gray-700/60">↵</kbd>
                 open
               </span>
               <span className="flex items-center gap-1">
-                <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700/60">Esc</kbd>
-                close
+                <kbd className="px-1 py-px rounded text-[9px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 border border-gray-200 dark:border-gray-700/60 midnight:border-gray-700/60">Esc</kbd>
+                dismiss
               </span>
             </div>
-            <span className="text-[10px] text-gray-300 dark:text-gray-700">
-              {filteredResults.length} result{filteredResults.length !== 1 ? 's' : ''}
+            <span className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-gray-700">
+              {filteredResults.length}
             </span>
           </div>
         )}

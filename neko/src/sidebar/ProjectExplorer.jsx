@@ -7,6 +7,7 @@ import {
   ChevronRight,
   MoreHorizontal,
   FolderPlus,
+  Plus,
   Pencil,
   Trash2,
   FolderMinus,
@@ -664,6 +665,17 @@ const ProjectExplorer = ({ isCollapsed = false, onCreateProject, currentProjectI
         </div>
       ) : currentWorkspace?.id ? (
         <div>
+          {/* ── New Project button ── */}
+          <div className="mb-2">
+            <button
+              onClick={() => eventBus.emit('openCreateProjectModal')}
+              className="w-full flex items-center justify-start px-3 py-2 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md transition-colors text-xs font-medium border border-dashed border-gray-300 dark:border-gray-700 midnight:border-gray-800"
+            >
+              <Plus className="w-3.5 h-3.5 mr-2" />
+              New Project
+            </button>
+          </div>
+
           {/* ── Folders section ── */}
           {(folders.length > 0 || projects.length > 0) && (
             <div className="mb-2">

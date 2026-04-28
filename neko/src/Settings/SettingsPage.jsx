@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { SlidersHorizontal, Lock, Moon, Sun, Server } from 'lucide-react';
+import { SlidersHorizontal, Lock, Moon, Sun, Server, LogOut } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 
 // Import our components
@@ -12,7 +12,7 @@ import ServerSection from './ServerSection';
 const SettingsPage = () => {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const { session } = useOutletContext() || {};
+  const { session, onSignOut } = useOutletContext() || {};
 
   // Workspace context
   const { currentWorkspace, refreshWorkspaces, updateCurrentWorkspace } = useWorkspace();
@@ -131,7 +131,7 @@ const SettingsPage = () => {
         );
       case 'security':    return <SecuritySection />;
       case 'appearance':  return <AppearanceSection theme={theme} setThemeMode={setThemeMode} />;
-      case 'server':     return <ServerSection session={session} />;
+      case 'server':      return <ServerSection session={session} />;
       default:
         return (
           <GeneralSection
@@ -159,7 +159,7 @@ const SettingsPage = () => {
           </h2>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 pt-2 pb-4">
+        <div className="flex-1 overflow-y-auto px-2 pt-2 pb-2">
           <div className="space-y-0.5">
             {allTabs.map((tab) => (
               <button
@@ -173,13 +173,7 @@ const SettingsPage = () => {
                   }`}
               >
                 <div className="flex items-center gap-2.5 w-full">
-                  <div
-                    className={`flex-shrink-0 ${
-                      activeTab === tab.id
-                        ? 'text-indigo-600 dark:text-indigo-400'
-                        : 'text-gray-400 dark:text-gray-500'
-                    }`}
-                  >
+                  <div className={`flex-shrink-0 ${activeTab === tab.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'}`}>
                     {tab.icon}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -190,6 +184,19 @@ const SettingsPage = () => {
             ))}
           </div>
         </div>
+
+        {/* Sign out — pinned to bottom like macOS System Settings */}
+        {onSignOut && (
+          <div className="flex-shrink-0 px-2 pb-3 pt-1 border-t border-gray-200/70 dark:border-gray-800/80 midnight:border-gray-800/80">
+            <button
+              onClick={onSignOut}
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-left text-sm text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 transition-colors"
+            >
+              <LogOut className="w-4 h-4 flex-shrink-0" />
+              Sign Out
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right Content Area */}

@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
-import { PanelLeft } from "lucide-react";
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
 import eventBus from '../utils/eventBus.js';
 import { useCommandCenter } from '../CommandCenter/CommandCenterContextEnhanced.jsx';
@@ -31,7 +30,6 @@ const AppLayout = ({ session, onSignOut }) => {
 
   
   // UI state
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [refreshProjectsFlag, setRefreshProjectsFlag] = useState(0);
   
@@ -457,46 +455,35 @@ const AppLayout = ({ session, onSignOut }) => {
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
 
-      {/* Floating sidebar-expand button — only visible when sidebar is collapsed */}
-      <button
-        onClick={() => setIsSidebarCollapsed(false)}
-        className={`fixed top-2.5 left-2.5 z-30 p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-lg border border-gray-200/50 dark:border-gray-700/50 transition-all duration-500 ${
-          isSidebarCollapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
-        }`}
-        style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-        title="Expand sidebar (⌘/)"
-      >
-        <PanelLeft className="w-4 h-4" />
-      </button>
-        <Sidebar
-          isSidebarCollapsed={isSidebarCollapsed}
-          setIsSidebarCollapsed={setIsSidebarCollapsed}
-          currentPage={currentPage}
-          isChatMode={isChatMode}
-          onPageChange={handleNavigate}
-          session={session}
-          onSignOut={onSignOut}
-          selectedProject={getProjectValue(true)}
-          onProjectSelect={handleProjectSelect}
-          refreshProjectsFlag={refreshProjectsFlag}
-          onRefreshProjects={refreshProjects}
-          onNewChat={handleNewChatWithNavigation}
-          basePage={basePage}
-          pathSegments={pathSegments}
-        />
+      {/* Dock — renders as fixed overlay, no flex space consumed */}
+      <Sidebar
+        currentPage={currentPage}
+        isChatMode={isChatMode}
+        onPageChange={handleNavigate}
+        session={session}
+        onSignOut={onSignOut}
+        selectedProject={getProjectValue(true)}
+        onProjectSelect={handleProjectSelect}
+        refreshProjectsFlag={refreshProjectsFlag}
+        onRefreshProjects={refreshProjects}
+        onNewChat={handleNewChatWithNavigation}
+        basePage={basePage}
+        pathSegments={pathSegments}
+      />
 
-        <main className="flex-1 overflow-y-auto h-full">
-          <div className="animate-fadeIn h-full">
-            <Outlet context={{
+      <main className="flex-1 overflow-hidden h-full">
+        <div className="animate-fadeIn h-full pb-20">
+          <Outlet context={{
               selectedProject: getProjectValue(true),
               onProjectSelect: handleProjectSelect,
               session,
               currentTab: params.tab,
               refreshProjects,
-              onOpenSettings: handleOpenSettings
+              onOpenSettings: handleOpenSettings,
+              onSignOut,
             }} />
-          </div>
-        </main>
+        </div>
+      </main>
 
       {/* Create Project Modal */}
       <CreateProjectFlow

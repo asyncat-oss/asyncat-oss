@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
-import { Grid, List, Star, Filter, ChevronDown, Search, Folder, FolderOpen } from 'lucide-react';
+import { Grid, List, Star, Filter, ChevronDown, Search, Folder, FolderOpen, Plus } from 'lucide-react';
 import ProjectCard from "../projectCard/ProjectCard";
 import ProjectListView from "./ProjectListView";
 
 // Empty state shown when there are no projects
-const EmptyState = ({ workspaceName }) => (
+const EmptyState = ({ workspaceName, onCreateClick }) => (
   <div className="h-[80vh] flex items-center justify-center">
     <div className="text-center max-w-md mx-auto p-6">
       <h2 className="text-xl font-bold mb-2 dark:text-white midnight:text-indigo-100">
@@ -13,6 +13,15 @@ const EmptyState = ({ workspaceName }) => (
       <p className="text-gray-500 dark:text-gray-400 midnight:text-indigo-300 mb-6">
         Take the leap—create something amazing and let your journey begin!
       </p>
+      {onCreateClick && (
+        <button
+          onClick={onCreateClick}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          New Project
+        </button>
+      )}
     </div>
   </div>
 );
@@ -116,8 +125,6 @@ const ProjectGrid = ({
   selectedProject,
   onOpenProjectDetail,
   onCreateClick,
-  onProjectDelete,
-  onProjectUpdate,
   viewMode = 'grid',
   onViewModeChange = () => {},
   workspaceName = "Projects",
@@ -241,6 +248,15 @@ const ProjectGrid = ({
           <h1 className="text-2xl font-serif text-gray-900 dark:text-white midnight:text-slate-100">
             {workspaceName} Projects
           </h1>
+          {onCreateClick && (
+            <button
+              onClick={onCreateClick}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Project
+            </button>
+          )}
         </div>
 
         {/* Toolbar: Search & Filters */}
@@ -386,7 +402,7 @@ const ProjectGrid = ({
               )}
             </div>
           ) : (
-            <EmptyState workspaceName={workspaceName} />
+            <EmptyState workspaceName={workspaceName} onCreateClick={onCreateClick} />
           )}
         </div>
       </div>
