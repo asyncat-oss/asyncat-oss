@@ -33,6 +33,8 @@ Asyncat gives your local model:
 - **MCP integration** — connect external tools
 - **Skills (Cerebellum)** — procedural knowledge loaded per task
 - **Soul** — editable agent persona, principles, and safety rules
+- **Agent Profiles** — named configurations bundling soul + tools + permissions
+- **Scheduler** — run agent goals on a cron-style schedule, no human required
 
 ---
 
@@ -217,7 +219,13 @@ Skills cover: debugging, git, testing, TDD, refactoring, API design, security, p
 
 ### Soul
 
-The agent's persona, principles, and operating rules live in `den/src/agent/souls/default.md`. Editable from the UI at `/agents/tools` → Soul tab.
+The agent's persona, principles, and operating rules live in `den/src/agent/souls/default.md`. Editable from the UI at `/agents/tools` → Soul tab. Agent profiles can override or replace the soul entirely.
+
+### Profiles
+
+Named configuration bundles that package a soul, working directory, permission rules, and pre-approved tool lists into one reusable agent identity. Create and manage profiles at `/agents/profiles`. The default profile is applied automatically to every run; pick any profile from the dropdown above the goal input.
+
+Built-in starter templates: General Agent, Dev Agent, Research Agent, Turbo Agent (auto-approves all tools).
 
 ### Memory
 
@@ -229,7 +237,7 @@ Every agent run is persisted as a session with a full audit trail of tool calls,
 
 ### Permissions
 
-Tools are classified as safe / moderate / dangerous. The agent asks for permission before running moderate/dangerous tools. You can approve once, approve for the session, or set a tool as always-allowed.
+Tools are classified as safe / moderate / dangerous. The agent asks for permission before running moderate/dangerous tools. You can approve once, approve for the session, or set a tool as always-allowed. Profiles can pre-approve specific tools so they never interrupt.
 
 ### Changes & Revert
 
@@ -241,7 +249,17 @@ Connect external tool servers via `data/mcp.json`. MCP tools are loaded dynamica
 
 ### Scheduler
 
-Schedule agent goals to run on a cron-style schedule via `POST /api/agent/schedule`.
+Create and manage scheduled agent jobs at `/agents/schedule`. Jobs run the full agent loop autonomously on a repeating interval, daily at a set time, or once after a delay. All jobs survive server restarts (persisted to SQLite).
+
+Supported schedule formats:
+
+| Format | Example | Meaning |
+|---|---|---|
+| `interval:<ms>` | `interval:3600000` | Every hour |
+| `hourly` | `hourly` | Top of every hour |
+| `daily:<HH:MM>` | `daily:09:00` | Every day at 09:00 |
+| `once:<ms>` | `once:1800000` | Once in 30 minutes |
+| `at:<ISO>` | `at:2026-05-01T10:00:00Z` | Once at exact time |
 
 ---
 
@@ -315,25 +333,31 @@ asyncat-oss/
 │   ├── index.js     # Main CLI entry
 │   ├── commands/    # Individual commands (start, stop, models, etc.)
 │   ├── lib/         # TUI helpers, themes, colors
-│   └── skills/      # 27 bundled Cerebellum skills
+│   └── skills/      # 27 bundled Cerebellum skills (markdown)
 ├── den/             # Backend API server (Express + SQLite)
 │   └── src/
 │       ├── agent/
 │       │   ├── AgentRuntime.js     # ReAct loop orchestration
 │       │   ├── AgentSession.js     # Session persistence
+│       │   ├── ProfileManager.js   # Agent profile CRUD (SQLite)
 │       │   ├── PermissionManager.js
 │       │   ├── Compactor.js        # Context window management
 │       │   ├── Scheduler.js        # Cron-style goal scheduling
-│       │   ├── skills.js           # Cerebellum skill loader
-│       │   ├── souls/              # Agent persona files (default.md)
-│       │   ├── prompts/            # System prompt builder
-│       │   └── tools/              # 60+ tool implementations
-│       └── ai/routes/agentRoutes.js
+│       │   ├── skills.js           # Cerebellum skill loader + relevance matching
+│       │   ├── souls/              # Agent persona files (default.md, editable from UI)
+│       │   ├── prompts/            # System prompt builder (soul + skills + memory + tools)
+│       │   └── tools/              # 60+ tool implementations + skillTools.js
+│       └── ai/routes/agentRoutes.js  # All agent HTTP/SSE routes
 ├── neko/            # Frontend web UI (Vite + React)
 │   └── src/
-│       ├── Agent/   # Agent UI: run feed, changes panel, tools/skills/soul/memory pages
-│       └── CommandCenter/  # Main agent run interface
-└── data/            # SQLite DB, MCP config
+│       ├── Agent/
+│       │   ├── AgentToolsSkillsPage.jsx  # Tools / Skills / Soul / Memory tabs
+│       │   ├── AgentProfilesPage.jsx     # Profile CRUD UI (/agents/profiles)
+│       │   ├── SchedulerPage.jsx         # Scheduled jobs UI (/agents/schedule)
+│       │   └── components/              # AgentRunFeed, AgentChangesPanel, etc.
+│       ├── CommandCenter/               # Main agent run interface + chat
+│       └── sidebar/                     # Dock sidebar with ⌘1–⌘9 shortcuts
+└── data/            # SQLite DB (asyncat.db), MCP config (mcp.json)
 ```
 
 | Directory | Purpose | Port |
@@ -355,16 +379,33 @@ npm run build         # Build frontend for production
 ### Key Files
 
 - `cat` — 2-line launcher
-- `cli/skills/` — 27 bundled skill markdown files
-- `den/src/agent/souls/default.md` — agent persona (editable from UI)
-- `den/src/agent/AgentRuntime.js` — ReAct loop, SSE streaming, tool execution
-- `den/src/ai/routes/agentRoutes.js` — all agent HTTP/SSE routes
+- `cli/skills/` — 27 bundled Cerebellum skill markdown files
+- `den/src/agent/souls/default.md` — agent persona (editable from UI at `/agents/tools` → Soul)
+- `den/src/agent/AgentRuntime.js` — ReAct loop, SSE streaming, tool execution, soul override
+- `den/src/agent/ProfileManager.js` — agent profile CRUD (SQLite-backed)
+- `den/src/agent/Scheduler.js` — SQLite-backed cron scheduler
+- `den/src/agent/skills.js` — skill loader with stop-word filtering and relevance scoring
+- `den/src/ai/routes/agentRoutes.js` — all agent HTTP/SSE routes (run, tools, skills, soul, memory, profiles, schedule, mcp, multi)
 - `neko/src/Agent/AgentToolsSkillsPage.jsx` — Tools / Skills / Soul / Memory tabs
-- `neko/src/CommandCenter/CommandCenterV2Enhanced.jsx` — main agent run UI
+- `neko/src/Agent/AgentProfilesPage.jsx` — Profile management UI (`/agents/profiles`)
+- `neko/src/Agent/SchedulerPage.jsx` — Scheduler UI (`/agents/schedule`)
+- `neko/src/CommandCenter/CommandCenterV2Enhanced.jsx` — main agent run UI with profile picker
+- `neko/src/CommandCenter/commandCenterApi.js` — all API client methods (agentApi, profilesApi, schedulerApi, chatApi, filesApi)
+- `neko/src/sidebar/Sidebar.jsx` — dock sidebar (⌘1–⌘9 shortcuts)
 
 ### Database
 
-SQLite at `data/asyncat.db`, created automatically on first run. Tables include agent sessions, tool audit log, agent memory, and workspace data.
+SQLite at `data/asyncat.db`, created automatically on first run. Tables include:
+
+| Table | Purpose |
+|---|---|
+| `agent_sessions` | Every agent run with goal, status, scratchpad |
+| `agent_tool_audit` | Per-tool call log with args, result, timing |
+| `agent_memory` | Durable key-value memory across sessions |
+| `agent_profiles` | Named agent configurations (soul, tools, permissions) |
+| `scheduled_jobs` | Cron-style scheduled agent goals |
+| `workspaces` | User workspaces |
+| `notes`, `tasks`, `events` | Workspace data |
 
 ### Environment
 

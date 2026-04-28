@@ -17,6 +17,7 @@ db.exec(`
     schedule     TEXT NOT NULL,          -- 'interval:<ms>' | 'at:<iso>' | 'once:<ms>'
     user_id      TEXT NOT NULL,
     workspace_id TEXT NOT NULL,
+    profile_id   TEXT,
     working_dir  TEXT NOT NULL DEFAULT '.',
     enabled      INTEGER NOT NULL DEFAULT 1,
     last_run_at  TEXT,
@@ -26,6 +27,12 @@ db.exec(`
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+try {
+  db.prepare('ALTER TABLE scheduled_jobs ADD COLUMN profile_id TEXT').run();
+} catch (err) {
+  if (!String(err.message || '').includes('duplicate column')) throw err;
+}
 
 // In-memory timer map: job.id -> NodeJS.Timer
 const _timers = new Map();
@@ -42,7 +49,7 @@ export function initScheduler(runAgentFn) {
 }
 
 /** Create a new scheduled job. */
-export function scheduleJob({ name, goal, schedule, userId, workspaceId, workingDir = process.cwd() }) {
+export function scheduleJob({ name, goal, schedule, userId, workspaceId, workingDir = process.cwd(), profileId = null }) {
   if (!_runAgent) throw new Error('Scheduler not initialized. Call initScheduler() first.');
 
   const id = randomUUID();
@@ -50,12 +57,12 @@ export function scheduleJob({ name, goal, schedule, userId, workspaceId, working
   if (!nextRunAt) throw new Error(`Invalid schedule: "${schedule}". Use: interval:<ms> | at:<ISO> | once:<ms>`);
 
   db.prepare(`
-    INSERT INTO scheduled_jobs (id, name, goal, schedule, user_id, workspace_id, working_dir, next_run_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, goal, schedule, userId, workspaceId, workingDir, nextRunAt.toISOString());
+    INSERT INTO scheduled_jobs (id, name, goal, schedule, user_id, workspace_id, profile_id, working_dir, next_run_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, goal, schedule, userId, workspaceId, profileId, workingDir, nextRunAt.toISOString());
 
   _armTimer(id);
-  return { id, name, goal, schedule, nextRunAt: nextRunAt.toISOString() };
+  return { id, name, goal, schedule, profile_id: profileId, nextRunAt: nextRunAt.toISOString() };
 }
 
 /** List all scheduled jobs for a user. */
@@ -126,7 +133,8 @@ async function _fireJob(id) {
       goal: job.goal,
       userId: job.user_id,
       workspaceId: job.workspace_id,
-      workingDir: job.working_dir,
+      workingDir: job.working_dir === '.' ? null : job.working_dir,
+      profileId: job.profile_id,
     });
   } catch (err) {
     console.error(`[scheduler] Job "${job.name}" failed:`, err.message);

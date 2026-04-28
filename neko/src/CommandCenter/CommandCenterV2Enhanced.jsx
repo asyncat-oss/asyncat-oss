@@ -279,7 +279,7 @@ import ExplainTermPanel from "./components/ExplainTermPanel";
 import GlossaryGallery from "./components/GlossaryGallery";
 import ConversationNavigation from "./components/ConversationNavigation";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
-import { chatApi, agentApi } from "./commandCenterApi";
+import { chatApi, agentApi, profilesApi } from "./commandCenterApi";
 import { useUser } from "../contexts/UserContext";
 import {
   Edit2,
@@ -307,6 +307,8 @@ import {
   ShieldOff,
   Brain,
   Terminal,
+  Layers,
+  ChevronDown,
 } from "lucide-react";
 
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
@@ -369,6 +371,34 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   });
   const agentAbortRef = useRef(null);
   const agentFeedEndRef = useRef(null);
+
+  // ── Agent profiles ──────────────────────────────────────────────────────────
+  const [agentProfiles, setAgentProfiles] = useState([]);
+  const [selectedProfileId, setSelectedProfileId] = useState(null);
+  const [showProfilePicker, setShowProfilePicker] = useState(false);
+  const profilePickerRef = useRef(null);
+
+  useEffect(() => {
+    profilesApi.listProfiles().then(res => {
+      const profiles = res.profiles || [];
+      setAgentProfiles(profiles);
+      const def = profiles.find(p => p.is_default);
+      if (def) setSelectedProfileId(prev => prev || def.id);
+    }).catch(() => {});
+  }, []);
+
+  const selectedAgentProfile = agentProfiles.find(p => p.id === selectedProfileId);
+
+  useEffect(() => {
+    if (!showProfilePicker) return;
+    const handler = (e) => {
+      if (profilePickerRef.current && !profilePickerRef.current.contains(e.target)) {
+        setShowProfilePicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showProfilePicker]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -757,7 +787,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let capturedFinalAnswer = '';
 
     try {
-      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId, { autoApprove: agentAutoApprove, preApprovedTools: [...alwaysAllowedTools] })) {
+      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId, { autoApprove: agentAutoApprove, preApprovedTools: [...alwaysAllowedTools], profileId: selectedProfileId })) {
         if (controller.signal.aborted) break;
         if (event.type === 'session_start') {
           if (event.data?.sessionId) setAgentCurrentSessionId(event.data.sessionId);
@@ -811,7 +841,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       agentAbortRef.current = null;
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
-  }, [agentRunning, agentConversationHistory, agentCurrentSessionId, agentAutoApprove, alwaysAllowedTools]);
+  }, [agentRunning, agentConversationHistory, agentCurrentSessionId, agentAutoApprove, alwaysAllowedTools, selectedProfileId]);
 
   const handleAgentStop = useCallback(() => {
     if (!agentAbortRef.current) return;
@@ -1526,6 +1556,51 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     </h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">It figures out the steps</p>
                   </div>
+
+                  {/* Profile picker */}
+                  {agentProfiles.length > 0 && (
+                    <div className="flex justify-center mb-3" ref={profilePickerRef}>
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowProfilePicker(v => !v)}
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/80 text-xs text-gray-600 dark:text-gray-300 transition-colors"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-gray-400" />
+                          <span>{selectedAgentProfile?.name || 'Default profile'}</span>
+                          <ChevronDown className="w-3 h-3 text-gray-400" />
+                        </button>
+                        {showProfilePicker && (
+                          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+                              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Agent Profile</p>
+                            </div>
+                            <div className="py-1">
+                              <button
+                                onClick={() => { setSelectedProfileId(null); setShowProfilePicker(false); }}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${!selectedProfileId ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-300'}`}
+                              >
+                                <span className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs">🤖</span>
+                                <span className="flex-1 text-left">Default (auto)</span>
+                                {!selectedProfileId && <Check className="w-3 h-3" />}
+                              </button>
+                              {agentProfiles.map(p => (
+                                <button
+                                  key={p.id}
+                                  onClick={() => { setSelectedProfileId(p.id); setShowProfilePicker(false); }}
+                                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${selectedProfileId === p.id ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-300'}`}
+                                >
+                                  <span className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs">{p.icon}</span>
+                                  <span className="flex-1 text-left">{p.name}</span>
+                                  {p.is_default && <span className="text-[9px] text-gray-400">default</span>}
+                                  {selectedProfileId === p.id && <Check className="w-3 h-3" />}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <MessageInputV2
                     onSubmit={handleAgentRun}

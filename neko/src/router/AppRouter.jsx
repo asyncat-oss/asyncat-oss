@@ -23,6 +23,8 @@ import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Settings/ModelsPage';
 import AgentToolsSkillsPage from '../Agent/AgentToolsSkillsPage';
+import SchedulerPage from '../Agent/SchedulerPage';
+import AgentProfilesPage from '../Agent/AgentProfilesPage';
 import FilesPage from '../files/FilesPage';
 
 
@@ -232,6 +234,16 @@ const createRouter = () => createBrowserRouter([
       {
         path: "agents/skills",
         element: <AgentToolsSkillsPage initialTab="skills" />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agents/schedule",
+        element: <SchedulerPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agents/profiles",
+        element: <AgentProfilesPage />,
         errorElement: <RouteErrorElement />
       },
       {

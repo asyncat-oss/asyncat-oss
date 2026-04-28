@@ -958,6 +958,7 @@ export const agentApi = {
         goal, conversationHistory, workingDir, maxRounds, workspaceId, continueSessionId,
         autoApprove: opts.autoApprove || false,
         preApprovedTools: opts.preApprovedTools || [],
+        profileId: opts.profileId || null,
       })
     });
 
@@ -1121,6 +1122,66 @@ export const agentApi = {
   deleteMemory: async (key) => {
     return await apiRequest(`${API_BASE_URL}/agent/memory/${encodeURIComponent(key)}`, {
       method: 'DELETE',
+    });
+  },
+};
+
+export const profilesApi = {
+  listProfiles: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles`);
+  },
+
+  createProfile: async (data) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateProfile: async (id, data) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteProfile: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+export const schedulerApi = {
+  listJobs: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/schedule`);
+  },
+
+  createJob: async ({ name, goal, schedule, profileId = null }) => {
+    return await apiRequest(`${API_BASE_URL}/agent/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, goal, schedule, profileId }),
+    });
+  },
+
+  deleteJob: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/schedule/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  enableJob: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/schedule/${encodeURIComponent(id)}/enable`, {
+      method: 'PATCH',
+    });
+  },
+
+  disableJob: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/schedule/${encodeURIComponent(id)}/disable`, {
+      method: 'PATCH',
     });
   },
 };

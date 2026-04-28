@@ -15,6 +15,8 @@ import {
   Cpu,
   Wrench,
   HardDrive,
+  Clock,
+  Layers,
 } from "lucide-react";
 
 import UniversalSearch from "./UniversalSearch";
@@ -110,6 +112,7 @@ const DynamicSidebar = ({
   basePage,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -190,6 +193,8 @@ const DynamicSidebar = ({
       else if ((e.ctrlKey || e.metaKey) && e.key === "5") { e.preventDefault(); navigate("/files"); }
       else if ((e.ctrlKey || e.metaKey) && e.key === "6") { e.preventDefault(); navigate("/models"); }
       else if ((e.ctrlKey || e.metaKey) && e.key === "7") { e.preventDefault(); navigate("/agents/tools"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "8") { e.preventDefault(); navigate("/agents/schedule"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "9") { e.preventDefault(); navigate("/agents/profiles"); }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -202,7 +207,9 @@ const DynamicSidebar = ({
   const isOnCalendar = basePage === "calendar";
   const isOnFiles = basePage === "files";
   const isOnModels = basePage === "models";
-  const isOnTools = basePage === "agents";
+  const isOnScheduler = location.pathname.startsWith("/agents/schedule");
+  const isOnProfiles  = location.pathname.startsWith("/agents/profiles");
+  const isOnTools = basePage === "agents" && !isOnScheduler && !isOnProfiles;
   const isOnSettings = basePage === "settings";
 
   return (
@@ -289,6 +296,24 @@ const DynamicSidebar = ({
           isActive={isOnTools}
         >
           <Wrench className="w-5 h-5" />
+        </DockItem>
+
+        {/* Scheduler */}
+        <DockItem
+          label="Scheduler  ⌘8"
+          onClick={() => navigate("/agents/schedule")}
+          isActive={isOnScheduler}
+        >
+          <Clock className="w-5 h-5" />
+        </DockItem>
+
+        {/* Profiles */}
+        <DockItem
+          label="Profiles  ⌘9"
+          onClick={() => navigate("/agents/profiles")}
+          isActive={isOnProfiles}
+        >
+          <Layers className="w-5 h-5" />
         </DockItem>
 
         <DockSep />

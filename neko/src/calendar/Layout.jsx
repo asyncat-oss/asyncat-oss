@@ -54,12 +54,10 @@ const Layout = ({ selectedProject, session }) => {
 					showCards: p.showCards !== undefined ? p.showCards : true,
 					priority: p.priority || "all",
 					completed: p.completed || "all",
-					assignedToMe: p.assignedToMe || false,
-					createdByMe: p.createdByMe || false,
 				};
 			}
 		} catch {}
-		return { showCards: true, priority: "all", completed: "all", assignedToMe: false, createdByMe: false };
+		return { showCards: true, priority: "all", completed: "all" };
 	});
 
 	// Init project filter from URL
@@ -418,23 +416,6 @@ const Layout = ({ selectedProject, session }) => {
 		if (cardFilters.priority !== "all" && card.priority?.toLowerCase() !== cardFilters.priority.toLowerCase()) return false;
 		if (cardFilters.completed === "completed" && !card.isCompleted) return false;
 		if (cardFilters.completed === "notCompleted" && card.isCompleted) return false;
-
-		if (cardFilters.assignedToMe && session?.user?.id) {
-			const userId = session.user.id;
-			let isAssigned = card.assignees?.some((a) => (typeof a === "object" ? a.id : a) === userId);
-			if (!isAssigned) {
-				isAssigned = card.checklist?.some((item) => {
-					if (item.assignees?.some((a) => (typeof a === "object" ? a.id : a) === userId)) return true;
-					if (item.assignee_id) return (typeof item.assignee_id === "object" ? item.assignee_id.id : item.assignee_id) === userId;
-					return false;
-				});
-			}
-			if (!isAssigned) return false;
-		}
-
-		if (cardFilters.createdByMe && session?.user?.id) {
-			if (card.administrator_id !== session.user.id) return false;
-		}
 
 		return true;
 	});

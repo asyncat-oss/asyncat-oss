@@ -68,6 +68,7 @@ export class AgentRuntime {
     this.sessionApprovedTools = new Set();
     this.session = null;
     this.continueSessionId = opts.continueSessionId || null;
+    this.soulOverride = opts.soul || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Local models handle much smaller contexts than cloud models — compact sooner.
@@ -163,8 +164,8 @@ export class AgentRuntime {
       });
     }
 
-    // Load soul for this run
-    const soul = loadSoul('default');
+    // Load soul for this run (profile override takes priority)
+    const soul = this.soulOverride ?? loadSoul('default');
 
     const systemPrompt = buildAgentSystemPrompt({
       goal,

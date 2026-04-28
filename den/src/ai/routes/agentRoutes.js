@@ -13,6 +13,7 @@ import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
+import { listProfiles, getProfile, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
 import db from '../../db/client.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
@@ -68,15 +69,30 @@ await initializeAgent();
 markStaleActiveSessions();
 
 // Initialize scheduler — pass a runAgent function so jobs can call the agent
-initScheduler(async ({ goal, userId, workspaceId, workingDir }) => {
+initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId }) => {
   try {
     const { client: aiClient, model, isLocal, supportsNativeTools } = getAiClientForUser(userId);
+    const profile = profileId ? getProfile(profileId, userId) : getDefaultProfile(userId);
+    let resolvedSoul = null;
+    if (profile?.soul_override) {
+      const withoutFrontmatter = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim();
+      resolvedSoul = withoutFrontmatter || null;
+    } else if (profile?.soul_name && profile.soul_name !== 'default') {
+      resolvedSoul = loadSoul(profile.soul_name);
+    }
     const agent = new AgentRuntime({
       aiClient, model, isLocal, supportsNativeTools,
       userId, workspaceId,
-      workingDir: workingDir || process.cwd(),
-      maxRounds: 20,
+      workingDir: workingDir || profile?.working_dir || process.cwd(),
+      maxRounds: profile?.max_rounds || 20,
+      autoApprove: profile?.auto_approve || false,
+      soul: resolvedSoul,
     });
+    if (Array.isArray(profile?.always_allowed_tools)) {
+      profile.always_allowed_tools.forEach(tool => {
+        if (typeof tool === 'string' && tool.trim()) agent.sessionApprovedTools.add(tool.trim());
+      });
+    }
     return await agent.run(goal);
   } catch (err) {
     console.error('[scheduler] Agent run failed:', err.message);
@@ -460,10 +476,19 @@ router.put('/soul', authenticate, (req, res) => {
 router.post('/run', authenticate, async (req, res) => {
   let heartbeatInterval = null;
   try {
-    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [] } = req.body;
+    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId } = req.body;
 
     if (!goal || !goal.trim()) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
+    }
+
+    // Resolve profile (if provided)
+    let profile = null;
+    if (profileId) {
+      profile = getProfile(profileId, req.user.id);
+    }
+    if (!profile && !profileId) {
+      profile = getDefaultProfile(req.user.id);
     }
 
     // Get user's AI provider
@@ -495,6 +520,21 @@ router.post('/run', authenticate, async (req, res) => {
       heartbeatInterval = null;
     });
 
+    // Resolve final run params (profile < request body, request body wins)
+    const resolvedWorkingDir = workingDir || profile?.working_dir || process.cwd();
+    const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
+    const resolvedAutoApprove = autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false;
+    const profileTools = Array.isArray(profile?.always_allowed_tools) ? profile.always_allowed_tools : [];
+
+    // Resolve soul: profile soul_override > profile soul_name > default
+    let resolvedSoul = null;
+    if (profile?.soul_override) {
+      const withoutFrontmatter = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim();
+      resolvedSoul = withoutFrontmatter || null;
+    } else if (profile?.soul_name && profile.soul_name !== 'default') {
+      resolvedSoul = loadSoul(profile.soul_name);
+    }
+
     // Create and run agent
     const agent = new AgentRuntime({
       aiClient,
@@ -503,16 +543,18 @@ router.post('/run', authenticate, async (req, res) => {
       supportsNativeTools,
       userId: req.user.id,
       workspaceId: req.workspaceId,
-      workingDir: workingDir || process.cwd(),
-      maxRounds: maxRounds || 25,
-      autoApprove: autoApprove === true || autoApprove === 'all',
+      workingDir: resolvedWorkingDir,
+      maxRounds: resolvedMaxRounds,
+      autoApprove: resolvedAutoApprove,
       requestPermission: createPermissionRequest(req, res),
       askUser: createAskUserRequest(req, res),
       continueSessionId,
+      soul: resolvedSoul,
     });
 
-    if (Array.isArray(preApprovedTools) && preApprovedTools.length > 0) {
-      preApprovedTools.forEach(tool => {
+    const allPreApproved = [...preApprovedTools, ...profileTools];
+    if (allPreApproved.length > 0) {
+      allPreApproved.forEach(tool => {
         if (typeof tool === 'string' && tool.trim()) {
           agent.sessionApprovedTools.add(tool.trim());
         }
@@ -1094,7 +1136,7 @@ router.delete('/memory/:key', authenticate, async (req, res) => {
  */
 router.post('/schedule', authenticate, async (req, res) => {
   try {
-    const { name, goal, schedule } = req.body;
+    const { name, goal, schedule, profileId } = req.body;
     if (!name || !goal || !schedule) {
       return res.status(400).json({ success: false, error: 'name, goal, and schedule are required' });
     }
@@ -1106,7 +1148,8 @@ router.post('/schedule', authenticate, async (req, res) => {
       name, goal, schedule,
       userId: req.user.id,
       workspaceId: workspaceId || 'default',
-      workingDir: req.body.working_dir || process.cwd(),
+      profileId: profileId || null,
+      workingDir: req.body.workingDir || req.body.working_dir || '.',
     });
     res.json({ success: true, job });
   } catch (err) {
@@ -1354,6 +1397,62 @@ router.get('/files/read', authenticate, (req, res) => {
     }
     const content = fs.readFileSync(resolved, 'utf8');
     res.json({ success: true, content, path: filePath, size: stat.size, mtime: stat.mtime });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PROFILE ROUTES — /api/agent/profiles
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.get('/profiles', authenticate, (req, res) => {
+  try {
+    const profiles = listProfiles(req.user.id);
+    res.json({ success: true, profiles });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/profiles', authenticate, (req, res) => {
+  try {
+    const { name, description, icon, color, soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault } = req.body;
+    if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' });
+    const profile = createProfile({
+      userId: req.user.id, name: name.trim(), description, icon, color,
+      soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault,
+    });
+    res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/profiles/:id', authenticate, (req, res) => {
+  try {
+    const profile = getProfile(req.params.id, req.user.id);
+    if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
+    res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/profiles/:id', authenticate, (req, res) => {
+  try {
+    const profile = updateProfile(req.params.id, req.user.id, req.body);
+    if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
+    res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/profiles/:id', authenticate, (req, res) => {
+  try {
+    deleteProfile(req.params.id, req.user.id);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

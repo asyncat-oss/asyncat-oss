@@ -103,8 +103,6 @@ const TopBar = ({
 		let count = 0;
 		if (cardFilters.showCards && cardFilters.priority !== "all") count++;
 		if (cardFilters.showCards && cardFilters.completed !== "all") count++;
-		if (cardFilters.showCards && cardFilters.assignedToMe) count++;
-		if (cardFilters.showCards && cardFilters.createdByMe) count++;
 		return count;
 	};
 
@@ -127,8 +125,6 @@ const TopBar = ({
 		setProjectFilter(null);
 		updateCardFilter("priority", "all");
 		updateCardFilter("completed", "all");
-		updateCardFilter("assignedToMe", false);
-		updateCardFilter("createdByMe", false);
 	};
 
 	return (
@@ -418,38 +414,6 @@ const TopBar = ({
 														</button>
 													))}
 												</div>
-											</div>
-
-											{/* Assignment Filter */}
-											<div className="flex items-center justify-between">
-												<label className="text-sm font-medium text-gray-700 dark:text-gray-300">Assigned to me</label>
-												<motion.button
-													onClick={() => updateCardFilter("assignedToMe", !cardFilters.assignedToMe)}
-													className={`relative w-12 h-6 rounded-full transition-colors ${cardFilters.assignedToMe ? "bg-green-500" : "bg-gray-300 dark:bg-gray-700"}`}
-													whileTap={{ scale: 0.95 }}
-												>
-													<motion.div
-														className="absolute top-1 w-4 h-4 bg-white rounded-full shadow"
-														animate={{ x: cardFilters.assignedToMe ? 24 : 2 }}
-														transition={{ type: "spring", stiffness: 300, damping: 30 }}
-													/>
-												</motion.button>
-											</div>
-
-											{/* Administrator Filter */}
-											<div className="flex items-center justify-between">
-												<label className="text-sm font-medium text-gray-700 dark:text-gray-300">Administrator</label>
-												<motion.button
-													onClick={() => updateCardFilter("createdByMe", !cardFilters.createdByMe)}
-													className={`relative w-12 h-6 rounded-full transition-colors ${cardFilters.createdByMe ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-700"}`}
-													whileTap={{ scale: 0.95 }}
-												>
-													<motion.div
-														className="absolute top-1 w-4 h-4 bg-white rounded-full shadow"
-														animate={{ x: cardFilters.createdByMe ? 24 : 2 }}
-														transition={{ type: "spring", stiffness: 300, damping: 30 }}
-													/>
-												</motion.button>
 											</div>
 										</motion.div>
 									)}
