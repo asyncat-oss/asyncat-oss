@@ -12,6 +12,7 @@ import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
+import db from '../../db/client.js';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -21,8 +22,48 @@ const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
 const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
 
+function writeAgentSse(res, payload) {
+  if (res.destroyed || res.writableEnded) return false;
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  res.flush?.();
+  return true;
+}
+
+function writeAgentSseComment(res, comment) {
+  if (res.destroyed || res.writableEnded) return false;
+  res.write(`: ${comment}\n\n`);
+  res.flush?.();
+  return true;
+}
+
+function markStaleActiveSessions() {
+  try {
+    const rows = db.prepare(
+      "SELECT id, scratchpad FROM agent_sessions WHERE status = 'active'"
+    ).all();
+    const update = db.prepare(`
+      UPDATE agent_sessions
+      SET status = 'failed', scratchpad = ?, updated_at = ?
+      WHERE id = ?
+    `);
+    const now = new Date().toISOString();
+    for (const row of rows) {
+      let scratchpad = {};
+      try { scratchpad = JSON.parse(row.scratchpad || '{}'); } catch {}
+      scratchpad._error = scratchpad._error || 'Agent run was interrupted before it could finish.';
+      update.run(JSON.stringify(scratchpad), now, row.id);
+    }
+    if (rows.length > 0) {
+      console.warn(`[agent] Marked ${rows.length} stale active session(s) as failed after restart`);
+    }
+  } catch (err) {
+    console.warn('[agent] Failed to mark stale active sessions:', err.message);
+  }
+}
+
 // Initialize agent tools on first load
 await initializeAgent();
+markStaleActiveSessions();
 
 // Initialize scheduler — pass a runAgent function so jobs can call the agent
 initScheduler(async ({ goal, userId, workspaceId, workingDir }) => {
@@ -91,7 +132,7 @@ function createPermissionRequest(req, res) {
       timer,
     });
 
-    res.write(`data: ${JSON.stringify({
+    const sent = writeAgentSse(res, {
       type: 'permission_request',
       data: {
         ...request,
@@ -99,7 +140,14 @@ function createPermissionRequest(req, res) {
         requestId,
         expiresInMs: 5 * 60 * 1000,
       }
-    })}\n\n`);
+    });
+
+    if (!sent) {
+      clearTimeout(timer);
+      pendingPermissions.delete(requestId);
+      ownedRequestIds.delete(requestId);
+      resolve({ decision: 'deny', reason: 'Agent stream closed before approval' });
+    }
   });
 }
 
@@ -138,7 +186,7 @@ function createAskUserRequest(req, res) {
       timer,
     });
 
-    res.write(`data: ${JSON.stringify({
+    const sent = writeAgentSse(res, {
       type: 'ask_user',
       data: {
         requestId,
@@ -149,7 +197,14 @@ function createAskUserRequest(req, res) {
         round: request.round,
         expiresInMs: 5 * 60 * 1000,
       }
-    })}\n\n`);
+    });
+
+    if (!sent) {
+      clearTimeout(timer);
+      pendingUserQuestions.delete(requestId);
+      ownedRequestIds.delete(requestId);
+      resolve({ success: false, error: 'Agent stream closed before answer' });
+    }
   });
 }
 
@@ -217,6 +272,7 @@ router.get('/skills/:name', authenticate, (req, res) => {
  * Body: { goal, conversationHistory?, workingDir?, maxRounds? }
  */
 router.post('/run', authenticate, async (req, res) => {
+  let heartbeatInterval = null;
   try {
     const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [] } = req.body;
 
@@ -238,9 +294,20 @@ router.post('/run', authenticate, async (req, res) => {
 
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Content-Encoding', 'identity');
     res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    req.socket?.setTimeout?.(0);
+    heartbeatInterval = setInterval(() => {
+      writeAgentSseComment(res, 'ping');
+    }, 15000);
+    res.on('close', () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    });
 
     // Create and run agent
     const agent = new AgentRuntime({
@@ -273,9 +340,11 @@ router.post('/run', authenticate, async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: error.message });
     } else {
-      res.write(`data: ${JSON.stringify({ type: 'error', data: { message: error.message } })}\n\n`);
+      writeAgentSse(res, { type: 'error', data: { message: error.message } });
       res.end();
     }
+  } finally {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
   }
 });
 

@@ -759,6 +759,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     try {
       for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId, { autoApprove: agentAutoApprove, preApprovedTools: [...alwaysAllowedTools] })) {
         if (controller.signal.aborted) break;
+        if (event.type === 'session_start') {
+          if (event.data?.sessionId) setAgentCurrentSessionId(event.data.sessionId);
+          continue;
+        }
         if (event.type === 'delta') {
           setAgentStreamingText(prev => prev + (event.data?.content || ''));
           continue;
@@ -880,6 +884,15 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
     setIsEditingGoal(false);
   }, [editGoalText, agentCurrentGoal, agentCurrentSessionId, triggerConversationRefresh]);
+
+  const handleNewAgentRun = useCallback(() => {
+    setAgentEvents([]);
+    setAgentCurrentGoal('');
+    setAgentCurrentSession(null);
+    setAgentConversationHistory([]);
+    setAgentCurrentSessionId(null);
+    setIsEditingGoal(false);
+  }, []);
 
   const handleAgentDelete = useCallback(async () => {
     if (!agentCurrentSessionId) return;
@@ -1481,7 +1494,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                             <Square className="w-3 h-3" />
                           </button>
                           <button
-                            onClick={() => { setAgentEvents([]); setAgentCurrentGoal(''); setAgentCurrentSession(null); setAgentConversationHistory([]); setAgentCurrentSessionId(null); setIsEditingGoal(false); }}
+                            onClick={handleNewAgentRun}
                             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                             title="New run"
                           >

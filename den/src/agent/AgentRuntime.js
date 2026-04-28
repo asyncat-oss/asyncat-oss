@@ -122,6 +122,16 @@ export class AgentRuntime {
     conversationRoundStart = this.session.totalRounds || 0;
     conversationToolStart = this.session.toolHistory?.length || 0;
 
+    this.onEvent({
+      type: 'session_start',
+      data: {
+        sessionId: this.session.id,
+        goal,
+        status: this.session.status,
+        continued: Boolean(this.continueSessionId),
+      },
+    });
+
     // Load relevant memories
     const memories = this._loadMemories(goal);
 
@@ -426,18 +436,23 @@ export class AgentRuntime {
    */
   async runStreaming(goal, conversationHistory, res) {
     const originalOnEvent = this.onEvent;
+    const writeSse = (event) => {
+      if (res.destroyed || res.writableEnded) return false;
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      res.flush?.();
+      return true;
+    };
 
     this.onEvent = (event) => {
       try {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-        res.flush();
+        writeSse(event);
       } catch {}
       originalOnEvent(event);
     };
 
     const result = await this.run(goal, conversationHistory);
 
-    res.write(`data: ${JSON.stringify({
+    writeSse({
       type: 'done',
       data: {
         answer: result.answer,
@@ -445,7 +460,7 @@ export class AgentRuntime {
         rounds: result.session.totalRounds,
         conversationRounds: result.session.scratchpad.conversationRounds || []
       }
-    })}\n\n`);
+    });
     res.end();
 
     return result;
