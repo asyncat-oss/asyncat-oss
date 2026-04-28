@@ -31,48 +31,11 @@ const AppLayout = ({ session, onSignOut }) => {
   
   // UI state
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
-  const [refreshProjectsFlag, setRefreshProjectsFlag] = useState(0);
   
   // Project state
   const [selectedProject, setSelectedProject] = useState(null);
   
-  // Determine current page from location - FIXED LOGIC
-  const pathSegments = location.pathname.split('/').filter(Boolean); // Remove empty strings
-  const basePage = pathSegments[0] || 'home';
-  
-  // Map routes to the correct page identifiers for sidebar
-  const getPageFromRoute = (basePage, _pathSegments) => {
-    switch (basePage) {
-      case 'conversations':
-        return 'home'; // these should map to home in sidebar
-      case 'all-chats':
-        return 'all-chats';
-      case 'home':
-        return 'home';
-      case 'workspace':
-        return 'workspace';
-      case 'projects':
-        return 'workspace';
-      case 'calendar':
-        return 'calendar';
-      case 'teams':
-        return 'teams';
-      case 'lab':
-        return 'lab';
-      case 'models':
-        return 'models';
-      case 'agents':
-        return 'agents';
-      case 'files':
-        return 'files';
-      default:
-        return 'home';
-    }
-  };
-  
-  // Use route-based page determination
-  const currentPage = getPageFromRoute(basePage, pathSegments);
-  const isChatMode = basePage === 'home' || basePage === 'conversations' || basePage === 'all-chats';
+  const basePage = location.pathname.split('/').filter(Boolean)[0] || 'home';
   
   // Check if user has any workspaces
   const hasWorkspaces = workspaces && workspaces.length > 0;
@@ -85,9 +48,8 @@ const AppLayout = ({ session, onSignOut }) => {
     refreshWorkspaces();
   }, [refreshWorkspaces]);
 
-  // Function to trigger project list refresh in sidebar
   const refreshProjects = useCallback(() => {
-    setRefreshProjectsFlag(prev => prev + 1);
+    eventBus.emit('projectsUpdated');
   }, []);
 
   // Project selection logic
@@ -178,11 +140,7 @@ const AppLayout = ({ session, onSignOut }) => {
     return needsFullObject ? selectedProject : selectedProject.id;
   };
 
-  // Define a project selection handler function that can be shared by components
   const handleProjectSelect = (project) => {
-    // Clear invites override when selecting a project
-    setCurrentPageOverride(null);
-    
     if (!project) {
       setSelectedProject(null);
       sessionStorage.removeItem('projectId');
@@ -457,18 +415,10 @@ const AppLayout = ({ session, onSignOut }) => {
 
       {/* Dock — renders as fixed overlay, no flex space consumed */}
       <Sidebar
-        currentPage={currentPage}
-        isChatMode={isChatMode}
         onPageChange={handleNavigate}
         session={session}
-        onSignOut={onSignOut}
-        selectedProject={getProjectValue(true)}
-        onProjectSelect={handleProjectSelect}
-        refreshProjectsFlag={refreshProjectsFlag}
-        onRefreshProjects={refreshProjects}
         onNewChat={handleNewChatWithNavigation}
         basePage={basePage}
-        pathSegments={pathSegments}
       />
 
       <main className="flex-1 overflow-hidden h-full">

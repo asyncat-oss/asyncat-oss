@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { LayoutGrid } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+	LayoutGrid,
+	KanbanSquare,
+	List,
+	Clock,
+	GanttChartSquare,
+	Link2,
+	FileText,
+	Target,
+	Settings,
+} from "lucide-react";
 
 // Import view components directly here
 import KanIndex from "../views/kanban/KanIndex";
@@ -19,6 +30,18 @@ import ProjectSettingsModal from "./components/ProjectSettingsModal";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 
 const soraFontBase = "font-sora";
+
+const PROJECT_VIEWS = [
+	{ key: 'kanban',   label: 'Kanban',   Icon: KanbanSquare },
+	{ key: 'list',     label: 'List',     Icon: List },
+	{ key: 'timeline', label: 'Timeline', Icon: Clock },
+	{ key: 'gantt',    label: 'Gantt',    Icon: GanttChartSquare },
+	{ key: 'network',  label: 'Network',  Icon: Link2 },
+	{ key: 'gallery',  label: 'Gallery',  Icon: LayoutGrid },
+	{ key: 'notes',    label: 'Notes',    Icon: FileText },
+	{ key: 'habits',   label: 'Habits',   Icon: Target },
+	{ key: 'settings', label: 'Settings', Icon: Settings },
+];
 
 // Comprehensive skeleton component for the project overview
 const ProjectOverviewSkeleton = () => (
@@ -131,6 +154,7 @@ const ProjectOverview = React.memo(({
 	onDelete,
 	session,
 }) => {
+	const navigate = useNavigate();
 	const [projectInfo, setProjectInfo] = useState(null);
 	const [loading, setLoading] = useState(true);
 	// Master loading state - true when any essential data is loading
@@ -428,7 +452,29 @@ const ProjectOverview = React.memo(({
 	}
 
 	return (
-		<div className={`flex h-full ${soraFontBase} relative`}>
+		<div className={`flex flex-col h-full ${soraFontBase} relative`}>
+			{/* Section tab navigation */}
+			<div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
+				<div className="flex items-center gap-0.5 px-4 overflow-x-auto scrollbar-none">
+					{PROJECT_VIEWS.map(({ key, label, Icon }) => {
+						const isActive = currentTab === key;
+						return (
+							<button
+								key={key}
+								onClick={() => navigate(`/workspace/${projectId}/${key}`)}
+								className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+									isActive
+										? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400'
+										: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
+								}`}
+							>
+								<Icon className="w-3.5 h-3.5" />
+								{label}
+							</button>
+						);
+					})}
+				</div>
+			</div>
 			<div className="flex-1 overflow-auto">
 				{renderViewContent()}
 			</div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, Bot, Check, ChevronRight, Copy, Edit3,
@@ -47,13 +47,62 @@ function escapeHtml(text) {
   return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// ─── Custom Dropdown for Root Selector ───────────────────────────────────────
+function RootDropdown({ roots, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const active = roots.find(r => r.id === value) || roots[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={active?.path || 'File root'}
+        className="flex items-center gap-1.5 max-w-40 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 px-2 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300 outline-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 focus:border-[#5555a0] transition-colors"
+      >
+        <span className="truncate max-w-[120px]">{active?.label}</span>
+        <ChevronRight className={`w-3 h-3 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-30 w-52 rounded-xl border border-gray-200 dark:border-gray-800 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-[0_8px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)] midnight:shadow-[0_8px_30px_rgba(0,0,0,0.5)] py-1 max-h-60 overflow-y-auto">
+          {roots.map(root => (
+            <button
+              key={root.id}
+              onClick={() => { onChange(root.id); setOpen(false); }}
+              className={`w-full flex flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors ${
+                root.id === value
+                  ? 'bg-gray-50 dark:bg-white/[0.05] midnight:bg-white/[0.05]'
+                  : 'hover:bg-gray-50 dark:hover:bg-white/[0.05] midnight:hover:bg-white/[0.05]'
+              }`}
+            >
+              <span className={`text-xs font-medium ${
+                root.id === value
+                  ? 'text-gray-900 dark:text-white midnight:text-white'
+                  : 'text-gray-700 dark:text-gray-300 midnight:text-gray-300'
+              }`}>{root.label}</span>
+              <span className="text-[10px] text-gray-400 dark:text-gray-600 midnight:text-gray-600 truncate w-full">{root.path}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Breadcrumb({ path, onNavigate }) {
   const parts = (!path || path === '.') ? [] : path.split('/').filter(Boolean);
   return (
     <nav className="flex items-center gap-0.5 min-w-0 flex-wrap">
       <button
         onClick={() => onNavigate('.')}
-        className="px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"
       >
         root
       </button>
@@ -70,7 +119,7 @@ function Breadcrumb({ path, onNavigate }) {
             ) : (
               <button
                 onClick={() => onNavigate(partPath)}
-                className="px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors truncate max-w-[140px]"
+                className="px-1.5 py-0.5 rounded text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors truncate max-w-[140px]"
               >
                 {part}
               </button>
@@ -82,6 +131,79 @@ function Breadcrumb({ path, onNavigate }) {
   );
 }
 
+// ─── Inline Modal ────────────────────────────────────────────────────────────
+function Modal({ open, onClose, title, children }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/30 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-2xl border border-gray-200 dark:border-gray-800 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.5)] midnight:shadow-[0_12px_40px_rgba(0,0,0,0.6)]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+          <button onClick={onClose} className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Name Input Modal (for Create File / Create Folder) ─────────────────────
+function NameModal({ open, onClose, title, label, placeholder, onConfirm }) {
+  const [value, setValue] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open) setValue('');
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [open]);
+
+  const submit = () => {
+    if (!value.trim()) return;
+    onConfirm(value.trim());
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      <div className="space-y-4">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
+          placeholder={placeholder}
+          className="w-full rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-gray-50 dark:bg-gray-950 midnight:bg-black px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 outline-none focus:border-[#5555a0]"
+        />
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 dark:border-gray-700 midnight:border-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">Cancel</button>
+          <button onClick={submit} className="px-3 py-1.5 rounded-lg text-xs bg-[#e8e8ec] dark:bg-[#e8e8ec] dark:hover:bg-[#d0d0d8] dark:text-[#0d0d0f] hover:bg-[#d0d0d8] text-[#0d0d0f] font-medium transition-colors">Create</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Delete Confirm Modal ───────────────────────────────────────────────────
+function DeleteModal({ open, onClose, itemName, onConfirm }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Delete">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-400">Delete <span className="font-medium text-gray-900 dark:text-gray-100">{itemName}</span>? This cannot be undone yet.</p>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 dark:border-gray-700 midnight:border-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">Cancel</button>
+          <button onClick={onConfirm} className="px-3 py-1.5 rounded-lg text-xs bg-red-50 dark:bg-red-950/40 midnight:bg-red-950/40 border border-red-200 dark:border-red-900/50 midnight:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 midnight:hover:bg-red-900/30 font-medium transition-colors">Delete</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function DirectoryRow({ entry, selected, onSelect, onOpen }) {
   const { Icon, color } = fileIconMeta(entry.ext || '', entry.type);
   return (
@@ -89,7 +211,7 @@ function DirectoryRow({ entry, selected, onSelect, onOpen }) {
       onClick={() => onSelect(entry)}
       onDoubleClick={() => onOpen(entry)}
       className={`w-full grid grid-cols-[minmax(0,1fr)_96px_172px_64px] items-center gap-3 px-4 py-2 text-left border-b border-gray-100 dark:border-gray-800/60 transition-colors ${
-        selected ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+        selected ? 'bg-gray-100 dark:bg-white/[0.04] midnight:bg-white/[0.04]' : 'hover:bg-gray-50 dark:hover:bg-white/[0.03] midnight:hover:bg-white/[0.03]'
       }`}
     >
       <span className="flex items-center gap-3 min-w-0">
@@ -118,8 +240,8 @@ function DirectoryGrid({ entries, selectedPath, onSelect, onOpen }) {
             onDoubleClick={() => onOpen(entry)}
             className={`min-h-[104px] flex flex-col items-center justify-center gap-2 rounded-md border px-3 py-3 transition-colors ${
               selected
-                ? 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30'
-                : 'border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                ? 'border-gray-300 dark:border-gray-600 midnight:border-gray-600 bg-gray-50 dark:bg-white/[0.04] midnight:bg-white/[0.04]'
+                : 'border-transparent hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-white/[0.03] midnight:hover:bg-white/[0.03]'
             }`}
           >
             <Icon className={`w-8 h-8 ${color}`} />
@@ -246,7 +368,7 @@ function Inspector({ selected, activeEntry, saving, onCopyPath, onAgent, onEdit,
           </div>
         </div>
         <div className="flex items-center gap-2 mt-4">
-          <button onClick={onAgent} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-indigo-600 text-white hover:bg-indigo-700">
+          <button onClick={onAgent} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-gray-100 dark:bg-white/[0.08] midnight:bg-white/[0.08] border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/[0.12] midnight:hover:bg-white/[0.12]">
             <Bot className="w-3.5 h-3.5" />
             Agent
           </button>
@@ -296,6 +418,12 @@ export default function FilesPage() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Modals
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [nameModalConfig, setNameModalConfig] = useState({ title: '', placeholder: '', onConfirm: () => {} });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const activeRoot = roots.find(root => root.id === rootId) || roots[0];
   const activeEntry = entry?.type === 'file' ? entry : selectedPreview;
@@ -393,54 +521,61 @@ export default function FilesPage() {
     navigate('/agents');
   }, [activeRoot, currentPath, entry, navigate, rootId, selected]);
 
-  const makeName = useCallback((label, fallback) => {
-    const name = window.prompt(label, fallback);
-    return name?.trim();
+  const openNameModal = useCallback((title, placeholder, onConfirm) => {
+    setNameModalConfig({ title, placeholder, onConfirm });
+    setShowNameModal(true);
   }, []);
 
-  const createFolder = useCallback(async () => {
-    const name = makeName('Folder name', 'New Folder');
-    if (!name) return;
-    await filesApi.createFolder(rootId, joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name));
-    await loadEntry();
-  }, [currentPath, entry, loadEntry, makeName, rootId]);
+  const createFolder = useCallback(() => {
+    openNameModal('New Folder', 'New Folder', async (name) => {
+      await filesApi.createFolder(rootId, joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name));
+      await loadEntry();
+    });
+  }, [currentPath, entry, loadEntry, openNameModal, rootId]);
 
-  const createFile = useCallback(async () => {
-    const name = makeName('File name', 'untitled.txt');
-    if (!name) return;
-    const filePath = joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name);
-    await filesApi.writeFile(rootId, filePath, '');
-    navigateTo(filePath);
-  }, [currentPath, entry, makeName, navigateTo, rootId]);
+  const createFile = useCallback(() => {
+    openNameModal('New File', 'untitled.txt', async (name) => {
+      const filePath = joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name);
+      await filesApi.writeFile(rootId, filePath, '');
+      navigateTo(filePath);
+    });
+  }, [currentPath, entry, navigateTo, openNameModal, rootId]);
 
-  const renameSelected = useCallback(async () => {
+  const renameSelected = useCallback(() => {
     if (!selected) return;
-    const name = makeName('Rename to', selected.name);
-    if (!name || name === selected.name) return;
-    const dest = joinPath(dirname(selected.path), name);
-    await filesApi.move(rootId, selected.path, dest);
-    navigateTo(dest);
-  }, [makeName, navigateTo, rootId, selected]);
+    openNameModal('Rename', selected.name, async (name) => {
+      if (name === selected.name) return;
+      const dest = joinPath(dirname(selected.path), name);
+      await filesApi.move(rootId, selected.path, dest);
+      navigateTo(dest);
+    });
+  }, [openNameModal, rootId, selected, navigateTo]);
 
-  const copySelected = useCallback(async () => {
+  const copySelected = useCallback(() => {
     if (!selected) return;
     const base = selected.name || basename(selected.path);
-    const name = makeName('Copy as', `Copy of ${base}`);
-    if (!name) return;
-    await filesApi.copy(rootId, selected.path, joinPath(dirname(selected.path), name));
-    await loadEntry();
-  }, [loadEntry, makeName, rootId, selected]);
+    openNameModal('Copy as', `Copy of ${base}`, async (name) => {
+      await filesApi.copy(rootId, selected.path, joinPath(dirname(selected.path), name));
+      await loadEntry();
+    });
+  }, [openNameModal, rootId, selected, loadEntry]);
 
-  const deleteSelected = useCallback(async () => {
+  const deleteSelected = useCallback(() => {
     if (!selected) return;
-    const ok = window.confirm(`Delete ${selected.name}? This cannot be undone from Asyncat yet.`);
-    if (!ok) return;
-    await filesApi.delete(rootId, selected.path, selected.type === 'dir');
-    const nextPath = selected.type === 'file' && currentPath === selected.path ? dirname(selected.path) : currentPath;
+    setDeleteTarget(selected);
+    setShowDeleteModal(true);
+  }, [selected]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    await filesApi.delete(rootId, deleteTarget.path, deleteTarget.type === 'dir');
+    const nextPath = deleteTarget.type === 'file' && currentPath === deleteTarget.path ? dirname(deleteTarget.path) : currentPath;
     setSelected(null);
     if (nextPath !== currentPath) navigateTo(nextPath);
     else await loadEntry();
-  }, [currentPath, loadEntry, navigateTo, rootId, selected]);
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
+  }, [currentPath, deleteTarget, loadEntry, navigateTo, rootId]);
 
   const runSearch = useCallback(async () => {
     if (!search.trim()) {
@@ -478,14 +613,7 @@ export default function FilesPage() {
             </button>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <select
-                  value={rootId}
-                  onChange={e => navigateTo('.', e.target.value)}
-                  className="max-w-40 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 outline-none"
-                  title={activeRoot?.path || 'File root'}
-                >
-                  {roots.map(root => <option key={root.id} value={root.id}>{root.label}</option>)}
-                </select>
+                <RootDropdown roots={roots} value={rootId} onChange={id => navigateTo('.', id)} />
                 <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-700" />
                 <Breadcrumb path={currentPath} onNavigate={navigateTo} />
               </div>
@@ -540,19 +668,19 @@ export default function FilesPage() {
               <FolderPlus className="w-3.5 h-3.5" />
               Folder
             </button>
-            <button onClick={agentPrompt} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-indigo-600 text-white hover:bg-indigo-700">
+            <button onClick={agentPrompt} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-gray-100 dark:bg-white/[0.08] midnight:bg-white/[0.08] border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/[0.12] midnight:hover:bg-white/[0.12]">
               <Bot className="w-3.5 h-3.5" />
               Agent
             </button>
             <div className="relative group">
-              <button disabled={!selected} className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
+              <button disabled={!selected} className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 disabled:opacity-30">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
               {selected && (
-                <div className="absolute right-0 top-8 z-20 hidden group-hover:block w-40 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1">
-                  <button onClick={renameSelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"><Edit3 className="w-3 h-3" />Rename</button>
-                  <button onClick={copySelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"><Copy className="w-3 h-3" />Copy</button>
-                  <button onClick={deleteSelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"><Trash2 className="w-3 h-3" />Delete</button>
+                <div className="absolute right-0 top-8 z-20 hidden group-hover:block w-40 rounded-xl border border-gray-200 dark:border-gray-800 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-[0_8px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)] midnight:shadow-[0_8px_30px_rgba(0,0,0,0.5)] py-1">
+                  <button onClick={renameSelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"><Edit3 className="w-3 h-3" />Rename</button>
+                  <button onClick={copySelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors"><Copy className="w-3 h-3" />Copy</button>
+                  <button onClick={deleteSelected} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 midnight:hover:bg-red-950/30 transition-colors"><Trash2 className="w-3 h-3" />Delete</button>
                 </div>
               )}
             </div>
@@ -599,6 +727,21 @@ export default function FilesPage() {
         editing={editing}
         editText={editText}
         setEditText={setEditText}
+      />
+
+      <NameModal
+        open={showNameModal}
+        onClose={() => setShowNameModal(false)}
+        title={nameModalConfig.title}
+        placeholder={nameModalConfig.placeholder}
+        onConfirm={nameModalConfig.onConfirm}
+      />
+
+      <DeleteModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        itemName={deleteTarget?.name}
+        onConfirm={confirmDelete}
       />
     </div>
   );

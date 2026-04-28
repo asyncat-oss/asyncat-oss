@@ -104,21 +104,10 @@ const DockSep = () => (
 // ── Main Dock Component ───────────────────────────────────────────────────────
 
 const DynamicSidebar = ({
-  currentPage,
   onPageChange,
   session,
-  onSignOut,
-  onProjectSelect,
-  onRefreshProjects,
   onNewChat,
   basePage,
-  pathSegments,
-  // legacy props — ignored in dock mode
-  isSidebarCollapsed,
-  setIsSidebarCollapsed,
-  isChatMode,
-  selectedProject,
-  refreshProjectsFlag,
 }) => {
   const navigate = useNavigate();
 
