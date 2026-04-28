@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
@@ -54,6 +54,44 @@ function truncateArgs(args) {
     const str = typeof args === 'string' ? args : JSON.stringify(args);
     return str.length > 120 ? str.slice(0, 120) + '…' : str;
   } catch { return ''; }
+}
+
+function getPermissionSubject(data) {
+  const args = data?.args || {};
+  if (typeof args.command === 'string' && args.command.trim()) {
+    return {
+      label: 'Command',
+      value: args.command.trim(),
+      tone: data?.permission === 'dangerous' ? 'text-red-700 dark:text-red-200' : 'text-amber-900 dark:text-amber-100',
+    };
+  }
+  if (typeof args.code === 'string' && args.code.trim()) {
+    return {
+      label: data?.tool === 'run_python' ? 'Python code' : data?.tool === 'run_node' ? 'Node code' : 'Code',
+      value: args.code.trim(),
+      tone: data?.permission === 'dangerous' ? 'text-red-700 dark:text-red-200' : 'text-amber-900 dark:text-amber-100',
+    };
+  }
+  if (typeof args.path === 'string' && args.path.trim()) {
+    const action = data?.tool === 'write_file' ? 'Write file'
+      : data?.tool === 'edit_file' ? 'Edit file'
+        : data?.tool === 'file_delete' || data?.tool === 'delete_file' ? 'Delete file'
+          : 'Path';
+    return { label: action, value: args.path.trim(), tone: 'text-amber-900 dark:text-amber-100' };
+  }
+  if (typeof data?.description === 'string' && data.description.trim()) {
+    return { label: 'Action', value: data.description.trim(), tone: 'text-amber-900 dark:text-amber-100' };
+  }
+  return { label: 'Action', value: `Run ${data?.tool || 'tool'}`, tone: 'text-amber-900 dark:text-amber-100' };
+}
+
+function formatCountdown(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return 'expired';
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function getResultSummary(result) {
@@ -196,6 +234,19 @@ function PermissionEvent({ data, onDecision }) {
   const isAllowed = decision === 'allow' || decision === 'allow_session' || decision === 'allow_always';
   const isDenied = decision === 'deny';
   const [showDiff, setShowDiff] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const expiresAt = useMemo(() => (
+    Number.isFinite(data?.expiresInMs) ? Date.now() + data.expiresInMs : null
+  ), [data?.requestId, data?.expiresInMs]);
+  const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : null;
+  const expired = !resolved && remainingMs === 0;
+  const subject = getPermissionSubject(data);
+
+  useEffect(() => {
+    if (resolved || !expiresAt) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [expiresAt, resolved]);
 
   return (
     <FeedFrame className="mb-4">
@@ -217,10 +268,29 @@ function PermissionEvent({ data, onDecision }) {
               {data?.permission || 'moderate'}
             </span>
           </div>
-          <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">{data?.description || label}</p>
-          <pre className="text-[10px] text-amber-700 dark:text-amber-300 whitespace-pre-wrap font-mono mt-1.5 max-h-24 overflow-y-auto bg-amber-100/50 dark:bg-amber-900/20 rounded p-1.5">
-            {truncateArgs(data?.args)}
-          </pre>
+          <div className="mt-2 rounded-md border border-amber-200/80 dark:border-amber-800/50 bg-white/65 dark:bg-gray-950/30 overflow-hidden">
+            <div className="px-2.5 py-1.5 border-b border-amber-100 dark:border-amber-900/40 flex items-center justify-between gap-3">
+              <span className="text-[10px] uppercase tracking-wide font-semibold text-amber-700/70 dark:text-amber-300/70">
+                {subject.label}
+              </span>
+              {!resolved && remainingMs !== null && (
+                <span className={`text-[10px] font-medium ${expired ? 'text-red-600 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                  {expired ? 'Expired, denying...' : `Auto-deny in ${formatCountdown(remainingMs)}`}
+                </span>
+              )}
+            </div>
+            <pre className={`text-xs whitespace-pre-wrap font-mono leading-relaxed max-h-36 overflow-y-auto p-2.5 break-words ${subject.tone}`}>
+              {subject.value}
+            </pre>
+          </div>
+          {data?.args && Object.keys(data.args).length > 0 && subject.value !== truncateArgs(data.args) && (
+            <details className="mt-1.5">
+              <summary className="text-[10px] text-amber-700 dark:text-amber-400 cursor-pointer">Raw arguments</summary>
+              <pre className="text-[10px] text-amber-700 dark:text-amber-300 whitespace-pre-wrap font-mono mt-1 max-h-24 overflow-y-auto bg-amber-100/50 dark:bg-amber-900/20 rounded p-1.5">
+                {JSON.stringify(data.args, null, 2)}
+              </pre>
+            </details>
+          )}
           {data?.diff && (
             <div className="mt-2">
               <button
@@ -262,14 +332,14 @@ function PermissionEvent({ data, onDecision }) {
           <>
             <button
               onClick={() => onDecision?.(data?.requestId, 'deny')}
-              disabled={data?.resolving}
+              disabled={data?.resolving || expired}
               className="px-2.5 py-1 text-xs rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60 transition-colors"
             >
               Deny
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow')}
-              disabled={data?.resolving}
+              disabled={data?.resolving || expired}
               className="px-2.5 py-1 text-xs rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white flex items-center gap-1.5 transition-colors"
             >
               {data?.resolving && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -277,14 +347,14 @@ function PermissionEvent({ data, onDecision }) {
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow_session')}
-              disabled={data?.resolving}
+              disabled={data?.resolving || expired}
               className="px-2.5 py-1 text-xs rounded bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 disabled:opacity-60 text-white transition-colors"
             >
               Trust this run
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow_always')}
-              disabled={data?.resolving}
+              disabled={data?.resolving || expired}
               title={`Always allow ${data?.tool} without asking`}
               className="px-2.5 py-1 text-xs rounded border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 flex items-center gap-1 transition-colors"
             >

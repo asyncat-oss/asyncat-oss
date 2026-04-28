@@ -289,6 +289,36 @@ export class AgentRuntime {
       // Permission checks — always sequential (may need interactive prompts)
       const permitted = [];
       for (const tc of toolCalls) {
+        if (!toolRegistry.has(tc.tool_name)) {
+          const unknownResult = {
+            success: false,
+            error: `Unknown tool: "${tc.tool_name}"`,
+          };
+          this.onEvent({
+            type: 'tool_start',
+            data: {
+              tool: tc.tool_name,
+              args: tc.arguments,
+              permission: 'none',
+              permissionDecision: 'not_applicable',
+              permissionReason: 'Unknown tool; not sent for approval',
+              workingDir: this.workingDir,
+              description: `Unknown tool: ${tc.tool_name}`,
+              round,
+            }
+          });
+          this.session.recordToolCall(tc.tool_name, tc.arguments, unknownResult, {
+            permissionLevel: 'none',
+            permissionDecision: 'not_applicable',
+            permissionReason: 'Unknown tool; not sent for approval',
+            workingDir: this.workingDir,
+            startedAt: new Date().toISOString(),
+          });
+          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: unknownResult, round } });
+          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, unknownResult) });
+          continue;
+        }
+
         const permission = toolRegistry.getPermission(tc.tool_name);
         const actionDesc = PermissionManager.describeAction(tc.tool_name, tc.arguments);
         const permissionStartedAt = new Date().toISOString();
