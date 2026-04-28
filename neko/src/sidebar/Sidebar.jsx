@@ -182,13 +182,22 @@ const DynamicSidebar = ({
       if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); setIsSearchOpen(true); }
       else if ((e.ctrlKey || e.metaKey) && e.key === ",") { e.preventDefault(); navigate("/settings/profile"); }
       else if ((e.ctrlKey || e.metaKey) && e.key === "n") { e.preventDefault(); onNewChat(); }
+      // Numbered dock shortcuts: Ctrl/Cmd + 1-7
+      else if ((e.ctrlKey || e.metaKey) && e.key === "1") { e.preventDefault(); onNewChat(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "2") { e.preventDefault(); navigate("/all-chats"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "3") { e.preventDefault(); navigate("/workspace"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "4") { e.preventDefault(); navigate("/calendar"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "5") { e.preventDefault(); navigate("/files"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "6") { e.preventDefault(); navigate("/models"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "7") { e.preventDefault(); navigate("/agents/tools"); }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onNewChat]);
 
   // Active states
-  const isOnChat = ["home", "conversations", "all-chats"].includes(basePage);
+  const isOnHome = basePage === "home";
+  const isOnConversations = ["conversations", "all-chats"].includes(basePage);
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnCalendar = basePage === "calendar";
   const isOnFiles = basePage === "files";
@@ -211,7 +220,7 @@ const DynamicSidebar = ({
         "
       >
         {/* Logo — new chat */}
-        <DockItem label="New Chat" onClick={onNewChat} isActive={false}>
+        <DockItem label="New Chat  ⌘N" onClick={onNewChat} isActive={isOnHome}>
           <img src="/cat.svg" alt="Asyncat" className="w-5 h-5" />
         </DockItem>
 
@@ -219,16 +228,16 @@ const DynamicSidebar = ({
 
         {/* Chat — navigates to all chats history */}
         <DockItem
-          label="Chat"
+          label="Chat  ⌘2"
           onClick={() => navigate("/all-chats")}
-          isActive={isOnChat}
+          isActive={isOnConversations}
         >
           <ChatIcon className="w-5 h-5" />
         </DockItem>
 
         {/* Workspace — navigates directly to projects page */}
         <DockItem
-          label="Workspace"
+          label="Workspace  ⌘3"
           onClick={() => navigate("/workspace")}
           isActive={isOnWorkspace}
         >
@@ -241,7 +250,7 @@ const DynamicSidebar = ({
 
         {/* Calendar — direct navigate */}
         <DockItem
-          label="Calendar"
+          label="Calendar  ⌘4"
           onClick={() => navigate("/calendar")}
           isActive={isOnCalendar}
         >
@@ -255,7 +264,7 @@ const DynamicSidebar = ({
 
         {/* Files — direct navigate */}
         <DockItem
-          label="Files"
+          label="Files  ⌘5"
           onClick={() => navigate("/files")}
           isActive={isOnFiles}
         >
@@ -266,7 +275,7 @@ const DynamicSidebar = ({
 
         {/* Models — standalone app */}
         <DockItem
-          label="Models"
+          label="Models  ⌘6"
           onClick={() => navigate("/models")}
           isActive={isOnModels}
         >
@@ -275,7 +284,7 @@ const DynamicSidebar = ({
 
         {/* Tools & Skills — standalone app */}
         <DockItem
-          label="Tools & Skills"
+          label="Tools & Skills  ⌘7"
           onClick={() => navigate("/agents/tools")}
           isActive={isOnTools}
         >
