@@ -5,6 +5,8 @@
 
 import os from 'os';
 import { execSync, spawn } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { PermissionLevel } from './toolRegistry.js';
 
 const PLATFORM = os.platform();
@@ -246,7 +248,7 @@ export const testRunnerTool = {
     let cmd       = 'npm test -- --passWithNoTests';
     try {
       const pkg = JSON.parse(
-        require('fs').readFileSync(require('path').join(cwd, 'package.json'), 'utf8')
+        readFileSync(join(cwd, 'package.json'), 'utf8')
       );
       const devDeps = { ...(pkg.devDependencies || {}), ...(pkg.dependencies || {}) };
       const scripts = pkg.scripts || {};
