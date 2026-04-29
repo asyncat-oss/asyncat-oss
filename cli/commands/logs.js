@@ -7,9 +7,15 @@ import { readRecentLogs } from '../lib/logger.js';
 
 const LOGS_DIR = path.join(ROOT, 'logs');
 const CLI_LOG_TYPES = ['ui', 'commands', 'agent', 'error', 'startup'];
+const BACKEND_LOG_TYPES = ['app', 'http', 'error', 'process'];
 
-function tailFile(file, label, color) {
+function tailFile(file, label, color, options = {}) {
   if (!fs.existsSync(file)) {
+    if (options.optional) {
+      log('');
+      log(`  ${col(color, col('bold', label + ' log'))} ${col('dim', '(no logs yet)')}`);
+      return;
+    }
     warn(`Log file not found: ${path.relative(ROOT, file)}`);
     return;
   }
@@ -35,6 +41,16 @@ function tailCliLog(category, label) {
   }
   log(col('dim', '  ' + '─'.repeat(60)));
   log('');
+}
+
+function tailBackendLogs() {
+  log('');
+  log(`  ${col('cyan', col('bold', 'Backend logs'))} ${col('dim', '(logs/backend/)')}`);
+
+  for (const type of BACKEND_LOG_TYPES) {
+    const file = path.join(LOGS_DIR, 'backend', type, `${type}-${getDateStamp()}.log`);
+    tailFile(file, `backend/${type}`, 'cyan', { optional: true });
+  }
 }
 
 export function run(args) {
@@ -87,7 +103,7 @@ export function run(args) {
   if (showBackend  && procs.backend)  info('Backend is running — output is streaming live in this terminal.');
   if (showFrontend && procs.frontend) info('Frontend is running — output is streaming live in this terminal.');
 
-  if (showBackend)  tailFile(path.join(LOGS_DIR, 'backend.log'),  'backend',  'cyan');
+  if (showBackend)  tailBackendLogs();
   if (showFrontend) tailFile(path.join(LOGS_DIR, 'frontend.log'), 'frontend', 'magenta');
 
   if (sub === 'all') {

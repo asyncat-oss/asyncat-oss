@@ -33,6 +33,24 @@ function logsDir() {
 	return d;
 }
 
+function dateStamp() {
+	const now = new Date();
+	const yyyy = now.getFullYear();
+	const mm = String(now.getMonth() + 1).padStart(2, "0");
+	const dd = String(now.getDate()).padStart(2, "0");
+	return `${yyyy}-${mm}-${dd}`;
+}
+
+function procLogFile(key) {
+	if (key === "backend") {
+		const dir = path.join(logsDir(), "backend", "process");
+		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+		return path.join(dir, `process-${dateStamp()}.log`);
+	}
+
+	return path.join(logsDir(), `${key}.log`);
+}
+
 function scanWatchPath(target, snapshot) {
 	let stat;
 	try {
@@ -117,7 +135,7 @@ function spawnProc(key) {
 	if (!spec) return;
 
 	const { cwd, cmd, args, color } = spec;
-	const logFile = path.join(logsDir(), `${key}.log`);
+	const logFile = procLogFile(key);
 	const logStream = fs.createWriteStream(logFile, { flags: "a" });
 
 	const isWin = process.platform === "win32";

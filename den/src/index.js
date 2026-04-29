@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import logger, { flushLogs, logError, morganStream } from './logger.js';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 import authRouter from './auth/authRouter.js';
@@ -59,7 +60,7 @@ const MACHINE_TOKEN = randomUUID();
 try {
   writeFileSync(MACHINE_TOKEN_PATH, MACHINE_TOKEN, { mode: 0o600 });
 } catch (e) {
-  console.warn('Could not write machine token:', e.message);
+  logger.warn('Could not write machine token:', e.message);
 }
 export { MACHINE_TOKEN };
 
@@ -90,7 +91,9 @@ app.use(cors({
 // ─── Core middleware ──────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false })); // CSP off — frontend handles it
 app.use(compression());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'tiny', {
+  stream: morganStream,
+}));
 app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -150,7 +153,7 @@ app.use((req, res) => {
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
+  logError('Unhandled error:', err);
 
   if (err.type === 'entity.too.large') {
     return res.status(413).json({ success: false, error: 'Payload too large' });
@@ -170,19 +173,28 @@ app.use((err, req, res, next) => {
 // Seed DB (no-op if already populated), then open the HTTP server.
 seed().then(() => {
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`den running on port ${PORT}`);
-    console.log(`environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`frontend: ${process.env.FRONTEND_URL || 'http://localhost:8717'}`);
+    logger.info(`den running on port ${PORT}`);
+    logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`frontend: ${process.env.FRONTEND_URL || 'http://localhost:8717'}`);
+  });
+  server.on('error', async (err) => {
+    logError('HTTP server failed:', err);
+    await flushLogs();
+    process.exit(1);
   });
 
   const shutdown = (signal) => {
-    console.log(`${signal} — shutting down`);
-    server.close(() => process.exit(0));
+    logger.info(`${signal} - shutting down`);
+    server.close(async () => {
+      await flushLogs();
+      process.exit(0);
+    });
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));
-}).catch((err) => {
-  console.error('Startup failed:', err);
+}).catch(async (err) => {
+  logError('Startup failed:', err);
+  await flushLogs();
   process.exit(1);
 });
 

@@ -1632,6 +1632,7 @@ async function runSingleCommand(argv) {
     case 'start': _start.run(rest); break;
     case 'stop':  _stop.run(); break;
     case 'status': _status.run(); break;
+    case 'logs': _logs.run(rest); break;
     case 'install': await _install.run(rest); break;
     case 'doctor': _doctor.run(); break;
     case 'version': _version.run(); break;

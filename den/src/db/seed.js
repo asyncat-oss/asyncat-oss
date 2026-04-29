@@ -13,6 +13,7 @@
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import db from './client.js';
+import logger from '../logger.js';
 
 const SOLO_MODE = process.env.SOLO_MODE !== 'false'; // default true
 
@@ -26,9 +27,9 @@ export async function seed() {
   const password = process.env.SOLO_PASSWORD || 'changeme';
 
   if (password === 'changeme') {
-    console.warn(
-      '⚠  WARNING: Using default password "changeme". ' +
-      'Set SOLO_PASSWORD in .env before exposing this instance to a network.'
+    logger.warn(
+      'WARNING: Using default password "changeme". ' +
+      'Set SOLO_PASSWORD in .env before exposing this instance to a network.',
     );
   }
 
@@ -48,5 +49,5 @@ export async function seed() {
     `).run(workspaceId, userId);
   })();
 
-  console.log(`Database: seeded default user (${email}) and workspace`);
+  logger.info(`Database: seeded default user (${email}) and workspace`);
 }

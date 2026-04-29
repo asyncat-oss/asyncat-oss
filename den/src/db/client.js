@@ -12,6 +12,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import logger from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +39,6 @@ const schemaPath = path.join(__dirname, 'schema.sql');
 const schema = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schema);
 
-console.log(`Database: SQLite at ${DB_PATH}`);
+logger.info(`Database: SQLite at ${DB_PATH}`);
 
 export default db;

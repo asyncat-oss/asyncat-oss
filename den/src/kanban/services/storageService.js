@@ -7,6 +7,7 @@ import fsp from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import logger from '../../logger.js';
 
 const STORAGE_ROOT = process.env.STORAGE_PATH
   ? path.resolve(process.env.STORAGE_PATH)
@@ -24,7 +25,7 @@ const fileUrl = (blobName) =>
 
 const initializeContainer = async () => {
   fs.mkdirSync(CONTAINER_DIR, { recursive: true });
-  console.log(`Storage: kanban attachments at ${CONTAINER_DIR}`);
+  logger.info(`Storage: kanban attachments at ${CONTAINER_DIR}`);
 };
 
 const uploadFile = async (file, cardId) => {
