@@ -9,7 +9,6 @@ export async function exportDocx(req, res) {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-    const blobServiceClient = req.blobServiceClient;
     const db = req.db;
 
     if (!userId) {
@@ -19,7 +18,7 @@ export async function exportDocx(req, res) {
     console.log(`[ExportController] Exporting note ${id} as DOCX for user ${userId}`);
 
     // Generate DOCX
-    const docxBuffer = await exportNoteAsDocx(id, userId, blobServiceClient, db);
+    const docxBuffer = await exportNoteAsDocx(id, userId, db);
 
     // Get note title for filename
     const { data: note } = await db
@@ -64,7 +63,6 @@ export async function exportPdf(req, res) {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-    const blobServiceClient = req.blobServiceClient;
     const db = req.db;
 
     console.log('[ExportController] Request params:', { id, userId: userId ? 'present' : 'missing' });
@@ -95,7 +93,6 @@ export async function exportPdf(req, res) {
     const pdfBuffer = await exportNoteAsPdf(
       id,
       userId,
-      blobServiceClient,
       db,
       { attachmentBaseUrl }
     );

@@ -26,17 +26,7 @@ const getFileSizeLimit = (mimeType, isBanner = false) => {
   return MAX_FILE_SIZE;
 };
 
-// Middleware to check if storage service is available
-export const checkStorageService = (req, res, next) => {
-  if (!req.blobServiceClient) {
-    return res.status(503).json({
-      success: false,
-      error: "Storage service is unavailable",
-      message: "Azure Blob Storage configuration is missing or invalid",
-    });
-  }
-  next();
-};
+// Middleware to check if storage is available - always passes in local mode
 
 // Helper function to process file uploads with busboy
 export const handleFileUpload = (req, res, next) => {

@@ -7,11 +7,10 @@ import * as noteService from './noteService.js';
  * Export a note as DOCX format
  * @param {string} noteId - Note ID to export
  * @param {string} userId - User ID making the request
- * @param {object} blobServiceClient - Azure blob service client
- * @param {object} db - Supabase client
+ * @param {object} db - Database client
  * @returns {Promise<Buffer>} DOCX file buffer
  */
-async function exportNoteAsDocx(noteId, userId, blobServiceClient, db) {
+async function exportNoteAsDocx(noteId, userId, db) {
   try {
     // Fetch note with full content
     const note = await noteService.getNoteById(noteId, userId, db);
@@ -50,7 +49,7 @@ async function exportNoteAsDocx(noteId, userId, blobServiceClient, db) {
       title,
       blocks,
       noteId,
-      blobServiceClient
+      db
     });
 
     return docxBuffer;
@@ -64,14 +63,12 @@ async function exportNoteAsDocx(noteId, userId, blobServiceClient, db) {
  * Export a note as PDF format
  * @param {string} noteId - Note ID to export
  * @param {string} userId - User ID making the request
- * @param {object} blobServiceClient - Azure blob service client
- * @param {object} db - Supabase client
+ * @param {object} db - Database client
  * @returns {Promise<Buffer>} PDF file buffer
  */
 async function exportNoteAsPdf(
   noteId,
   userId,
-  blobServiceClient,
   db,
   options = {}
 ) {
@@ -113,7 +110,7 @@ async function exportNoteAsPdf(
       blocks,
       noteId,
       projectId: note.projectid,
-      blobServiceClient,
+      db,
       attachmentBaseUrl: options.attachmentBaseUrl
     });
 

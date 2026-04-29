@@ -40,6 +40,10 @@ const BannerSelector = ({ note, onBannerChange, onClose }) => {
   });
   const fileInputRef = useRef(null);
 
+  const handleCloseUploadAlert = () => {
+    setUploadAlert(createInitialUploadAlert());
+  };
+
   // Predefined color options
   const colorOptions = [
     { name: "Blue", value: "#3B82F6" },

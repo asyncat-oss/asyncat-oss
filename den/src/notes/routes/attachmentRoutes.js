@@ -2,12 +2,9 @@ import express from "express";
 import * as attachmentController from "../controllers/attachmentController.js";
 import { verifyUserMiddleware, auth } from "../middleware/auth.js";
 import { verifyAttachmentAccess } from "../middleware/attachmentAuth.js";
-import { handleFileUpload, checkStorageService } from "../middleware/fileUpload.js";
+import { handleFileUpload } from "../middleware/fileUpload.js";
 
 const router = express.Router();
-
-// Check storage service availability for all routes
-router.use(checkStorageService);
 
 // Upload attachment to a note (requires full auth)
 router.post(

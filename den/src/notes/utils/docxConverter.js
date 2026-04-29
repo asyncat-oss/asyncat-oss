@@ -15,13 +15,17 @@ import {
   CheckBox
 } from 'docx';
 import { injectNativeCharts } from './nativeChartBuilder.js';
+import localStorageService from '../../storage/localStorageService.js';
+import path from 'path';
+import fs from 'fs';
+import fsp from 'fs/promises';
 
 /**
  * Convert blocks to DOCX document
- * @param {object} options - { title, blocks, noteId, blobServiceClient }
+ * @param {object} options - { title, blocks, noteId, db }
  * @returns {Promise<Buffer>} DOCX file buffer
  */
-async function convertBlocksToDocx({ title, blocks, noteId, blobServiceClient }) {
+async function convertBlocksToDocx({ title, blocks, noteId, db }) {
   // Track charts for native OOXML injection
   const chartsToInject = [];
 
@@ -80,7 +84,7 @@ async function convertBlocksToDocx({ title, blocks, noteId, blobServiceClient })
     } else {
       // Regular block - convert individually
       try {
-        const elements = await convertBlockToDocx(block, blobServiceClient, noteId, chartsToInject);
+        const elements = await convertBlockToDocx(block, noteId, chartsToInject);
 
         // Validate elements before adding
         if (Array.isArray(elements) && elements.length > 0) {
@@ -250,11 +254,10 @@ function convertListBlocksToDocx(listBlocks, listType) {
 /**
  * Convert a single block to DOCX elements
  * @param {object} block - Block object
- * @param {object} blobServiceClient - Azure blob client
  * @param {string} noteId - Note ID for fetching attachments
  * @returns {Promise<Array>} Array of DOCX elements
  */
-async function convertBlockToDocx(block, blobServiceClient, noteId, chartsToInject = []) {
+async function convertBlockToDocx(block, noteId, chartsToInject = []) {
   const { type, content, properties } = block;
 
   switch (type) {
@@ -295,10 +298,10 @@ async function convertBlockToDocx(block, blobServiceClient, noteId, chartsToInje
       return convertTableBlock(properties);
 
     case 'image':
-      return await convertImageBlock(properties, blobServiceClient, noteId);
+      return await convertImageBlock(properties, noteId);
 
     case 'video':
-      return await convertVideoBlock(properties, blobServiceClient, noteId);
+      return await convertVideoBlock(properties, noteId);
 
     case 'audio':
       return convertAudioBlock(properties);
@@ -801,7 +804,7 @@ function convertTableBlock(properties) {
 /**
  * Convert image block
  */
-async function convertImageBlock(properties, blobServiceClient, noteId) {
+async function convertImageBlock(properties, noteId) {
   try {
     const { url, alt, caption, width, height } = properties;
 
@@ -811,15 +814,20 @@ async function convertImageBlock(properties, blobServiceClient, noteId) {
       return [new Paragraph({ text: '[Image: No URL provided]' })];
     }
 
-    // Download image from blob storage or fetch from URL
     let imageBuffer = null;
 
-    // Try blob storage first
-    if (blobServiceClient && noteId) {
-      imageBuffer = await downloadAttachment(url, blobServiceClient, noteId);
+    // Try local storage first
+    const localPath = localStorageService.getLocalPathFromUrl(url);
+    if (localPath) {
+      try {
+        imageBuffer = await fsp.readFile(localPath);
+        console.log('[DocxConverter] Loaded image from local storage, size:', imageBuffer.length);
+      } catch (err) {
+        console.log('[DocxConverter] Local file not found, trying URL fetch');
+      }
     }
 
-    // If blob storage failed and URL is a direct HTTP(S) URL, try to fetch it
+    // If local storage failed and URL is a direct HTTP(S) URL, try to fetch it
     if (!imageBuffer && (url.startsWith('http://') || url.startsWith('https://'))) {
       console.log('[DocxConverter] Trying to fetch image from URL:', url.substring(0, 100));
       try {
@@ -952,19 +960,17 @@ async function convertImageBlock(properties, blobServiceClient, noteId) {
 }
 
 /**
- * Download attachment from blob storage
+ * Download attachment from local storage
  */
-async function downloadAttachment(url, blobServiceClient, noteId) {
+async function downloadAttachment(url, noteId) {
   try {
-    if (!url || !blobServiceClient) {
-      console.log('[DocxConverter] Missing URL or blob client');
+    if (!url) {
+      console.log('[DocxConverter] Missing URL');
       return null;
     }
 
-    // Extract filename from URL, removing query parameters
-    // Handle both regular query strings (?token=...) and URL-encoded ones (%3Ftoken%3D...)
-    let urlPath = url.split('?')[0]; // Remove query string
-    urlPath = urlPath.split('%3F')[0]; // Remove URL-encoded query string
+    let urlPath = url.split('?')[0];
+    urlPath = urlPath.split('%3F')[0];
     const filename = urlPath.split('/').pop();
 
     console.log('[DocxConverter] Extracted filename from URL:', filename);
@@ -974,27 +980,34 @@ async function downloadAttachment(url, blobServiceClient, noteId) {
       return null;
     }
 
-    const containerClient = blobServiceClient.getContainerClient('note-attachments');
-
-    // Try to find the blob
-    const projectId = noteId.split('-')[0]; // Simple extraction
-    const blobPath = `project-${projectId}/note-${noteId}/${filename}`;
-
-    console.log('[DocxConverter] Trying to download from blob path:', blobPath);
-
-    const blobClient = containerClient.getBlobClient(blobPath);
-
-    // Download
-    const downloadResponse = await blobClient.download();
-    const chunks = [];
-
-    for await (const chunk of downloadResponse.readableStreamBody) {
-      chunks.push(chunk);
+    // Try local storage first
+    const localPath = localStorageService.getLocalPathFromUrl(url);
+    if (localPath) {
+      try {
+        const buffer = await fsp.readFile(localPath);
+        console.log('[DocxConverter] Successfully downloaded from local, size:', buffer.length);
+        return buffer;
+      } catch (err) {
+        console.log('[DocxConverter] Local file not found:', localPath);
+      }
     }
 
-    const buffer = Buffer.concat(chunks);
-    console.log('[DocxConverter] Successfully downloaded attachment, size:', buffer.length);
-    return buffer;
+    // Try fetching from URL if it's HTTP(S)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          console.log('[DocxConverter] Successfully fetched from URL, size:', buffer.length);
+          return Buffer.from(buffer);
+        }
+      } catch (fetchErr) {
+        console.error('[DocxConverter] URL fetch failed:', fetchErr.message);
+      }
+    }
+
+    console.log('[DocxConverter] Could not find file for:', filename);
+    return null;
   } catch (error) {
     console.error('[DocxConverter] Download attachment error:', error);
     return null;
@@ -1004,7 +1017,7 @@ async function downloadAttachment(url, blobServiceClient, noteId) {
 /**
  * Convert video block
  */
-async function convertVideoBlock(properties, blobServiceClient, noteId) {
+async function convertVideoBlock(properties, noteId) {
   try {
     const { url, filename, caption, thumbnail, width, height } = properties;
 
@@ -1016,12 +1029,10 @@ async function convertVideoBlock(properties, blobServiceClient, noteId) {
     if (thumbnail) {
       let thumbnailBuffer = null;
 
-      // Try to download thumbnail from blob storage
-      if (blobServiceClient && noteId) {
-        thumbnailBuffer = await downloadAttachment(thumbnail, blobServiceClient, noteId);
-      }
+      // Try to download thumbnail from local storage
+      thumbnailBuffer = await downloadAttachment(thumbnail, noteId);
 
-      // If blob storage failed and thumbnail is a direct HTTP(S) URL, try to fetch it
+      // If local storage failed and thumbnail is a direct HTTP(S) URL, try to fetch it
       if (!thumbnailBuffer && (thumbnail.startsWith('http://') || thumbnail.startsWith('https://'))) {
         console.log('[DocxConverter] Trying to fetch video thumbnail from URL:', thumbnail.substring(0, 100));
         try {

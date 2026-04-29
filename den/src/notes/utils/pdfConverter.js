@@ -2,13 +2,16 @@
 import puppeteer from 'puppeteer';
 import { renderChartToImage } from './chartRenderer.js';
 import { sanitizeTableCell } from './sanitizer.js';
+import localStorageService from '../../storage/localStorageService.js';
+import fsp from 'fs/promises';
+
 const PUBLIC_ATTACHMENT_BASE_URL = process.env.PUBLIC_ATTACHMENT_BASE_URL
   ? process.env.PUBLIC_ATTACHMENT_BASE_URL.replace(/\/$/, '')
   : '';
 
 /**
  * Convert blocks to PDF document
- * @param {object} options - { title, blocks, noteId, blobServiceClient }
+ * @param {object} options - { title, blocks, noteId, db }
  * @returns {Promise<Buffer>} PDF file buffer
  */
 async function convertBlocksToPdf({
@@ -16,7 +19,7 @@ async function convertBlocksToPdf({
   blocks,
   noteId,
   projectId,
-  blobServiceClient,
+  db,
   attachmentBaseUrl = ""
 }) {
   let browser = null;
@@ -30,7 +33,7 @@ async function convertBlocksToPdf({
       blocks,
       noteId,
       projectId,
-      blobServiceClient,
+      db,
       attachmentBaseUrl
     );
     console.log('[PdfConverter] HTML generated, length:', htmlContent.length);
@@ -122,7 +125,7 @@ async function convertBlocksToHtml(
   blocks,
   noteId,
   projectId,
-  blobServiceClient,
+  db,
   attachmentBaseUrl
 ) {
   const blockHtmlArray = [];
@@ -171,7 +174,7 @@ async function convertBlocksToHtml(
         const listHtml = await convertListBlocksToHtml(
           listBlocks,
           listType,
-          blobServiceClient,
+          db,
           noteId,
           projectId,
           attachmentBaseUrl
@@ -186,7 +189,7 @@ async function convertBlocksToHtml(
       try {
         const html = await convertBlockToHtml(
           block,
-          blobServiceClient,
+          db,
           noteId,
           projectId,
           attachmentBaseUrl
@@ -642,11 +645,11 @@ async function convertBlocksToHtml(
 async function convertListBlocksToHtml(
   listBlocks,
   listType,
-  blobServiceClient,
+  db,
   noteId,
   projectId,
   attachmentBaseUrl
-) { // eslint-disable-line no-unused-vars
+) {
   if (listBlocks.length === 0) return '';
 
   const listTag = listType === 'bullet_list' ? 'ul' : 'ol';
@@ -746,7 +749,7 @@ async function convertListBlocksToHtml(
  */
 async function convertBlockToHtml(
   block,
-  blobServiceClient,
+  db,
   noteId,
   projectId,
   attachmentBaseUrl
@@ -799,7 +802,7 @@ async function convertBlockToHtml(
       return convertTableToHtml(properties);
 
     case 'image':
-      return await convertImageToHtml(properties, blobServiceClient, noteId);
+      return await convertImageToHtml(properties, noteId);
 
     case 'video':
       return convertVideoToHtml(properties, { noteId, projectId, attachmentBaseUrl });
@@ -909,7 +912,7 @@ function convertTableToHtml(properties) {
   return html;
 }
 
-async function convertImageToHtml(properties, blobServiceClient, noteId) {
+async function convertImageToHtml(properties, noteId) {
   const { url, alt, caption, filename } = properties;
 
   if (!url) {
@@ -923,12 +926,18 @@ async function convertImageToHtml(properties, blobServiceClient, noteId) {
   try {
     let imageBuffer = null;
 
-    // Try to download from blob storage
-    if (blobServiceClient && noteId) {
-      imageBuffer = await downloadAttachment(url, blobServiceClient, noteId);
+    // Try to download from local storage first
+    const localPath = localStorageService.getLocalPathFromUrl(url);
+    if (localPath) {
+      try {
+        imageBuffer = await fsp.readFile(localPath);
+        console.log('[PdfConverter] Loaded image from local storage, size:', imageBuffer.length);
+      } catch (err) {
+        console.log('[PdfConverter] Local file not found, trying URL fetch');
+      }
     }
 
-    // If blob storage failed and URL is a direct HTTP(S) URL, try to fetch it
+    // If local storage failed and URL is a direct HTTP(S) URL, try to fetch it
     if (!imageBuffer && (url.startsWith('http://') || url.startsWith('https://'))) {
       console.log('[PdfConverter] Trying to fetch image from URL:', url);
       const response = await fetch(url);
@@ -1191,27 +1200,52 @@ async function convertChartToHtml(type, properties) {
 /**
  * Download attachment from blob storage
  */
-async function downloadAttachment(url, blobServiceClient, noteId) {
+async function downloadAttachment(url, noteId) {
   try {
-    const filename = url.split('/').pop();
-
-    if (!filename || !blobServiceClient) {
+    if (!url) {
+      console.log('[PdfConverter] Missing URL');
       return null;
     }
 
-    const containerClient = blobServiceClient.getContainerClient('note-attachments');
-    const projectId = noteId.split('-')[0];
-    const blobPath = `project-${projectId}/note-${noteId}/${filename}`;
+    let urlPath = url.split('?')[0];
+    urlPath = urlPath.split('%3F')[0];
+    const filename = urlPath.split('/').pop();
 
-    const blobClient = containerClient.getBlobClient(blobPath);
-    const downloadResponse = await blobClient.download();
-    const chunks = [];
+    console.log('[PdfConverter] Extracted filename from URL:', filename);
 
-    for await (const chunk of downloadResponse.readableStreamBody) {
-      chunks.push(chunk);
+    if (!filename) {
+      console.log('[PdfConverter] Could not extract filename from URL:', url);
+      return null;
     }
 
-    return Buffer.concat(chunks);
+    // Try local storage first
+    const localPath = localStorageService.getLocalPathFromUrl(url);
+    if (localPath) {
+      try {
+        const buffer = await fsp.readFile(localPath);
+        console.log('[PdfConverter] Successfully downloaded from local, size:', buffer.length);
+        return buffer;
+      } catch (err) {
+        console.log('[PdfConverter] Local file not found:', localPath);
+      }
+    }
+
+    // Try fetching from URL if it's HTTP(S)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          console.log('[PdfConverter] Successfully fetched from URL, size:', buffer.length);
+          return Buffer.from(buffer);
+        }
+      } catch (fetchErr) {
+        console.error('[PdfConverter] URL fetch failed:', fetchErr.message);
+      }
+    }
+
+    console.log('[PdfConverter] Could not find file for:', filename);
+    return null;
   } catch (error) {
     console.error('[PdfConverter] Download attachment error:', error);
     return null;

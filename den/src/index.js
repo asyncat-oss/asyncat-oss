@@ -137,6 +137,7 @@ app.use('/api/attachments', attachmentRoutes);
 app.use('/api/config', configRouter);
 
 // ─── Routes: Storage ─────────────────────────────────────────────────────────
+app.use('/files', storageRouter);
 app.use('/api/storage', storageRouter);
 
 // ─── Routes: Update ───────────────────────────────────────────────────────────
@@ -177,7 +178,16 @@ app.use((err, req, res, next) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 // Seed DB (no-op if already populated), then open the HTTP server.
-seed().then(() => {
+seed().then(async () => {
+  // Initialize storage containers
+  try {
+    const { initializeAllContainers } = await import('./storage/localStorageService.js');
+    await initializeAllContainers();
+    logger.info('Storage initialized');
+  } catch (err) {
+    logger.warn('Storage initialization warning:', err.message);
+  }
+
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`den running on port ${PORT}`);
     logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);

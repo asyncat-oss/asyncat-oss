@@ -292,7 +292,7 @@ export const applyDeltaChanges = async (req, res) => {
     if (content !== undefined) updates.content = content;
     if (metadata !== undefined) updates.metadata = metadata;
 
-    const updatedNote = await noteService.updateNoteDelta(id, updates, req.user.id, req.blobServiceClient, req.db);
+    const updatedNote = await noteService.updateNoteDelta(id, updates, req.user.id, req.db);
 
     res.json({
       success: true,
@@ -352,7 +352,7 @@ export const createNote = async (req, res) => {
 
 export const deleteNote = async (req, res) => {
   try {
-    const deletedNote = await noteService.deleteNote(req.params.id, req.user.id, req.blobServiceClient, req.db);
+    const deletedNote = await noteService.deleteNote(req.params.id, req.user.id, req.db);
     res.json({ success: true, data: deletedNote });
   } catch (error) {
     console.error("Note deletion error:", error);

@@ -233,7 +233,6 @@ const updateNote = async (
   id,
   updates,
   userId,
-  blobServiceClient = null,
   db = null
 ) => {
   try {
@@ -329,17 +328,15 @@ const updateNoteDelta = async (
   id,
   updates,
   userId,
-  blobServiceClient = null,
   db = null
 ) => {
-  return updateNote(id, updates, userId, blobServiceClient, db);
+  return updateNote(id, updates, userId, db);
 };
 
 // Enhanced delete note
 const deleteNote = async (
   id,
   userId,
-  blobServiceClient = null,
   db = null
 ) => {
   try {
