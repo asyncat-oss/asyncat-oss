@@ -431,18 +431,22 @@ CREATE TABLE IF NOT EXISTS agent_memory (
 );
 
 CREATE TABLE IF NOT EXISTS agent_sessions (
-  id            TEXT PRIMARY KEY,
-  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  status        TEXT NOT NULL DEFAULT 'active'
-                  CHECK (status IN ('active','paused','completed','failed')),
-  goal          TEXT NOT NULL,
-  plan          TEXT NOT NULL DEFAULT '[]',
-  scratchpad    TEXT NOT NULL DEFAULT '{}',
-  tool_history  TEXT NOT NULL DEFAULT '[]',
-  total_rounds  INTEGER NOT NULL DEFAULT 0,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  status           TEXT NOT NULL DEFAULT 'active'
+                     CHECK (status IN ('active','paused','completed','failed')),
+  goal             TEXT NOT NULL,
+  plan             TEXT NOT NULL DEFAULT '[]',
+  scratchpad       TEXT NOT NULL DEFAULT '{}',
+  tool_history     TEXT NOT NULL DEFAULT '[]',
+  total_rounds     INTEGER NOT NULL DEFAULT 0,
+  feedback_rating  INTEGER,
+  feedback_comment TEXT,
+  was_helpful      INTEGER,
+  corrections      TEXT NOT NULL DEFAULT '[]',
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_memory_user       ON agent_memory(user_id);
@@ -505,8 +509,41 @@ CREATE TRIGGER IF NOT EXISTS agent_memory_au AFTER UPDATE ON agent_memory BEGIN
   VALUES (new.id, new.key, new.content);
 END;
 
--- =============================================
--- FEEDBACK LEARNING
--- =============================================
--- Feedback columns added via migration in BasalGanglia.js and AgentSession.js
--- instead of schema to avoid duplicate column errors
+-- ─── Agent Feedback & Patterns ───────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS agent_patterns (
+  id                   TEXT PRIMARY KEY,
+  user_id              TEXT NOT NULL,
+  workspace_id         TEXT,
+  pattern_hash         TEXT NOT NULL,
+  pattern_summary      TEXT NOT NULL,
+  tool_sequence        TEXT NOT NULL,
+  success_count        INTEGER DEFAULT 1,
+  failure_count        INTEGER DEFAULT 0,
+  last_seen_at         TEXT NOT NULL,
+  last_failure_at      TEXT,
+  created_at           TEXT NOT NULL,
+  auto_skill_created   INTEGER DEFAULT 0,
+  corrections          TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS idx_patterns_user_pattern ON agent_patterns(user_id, pattern_hash);
+
+CREATE TABLE IF NOT EXISTS agent_tool_audit (
+  id                  TEXT PRIMARY KEY,
+  session_id          TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+  user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id        TEXT,
+  tool_name           TEXT NOT NULL,
+  permission_level    TEXT NOT NULL,
+  permission_decision TEXT NOT NULL,
+  permission_reason   TEXT,
+  working_dir         TEXT,
+  args                TEXT NOT NULL DEFAULT '{}',
+  result              TEXT,
+  success             INTEGER,
+  round               INTEGER,
+  started_at          TEXT NOT NULL,
+  completed_at        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_session ON agent_tool_audit(session_id);
+CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_user    ON agent_tool_audit(user_id, started_at);

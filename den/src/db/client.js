@@ -12,7 +12,6 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { runMigrations } from './migrations/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,7 +37,6 @@ db.pragma('temp_store = MEMORY');
 const schemaPath = path.join(__dirname, 'schema.sql');
 const schema = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schema);
-runMigrations(db);
 
 console.log(`Database: SQLite at ${DB_PATH}`);
 
