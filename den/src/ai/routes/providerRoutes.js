@@ -272,6 +272,20 @@ router.get('/stats', verifyUser, async (req, res) => {
   }
 });
 
+// ── GET /check-ollama — detect if Ollama is running ────────────────────────
+router.get('/check-ollama', async (_req, res) => {
+  const { checkOllamaRunning } = await import('../controllers/ai/providerCatalog.js');
+  const result = await checkOllamaRunning();
+  res.json({ success: true, ...result });
+});
+
+// ── GET /check-lm-studio — detect if LM Studio is running ──────────────────
+router.get('/check-lm-studio', async (_req, res) => {
+  const { checkLMStudioRunning } = await import('../controllers/ai/providerCatalog.js');
+  const result = await checkLMStudioRunning();
+  res.json({ success: true, ...result });
+});
+
 // ── GET /catalog — built-in provider presets ────────────────────────────────
 router.get('/catalog', verifyUser, (_req, res) => {
   res.json({ success: true, providers: PROVIDER_CATALOG });

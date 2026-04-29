@@ -241,3 +241,78 @@ export function publicProvider(row) {
     updated_at: row.updated_at || null,
   };
 }
+
+/**
+ * Check if Ollama is installed and running on localhost:11434
+ * Attempts both /api/tags (list models) and / (health check) endpoints
+ */
+export async function checkOllamaRunning() {
+  const OLLAMA_BASE = 'http://localhost:11434';
+
+  // Try /api/tags first - gives us model list too
+  try {
+    const res = await fetch(`${OLLAMA_BASE}/api/tags`, {
+      signal: AbortSignal.timeout(3000)
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        found: true,
+        running: true,
+        baseUrl: `${OLLAMA_BASE}/v1`,
+        models: data.models?.map(m => m.name) || [],
+      };
+    }
+  } catch {}
+
+  // Fallback: try root health endpoint
+  try {
+    const health = await fetch(`${OLLAMA_BASE}/`, {
+      signal: AbortSignal.timeout(2000)
+    });
+    if (health.ok) {
+      return {
+        found: true,
+        running: true,
+        baseUrl: `${OLLAMA_BASE}/v1`,
+        models: [],
+      };
+    }
+  } catch {}
+
+  return {
+    found: false,
+    running: false,
+    baseUrl: null,
+    models: [],
+  };
+}
+
+/**
+ * Check if LM Studio is installed and running on localhost:1234
+ */
+export async function checkLMStudioRunning() {
+  const LM_STUDIO_BASE = 'http://localhost:1234';
+
+  try {
+    const res = await fetch(`${LM_STUDIO_BASE}/v1/models`, {
+      signal: AbortSignal.timeout(3000)
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        found: true,
+        running: true,
+        baseUrl: `${LM_STUDIO_BASE}/v1`,
+        models: data.data?.map(m => m.id) || [],
+      };
+    }
+  } catch {}
+
+  return {
+    found: false,
+    running: false,
+    baseUrl: null,
+    models: [],
+  };
+}

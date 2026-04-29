@@ -2,9 +2,12 @@ import { useState, useEffect } from "react";
 import {
 	Loader2,
 	Trash2,
+	AlertTriangle,
+	X,
 } from "lucide-react";
 
 import { workspaceApi, apiUtils } from "./settingApi";
+import Portal from "../components/Portal";
 
 // Popular workspace emojis
 const popularWorkspaceEmojis = [
@@ -185,6 +188,96 @@ const EmojiPicker = ({ selectedEmoji, onEmojiSelect, disabled = false }) => {
 	);
 };
 
+// Delete Workspace Modal
+const DeleteWorkspaceModal = ({ isOpen, onClose, onConfirm, workspaceName, isDeleting: _isDeleting, hasProjects, forceDelete, setForceDelete }) => {
+	if (!isOpen) return null;
+
+	const isProcessing = _isDeleting;
+
+	return (
+		<Portal>
+			<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200">
+				<div
+					className="bg-white dark:bg-gray-900 midnight:bg-slate-950 w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex flex-col animate-in zoom-in-95 duration-200"
+					onClick={(e) => e.stopPropagation()}
+				>
+					{/* Header */}
+					<div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex items-center justify-between bg-red-50/50 dark:bg-red-900/10 midnight:bg-red-950/20">
+						<div className="flex items-center gap-3 text-red-600 dark:text-red-400 midnight:text-red-400">
+							<div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-full">
+								<AlertTriangle className="w-5 h-5" />
+							</div>
+							<h2 className="text-xl font-semibold">Delete Workspace</h2>
+						</div>
+						{!isProcessing && (
+							<button
+								onClick={onClose}
+								className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-transparent hover:bg-red-100/50 dark:hover:bg-gray-800 rounded-full p-2 transition-colors"
+							>
+								<X className="w-5 h-5" />
+							</button>
+						)}
+					</div>
+
+					{/* Body */}
+					<div className="px-6 py-6 text-gray-600 dark:text-gray-300 midnight:text-slate-300">
+						<p className="text-base mb-2">
+							Are you sure you want to delete <span className="font-semibold text-gray-900 dark:text-white midnight:text-slate-100">"{workspaceName}"</span>?
+						</p>
+						<p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+							This action cannot be undone. All projects and data associated with this workspace will be permanently deleted.
+						</p>
+
+						{hasProjects && (
+							<div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 midnight:bg-yellow-900/30 rounded-lg">
+								<label className="flex items-start cursor-pointer">
+									<input
+										type="checkbox"
+										checked={forceDelete}
+										onChange={(e) => setForceDelete(e.target.checked)}
+										className="mr-3 mt-0.5 h-4 w-4 accent-red-500 dark:accent-red-400 midnight:accent-red-300"
+									/>
+									<span className="text-sm text-yellow-700 dark:text-yellow-400 midnight:text-yellow-300">
+										I understand this will permanently delete all {hasProjects} associated project(s)
+									</span>
+								</label>
+							</div>
+						)}
+					</div>
+
+					{/* Footer */}
+					<div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex justify-end gap-3 rounded-b-2xl">
+						<button
+							onClick={onClose}
+							disabled={isProcessing}
+							className="px-4 py-2 bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors font-medium cursor-pointer disabled:opacity-50"
+						>
+							Cancel
+						</button>
+						<button
+							onClick={onConfirm}
+							disabled={isProcessing || (hasProjects && !forceDelete)}
+							className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors font-medium flex items-center gap-2 cursor-pointer disabled:opacity-70"
+						>
+							{isProcessing ? (
+								<>
+									<Loader2 className="w-4 h-4 animate-spin" />
+									<span>Deleting...</span>
+								</>
+							) : (
+								<>
+									<Trash2 className="w-4 h-4" />
+									<span>Delete Workspace</span>
+								</>
+							)}
+						</button>
+					</div>
+				</div>
+			</div>
+		</Portal>
+	);
+};
+
 const WorkspaceSettingsSection = ({
 	workspace,
 	onWorkspaceUpdated,
@@ -207,6 +300,9 @@ const WorkspaceSettingsSection = ({
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [error, setError] = useState(null);
 	const [successMessage, setSuccessMessage] = useState(null);
+
+	// Delete modal state
+	const [showDeleteModal, setShowDeleteModal] = useState(false);
 
 	// Initialize form data when workspace changes
 	useEffect(() => {
@@ -260,6 +356,7 @@ const WorkspaceSettingsSection = ({
 
 			setSuccessMessage("Workspace deleted successfully!");
 			setPendingDelete(false);
+			setShowDeleteModal(false);
 		} catch (err) {
 			const errorMessage = apiUtils.handleError(
 				err,
@@ -445,83 +542,25 @@ const WorkspaceSettingsSection = ({
 				{/* Danger Zone - only show for non-personal workspaces */}
 				{!workspace.is_personal && (
 					<div className="mt-8">
-						<div className="rounded-lg p-4 bg-red-50/30 dark:bg-red-900/5 midnight:bg-red-900/5">
-							<h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-1">
-								Danger Zone
-							</h4>
-							<p className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400 mb-3">
-								Once you delete this workspace, there is no going back. Please be certain.
-							</p>
-
-							{hasProjects && (
-								<div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 midnight:bg-yellow-900/30 rounded-lg">
-									<label className="flex items-center">
-										<input
-											type="checkbox"
-											checked={forceDelete}
-											onChange={(e) =>
-												setForceDelete(
-													e.target.checked
-												)
-											}
-											className="mr-2 h-4 w-4 accent-red-500 dark:accent-red-400 midnight:accent-red-300"
-										/>
-										<span className="text-sm text-yellow-700 dark:text-yellow-400 midnight:text-yellow-300">
-											I understand this will delete all associated projects
-										</span>
-									</label>
+						<div className="rounded-lg p-4 bg-red-50/30 dark:bg-red-900/5 midnight:bg-red-900/5 border border-red-100 dark:border-red-900/20 midnight:border-red-900/20">
+							<div className="flex items-center justify-between">
+								<div>
+									<h4 className="text-sm font-semibold text-red-600 dark:text-red-400 midnight:text-red-400 mb-0.5">
+										Delete Workspace
+									</h4>
+									<p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
+										Permanently remove this workspace and all its data
+									</p>
 								</div>
-							)}
-
-							{pendingDelete ? (
-								<div className="flex items-center gap-2">
-									<span className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-										Are you sure? This action cannot be undone.
-									</span>
-									<button
-										type="button"
-										onClick={handleDeleteWorkspace}
-										disabled={
-											isDeleting ||
-											(hasProjects && !forceDelete)
-										}
-										className="bg-red-600 hover:bg-red-700 text-white py-1.5 px-3 rounded-lg text-xs transition-colors disabled:opacity-50 flex items-center justify-center min-w-[100px]"
-									>
-										{isDeleting ? (
-											<Loader2
-												size={14}
-												className="animate-spin"
-											/>
-										) : (
-											"Yes, Delete"
-										)}
-									</button>
-									<button
-										type="button"
-										onClick={() => {
-											setPendingDelete(false);
-											setHasProjects(false);
-											setForceDelete(false);
-											setError(null);
-										}}
-										disabled={isDeleting}
-										className="hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 text-gray-700 dark:text-gray-300 midnight:text-gray-300 py-1.5 px-3 rounded-lg text-xs transition-colors"
-									>
-										Cancel
-									</button>
-								</div>
-							) : (
 								<button
 									type="button"
-									onClick={() =>
-										setPendingDelete(true)
-									}
-									className="hover:bg-red-50 dark:hover:bg-red-900/10 midnight:hover:bg-red-900/10 text-red-600 dark:text-red-500 midnight:text-red-500 py-1.5 px-3 rounded-lg text-xs transition-colors flex items-center gap-1.5"
+									onClick={() => setShowDeleteModal(true)}
+									className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-red-200 dark:border-red-800 midnight:border-red-800 text-red-600 dark:text-red-400 midnight:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 transition-colors"
 								>
 									<Trash2 className="w-3.5 h-3.5" />
-									Delete Workspace
+									Delete
 								</button>
-							)}
+							</div>
 						</div>
 					</div>
 				)}
@@ -544,6 +583,22 @@ const WorkspaceSettingsSection = ({
 						)}
 					</button>
 				</div>
+
+				{/* Delete Workspace Modal */}
+				<DeleteWorkspaceModal
+					isOpen={showDeleteModal}
+					onClose={() => {
+						setShowDeleteModal(false);
+						setHasProjects(false);
+						setForceDelete(false);
+					}}
+					onConfirm={handleDeleteWorkspace}
+					workspaceName={workspace?.name || 'this workspace'}
+					isDeleting={isDeleting}
+					hasProjects={hasProjects}
+					forceDelete={forceDelete}
+					setForceDelete={setForceDelete}
+				/>
 			</div>
 		);
 	};

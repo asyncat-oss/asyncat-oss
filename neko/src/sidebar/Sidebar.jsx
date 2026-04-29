@@ -122,6 +122,11 @@ const DynamicSidebar = ({
     () => globalProfileCache || { name: "", profilePicture: "" }
   );
   const [profileImageError, setProfileImageError] = useState(false);
+  const [dockItemsVisible, setDockItemsVisible] = useState(() => {
+    const stored = localStorage.getItem('dockItemsVisible');
+    if (stored) return JSON.parse(stored);
+    return { chat: true, workspace: true, calendar: true, files: true, models: true, tools: true, scheduler: true, profiles: true, search: true, settings: true };
+  });
 
   const { currentWorkspace } = useWorkspace();
 

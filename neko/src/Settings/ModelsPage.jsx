@@ -1555,6 +1555,54 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
   );
 };
 
+const LocalProviderCard = ({ name, found, running, baseUrl, models, onUse, onDismiss, providerAction }) => {
+  const hasModels = models && models.length > 0;
+  return (
+    <div className="rounded-3xl border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/10 p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-xl bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-semibold text-green-900 dark:text-green-100">{name} Detected</h3>
+              {running && <Badge color="green">Running</Badge>}
+            </div>
+            <p className="mt-1 text-xs text-green-700 dark:text-green-300 break-all">{baseUrl}</p>
+            {hasModels && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {models.slice(0, 5).map(m => (
+                  <span key={m} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200">{m}</span>
+                ))}
+                {models.length > 5 && <span className="text-xs text-green-600 dark:text-green-400">+{models.length - 5} more</span>}
+              </div>
+            )}
+          </div>
+        </div>
+        <button onClick={onDismiss} className="p-1 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-800 rounded-lg">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button
+          onClick={onUse}
+          disabled={Boolean(providerAction)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+        >
+          <Sparkles className="w-4 h-4" />
+          Use {name}
+        </button>
+        {hasModels && (
+          <span className="flex items-center text-xs text-green-700 dark:text-green-300 py-2">
+            {models.length} model{models.length !== 1 ? 's' : ''} available
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const LocalSwitchPrompt = ({ profile, serverStatus, onChoose, onClose, busy }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
     <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-5">
@@ -1693,9 +1741,34 @@ const ProvidersSection = ({
   const network = useNetworkStatus();
   const [modalState, setModalState] = useState(null);
   const [pendingActivate, setPendingActivate] = useState(null);
+  const [ollamaInfo, setOllamaInfo] = useState(null); // { found, running, models, baseUrl }
+  const [lmStudioInfo, setLmStudioInfo] = useState(null); // { found, running, models, baseUrl }
+  const [checkingLocal, setCheckingLocal] = useState(false);
   const [modelLists, setModelLists] = useState({});
   const [modelLoading, setModelLoading] = useState(null);
   const [modelPickerProfile, setModelPickerProfile] = useState(null);
+
+  // Auto-detect Ollama and LM Studio on mount
+  useEffect(() => {
+    if (checkingLocal) return;
+    setCheckingLocal(true);
+
+    Promise.all([
+      aiProviderApi.checkOllama(),
+      aiProviderApi.checkLMStudio(),
+    ])
+      .then(([ollamaRes, lmStudioRes]) => {
+        if (ollamaRes.success && ollamaRes.found && ollamaRes.running) {
+          setOllamaInfo({ found: true, running: true, models: ollamaRes.models || [], baseUrl: ollamaRes.baseUrl });
+        }
+        if (lmStudioRes.success && lmStudioRes.found && lmStudioRes.running) {
+          setLmStudioInfo({ found: true, running: true, models: lmStudioRes.models || [], baseUrl: lmStudioRes.baseUrl });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCheckingLocal(false));
+  }, []);
+
   const activeProfileId = activeConfig?.profile_id;
   const activeProviderName = activeConfig?.provider_id === 'llamacpp-builtin'
     ? 'Built-in llama.cpp'
@@ -1704,6 +1777,23 @@ const ProvidersSection = ({
   const localServerRunning = serverStatus?.status === 'ready' || serverStatus?.status === 'loading';
   const activeIsCloud = activeConfig?.provider_type === 'cloud' || activeConfig?.provider_type === 'custom';
   const NetworkIcon = network.fullyOnline ? Wifi : WifiOff;
+
+  const handleUseLocalProvider = async (providerId, info) => {
+    if (!info?.found) return;
+    const model = info.models[0] || (providerId === 'ollama' ? 'llama3.2' : 'local-model');
+    const payload = {
+      name: providerId === 'ollama' ? 'Ollama Auto' : 'LM Studio Auto',
+      provider_id: providerId,
+      provider_type: 'local',
+      base_url: info.baseUrl,
+      model,
+      supports_tools: false,
+      settings: {},
+    };
+    await onSave(null, payload);
+    if (providerId === 'ollama') setOllamaInfo(null);
+    else setLmStudioInfo(null);
+  };
 
   const activate = (profile) => {
     if (profile.provider_id !== 'llamacpp-builtin' && profile.provider_type !== 'local' && localServerRunning) {
@@ -1865,6 +1955,41 @@ const ProvidersSection = ({
           </div>
         )}
       </div>
+
+      {/* Detected Local Providers - Ollama & LM Studio */}
+      {(ollamaInfo?.found || lmStudioInfo?.found) && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Detected Local Providers</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {ollamaInfo?.found && (
+              <LocalProviderCard
+                name="Ollama"
+                found
+                running={ollamaInfo.running}
+                baseUrl={ollamaInfo.baseUrl}
+                models={ollamaInfo.models}
+                onUse={() => handleUseLocalProvider('ollama', ollamaInfo)}
+                onDismiss={() => setOllamaInfo(null)}
+                providerAction={providerAction}
+              />
+            )}
+            {lmStudioInfo?.found && (
+              <LocalProviderCard
+                name="LM Studio"
+                found
+                running={lmStudioInfo.running}
+                baseUrl={lmStudioInfo.baseUrl}
+                models={lmStudioInfo.models}
+                onUse={() => handleUseLocalProvider('lmstudio', lmStudioInfo)}
+                onDismiss={() => setLmStudioInfo(null)}
+                providerAction={providerAction}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {modalState && (
         <ProviderProfileModal

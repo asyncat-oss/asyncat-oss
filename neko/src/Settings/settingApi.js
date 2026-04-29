@@ -162,6 +162,14 @@ export const aiProviderApi = {
     return apiCall(`${AI_API_BASE}/catalog`);
   },
 
+  checkOllama: async () => {
+    return apiCall(`${AI_API_BASE}/check-ollama`);
+  },
+
+  checkLMStudio: async () => {
+    return apiCall(`${AI_API_BASE}/check-lm-studio`);
+  },
+
   listProfiles: async () => {
     return apiCall(`${AI_API_BASE}/profiles`);
   },

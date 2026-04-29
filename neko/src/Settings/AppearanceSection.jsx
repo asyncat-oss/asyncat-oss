@@ -15,7 +15,7 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
     setDockVisibility(value);
     localStorage.setItem('dockVisibility', value);
   };
-  
+
 
   return (
     <div className={`space-y-6 ${soraFontBase}`}>      {/* Theme Setting Card */}
@@ -26,7 +26,7 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
             Theme
           </h3>
         </div>
-        
+
         <div className="backdrop-blur-sm bg-gray-50/80 dark:bg-gray-700/80 midnight:bg-gray-800/80 p-4 rounded-lg border border-gray-200/30 dark:border-gray-600/30 midnight:border-gray-500/30">
           <div className="space-y-4">
             <div className="flex flex-col gap-3">              {/* Light mode option */}
@@ -35,32 +35,32 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
                   <Sun className="text-amber-500 dark:text-amber-400 midnight:text-amber-300 w-5 h-5 mr-3" />
                   <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Light Mode</span>
                 </div>
-                <input 
-                  type="radio" 
-                  name="theme" 
-                  checked={theme === 'light'} 
+                <input
+                  type="radio"
+                  name="theme"
+                  checked={theme === 'light'}
                   onChange={() => setThemeMode('light')}
                   className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
                 />
               </label>
-              
+
               {/* Dark mode option */}
               <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
                 <div className="flex items-center">
                   <Moon className="text-indigo-500 dark:text-indigo-400 midnight:text-indigo-300 w-5 h-5 mr-3" />
                   <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Dark Mode</span>
-                </div>                <input 
-                  type="radio" 
-                  name="theme" 
-                  checked={theme === 'dark'} 
+                </div>                <input
+                  type="radio"
+                  name="theme"
+                  checked={theme === 'dark'}
                   onChange={() => setThemeMode('dark')}
                   className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
                 />
               </label>
-              
+
 
                 {/* System preference option */}
-              <button 
+              <button
                 onClick={() => {
                   localStorage.removeItem('theme');
                   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -80,7 +80,7 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
               </button>
             </div>
           </div>
-          
+
           <p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-200 mt-4">
             Select your preferred theme or use your system's default setting.
           </p>
