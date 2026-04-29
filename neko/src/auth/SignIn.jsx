@@ -1,5 +1,5 @@
 // auth/SignIn.jsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import FormInput from './FormInput';
@@ -8,16 +8,20 @@ import useAuth from '../hooks/useAuth';
 const soraFontBase = "font-sora";
 
 const DEFAULT_EMAIL = 'admin@local';
-const DEFAULT_PASSWORD = '****';
+const DEFAULT_PASSWORD = '';
 
-const SignIn = ({ navigateToSignUp }) => {
+const SignIn = ({ initialEmail = DEFAULT_EMAIL }) => {
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
-  const [email, setEmail] = useState(DEFAULT_EMAIL);
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setEmail(initialEmail);
+  }, [initialEmail]);
 
   const handleSignIn = async (e) => {
     e.preventDefault();

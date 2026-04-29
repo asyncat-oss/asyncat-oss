@@ -4,7 +4,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 import { verifyUser } from './authMiddleware.js';
 
@@ -12,7 +11,6 @@ const router = express.Router();
 
 const JWT_SECRET     = process.env.JWT_SECRET     || 'change-this-secret-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-const SOLO_MODE      = process.env.SOLO_MODE !== 'false'; // default true
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,53 +54,14 @@ router.post('/login', async (req, res) => {
 });
 
 // ─── POST /api/auth/register ──────────────────────────────────────────────────
-// Disabled in solo mode (one user is seeded automatically).
+// Registration is disabled in the local build. The local account is seeded once
+// and can be edited from the first-run workspace setup or Settings.
 
-router.post('/register', async (req, res) => {
-  if (SOLO_MODE) {
-    return res.status(403).json({
-      success: false,
-      error: 'Registration is disabled in solo mode. Use SOLO_EMAIL / SOLO_PASSWORD in .env.',
-    });
-  }
-
-  const { email, password, name } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ success: false, error: 'Email and password are required' });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
-  }
-
-  try {
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existing) {
-      return res.status(409).json({ success: false, error: 'Email already in use' });
-    }
-
-    const userId      = randomUUID();
-    const workspaceId = randomUUID();
-    const hash        = await bcrypt.hash(password, 12);
-
-    db.transaction(() => {
-      db.prepare(`
-        INSERT INTO users (id, email, password_hash, name, created_at, updated_at)
-        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
-      `).run(userId, email, hash, name || null);
-
-      db.prepare(`
-        INSERT INTO workspaces (id, name, owner_id, created_at, updated_at)
-        VALUES (?, 'My Workspace', ?, datetime('now'), datetime('now'))
-      `).run(workspaceId, userId);
-    })();
-
-    const user  = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-    const token = issueToken(user);
-    res.status(201).json({ success: true, token, user: publicUser(user) });
-  } catch (err) {
-    console.error('[Auth] register error:', err.message);
-    res.status(500).json({ success: false, error: 'Registration failed' });
-  }
+router.post('/register', (_req, res) => {
+  res.status(403).json({
+    success: false,
+    error: 'Registration is disabled in the local build. Sign in with the local account.',
+  });
 });
 
 // ─── GET /api/auth/me ─────────────────────────────────────────────────────────
@@ -133,6 +92,66 @@ router.post('/update-password', verifyUser, async (req, res) => {
   }
 });
 
+// ─── PUT /api/auth/local-account ─────────────────────────────────────────────
+
+router.put('/local-account', verifyUser, async (req, res) => {
+  const { name, email, password } = req.body;
+  const nextName = typeof name === 'string' ? name.trim() : undefined;
+  const nextEmail = typeof email === 'string' ? email.trim().toLowerCase() : undefined;
+  const nextPassword = typeof password === 'string' ? password : undefined;
+
+  if (nextEmail !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$|^[^\s@]+@local$/i.test(nextEmail)) {
+    return res.status(400).json({ success: false, error: 'Enter a valid email address.' });
+  }
+
+  if (nextPassword !== undefined && nextPassword.length > 0 && nextPassword.length < 8) {
+    return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
+  }
+
+  try {
+    const current = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    if (!current) return res.status(404).json({ success: false, error: 'User not found' });
+
+    if (nextEmail && nextEmail !== current.email) {
+      const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(nextEmail, req.user.id);
+      if (existing) return res.status(409).json({ success: false, error: 'Email already in use.' });
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (nextName !== undefined) {
+      updates.push('name = ?');
+      params.push(nextName || null);
+    }
+    if (nextEmail !== undefined) {
+      updates.push('email = ?');
+      params.push(nextEmail);
+    }
+    if (nextPassword !== undefined && nextPassword.length > 0) {
+      const hash = await bcrypt.hash(nextPassword, 12);
+      updates.push('password_hash = ?');
+      params.push(hash);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ success: false, error: 'No account fields provided.' });
+    }
+
+    updates.push("updated_at = datetime('now')");
+    params.push(req.user.id);
+
+    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    const token = issueToken(user);
+    res.json({ success: true, token, user: publicUser(user) });
+  } catch (err) {
+    console.error('[Auth] local-account error:', err.message);
+    res.status(500).json({ success: false, error: 'Account update failed' });
+  }
+});
+
 // ─── POST /api/auth/logout ────────────────────────────────────────────────────
 // Stateless — client discards the token.
 
@@ -141,13 +160,14 @@ router.post('/logout', (_req, res) => {
 });
 
 // ─── GET /api/auth/status ────────────────────────────────────────────────────
-// Returns app mode (solo/server) for the auth UI
+// Returns local auth metadata for the auth UI
 
 router.get('/status', (_req, res) => {
+  const user = db.prepare('SELECT email FROM users LIMIT 1').get();
   res.json({
     success: true,
-    mode: SOLO_MODE ? 'solo' : 'server',
-    soloEmail: SOLO_MODE ? process.env.SOLO_EMAIL : null,
+    mode: 'local',
+    localEmail: user?.email || process.env.LOCAL_EMAIL || process.env.SOLO_EMAIL || 'admin@local',
   });
 });
 

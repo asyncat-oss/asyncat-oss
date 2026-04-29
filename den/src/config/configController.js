@@ -4,11 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..', '..');
+const ROOT = path.resolve(__dirname, '..', '..', '..');
 
 const ENV_FILE = path.join(ROOT, 'den', '.env');
 
-const SECRETS = ['JWT_SECRET', 'AI_API_KEY', 'SOLO_PASSWORD'];
+const SECRETS = ['JWT_SECRET', 'LOCAL_PASSWORD'];
+const LEGACY_SECRETS = ['SOLO_PASSWORD'];
 
 function maskSecret(value) {
   if (!value || value.length < 8) return '***';
@@ -67,7 +68,7 @@ export function getConfig(req, res) {
 
   const masked = {};
   for (const [k, v] of Object.entries(env)) {
-    masked[k] = SECRETS.includes(k) ? maskSecret(v) : v;
+    masked[k] = [...SECRETS, ...LEGACY_SECRETS].includes(k) ? maskSecret(v) : v;
   }
 
   res.json({ success: true, config: masked });
@@ -80,7 +81,7 @@ export function updateConfig(req, res) {
     return res.status(400).json({ success: false, error: 'key and value are required' });
   }
 
-  const allowed = [...SECRETS, 'SOLO_EMAIL', 'AI_BASE_URL', 'AI_MODEL', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH'];
+  const allowed = [...SECRETS, 'LOCAL_EMAIL', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH'];
   if (!allowed.includes(key)) {
     return res.status(400).json({ success: false, error: `Key not allowed: ${key}. Allowed: ${allowed.join(', ')}` });
   }

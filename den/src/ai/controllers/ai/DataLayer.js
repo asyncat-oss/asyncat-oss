@@ -19,7 +19,7 @@ class DataLayer {
     return null;
   }
 
-  // Solo mode: return the user's first workspace id.
+  // Local account build: return the user's first workspace id.
   async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, db = defaultSupabase) {
     try {
       if (preferredWorkspaceId) return preferredWorkspaceId;

@@ -1080,8 +1080,8 @@ case 'tools': {
       } catch (err) {
         const message = String(err?.message || '');
         if (/Auth failed|Authentication failed|401/.test(message)) {
-          tui.printErr('Backend auth failed. den/.env SOLO_PASSWORD does not match the backend database user.');
-          tui.printInfo('Sync the solo password, then try again.');
+          tui.printErr('Backend auth failed. den/.env LOCAL_PASSWORD does not match the local database account.');
+          tui.printInfo('Sync the local account password, then try again.');
           return;
         }
         tui.printErr('Backend not running. Starting it...');

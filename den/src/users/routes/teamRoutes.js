@@ -105,8 +105,24 @@ router.delete('/:teamId', auth, (req, res) => {
       .get(teamId, req.user.id);
     if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
 
-    // Projects are deleted automatically via ON DELETE CASCADE on team_id.
-    db.prepare('DELETE FROM workspaces WHERE id = ? AND owner_id = ?').run(teamId, req.user.id);
+    db.transaction(() => {
+      const projectIds = db.prepare('SELECT id FROM projects WHERE team_id = ?')
+        .all(teamId)
+        .map(project => project.id);
+
+      if (projectIds.length > 0) {
+        const placeholders = projectIds.map(() => '?').join(', ');
+        db.prepare(`DELETE FROM Events WHERE projectId IN (${placeholders})`).run(...projectIds);
+      }
+
+      db.prepare('DELETE FROM mcp_auth_codes WHERE workspace_id = ?').run(teamId);
+      db.prepare('DELETE FROM mcp_access_tokens WHERE workspace_id = ?').run(teamId);
+      db.prepare('DELETE FROM agent_patterns WHERE workspace_id = ?').run(teamId);
+
+      // Projects and workspace-owned rows are deleted automatically via ON DELETE CASCADE.
+      db.prepare('DELETE FROM workspaces WHERE id = ? AND owner_id = ?').run(teamId, req.user.id);
+    })();
+
     res.json({ success: true, message: `Workspace "${ws.name}" deleted` });
   } catch (err) {
     console.error('[teams] DELETE error:', err.message);
@@ -115,7 +131,7 @@ router.delete('/:teamId', auth, (req, res) => {
 });
 
 // ── POST /api/teams/:teamId/leave ──────────────────────────────────────────────
-// Solo mode: the user is always the owner, so leaving is a no-op / not allowed.
+// Local account build: the current user is always the owner, so leaving is not allowed.
 router.post('/:teamId/leave', auth, (req, res) => {
   const ws = db.prepare('SELECT owner_id FROM workspaces WHERE id = ?').get(req.params.teamId);
   if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
@@ -126,7 +142,7 @@ router.post('/:teamId/leave', auth, (req, res) => {
 });
 
 // ── GET /api/teams/:teamId/members ─────────────────────────────────────────────
-// Solo mode: the only "member" is the owner.
+// Local account build: the only "member" is the owner.
 router.get('/:teamId/members', auth, (req, res) => {
   try {
     const ws = db.prepare('SELECT id, owner_id FROM workspaces WHERE id = ?')

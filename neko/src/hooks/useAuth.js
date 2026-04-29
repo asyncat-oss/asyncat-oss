@@ -112,6 +112,16 @@ const useAuth = () => {
     }
   }, []);
 
+  const updateLocalAccount = useCallback(async (account) => {
+    setError(null);
+    try {
+      return await authService.updateLocalAccount(account);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
   // API call wrapper using authService's authenticatedFetch
   const apiCall = useCallback(async (url, options = {}) => {
     try {
@@ -138,6 +148,7 @@ const useAuth = () => {
     signUp,
     signOut,
     updatePassword,
+    updateLocalAccount,
 
     // API methods
     apiCall,

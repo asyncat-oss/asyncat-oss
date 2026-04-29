@@ -72,10 +72,10 @@ function hardenFirstRunEnv() {
 		setKey("den/.env", "JWT_SECRET", crypto.randomBytes(32).toString("hex"));
 		ok("Generated JWT_SECRET");
 	}
-	if (!env.SOLO_PASSWORD || env.SOLO_PASSWORD === "changeme") {
+	if (!env.LOCAL_PASSWORD || env.LOCAL_PASSWORD === "changeme") {
 		const password = `${crypto.randomBytes(2).toString("hex")}-${crypto.randomBytes(2).toString("hex")}-${crypto.randomBytes(2).toString("hex")}`;
-		setKey("den/.env", "SOLO_PASSWORD", password);
-		ok("Generated SOLO_PASSWORD");
+		setKey("den/.env", "LOCAL_PASSWORD", password);
+		ok("Generated LOCAL_PASSWORD");
 	}
 }
 

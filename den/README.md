@@ -79,14 +79,13 @@ npm start     # production
 
 Starts at `http://localhost:8716`.
 
-## Solo mode
+## Local account
 
-Default. One user, SQLite database, no network access needed.
+Default. One local user, SQLite database, no network access needed.
 
 ```env
-SOLO_MODE=true
-SOLO_EMAIL=admin@local
-SOLO_PASSWORD=changeme
+LOCAL_EMAIL=admin@local
+LOCAL_PASSWORD=changeme
 ```
 
 ## Database

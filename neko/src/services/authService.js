@@ -3,7 +3,6 @@ import { getToken, setToken, clearToken } from '../auth/tokenStore';
 import { performCompleteLogout } from '../utils/logoutUtils';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8716';
-let authMode = 'solo'; // default, fetched on init
 
 class AuthService {
   constructor() {
@@ -15,25 +14,12 @@ class AuthService {
     window.addEventListener('offline', () => { this.isOnline = false; });
 
     this.initializeSession();
-    this.fetchAuthStatus();
   }
 
-  // ── Auth status ──────────────────────────────────────────────────────
-
-  async fetchAuthStatus() {
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/status`);
-      if (res.ok) {
-        const data = await res.json();
-        authMode = data.mode || 'solo';
-      }
-    } catch {
-      // Default to solo mode on error
-    }
-  }
-
-  getAuthMode() {
-    return authMode;
+  async getAuthStatus() {
+    const res = await fetch(`${API_BASE}/api/auth/status`, { cache: 'no-store' });
+    if (!res.ok) return { mode: 'local', localEmail: 'admin@local' };
+    return res.json();
   }
 
   // ── Session bootstrap ──────────────────────────────────────────────────────
@@ -178,6 +164,24 @@ class AuthService {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Password update failed');
+  }
+
+  async updateLocalAccount({ name, email, password }) {
+    const token = this.getAccessToken();
+    const res = await fetch(`${API_BASE}/api/auth/local-account`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name, email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Account update failed');
+
+    if (data.token && data.user) {
+      setToken(data.token);
+      this.currentSession = { user: data.user, access_token: data.token };
+      this.notifyListeners('SIGNED_IN', this.currentSession);
+    }
+    return this.currentSession;
   }
 
   // ── Authenticated fetch ────────────────────────────────────────────────────

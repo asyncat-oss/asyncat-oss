@@ -29,7 +29,7 @@ const tips = [
 const AuthContainer = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [authMode, setAuthMode] = useState('solo');
+  const [localEmail, setLocalEmail] = useState('admin@local');
   const [tip] = useState(() => {
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
     return tips[dayOfYear % tips.length];
@@ -42,14 +42,20 @@ const AuthContainer = () => {
     return cleanup;
   }, []);
 
-  // Fetch auth mode on mount
+  // Fetch local account metadata on mount
   useEffect(() => {
-    const mode = authService.getAuthMode() || 'solo';
-    setAuthMode(mode);
-
-    if (mode === 'solo' && location.pathname === '/signup') {
-      navigate('/auth');
-    }
+    let cancelled = false;
+    authService.getAuthStatus()
+      .then((status) => {
+        if (!cancelled) setLocalEmail(status.localEmail || authService.currentSession?.user?.email || 'admin@local');
+      })
+      .catch(() => {
+        if (!cancelled) setLocalEmail(authService.currentSession?.user?.email || 'admin@local');
+      });
+    if (location.pathname === '/signup') navigate('/auth');
+    return () => {
+      cancelled = true;
+    };
   }, [location.pathname, navigate]);
 
   const getCurrentPage = () => {
@@ -73,7 +79,7 @@ const AuthContainer = () => {
               asyncat
             </h1>
             <p className="text-sm text-gray-500 dark:text-[#6b6b78] midnight:text-[#52525e]">
-              {authMode === 'solo' ? 'admin@local' : 'Sign in to continue'}
+              {localEmail}
             </p>
           </div>
 
@@ -82,14 +88,14 @@ const AuthContainer = () => {
             {currentPage === 'signup' ? (
               <SignUp navigateToSignIn={() => navigate('/auth')} />
             ) : (
-              <SignIn navigateToSignUp={() => navigate('/signup')} />
+              <SignIn initialEmail={localEmail} />
             )}
           </div>
 
-          {/* Solo mode hint */}
-          {authMode === 'solo' && currentPage === 'signin' && (
+          {/* Local account hint */}
+          {currentPage === 'signin' && (
             <p className="text-center text-xs text-gray-400 dark:text-[#44444e] midnight:text-[#33333c] mt-4">
-              Default credentials: admin@local / ****
+              Local account. You can change the name, email, and password during setup.
             </p>
           )}
         </div>

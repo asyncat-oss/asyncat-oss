@@ -116,11 +116,11 @@ export async function run() {
       ok('Generated JWT_SECRET');
     }
 
-    // Generate solo password if default
-    if (envContent.includes('SOLO_PASSWORD=changeme')) {
-      const soloPass = generatePassword();
-      envContent = envContent.replace(/SOLO_PASSWORD=changeme/, `SOLO_PASSWORD=${soloPass}`);
-      ok('Generated SOLO_PASSWORD');
+    // Generate local account seed password if default
+    if (envContent.includes('LOCAL_PASSWORD=changeme')) {
+      const localPass = generatePassword();
+      envContent = envContent.replace(/LOCAL_PASSWORD=changeme/, `LOCAL_PASSWORD=${localPass}`);
+      ok('Generated LOCAL_PASSWORD');
     }
 
     fs.writeFileSync(envPath, envContent);

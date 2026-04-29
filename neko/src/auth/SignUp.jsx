@@ -78,8 +78,8 @@ const SignUp = ({ navigateToSignIn }) => {
       let msg = 'Account creation failed.';
       if (err.message?.includes('Email already in use')) {
         msg = 'An account with this email already exists.';
-      } else if (err.message?.includes('disabled') || err.message?.includes('solo mode')) {
-        msg = 'Registration is disabled on this instance.';
+      } else if (err.message?.includes('disabled') || err.message?.includes('local build')) {
+        msg = 'Registration is disabled in the local build.';
       } else if (err.message?.includes('Invalid email')) {
         msg = 'Please provide a valid email address.';
       }

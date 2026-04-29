@@ -15,8 +15,8 @@ function getDenConfig() {
   const env = readEnv('den/.env');
   return {
     port:     env['PORT']          || '8716',
-    email:    env['SOLO_EMAIL']    || 'admin@local',
-    password: env['SOLO_PASSWORD'] || 'changeme',
+    email:    env['LOCAL_EMAIL']    || env['SOLO_EMAIL']    || 'admin@local',
+    password: env['LOCAL_PASSWORD'] || env['SOLO_PASSWORD'] || 'changeme',
   };
 }
 
@@ -40,7 +40,7 @@ export async function getToken(forceRefresh = false) {
     return _token;
   }
 
-  // Fall back to credential-based login (SOLO_EMAIL / SOLO_PASSWORD)
+  // Fall back to credential-based login (LOCAL_EMAIL / LOCAL_PASSWORD)
   const { port, email, password } = getDenConfig();
   const base = `http://localhost:${port}`;
 

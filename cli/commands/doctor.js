@@ -140,7 +140,7 @@ export function run() {
 
   // 10. data/asyncat.db
   if (fs.existsSync(path.join(ROOT, 'den/data/asyncat.db'))) pass('den/data/asyncat.db exists');
-  else warnIt('data/asyncat.db not found — will be created on first run (SOLO_MODE)');
+  else warnIt('data/asyncat.db not found — will be created on first run');
 
   // 11. Local engine
   const env = readEnv('den/.env');

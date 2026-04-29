@@ -19,11 +19,10 @@ const readOnlyCls =
 
 const ServerSection = ({ session: _session }) => {
   const [config, setConfig] = useState({});
-  const [_secrets, _setSecrets] = useState({});
+  const [, setSecrets] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
-  const [_showSecrets, _setShowSecrets] = useState({});
 
   const [editValues, setEditValues] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
@@ -83,17 +82,17 @@ const ServerSection = ({ session: _session }) => {
 
   const editableSecrets = [
     { key: 'JWT_SECRET', label: 'JWT Secret', placeholder: 'Enter JWT secret key' },
-    { key: 'AI_API_KEY', label: 'AI API Key', placeholder: 'sk-...' },
-    { key: 'SOLO_PASSWORD', label: 'Solo Password', placeholder: 'Enter solo password' },
   ];
 
   const nonEditableConfig = [
     { key: 'PORT', label: 'Server Port' },
     { key: 'NODE_ENV', label: 'Environment' },
     { key: 'FRONTEND_URL', label: 'Frontend URL' },
-    { key: 'SOLO_EMAIL', label: 'Solo Email' },
-    { key: 'AI_BASE_URL', label: 'AI Base URL' },
-    { key: 'AI_MODEL', label: 'AI Model' },
+    { key: 'LOCAL_EMAIL', label: 'Seed Email' },
+    { key: 'DB_PATH', label: 'Database Path' },
+    { key: 'LLAMA_SERVER_PORT', label: 'Local Model Port' },
+    { key: 'MODELS_PATH', label: 'Models Path' },
+    { key: 'STORAGE_PATH', label: 'Storage Path' },
   ];
 
   if (loading) {
@@ -133,7 +132,7 @@ const ServerSection = ({ session: _session }) => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Update sensitive values. Changes require a server restart to take effect.
+          Update server-level secrets. Account password changes belong in Profile or the setup walkthrough.
         </p>
 
         <div className="space-y-4">

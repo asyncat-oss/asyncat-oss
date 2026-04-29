@@ -36,8 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- ─── Workspaces (replaces public.teams) ──────────────────────────────────────
--- Solo-mode: one row is auto-seeded at first boot.
--- Server-mode: each account gets a workspace on registration.
+-- The local account creates its workspace from the first-run walkthrough.
 
 CREATE TABLE IF NOT EXISTS workspaces (
   id          TEXT PRIMARY KEY,
