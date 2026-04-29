@@ -41,6 +41,9 @@ import attachmentRoutes from './notes/routes/attachmentRoutes.js';
 // ─── Config ────────────────────────────────────────────────────────────────────
 import configRouter from './config/configRouter.js';
 
+// ─── Update ───────────────────────────────────────────────────────────────────
+import updateRouter from './update/updateRouter.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
@@ -126,6 +129,9 @@ app.use('/api/attachments', attachmentRoutes);
 
 // ─── Routes: Config ──────────────────────────────────────────────────────────
 app.use('/api/config', configRouter);
+
+// ─── Routes: Update ───────────────────────────────────────────────────────────
+app.use('/api/update', updateRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

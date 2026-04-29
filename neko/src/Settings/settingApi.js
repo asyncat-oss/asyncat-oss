@@ -528,6 +528,77 @@ export const configApi = {
 };
 
 // ===========================================
+// UPDATE API FUNCTIONS
+// ===========================================
+
+const UPDATE_API_BASE = import.meta.env.VITE_MAIN_URL + '/api/update';
+
+export const updateApi = {
+  // Get local git info (fast, no network)
+  getStatus: async () => {
+    return apiCall(`${UPDATE_API_BASE}/status`);
+  },
+
+  // Fetch from remote and return how many commits behind we are
+  check: async () => {
+    return apiCall(`${UPDATE_API_BASE}/check`, { method: 'POST' });
+  },
+
+  // Stream the update process. Returns a cleanup function.
+  // onLog(text), onDone(text), onError(text) are callbacks.
+  apply: (onLog, onDone, onError) => {
+    let stopped = false;
+
+    (async () => {
+      try {
+        const token = authService.getAccessToken();
+        const res = await fetch(`${UPDATE_API_BASE}/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: 'include',
+        });
+
+        if (!res.ok || !res.body) {
+          const err = await res.json().catch(() => ({}));
+          onError?.(err.error || 'Update request failed');
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (!stopped) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // keep incomplete line
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const { type, text } = JSON.parse(line.slice(6));
+              if (type === 'log') onLog?.(text);
+              else if (type === 'done') onDone?.(text);
+              else if (type === 'error') onError?.(text);
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        if (!stopped) onError?.(e.message || 'Connection lost');
+      }
+    })();
+
+    return () => { stopped = true; };
+  },
+};
+
+// ===========================================
 // ERROR HANDLING UTILITIES
 // ===========================================
 
