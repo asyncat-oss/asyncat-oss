@@ -137,17 +137,23 @@ export const handleFileUpload = (req, res, next) => {
       });
     }
 
+    if (!fileBuffer) {
+      return res.status(400).json({
+        success: false,
+        error: "No file field 'file' found in multipart upload",
+        hint: "Ensure the FormData append uses field name 'file'",
+      });
+    }
+
     // Attach fields and file info to request object
     req.body = fields;
 
-    if (fileBuffer) {
-      req.file = {
-        buffer: fileBuffer,
-        originalname: fileName,
-        mimetype: fileMimetype,
-        size: fileSize,
-      };
-    }
+    req.file = {
+      buffer: fileBuffer,
+      originalname: fileName,
+      mimetype: fileMimetype,
+      size: fileSize,
+    };
 
     next();
   });

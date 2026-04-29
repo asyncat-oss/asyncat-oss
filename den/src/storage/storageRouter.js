@@ -5,6 +5,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { getStorageSummary } from './storageService.js';
 
 const router = express.Router();
 
@@ -17,6 +18,16 @@ const ALLOWED_CONTAINERS = ['notes', 'kanban-attachments'];
 const sanitizePath = (inputPath) => {
   return path.normalize(inputPath).replace(/^(\.\.(\/|\\|$))+/, '');
 };
+
+router.get('/summary', (req, res) => {
+  try {
+    const summary = getStorageSummary();
+    res.json(summary);
+  } catch (err) {
+    console.error('Storage summary error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 router.get('/:container/*', (req, res) => {
   const { container } = req.params;
