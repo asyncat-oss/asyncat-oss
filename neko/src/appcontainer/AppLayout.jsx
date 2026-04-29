@@ -6,6 +6,7 @@ import eventBus from '../utils/eventBus.js';
 import { useCommandCenter } from '../CommandCenter/CommandCenterContextEnhanced.jsx';
 import { useUnauthorizedError } from '../error/ErrorBoundary.jsx';
 import { initializeTheme, setupThemeListener } from '../auth/utils.js';
+import { loadKeyboardShortcuts } from '../utils/keyboardShortcutsUtils.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 
@@ -272,10 +273,17 @@ const AppLayout = ({ session, onSignOut }) => {
   // Keyboard shortcuts for mode switching
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === '1') { e.preventDefault(); navigate('/home'); }
-        else if (e.key === '2') { e.preventDefault(); navigate('/workspace'); }
-        else if (e.key === '3') { e.preventDefault(); navigate('/calendar'); }
+      const shortcuts = loadKeyboardShortcuts();
+      const match = Object.values(shortcuts).find(s => {
+        return s.key === e.key && (e.ctrlKey || e.metaKey);
+      });
+      if (!match) return;
+      e.preventDefault();
+      switch (match.action) {
+        case 'navHome': navigate('/home'); break;
+        case 'navWorkspace': navigate('/workspace'); break;
+        case 'navCalendar': navigate('/calendar'); break;
+        default: break;
       }
     };
     document.addEventListener('keydown', handleKeyDown);

@@ -21,10 +21,7 @@ import {
 
 import UniversalSearch from "./UniversalSearch";
 import { useWorkspace } from "../contexts/WorkspaceContext";
-
-// ── utilities ─────────────────────────────────────────────────────────────────
-
-// ── global profile cache ──────────────────────────────────────────────────────
+import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 
 let globalProfileCache = null;
 let profileCacheInitialized = false;
@@ -115,6 +112,9 @@ const DynamicSidebar = ({
   const location = useLocation();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isDockVisible, setIsDockVisible] = useState(() => {
+    return localStorage.getItem('dockVisibility') !== 'hover';
+  });
 
   // Profile state (for dock avatar only)
   const API_URL = import.meta.env.VITE_USER_URL;
@@ -124,6 +124,45 @@ const DynamicSidebar = ({
   const [profileImageError, setProfileImageError] = useState(false);
 
   const { currentWorkspace } = useWorkspace();
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const dockVis = localStorage.getItem('dockVisibility');
+      setIsDockVisible(dockVis !== 'hover');
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const dockVis = localStorage.getItem('dockVisibility');
+      setIsDockVisible(dockVis !== 'hover');
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (localStorage.getItem('dockVisibility') !== 'hover') return;
+
+    const handleMouseMove = (e) => {
+      if (e.clientY > window.innerHeight - 100) {
+        setIsDockVisible(true);
+      }
+    };
+
+    const handleMouseLeave = () => {
+      setIsDockVisible(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
 
   // Fetch profile data (for dock avatar)
   const userId = useMemo(() => session?.user?.id, [session?.user?.id]);
@@ -182,22 +221,46 @@ const DynamicSidebar = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); setIsSearchOpen(true); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === ",") { e.preventDefault(); navigate("/settings/profile"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "n") { e.preventDefault(); onNewChat(); }
-      // Numbered dock shortcuts: Ctrl/Cmd + 1-7
-      else if ((e.ctrlKey || e.metaKey) && e.key === "1") { e.preventDefault(); onNewChat(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "2") { e.preventDefault(); navigate("/all-chats"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "3") { e.preventDefault(); navigate("/workspace"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "4") { e.preventDefault(); navigate("/calendar"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "5") { e.preventDefault(); navigate("/files"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "6") { e.preventDefault(); navigate("/models"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "7") { e.preventDefault(); navigate("/agents/tools"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "8") { e.preventDefault(); navigate("/agents/schedule"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "9") { e.preventDefault(); navigate("/agents/profiles"); }
+      const shortcuts = loadKeyboardShortcuts();
+
+      const match = Object.values(shortcuts).find(s => {
+        const keyMatch = s.key === e.key;
+        const ctrlMatch = s.ctrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey);
+        return keyMatch && ctrlMatch;
+      });
+
+      if (!match) return;
+      e.preventDefault();
+
+      switch (match.action) {
+        case 'openSearch': setIsSearchOpen(true); break;
+        case 'openSettings': navigate("/settings/profile"); break;
+        case 'newChat': onNewChat(); break;
+        case 'navHome': onNewChat(); break;
+        case 'navChat': navigate("/all-chats"); break;
+        case 'navWorkspace': navigate("/workspace"); break;
+        case 'navCalendar': navigate("/calendar"); break;
+        case 'navFiles': navigate("/files"); break;
+        case 'navModels': navigate("/models"); break;
+        case 'navTools': navigate("/agents/tools"); break;
+        case 'navScheduler': navigate("/agents/schedule"); break;
+        case 'navProfiles': navigate("/agents/profiles"); break;
+        default: break;
+      }
     };
+
+    const handleShortcutsChange = () => {
+      document.removeEventListener("keydown", handler);
+      document.addEventListener("keydown", handler);
+    };
+
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    window.addEventListener('keyboard-shortcuts-changed', handleShortcutsChange);
+
+    return () => {
+      document.removeEventListener("keydown", handler);
+      window.removeEventListener('keyboard-shortcuts-changed', handleShortcutsChange);
+    };
   }, [onNewChat]);
 
   // Active states
@@ -214,9 +277,17 @@ const DynamicSidebar = ({
 
   return (
     <>
+      {/* ── Hover Trigger Zone (only when dockVisibility === 'hover') ── */}
+      {localStorage.getItem('dockVisibility') === 'hover' && !isDockVisible && (
+        <div
+          className="fixed bottom-0 left-0 right-0 h-24 z-40"
+          onMouseEnter={() => setIsDockVisible(true)}
+        />
+      )}
+
       {/* ── The Dock ── */}
       <div
-        className="
+        className={`
           fixed bottom-4 left-1/2 -translate-x-1/2 z-50
           flex items-center gap-0.5 px-2.5 py-2
           bg-white/85 dark:bg-gray-900/85 midnight:bg-gray-950/90
@@ -224,7 +295,19 @@ const DynamicSidebar = ({
           border border-gray-200/70 dark:border-white/[0.08] midnight:border-white/[0.05]
           rounded-2xl
           shadow-[0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.55)] midnight:shadow-[0_8px_40px_rgba(0,0,0,0.7)]
-        "
+          transition-opacity duration-200
+          ${isDockVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+        `}
+        onMouseEnter={() => {
+          if (localStorage.getItem('dockVisibility') === 'hover') {
+            setIsDockVisible(true);
+          }
+        }}
+        onMouseLeave={() => {
+          if (localStorage.getItem('dockVisibility') === 'hover') {
+            setIsDockVisible(false);
+          }
+        }}
       >
         {/* Logo — new chat */}
         <DockItem label="New Chat  ⌘N" onClick={onNewChat} isActive={isOnHome}>
