@@ -26,7 +26,7 @@ import HabitsIndex from "../habits/HabitsIndex";
 import { ColumnProvider } from "../views/context/ColumnProvider";
 import { CardProvider } from "../views/context/CardProvider";
 
-import ProjectSettingsModal from "./components/ProjectSettingsModal";
+
 import { useWorkspace } from "../contexts/WorkspaceContext";
 
 const soraFontBase = "font-sora";
@@ -40,7 +40,6 @@ const PROJECT_VIEWS = [
 	{ key: 'gallery',  label: 'Gallery',  Icon: LayoutGrid },
 	{ key: 'notes',    label: 'Notes',    Icon: FileText },
 	{ key: 'habits',   label: 'Habits',   Icon: Target },
-	{ key: 'settings', label: 'Settings', Icon: Settings },
 ];
 
 // Comprehensive skeleton component for the project overview
@@ -375,20 +374,6 @@ const ProjectOverview = React.memo(({
 						selectedProject={projectData}
 						session={session}
 						currentPage={currentTab}
-					/>
-				);
-
-			case "settings":
-				return (
-					<ProjectSettingsModal
-						isPage
-						project={projectInfo}
-						onClose={() => {}}
-						onSave={handleSaveEdit}
-						onDelete={handleDeleteProject}
-						session={session}
-						onLocalUpdate={updateLocalProjectPreferences}
-						initialTab="general"
 					/>
 				);
 
