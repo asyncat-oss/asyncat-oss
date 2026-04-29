@@ -42,6 +42,9 @@ import attachmentRoutes from './notes/routes/attachmentRoutes.js';
 // ─── Config ────────────────────────────────────────────────────────────────────
 import configRouter from './config/configRouter.js';
 
+// ─── Storage ───────────────────────────────────────────────────────────────────
+import storageRouter from './storage/storageRouter.js';
+
 // ─── Update ───────────────────────────────────────────────────────────────────
 import updateRouter from './update/updateRouter.js';
 
@@ -132,6 +135,9 @@ app.use('/api/attachments', attachmentRoutes);
 
 // ─── Routes: Config ──────────────────────────────────────────────────────────
 app.use('/api/config', configRouter);
+
+// ─── Routes: Storage ─────────────────────────────────────────────────────────
+app.use('/api/storage', storageRouter);
 
 // ─── Routes: Update ───────────────────────────────────────────────────────────
 app.use('/api/update', updateRouter);

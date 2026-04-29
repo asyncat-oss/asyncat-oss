@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { SlidersHorizontal, Lock, Moon, Sun, Server, LogOut, ArrowUpCircle } from 'lucide-react';
+import { SlidersHorizontal, Lock, Moon, Sun, Server, LogOut, ArrowUpCircle, HardDrive } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 
 // Import our components
@@ -9,6 +9,7 @@ import SecuritySection from './SecuritySection';
 import AppearanceSection from './AppearanceSection';
 import ServerSection from './ServerSection';
 import UpdateSection from './UpdateSection';
+import StorageSection from './StorageSection';
 
 const SettingsPage = () => {
   const { tab } = useParams();
@@ -114,6 +115,11 @@ const SettingsPage = () => {
       icon: <Server className="w-4 h-4" />,
     },
     {
+      id: 'storage',
+      label: 'Storage',
+      icon: <HardDrive className="w-4 h-4" />,
+    },
+    {
       id: 'updates',
       label: 'Updates',
       icon: <ArrowUpCircle className="w-4 h-4" />,
@@ -138,6 +144,7 @@ const SettingsPage = () => {
       case 'security':    return <SecuritySection />;
       case 'appearance':  return <AppearanceSection theme={theme} setThemeMode={setThemeMode} />;
       case 'server':      return <ServerSection session={session} />;
+      case 'storage':     return <StorageSection />;
       case 'updates':     return <UpdateSection />;
       default:
         return (

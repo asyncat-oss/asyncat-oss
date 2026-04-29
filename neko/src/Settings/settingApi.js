@@ -590,6 +590,16 @@ export const configApi = {
 };
 
 // ===========================================
+// STORAGE API FUNCTIONS
+// ===========================================
+
+export const storageApi = {
+  getSummary: async () => {
+    return apiCall(`${MAIN_URL}/api/storage/summary`);
+  },
+};
+
+// ===========================================
 // UPDATE API FUNCTIONS
 // ===========================================
 
