@@ -1,6 +1,6 @@
 // components/TopMenuBar.jsx - OS-style top menu bar
 import { useState, useEffect } from "react";
-import { ServerCrash, Wifi, WifiOff, Search } from "lucide-react";
+import { ServerCrash, Wifi, WifiOff, Search, RotateCw } from "lucide-react";
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 // Time formatting helper
@@ -147,6 +147,15 @@ const TopMenuBar = ({ onSearchOpen }) => {
             title="Search"
           >
             <Search className="w-4 h-4" />
+          </button>
+
+          {/* Refresh button */}
+          <button
+            onClick={() => window.location.reload()}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400 midnight:text-gray-400"
+            title="Refresh"
+          >
+            <RotateCw className="w-4 h-4" />
           </button>
 
           <div className="w-px h-5 bg-gray-300/50 dark:bg-gray-700/50 midnight:bg-gray-800/50" />

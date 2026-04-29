@@ -16,7 +16,7 @@ const isTopMenuBarVisible = () => {
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
 import CreateProjectFlow from '../projects/components/CreateProjectFlow.jsx';
-import CreateWorkspaceModal from '../sidebar/CreateWorkSpaceModal.jsx';
+import WelcomePage from '../WelcomePage.jsx';
 
 const AppLayout = ({ session, onSignOut }) => {
   const navigate = useNavigate();
@@ -408,19 +408,13 @@ const AppLayout = ({ session, onSignOut }) => {
     );
   }
 
-  // If user has no workspaces, show only the CreateWorkspaceModal
+  // If user has no workspaces, show only the WelcomePage
   if (shouldShowCreateWorkspace) {
     return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
-        <TopMenuBar />
-        <CreateWorkspaceModal
-          isOpen={true}
-          onClose={() => {}}
-          canClose={false}
-          session={session}
-          onTeamCreated={handleWorkspaceCreated}
-        />
-      </div>
+      <WelcomePage
+        session={session}
+        onTeamCreated={handleWorkspaceCreated}
+      />
     );
   }
 
