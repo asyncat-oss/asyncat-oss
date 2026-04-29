@@ -180,7 +180,7 @@ export function listModels() {
       });
 
     // Add custom paths
-    const customEntries = db.prepare('SELECT * FROM custom_model_paths WHERE type = "gguf"').all();
+    const customEntries = db.prepare('SELECT * FROM custom_model_paths WHERE type = ?').all('gguf');
     const customModels = customEntries.map(entry => {
       try {
         const stat = fs.statSync(entry.path);

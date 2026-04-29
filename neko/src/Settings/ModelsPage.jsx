@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff, FolderOpen } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import MlxModelsSection from './MlxModelsSection';
-import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';
+import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from './settingApi.js';
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
@@ -2154,11 +2154,13 @@ const ModelsPage = () => {
   const loadModelList = async () => {
     setLoadingModels(true);
     try {
-      const [ggufModels, mlxModels] = await Promise.all([
+      const [ggufRes, mlxRes] = await Promise.all([
         localModelsApi.listModels(),
-        mlxApi.listModels().catch(() => [])
+        mlxApi.listModels().catch(() => ({ models: [] }))
       ]);
-      
+      const ggufModels = ggufRes?.models ?? [];
+      const mlxModels = mlxRes?.models ?? [];
+
       const unifiedModels = [
         ...ggufModels.map(m => ({ ...m, engineType: 'gguf' })),
         ...mlxModels.map(m => ({ ...m, engineType: 'mlx', filename: m.path }))
