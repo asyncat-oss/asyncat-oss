@@ -1,23 +1,40 @@
 // CommandCenterV2Enhanced.jsx
 
 // ── Agent status badge (module-level to avoid re-mount on every render) ────────
-function AgentStatusBadge({ session }) {
+function formatDuration(ms) {
+  if (!ms || ms < 0) return null;
+  const totalSecs = Math.floor(ms / 1000);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+function AgentStatusBadge({ session, duration }) {
   if (!session) return null;
   const hasAnswer = session.scratchpad?.finalAnswer || session.status === 'complete' || session.status === 'completed';
   const hasError  = session.status === 'error' || session.status === 'failed';
+
+  // Derive duration from session timestamps when not provided directly
+  const displayDuration = duration ?? (() => {
+    if (!session.createdAt || !session.updatedAt) return null;
+    const ms = new Date(session.updatedAt) - new Date(session.createdAt);
+    return ms > 1000 ? ms : null;
+  })();
+  const durationLabel = formatDuration(displayDuration);
+
   if (hasError) return (
     <span className="flex items-center gap-1 text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800/50">
-      <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Failed
+      <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Failed{durationLabel && ` · ${durationLabel}`}
     </span>
   );
   if (!hasAnswer) return (
     <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/50">
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Incomplete
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Incomplete{durationLabel && ` · ${durationLabel}`}
     </span>
   );
   return (
     <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/50">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Complete
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Complete{durationLabel && ` · ${durationLabel}`}
     </span>
   );
 }
@@ -187,74 +204,74 @@ function cleanAgentActivityDetail(detail) {
 }
 
 function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false }) {
-  const latestItemId = items[items.length - 1]?.id;
+  const feedEndRef = useRef(null);
+
+  useEffect(() => {
+    if (isRunning) feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [items.length, isRunning]);
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex items-center justify-between">
-        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-          Activity
-        </h2>
-        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-          {items.length}
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex items-center gap-2">
+        <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+          Steps
         </span>
+        {isLoading ? (
+          <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+        ) : isRunning ? (
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+        ) : (
+          <span className="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{items.length}</span>
+        )}
       </div>
 
-      <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-        <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-          {isLoading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
-          ) : isRunning ? (
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          ) : (
-            <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600" />
-          )}
-          <span className="truncate">
-            {isLoading ? 'Loading run' : isRunning ? 'Agent running' : 'Run idle'}
-          </span>
+      <div className="flex-1 overflow-y-auto">
+        {items.length === 0 && !isLoading && (
+          <p className="px-4 py-5 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+            Nothing yet.
+          </p>
+        )}
+        <div className="py-1.5 px-1.5 space-y-px">
+          {items.map((item, i) => {
+            const detail = cleanAgentActivityDetail(item.detail);
+            const isLast = i === items.length - 1;
+
+            return (
+              <div
+                key={item.id}
+                title={detail || item.label}
+                className={`rounded-lg px-2.5 py-2 transition-colors ${
+                  isLast && isRunning
+                    ? 'bg-blue-50/50 dark:bg-blue-950/20 midnight:bg-blue-950/20'
+                    : 'hover:bg-gray-100/60 dark:hover:bg-gray-800/40 midnight:hover:bg-slate-800/40'
+                }`}
+              >
+                <div className="flex items-start gap-2 min-w-0">
+                  <span className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 ${item.dot}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 truncate leading-none">
+                        {item.label}
+                      </span>
+                      {item.duration && (
+                        <span className="shrink-0 text-[10px] tabular-nums text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                          · {item.duration}
+                        </span>
+                      )}
+                    </div>
+                    {detail && (
+                      <p className="mt-0.5 text-[10px] leading-snug text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2 break-all">
+                        {detail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={feedEndRef} />
         </div>
       </div>
-
-      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
-        {items.length === 0 && (
-          <div className="px-2 py-4 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-            No activity yet.
-          </div>
-        )}
-        {items.map((item) => {
-          const Icon = item.icon;
-          const detail = cleanAgentActivityDetail(item.detail);
-          const isLatest = item.id === latestItemId;
-
-          return (
-            <div
-              key={item.id}
-              title={detail || item.label}
-              className={`group w-full rounded px-2 py-2 transition-colors ${
-                isLatest
-                  ? 'bg-gray-100/80 dark:bg-gray-800/70 midnight:bg-slate-800/70'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Icon className={`w-3.5 h-3.5 shrink-0 ${item.tone}`} />
-                <span className={`text-xs leading-snug truncate ${
-                  isLatest
-                    ? 'font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200'
-                    : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'
-                }`}>
-                  {item.label}
-                </span>
-              </div>
-              {detail && (
-                <p className="mt-1 ml-5 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2 break-words">
-                  {detail}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </nav>
     </div>
   );
 }
@@ -371,6 +388,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   });
   const agentAbortRef = useRef(null);
   const agentFeedEndRef = useRef(null);
+  const agentRunStartTime = useRef(null);
+  const [agentElapsedSecs, setAgentElapsedSecs] = useState(0);
+  const [agentRunDuration, setAgentRunDuration] = useState(null);
+
+  useEffect(() => {
+    if (!agentRunning) return;
+    setAgentElapsedSecs(0);
+    const interval = setInterval(() => {
+      setAgentElapsedSecs(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [agentRunning]);
 
   // ── Agent profiles ──────────────────────────────────────────────────────────
   const [agentProfiles, setAgentProfiles] = useState([]);
@@ -463,36 +492,55 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         if (event.type === 'user_goal') {
           return {
             id: `${index}-goal`,
-            icon: MessageSquare,
-            tone: 'text-gray-500',
-            label: 'Goal',
-            detail: event.data?.goal || event.data?.content || '',
+            type: 'goal',
+            dot: 'bg-gray-300 dark:bg-gray-600',
+            label: event.data?.goal || event.data?.content || 'Goal',
+            detail: null,
+          };
+        }
+        if (event.type === 'thinking') {
+          const words = (event.data?.thought || '').trim().split(/\s+/).filter(Boolean).length;
+          return {
+            id: `${index}-thinking`,
+            type: 'thinking',
+            dot: 'bg-gray-300 dark:bg-gray-600',
+            label: 'Thinking',
+            detail: words > 0 ? `${words} words` : null,
           };
         }
         if (event.type === 'tool_start') {
+          const toolName = event.data?.tool || 'tool';
           const failed = event.result && (event.result.error || event.result.success === false);
+          const pending = event.result === undefined;
+          const durationMs = event.completedAt && event.arrivedAt ? event.completedAt - event.arrivedAt : null;
+          const durationStr = durationMs != null ? (
+            durationMs < 1000 ? '<1s' :
+            durationMs < 60000 ? `${Math.round(durationMs / 1000)}s` :
+            `${Math.floor(durationMs / 60000)}m ${Math.round((durationMs % 60000) / 1000)}s`
+          ) : null;
           return {
             id: `${index}-tool`,
-            icon: Wrench,
-            tone: failed ? 'text-red-500' : event.result === undefined ? 'text-amber-500' : 'text-emerald-500',
-            label: event.result === undefined ? 'Running tool' : failed ? 'Tool failed' : 'Tool finished',
-            detail: event.data?.tool || 'tool',
+            type: 'tool',
+            dot: failed ? 'bg-red-400' : pending ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400',
+            label: toolName,
+            detail: failed ? (event.result?.error || 'failed') : null,
+            duration: pending ? null : durationStr,
           };
         }
         if (event.type === 'permission_request') {
           return {
             id: `${index}-permission`,
-            icon: ShieldCheck,
-            tone: event.data?.resolved ? 'text-emerald-500' : 'text-amber-500',
-            label: event.data?.resolved ? 'Permission resolved' : 'Permission needed',
+            type: 'permission',
+            dot: event.data?.resolved ? 'bg-emerald-400' : 'bg-amber-400',
+            label: event.data?.resolved ? 'Approved' : 'Needs approval',
             detail: event.data?.tool || event.data?.description || '',
           };
         }
         if (event.type === 'answer') {
           return {
             id: `${index}-answer`,
-            icon: Bot,
-            tone: 'text-blue-500',
+            type: 'answer',
+            dot: 'bg-gray-400 dark:bg-gray-500',
             label: 'Answer',
             detail: event.data?.answer || '',
           };
@@ -500,8 +548,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         if (event.type === 'error') {
           return {
             id: `${index}-error`,
-            icon: X,
-            tone: 'text-red-500',
+            type: 'error',
+            dot: 'bg-red-400',
             label: 'Error',
             detail: event.data?.message || '',
           };
@@ -509,10 +557,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         if (event.type === 'status') {
           return {
             id: `${index}-status`,
-            icon: Activity,
-            tone: 'text-gray-400',
-            label: 'Status',
-            detail: event.data?.message || '',
+            type: 'status',
+            dot: 'bg-gray-300 dark:bg-gray-600',
+            label: event.data?.message || 'Status',
+            detail: null,
           };
         }
         return null;
@@ -775,12 +823,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
     setAgentEvents(prev => [
       ...prev,
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString() } },
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString() }, arrivedAt: Date.now() },
     ]);
 
     setAgentStreamingText('');
     setAgentRunning(true);
+    setAgentRunDuration(null);
     setAgentCurrentSession(null);
+    agentRunStartTime.current = Date.now();
     const controller = new AbortController();
     agentAbortRef.current = controller;
 
@@ -808,11 +858,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           capturedFinalAnswer = event.data?.answer || '';
         }
         if (event.type === 'tool_result') {
+          const completedAt = Date.now();
           setAgentEvents(prev => {
             const updated = [...prev];
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].type === 'tool_start' && updated[i].data?.tool === event.data?.tool && updated[i].result === undefined) {
-                updated[i] = { ...updated[i], result: event.data?.result };
+                updated[i] = { ...updated[i], result: event.data?.result, completedAt };
                 return updated;
               }
             }
@@ -820,7 +871,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           });
           continue;
         }
-        setAgentEvents(prev => [...prev, event]);
+        setAgentEvents(prev => [...prev, { ...event, arrivedAt: Date.now() }]);
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -836,6 +887,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           { role: 'assistant', content: capturedFinalAnswer },
         ]);
       }
+      if (agentRunStartTime.current) {
+        setAgentRunDuration(Date.now() - agentRunStartTime.current);
+        agentRunStartTime.current = null;
+      }
       setAgentStreamingText('');
       setAgentRunning(false);
       agentAbortRef.current = null;
@@ -846,6 +901,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const handleAgentStop = useCallback(() => {
     if (!agentAbortRef.current) return;
     agentAbortRef.current.abort();
+    if (agentRunStartTime.current) {
+      setAgentRunDuration(Date.now() - agentRunStartTime.current);
+      agentRunStartTime.current = null;
+    }
     setAgentStreamingText('');
     setAgentRunning(false);
     setAgentEvents(prev => [...prev, { type: 'status', data: { message: 'Stopped by user.' } }]);
@@ -1475,9 +1534,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 {/* Status */}
                 {agentRunning ? (
                   <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Running
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                    Running · {agentElapsedSecs < 60
+                      ? `${agentElapsedSecs}s`
+                      : `${Math.floor(agentElapsedSecs / 60)}m ${agentElapsedSecs % 60}s`}
                   </span>
-                ) : agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} />}
+                ) : agentCurrentSession && <AgentStatusBadge session={agentCurrentSession} duration={agentRunDuration} />}
                 {agentAutoApprove && (
                   <span className="flex items-center gap-1 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800/50">
                     <ShieldOff className="w-2.5 h-2.5" /> Unrestricted
