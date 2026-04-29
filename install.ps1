@@ -14,35 +14,8 @@ function Die   { Write-Host "[asyncat] x $args" -ForegroundColor Red; exit 1 }
 
 $REPO_URL  = "https://github.com/asyncat-oss/asyncat-oss.git"
 $BinDir    = "$env:USERPROFILE\.local\bin"
-
-function Test-LlamaServer {
-    if (Get-Command llama-server -ErrorAction SilentlyContinue) { return $true }
-    if (Get-Command llama-server.exe -ErrorAction SilentlyContinue) { return $true }
-
-    $candidates = @(
-        "$env:LOCALAPPDATA\Microsoft\WindowsApps\llama-server.exe",
-        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\llama-server.exe",
-        "$env:LOCALAPPDATA\Programs\llama.cpp\llama-server.exe",
-        "$env:USERPROFILE\.local\bin\llama-server.exe"
-    )
-    foreach ($candidate in $candidates) {
-        if (Test-Path $candidate) { return $true }
-    }
-    $wingetPackage = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter "llama-server.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($wingetPackage) { return $true }
-    return $false
-}
-
-function Ensure-LlamaServer {
-    Info "Checking local AI engine..."
-    if (Test-LlamaServer) {
-        Ok "llama-server found"
-        return
-    }
-
-    Warn "llama-server not found - cloud providers, Ollama, and LM Studio still work"
-    Info "To install Asyncat's managed local engine, run: asyncat install --local-engine"
-}
+$DEN_PORT  = 8716
+$NEKO_PORT = 8717
 
 Write-Host ""
 Write-Host "    /\_____/\ " -ForegroundColor Magenta
@@ -95,16 +68,20 @@ npm install --silent
 Pop-Location
 Ok "Dependencies installed"
 
-# -- 5. First-run .env setup ---------------------------------------------------
+# -- 5. Build the frontend for production ---------------------------------------
+Info "Building frontend..."
+Push-Location $InstallDir
+npm run build -w neko
+Pop-Location
+Ok "Frontend built"
+
+# -- 6. First-run .env setup ---------------------------------------------------
 $denEnv  = Join-Path $InstallDir "den\.env"
 $nekoEnv = Join-Path $InstallDir "neko\.env"
 $denEx   = Join-Path $InstallDir "den\.env.example"
 $nekoEx  = Join-Path $InstallDir "neko\.env.example"
 if (-not (Test-Path $denEnv)  -and (Test-Path $denEx))  { Copy-Item $denEx  $denEnv;  Warn "Created den\.env  - edit JWT_SECRET before deploying!" }
 if (-not (Test-Path $nekoEnv) -and (Test-Path $nekoEx)) { Copy-Item $nekoEx $nekoEnv }
-
-# -- 6. Local AI engine --------------------------------------------------------
-Ensure-LlamaServer
 
 # -- 7. Wire up the asyncat command --------------------------------------------
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
@@ -131,44 +108,119 @@ if ($userPath -notlike "*$BinDir*") {
     Warn "Added $BinDir to PATH - restart your terminal for it to take effect."
 }
 
-# -- 9. Desktop launcher (for humans) ------------------------------------------
+# -- 9. Copy all PWA icons to system locations ---------------------------------
+Info "Installing icons..."
+
+$iconSrcDir = Join-Path $InstallDir "neko\public"
+$iconDestDir = Join-Path $env:LOCALAPPDATA "asyncat-icons"
+New-Item -ItemType Directory -Force -Path $iconDestDir | Out-Null
+
+# All PWA icon sizes
+$pwaIcons = @(
+    "pwa-72x72.png",
+    "pwa-96x96.png",
+    "pwa-128x128.png",
+    "pwa-144x144.png",
+    "pwa-152x152.png",
+    "pwa-192x192.png",
+    "pwa-384x384.png",
+    "pwa-512x512.png"
+)
+
+foreach ($icon in $pwaIcons) {
+    $src = Join-Path $iconSrcDir $icon
+    if (Test-Path $src) {
+        Copy-Item $src (Join-Path $iconDestDir $icon) -Force
+    }
+}
+
+# Also copy main icon and SVG
+$mainIcon = Join-Path $iconSrcDir "pwa-192x192.png"
+$svgIcon = Join-Path $iconSrcDir "cat.svg"
+if (Test-Path $mainIcon) { Copy-Item $mainIcon (Join-Path $iconDestDir "asyncat.png") -Force }
+if (Test-Path $svgIcon) { Copy-Item $svgIcon (Join-Path $iconDestDir "cat.svg") -Force }
+
+Ok "Icons installed"
+
+# -- 10. Desktop launcher (for humans) ------------------------------------------
 $uiScript = Join-Path $BinDir "asyncat-ui.ps1"
 $iconSrc = Join-Path $InstallDir "neko\public\pwa-192x192.png"
 
 @"
-# Start asyncat if not running
-try { `$null = Invoke-WebRequest http://localhost:8717 -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue } catch {}
-if (`$Error.Count -gt 0) {
-    Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd `'$InstallDir`' ; node cat start`"" -NoNewWindow
-    Start-Sleep 3
+# asyncat-ui - Start services + open as native app window
+
+`$InstallDir = "$InstallDir"
+`$BinDir = "$BinDir"
+`$NEKO_DIST = Join-Path `$InstallDir "neko\dist"
+`$DEN_PORT = $DEN_PORT
+`$NEKO_PORT = $NEKO_PORT
+
+# Check if den backend is already running
+try {
+    `$null = Invoke-WebRequest "http://localhost:`$DEN_PORT/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+    `$denRunning = `$true
+} catch { `$denRunning = `$false }
+
+if (-not `$denRunning) {
+    Write-Host "[asyncat] Starting backend..." -ForegroundColor Cyan
+    Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd '\`$InstallDir'; node den/src/index.js`"" -NoNewWindow
+    # Wait for den to start
+    for (`$i = 0; `$i -lt 30; `$i++) {
+        try {
+            `$null = Invoke-WebRequest "http://localhost:`$DEN_PORT/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+            break
+        } catch { Start-Sleep 0.5 }
+    }
+}
+
+# Check if frontend is already running
+try {
+    `$null = Invoke-WebRequest "http://localhost:`$NEKO_PORT" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+    `$nekoRunning = `$true
+} catch { `$nekoRunning = `$false }
+
+if (-not `$nekoRunning) {
+    Write-Host "[asyncat] Starting frontend..." -ForegroundColor Cyan
+    
+    if (Test-Path `$NEKO_DIST) {
+        # Serve built frontend with serve
+        Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd '\`$NEKO_DIST'; npx serve -l `\`$NEKO_PORT`"" -NoNewWindow
+    } else {
+        # Fallback: use Vite dev server
+        Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd '\`$InstallDir\neko'; npx vite --port `\``$NEKO_PORT`"" -NoNewWindow
+    }
+    
+    # Wait for frontend to start
+    for (`$i = 0; `$i -lt 30; `$i++) {
+        try {
+            `$null = Invoke-WebRequest "http://localhost:`\``$NEKO_PORT" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+            break
+        } catch { Start-Sleep 0.5 }
+    }
 }
 
 # Open in Chrome/Edge with --app flag (app mode = no address bar)
-`$chrome = @(
+`$chromePaths = @(
     "C:\Program Files\Google\Chrome\Application\chrome.exe",
     "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     "`$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
-) | Where-Object { Test-Path `$_ } | Select-Object -First 1
+)
+`$chrome = `$chromePaths | Where-Object { Test-Path `$_ } | Select-Object -First 1
 
-`$edge = @(
+`$edgePaths = @(
     "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-) | Where-Object { Test-Path `$_ } | Select-Object -First 1
+)
+`$edge = `$edgePaths | Where-Object { Test-Path `$_ } | Select-Object -First 1
 
 if (`$chrome) {
-    Start-Process `$chrome "--app=http://localhost:8717"
+    Start-Process `$chrome "--app=http://localhost:`$NEKO_PORT"
 } elseif (`$edge) {
-    Start-Process `$edge "--app=http://localhost:8717"
+    Start-Process `$edge "--app=http://localhost:`$NEKO_PORT"
 } else {
-    Start-Process "http://localhost:8717"
+    Start-Process "http://localhost:`$NEKO_PORT"
 }
 "@ | Set-Content $uiScript
-
-# Determine icon path
-$iconPath = "chrome.exe"
-if (Test-Path $iconSrc) {
-    $iconPath = $iconSrc
-}
 
 # Create Desktop shortcut
 $desktop = [Environment]::GetFolderPath("Desktop")
@@ -177,7 +229,9 @@ $WshShell = New-Object -ComObject WScript.Shell
 $shortcut = $WshShell.CreateShortcut($desktopShortcut)
 $shortcut.TargetPath = "powershell.exe"
 $shortcut.Arguments = "-WindowStyle Hidden -File `"$uiScript`""
-$shortcut.IconLocation = $iconPath
+if (Test-Path $iconSrc) {
+    $shortcut.IconLocation = $iconSrc
+}
 $shortcut.Save()
 
 # Create Start Menu shortcut
@@ -186,8 +240,26 @@ $startMenuShortcut = Join-Path $startMenu "Asyncat.lnk"
 $shortcut2 = $WshShell.CreateShortcut($startMenuShortcut)
 $shortcut2.TargetPath = "powershell.exe"
 $shortcut2.Arguments = "-WindowStyle Hidden -File `"$uiScript`""
-$shortcut2.IconLocation = $iconPath
+if (Test-Path $iconSrc) {
+    $shortcut2.IconLocation = $iconSrc
+}
 $shortcut2.Save()
+
+# Create Start Menu folder for Asyncat
+$startMenuFolder = Join-Path $startMenu "Asyncat"
+if (-not (Test-Path $startMenuFolder)) {
+    New-Item -ItemType Directory -Force -Path $startMenuFolder | Out-Null
+}
+
+# Create shortcut in the folder
+$folderShortcut = Join-Path $startMenuFolder "Asyncat.lnk"
+$shortcut3 = $WshShell.CreateShortcut($folderShortcut)
+$shortcut3.TargetPath = "powershell.exe"
+$shortcut3.Arguments = "-WindowStyle Hidden -File `"$uiScript`""
+if (Test-Path $iconSrc) {
+    $shortcut3.IconLocation = $iconSrc
+}
+$shortcut3.Save()
 
 Ok "App shortcuts created on Desktop + Start Menu"
 
@@ -200,8 +272,8 @@ Write-Host "    Click " -NoNewline; Write-Host "Asyncat" -ForegroundColor Cyan -
 Write-Host ""
 Write-Host "  For terminal gremlins:"
 Write-Host "    asyncat              " -NoNewline; Write-Host "open the interactive CLI REPL" -ForegroundColor Cyan
-Write-Host "    asyncat start        " -NoNewline; Write-Host "start backend + frontend directly" -ForegroundColor Cyan
-Write-Host "    asyncat install      " -NoNewline; Write-Host "set up .env and check llama.cpp" -ForegroundColor Cyan
+Write-Host "    asyncat start        " -NoNewline; Write-Host "start backend only" -ForegroundColor Cyan
+Write-Host "    asyncat-ui.ps1       " -NoNewline; Write-Host "launch the web app" -ForegroundColor Cyan
 Write-Host "    asyncat --help       " -NoNewline; Write-Host "see all commands" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  First time? Run:  asyncat install"

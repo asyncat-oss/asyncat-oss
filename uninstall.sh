@@ -8,8 +8,8 @@ ok()   { echo -e "${GREEN}[asyncat]${NC} ✓ $*"; }
 warn() { echo -e "${YELLOW}[asyncat]${NC} ⚠ $*"; }
 
 echo ""
-echo "    /\\_____/\\ "
-echo "   /  o   o  \\    asyncat  goodbye! 🎬"
+echo "    /\_____/\ "
+echo "   /  o   o  \    asyncat  goodbye! 🎬"
 echo "  ( ==  ^  == )   ─────────────────────────────────"
 echo "   )         ("
 echo ""
@@ -19,9 +19,15 @@ INSTALL_DIR="${ASYNCAT_INSTALL_DIR:-$HOME/.asyncat}"
 
 # ── Stop services ──────────────────────────────────────────────────────────
 info "Stopping services..."
-pkill -f "asyncat start" 2>/dev/null || true
-pkill -f "node.*den/src" 2>/dev/null || true
-pkill -f "npm.*run.*dev" 2>/dev/null || true
+# Kill any running asyncat processes
+pkill -f "asyncat" 2>/dev/null || true
+pkill -f "node.*den" 2>/dev/null || true
+pkill -f "node.*neko" 2>/dev/null || true
+pkill -f "serve.*8716\|serve.*8717" 2>/dev/null || true
+pkill -f "vite" 2>/dev/null || true
+
+# Wait a moment for processes to clean up
+sleep 1
 
 # ── Remove CLI command ─────────────────────────────────────────────────────
 if [ -f "$BIN_DIR/asyncat" ]; then
@@ -41,20 +47,42 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     rm -rf "$HOME/Applications/Asyncat.app"
     ok "Removed ~/Applications/Asyncat.app"
   fi
+  
+  # Clean up icon cache
+  if [ -d "$HOME/Library/Caches/asyncat-icons" ]; then
+    rm -rf "$HOME/Library/Caches/asyncat-icons"
+    ok "Removed icon cache"
+  fi
 fi
 
-# ── Linux: Remove .desktop and icons ───────────────────────────────────────
+# ── Linux: Remove .desktop and ALL icons ───────────────────────────────────────
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   if [ -f "$HOME/.local/share/applications/asyncat.desktop" ]; then
     rm -f "$HOME/.local/share/applications/asyncat.desktop"
     ok "Removed desktop entry"
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
   fi
-
-  if [ -f "$HOME/.local/share/icons/hicolor/192x192/apps/asyncat.png" ]; then
-    rm -f "$HOME/.local/share/icons/hicolor/192x192/apps/asyncat.png"
-    ok "Removed icon"
+  
+  # Remove all icon sizes from hicolor
+  HICOLOR_BASE="$HOME/.local/share/icons/hicolor"
+  SIZES=("72x72" "96x96" "128x128" "144x144" "152x152" "192x192" "384x384" "512x512")
+  for size in "${SIZES[@]}"; do
+    if [ -f "$HICOLOR_BASE/${size}/apps/asyncat.png" ]; then
+      rm -f "$HICOLOR_BASE/${size}/apps/asyncat.png"
+    fi
+  done
+  ok "Removed icons from hicolor"
+  
+  # Remove main icons
+  if [ -f "$HOME/.local/share/icons/asyncat.png" ]; then
+    rm -f "$HOME/.local/share/icons/asyncat.png"
   fi
+  if [ -f "$HOME/.local/share/icons/asyncat.svg" ]; then
+    rm -f "$HOME/.local/share/icons/asyncat.svg"
+  fi
+  
+  # Update icon cache
+  gtk-update-icon-cache "$HICOLOR_BASE" 2>/dev/null || true
 fi
 
 # ── Done ───────────────────────────────────────────────────────────────────
@@ -65,8 +93,8 @@ echo "  Leftover files (optional cleanup):"
 echo -e "    ${CYAN}rm -rf $INSTALL_DIR${NC}         # remove installation directory"
 echo -e "    ${CYAN}rm -rf $HOME/.asyncat${NC}       # remove data, config, database"
 echo ""
-echo "    /\\_____/\\"
-echo "   /  ~   ~  \\"
+echo "    /\_____/\"
+echo "   /  ~   ~  \"
 echo "  ( ==  x  == )"
 echo "   )   bye   ("
 echo "  (           )"

@@ -10,7 +10,7 @@ function Warn  { Write-Host "[asyncat] ! $args" -ForegroundColor Yellow }
 Write-Host ""
 Write-Host "    /\_____/\ " -ForegroundColor Magenta
 Write-Host "   /  o   o  \    asyncat  goodbye! " -ForegroundColor Magenta -NoNewline; Write-Host "🎬" -ForegroundColor White
-Write-Host "  ( ==  ^  == )   ─────────────────────────────────" -ForegroundColor Magenta
+Write-Host "  ( ==  ^  == )   ---------------------------------" -ForegroundColor Magenta
 Write-Host "   )         (" -ForegroundColor Magenta
 Write-Host ""
 
@@ -19,7 +19,26 @@ $InstallDir = if ($env:ASYNCAT_INSTALL_DIR) { $env:ASYNCAT_INSTALL_DIR } else { 
 
 # ── Stop services ──────────────────────────────────────────────────────────
 Info "Stopping services..."
-Get-Process | Where-Object { $_.ProcessName -like "*node*" -and $_.CommandLine -like "*asyncat*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+# Kill any running asyncat processes
+Get-Process | Where-Object {
+    $_.ProcessName -like "*node*" -and (
+        $_.CommandLine -like "*asyncat*" -or
+        $_.CommandLine -like "*den*" -or
+        $_.CommandLine -like "*neko*" -or
+        $_.CommandLine -like "*serve*"
+    )
+} | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# Also try to find processes by port
+$ports = @(8716, 8717)
+foreach ($port in $ports) {
+    $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+    if ($conn) {
+        $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+        if ($proc) { $proc | Stop-Process -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 Start-Sleep 1
 
 # ── Remove CLI commands ────────────────────────────────────────────────────
@@ -46,12 +65,32 @@ if (Test-Path $DesktopShortcut) {
     Ok "Removed Desktop shortcut"
 }
 
-# ── Remove Start Menu shortcut ─────────────────────────────────────────────
-$StartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
-$StartMenuShortcut = Join-Path $StartMenu "Asyncat.lnk"
-if (Test-Path $StartMenuShortcut) {
-    Remove-Item $StartMenuShortcut -Force
+# ── Remove Start Menu shortcuts ─────────────────────────────────────────────
+$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+
+# Remove direct shortcut
+$startMenuShortcut = Join-Path $startMenu "Asyncat.lnk"
+if (Test-Path $startMenuShortcut) {
+    Remove-Item $startMenuShortcut -Force
     Ok "Removed Start Menu shortcut"
+}
+
+# Remove folder with shortcut
+$startMenuFolder = Join-Path $startMenu "Asyncat"
+if (Test-Path $startMenuFolder) {
+    $folderShortcut = Join-Path $startMenuFolder "Asyncat.lnk"
+    if (Test-Path $folderShortcut) {
+        Remove-Item $folderShortcut -Force
+    }
+    Remove-Item $startMenuFolder -Force -Recurse
+    Ok "Removed Asyncat folder from Start Menu"
+}
+
+# ── Remove icon cache ──────────────────────────────────────────────────────
+$iconCache = Join-Path $env:LOCALAPPDATA "asyncat-icons"
+if (Test-Path $iconCache) {
+    Remove-Item $iconCache -Force -Recurse
+    Ok "Removed icon cache"
 }
 
 # ── Remove from PATH if applicable ─────────────────────────────────────────
