@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff } from 'lucide-react';
+import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff, FolderOpen } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import MlxModelsSection from './MlxModelsSection';
 import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';
@@ -8,11 +8,11 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 const Badge = ({ children, color = 'gray' }) => {
   const colors = {
-    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-slate-900/30 midnight:text-green-400',
-    gray:  'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 midnight:bg-slate-900/30 midnight:text-amber-400',
-    red:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 midnight:bg-slate-900/30 midnight:text-red-400',
-    blue:  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-slate-900/30 midnight:text-blue-400',
+    green: 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800/30 midnight:bg-slate-900/30 midnight:text-green-400',
+    gray:  'bg-gray-50 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:bg-slate-800 midnight:text-slate-400',
+    amber: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/30 midnight:bg-slate-900/30 midnight:text-amber-400',
+    red:   'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/30 midnight:bg-slate-900/30 midnight:text-red-400',
+    blue:  'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/30 midnight:bg-slate-900/30 midnight:text-blue-400',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[color]}`}>
@@ -2066,6 +2066,7 @@ const ModelsPage = () => {
   const [installError, setInstallError] = useState('');
   const [installSuccess, setInstallSuccess] = useState('');
   const [revertSelection, setRevertSelection] = useState(null);
+  const [quickLoadPath, setQuickLoadPath] = useState('');
   const [pythonInstallJob, setPythonInstallJob] = useState(null);
   const [pythonBuildError, setPythonBuildError] = useState('');
   const [pythonBuildSuccess, setPythonBuildSuccess] = useState('');
@@ -2153,13 +2154,20 @@ const ModelsPage = () => {
   const loadModelList = async () => {
     setLoadingModels(true);
     try {
-      const res = await localModelsApi.listModels();
-      if (res.success) {
-        setModels(res.models || []);
-        setStorage(res.storage || null);
-      }
+      const [ggufModels, mlxModels] = await Promise.all([
+        localModelsApi.listModels(),
+        mlxApi.listModels().catch(() => [])
+      ]);
+      
+      const unifiedModels = [
+        ...ggufModels.map(m => ({ ...m, engineType: 'gguf' })),
+        ...mlxModels.map(m => ({ ...m, engineType: 'mlx', filename: m.path }))
+      ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      setModels(unifiedModels);
+      setHasMlxModels(mlxModels.length > 0);
     } catch (err) {
-      console.warn('Failed to load models:', err);
+      console.warn('Failed to load unified model list:', err);
     } finally {
       setLoadingModels(false);
     }
@@ -2462,11 +2470,11 @@ const ModelsPage = () => {
     pollCleanup.current?.();
     pollCleanup.current = null;
     try {
-      if (serverStatus?.port === 8766) {
-        await mlxApi.stop();
-      } else {
-        await llamaServerApi.stop();
-      }
+      // Safely attempt to stop both engines to guarantee a clean state
+      await Promise.all([
+        mlxApi.stop().catch(e => console.warn('MLX stop ignored:', e)),
+        llamaServerApi.stop().catch(e => console.warn('Llama stop ignored:', e))
+      ]);
       setServerStatus({ status: 'idle', model: null });
       await loadProviderData();
       await loadStatus();
@@ -2477,15 +2485,48 @@ const ModelsPage = () => {
     }
   };
 
-  const handleDelete = async (filename) => {
-    setDeletingModel(filename);
+  const handleDelete = async (m) => {
+    const identifier = m.isExternal ? m.name : m.filename;
+    const confirmMsg = m.isExternal 
+      ? `Remove "${identifier}" from your library? (The actual file will NOT be deleted)`
+      : `Are you sure you want to delete "${identifier}"? (This will permanently delete the file from your disk)`;
+
+    if (!window.confirm(confirmMsg)) return;
+    setDeletingModel(m.filename);
     try {
-      await localModelsApi.deleteModel(filename);
+      if (m.isExternal) {
+        await localModelsApi.deleteCustomPath(m.id);
+      } else {
+        await localModelsApi.deleteModel(m.filename);
+      }
       await loadModelList();
     } catch (err) {
-      console.error('Failed to delete model:', err);
+      alert(err.message || 'Failed to remove model');
     } finally {
       setDeletingModel(null);
+    }
+  };
+
+  const handleAddPath = async () => {
+    const p = quickLoadPath.trim();
+    if (!p) return;
+    
+    // Clean up path and extract a friendly name
+    const cleanPath = p.replace(/\/+$/, '');
+    const isGguf = p.toLowerCase().endsWith('.gguf') || p.toLowerCase().endsWith('.bin');
+    const type = isGguf ? 'gguf' : 'mlx';
+    const name = cleanPath.split('/').pop().replace(/\.(gguf|bin)$/i, '') || 'Custom Model';
+    
+    try {
+      setSwitchingEngine('adding_path');
+      await localModelsApi.saveCustomPath(name, p, type);
+      setSwitchSuccess(`Added "${name}" to your library`);
+      setQuickLoadPath('');
+      await loadModelList();
+    } catch (err) {
+      setSwitchError(err.message || 'Failed to add path');
+    } finally {
+      setSwitchingEngine(null);
     }
   };
 
@@ -2780,6 +2821,104 @@ const ModelsPage = () => {
                     <LocalModelsSection storage={storage} onRefresh={loadModelList} hideStorage />
                   </div>
 
+                  {/* Unified Path Loader */}
+                  <div className="bg-white dark:bg-gray-900 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm mb-6">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                      <div className="flex-1 w-full">
+                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Add Local Path
+                        </h3>
+                        <div className="relative group">
+                          <input
+                            type="text"
+                            value={quickLoadPath}
+                            onChange={(e) => setQuickLoadPath(e.target.value)}
+                            placeholder="Enter absolute path to .gguf file or MLX directory..."
+                            className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/50 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 midnight:focus:ring-gray-700 focus:border-gray-300 dark:focus:border-gray-600 midnight:focus:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 transition-all"
+                          />
+                          <FolderOpen className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 w-full sm:w-auto self-end">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={async () => {
+                              const p = quickLoadPath.trim();
+                              if (!p) return;
+                              
+                              // Simple heuristic detection
+                              const isGguf = p.toLowerCase().endsWith('.gguf') || p.toLowerCase().endsWith('.bin');
+                              
+                              if (isGguf) {
+                                handleStart(p, config?.ctx_size || 4096);
+                              } else {
+                                // Assume MLX directory
+                                setStartingModel(p);
+                                try {
+                                  await mlxApi.start(p);
+                                  setServerStatus(prev => ({ ...prev, status: 'loading', model: p.split('/').pop(), modelPath: p, port: 8766 }));
+                                  // Start polling MLX status
+                                  pollCleanup.current?.();
+                                  pollCleanup.current = mlxApi.pollStatus(
+                                    (snap) => setServerStatus(snap),
+                                    async (snap) => {
+                                      setServerStatus(snap);
+                                      pollCleanup.current = null;
+                                      setStartingModel(null);
+                                      await loadEngineData();
+                                    },
+                                    async (snap) => {
+                                      setServerStatus(snap);
+                                      pollCleanup.current = null;
+                                      setStartingModel(null);
+                                      setSwitchError(snap?.error || 'Failed to load MLX model');
+                                    }
+                                  );
+                                } catch (err) {
+                                  setStartingModel(null);
+                                  setSwitchError(err.message || 'Failed to start MLX server');
+                                }
+                              }
+                            }}
+                            disabled={!quickLoadPath.trim() || startingModel || Boolean(switchingEngine) || Boolean(installingEngine)}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-900 midnight:bg-slate-800 midnight:hover:bg-slate-700 rounded-lg transition-all shadow-sm disabled:opacity-50"
+                          >
+                            {startingModel && <RefreshCw className="w-4 h-4 animate-spin" />}
+                            {startingModel ? 'Starting...' : 'Load Model'}
+                          </button>
+                          
+                          <button
+                            onClick={handleAddPath}
+                            disabled={!quickLoadPath.trim() || Boolean(switchingEngine)}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold border border-gray-300 bg-white hover:bg-gray-50 dark:bg-transparent dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-400 rounded-lg transition-all disabled:opacity-50"
+                            title="Save this path to your library permanently"
+                          >
+                            {switchingEngine === 'adding_path' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            Add to Library
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {switchError && (
+                      <div className="mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 flex items-center gap-2 text-xs text-red-700 dark:text-red-300">
+                        <TriangleAlert className="w-4 h-4 flex-shrink-0" />
+                        {switchError}
+                      </div>
+                    )}
+                    
+                    {switchSuccess && (
+                      <div className="mt-3 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                        {switchSuccess}
+                      </div>
+                    )}
+                    
+                    <p className="mt-3 text-[10px] text-gray-400 dark:text-gray-500 italic">
+                      Detects automatically: <span className="font-semibold">.gguf/.bin</span> files use llama.cpp; <span className="font-semibold">directories</span> use the MLX engine.
+                    </p>
+                  </div>
+
                   {loadingModels ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {[1, 2].map(i => (
@@ -2799,8 +2938,8 @@ const ModelsPage = () => {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {models.map(m => {
-                        const isLoaded = serverStatus?.model === m.filename && status === 'ready';
-                        const isStarting = startingModel === m.filename;
+                        const isLoaded = (serverStatus?.model === m.filename || serverStatus?.modelPath === (m.path || m.filename)) && (serverStatus?.status === 'ready' || status === 'ready');
+                        const isStarting = startingModel === (m.path || m.filename);
                         const isDeleting = deletingModel === m.filename;
                         const modelContextLimit = getModelContextLimit(m);
                         const modelLoadCtxValue = modelLoadCtxSizes[m.filename] ?? String(Math.min(DEFAULT_LOAD_CTX_SIZE, modelContextLimit));
@@ -2817,13 +2956,17 @@ const ModelsPage = () => {
                               <div className="flex items-start justify-between gap-3 mb-3">
                                 <div className="flex items-center gap-2.5 min-w-0">
                                   <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? 'bg-gray-700 text-white dark:bg-gray-600 midnight:bg-slate-800' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800/50 midnight:text-slate-400'}`}>
-                                    <Cpu className="w-5 h-5" />
+                                    {m.isExternal ? <FolderOpen className="w-5 h-5" /> : <Cpu className="w-5 h-5" />}
                                   </div>
                                   <div className="min-w-0">
                                     <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate" title={m.name || m.filename}>
                                       {m.name || m.filename}
                                     </h3>
                                     <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                      {m.engineType === 'gguf' && <Badge color="gray">GGUF</Badge>}
+                                      {m.engineType === 'mlx' && <Badge color="amber">MLX</Badge>}
+                                      {m.isExternal && <Badge color="blue">External</Badge>}
+                                      {m.isMissing && <Badge color="red">Missing Path</Badge>}
                                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 bg-gray-100 dark:bg-gray-900/50 midnight:bg-slate-800/50 px-2 py-0.5 rounded">
                                         {m.sizeFormatted}
                                       </span>
@@ -2881,31 +3024,41 @@ const ModelsPage = () => {
                             </div>
 
                             <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 border-t border-gray-100 dark:border-gray-700/50 midnight:border-slate-800/50 flex items-center justify-between gap-2">
-                              {!isLoaded ? (
-                                <button
-                                  onClick={() => handleStart(m.filename, modelContextLimit)}
-                                  disabled={Boolean(loadCtxError) || isStarting || isRunning || Boolean(switchingEngine) || Boolean(installingEngine)}
-                                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-white dark:bg-gray-800 midnight:bg-slate-900 text-gray-700 dark:text-gray-300 midnight:text-slate-400 border border-gray-200 dark:border-gray-600 midnight:border-slate-700 rounded-xl hover:bg-gray-50 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-gray-100 midnight:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200"
-                                >
-                                  {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
-                                  {isStarting ? 'Starting...' : 'Load Model'}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={handleStop}
-                                  disabled={stopping || Boolean(switchingEngine) || Boolean(installingEngine)}
-                                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 midnight:bg-slate-800 midnight:hover:bg-slate-700 rounded-xl transition-colors shadow-sm"
-                                >
-                                  {stopping ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4 fill-current" />}
-                                  In Memory
-                                </button>
-                              )}
+                              <button
+                                onClick={() => {
+                                  if (m.engineType === 'mlx') {
+                                    setStartingModel(m.path);
+                                    mlxApi.start(m.path).then(() => {
+                                      setServerStatus(prev => ({ ...prev, status: 'loading', model: m.name, modelPath: m.path, port: 8766 }));
+                                      pollCleanup.current?.();
+                                      pollCleanup.current = mlxApi.pollStatus(
+                                        (snap) => setServerStatus(snap),
+                                        async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); await loadEngineData(); },
+                                        async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); setSwitchError(snap?.error || 'Failed to load MLX model'); }
+                                      );
+                                    }).catch(err => {
+                                      setStartingModel(null);
+                                      setSwitchError(err.message || 'Failed to start MLX server');
+                                    });
+                                  } else {
+                                    handleStart(m.filename, modelLoadCtxValue);
+                                  }
+                                }}
+                                disabled={isStarting || isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}
+                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50
+                                  ${isLoaded 
+                                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-200 dark:shadow-none' 
+                                    : 'bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-900 midnight:bg-slate-100 midnight:hover:bg-slate-200 midnight:text-slate-900'}`}
+                              >
+                                {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : isLoaded ? <CheckCircle2 className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+                                {isStarting ? 'Loading...' : isLoaded ? 'Active' : 'Load Model'}
+                              </button>
 
                               <button
-                                onClick={() => handleDelete(m.filename)}
+                                onClick={() => handleDelete(m)}
                                 disabled={isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}
                                 className="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
-                                title="Delete model"
+                                title={m.isExternal ? "Remove from library" : "Delete model"}
                               >
                                 {isDeleting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                               </button>
@@ -2917,14 +3070,16 @@ const ModelsPage = () => {
                   )}
                 </div>
 
-                  {/* MLX Models — Apple Silicon only, auto-hidden on other platforms */}
-                  <div className={`bg-white dark:bg-gray-900 midnight:bg-slate-950 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm ${hasMlxModels ? "order-2" : "order-3"}`}>
-                    <MlxModelsSection 
-                      onMlxStatusChange={setServerStatus} 
-                      onMlxStopRequest={loadStatus}
-                      onMlxModelsCountChange={(count) => setHasMlxModels(count > 0)}
-                    />
-                  </div>
+                  {/* MLX Models — Only show when active or loading an MLX model */}
+                  {(serverStatus?.port === 8766 || (serverStatus?.status === 'loading' && startingModel && !startingModel.toLowerCase().endsWith('.gguf') && !startingModel.toLowerCase().endsWith('.bin'))) && (
+                    <div className="bg-white dark:bg-gray-900 midnight:bg-slate-950 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm order-2">
+                      <MlxModelsSection 
+                        globalServerStatus={serverStatus}
+                        onMlxStatusChange={setServerStatus} 
+                        onMlxStopRequest={loadStatus}
+                      />
+                    </div>
+                  )}
               </div>
               )}
 

@@ -253,6 +253,22 @@ export const localModelsApi = {
     });
   },
 
+  // Custom Model Paths
+  getCustomPaths: async () => {
+    return apiCall(`${AI_API_BASE}/local-models/custom-paths`);
+  },
+  saveCustomPath: async (name, path, type) => {
+    return apiCall(`${AI_API_BASE}/local-models/custom-paths`, {
+      method: 'POST',
+      body: JSON.stringify({ name, path, type }),
+    });
+  },
+  deleteCustomPath: async (id) => {
+    return apiCall(`${AI_API_BASE}/local-models/custom-paths/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Start downloading a model
   startDownload: async (url, filename) => {
     return apiCall(`${AI_API_BASE}/local-models/download`, {

@@ -582,6 +582,44 @@ router.delete('/local-models/:filename', verifyUser, (req, res) => {
   }
 });
 
+// ── GET /local-models/custom-paths — list all custom model paths ─────────────
+router.get('/local-models/custom-paths', verifyUser, (req, res) => {
+  try {
+    const paths = db.prepare('SELECT * FROM custom_model_paths ORDER BY created_at DESC').all();
+    res.json({ success: true, paths });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /local-models/custom-paths — save a new custom model path ────────────
+router.post('/local-models/custom-paths', verifyUser, (req, res) => {
+  const { name, path: modelPath, type } = req.body;
+  if (!name || !modelPath || !type) {
+    return res.status(400).json({ success: false, error: 'Name, path, and type are required' });
+  }
+  try {
+    const result = db.prepare('INSERT INTO custom_model_paths (name, path, type) VALUES (?, ?, ?)').run(name, modelPath, type);
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (err) {
+    if (err.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).json({ success: false, error: 'This path is already in your library' });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── DELETE /local-models/custom-paths/:id — remove a custom model path ────────
+router.delete('/local-models/custom-paths/:id', verifyUser, (req, res) => {
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM custom_model_paths WHERE id = ?').run(id);
+    res.json({ success: true, message: 'Path removed from library' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── POST /local-models/download — start a model download ─────────────────────
 router.post('/local-models/download', verifyUser, async (req, res) => {
   try {
@@ -1157,8 +1195,9 @@ router.post('/server/start', verifyUser, async (req, res) => {
 
     await startServer(filename, MODELS_DIR, ctxSize);
 
+    const expectedModel = filename.split('/').pop().split('\\').pop();
     const unsub = llamaSubscribe(snap => {
-      if (snap.status === 'ready' && snap.model === filename) {
+      if (snap.status === 'ready' && snap.model === expectedModel) {
         unsub();
         try {
           saveBuiltinProviderConfig(req.user.id, filename);

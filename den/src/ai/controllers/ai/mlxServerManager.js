@@ -10,6 +10,7 @@ import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import db from '../../../db/client.js';
 
 const execAsync = promisify(exec);
 
@@ -162,7 +163,15 @@ export function listMlxModels() {
   const seen = new Set();
   const results = [];
 
-  for (const scanRoot of scanDirectories()) {
+  const scanDirs = scanDirectories();
+  try {
+    const customEntries = db.prepare('SELECT path FROM custom_model_paths WHERE type = "mlx"').all();
+    for (const entry of customEntries) {
+      if (!scanDirs.includes(entry.path)) scanDirs.push(entry.path);
+    }
+  } catch {}
+
+  for (const scanRoot of scanDirs) {
     const dirs = findMlxModelsIn(scanRoot);
     for (const modelPath of dirs) {
       const realPath = (() => { try { return fs.realpathSync(modelPath); } catch { return modelPath; } })();
@@ -193,7 +202,10 @@ export function listMlxModels() {
         path: modelPath,
         realPath,
         architecture: config.model_type || config.architectures?.[0] || 'unknown',
-        contextLength: config.max_position_embeddings || null,
+        contextLength: config.max_position_embeddings || 
+                       config.max_seq_len || 
+                       config.model_max_length || 
+                       config.n_positions || null,
         quantization: config.quantization_config?.quant_type || null,
         sizeBytes,
         sizeFormatted: formatBytes(sizeBytes),
@@ -201,6 +213,19 @@ export function listMlxModels() {
       });
     }
   }
+
+  // Update results with custom names if applicable
+  try {
+    const customEntries = db.prepare('SELECT id, name, path FROM custom_model_paths WHERE type = "mlx"').all();
+    for (const res of results) {
+      const custom = customEntries.find(c => c.path === res.path || c.path === res.realPath);
+      if (custom) {
+        res.id = custom.id;
+        res.name = custom.name;
+        res.isExternal = true;
+      }
+    }
+  } catch {}
 
   return results;
 }

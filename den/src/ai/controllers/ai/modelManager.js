@@ -10,6 +10,7 @@ import { createWriteStream } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import db from '../../../db/client.js';
 
 const execAsync = promisify(exec);
 
@@ -156,7 +157,7 @@ const activeDownloads = new Map();
 export function listModels() {
   try {
     const files = fs.readdirSync(MODELS_DIR);
-    return files
+    const diskModels = files
       .filter(f => f.endsWith('.gguf') || f.endsWith('.bin'))
       .map(filename => {
         const filePath = path.join(MODELS_DIR, filename);
@@ -176,8 +177,42 @@ export function listModels() {
           createdAt: stat.birthtime.toISOString(),
           modifiedAt: stat.mtime.toISOString(),
         };
-      })
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      });
+
+    // Add custom paths
+    const customEntries = db.prepare('SELECT * FROM custom_model_paths WHERE type = "gguf"').all();
+    const customModels = customEntries.map(entry => {
+      try {
+        const stat = fs.statSync(entry.path);
+        const meta = extractGgufMetadata(entry.path) || {};
+        return {
+          id: entry.id,
+          isExternal: true,
+          name: entry.name,
+          filename: entry.path, // Absolute path used so llamaServerManager handles it
+          path: entry.path,
+          sizeBytes: stat.size,
+          sizeFormatted: formatBytes(stat.size),
+          contextLength: getContextLength(meta),
+          architecture: meta['general.architecture'] || 'unknown',
+          createdAt: entry.created_at,
+          modifiedAt: entry.created_at,
+        };
+      } catch (err) {
+        return {
+          id: entry.id,
+          isExternal: true,
+          isMissing: true,
+          name: entry.name,
+          filename: entry.path,
+          path: entry.path,
+          error: 'File not found',
+          createdAt: entry.created_at,
+        };
+      }
+    });
+
+    return [...diskModels, ...customModels].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   } catch (err) {
     console.error('Failed to list models:', err);
     return [];

@@ -546,3 +546,14 @@ CREATE TABLE IF NOT EXISTS agent_tool_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_session ON agent_tool_audit(session_id);
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_user    ON agent_tool_audit(user_id, started_at);
+
+-- ─── Custom Model Paths ────────────────────────────────────────────────────────
+-- Stores absolute paths to models located outside the default directory.
+
+CREATE TABLE IF NOT EXISTS custom_model_paths (
+  id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  name        TEXT NOT NULL,
+  path        TEXT NOT NULL UNIQUE,
+  type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx')),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
