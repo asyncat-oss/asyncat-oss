@@ -2051,6 +2051,7 @@ const ModelsPage = () => {
   const [installJob, setInstallJob] = useState(null);
   const [storage, setStorage] = useState(null);
   const [activeTab, setActiveTab] = useState('library');
+  const [hasMlxModels, setHasMlxModels] = useState(false);
   const [loadingModels, setLoadingModels] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [loadingEngines, setLoadingEngines] = useState(true);
@@ -2703,10 +2704,10 @@ const ModelsPage = () => {
               </div>
 
               {activeTab === 'library' && (
-              <div className="space-y-8">
+              <div className="flex flex-col gap-8">
 
                 {/* Active Server Banner */}
-                <div className={`relative overflow-hidden rounded-3xl border p-6 transition-all duration-300 shadow-sm ${bannerClass}`}>
+                <div className={`order-1 relative overflow-hidden rounded-3xl border p-6 transition-all duration-300 shadow-sm ${bannerClass}`}>
                   <div className="relative z-10 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
                     <div className="flex items-center gap-4">
                       <div className={`p-3 bg-white dark:bg-gray-900 midnight:bg-slate-900 rounded-xl shadow-sm border border-black/5 dark:border-white/5 midnight:border-white/5`}>
@@ -2759,7 +2760,7 @@ const ModelsPage = () => {
                 </div>
 
                 {/* Models: Library + Download combined */}
-                <div>
+                <div className={hasMlxModels ? "order-3" : "order-2"}>
                   <div className="flex items-end justify-between mb-4 gap-4">
                     <div>
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Models</h2>
@@ -2914,12 +2915,16 @@ const ModelsPage = () => {
                       })}
                     </div>
                   )}
+                </div>
 
                   {/* MLX Models — Apple Silicon only, auto-hidden on other platforms */}
-                  <div className="mt-4 bg-white dark:bg-gray-900 midnight:bg-slate-950 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
-                    <MlxModelsSection onMlxStatusChange={setServerStatus} onMlxStopRequest={loadStatus} />
+                  <div className={`bg-white dark:bg-gray-900 midnight:bg-slate-950 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm ${hasMlxModels ? "order-2" : "order-3"}`}>
+                    <MlxModelsSection 
+                      onMlxStatusChange={setServerStatus} 
+                      onMlxStopRequest={loadStatus}
+                      onMlxModelsCountChange={(count) => setHasMlxModels(count > 0)}
+                    />
                   </div>
-                </div>
               </div>
               )}
 

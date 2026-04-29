@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Sparkles,
   TriangleAlert,
 } from 'lucide-react';
 import { mlxApi } from './settingApi.js';
@@ -149,7 +148,7 @@ const MlxModelCard = ({ model, serverStatus, onLoad, onStop, loading }) => {
 };
 
 // ── Main component ─────────────────────────────────────────────────────────────
-const MlxModelsSection = ({ onMlxStatusChange, onMlxStopRequest }) => {
+const MlxModelsSection = ({ onMlxStatusChange, onMlxStopRequest, onMlxModelsCountChange }) => {
   const [models, setModels] = useState([]);
   const [serverStatus, setServerStatus] = useState(null); // { status, model, modelPath, mlxAvailable, available }
   const [loading, setLoading]   = useState(true);
@@ -171,6 +170,7 @@ const MlxModelsSection = ({ onMlxStatusChange, onMlxStopRequest }) => {
         onMlxStatusChange?.(statusRes);
       }
       setModels(modelsRes.models || []);
+      onMlxModelsCountChange?.((modelsRes.models || []).length);
     } catch (err) {
       setError(err.message || 'Failed to load MLX data');
     } finally {
@@ -271,7 +271,6 @@ const MlxModelsSection = ({ onMlxStatusChange, onMlxStopRequest }) => {
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-500" />
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">
               MLX Models
             </h3>
