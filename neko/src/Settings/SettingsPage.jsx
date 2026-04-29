@@ -200,7 +200,7 @@ const SettingsPage = () => {
               className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-left text-sm text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 transition-colors"
             >
               <LogOut className="w-4 h-4 flex-shrink-0" />
-              Sign Out
+              Log Out
             </button>
           </div>
         )}

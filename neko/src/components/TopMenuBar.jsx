@@ -1,6 +1,6 @@
 // components/TopMenuBar.jsx - OS-style top menu bar
 import { useState, useEffect } from "react";
-import { ServerCrash, Wifi, WifiOff } from "lucide-react";
+import { ServerCrash, Wifi, WifiOff, Search } from "lucide-react";
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 // Time formatting helper
@@ -31,7 +31,7 @@ const SystemClock = () => {
       setTime(formatSystemTime(now));
       setDate(formatSystemDate(now));
     };
-    
+
     const now = new Date();
     const delayUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
     let interval = null;
@@ -48,7 +48,7 @@ const SystemClock = () => {
   }, []);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 midnight:text-gray-300">
       <time className="text-sm font-medium" dateTime={new Date().toISOString()}>
         {time}
       </time>
@@ -70,6 +70,7 @@ const NetworkStatus = () => {
         detail: "This device is offline.",
         Icon: WifiOff,
         dotClassName: "bg-red-500",
+        iconClassName: "text-red-500 dark:text-red-400 midnight:text-red-400",
         textClassName: "text-red-600 dark:text-red-400 midnight:text-red-400",
       }
     : !network.backendOnline
@@ -78,6 +79,7 @@ const NetworkStatus = () => {
           detail: "Local Asyncat services are unreachable.",
           Icon: ServerCrash,
           dotClassName: "bg-amber-500",
+          iconClassName: "text-amber-500 dark:text-amber-400 midnight:text-amber-400",
           textClassName: "text-amber-600 dark:text-amber-400 midnight:text-amber-400",
         }
       : {
@@ -85,6 +87,7 @@ const NetworkStatus = () => {
           detail: "Browser and backend are reachable.",
           Icon: Wifi,
           dotClassName: "bg-emerald-500",
+          iconClassName: "text-emerald-500 dark:text-emerald-400 midnight:text-emerald-400",
           textClassName: "text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400",
         };
 
@@ -93,7 +96,7 @@ const NetworkStatus = () => {
   return (
     <div className="relative group flex items-center gap-1.5">
       <span className={`h-2 w-2 rounded-full ${status.dotClassName}`} />
-      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icon className={`h-3.5 w-3.5 ${status.iconClassName}`} aria-hidden="true" />
       <span className={`text-xs font-medium hidden sm:inline ${status.textClassName}`}>
         {status.label}
       </span>
@@ -105,27 +108,18 @@ const NetworkStatus = () => {
   );
 };
 
-// App Name Component
-const AppName = () => (
-  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-200">
-    Asyncat
-  </span>
-);
-
 // Main TopMenuBar Component
-const TopMenuBar = () => {
+const TopMenuBar = ({ onSearchOpen }) => {
   const [isVisible, setIsVisible] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
   });
 
-  // Listen for visibility changes
   useEffect(() => {
     const checkVisibility = () => {
       const visibility = localStorage.getItem('topMenuBarVisibility');
       setIsVisible(visibility !== 'hidden');
     };
 
-    // Check periodically for changes (in case user changes in settings)
     const interval = setInterval(checkVisibility, 500);
     return () => clearInterval(interval);
   }, []);
@@ -135,17 +129,30 @@ const TopMenuBar = () => {
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[70] h-10 bg-white/90 dark:bg-gray-900/90 midnight:bg-black/90 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/10 midnight:border-white/10">
+    <div className="fixed top-0 left-0 right-0 z-[70] h-10 bg-white/90 dark:bg-gray-900/90 midnight:bg-black/90 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-800 midnight:border-gray-900">
       <div className="h-full px-4 flex items-center justify-between">
         {/* Left side - App Name */}
         <div className="flex items-center gap-4">
-          <AppName />
+          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-200">
+            Asyncat
+          </span>
         </div>
 
-        {/* Right side - Status indicators */}
-        <div className="flex items-center gap-4">
+        {/* Right side - Actions and Status */}
+        <div className="flex items-center gap-3">
+          {/* Search button */}
+          <button
+            onClick={onSearchOpen}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400 midnight:text-gray-400"
+            title="Search"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+
+          <div className="w-px h-5 bg-gray-300/50 dark:bg-gray-700/50 midnight:bg-gray-800/50" />
+
           <NetworkStatus />
-          <div className="w-px h-5 bg-gray-300/50 dark:bg-white/20 midnight:bg-white/20" />
+          <div className="w-px h-5 bg-gray-300/50 dark:bg-gray-700/50 midnight:bg-gray-800/50" />
           <SystemClock />
         </div>
       </div>

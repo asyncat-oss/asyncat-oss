@@ -34,6 +34,7 @@ const AppLayout = ({ session, onSignOut }) => {
   } = useWorkspace();
   
   // UI state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   
   // Project state
@@ -426,7 +427,9 @@ const AppLayout = ({ session, onSignOut }) => {
   // Normal dashboard when user has workspaces
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
-      <TopMenuBar />
+      <TopMenuBar
+        onSearchOpen={() => setIsSearchOpen(true)}
+      />
 
       {/* Dock — renders as fixed overlay, no flex space consumed */}
       <Sidebar
@@ -434,6 +437,8 @@ const AppLayout = ({ session, onSignOut }) => {
         session={session}
         onNewChat={handleNewChatWithNavigation}
         basePage={basePage}
+        isSearchOpen={isSearchOpen}
+        onSearchOpen={setIsSearchOpen}
       />
 
       <main className={`flex-1 overflow-hidden h-full ${isTopMenuBarVisible() ? 'pt-10' : ''}`}>

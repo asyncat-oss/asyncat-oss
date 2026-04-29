@@ -11,7 +11,6 @@ import authService from "../services/authService.js";
 import {
   Settings,
   MessageSquare as ChatIcon,
-  Search,
   Cpu,
   Wrench,
   HardDrive,
@@ -107,11 +106,12 @@ const DynamicSidebar = ({
   session,
   onNewChat,
   basePage,
+  isSearchOpen,
+  onSearchOpen,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isDockVisible, setIsDockVisible] = useState(() => {
     return localStorage.getItem('dockVisibility') !== 'hover';
   });
@@ -238,7 +238,7 @@ const DynamicSidebar = ({
       e.preventDefault();
 
       switch (match.action) {
-        case 'openSearch': setIsSearchOpen(true); break;
+        case 'openSearch': onSearchOpen(true); break;
         case 'openSettings': navigate("/settings/profile"); break;
         case 'newChat': onNewChat(); break;
         case 'navHome': onNewChat(); break;
@@ -406,11 +406,6 @@ const DynamicSidebar = ({
 
         <DockSep />
 
-        {/* Search */}
-        <DockItem label="Search  ⌘K" onClick={() => setIsSearchOpen(true)} isActive={false}>
-          <Search className="w-5 h-5" />
-        </DockItem>
-
         {/* Settings/Profile — navigates to unified settings page */}
         <DockItem
           label="Settings & Profile"
@@ -433,7 +428,7 @@ const DynamicSidebar = ({
       </div>
 
       {/* ── Modals ── */}
-      <UniversalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} onNavigate={onPageChange} />
+      <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} onNavigate={onPageChange} />
     </>
   );
 };
