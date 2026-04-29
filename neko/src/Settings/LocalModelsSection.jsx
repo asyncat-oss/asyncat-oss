@@ -285,13 +285,20 @@ const LocalModelsSection = ({ storage, onRefresh, hideStorage = false }) => {
           };
         }),
       (data) => {
-        setActiveDownloads((prev) => {
-          const n = { ...prev };
-          delete n[filename];
-          return n;
-        });
-        if (data.status === "complete" && onRefresh) onRefresh();
-        delete cleanupFnsRef.current[filename];
+        if (data.status === "error") {
+          setActiveDownloads((prev) => ({
+            ...prev,
+            [filename]: { ...prev[filename], status: "error", error: data.error }
+          }));
+        } else {
+          setActiveDownloads((prev) => {
+            const n = { ...prev };
+            delete n[filename];
+            return n;
+          });
+          if (data.status === "complete" && onRefresh) onRefresh();
+          delete cleanupFnsRef.current[filename];
+        }
       },
       () => {
         setActiveDownloads((prev) => {
@@ -317,17 +324,25 @@ const LocalModelsSection = ({ storage, onRefresh, hideStorage = false }) => {
 
   const handleCancelDownload = async (filename) => {
     const dl = activeDownloads[filename];
+    
+    // Always clean up UI state immediately
+    cleanupFnsRef.current[filename]?.();
+    delete cleanupFnsRef.current[filename];
+    setActiveDownloads((prev) => {
+      const n = { ...prev };
+      delete n[filename];
+      return n;
+    });
+
     if (!dl?.downloadId) return;
+
     try {
       await localModelsApi.cancelDownload(dl.downloadId);
-      cleanupFnsRef.current[filename]?.();
-      setActiveDownloads((prev) => {
-        const n = { ...prev };
-        delete n[filename];
-        return n;
-      });
     } catch (err) {
-      console.error("Failed to cancel download:", err);
+      // Ignore errors if backend already lost track of it
+      if (!err.message?.toLowerCase().includes('not found')) {
+        console.warn("Backend cancel notice:", err);
+      }
     }
   };
 
@@ -398,35 +413,48 @@ const LocalModelsSection = ({ storage, onRefresh, hideStorage = false }) => {
                   </button>
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  <span>
-                    {dl.downloadedFormatted || "0 B"} /{" "}
-                    {dl.totalFormatted || "?"}
-                  </span>
-                  {dl.speedFormatted && dl.etaFormatted && (
+                  {dl.status === "error" ? (
+                    <span className="text-red-500 font-medium">Download failed</span>
+                  ) : (
+                    <span>
+                      {dl.downloadedFormatted || "0 B"} /{" "}
+                      {dl.totalFormatted || "?"}
+                    </span>
+                  )}
+                  {dl.status !== "error" && dl.speedFormatted && dl.etaFormatted && (
                     <span className="opacity-80">
                       {dl.speedFormatted} • {dl.etaFormatted}
                     </span>
                   )}
                   <span className="font-mono font-medium text-gray-700 dark:text-gray-300">
-                    {pct}%
+                    {dl.status === "error" ? "ERROR" : `${pct}%`}
                   </span>
                 </div>
-                <div className="h-1.5 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gray-600 dark:bg-gray-400 midnight:bg-gray-500 rounded-full transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-                  {totalBytes > 0 && (
-                    <span>Download size {formatBytes(totalBytes)}</span>
-                  )}
-                  {freeAfterDownload !== null && (
-                    <span>
-                      Free after download about {formatBytes(freeAfterDownload)}
-                    </span>
-                  )}
-                </div>
+
+                {dl.status === "error" ? (
+                  <div className="mt-1 text-[11px] text-red-500/90 dark:text-red-400">
+                    {dl.error || "Network request failed"}
+                  </div>
+                ) : (
+                  <>
+                    <div className="h-1.5 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gray-600 dark:bg-gray-400 midnight:bg-gray-500 rounded-full transition-all duration-300"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      {totalBytes > 0 && (
+                        <span>Download size {formatBytes(totalBytes)}</span>
+                      )}
+                      {freeAfterDownload !== null && (
+                        <span>
+                          Free after download about {formatBytes(freeAfterDownload)}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}

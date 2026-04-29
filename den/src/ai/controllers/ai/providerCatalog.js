@@ -3,6 +3,10 @@ const LLAMA_PORT = parseInt(process.env.LLAMA_SERVER_PORT ?? '8765', 10);
 export const LLAMA_PROVIDER_ID = 'llamacpp-builtin';
 export const LLAMA_BASE_URL = `http://127.0.0.1:${LLAMA_PORT}/v1`;
 
+const MLX_PORT = parseInt(process.env.MLX_SERVER_PORT ?? '8766', 10);
+export const MLX_PROVIDER_ID = 'mlx-local';
+export const MLX_BASE_URL = `http://127.0.0.1:${MLX_PORT}/v1`;
+
 export const PROVIDER_CATALOG = [
   {
     id: LLAMA_PROVIDER_ID,
@@ -17,6 +21,20 @@ export const PROVIDER_CATALOG = [
     local: true,
     managed: true,
     description: 'Run downloaded GGUF models with Asyncat managed llama.cpp.',
+  },
+  {
+    id: MLX_PROVIDER_ID,
+    name: 'MLX (Apple Silicon)',
+    providerType: 'local',
+    providerId: MLX_PROVIDER_ID,
+    baseUrl: MLX_BASE_URL,
+    model: '',
+    requiresApiKey: false,
+    supportsTools: false,
+    supportsModelList: false,
+    local: true,
+    managed: true,
+    description: 'Run HuggingFace MLX models natively on Apple Silicon via mlx_lm.server.',
   },
   {
     id: 'ollama',

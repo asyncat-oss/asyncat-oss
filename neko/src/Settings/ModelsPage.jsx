@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
+import MlxModelsSection from './MlxModelsSection';
 import { llamaServerApi, localModelsApi, aiProviderApi } from './settingApi.js';
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
@@ -2135,8 +2136,12 @@ const ModelsPage = () => {
   const loadStatus = async () => {
     setLoadingStatus(true);
     try {
-      const snap = await llamaServerApi.getStatus();
-      setServerStatus(snap);
+      const [llamaSnap, mlxSnap] = await Promise.all([
+        llamaServerApi.getStatus().catch(() => null),
+        mlxApi.getStatus().catch(() => null)
+      ]);
+      const isMlxActive = mlxSnap && (mlxSnap.status === 'ready' || mlxSnap.status === 'loading');
+      setServerStatus(isMlxActive ? mlxSnap : (llamaSnap || { status: 'idle' }));
     } catch (err) {
       console.warn('Failed to load server status:', err);
     } finally {
@@ -2456,9 +2461,14 @@ const ModelsPage = () => {
     pollCleanup.current?.();
     pollCleanup.current = null;
     try {
-      await llamaServerApi.stop();
+      if (serverStatus?.port === 8766) {
+        await mlxApi.stop();
+      } else {
+        await llamaServerApi.stop();
+      }
       setServerStatus({ status: 'idle', model: null });
       await loadProviderData();
+      await loadStatus();
     } catch (err) {
       console.error('Failed to stop server:', err);
     } finally {
@@ -2599,10 +2609,10 @@ const ModelsPage = () => {
     && hardwareBadgeLabel.toLowerCase() !== currentCapabilityLabel.toLowerCase()
   );
   const tabs = [
-    { id: 'library', label: 'Models', icon: HardDriveDownload },
-    { id: 'providers', label: 'Providers', icon: Cloud },
-    { id: 'engine', label: 'Engine', icon: Wrench },
-    { id: 'system', label: 'System', icon: Activity },
+    { id: 'library',    label: 'Models',    icon: HardDriveDownload },
+    { id: 'providers',  label: 'Providers', icon: Cloud },
+    { id: 'engine',     label: 'Engine',    icon: Wrench },
+    { id: 'system',     label: 'System',    icon: Activity },
   ];
 
   return (
@@ -2904,6 +2914,11 @@ const ModelsPage = () => {
                       })}
                     </div>
                   )}
+
+                  {/* MLX Models — Apple Silicon only, auto-hidden on other platforms */}
+                  <div className="mt-4 bg-white dark:bg-gray-900 midnight:bg-slate-950 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
+                    <MlxModelsSection onMlxStatusChange={setServerStatus} onMlxStopRequest={loadStatus} />
+                  </div>
                 </div>
               </div>
               )}

@@ -56,3 +56,6 @@ Thumbs.db
 # Misc
 *.swp
 *.swo
+
+# AI Coding Docs
+mlx_integration_summary.txt

@@ -36,6 +36,8 @@ import {
 import {
   LLAMA_BASE_URL,
   LLAMA_PROVIDER_ID,
+  MLX_BASE_URL,
+  MLX_PROVIDER_ID,
   PROVIDER_CATALOG,
   getProviderPreset,
   normalizeBaseUrl,
@@ -45,6 +47,14 @@ import {
   providerSupportsTools,
   publicProvider,
 } from '../controllers/ai/providerCatalog.js';
+import {
+  listMlxModels,
+  isMlxAvailable,
+  startServer as startMlxServer,
+  stopServer as stopMlxServer,
+  getStatus as getMlxStatus,
+  IS_APPLE_SILICON,
+} from '../controllers/ai/mlxServerManager.js';
 import db from '../../db/client.js';
 
 const router = express.Router();
@@ -1209,6 +1219,101 @@ router.post('/server/stop', verifyUser, async (req, res) => {
     res.json({ success: true, message: 'Server stopped' });
   } catch (err) {
     console.error('Server stop error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MLX SERVER ROUTES — /api/ai/providers/mlx/*
+// Only meaningful on Apple Silicon; all routes return gracefully on other platforms.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /mlx/status — current MLX server state + availability
+router.get('/mlx/status', verifyUser, async (req, res) => {
+  try {
+    const status = getMlxStatus();
+    const mlxAvailable = IS_APPLE_SILICON ? await isMlxAvailable() : false;
+    res.json({ success: true, ...status, mlxAvailable });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /mlx/models — list all locally detected MLX model directories
+router.get('/mlx/models', verifyUser, (req, res) => {
+  try {
+    const models = listMlxModels();
+    res.json({ success: true, models });
+  } catch (err) {
+    console.error('MLX list models error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /mlx/start — start mlx_lm.server with a specific model path
+router.post('/mlx/start', verifyUser, async (req, res) => {
+  try {
+    const { modelPath } = req.body || {};
+    if (!modelPath) {
+      return res.status(400).json({ success: false, error: 'modelPath is required' });
+    }
+    if (!IS_APPLE_SILICON) {
+      return res.status(400).json({ success: false, error: 'MLX is only supported on Apple Silicon (macOS arm64).' });
+    }
+
+    // Return immediately — client polls /mlx/status for progress
+    res.json({ success: true, message: 'MLX server starting…' });
+
+    // Save MLX as the active provider (non-blocking, best-effort)
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO ai_provider_config (user_id, profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools, updated_at)
+        VALUES (?, NULL, 'local', ?, ?, ?, NULL, '{}', 0, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          profile_id = NULL,
+          provider_type = 'local',
+          provider_id = excluded.provider_id,
+          base_url = excluded.base_url,
+          model = excluded.model,
+          api_key = NULL,
+          settings = '{}',
+          supports_tools = 0,
+          updated_at = excluded.updated_at
+      `).run(req.user.id, MLX_PROVIDER_ID, MLX_BASE_URL, modelPath, now);
+      notifyProviderStatus(req.user.id);
+    } catch (dbErr) {
+      console.warn('[mlxRoute] Failed to persist active provider:', dbErr.message);
+    }
+
+    // Start server in background
+    startMlxServer(modelPath).catch(err => {
+      console.error('[mlxRoute] startMlxServer error:', err.message);
+    });
+  } catch (err) {
+    console.error('MLX start error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /mlx/stop — stop the running mlx_lm.server
+router.post('/mlx/stop', verifyUser, async (req, res) => {
+  try {
+    await stopMlxServer();
+
+    // Clear active provider if it was MLX
+    const current = db
+      .prepare('SELECT provider_id FROM ai_provider_config WHERE user_id = ?')
+      .get(req.user.id);
+    if (current?.provider_id === MLX_PROVIDER_ID) {
+      db.prepare('DELETE FROM ai_provider_config WHERE user_id = ?').run(req.user.id);
+      notifyProviderStatus(req.user.id);
+    }
+
+    res.json({ success: true, message: 'MLX server stopped' });
+  } catch (err) {
+    console.error('MLX stop error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

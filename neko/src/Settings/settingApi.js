@@ -504,6 +504,60 @@ export const llamaServerApi = {
 };
 
 // ===========================================
+// MLX LOCAL MODEL SERVER API
+// ===========================================
+
+export const mlxApi = {
+  // Get current MLX server status + whether mlx_lm is installed
+  getStatus: async () => {
+    return apiCall(`${AI_API_BASE}/mlx/status`);
+  },
+
+  // List all locally detected MLX model directories
+  listModels: async () => {
+    return apiCall(`${AI_API_BASE}/mlx/models`);
+  },
+
+  // Start mlx_lm.server with a specific model path.
+  // Returns immediately — poll getStatus() to track loading.
+  start: async (modelPath) => {
+    return apiCall(`${AI_API_BASE}/mlx/start`, {
+      method: 'POST',
+      body: JSON.stringify({ modelPath }),
+    });
+  },
+
+  // Stop the running MLX server.
+  stop: async () => {
+    return apiCall(`${AI_API_BASE}/mlx/stop`, { method: 'POST' });
+  },
+
+  // Poll MLX status until ready or error.
+  // Returns a cleanup function that stops polling.
+  pollStatus: (onUpdate, onReady, onError) => {
+    let stopped = false;
+    let timerId = null;
+
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const snap = await apiCall(`${AI_API_BASE}/mlx/status`);
+        if (stopped) return;
+        onUpdate?.(snap);
+        if (snap.status === 'ready') { stopped = true; onReady?.(snap); return; }
+        if (snap.status === 'error') { stopped = true; onError?.(snap); return; }
+      } catch (err) {
+        if (!stopped) { stopped = true; onError?.({ status: 'error', error: err.message }); return; }
+      }
+      if (!stopped) timerId = setTimeout(poll, 1000);
+    };
+
+    poll();
+    return () => { stopped = true; clearTimeout(timerId); };
+  },
+};
+
+// ===========================================
 // CONFIG API FUNCTIONS
 // ===========================================
 
