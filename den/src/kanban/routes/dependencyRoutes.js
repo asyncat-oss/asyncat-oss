@@ -1,7 +1,7 @@
 // dependencyRoutes.js - Updated to use Supabase auth
 import express from "express";
 import dependencyController from "../controllers/dependencyController.js";
-import { verifyUser } from "../auth.js";
+import { verifyUser } from "../../auth/authMiddleware.js";
 import { attachDb } from "../../db/sqlite.js";
 
 const router = express.Router();

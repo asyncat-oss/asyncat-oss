@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { trashApi } from "./commandCenterApi";
 import { Trash2, RotateCcw, MessageSquare, AlertTriangle } from "lucide-react";
 

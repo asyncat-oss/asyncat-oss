@@ -1,7 +1,7 @@
 // timeRoutes.js - Updated to use Supabase auth
 import express from "express";
 import timeController from "../controllers/timeController.js";
-import { verifyUser } from "../auth.js";
+import { verifyUser } from "../../auth/authMiddleware.js";
 import { attachDb } from "../../db/sqlite.js";
 
 const router = express.Router();

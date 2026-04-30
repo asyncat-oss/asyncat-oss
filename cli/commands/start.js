@@ -37,7 +37,7 @@ export async function run(args = []) {
   }
 
   if (!frontendOnly) {
-    info('Starting backend  → ' + col('white', 'http://localhost:8716'));
+    info('Starting backend  → ' + col('white', 'http://localhost:7716'));
     info('Backend auto-restart watches den/src, den/.env, and den/package.json');
     startProc('backend', 'den', 'npm', ['start'], 'cyan', {
       watchPaths: ['src', '.env', 'package.json'],
@@ -47,7 +47,7 @@ export async function run(args = []) {
   }
 
   if (!backendOnly) {
-    info('Starting frontend → ' + col('white', 'http://localhost:8717'));
+    info('Starting frontend → ' + col('white', 'http://localhost:7717'));
     startProc('frontend', 'neko', 'npm', ['run', 'dev'], 'magenta');
   }
 }
