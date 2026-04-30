@@ -187,9 +187,8 @@ const importantTableOrder = [
   'conversations',
   'agent_memory',
   'projects',
-  'Cards',
-  'Events',
-  'habits',
+  'cards',
+  'events',
   'users',
 ];
 

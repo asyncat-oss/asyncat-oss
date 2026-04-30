@@ -9,7 +9,6 @@
 -- Schema prefixes removed (SQLite has no schemas):
 --   kanban.Columns  → Columns      kanban.Cards  → Cards
 --   kanban.TaskDependencies         kanban.TimeEntries
---   habits.habits   → habits        habits.habit_completions / habit_streaks
 --   aichats.conversations / chat_folders
 --
 -- SQLite adaptations:
@@ -61,7 +60,7 @@ CREATE TABLE IF NOT EXISTS projects (
   -- References workspaces instead of the old teams table.
   team_id         TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   is_archived     INTEGER NOT NULL DEFAULT 0,
-  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","timeline","gantt","network","notes","habits","gallery"]',
+  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","timeline","gantt","network","notes","gallery"]',
   enabled_widgets TEXT NOT NULL DEFAULT '["metrics","progress","description","quick-stats","deadlines","team-members","features","project-details"]',
   emoji           TEXT NOT NULL DEFAULT '📁',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
@@ -249,50 +248,6 @@ CREATE TABLE IF NOT EXISTS TimeEntries (
   updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- ─── Habits ───────────────────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS habits (
-  id            TEXT PRIMARY KEY,
-  name          TEXT NOT NULL,
-  description   TEXT,
-  created_by    TEXT NOT NULL REFERENCES users(id),
-  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  frequency     TEXT NOT NULL DEFAULT 'daily'
-                  CHECK (frequency IN ('daily','weekly','monthly')),
-  tracking_type TEXT NOT NULL DEFAULT 'boolean'
-                  CHECK (tracking_type IN ('boolean','numeric','duration')),
-  target_value  INTEGER NOT NULL DEFAULT 1,
-  unit          TEXT,
-  is_active     INTEGER NOT NULL DEFAULT 1,
-  is_private    INTEGER NOT NULL DEFAULT 1,
-  category      TEXT NOT NULL DEFAULT 'general',
-  color         TEXT NOT NULL DEFAULT '#6366f1',
-  icon          TEXT NOT NULL DEFAULT '🎯',
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS habit_completions (
-  id             TEXT PRIMARY KEY,
-  habit_id       TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-  user_id        TEXT NOT NULL REFERENCES users(id),
-  completed_date TEXT NOT NULL,   -- DATE as TEXT: 'YYYY-MM-DD'
-  value          INTEGER NOT NULL DEFAULT 1,
-  notes          TEXT,
-  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS habit_streaks (
-  id                   TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  habit_id             TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-  user_id              TEXT NOT NULL REFERENCES users(id),
-  current_streak       INTEGER NOT NULL DEFAULT 0,
-  longest_streak       INTEGER NOT NULL DEFAULT 0,
-  last_completion_date TEXT,   -- DATE as TEXT: 'YYYY-MM-DD'
-  updated_at           TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(habit_id, user_id)
-);
-
 -- ─── AI Chats ─────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS chat_folders (
@@ -342,9 +297,6 @@ CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);
 CREATE INDEX IF NOT EXISTS idx_Cards_createdBy          ON Cards(createdBy);
 CREATE INDEX IF NOT EXISTS idx_TimeEntries_cardId       ON TimeEntries(cardId);
 CREATE INDEX IF NOT EXISTS idx_TimeEntries_userId       ON TimeEntries(userId);
-CREATE INDEX IF NOT EXISTS idx_habits_project_id        ON habits(project_id);
-CREATE INDEX IF NOT EXISTS idx_habit_completions_habit  ON habit_completions(habit_id);
-CREATE INDEX IF NOT EXISTS idx_habit_streaks_habit      ON habit_streaks(habit_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_user       ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_workspace  ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_deleted    ON conversations(deleted_at);

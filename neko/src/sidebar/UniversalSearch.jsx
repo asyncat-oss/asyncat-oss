@@ -109,7 +109,6 @@ const UniversalSearch = ({ isOpen, onClose }) => {
 
     const PROJECT_TABS = [
       { id: 'notes',    label: 'Notes' },
-      { id: 'habits',   label: 'Habits' },
       { id: 'kanban',   label: 'Board' },
       { id: 'list',     label: 'List' },
       { id: 'timeline', label: 'Timeline' },

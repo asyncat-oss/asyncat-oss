@@ -261,7 +261,7 @@ const OWNER_PERMISSIONS = {
 const getDefaultEnabledViews = () => {
   return [
     'kanban', 'list', 'timeline',
-    'gantt', 'network', 'notes', 'habits', 'activity', 'storage', 'gallery'
+    'gantt', 'network', 'notes', 'activity', 'storage', 'gallery'
   ];
 };
 
@@ -273,7 +273,7 @@ const validateProjectEnabledViews = (enabledViews) => {
   
   const validViewKeys = [
     'storage', 'kanban', 'list', 'timeline', 'gantt',
-    'network', 'notes', 'habits', 'activity', 'gallery'
+    'network', 'notes', 'activity', 'gallery'
   ];
   
   const invalidViews = enabledViews.filter(view => !validViewKeys.includes(view));

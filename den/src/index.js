@@ -1,5 +1,5 @@
 // den/src/index.js — Asyncat unified backend monolith
-// Merges: ai, users, calendar, habits, kanban, notes
+// Merges: ai, users, calendar, kanban, notes
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -25,9 +25,6 @@ import projectRoutes from './users/routes/projectRouters.js';
 
 // ─── Calendar (from asy_b_calendar) ──────────────────────────────────────────
 import eventRoutes from './calendar/routes/eventRoutes.js';
-
-// ─── Habits (from asy_b_habit) ────────────────────────────────────────────────
-import habitsRoutes from './habits/routes/habitsRoutes.js';
 
 // ─── Kanban (from asy_b_kanban) ───────────────────────────────────────────────
 import cardRoutes from './kanban/routes/cardRoutes.js';
@@ -119,9 +116,6 @@ app.use('/api/projects', projectRoutes);
 
 // ─── Routes: Calendar ─────────────────────────────────────────────────────────
 app.use('/api/events', eventRoutes);
-
-// ─── Routes: Habits ───────────────────────────────────────────────────────────
-app.use('/api/habits', habitsRoutes);
 
 // ─── Routes: Kanban ───────────────────────────────────────────────────────────
 app.use('/api/cards', cardRoutes);

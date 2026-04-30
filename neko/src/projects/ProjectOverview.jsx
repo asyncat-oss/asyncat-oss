@@ -17,7 +17,6 @@ const ProjectOverview = () => {
     'network',
     'gallery',
     'notes',
-    'habits',
     'settings',
   ];
 

@@ -8,7 +8,6 @@ import {
 	GanttChartSquare,
 	Link2,
 	FileText,
-	Target,
 	Settings,
 } from "lucide-react";
 
@@ -20,7 +19,6 @@ import GanttView from "../views/gantt/GanttView";
 import NetworkView from "../views/network/NetworkView";
 import GalleryView from "../views/gallery/GalleryView";
 import NotesIndex from "../notes/NotesIndex";
-import HabitsIndex from "../habits/HabitsIndex";
 
 // Import context providers
 import { ColumnProvider } from "../views/context/ColumnProvider";
@@ -39,7 +37,6 @@ const PROJECT_VIEWS = [
 	{ key: 'network',  label: 'Network',  Icon: Link2 },
 	{ key: 'gallery',  label: 'Gallery',  Icon: LayoutGrid },
 	{ key: 'notes',    label: 'Notes',    Icon: FileText },
-	{ key: 'habits',   label: 'Habits',   Icon: Target },
 ];
 
 // Comprehensive skeleton component for the project overview
@@ -365,15 +362,6 @@ const ProjectOverview = React.memo(({
 					<NotesIndex
 						selectedProject={projectData}
 						session={session}
-					/>
-				);
-
-			case "habits":
-				return (
-					<HabitsIndex
-						selectedProject={projectData}
-						session={session}
-						currentPage={currentTab}
 					/>
 				);
 
