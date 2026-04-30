@@ -130,7 +130,7 @@ function UserGoalEvent({ data }) {
   );
 }
 
-// Minimal inline reasoning disclosure — matches ThinkingBlock in chat
+// Minimal inline reasoning disclosure for agent thought events.
 function ThinkingEvent({ data }) {
   const [expanded, setExpanded] = useState(false);
   const thought = data?.thought || '';

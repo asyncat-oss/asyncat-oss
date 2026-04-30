@@ -1,6 +1,6 @@
 // den/src/agent/tools/searchTools.js
 // ─── Web Search Tools ────────────────────────────────────────────────────────
-// Wraps the existing webSearch.js (DuckDuckGo + SearXNG) for agent use.
+// Wraps the local DuckDuckGo search helper for agent use.
 
 import { PermissionLevel } from './toolRegistry.js';
 
@@ -106,7 +106,7 @@ export const webSearchTool = {
   },
   execute: async (args) => {
     try {
-      const { searchWeb } = await import('../../ai/controllers/ai/webSearch.js');
+      const { searchWeb } = await import('./webSearch.js');
       const results = await searchWeb(args.query, args.max_results || 5, args.include_images || false);
       // Slim results for agent consumption
       const formatted = results.results.map((r, i) => ({

@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Bot, ChevronDown, Cloud, Cpu, Loader2, MessageSquare, Send, Search, X, ShieldOff, Shield } from "lucide-react";
+import { ChevronDown, Cloud, Cpu, Loader2, Send, Search, X } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -16,10 +16,6 @@ export const MessageInputV2 = ({
   hasMessages = false,
   conversationTooLong = false,
   conversationTokens = 0,
-  mode = 'chat',
-  onModeChange,
-  agentAutoApprove = false,
-  onAgentAutoApproveChange,
   prefillValue,
 }) => {
   const [value, setValue] = useState("");
@@ -121,12 +117,6 @@ export const MessageInputV2 = ({
 
   const canSubmit = value.trim() && !disabled;
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
-  const modeOptions = [
-    { value: "chat", label: "Chat", icon: MessageSquare },
-    { value: "agent", label: "Agent", icon: Bot },
-  ];
-  const activeModeOption = modeOptions.find((option) => option.value === mode) || modeOptions[0];
-  const ModeIcon = activeModeOption.icon;
   const modelLabel = activeBrain.isLoadingModel
     ? "Loading"
     : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
@@ -362,48 +352,6 @@ export const MessageInputV2 = ({
                       </div>
                     )}
                   </div>
-                  {onModeChange && (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setOpenMenu((current) => (current === "mode" ? null : "mode"))}
-                        disabled={disabled}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-600 transition-colors disabled:cursor-not-allowed"
-                        aria-haspopup="menu"
-                        aria-expanded={openMenu === "mode"}
-                      >
-                        <ModeIcon className="w-3.5 h-3.5 shrink-0" />
-                        {activeModeOption.label}
-                        <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-                      </button>
-                      {openMenu === "mode" && (
-                        <div className="absolute left-0 top-full z-30 mt-1.5 w-32 overflow-hidden rounded-lg border border-gray-200 bg-white p-1 shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                          {modeOptions.map((option) => {
-                            const OptionIcon = option.icon;
-                            const isActive = option.value === mode;
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => {
-                                  onModeChange(option.value);
-                                  setOpenMenu(null);
-                                }}
-                                className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors ${
-                                  isActive
-                                    ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800"
-                                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800"
-                                }`}
-                              >
-                                <OptionIcon className="w-3.5 h-3.5" />
-                                {option.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
                   <button
                     type="button"
                     onClick={() => setWebSearchEnabled((v) => !v)}
@@ -422,29 +370,6 @@ export const MessageInputV2 = ({
                     <Search className="w-3.5 h-3.5" />
                     Search
                   </button>
-
-                  {mode === 'agent' && onAgentAutoApproveChange && (
-                    <button
-                      type="button"
-                      onClick={() => onAgentAutoApproveChange(!agentAutoApprove)}
-                      disabled={disabled}
-                      title={agentAutoApprove
-                        ? "Unrestricted mode ON — agent runs all tools without asking. Click to turn off."
-                        : "Restricted mode — agent will ask permission for sensitive tools. Click to enable unrestricted mode."
-                      }
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        agentAutoApprove
-                          ? "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 ring-1 ring-orange-400 dark:ring-orange-500"
-                          : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-                      }`}
-                    >
-                      {agentAutoApprove
-                        ? <ShieldOff className="w-3.5 h-3.5" />
-                        : <Shield className="w-3.5 h-3.5" />
-                      }
-                      {agentAutoApprove ? "Unrestricted" : "Restricted"}
-                    </button>
-                  )}
                 </div>
 
                 <div className="shrink-0">

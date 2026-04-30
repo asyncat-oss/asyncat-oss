@@ -9,7 +9,7 @@ import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.j
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import { loadSkills, listSkills } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
-import { getAiClientForUser } from '../controllers/ai/chat/chatRouter.js';
+import { getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
@@ -502,11 +502,63 @@ router.put('/soul', authenticate, (req, res) => {
 router.post('/run', authenticate, async (req, res) => {
   let heartbeatInterval = null;
   try {
-    const { goal, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId } = req.body;
+    // Accept `message` as an alias for `goal` (unified chat interface)
+    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true } = req.body;
+    const goal = (rawGoal || rawMessage || '').trim();
 
-    if (!goal || !goal.trim()) {
+    if (!goal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
     }
+
+    // ── Tools disabled: single-round answer stream through the agent endpoint ──
+    if (!enableTools) {
+      const { client: aiClient, model, isLocal } = getAiClientForUser(req.user.id);
+      const maxTokens = isLocal ? 1024 : 4000;
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Content-Encoding', 'identity');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+
+      const hbInterval = setInterval(() => writeAgentSseComment(res, 'ping'), 15000);
+      res.on('close', () => clearInterval(hbInterval));
+
+      try {
+        const messages = [
+          ...conversationHistory.slice(-6).map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: goal },
+        ];
+        const systemPrompt = 'You are a helpful AI assistant. Respond clearly and concisely.';
+
+        const stream = await aiClient.client.chat.completions.create({
+          model,
+          messages: [{ role: 'system', content: systemPrompt }, ...messages],
+          stream: true,
+          max_tokens: maxTokens,
+        });
+
+        let fullContent = '';
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta?.content;
+          if (delta) {
+            fullContent += delta;
+            writeAgentSse(res, { type: 'delta', data: { content: delta } });
+          }
+        }
+
+        writeAgentSse(res, { type: 'done', data: { answer: fullContent } });
+      } catch (err) {
+        writeAgentSse(res, { type: 'error', data: { message: err.message } });
+      } finally {
+        clearInterval(hbInterval);
+        res.end();
+      }
+      return;
+    }
+
+    // ── Full agent mode ──────────────────────────────────────────────────────
 
     // Resolve profile (if provided)
     let profile = null;

@@ -17,7 +17,7 @@ export const agentTools = [
     execute: async (args, context) => {
       // Dynamically import AgentRuntime to avoid circular dependencies
       const { AgentRuntime } = await import('../AgentRuntime.js');
-      const { getAiClientForUser } = await import('../../ai/controllers/ai/chat/chatRouter.js');
+      const { getAiClientForUser } = await import('../../ai/controllers/ai/clientFactory.js');
       
       const providerInfo = await getAiClientForUser(context.userId);
       if (!providerInfo || !providerInfo.client) {

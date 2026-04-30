@@ -1,9 +1,6 @@
-// BlockBasedMessageRenderer.jsx - Updated for New Mode System
+// BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
 import { useMemo, useState, useCallback, memo, useEffect } from 'react';
-import SaveAsNoteModal from './SaveAsNoteModal';
-import ArtifactViewer from './artifacts/ArtifactViewer';
 import { Copy, Check, RotateCcw, Zap } from 'lucide-react';
-import { useCommandCenter } from '../CommandCenterContextEnhanced';
 import { tokenTracker } from './LocalModelStats';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -1001,18 +998,11 @@ const BlockBasedMessageRenderer = memo(({
   _isLastMessage = false,
   _suggestions = [],
   isPublicView = false,
-  artifacts = null,
-  artifactExplanation = null,
-  _onSaveArtifactToNotes = null,
-  _onArtifactOpen = null,
   onTermClick = null,
   isStreaming = false
 }) => {
   const [copyStatus, setCopyStatus] = useState(null);
-  const [showSaveModal, setShowSaveModal] = useState(false);
   const [tokensPerSec, setTokensPerSec] = useState(null);
-
-  const { shouldSaveConversations } = useCommandCenter();
 
   // Subscribe to token tracker events for live tokens/sec
   useEffect(() => {
@@ -1029,20 +1019,10 @@ const BlockBasedMessageRenderer = memo(({
     return unsub;
   }, [isStreaming]);
 
-  // Check if message has artifacts
-  const hasArtifacts = artifacts && artifacts.length > 0;
-
   // Parse AI response into blocks
   const blocks = useMemo(() => {
-    const parsedBlocks = parseAIResponseToBlocks(content);
-
-    // When artifacts exist, filter out code blocks from content (they're shown as artifacts)
-    if (hasArtifacts) {
-      return parsedBlocks.filter(block => block.type !== 'code');
-    }
-
-    return parsedBlocks;
-  }, [content, hasArtifacts]);
+    return parseAIResponseToBlocks(content);
+  }, [content]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -1055,11 +1035,6 @@ const BlockBasedMessageRenderer = memo(({
       setTimeout(() => setCopyStatus(null), 2000);
     }
   }, [content]);
-
-  const _handleSaveAsNote = useCallback(() => {
-    setShowSaveModal(true);
-  }, []);
-
 
   const colors = {
     border: 'border-gray-200/50 dark:border-gray-700/50 midnight:border-slate-600/50'
@@ -1079,7 +1054,7 @@ const BlockBasedMessageRenderer = memo(({
         `}</style>
       )}
 
-      {/* Handle text content with simple block display - Show BEFORE artifacts like Claude */}
+      {/* Handle text content with simple block display */}
       {content && blocks && (
         <div className="space-y-1">
           {blocks.map((block, idx) => (
@@ -1095,20 +1070,6 @@ const BlockBasedMessageRenderer = memo(({
           {isStreaming && <span className="cc-cursor" aria-hidden="true" />}
         </div>
       )}
-
-      {/* Artifacts — only show inline card when no side panel handler exists */}
-      {hasArtifacts && !_onArtifactOpen && (
-        <div className="artifacts-section">
-          <ArtifactViewer
-            artifacts={artifacts}
-            explanation={artifactExplanation}
-            showExplanation={!!artifactExplanation}
-            onSaveToNotes={_onSaveArtifactToNotes}
-            onArtifactOpen={_onArtifactOpen}
-          />
-        </div>
-      )}
-
 
       {/* Action Bar - Placed at top for quick access */}
       {!isPublicView && (
@@ -1156,16 +1117,6 @@ const BlockBasedMessageRenderer = memo(({
       )}
 
 
-      {/* Save Modal - Only for saveable modes */}
-      {!isPublicView && shouldSaveConversations && shouldSaveConversations() && (
-        <SaveAsNoteModal
-          isOpen={showSaveModal}
-          onClose={() => setShowSaveModal(false)}
-          content={content}
-          blocks={blocks}
-          suggestedTitle={`AI Response - ${new Date().toLocaleDateString()}`}
-        />
-      )}
     </div>
   );
 });
