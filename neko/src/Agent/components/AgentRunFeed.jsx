@@ -473,10 +473,8 @@ function AnswerEvent({ data }) {
     .replace(/\s*<tool_call[\s\S]*$/i, '')
     .trim();
 
-  // If stripping removed all content (model response was only think/tool_call blocks),
-  // fall back to the think content so the user sees something meaningful.
-  const displayAnswer = answer || thinkFallback;
-  if (!displayAnswer) return null;
+  const displayAnswer = answer;
+  if (!displayAnswer && !thinkFallback) return null;
 
   let blocks = [];
   try {
@@ -484,18 +482,21 @@ function AnswerEvent({ data }) {
   } catch { blocks = []; }
 
   return (
-    <div className="group mb-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
-          {blocks.length > 0
-            ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
-            : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
+    <>
+      {thinkFallback && <ThinkingEvent data={{ thought: thinkFallback }} />}
+      {displayAnswer && <div className="group mb-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+            {blocks.length > 0
+              ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
+              : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
+          </div>
+          {data?.round > 1 && (
+            <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
+          )}
         </div>
-        {data?.round > 1 && (
-          <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
-        )}
-      </div>
-    </div>
+      </div>}
+    </>
   );
 }
 
@@ -575,6 +576,8 @@ function StreamingPreview({ text }) {
   if (!text?.trim()) return null;
 
   const clean = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/gi, '')
     .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
     .replace(/\*\*Thought:\*\*[\s\S]*?(?=\*\*[A-Z]|$)/g, '')
     .replace(/\*\*Action:\*\*[\s\S]*$/s, '')
