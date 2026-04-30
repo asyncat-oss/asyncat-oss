@@ -307,6 +307,65 @@ function RevertRunModal({ open, goal, total, checkpoint, reverting, onCancel, on
   );
 }
 
+function formatRunDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+export function AgentRunSummary({ events = [], duration = null }) {
+  const tools = new Map();
+  const files = new Set();
+  const failures = [];
+
+  for (const ev of events) {
+    if (ev.type !== 'tool_start') continue;
+    const tool = ev.data?.tool || 'tool';
+    tools.set(tool, (tools.get(tool) || 0) + 1);
+    const args = ev.data?.args || {};
+    if (args.path) files.add(args.path);
+    if (args.destination) files.add(args.destination);
+    if (ev.result && (ev.result.error || ev.result.success === false)) {
+      failures.push({ tool, error: ev.result.error || 'failed' });
+    }
+  }
+
+  const answerSeen = events.some(ev => ev.type === 'answer');
+  const durationLabel = formatRunDuration(duration);
+  if (!events.length || (!tools.size && !failures.length && !durationLabel && !answerSeen)) return null;
+
+  const toolLabel = tools.size
+    ? [...tools.entries()].map(([name, count]) => `${name}${count > 1 ? ` x${count}` : ''}`).join(' · ')
+    : 'No tools';
+
+  return (
+    <div className="mt-4 max-w-4xl mx-auto rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-950 overflow-hidden">
+      <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-800/60 flex items-center gap-2">
+        <CheckCircle2 className={`w-3.5 h-3.5 ${failures.length ? 'text-amber-500' : 'text-emerald-500'}`} />
+        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Run summary</span>
+        {durationLabel && <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500">{durationLabel}</span>}
+      </div>
+      <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+        <div>
+          <div className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Tools</div>
+          <div className="mt-1 text-gray-700 dark:text-gray-300 truncate" title={toolLabel}>{toolLabel}</div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Files</div>
+          <div className="mt-1 text-gray-700 dark:text-gray-300">{files.size}</div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Failures</div>
+          <div className={failures.length ? 'mt-1 text-amber-600 dark:text-amber-400 truncate' : 'mt-1 text-gray-700 dark:text-gray-300'}>
+            {failures.length ? `${failures.length}: ${failures[0].tool}` : 'None'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AgentChangesPanel({ events = [], sessionId = null, session = null }) {
   const [collapsed, setCollapsed] = useState(false);
   const [stateData, setStateData] = useState(null);
@@ -321,6 +380,15 @@ export default function AgentChangesPanel({ events = [], sessionId = null, sessi
   const total = files.length + commands.length;
   const checkpoint = stateData?.checkpoint || session?.scratchpad?.baselineCheckpoint || null;
   const revert = stateData?.revert || null;
+  const hasFiles = files.length > 0;
+  const hasCommands = commands.length > 0;
+  const panelTitle = hasFiles && hasCommands
+    ? 'Changes and commands from this run'
+    : hasFiles
+      ? 'Changes from this run'
+      : 'Commands from this run';
+  const PanelIcon = hasFiles ? File : Terminal;
+  const showRevertControls = hasFiles && checkpoint;
 
   const refreshState = () => {
     if (!sessionId) return;
@@ -369,8 +437,8 @@ export default function AgentChangesPanel({ events = [], sessionId = null, sessi
             ? <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
             : <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
           }
-          <File className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Changes from this run</span>
+          <PanelIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{panelTitle}</span>
           <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500 truncate">
             {files.length > 0 && `${files.length} file${files.length !== 1 ? 's' : ''}`}
             {files.length > 0 && commands.length > 0 && ' · '}
@@ -388,7 +456,7 @@ export default function AgentChangesPanel({ events = [], sessionId = null, sessi
             Refresh state
           </button>
         )}
-        {checkpoint && (
+        {showRevertControls && (
           <button
             onClick={() => setShowRevertConfirm(true)}
             disabled={!revert?.available || reverting}
@@ -414,7 +482,7 @@ export default function AgentChangesPanel({ events = [], sessionId = null, sessi
               {revertMessage.text}
             </div>
           )}
-          {revert && !revert.available && (
+          {hasFiles && revert && !revert.available && (
             <div className="px-3 py-2 text-[11px] text-gray-400 dark:text-gray-500">
               Revert unavailable: {revert.reason}
             </div>

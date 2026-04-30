@@ -53,6 +53,47 @@ class ToolRegistry {
     return tool ? tool.permission : PermissionLevel.DANGEROUS;
   }
 
+  validateArgs(name, args) {
+    const tool = this._tools.get(name);
+    if (!tool) {
+      return { valid: false, error: `Unknown tool: "${name}"`, missing: [], invalid: [] };
+    }
+
+    const parameters = tool.parameters || {};
+    const required = Array.isArray(parameters.required) ? parameters.required : [];
+    const props = parameters.properties || {};
+    const value = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+    const missing = required.filter(key => value[key] === undefined || value[key] === null || value[key] === '');
+    const invalid = [];
+
+    for (const [key, spec] of Object.entries(props)) {
+      if (value[key] === undefined || value[key] === null) continue;
+      const expected = spec?.type;
+      if (!expected) continue;
+      const actual = Array.isArray(value[key]) ? 'array' : typeof value[key];
+      const allowed = Array.isArray(expected) ? expected : [expected];
+      if (!allowed.includes(actual)) {
+        invalid.push({ key, expected: allowed.join(' or '), actual });
+      }
+    }
+
+    if (missing.length || invalid.length) {
+      const parts = [];
+      if (missing.length) parts.push(`missing required ${missing.map(k => `\`${k}\``).join(', ')}`);
+      if (invalid.length) {
+        parts.push(`invalid ${invalid.map(item => `\`${item.key}\` (${item.actual}, expected ${item.expected})`).join(', ')}`);
+      }
+      return {
+        valid: false,
+        error: `Invalid arguments for ${name}: ${parts.join('; ')}`,
+        missing,
+        invalid,
+      };
+    }
+
+    return { valid: true, missing: [], invalid: [] };
+  }
+
   byCategory(category) {
     return this.all().filter(t => t.category === category);
   }
@@ -72,6 +113,16 @@ class ToolRegistry {
   async execute(name, args, context) {
     const tool = this._tools.get(name);
     if (!tool) return { success: false, error: `Unknown tool: "${name}"` };
+    const validation = this.validateArgs(name, args);
+    if (!validation.valid) {
+      return {
+        success: false,
+        code: 'invalid_tool_arguments',
+        error: validation.error,
+        missing: validation.missing,
+        invalid: validation.invalid,
+      };
+    }
     try {
       return await tool.execute(args, context);
     } catch (err) {

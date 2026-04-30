@@ -547,7 +547,6 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             {/* Header row */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-500" />
                 <span className="text-sm font-semibold text-gray-800 dark:text-white">default.md</span>
                 <span className="text-xs text-gray-400 dark:text-gray-600 ml-1">Agent persona &amp; operating rules</span>
               </div>

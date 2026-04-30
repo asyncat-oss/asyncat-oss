@@ -69,6 +69,7 @@ export class AgentRuntime {
     this.session = null;
     this.continueSessionId = opts.continueSessionId || null;
     this.soulOverride = opts.soul || null;
+    this.providerInfo = opts.providerInfo || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Local models handle much smaller contexts than cloud models — compact sooner.
@@ -127,6 +128,13 @@ export class AgentRuntime {
 
     conversationRoundStart = this.session.totalRounds || 0;
     conversationToolStart = this.session.toolHistory?.length || 0;
+    this.session.setScratchpad('providerInfo', {
+      ...(this.providerInfo || {}),
+      model: this.model,
+      isLocal: this.isLocal,
+      supportsNativeTools: this.supportsNativeTools,
+    });
+    this.session.save();
 
     this.onEvent({
       type: 'session_start',
@@ -202,6 +210,7 @@ export class AgentRuntime {
     // ── ReAct Loop ──────────────────────────────────────────────────────────
     let answer = null;
     let formatRepairAttempts = 0;
+    const argumentRepairAttempts = new Map();
     let lastToolSig = null;
     let consecutiveDupCount = 0;
 
@@ -250,8 +259,20 @@ export class AgentRuntime {
         return { answer: `Error: ${err.message}`, session: this.session, toolCalls: this.session.toolHistory };
       }
 
-      // Add assistant response to thread
-      messages.push({ role: 'assistant', content: responseText });
+      // Add assistant response to thread. Native tool-calling providers expect
+      // the assistant tool_call message followed by role=tool result messages.
+      const nativeToolCallsForThread = Array.isArray(apiToolCalls) && apiToolCalls.length > 0
+        ? apiToolCalls
+        : null;
+      if (nativeToolCallsForThread) {
+        messages.push({
+          role: 'assistant',
+          content: responseText || null,
+          tool_calls: nativeToolCallsForThread,
+        });
+      } else {
+        messages.push({ role: 'assistant', content: responseText });
+      }
 
       // Parse for tool calls (handles all model formats)
       const toolCalls = ToolCallFormatter.parseToolCalls(responseText, apiToolCalls, knownTools);
@@ -312,6 +333,7 @@ export class AgentRuntime {
 
       // Permission checks — always sequential (may need interactive prompts)
       const permitted = [];
+      let repairRequested = false;
       for (const tc of toolCalls) {
         if (!toolRegistry.has(tc.tool_name)) {
           const unknownResult = {
@@ -339,11 +361,62 @@ export class AgentRuntime {
             startedAt: new Date().toISOString(),
           });
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: unknownResult, round } });
-          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, unknownResult) });
+          messages.push(this._toolResultMessage(tc, unknownResult, Boolean(nativeToolCallsForThread)));
           continue;
         }
 
-        const permission = toolRegistry.getPermission(tc.tool_name);
+        const validation = toolRegistry.validateArgs(tc.tool_name, tc.arguments);
+        if (!validation.valid) {
+          const invalidResult = {
+            success: false,
+            code: 'invalid_tool_arguments',
+            error: validation.error,
+            missing: validation.missing,
+            invalid: validation.invalid,
+          };
+          const repairPrompt = this._formatArgumentRepairPrompt(tc, validation);
+          this.onEvent({
+            type: 'tool_start',
+            data: {
+              tool: tc.tool_name,
+              args: tc.arguments,
+              permission: 'none',
+              permissionDecision: 'not_applicable',
+              permissionReason: 'Invalid arguments; not executed',
+              workingDir: this.workingDir,
+              description: `Invalid arguments for ${tc.tool_name}`,
+              repairPrompt,
+              round,
+            }
+          });
+          this.session.recordToolCall(tc.tool_name, tc.arguments, invalidResult, {
+            permissionLevel: 'none',
+            permissionDecision: 'not_executed',
+            permissionReason: 'Invalid arguments; not executed',
+            workingDir: this.workingDir,
+            startedAt: new Date().toISOString(),
+          });
+          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: invalidResult, round } });
+          messages.push(this._toolResultMessage(tc, invalidResult, Boolean(nativeToolCallsForThread)));
+
+          const repairKey = `${tc.tool_name}:${JSON.stringify(validation.missing)}:${JSON.stringify(validation.invalid)}`;
+          const repairs = argumentRepairAttempts.get(repairKey) || 0;
+          if (repairs < 2) {
+            argumentRepairAttempts.set(repairKey, repairs + 1);
+            messages.push({ role: 'user', content: repairPrompt });
+            const thought = `The ${tc.tool_name} tool call had invalid arguments. Asking the model to emit corrected arguments.`;
+            reasoningEvents.push({ thought, round, timestamp: new Date().toISOString() });
+            this.onEvent({ type: 'thinking', data: { thought, round } });
+            repairRequested = true;
+            break;
+          }
+
+          answer = `I could not continue because \`${tc.tool_name}\` was called with invalid arguments more than once. ${validation.error}`;
+          this.onEvent({ type: 'answer', data: { answer, round } });
+          break;
+        }
+
+        const permission = this._effectivePermission(tc.tool_name, tc.arguments, toolRegistry.getPermission(tc.tool_name));
         const actionDesc = PermissionManager.describeAction(tc.tool_name, tc.arguments);
         const permissionStartedAt = new Date().toISOString();
         const permResult = await this._checkPermission({
@@ -376,10 +449,14 @@ export class AgentRuntime {
             startedAt: permissionStartedAt,
           });
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: deniedResult, round } });
-          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, this._compactToolResultForContext(tc.tool_name, deniedResult)) });
+          messages.push(this._toolResultMessage(
+            tc,
+            this._compactToolResultForContext(tc.tool_name, deniedResult),
+            Boolean(nativeToolCallsForThread),
+          ));
         } else {
           let checkpoint = null;
-          if (this._isMutatingTool(tc.tool_name)) {
+          if (this._isMutatingTool(tc.tool_name, tc.arguments)) {
             checkpoint = this._ensureBaselineCheckpoint({ round, toolName: tc.tool_name });
           }
           this.onEvent({
@@ -406,6 +483,9 @@ export class AgentRuntime {
         }
       }
 
+      if (repairRequested) continue;
+      if (answer) break;
+
       // Execute permitted tools in parallel — safe tools gain the most from this
       if (permitted.length > 0) {
         const execResults = await Promise.all(
@@ -426,7 +506,11 @@ export class AgentRuntime {
             startedAt: item.startedAt,
           });
           this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result, round } });
-          messages.push({ role: 'user', content: ToolCallFormatter.formatToolResult(tc.tool_name, tc.call_id, this._compactToolResultForContext(tc.tool_name, result)) });
+          messages.push(this._toolResultMessage(
+            tc,
+            this._compactToolResultForContext(tc.tool_name, result),
+            Boolean(nativeToolCallsForThread),
+          ));
 
           // Detect infinite loops: same tool + same args called 3 times consecutively.
           const sig = `${tc.tool_name}:${JSON.stringify(tc.arguments)}`;
@@ -436,7 +520,7 @@ export class AgentRuntime {
               const repeatedToolThought = `Detected repeated tool call (${tc.tool_name}) — stopping loop.`;
               reasoningEvents.push({ thought: repeatedToolThought, round, timestamp: new Date().toISOString() });
               this.onEvent({ type: 'thinking', data: { thought: repeatedToolThought, round } });
-              answer = `I got stuck calling the same tool (${tc.tool_name}) repeatedly. Here's what I found: ${JSON.stringify(result)}`;
+              answer = this._formatRepeatedToolAnswer(tc, result);
               this.onEvent({ type: 'answer', data: { answer, round } });
               break;
             }
@@ -675,8 +759,40 @@ export class AgentRuntime {
     return Math.ceil(String(value || '').length / 4);
   }
 
-  _isMutatingTool(toolName) {
-    return MUTATING_FILE_TOOLS.has(toolName) || MUTATING_SHELL_TOOLS.has(toolName);
+  _effectivePermission(toolName, args = {}, fallbackPermission = 'dangerous') {
+    if (toolName === 'run_command' && this._looksReadOnlyShellCommand(args.command || '')) {
+      return 'safe';
+    }
+    return fallbackPermission;
+  }
+
+  _isMutatingTool(toolName, args = {}) {
+    if (MUTATING_FILE_TOOLS.has(toolName)) return true;
+    if (toolName === 'run_command') return !this._looksReadOnlyShellCommand(args.command || '');
+    return MUTATING_SHELL_TOOLS.has(toolName);
+  }
+
+  _looksReadOnlyShellCommand(command) {
+    if (!command || typeof command !== 'string') return false;
+    const raw = command.trim();
+    if (!raw) return false;
+    if (/[`$<>]/.test(raw)) return false;
+
+    const mutatingPattern = /\b(rm|mv|cp|touch|mkdir|rmdir|chmod|chown|ln|tee|truncate|dd|curl|wget|ssh|scp|rsync)\b|\b(npm|pnpm|yarn|bun)\s+(install|i|add|remove|uninstall|update|upgrade|run|exec|dlx|create)\b|\bgit\s+(add|am|apply|checkout|clean|commit|merge|pull|push|rebase|reset|restore|revert|stash|switch)\b|\b(sed\s+-i|perl\s+-pi|python|python3|node|bash|sh)\b/i;
+    if (mutatingPattern.test(raw)) return false;
+
+    const normalized = raw
+      .replace(/^(?:cd\s+(?:"[^"]+"|'[^']+'|[^&|;]+)\s*&&\s*)+/i, '')
+      .trim();
+
+    if (/[;&]|\|\|/.test(normalized)) return false;
+
+    const readonlySegment = /^(git\s+(show|log|status|diff|rev-parse|branch|ls-files|describe|remote|tag)\b|pwd\b|ls\b|find\b|rg\b|grep\b|cat\b|sed\s+-n\b|awk\b|wc\b|head\b|tail\b|du\b|sort\b|uniq\b|cut\b|tr\b)/i;
+    return normalized
+      .split('|')
+      .map(segment => segment.trim())
+      .filter(Boolean)
+      .every(segment => readonlySegment.test(segment));
   }
 
   _ensureBaselineCheckpoint({ round, toolName }) {
@@ -796,6 +912,72 @@ export class AgentRuntime {
       }
     }
     return compact;
+  }
+
+  _toolResultMessage(toolCall, result, nativeTools = false) {
+    if (nativeTools) {
+      const content = typeof result === 'string' ? result : JSON.stringify(result);
+      return {
+        role: 'tool',
+        tool_call_id: toolCall.call_id,
+        name: toolCall.tool_name,
+        content,
+      };
+    }
+
+    return {
+      role: 'user',
+      content: ToolCallFormatter.formatToolResult(toolCall.tool_name, toolCall.call_id, result),
+    };
+  }
+
+  _formatArgumentRepairPrompt(toolCall, validation) {
+    const tool = toolRegistry.get(toolCall.tool_name);
+    const required = tool?.parameters?.required || [];
+    const schema = tool?.parameters?.properties || {};
+    const missing = validation.missing?.length
+      ? `Missing required argument(s): ${validation.missing.map(k => `\`${k}\``).join(', ')}.`
+      : '';
+    const invalid = validation.invalid?.length
+      ? `Invalid argument(s): ${validation.invalid.map(item => `\`${item.key}\` was ${item.actual}, expected ${item.expected}`).join('; ')}.`
+      : '';
+
+    return [
+      `You called \`${toolCall.tool_name}\` with invalid arguments, so Asyncat did not execute it.`,
+      missing,
+      invalid,
+      required.length ? `Required fields: ${required.map(k => `\`${k}\``).join(', ')}.` : '',
+      `Relevant schema: ${JSON.stringify(schema).slice(0, 1800)}`,
+      '',
+      'Emit exactly one corrected machine-readable tool call for the same next step, with no extra prose.',
+      '<tool_call>',
+      `{"name": "${toolCall.tool_name}", "arguments": {}}`,
+      '</tool_call>',
+    ].filter(Boolean).join('\n');
+  }
+
+  _formatRepeatedToolAnswer(toolCall, result) {
+    const lines = [
+      `I stopped because the same tool call repeated three times in a row: \`${toolCall.tool_name}\`.`,
+    ];
+
+    const args = toolCall.arguments || {};
+    const command = args.command || args.code || null;
+    if (command) lines.push(`Last repeated command:\n\n\`\`\`sh\n${String(command).slice(0, 1200)}\n\`\`\``);
+
+    if (result && typeof result === 'object') {
+      const output = result.stdout || result.output || result.stderr || result.error || null;
+      if (output) {
+        lines.push(`Latest result:\n\n\`\`\`\n${String(output).slice(0, 4000)}\n\`\`\``);
+      } else {
+        lines.push(`Latest result: ${JSON.stringify(result).slice(0, 4000)}`);
+      }
+    } else if (result) {
+      lines.push(`Latest result:\n\n\`\`\`\n${String(result).slice(0, 4000)}\n\`\`\``);
+    }
+
+    lines.push('This is a loop guard, not a user stop.');
+    return lines.join('\n\n');
   }
 
   _loadMemories(goal) {

@@ -286,7 +286,7 @@ import {
 import { MessageListV2 } from "./components/MessageListV2";
 import { MessageInputV2 } from "./components/MessageInputV2";
 import AgentRunFeed from '../Agent/components/AgentRunFeed';
-import AgentChangesPanel from '../Agent/components/AgentChangesPanel';
+import AgentChangesPanel, { AgentRunSummary } from '../Agent/components/AgentChangesPanel';
 import ArtifactsGallery from "./components/artifacts/ArtifactsGallery";
 import SaveAsNoteModal from "./components/SaveAsNoteModal";
 import ClarifyingQuestionsWidget from "./components/ClarifyingQuestionsWidget";
@@ -391,6 +391,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const agentRunStartTime = useRef(null);
   const [agentElapsedSecs, setAgentElapsedSecs] = useState(0);
   const [agentRunDuration, setAgentRunDuration] = useState(null);
+  const [agentHealth, setAgentHealth] = useState(null);
 
   useEffect(() => {
     if (!agentRunning) return;
@@ -415,6 +416,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       if (def) setSelectedProfileId(prev => prev || def.id);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'agent') return;
+    let cancelled = false;
+    if (agentRunning) return undefined;
+    agentApi.getHealth(80)
+      .then(res => {
+        if (!cancelled && res?.success) setAgentHealth(res.providers?.[0] || null);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [mode, agentRunning]);
 
   const selectedAgentProfile = agentProfiles.find(p => p.id === selectedProfileId);
 
@@ -835,6 +848,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     agentAbortRef.current = controller;
 
     let capturedFinalAnswer = '';
+    let sawFinalResponse = false;
+    let sawErrorEvent = false;
+    let sawDoneWithoutAnswer = false;
 
     try {
       for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId, { autoApprove: agentAutoApprove, preApprovedTools: [...alwaysAllowedTools], profileId: selectedProfileId })) {
@@ -852,10 +868,36 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         }
         if (event.type === 'done') {
           if (event.data?.sessionId) setAgentCurrentSessionId(event.data.sessionId);
+          const doneAnswer = String(event.data?.answer || '').trim();
+          if (doneAnswer) {
+            sawFinalResponse = true;
+          }
+          if (!capturedFinalAnswer && doneAnswer) {
+            capturedFinalAnswer = doneAnswer;
+            setAgentEvents(prev => [...prev, {
+              type: 'answer',
+              data: {
+                answer: doneAnswer,
+                round: event.data.rounds,
+              },
+              arrivedAt: Date.now(),
+            }]);
+          } else if (!doneAnswer) {
+            sawDoneWithoutAnswer = true;
+          }
           continue;
         }
         if (event.type === 'answer') {
-          capturedFinalAnswer = event.data?.answer || '';
+          const answerText = String(event.data?.answer || '').trim();
+          if (answerText) {
+            sawFinalResponse = true;
+            capturedFinalAnswer = answerText;
+          } else {
+            sawDoneWithoutAnswer = true;
+          }
+        }
+        if (event.type === 'error') {
+          sawErrorEvent = true;
         }
         if (event.type === 'tool_result') {
           const completedAt = Date.now();
@@ -875,10 +917,21 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       }
     } catch (err) {
       if (!controller.signal.aborted) {
+        sawErrorEvent = true;
         setAgentStreamingText('');
         setAgentEvents(prev => [...prev, { type: 'error', data: { message: err.message } }]);
       }
     } finally {
+      if (!controller.signal.aborted && !sawFinalResponse && !sawErrorEvent) {
+        setAgentEvents(prev => [...prev, {
+          type: 'status',
+          data: {
+            message: sawDoneWithoutAnswer
+              ? 'Agent finished but did not return a final answer.'
+              : 'Agent stream ended before a final answer was received.',
+          },
+        }]);
+      }
       // Accumulate history so follow-up goals have context
       if (capturedFinalAnswer) {
         setAgentConversationHistory(prev => [
@@ -897,6 +950,22 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
   }, [agentRunning, agentConversationHistory, agentCurrentSessionId, agentAutoApprove, alwaysAllowedTools, selectedProfileId]);
+
+  const handleRetryTool = useCallback((failure) => {
+    const tool = failure?.tool || 'tool';
+    const args = failure?.args ? JSON.stringify(failure.args) : '{}';
+    const error = failure?.result?.error || 'Invalid tool arguments';
+    const repairPrompt = failure?.repairPrompt || '';
+    const goal = [
+      `Retry from the failed ${tool} step in the current run.`,
+      `Original goal: ${agentCurrentGoal || 'continue the task'}`,
+      `The previous ${tool} call used arguments: ${args}`,
+      `It failed before execution with: ${error}`,
+      repairPrompt ? `Repair guidance from Asyncat:\n${repairPrompt}` : '',
+      'Continue from there and produce the final answer when done.',
+    ].filter(Boolean).join('\n\n');
+    handleAgentRun({ content: goal });
+  }, [agentCurrentGoal, handleAgentRun]);
 
   const handleAgentStop = useCallback(() => {
     if (!agentAbortRef.current) return;
@@ -1545,6 +1614,21 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     <ShieldOff className="w-2.5 h-2.5" /> Unrestricted
                   </span>
                 )}
+                {agentHealth && (
+                  <span
+                    title={`${agentHealth.providerId} · ${agentHealth.model} · tool success ${agentHealth.toolSuccessRate == null ? 'n/a' : `${Math.round(agentHealth.toolSuccessRate * 100)}%`} · invalid args ${agentHealth.invalidToolArgs}`}
+                    className={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                      agentHealth.status === 'good'
+                        ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/50'
+                        : agentHealth.status === 'poor'
+                          ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50'
+                          : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50'
+                    }`}
+                  >
+                    <Activity className="w-2.5 h-2.5" />
+                    Tool health · {agentHealth.status}
+                  </span>
+                )}
 
                 {/* Goal title */}
                 <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -1736,13 +1820,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                           streamingText={agentStreamingText}
                           onPermissionDecision={handleAgentPermission}
                           onAskUserAnswer={handleAgentAskUser}
+                          onRetryTool={handleRetryTool}
                         />
                         {!agentRunning && (
-                          <AgentChangesPanel
-                            events={agentEvents}
-                            sessionId={agentCurrentSessionId}
-                            session={agentCurrentSession}
-                          />
+                          <>
+                            <AgentRunSummary events={agentEvents} duration={agentRunDuration} />
+                            <AgentChangesPanel
+                              events={agentEvents}
+                              sessionId={agentCurrentSessionId}
+                              session={agentCurrentSession}
+                            />
+                          </>
                         )}
                       </>
                     )}

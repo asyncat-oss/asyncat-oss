@@ -4,7 +4,7 @@ import {
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send,
-  ShieldOff, Brain,
+  ShieldOff, Brain, RotateCcw,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 
@@ -160,11 +160,12 @@ function ThinkingEvent({ data }) {
   );
 }
 
-function ToolEvent({ data, result }) {
+function ToolEvent({ data, result, onRetryTool }) {
   const [expanded, setExpanded] = useState(false);
   const { icon: Icon, label } = getToolMeta(data?.tool);
   const isPending = result === undefined;
   const isError = result && (result.error || result.success === false);
+  const isMalformed = result?.code === 'invalid_tool_arguments';
   const summary = getResultSummary(result);
   const argsStr = truncateArgs(data?.args);
 
@@ -205,6 +206,16 @@ function ToolEvent({ data, result }) {
           <p className={`text-[10px] font-mono mt-0.5 pl-5 truncate ${isError ? 'text-red-400' : 'text-gray-400 dark:text-gray-600'}`}>
             {summary}
           </p>
+        )}
+
+        {isMalformed && (
+          <button
+            onClick={() => onRetryTool?.({ tool: data?.tool, args: data?.args, result, repairPrompt: data?.repairPrompt })}
+            className="mt-1 ml-5 inline-flex items-center gap-1 rounded border border-red-200 dark:border-red-800 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Retry from here
+          </button>
         )}
 
         {data?.permissionDecision && (
@@ -534,8 +545,7 @@ function SkillsLoadedEvent({ data }) {
           Skills loaded · {skills.map(s => s.name).join(', ')}
         </span>
       </button>
-   515cebc
-   {expanded && (
+      {expanded && (
         <div className="mt-1 pl-5 space-y-1">
           {skills.map(s => (
             <div key={s.name} className="flex items-start gap-1.5">
@@ -601,7 +611,7 @@ function RunningIndicator() {
 
 // ── Main feed component ───────────────────────────────────────────────────────
 
-export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision, onAskUserAnswer }) {
+export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision, onAskUserAnswer, onRetryTool }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
@@ -613,7 +623,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
           case 'thinking':           return <ThinkingEvent key={i} data={ev.data} />;
           case 'permission_request': return <PermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
           case 'ask_user':           return <AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />;
-          case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} />;
+          case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} onRetryTool={onRetryTool} />;
           case 'answer':             return <AnswerEvent key={i} data={ev.data} />;
           case 'error':              return <ErrorEvent key={i} data={ev.data} />;
           case 'status':             return <StatusEvent key={i} data={ev.data} />;

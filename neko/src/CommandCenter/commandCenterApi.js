@@ -1038,6 +1038,10 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/changes/state`);
   },
 
+  getHealth: async (limit = 80) => {
+    return await apiRequest(`${API_BASE_URL}/agent/health?limit=${encodeURIComponent(String(limit))}`);
+  },
+
   revertSession: async (sessionId) => {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/revert`, {
       method: 'POST',

@@ -71,7 +71,7 @@ markStaleActiveSessions();
 // Initialize scheduler — pass a runAgent function so jobs can call the agent
 initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId }) => {
   try {
-    const { client: aiClient, model, isLocal, supportsNativeTools } = getAiClientForUser(userId);
+    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(userId);
     const profile = profileId ? getProfile(profileId, userId) : getDefaultProfile(userId);
     let resolvedSoul = null;
     if (profile?.soul_override) {
@@ -87,6 +87,7 @@ initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId }) => {
       maxRounds: profile?.max_rounds || 20,
       autoApprove: profile?.auto_approve || false,
       soul: resolvedSoul,
+      providerInfo,
     });
     if (Array.isArray(profile?.always_allowed_tools)) {
       profile.always_allowed_tools.forEach(tool => {
@@ -258,6 +259,31 @@ function checkpointAvailability(checkpoint) {
 
 function execGitStashList(cwd) {
   return execSync('git stash list', { cwd: cwd || process.cwd(), encoding: 'utf8', timeout: 3000 });
+}
+
+function parseJson(value, fallback) {
+  try { return JSON.parse(value || ''); } catch { return fallback; }
+}
+
+function providerKeyFromScratchpad(scratchpad = {}) {
+  const info = scratchpad.providerInfo || {};
+  const providerId = info.providerId || info.provider_id || (info.isLocal ? 'local' : null) || 'global';
+  const model = info.model || 'unknown';
+  return {
+    key: `${providerId}:${model}`,
+    providerId,
+    providerType: info.type || info.provider_type || (info.isLocal ? 'local' : 'unknown'),
+    model,
+    supportsNativeTools: Boolean(info.supportsNativeTools),
+  };
+}
+
+function gradeHealth({ invalidToolArgs, repeatedLoops, failedTools, totalTools }) {
+  const totalProblems = invalidToolArgs + repeatedLoops + failedTools;
+  if (totalTools === 0) return 'unknown';
+  if (invalidToolArgs >= 3 || repeatedLoops >= 2 || totalProblems / Math.max(1, totalTools) > 0.25) return 'poor';
+  if (totalProblems > 0) return 'watch';
+  return 'good';
 }
 
 function createPermissionRequest(req, res) {
@@ -492,7 +518,7 @@ router.post('/run', authenticate, async (req, res) => {
     }
 
     // Get user's AI provider
-    const { client: aiClient, model, isLocal, supportsNativeTools } = getAiClientForUser(req.user.id);
+    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(req.user.id);
 
     // Resolve workspace
     const workspaceId = req.workspaceId;
@@ -550,6 +576,7 @@ router.post('/run', authenticate, async (req, res) => {
       askUser: createAskUserRequest(req, res),
       continueSessionId,
       soul: resolvedSoul,
+      providerInfo,
     });
 
     const allPreApproved = [...preApprovedTools, ...profileTools];
@@ -584,6 +611,92 @@ router.get('/sessions', authenticate, (req, res) => {
   const limit = parseInt(req.query.limit || '20');
   const sessions = AgentSession.listRecent(req.user.id, limit);
   res.json({ success: true, sessions });
+});
+
+/**
+ * GET /api/agent/health
+ * Lightweight model/tool-call quality summary grouped by provider + model.
+ */
+router.get('/health', authenticate, (req, res) => {
+  try {
+    const limit = Math.max(10, Math.min(200, Number(req.query.limit || 80)));
+    const sessions = db.prepare(`
+      SELECT id, status, scratchpad, total_rounds, created_at, updated_at
+      FROM agent_sessions
+      WHERE user_id = ?
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `).all(req.user.id, limit);
+    const ids = sessions.map(s => s.id);
+    const rows = ids.length
+      ? db.prepare(`
+          SELECT session_id, tool_name, result, success
+          FROM agent_tool_audit
+          WHERE user_id = ?
+            AND session_id IN (${ids.map(() => '?').join(',')})
+        `).all(req.user.id, ...ids)
+      : [];
+
+    const bySession = new Map();
+    for (const row of rows) {
+      if (!bySession.has(row.session_id)) bySession.set(row.session_id, []);
+      bySession.get(row.session_id).push(row);
+    }
+
+    const groups = new Map();
+    for (const session of sessions) {
+      const scratchpad = parseJson(session.scratchpad, {});
+      const provider = providerKeyFromScratchpad(scratchpad);
+      if (!groups.has(provider.key)) {
+        groups.set(provider.key, {
+          ...provider,
+          sessions: 0,
+          completedSessions: 0,
+          failedSessions: 0,
+          totalRounds: 0,
+          totalTools: 0,
+          failedTools: 0,
+          invalidToolArgs: 0,
+          repeatedLoops: 0,
+          lastSeenAt: session.updated_at,
+        });
+      }
+      const group = groups.get(provider.key);
+      group.sessions += 1;
+      group.completedSessions += session.status === 'completed' ? 1 : 0;
+      group.failedSessions += session.status === 'failed' ? 1 : 0;
+      group.totalRounds += Number(session.total_rounds || 0);
+      if (String(session.updated_at || '').localeCompare(String(group.lastSeenAt || '')) > 0) {
+        group.lastSeenAt = session.updated_at;
+      }
+
+      const finalAnswer = String(scratchpad.finalAnswer || '');
+      if (/same tool call repeated|loop guard|calling the same tool/i.test(finalAnswer)) {
+        group.repeatedLoops += 1;
+      }
+
+      for (const row of bySession.get(session.id) || []) {
+        const result = parseJson(row.result, {});
+        group.totalTools += 1;
+        const failed = row.success === 0 || result?.success === false || Boolean(result?.error);
+        if (failed) group.failedTools += 1;
+        if (result?.code === 'invalid_tool_arguments') group.invalidToolArgs += 1;
+      }
+    }
+
+    const providers = [...groups.values()].map(group => ({
+      ...group,
+      avgRounds: group.sessions ? Number((group.totalRounds / group.sessions).toFixed(1)) : 0,
+      toolSuccessRate: group.totalTools
+        ? Number(((group.totalTools - group.failedTools) / group.totalTools).toFixed(3))
+        : null,
+      status: gradeHealth(group),
+    })).sort((a, b) => String(b.lastSeenAt || '').localeCompare(String(a.lastSeenAt || '')));
+
+    res.json({ success: true, count: providers.length, providers });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
@@ -1220,7 +1333,7 @@ router.post('/multi', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Maximum 10 parallel tasks per request' });
     }
 
-    const { client: aiClient, model, isLocal, supportsNativeTools } = getAiClientForUser(req.user.id);
+    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(req.user.id);
     const { default: db } = await import('../../db/client.js');
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -1237,6 +1350,7 @@ router.post('/multi', authenticate, async (req, res) => {
             workspaceId,
             workingDir: task.workingDir || process.cwd(),
             maxRounds: 15,
+            providerInfo,
           });
           const answer = await agent.run(task.goal);
           return { name: task.name || task.goal.slice(0, 40), goal: task.goal, answer, success: true };
