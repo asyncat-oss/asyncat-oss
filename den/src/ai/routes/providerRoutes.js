@@ -4,6 +4,7 @@
 // POST /api/ai/providers/server/*           — built-in llama.cpp server control
 
 import express from 'express';
+import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { verifyUser } from '../../auth/authMiddleware.js';
 import { getProviderStats } from '../controllers/ai/providerManager.js';
@@ -17,6 +18,7 @@ import {
   listActiveDownloads,
   getStorageInfo,
   MODELS_DIR,
+  clearCache as clearGgufCache,
 } from '../controllers/ai/modelManager.js';
 import {
   startServer,
@@ -54,6 +56,7 @@ import {
   stopServer as stopMlxServer,
   getStatus as getMlxStatus,
   IS_APPLE_SILICON,
+  clearCache as clearMlxCache,
 } from '../controllers/ai/mlxServerManager.js';
 import db from '../../db/client.js';
 
@@ -99,6 +102,25 @@ function saveBuiltinProviderConfig(userId, filename) {
       supports_tools = 0,
       updated_at    = excluded.updated_at
   `).run(userId, LLAMA_BASE_URL, filename, now);
+  notifyProviderStatus(userId);
+}
+
+function saveMlxProviderConfig(userId, modelPath) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO ai_provider_config (user_id, profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools, updated_at)
+    VALUES (?, NULL, 'local', 'mlx-builtin', ?, ?, NULL, '{}', 0, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      profile_id     = NULL,
+      provider_type = 'local',
+      provider_id   = 'mlx-builtin',
+      base_url      = excluded.base_url,
+      model         = excluded.model,
+      api_key       = NULL,
+      settings      = '{}',
+      supports_tools = 0,
+      updated_at    = excluded.updated_at
+  `).run(userId, MLX_BASE_URL, modelPath, now);
   notifyProviderStatus(userId);
 }
 
@@ -572,6 +594,7 @@ router.delete('/local-models/:filename', verifyUser, (req, res) => {
   try {
     const { filename } = req.params;
     deleteModel(filename);
+    clearGgufCache();
     res.json({ success: true, message: `Deleted ${filename}` });
   } catch (err) {
     console.error('Delete model error:', err);
@@ -594,17 +617,85 @@ router.get('/local-models/custom-paths', verifyUser, (req, res) => {
 
 // ── POST /local-models/custom-paths — save a new custom model path ────────────
 router.post('/local-models/custom-paths', verifyUser, (req, res) => {
-  const { name, path: modelPath, type } = req.body;
-  if (!name || !modelPath || !type) {
-    return res.status(400).json({ success: false, error: 'Name, path, and type are required' });
+  let { name, path: modelPath, type } = req.body;
+  if (!name || !modelPath) {
+    return res.status(400).json({ success: false, error: 'Name and path are required' });
   }
+  modelPath = modelPath.trim();
+
+  // Auto-detect type if not provided or 'auto'
+  if (!type || type === 'auto') {
+    const p = modelPath.toLowerCase();
+    const isGguf = p.endsWith('.gguf') || p.endsWith('.bin');
+    if (isGguf) {
+      type = 'gguf';
+    } else {
+      try {
+        const stat = fs.statSync(modelPath);
+        if (stat.isDirectory()) {
+          type = 'mlx';
+        } else {
+          type = 'gguf';
+        }
+      } catch {
+        type = 'gguf'; // fallback
+      }
+    }
+  }
+
   try {
     const result = db.prepare('INSERT INTO custom_model_paths (name, path, type) VALUES (?, ?, ?)').run(name, modelPath, type);
-    res.json({ success: true, id: result.lastInsertRowid });
+    if (type === 'gguf') clearGgufCache();
+    if (type === 'mlx') clearMlxCache();
+    res.json({ success: true, id: result.lastInsertRowid, type });
   } catch (err) {
     if (err.message.includes('UNIQUE constraint failed')) {
       return res.status(400).json({ success: false, error: 'This path is already in your library' });
     }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /local-models/start — auto-detect engine and start model ─────────────
+router.post('/local-models/start', verifyUser, async (req, res) => {
+  let { path: modelPath, ctxSize } = req.body;
+  if (!modelPath) return res.status(400).json({ success: false, error: 'Path is required' });
+  modelPath = modelPath.trim();
+
+  try {
+    const p = modelPath.toLowerCase();
+    const isGguf = p.endsWith('.gguf') || p.endsWith('.bin');
+    
+    let type = 'gguf';
+    if (!isGguf) {
+      try {
+        const stat = fs.statSync(modelPath);
+        if (stat.isDirectory()) type = 'mlx';
+      } catch {}
+    }
+
+    if (type === 'mlx' && IS_APPLE_SILICON) {
+      await stopServer(); // stop llama.cpp
+      const result = await startMlxServer(modelPath);
+      try {
+        saveMlxProviderConfig(req.user.id, result.modelPath);
+      } catch (dbErr) {
+        console.warn('[mlx] Failed to auto-save provider config:', dbErr);
+      }
+      return res.json({ success: true, engine: 'mlx', ...result });
+    } else {
+      await stopMlxServer(); // stop MLX
+      // startServer (llama) expects (modelFilename, modelsDir, ctxSizeOverride)
+      const result = await startServer(modelPath, MODELS_DIR, ctxSize);
+      try {
+        saveBuiltinProviderConfig(req.user.id, modelPath);
+      } catch (dbErr) {
+        console.warn('[gguf] Failed to auto-save provider config:', dbErr);
+      }
+      return res.json({ success: true, engine: 'gguf', ...result });
+    }
+  } catch (err) {
+    console.error('Auto-start model error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -614,6 +705,8 @@ router.delete('/local-models/custom-paths/:id', verifyUser, (req, res) => {
   const { id } = req.params;
   try {
     db.prepare('DELETE FROM custom_model_paths WHERE id = ?').run(id);
+    clearGgufCache();
+    clearMlxCache();
     res.json({ success: true, message: 'Path removed from library' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1179,8 +1272,9 @@ router.get('/server/status/stream', async (req, res) => {
 
 // ── POST /server/start — load a model into the built-in server ────────────────
 router.post('/server/start', verifyUser, async (req, res) => {
+  let { filename, ctxSize } = req.body;
+  if (filename) filename = filename.trim();
   try {
-    const { filename, ctxSize } = req.body;
     if (!filename) {
       return res.status(400).json({ success: false, error: 'filename is required' });
     }

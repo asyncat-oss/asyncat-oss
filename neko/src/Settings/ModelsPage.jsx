@@ -2514,15 +2514,15 @@ const ModelsPage = () => {
     if (!p) return;
     
     // Clean up path and extract a friendly name
-    const cleanPath = p.replace(/\/+$/, '');
+    const cleanPath = p.replace(/[\\/]+$/, '');
     const isGguf = p.toLowerCase().endsWith('.gguf') || p.toLowerCase().endsWith('.bin');
     const type = isGguf ? 'gguf' : 'mlx';
-    const name = cleanPath.split('/').pop().replace(/\.(gguf|bin)$/i, '') || 'Custom Model';
+    const name = cleanPath.split(/[\\/]/).pop().replace(/\.(gguf|bin)$/i, '') || 'Custom Model';
     
     try {
       setSwitchingEngine('adding_path');
-      await localModelsApi.saveCustomPath(name, p, type);
-      setSwitchSuccess(`Added "${name}" to your library`);
+      const res = await localModelsApi.saveCustomPath(name, p, 'auto');
+      setSwitchSuccess(`Added "${name}" as ${res.type?.toUpperCase() || 'model'} to your library`);
       setQuickLoadPath('');
       await loadModelList();
     } catch (err) {
@@ -2848,38 +2848,45 @@ const ModelsPage = () => {
                               const p = quickLoadPath.trim();
                               if (!p) return;
                               
-                              // Simple heuristic detection
-                              const isGguf = p.toLowerCase().endsWith('.gguf') || p.toLowerCase().endsWith('.bin');
+                              setStartingModel(p);
+                              setSwitchError('');
+                              setSwitchSuccess('');
                               
-                              if (isGguf) {
-                                handleStart(p, config?.ctx_size || 4096);
-                              } else {
-                                // Assume MLX directory
-                                setStartingModel(p);
-                                try {
-                                  await mlxApi.start(p);
-                                  setServerStatus(prev => ({ ...prev, status: 'loading', model: p.split('/').pop(), modelPath: p, port: 8766 }));
-                                  // Start polling MLX status
-                                  pollCleanup.current?.();
-                                  pollCleanup.current = mlxApi.pollStatus(
-                                    (snap) => setServerStatus(snap),
-                                    async (snap) => {
-                                      setServerStatus(snap);
-                                      pollCleanup.current = null;
-                                      setStartingModel(null);
-                                      await loadEngineData();
-                                    },
-                                    async (snap) => {
-                                      setServerStatus(snap);
-                                      pollCleanup.current = null;
-                                      setStartingModel(null);
-                                      setSwitchError(snap?.error || 'Failed to load MLX model');
-                                    }
-                                  );
-                                } catch (err) {
-                                  setStartingModel(null);
-                                  setSwitchError(err.message || 'Failed to start MLX server');
-                                }
+                              try {
+                                const ctxSize = config?.ctx_size || 4096;
+                                const res = await localModelsApi.autoStart(p, ctxSize);
+                                
+                                setServerStatus(prev => ({ 
+                                  ...prev, 
+                                  status: 'loading', 
+                                  model: p.split(/[\\/]/).pop(), 
+                                  modelPath: p,
+                                  port: res.engine === 'mlx' ? 8766 : 8765 
+                                }));
+
+                                // Polling logic based on detected engine
+                                pollCleanup.current?.();
+                                const api = res.engine === 'mlx' ? mlxApi : llamaServerApi;
+                                
+                                pollCleanup.current = api.pollStatus(
+                                  (snap) => setServerStatus(snap),
+                                  async (snap) => {
+                                    setServerStatus(snap);
+                                    pollCleanup.current = null;
+                                    setStartingModel(null);
+                                    await loadEngineData();
+                                    await loadProviderData();
+                                  },
+                                  async (snap) => {
+                                    setServerStatus(snap);
+                                    pollCleanup.current = null;
+                                    setStartingModel(null);
+                                    setSwitchError(snap?.error || `Failed to load ${res.engine?.toUpperCase()} model`);
+                                  }
+                                );
+                              } catch (err) {
+                                setStartingModel(null);
+                                setSwitchError(err.message || 'Failed to start model server');
                               }
                             }}
                             disabled={!quickLoadPath.trim() || startingModel || Boolean(switchingEngine) || Boolean(installingEngine)}
@@ -3043,7 +3050,7 @@ const ModelsPage = () => {
                                       setSwitchError(err.message || 'Failed to start MLX server');
                                     });
                                   } else {
-                                    handleStart(m.filename, modelLoadCtxValue);
+                                    handleStart(m.path || m.filename, modelLoadCtxValue);
                                   }
                                 }}
                                 disabled={isStarting || isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}

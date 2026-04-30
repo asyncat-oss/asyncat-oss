@@ -83,13 +83,60 @@ function scanDirectories() {
  */
 function isValidMlxModelDir(dirPath) {
   try {
+    const stat = fs.statSync(dirPath);
+    if (!stat.isDirectory()) return false;
+
     const entries = fs.readdirSync(dirPath);
     const hasConfig = entries.some(e => e === 'config.json');
-    const hasTensors = entries.some(e => e.endsWith('.safetensors'));
-    return hasConfig && hasTensors;
+    const hasWeights = entries.some(e => e.endsWith('.safetensors') || e.endsWith('.pt') || e.endsWith('.bin'));
+    if (hasConfig && hasWeights) return true;
+
+    // Check for HuggingFace snapshots
+    if (entries.includes('snapshots')) {
+      const snapDir = path.join(dirPath, 'snapshots');
+      const snaps = fs.readdirSync(snapDir);
+      for (const snap of snaps) {
+        if (isValidMlxModelDir(path.join(snapDir, snap))) return true;
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }
+}
+
+/**
+ * Resolve the actual model directory (handles HF Hub snapshots)
+ */
+function resolveMlxModelDir(dirPath) {
+  try {
+    const entries = fs.readdirSync(dirPath);
+    
+    // Always prefer snapshots if they exist (standard HF Hub cache)
+    if (entries.includes('snapshots')) {
+      const snapDir = path.join(dirPath, 'snapshots');
+      try {
+        const snaps = fs.readdirSync(snapDir).filter(s => !s.startsWith('.'));
+        if (snaps.length > 0) {
+          // Sort snapshots by mtime to pick the most recent if there are multiple
+          const snapStats = snaps.map(s => ({
+            name: s,
+            mtime: fs.statSync(path.join(snapDir, s)).mtimeMs
+          }));
+          snapStats.sort((a, b) => b.mtime - a.mtime);
+          
+          const bestSnap = snapStats[0].name;
+          const fullSnapPath = path.join(snapDir, bestSnap);
+          if (isValidMlxModelDir(fullSnapPath)) return resolveMlxModelDir(fullSnapPath);
+        }
+      } catch (e) {}
+    }
+
+    if (entries.includes('config.json')) return dirPath;
+  } catch (e) {}
+  
+  return dirPath;
 }
 
 /**
@@ -129,9 +176,10 @@ function findMlxModelsIn(rootDir, maxDepth = 4, depth = 0) {
   if (depth > maxDepth) return found;
   if (!fs.existsSync(rootDir)) return found;
 
-  // Check the root itself first
-  if (depth > 0 && isValidMlxModelDir(rootDir)) {
-    found.push(rootDir);
+  // Check if this is a valid MLX dir (possibly a Hub dir)
+  if (isValidMlxModelDir(rootDir)) {
+    const resolved = resolveMlxModelDir(rootDir);
+    found.push(resolved);
     return found; // don't recurse into a valid model dir
   }
 
@@ -154,11 +202,21 @@ function findMlxModelsIn(rootDir, maxDepth = 4, depth = 0) {
   return found;
 }
 
+// Simple in-memory cache for MLX model list
+let cachedMlxModels = null;
+let lastMlxScan = 0;
+const MLX_CACHE_TTL = 10000; // 10 seconds
+
 /**
  * List all locally detected MLX models across all scan directories.
  */
 export function listMlxModels() {
   if (!IS_APPLE_SILICON) return [];
+
+  const now = Date.now();
+  if (cachedMlxModels && (now - lastMlxScan < MLX_CACHE_TTL)) {
+    return cachedMlxModels;
+  }
 
   const seen = new Set();
   const results = [];
@@ -214,19 +272,68 @@ export function listMlxModels() {
     }
   }
 
-  // Update results with custom names if applicable
+  // Update results with custom names and include unmatched custom paths
   try {
     const customEntries = db.prepare('SELECT id, name, path FROM custom_model_paths WHERE type = "mlx"').all();
+    
+    // Normalize path helper
+    const norm = (p) => p ? p.replace(/\/+$/, '') : '';
+
+    // First, update existing results found by scanner
     for (const res of results) {
-      const custom = customEntries.find(c => c.path === res.path || c.path === res.realPath);
+      const resPath = norm(res.path);
+      const resRealPath = norm(res.realPath);
+      
+      const custom = customEntries.find(c => {
+        const cPath = norm(c.path);
+        return cPath === resPath || cPath === resRealPath;
+      });
+      
       if (custom) {
         res.id = custom.id;
         res.name = custom.name;
         res.isExternal = true;
       }
     }
-  } catch {}
 
+    // Second, add custom paths that the scanner missed
+    for (const custom of customEntries) {
+      const cPath = norm(custom.path);
+      const found = results.some(res => norm(res.path) === cPath || norm(res.realPath) === cPath);
+      
+      if (!found) {
+        let pathExists = false;
+        let isDir = false;
+        try {
+          const stat = fs.statSync(custom.path);
+          pathExists = true;
+          isDir = stat.isDirectory();
+        } catch {}
+        
+        results.push({
+          id: custom.id,
+          name: custom.name,
+          dirName: path.basename(custom.path),
+          path: custom.path,
+          realPath: custom.path,
+          architecture: 'unknown',
+          contextLength: null,
+          quantization: null,
+          sizeBytes: 0,
+          sizeFormatted: '0 B',
+          isExternal: true,
+          isMissing: !pathExists,
+          isInvalid: pathExists && !isDir,
+          isRunning: serverState.modelPath === custom.path && serverState.status !== 'idle',
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error updating MLX custom paths:', err);
+  }
+
+  cachedMlxModels = results;
+  lastMlxScan = now;
   return results;
 }
 
@@ -282,7 +389,8 @@ export async function startServer(modelPath) {
   // Stop any running server first
   await stopServer();
 
-  const realPath = (() => { try { return fs.realpathSync(modelPath); } catch { return modelPath; } })();
+  const resolvedPath = resolveMlxModelDir(modelPath);
+  const realPath = (() => { try { return fs.realpathSync(resolvedPath); } catch { return resolvedPath; } })();
 
   if (!isValidMlxModelDir(realPath)) {
     throw new Error(`Not a valid MLX model directory: ${modelPath}`);
@@ -371,6 +479,11 @@ function formatBytes(bytes) {
   const mb = bytes / 1e6;
   if (mb >= 1) return `${mb.toFixed(1)} MB`;
   return `${(bytes / 1e3).toFixed(0)} KB`;
+}
+
+export function clearCache() {
+  cachedMlxModels = null;
+  lastMlxScan = 0;
 }
 
 export { MLX_PORT };

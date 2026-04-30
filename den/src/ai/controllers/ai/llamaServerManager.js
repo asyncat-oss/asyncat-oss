@@ -1388,8 +1388,8 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
     await stopServer();
   }
 
-  const isAbs = path.isAbsolute(modelFilename);
-  const modelPath = isAbs ? modelFilename : path.join(modelsDir, path.basename(modelFilename));
+  const isAbs = path.isAbsolute(modelFilename.trim());
+  const modelPath = isAbs ? modelFilename.trim() : path.join(modelsDir, path.basename(modelFilename.trim()));
   const safeFilename = path.basename(modelPath);
 
   if (!fs.existsSync(modelPath)) {

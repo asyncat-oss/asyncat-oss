@@ -151,10 +151,23 @@ function getContextLength(meta = {}) {
 // Active downloads map: { downloadId -> { progress, total, status, abortController } }
 const activeDownloads = new Map();
 
+// Simple in-memory caches
+let cachedGgufModels = null;
+let lastGgufScan = 0;
+const GGUF_CACHE_TTL = 10000; // 10 seconds
+
+// Cache for metadata: path -> { mtime, meta }
+const metadataCache = new Map();
+
 /**
  * List all GGUF models in the models directory.
  */
 export function listModels() {
+  const now = Date.now();
+  if (cachedGgufModels && (now - lastGgufScan < GGUF_CACHE_TTL)) {
+    return cachedGgufModels;
+  }
+
   try {
     const files = fs.readdirSync(MODELS_DIR);
     const diskModels = files
@@ -162,7 +175,17 @@ export function listModels() {
       .map(filename => {
         const filePath = path.join(MODELS_DIR, filename);
         const stat = fs.statSync(filePath);
-        const meta = extractGgufMetadata(filePath) || {};
+        
+        // Check metadata cache
+        const cached = metadataCache.get(filePath);
+        let meta;
+        if (cached && cached.mtime === stat.mtimeMs) {
+          meta = cached.meta;
+        } else {
+          meta = extractGgufMetadata(filePath) || {};
+          metadataCache.set(filePath, { mtime: stat.mtimeMs, meta });
+        }
+
         return {
           id: filename,
           name: filename.replace(/\.(gguf|bin)$/, ''),
@@ -182,15 +205,33 @@ export function listModels() {
     // Add custom paths
     const customEntries = db.prepare('SELECT * FROM custom_model_paths WHERE type = ?').all('gguf');
     const customModels = customEntries.map(entry => {
+      let modelPath = (entry.path || '').trim();
       try {
-        const stat = fs.statSync(entry.path);
-        const meta = extractGgufMetadata(entry.path) || {};
+        let stat;
+        try {
+          stat = fs.statSync(modelPath);
+        } catch (e) {
+          // Fallback: maybe it was saved with a trailing slash or something weird
+          modelPath = modelPath.replace(/\/+$/, '');
+          stat = fs.statSync(modelPath);
+        }
+        
+        // Check metadata cache
+        const cached = metadataCache.get(modelPath);
+        let meta;
+        if (cached && cached.mtime === stat.mtimeMs) {
+          meta = cached.meta;
+        } else {
+          meta = extractGgufMetadata(modelPath) || {};
+          metadataCache.set(modelPath, { mtime: stat.mtimeMs, meta });
+        }
+
         return {
           id: entry.id,
           isExternal: true,
           name: entry.name,
-          filename: entry.path, // Absolute path used so llamaServerManager handles it
-          path: entry.path,
+          filename: path.basename(modelPath),
+          path: modelPath,
           sizeBytes: stat.size,
           sizeFormatted: formatBytes(stat.size),
           contextLength: getContextLength(meta),
@@ -204,15 +245,31 @@ export function listModels() {
           isExternal: true,
           isMissing: true,
           name: entry.name,
-          filename: entry.path,
-          path: entry.path,
+          filename: path.basename(modelPath),
+          path: modelPath,
           error: 'File not found',
           createdAt: entry.created_at,
         };
       }
     });
 
-    return [...diskModels, ...customModels].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const results = [...diskModels, ...customModels].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    // Final check to deduplicate if diskModels and customModels overlap
+    // diskModels use filename as id, customModels use UUID. We should prefer the custom model info (name/id).
+    const finalResults = [];
+    const seenPaths = new Set();
+
+    for (const m of results) {
+      const p = (m.path || '').replace(/[\\/]+$/, '');
+      if (seenPaths.has(p)) continue;
+      seenPaths.add(p);
+      finalResults.push(m);
+    }
+
+    cachedGgufModels = finalResults;
+    lastGgufScan = now;
+    return finalResults;
   } catch (err) {
     console.error('Failed to list models:', err);
     return [];
@@ -341,6 +398,7 @@ export async function startDownload(url, filename, onProgress) {
       if (finalDl) {
         finalDl.status = 'complete';
         finalDl.progress = 100;
+        clearCache();
       }
 
       onProgress?.({
@@ -486,6 +544,11 @@ function formatBytes(bytes) {
   if (mb >= 1) return `${mb.toFixed(1)} MB`;
   const kb = bytes / 1e3;
   return `${kb.toFixed(0)} KB`;
+}
+
+export function clearCache() {
+  cachedGgufModels = null;
+  lastGgufScan = 0;
 }
 
 export { MODELS_DIR };

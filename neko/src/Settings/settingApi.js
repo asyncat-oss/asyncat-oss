@@ -268,6 +268,12 @@ export const localModelsApi = {
       method: 'DELETE',
     });
   },
+  autoStart: async (path, ctxSize) => {
+    return apiCall(`${AI_API_BASE}/local-models/start`, {
+      method: 'POST',
+      body: JSON.stringify({ path, ctxSize }),
+    });
+  },
 
   // Start downloading a model
   startDownload: async (url, filename) => {
