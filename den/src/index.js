@@ -13,9 +13,8 @@ import logger, { flushLogs, logError, morganStream } from './logger.js';
 import authRouter from './auth/authRouter.js';
 
 // ─── AI / MCP routes (from asy_b_main) ───────────────────────────────────────
-import aiRoutes from './ai/routes/aiRoutes.js';
+import aiAgentRoutes from './ai/routes/aiAgentRoutes.js';
 import providerRoutes from './ai/routes/providerRoutes.js';
-import agentRoutes from './ai/routes/agentRoutes.js';
 import fileRoutes from './files/fileRoutes.js';
 
 // ─── Users / Projects (from asy_b_users) ──────────────────────────────
@@ -102,11 +101,11 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api/auth', authRouter);
 
 // ─── Routes: AI ──────────────────────────────────────────────────────────────
-// Provider routes MUST be mounted before aiRoutes to avoid the /api/ai catch-all
+// Provider routes MUST be mounted before aiAgentRoutes to avoid the /api/ai catch-all
 // matching /api/ai/providers/* requests first.
 app.use('/api/ai/providers', providerRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/agent', agentRoutes);
+app.use('/api/ai', aiAgentRoutes);
+app.use('/api/agent', aiAgentRoutes);
 app.use('/api/files', fileRoutes);
 
 // ─── Routes: Users / Projects ────────────────────────────────────────────────

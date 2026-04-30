@@ -3,10 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Check,
   Loader2,
-  User,
   Activity,
   Zap,
-  ArrowRight,
   Database,
   ChevronRight,
   Sun,
