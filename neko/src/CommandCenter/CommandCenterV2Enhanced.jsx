@@ -1085,20 +1085,6 @@ const CommandCenterV2Enhanced = () => {
     <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
       <div />
       <div className="flex items-center gap-2">
-        {/* Tools toggle */}
-        <button
-          onClick={() => setToolsEnabled(!toolsEnabled)}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-            toolsEnabled
-              ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'
-              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400'
-          }`}
-          title={toolsEnabled ? 'Tools enabled' : 'Tools disabled (answer only)'}
-        >
-          <Wrench className="w-3.5 h-3.5" />
-          {toolsEnabled ? 'Tools ON' : 'Tools OFF'}
-        </button>
-
         {isGhostMode && (
           <button
             onClick={toggleGhostMode}
@@ -1174,6 +1160,8 @@ const CommandCenterV2Enhanced = () => {
               }
               hasMessages={hasConversationContent}
               conversationTokens={conversationTokens}
+              toolsEnabled={toolsEnabled}
+              onToggleTools={() => setToolsEnabled(!toolsEnabled)}
             />
 
             {!isGhostMode && (
@@ -1427,6 +1415,8 @@ const CommandCenterV2Enhanced = () => {
                 }
                 hasMessages={hasConversationContent}
                 conversationTokens={conversationTokens}
+                toolsEnabled={toolsEnabled}
+                onToggleTools={() => setToolsEnabled(!toolsEnabled)}
               />
             </div>
           </>

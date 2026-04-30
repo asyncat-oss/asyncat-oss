@@ -117,8 +117,8 @@ const SecuritySection = ({ session }) => {
       {message && (
         <div className={`p-4 rounded-lg text-sm ${
           message.type === 'success'
-            ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200 midnight:bg-green-900 midnight:text-green-300'
-            : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200 midnight:bg-red-900 midnight:text-red-300'
+            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 midnight:text-green-300'
+            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 midnight:text-red-300'
         }`}>
           {message.text}
         </div>

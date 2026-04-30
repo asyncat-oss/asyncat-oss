@@ -201,7 +201,9 @@ function useTopTables(tables = []) {
     const rest = tables
       .filter(table => !importantTableOrder.includes(table.name))
       .sort((a, b) => (b.rows || 0) - (a.rows || 0));
-    return [...picked, ...rest].slice(0, 12);
+    const result = [...picked, ...rest].slice(0, 12);
+    const maxRows = result.length > 0 ? Math.max(...result.map(t => t.rows || 0)) : 0;
+    return { tables: result, maxRows };
   }, [tables]);
 }
 
@@ -230,7 +232,7 @@ export default function StorageSection() {
     loadSummary();
   }, [loadSummary]);
 
-  const topTables = useTopTables(summary?.database?.tables || []);
+  const { tables: topTables, maxRows } = useTopTables(summary?.database?.tables || []);
 
   if (loading) {
     return (
@@ -350,20 +352,31 @@ export default function StorageSection() {
               Top {topTables.length} of {database?.tableCount || 0}
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-            {topTables.map(table => (
-              <div
-                key={table.name}
-                className="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800"
-              >
-                <span className="text-xs font-mono text-gray-700 dark:text-gray-300 midnight:text-gray-300 truncate">
-                  {table.name}
-                </span>
-                <span className={`text-xs tabular-nums ${mutedText}`}>
-                  {table.rows == null ? 'n/a' : table.rows.toLocaleString()}
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 gap-2">
+            {topTables.map(table => {
+              const percent = maxRows > 0 ? Math.round(((table.rows || 0) / maxRows) * 100) : 0;
+              return (
+                <div
+                  key={table.name}
+                  className="py-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-mono text-gray-700 dark:text-gray-300 midnight:text-gray-300 truncate">
+                      {table.name}
+                    </span>
+                    <span className={`text-xs tabular-nums flex-shrink-0 ${mutedText}`}>
+                      {table.rows == null ? 'n/a' : table.rows.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-indigo-500"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

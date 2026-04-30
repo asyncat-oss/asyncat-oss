@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChevronDown, Cloud, Cpu, Loader2, Send, Search, X } from "lucide-react";
+import { ChevronDown, Cloud, Cpu, Loader2, Send, Wrench, X } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -17,10 +17,11 @@ export const MessageInputV2 = ({
   conversationTooLong = false,
   conversationTokens = 0,
   prefillValue,
+  toolsEnabled = true,
+  onToggleTools,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [localModels, setLocalModels] = useState([]);
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -82,7 +83,6 @@ export const MessageInputV2 = ({
       try {
         const messageToSend = {
           content: value.trim(),
-          webSearch: webSearchEnabled,
           modelConfig,
         };
 
@@ -95,7 +95,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, webSearchEnabled, modelConfig, onSubmit],
+    [value, disabled, modelConfig, onSubmit],
   );
 
   const handleKeyDown = useCallback(
@@ -352,24 +352,23 @@ export const MessageInputV2 = ({
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setWebSearchEnabled((v) => !v)}
-                    disabled={disabled}
-                    title={
-                      webSearchEnabled
-                        ? "Web search ON — click to disable"
-                        : "Search the web"
-                    }
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                      webSearchEnabled
-                        ? "bg-blue-100 dark:bg-blue-900/40 midnight:bg-blue-900/40 text-blue-700 dark:text-blue-300 midnight:text-blue-300 ring-1 ring-blue-400 dark:ring-blue-500"
-                        : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
-                    }`}
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                    Search
-                  </button>
+                  
+                  {onToggleTools && (
+                    <button
+                      type="button"
+                      onClick={onToggleTools}
+                      disabled={disabled}
+                      title={toolsEnabled ? "Tools enabled — click to disable" : "Tools disabled — click to enable"}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                        toolsEnabled
+                          ? "bg-blue-50 dark:bg-blue-950/30 midnight:bg-blue-950/30 text-blue-700 dark:text-blue-300 midnight:text-blue-300 border border-blue-300 dark:border-blue-700"
+                          : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-500 dark:text-gray-400 midnight:text-gray-400 border border-transparent hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
+                      }`}
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      {toolsEnabled ? 'Tools ON' : 'Tools OFF'}
+                    </button>
+                  )}
                 </div>
 
                 <div className="shrink-0">
