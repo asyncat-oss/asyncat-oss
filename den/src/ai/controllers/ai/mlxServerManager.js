@@ -223,7 +223,7 @@ export function listMlxModels() {
 
   const scanDirs = scanDirectories();
   try {
-    const customEntries = db.prepare('SELECT path FROM custom_model_paths WHERE type = "mlx"').all();
+    const customEntries = db.prepare("SELECT path FROM custom_model_paths WHERE type = 'mlx'").all();
     for (const entry of customEntries) {
       if (!scanDirs.includes(entry.path)) scanDirs.push(entry.path);
     }
@@ -274,7 +274,7 @@ export function listMlxModels() {
 
   // Update results with custom names and include unmatched custom paths
   try {
-    const customEntries = db.prepare('SELECT id, name, path FROM custom_model_paths WHERE type = "mlx"').all();
+    const customEntries = db.prepare("SELECT id, name, path FROM custom_model_paths WHERE type = 'mlx'").all();
     
     // Normalize path helper
     const norm = (p) => p ? p.replace(/\/+$/, '') : '';
@@ -286,7 +286,15 @@ export function listMlxModels() {
       
       const custom = customEntries.find(c => {
         const cPath = norm(c.path);
-        return cPath === resPath || cPath === resRealPath;
+        // Direct match or the custom path resolves to this scanner result
+        if (cPath === resPath || cPath === resRealPath) return true;
+        
+        try {
+          const resolvedCPath = norm(resolveMlxModelDir(c.path));
+          return resolvedCPath === resPath || resolvedCPath === resRealPath;
+        } catch {
+          return false;
+        }
       });
       
       if (custom) {
@@ -299,7 +307,14 @@ export function listMlxModels() {
     // Second, add custom paths that the scanner missed
     for (const custom of customEntries) {
       const cPath = norm(custom.path);
-      const found = results.some(res => norm(res.path) === cPath || norm(res.realPath) === cPath);
+      const resolvedCPath = norm(resolveMlxModelDir(custom.path));
+      
+      const found = results.some(res => {
+        const resPath = norm(res.path);
+        const resRealPath = norm(res.realPath);
+        return resPath === cPath || resRealPath === cPath || 
+               resPath === resolvedCPath || resRealPath === resolvedCPath;
+      });
       
       if (!found) {
         let pathExists = false;
