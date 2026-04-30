@@ -1,43 +1,5 @@
 // CommandCenterV2Enhanced.jsx — Unified agent interface (tools ON = acts, tools OFF = answers only)
 
-// ── Agent status badge (module-level to avoid re-mount on every render) ────────
-function formatDuration(ms) {
-  if (!ms || ms < 0) return null;
-  const totalSecs = Math.floor(ms / 1000);
-  const mins = Math.floor(totalSecs / 60);
-  const secs = totalSecs % 60;
-  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-}
-
-function AgentStatusBadge({ session, duration }) {
-  if (!session) return null;
-  const hasAnswer = session.scratchpad?.finalAnswer || session.status === 'complete' || session.status === 'completed';
-  const hasError  = session.status === 'error' || session.status === 'failed';
-
-  const displayDuration = duration ?? (() => {
-    if (!session.createdAt || !session.updatedAt) return null;
-    const ms = new Date(session.updatedAt) - new Date(session.createdAt);
-    return ms > 1000 ? ms : null;
-  })();
-  const durationLabel = formatDuration(displayDuration);
-
-  if (hasError) return (
-    <span className="flex items-center gap-1 text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800/50">
-      <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Failed{durationLabel && ` · ${durationLabel}`}
-    </span>
-  );
-  if (!hasAnswer) return (
-    <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/50">
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Incomplete{durationLabel && ` · ${durationLabel}`}
-    </span>
-  );
-  return (
-    <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/50">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Complete{durationLabel && ` · ${durationLabel}`}
-    </span>
-  );
-}
-
 function normalizeAgentToolRows(rows = []) {
   return rows.map(row => ({
     tool: row.tool_name || row.tool,

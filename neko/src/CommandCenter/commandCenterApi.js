@@ -1,4 +1,4 @@
-// commandCenterApi.js - Simplified: Chat Only
+// commandCenterApi.js — Unified API client for CommandCenter
 import authService from '../services/authService.js';
 import eventBus from '../utils/eventBus.js';
 
@@ -7,9 +7,6 @@ const USER_API_BASE_URL = import.meta.env.VITE_USER_URL + '/api';
 
 // API Endpoints
 const ENDPOINTS = {
-  // Core endpoints
-  AI_UNIFIED: `${API_BASE_URL}/ai/unified`,
-  AI_FEED: `${API_BASE_URL}/ai/feed`,
   CHATS: `${API_BASE_URL}/ai/chats`,
   PROJECTS: `${USER_API_BASE_URL}/projects`
 };
@@ -456,104 +453,6 @@ export const bulkApi = {
     return await Promise.allSettled(promises);
   },
 
-};
-
-// =====================================================
-// FOR YOU FEED API
-// =====================================================
-
-export const feedApi = {
-  /**
-   * Get personalized "For You" feed
-   * Returns AI-generated personalized dashboard content
-   */
-  getFeed: async (options = {}) => {
-    const { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone } = options;
-    const workspaceId = getCurrentWorkspaceId();
-    
-    let url = ENDPOINTS.AI_FEED;
-    const params = new URLSearchParams();
-    
-    if (timezone) params.append('timezone', timezone);
-    if (workspaceId) params.append('workspaceId', workspaceId);
-    
-    if (params.toString()) {
-      url += `?${params.toString()}`;
-    }
-    
-    return await apiRequest(url);
-  },
-
-  /**
-   * Get cached feed or fetch new one
-   */
-  getCachedFeed: async (options = {}) => {
-    const { forceRefresh = false, maxAge = 5 * 60 * 1000 } = options;
-    const workspaceId = getCurrentWorkspaceId();
-    // Make cache key workspace-specific
-    const cacheKey = workspaceId ? `asyncat-feed-cache-${workspaceId}` : 'asyncat-feed-cache';
-    
-    // If forcing refresh, clear the cache first
-    if (forceRefresh) {
-      try {
-        localStorage.removeItem(cacheKey);
-      } catch {
-        // Ignore cache errors
-      }
-    } else {
-      // Try to use cached data
-      try {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          const age = Date.now() - new Date(parsed.generatedAt).getTime();
-          
-          if (age < maxAge) {
-            return { success: true, feed: parsed, fromCache: true };
-          }
-        }
-      } catch {
-        // Ignore cache errors
-      }
-    }
-    
-    // Fetch fresh data from server
-    const result = await feedApi.getFeed(options);
-    
-    if (result.success && result.feed) {
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify(result.feed));
-      } catch {
-        // Ignore storage errors
-      }
-    }
-    
-    return { ...result, fromCache: false };
-  },
-
-  /**
-   * Clear feed cache (current workspace or all)
-   */
-  clearCache: (clearAll = false) => {
-    try {
-      if (clearAll) {
-        // Clear all feed caches
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('asyncat-feed-cache')) {
-            localStorage.removeItem(key);
-          }
-        }
-      } else {
-        // Clear only current workspace cache
-        const workspaceId = getCurrentWorkspaceId();
-        const cacheKey = workspaceId ? `asyncat-feed-cache-${workspaceId}` : 'asyncat-feed-cache';
-        localStorage.removeItem(cacheKey);
-      }
-    } catch {
-      // Ignore errors
-    }
-  }
 };
 
 // =====================================================
@@ -1113,7 +1012,6 @@ export default {
   projects: projectsApi,
   cachedProjects: cachedProjectsApi,
   bulk: bulkApi,
-  feed: feedApi,
   chatFolders: chatFoldersApi,
   projectFolders: projectFoldersApi,
   trash: trashApi,
