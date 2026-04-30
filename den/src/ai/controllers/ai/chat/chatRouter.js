@@ -8,10 +8,6 @@ import db from '../../../../db/client.js';
 
 // Import refactored modules
 import { generateSystemPrompt } from './systemPrompts.js';
-import {
-  validateInput,
-  getWorkspaceContext,
-} from './requestAnalysis.js';
 import { artifactParser } from '../artifactParser.js';
 import { TOOL_DEFINITIONS, buildToolsSystemSection } from '../toolDefinitions.js';
 import { executeTool } from '../toolExecutor.js';
@@ -38,6 +34,23 @@ function isLocalBaseUrl(baseUrl) {
 function isBuiltinLlamaBaseUrl(baseUrl) {
   const port = process.env.LLAMA_SERVER_PORT ?? '8765';
   return new RegExp(`^(https?:\\/\\/)?(127\\.0\\.0\\.1|localhost):${port}(\\/|$)`, 'i').test(baseUrl || '');
+}
+
+function getWorkspaceContext(req) {
+  return req.headers['x-workspace-id'] ||
+         req.body?.workspaceId ||
+         req.query?.workspaceId ||
+         null;
+}
+
+function validateInput(message) {
+  if (!message || message.length === 0) {
+    return { valid: false, error: 'Message cannot be empty' };
+  }
+  if (message.length > 50000) {
+    return { valid: false, error: 'Message too long (max 50KB)' };
+  }
+  return { valid: true };
 }
 
 function assertLocalModelReady() {

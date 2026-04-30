@@ -462,16 +462,25 @@ function AskUserEvent({ data, onAnswer }) {
 function AnswerEvent({ data }) {
   // Strip raw <think>...</think> blocks the model may have left in the answer
   const raw = data?.answer || '';
+
+  // Extract any think-block content as a fallback before stripping
+  const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
+  const thinkFallback = thinkMatch ? thinkMatch[1].trim() : null;
+
   const answer = raw
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/\s*<tool_call>[\s\S]*?<\/(?:\w+:)?tool_call>/gi, '')
     .replace(/\s*<tool_call[\s\S]*$/i, '')
     .trim();
-  if (!answer) return null;
+
+  // If stripping removed all content (model response was only think/tool_call blocks),
+  // fall back to the think content so the user sees something meaningful.
+  const displayAnswer = answer || thinkFallback;
+  if (!displayAnswer) return null;
 
   let blocks = [];
   try {
-    blocks = parseAIResponseToBlocks(answer);
+    blocks = parseAIResponseToBlocks(displayAnswer);
   } catch { blocks = []; }
 
   return (
@@ -480,7 +489,7 @@ function AnswerEvent({ data }) {
         <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
           {blocks.length > 0
             ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
-            : <p className="whitespace-pre-wrap">{answer}</p>}
+            : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
         </div>
         {data?.round > 1 && (
           <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>

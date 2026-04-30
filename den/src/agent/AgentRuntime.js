@@ -213,6 +213,9 @@ export class AgentRuntime {
     const argumentRepairAttempts = new Map();
     let lastToolSig = null;
     let consecutiveDupCount = 0;
+    // Track how many times each tool has been called regardless of args — catches
+    // loops where the model varies args slightly to evade the consecutive-dup guard.
+    const toolCallCount = new Map();
 
     for (let round = 0; round < this.maxRounds; round++) {
       this.session.nextRound();
@@ -527,6 +530,20 @@ export class AgentRuntime {
           } else {
             lastToolSig = sig;
             consecutiveDupCount = 0;
+          }
+
+          // Also catch loops where the model varies args slightly — if the same tool
+          // name has been called 4+ times total, it's stuck regardless of arg differences.
+          const totalCalls = (toolCallCount.get(tc.tool_name) || 0) + 1;
+          toolCallCount.set(tc.tool_name, totalCalls);
+          const toolLimit = tc.tool_name === 'list_directory' || tc.tool_name === 'read_file' ? 4 : 6;
+          if (totalCalls > toolLimit) {
+            const stuckThought = `Tool \`${tc.tool_name}\` called ${totalCalls} times total — likely stuck. Stopping.`;
+            reasoningEvents.push({ thought: stuckThought, round, timestamp: new Date().toISOString() });
+            this.onEvent({ type: 'thinking', data: { thought: stuckThought, round } });
+            answer = this._formatRepeatedToolAnswer(tc, result);
+            this.onEvent({ type: 'answer', data: { answer, round } });
+            break;
           }
         }
         if (answer) break;

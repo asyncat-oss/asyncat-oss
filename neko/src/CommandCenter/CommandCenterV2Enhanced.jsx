@@ -39,15 +39,6 @@ function AgentStatusBadge({ session, duration }) {
   );
 }
 
-const AGENT_EXAMPLES = [
-  { label: 'Research & summarize', prompt: 'Search the web for the latest AI agent frameworks in 2025 and write a concise comparison.' },
-  { label: 'Plan my week',         prompt: 'Review my tasks and calendar, then build a prioritized daily plan for the week ahead.' },
-  { label: 'Save a note',          prompt: 'Research the key differences between REST and GraphQL APIs and save a concise reference note.' },
-  { label: 'Shell task',           prompt: 'List all files larger than 10MB in the current directory and show their sizes.' },
-  { label: 'Remember context',     prompt: 'Remember that I prefer TypeScript over JavaScript and concise, commented code style.' },
-  { label: 'Browse & extract',     prompt: 'Go to https://news.ycombinator.com and summarize the top 5 stories right now.' },
-];
-
 const AGENT_CATEGORIES = [
   {
     id: 'research',
@@ -313,14 +304,10 @@ import {
   Library,
   Menu,
   BookOpen,
-  Bot,
-  MessageSquare,
   Loader2,
   RotateCcw,
   Activity,
   Square,
-  Wrench,
-  ShieldCheck,
   ShieldOff,
   Brain,
   Terminal,

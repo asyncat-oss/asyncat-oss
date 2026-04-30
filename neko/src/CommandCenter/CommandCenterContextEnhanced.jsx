@@ -359,7 +359,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     const modelConfig = typeof content === 'object' ? (content.modelConfig ?? null)  : null;
 
     if (!messageContent || !messageContent.trim()) return;
-    if (state.isProcessing || state.isStreaming) return;
+    if (state.isProcessing || state.isStreaming) {
+      dispatch({ type: ActionTypes.SET_ERROR, payload: 'Still processing previous message. Please wait.' });
+      return;
+    }
 
     if (!currentWorkspace?.id) {
       dispatch({ type: ActionTypes.SET_ERROR, payload: 'No workspace selected. Please select a workspace first.' });
@@ -516,6 +519,24 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
 
       // Final extraction with complete content
       const { cleanContent, artifacts, artifactExplanation: finalExplanation } = extractArtifacts(streamedContent);
+
+      // If the stream completed with no content, treat it as an error rather than
+      // silently leaving an empty assistant bubble.
+      if (!streamedContent.trim()) {
+        dispatch({
+          type: ActionTypes.UPDATE_STREAMING_MESSAGE,
+          payload: {
+            messageId: assistantMessageId,
+            content: "😿 No response received. The model may have hit a context or token limit. Try starting a new conversation.",
+            artifacts: [],
+            artifactExplanation: null,
+            isStreaming: false,
+            isError: true
+          }
+        });
+        dispatch({ type: ActionTypes.SET_ERROR, payload: 'Empty response from model' });
+        return;
+      }
 
       // Final update with complete content and artifacts — clears per-message isStreaming flag
       dispatch({
