@@ -525,6 +525,12 @@ body {
   animation: fadeInContent 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn {
+    animation: none;
+  }
+}
+
 /* Smooth conversation loading */
 @keyframes conversationSlide {
   from {

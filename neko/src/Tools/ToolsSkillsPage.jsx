@@ -1,90 +1,209 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
-  Search, Wrench, Terminal, File, Globe, Database,
+  Search, Wrench, File,
   Brain, Loader2, AlertCircle, ChevronDown, ChevronRight,
-  BookOpen, Cpu, ShieldAlert, Monitor,
-  Bot, Sparkles, Save, Edit2, X, Check, BookMarked, Trash2,
+  BookOpen, Cpu, ShieldAlert,
+  Bot, Save, Edit2, X, Check, BookMarked, Trash2,
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/commandCenterApi';
 
 const PERM_META = {
-  safe:      { label: 'Safe',      dot: 'bg-emerald-500' },
-  moderate:  { label: 'Moderate',  dot: 'bg-amber-500'   },
-  dangerous: { label: 'Dangerous', dot: 'bg-red-500'     },
-};
-
-const TOOL_CATEGORY_META = {
-  file:      { icon: File,        color: 'text-blue-500'        },
-  shell:     { icon: Terminal,    color: 'text-gray-500'        },
-  git:       { icon: BookOpen,    color: 'text-orange-500'      },
-  search:    { icon: Globe,       color: 'text-purple-500'      },
-  memory:    { icon: Brain,       color: 'text-pink-500'        },
-  workspace: { icon: Database,    color: 'text-cyan-500'        },
-  agent:     { icon: Cpu,         color: 'text-indigo-500'      },
-  system:    { icon: Wrench,      color: 'text-gray-400'        },
-  os:        { icon: Terminal,    color: 'text-green-600'       },
-  screen:    { icon: Monitor,     color: 'text-violet-500'     },
-  data:      { icon: Database,    color: 'text-teal-500'        },
-  plan:      { icon: Brain,       color: 'text-rose-500'        },
-  askUser:   { icon: ShieldAlert, color: 'text-amber-500'      },
-  browser:   { icon: Globe,       color: 'text-sky-500'         },
-  docker:    { icon: Cpu,         color: 'text-blue-400'        },
-  dev:       { icon: Terminal,    color: 'text-emerald-500'     },
-  general:   { icon: Wrench,      color: 'text-gray-400'        },
+  safe:      { label: 'Safe',      dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' },
+  moderate:  { label: 'Moderate',  dot: 'bg-amber-500',   badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' },
+  dangerous: { label: 'Dangerous', dot: 'bg-red-500',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' },
 };
 
 const BRAIN_REGION_META = {
-  prefrontal:    { label: 'Prefrontal',    icon: Brain,     color: 'text-violet-500' },
-  cerebellum:    { label: 'Cerebellum',    icon: BookOpen,  color: 'text-blue-500'   },
-  hippocampus:   { label: 'Hippocampus',   icon: Cpu,       color: 'text-cyan-500'   },
-  amygdala:      { label: 'Amygdala',      icon: ShieldAlert, color: 'text-red-500'    },
-  basal_ganglia: { label: 'Basal Ganglia', icon: Brain,    color: 'text-amber-500'  },
-  limbic:        { label: 'Limbic',        icon: BookOpen, color: 'text-pink-500'   },
-  unknown:       { label: 'Other',         icon: Wrench,    color: 'text-gray-400'   },
+  prefrontal:    { label: 'Planning',      icon: Brain,       color: 'text-violet-500', desc: 'Goal shaping and step-by-step reasoning' },
+  cerebellum:    { label: 'Workflow',      icon: BookOpen,    color: 'text-blue-500',   desc: 'Procedures, craft patterns, and repeatable execution' },
+  hippocampus:   { label: 'Recall',        icon: Cpu,         color: 'text-cyan-500',   desc: 'Context retrieval and learned project knowledge' },
+  amygdala:      { label: 'Risk Checks',   icon: ShieldAlert, color: 'text-red-500',    desc: 'Safety, permissions, and high-impact cautions' },
+  basal_ganglia: { label: 'Habits',        icon: Brain,       color: 'text-amber-500',  desc: 'Default behaviors and operating preferences' },
+  limbic:        { label: 'Tone',          icon: BookOpen,    color: 'text-pink-500',   desc: 'Style, empathy, and user-facing expression' },
+  unknown:       { label: 'Other',         icon: Wrench,      color: 'text-gray-400',   desc: 'Uncategorized skills' },
 };
 
 const REGION_ORDER = ['prefrontal', 'cerebellum', 'hippocampus', 'amygdala', 'basal_ganglia', 'limbic', 'unknown'];
-
-function getToolCategoryMeta(cat) {
-  return TOOL_CATEGORY_META[cat?.toLowerCase()] || TOOL_CATEGORY_META.general;
-}
 
 function getRegionMeta(region) {
   const key = (region || 'unknown').toLowerCase().replace(/[\s-]+/g, '_');
   return BRAIN_REGION_META[key] || BRAIN_REGION_META.unknown;
 }
 
+function formatLabel(value) {
+  return (value || 'general')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function renderInlineMarkdown(text, keyPrefix) {
+  const parts = [];
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    const key = `${keyPrefix}-${parts.length}`;
+    if (token.startsWith('`')) {
+      parts.push(
+        <code key={key} className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[0.92em] text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+          {token.slice(1, -1)}
+        </code>
+      );
+    } else {
+      parts.push(<strong key={key} className="font-semibold text-gray-900 dark:text-gray-100">{token.slice(2, -2)}</strong>);
+    }
+
+    lastIndex = match.index + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length ? parts : text;
+}
+
+function parseSoulMarkdown(content) {
+  if (!content?.trim()) return [];
+
+  const withoutFrontmatter = content.replace(/^---[\s\S]*?\n---\s*/, '');
+  const lines = withoutFrontmatter.split(/\r\n|\r|\n/);
+  const blocks = [];
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push({ type: 'paragraph', text: paragraph.join(' ') });
+    paragraph = [];
+  };
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      return;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      blocks.push({ type: 'heading', depth: heading[1].length, text: heading[2] });
+      return;
+    }
+
+    const numbered = trimmed.match(/^(\d+)\.\s+(.+)$/);
+    if (numbered) {
+      flushParagraph();
+      blocks.push({ type: 'numbered', number: numbered[1], text: numbered[2] });
+      return;
+    }
+
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      blocks.push({ type: 'bullet', text: bullet[1] });
+      return;
+    }
+
+    paragraph.push(trimmed);
+  });
+
+  flushParagraph();
+  return blocks;
+}
+
+function SoulPreview({ content }) {
+  const blocks = useMemo(() => parseSoulMarkdown(content), [content]);
+
+  return (
+    <article className="min-h-[52vh] bg-white px-7 py-8 text-sm leading-7 text-gray-700 dark:bg-gray-900 dark:text-gray-300 midnight:bg-slate-950 midnight:text-slate-300 sm:px-10">
+      {blocks.map((block, idx) => {
+        if (block.type === 'heading') {
+          const HeadingTag = block.depth === 1 ? 'h1' : block.depth === 2 ? 'h2' : 'h3';
+          const headingClass = block.depth === 1
+            ? 'mb-5 text-xl font-semibold text-gray-950 dark:text-white'
+            : 'mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100';
+          return (
+            <HeadingTag key={`heading-${idx}`} className={headingClass}>
+              {renderInlineMarkdown(block.text, `heading-${idx}`)}
+            </HeadingTag>
+          );
+        }
+
+        if (block.type === 'numbered') {
+          return (
+            <div key={`numbered-${idx}`} className="my-4 flex gap-3">
+              <span className="mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                {block.number}
+              </span>
+              <p className="min-w-0">{renderInlineMarkdown(block.text, `numbered-${idx}`)}</p>
+            </div>
+          );
+        }
+
+        if (block.type === 'bullet') {
+          return (
+            <div key={`bullet-${idx}`} className="my-2 flex gap-3">
+              <span className="mt-3 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400 dark:bg-gray-500" />
+              <p className="min-w-0">{renderInlineMarkdown(block.text, `bullet-${idx}`)}</p>
+            </div>
+          );
+        }
+
+        return (
+          <p key={`paragraph-${idx}`} className="mb-5 max-w-4xl">
+            {renderInlineMarkdown(block.text, `paragraph-${idx}`)}
+          </p>
+        );
+      })}
+    </article>
+  );
+}
+
+SoulPreview.propTypes = {
+  content: PropTypes.string.isRequired,
+};
+
 function ToolCard({ tool, isFirst }) {
   const [expanded, setExpanded] = useState(false);
   const perm = PERM_META[tool.permission] || PERM_META.moderate;
 
   return (
-    <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800'}>
+    <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800'}>
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+        className="group w-full px-4 py-3 text-left transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-900/55"
       >
-        <span className={'flex-shrink-0 w-2 h-2 rounded-full ' + perm.dot} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{tool.name}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{perm.label}</span>
+        <div className="flex items-start gap-3">
+          <span className={'mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full ' + perm.dot} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate font-mono text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{tool.name}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${perm.badge}`}>{perm.label}</span>
+            </div>
+            <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{tool.description || 'No description'}</p>
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{tool.description || 'No description'}</p>
-        </div>
-        <div className="text-gray-300 dark:text-gray-600">
-          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          <div className="mt-0.5 text-gray-300 transition-colors group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400">
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </div>
         </div>
       </button>
 
       {expanded && (
         <div className="px-4 pb-4 pl-9">
-          <p className="text-sm text-gray-600 dark:text-gray-400">{tool.description || 'No description'}</p>
+          <p className="max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-400">{tool.description || 'No description'}</p>
           {tool.parameters && (
-            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-[10px] font-medium text-gray-500 uppercase mb-1">Parameters</p>
-              <pre className="text-xs text-gray-600 dark:text-gray-400 font-mono overflow-x-auto">{typeof tool.parameters === 'string' ? tool.parameters : JSON.stringify(tool.parameters, null, 2)}</pre>
+            <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/60">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Parameters</p>
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-gray-700 dark:text-gray-300">{typeof tool.parameters === 'string' ? tool.parameters : JSON.stringify(tool.parameters, null, 2)}</pre>
             </div>
           )}
         </div>
@@ -107,50 +226,50 @@ ToolCard.propTypes = {
 function SkillCard({ skill, isFirst }) {
   const [expanded, setExpanded] = useState(false);
   const meta = getRegionMeta(skill.brain_region);
-  const RegIcon = meta.icon;
 
   return (
-    <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800'}>
+    <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800'}>
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-start gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+        className="group w-full px-4 py-3 text-left transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-900/55"
       >
-        <div className="flex-shrink-0 w-6 h-6 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center mt-0.5">
-          <RegIcon className={'w-3.5 h-3.5 ' + meta.color} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{skill.name}</span>
-            {skill.source === 'user' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">Custom</span>
+        <div className="flex items-start gap-3">
+          <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-300 dark:bg-gray-600" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{skill.name}</span>
+              {skill.source === 'user' && (
+                <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Custom</span>
+              )}
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{meta.label}</span>
+            </div>
+            <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{skill.description || 'No description'}</p>
+            {skill.tags?.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {skill.tags.slice(0, 4).map(tag => (
+                  <span key={tag} className="rounded border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-gray-800 dark:text-gray-500">{tag}</span>
+                ))}
+              </div>
             )}
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{skill.description}</p>
-          {skill.tags?.length > 0 && (
-            <div className="flex gap-1 mt-1.5 flex-wrap">
-              {skill.tags.slice(0, 3).map(tag => (
-                <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{tag}</span>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="text-gray-300 dark:text-gray-600 mt-0.5">
-          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          <div className="mt-0.5 text-gray-300 transition-colors group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400">
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </div>
         </div>
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 pl-9 space-y-2">
+        <div className="space-y-2 px-4 pb-4 pl-9">
           {skill.when_to_use && (
-            <div className="p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg">
-              <p className="text-[10px] font-medium text-violet-600 dark:text-violet-400 uppercase mb-1">When to use</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">{skill.when_to_use}</p>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/60">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">When to use</p>
+              <p className="text-xs leading-5 text-gray-600 dark:text-gray-400">{skill.when_to_use}</p>
             </div>
           )}
           {skill.body && (
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-[10px] font-medium text-gray-500 uppercase mb-1">Process</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{skill.body}</p>
+            <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Process</p>
+              <p className="whitespace-pre-wrap text-xs leading-5 text-gray-600 dark:text-gray-400">{skill.body}</p>
             </div>
           )}
         </div>
@@ -173,44 +292,70 @@ SkillCard.propTypes = {
 };
 
 function ToolSection({ category, catTools }) {
-  const catMeta = getToolCategoryMeta(category);
-  const CatIcon = catMeta.icon || Wrench;
+  const sortedTools = useMemo(() => [...catTools].sort((a, b) => a.name.localeCompare(b.name)), [catTools]);
 
   return (
-    <div className="mb-6">
-      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
-        <CatIcon className={'w-3.5 h-3.5 ' + catMeta.color} />
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">{category}</span>
-        <span className="text-[10px] text-gray-400 ml-auto">{catTools.length}</span>
+    <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+      <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-2.5 dark:border-gray-800 dark:bg-gray-800/35 midnight:border-slate-800 midnight:bg-slate-900/35">
+        <div className="min-w-0">
+          <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{formatLabel(category)}</h2>
+        </div>
+        <span className="rounded bg-white px-2 py-0.5 font-mono text-[10px] text-gray-500 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">{catTools.length}</span>
       </div>
-      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
-        {catTools.sort((a, b) => a.name.localeCompare(b.name)).map((tool, idx) => (
+      <div>
+        {sortedTools.map((tool, idx) => (
           <ToolCard key={tool.name} tool={tool} isFirst={idx === 0} />
         ))}
       </div>
-    </div>
+    </section>
   );
 }
+
+ToolSection.propTypes = {
+  category: PropTypes.string.isRequired,
+  catTools: PropTypes.arrayOf(PropTypes.shape({
+    name: PropTypes.string.isRequired,
+    description: PropTypes.string,
+    permission: PropTypes.string,
+    category: PropTypes.string,
+    parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
+  })).isRequired,
+};
 
 function SkillSection({ region, regionSkills }) {
   const meta = getRegionMeta(region);
-  const RegIcon = meta.icon;
+  const sortedSkills = useMemo(() => [...regionSkills].sort((a, b) => a.name.localeCompare(b.name)), [regionSkills]);
 
   return (
-    <div className="mb-6">
-      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
-        <RegIcon className={'w-3.5 h-3.5 ' + meta.color} />
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">{meta.label}</span>
-        <span className="text-[10px] text-gray-400 ml-auto">{regionSkills.length}</span>
+    <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+      <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-2.5 dark:border-gray-800 dark:bg-gray-800/35 midnight:border-slate-800 midnight:bg-slate-900/35">
+        <div className="min-w-0">
+          <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{meta.label}</h2>
+          <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{meta.desc}</p>
+        </div>
+        <span className="rounded bg-white px-2 py-0.5 font-mono text-[10px] text-gray-500 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">{regionSkills.length}</span>
       </div>
-      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
-        {regionSkills.sort((a, b) => a.name.localeCompare(b.name)).map((skill, idx) => (
+      <div>
+        {sortedSkills.map((skill, idx) => (
           <SkillCard key={skill.name} skill={skill} isFirst={idx === 0} />
         ))}
       </div>
-    </div>
+    </section>
   );
 }
+
+SkillSection.propTypes = {
+  region: PropTypes.string.isRequired,
+  regionSkills: PropTypes.arrayOf(PropTypes.shape({
+    brain_region: PropTypes.string,
+    name: PropTypes.string.isRequired,
+    source: PropTypes.string,
+    description: PropTypes.string,
+    tags: PropTypes.arrayOf(PropTypes.string),
+    when_to_use: PropTypes.string,
+    body: PropTypes.string,
+  })).isRequired,
+};
 
 export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -398,6 +543,19 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const safeCount   = tools.filter(t => t.permission === 'safe').length;
   const modCount    = tools.filter(t => t.permission === 'moderate').length;
   const dangerCount = tools.filter(t => t.permission === 'dangerous').length;
+  const toolCategoryCount = Object.keys(toolsByCategory).length;
+  const skillRegionCount = Object.values(skillsByRegion).filter(group => group.length > 0).length;
+  const customSkillCount = skills.filter(s => s.source === 'user').length;
+  const soulStats = useMemo(() => {
+    const source = editingSoul ? soulEdited : soulContent;
+    const trimmed = source.trim();
+    return {
+      lines: source ? source.split(/\r\n|\r|\n/).length : 0,
+      words: trimmed ? trimmed.split(/\s+/).length : 0,
+      chars: source.length,
+    };
+  }, [editingSoul, soulContent, soulEdited]);
+  const soulDirty = soulEdited !== soulContent;
 
   const toolsTabActive   = activeTab === 'tools';
   const skillsTabActive  = activeTab === 'skills';
@@ -439,7 +597,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             Skills
           </button>
           <button onClick={() => setActiveTab('soul')} className={tabClass(soulTabActive)}>
-            <Sparkles className="w-3.5 h-3.5" />
+            <File className="w-3.5 h-3.5" />
             Soul
           </button>
           <button onClick={() => setActiveTab('memory')} className={tabClass(memoryTabActive)}>
@@ -452,111 +610,194 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {toolsTabActive && (
-          <>
-            {/* Search + stats */}
-            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-slate-950/50">
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={toolSearch}
-                  onChange={e => setToolSearch(e.target.value)}
-                  placeholder="Search tools..."
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg text-gray-700 dark:text-gray-200 midnight:text-slate-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600"
-                />
+          <div className="grid min-h-full grid-cols-1 bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:border-b-0 lg:border-r">
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                    Tools are the actions the agent can request while working, from reading files to running shell commands and using workspace services.
+                  </p>
+                </div>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Permission levels</p>
+                  <div className="mt-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Safe</span><span className="font-mono text-gray-800 dark:text-gray-200">{safeCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Moderate</span><span className="font-mono text-gray-800 dark:text-gray-200">{modCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500" />Dangerous</span><span className="font-mono text-gray-800 dark:text-gray-200">{dangerCount}</span></div>
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Catalog</p>
+                  <div className="mt-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Visible tools</span><span className="font-mono text-gray-800 dark:text-gray-200">{filteredTools.length}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200">{toolCategoryCount}</span></div>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Safe {safeCount}</span>
-                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Moderate {modCount}</span>
-                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />Dangerous {dangerCount}</span>
-              </div>
-            </div>
+            </aside>
 
-            {/* Tools list */}
-            {loadingTools && (
-              <div className="flex items-center justify-center py-20 gap-2 text-gray-400">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="text-sm">Loading tools...</span>
+            <main className="min-w-0 px-4 py-5 sm:px-6">
+              <div className="mx-auto max-w-5xl">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Tool Catalog</h2>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, or group. Expand a row to inspect parameters.</p>
+                  </div>
+                  <div className="relative w-full sm:w-80">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={toolSearch}
+                      onChange={e => setToolSearch(e.target.value)}
+                      placeholder="Search tools"
+                      className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+                    />
+                  </div>
+                </div>
+
+                {loadingTools && (
+                  <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="text-sm">Loading tools...</span>
+                  </div>
+                )}
+                {errorTools && (
+                  <div className="flex flex-col items-center justify-center gap-3 py-20">
+                    <AlertCircle className="h-6 w-6 text-red-500" />
+                    <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load tools</p>
+                    <button onClick={fetchTools} className="text-xs text-gray-500 underline hover:text-gray-700">Try again</button>
+                  </div>
+                )}
+                {!loadingTools && !errorTools && Object.keys(toolsByCategory).length === 0 && (
+                  <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+                    <Search className="h-6 w-6" />
+                    <p className="text-sm">{toolSearch ? 'No tools match your search' : 'No tools available'}</p>
+                  </div>
+                )}
+                {!loadingTools && !errorTools && Object.entries(toolsByCategory).length > 0 && (
+                  <div className="space-y-4">
+                    {Object.entries(toolsByCategory).map(([category, catTools]) => (
+                      <ToolSection key={category} category={category} catTools={catTools} />
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-            {errorTools && (
-              <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <AlertCircle className="w-6 h-6 text-red-500" />
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load tools</p>
-                <button onClick={fetchTools} className="text-xs text-gray-500 hover:text-gray-700 underline">Try again</button>
-              </div>
-            )}
-            {!loadingTools && !errorTools && Object.keys(toolsByCategory).length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 gap-2 text-gray-400">
-                <Search className="w-6 h-6" />
-                <p className="text-sm">{toolSearch ? 'No tools match your search' : 'No tools available'}</p>
-              </div>
-            )}
-            {!loadingTools && !errorTools && Object.entries(toolsByCategory).map(([category, catTools]) => (
-              <ToolSection key={category} category={category} catTools={catTools} />
-            ))}
-          </>
+            </main>
+          </div>
         )}
 
         {skillsTabActive && (
-          <>
-            {/* Search */}
-            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-slate-950/50">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={skillSearch}
-                  onChange={e => setSkillSearch(e.target.value)}
-                  placeholder="Search skills..."
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg text-gray-700 dark:text-gray-200 midnight:text-slate-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600"
-                />
+          <div className="grid min-h-full grid-cols-1 bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:border-b-0 lg:border-r">
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                    Skills are reusable instruction packs the agent can load automatically when a task matches their purpose.
+                  </p>
+                </div>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Catalog</p>
+                  <div className="mt-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Visible skills</span><span className="font-mono text-gray-800 dark:text-gray-200">{filteredSkills.length}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200">{skillRegionCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Custom</span><span className="font-mono text-gray-800 dark:text-gray-200">{customSkillCount}</span></div>
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">How they run</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                    The agent chooses relevant skills in context. Opening a row shows when it applies and what process it adds.
+                  </p>
+                </div>
               </div>
-            </div>
+            </aside>
 
-            {/* Skills list */}
-            {loadingSkills && (
-              <div className="flex items-center justify-center py-20 gap-2 text-gray-400">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="text-sm">Loading skills...</span>
+            <main className="min-w-0 px-4 py-5 sm:px-6">
+              <div className="mx-auto max-w-5xl">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Skill Library</h2>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Expand a row to read its instructions.</p>
+                  </div>
+                  <div className="relative w-full sm:w-80">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={skillSearch}
+                      onChange={e => setSkillSearch(e.target.value)}
+                      placeholder="Search skills"
+                      className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+                    />
+                  </div>
+                </div>
+
+                {loadingSkills && (
+                  <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="text-sm">Loading skills...</span>
+                  </div>
+                )}
+                {errorSkills && (
+                  <div className="flex flex-col items-center justify-center gap-3 py-20">
+                    <AlertCircle className="h-6 w-6 text-red-500" />
+                    <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load skills</p>
+                    <button onClick={fetchSkills} className="text-xs text-gray-500 underline hover:text-gray-700">Try again</button>
+                  </div>
+                )}
+                {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length === 0 && (
+                  <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+                    <Search className="h-6 w-6" />
+                    <p className="text-sm">{skillSearch ? 'No skills match your search' : 'No skills available'}</p>
+                  </div>
+                )}
+                {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length > 0 && (
+                  <div className="space-y-4">
+                    {REGION_ORDER.map(region => {
+                      const regionSkills = skillsByRegion[region];
+                      if (!regionSkills?.length) return null;
+                      return <SkillSection key={region} region={region} regionSkills={regionSkills} />;
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-            {errorSkills && (
-              <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <AlertCircle className="w-6 h-6 text-red-500" />
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load skills</p>
-                <button onClick={fetchSkills} className="text-xs text-gray-500 hover:text-gray-700 underline">Try again</button>
-              </div>
-            )}
-            {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 gap-2 text-gray-400">
-                <Search className="w-6 h-6" />
-                <p className="text-sm">{skillSearch ? 'No skills match your search' : 'No skills available'}</p>
-              </div>
-            )}
-            {!loadingSkills && !errorSkills && REGION_ORDER.map(region => {
-              const regionSkills = skillsByRegion[region];
-              if (!regionSkills?.length) return null;
-              return <SkillSection key={region} region={region} regionSkills={regionSkills} />;
-            })}
-          </>
+            </main>
+          </div>
         )}
 
         {soulTabActive && (
-          <div className="px-6 py-5">
-            {/* Header row */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-800 dark:text-white">default.md</span>
-                <span className="text-xs text-gray-400 dark:text-gray-600 ml-1">Agent persona &amp; operating rules</span>
+          <div className="flex h-full flex-col bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950">
+            <div className="flex flex-col gap-3 border-b border-gray-100 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">default.md</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    editingSoul
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+                  }`}>
+                    {editingSoul ? (soulDirty ? 'Editing' : 'No changes') : 'Active'}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+                  Agent persona &amp; operating rules
+                </p>
               </div>
+
               <div className="flex items-center gap-2">
+                {saveSuccess && (
+                  <span className="hidden items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 sm:flex">
+                    <Check className="h-3.5 w-3.5" />
+                    Saved
+                  </span>
+                )}
                 {!editingSoul && !loadingSoul && !errorSoul && (
                   <button
                     onClick={() => setEditingSoul(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                   >
-                    <Edit2 className="w-3 h-3" />
+                    <Edit2 className="h-3.5 w-3.5" />
                     Edit
                   </button>
                 )}
@@ -565,17 +806,17 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     <button
                       onClick={cancelEdit}
                       disabled={savingSoul}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="h-3.5 w-3.5" />
                       Cancel
                     </button>
                     <button
                       onClick={saveSoul}
-                      disabled={savingSoul || soulEdited === soulContent}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white transition-colors"
+                      disabled={savingSoul || !soulDirty}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
                     >
-                      {savingSoul ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      {savingSoul ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                       Save
                     </button>
                   </>
@@ -584,42 +825,101 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             </div>
 
             {loadingSoul && (
-              <div className="flex items-center gap-2 py-10 justify-center text-gray-400">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="text-sm">Loading soul…</span>
+              <div className="flex flex-1 items-center justify-center gap-2 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading soul...</span>
               </div>
             )}
 
             {errorSoul && (
-              <div className="flex flex-col items-center gap-2 py-10 text-red-500">
-                <AlertCircle className="w-5 h-5" />
-                <p className="text-sm">{errorSoul}</p>
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <AlertCircle className="h-6 w-6 text-red-500" />
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">{errorSoul}</p>
                 <button
                   onClick={() => { soulFetchedRef.current = false; fetchSoul(); }}
-                  className="text-xs text-gray-400 hover:text-gray-600 underline mt-1"
+                  className="text-xs text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 >
                   Retry
                 </button>
               </div>
             )}
 
-            {!loadingSoul && !errorSoul && !editingSoul && soulContent && (
-              <pre className="text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-                {soulContent}
-              </pre>
-            )}
+            {!loadingSoul && !errorSoul && (
+              <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[240px_minmax(0,1fr)]">
+                <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:border-b-0 lg:border-r">
+                  <div className="space-y-5">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this controls</p>
+                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                        The soul is the default instruction file for the local agent: its identity, working style, and rules before a task starts.
+                      </p>
+                    </div>
 
-            {!loadingSoul && !errorSoul && editingSoul && (
-              <textarea
-                value={soulEdited}
-                onChange={e => setSoulEdited(e.target.value)}
-                className="w-full h-[60vh] text-xs font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed bg-white dark:bg-gray-800 rounded-xl p-4 border border-indigo-200 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-                spellCheck={false}
-              />
-            )}
+                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">How to edit</p>
+                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                        Preview renders the Markdown for reading. Edit shows the raw file so headings, lists, and front matter stay exactly as saved.
+                      </p>
+                    </div>
 
-            {!loadingSoul && !errorSoul && !soulContent && (
-              <div className="text-sm text-gray-400 py-10 text-center">No soul file found.</div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Document</p>
+                      <div className="mt-2 space-y-2 text-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-gray-500 dark:text-gray-400">Lines</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200">{soulStats.lines}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-gray-500 dark:text-gray-400">Words</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200">{soulStats.words}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-gray-500 dark:text-gray-400">Characters</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200">{soulStats.chars}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">State</p>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                        <span className={`h-1.5 w-1.5 rounded-full ${soulDirty ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                        {editingSoul ? (soulDirty ? 'Unsaved changes' : 'Ready to edit') : 'Loaded from profile'}
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+
+                <main className="min-h-0 overflow-y-auto p-4 sm:p-6">
+                  <div className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/70 px-4 py-2 dark:border-gray-800 dark:bg-gray-800/40 midnight:border-slate-800 midnight:bg-slate-900/40">
+                      <span className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">souls/default.md</span>
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                        {editingSoul ? 'Edit mode' : 'Preview'}
+                      </span>
+                    </div>
+
+                    {!editingSoul && soulContent && (
+                      <SoulPreview content={soulContent} />
+                    )}
+
+                    {editingSoul && (
+                      <textarea
+                        value={soulEdited}
+                        onChange={e => setSoulEdited(e.target.value)}
+                        className="h-[60vh] w-full resize-none bg-white p-5 font-mono text-xs leading-6 text-gray-800 outline-none focus:ring-2 focus:ring-inset focus:ring-gray-300 dark:bg-gray-900 dark:text-gray-100 dark:focus:ring-gray-700 midnight:bg-slate-950 midnight:text-slate-100 sm:p-6"
+                        spellCheck={false}
+                      />
+                    )}
+
+                    {!editingSoul && !soulContent && (
+                      <div className="flex min-h-[52vh] items-center justify-center px-6 text-sm text-gray-400">
+                        No soul file found.
+                      </div>
+                    )}
+                  </div>
+                </main>
+              </div>
             )}
           </div>
         )}
@@ -702,7 +1002,7 @@ const KIND_COLORS = {
 function MemoryRow({ mem, onDelete, deleting }) {
   const [expanded, setExpanded] = useState(false);
   const kindColor = KIND_COLORS[mem.kind || mem.memory_type] || KIND_COLORS.fact;
-  const tags = Array.isArray(mem.tags) ? mem.tags : (typeof mem.tags === 'string' ? mem.tags.replace(/[\[\]]/g, '').split(',').map(t => t.trim()).filter(Boolean) : []);
+  const tags = Array.isArray(mem.tags) ? mem.tags : (typeof mem.tags === 'string' ? mem.tags.replaceAll('[', '').replaceAll(']', '').split(',').map(t => t.trim()).filter(Boolean) : []);
   const importance = Number(mem.importance ?? 0.5);
   const importanceDots = Math.round(importance * 5);
 
@@ -757,6 +1057,22 @@ function MemoryRow({ mem, onDelete, deleting }) {
     </div>
   );
 }
+
+MemoryRow.propTypes = {
+  mem: PropTypes.shape({
+    key: PropTypes.string.isRequired,
+    kind: PropTypes.string,
+    memory_type: PropTypes.string,
+    tags: PropTypes.oneOfType([PropTypes.arrayOf(PropTypes.string), PropTypes.string]),
+    importance: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    content: PropTypes.string,
+    last_accessed_at: PropTypes.string,
+    access_count: PropTypes.number,
+    created_at: PropTypes.string,
+  }).isRequired,
+  onDelete: PropTypes.func.isRequired,
+  deleting: PropTypes.bool,
+};
 
 AgentToolsSkillsPage.propTypes = {
   initialTab: PropTypes.oneOf(['tools', 'skills', 'soul', 'memory']),

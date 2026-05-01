@@ -36,11 +36,15 @@ const AppLayout = ({ session, onSignOut }) => {
   // UI state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
+  const [pageTransitionsEnabled, setPageTransitionsEnabled] = useState(() => {
+    return localStorage.getItem('pageTransitions') !== 'off';
+  });
   
   // Project state
   const [selectedProject, setSelectedProject] = useState(null);
   
   const basePage = location.pathname.split('/').filter(Boolean)[0] || 'home';
+  const routeTransitionKey = basePage;
   
   // Check if user has any workspaces
   const hasWorkspaces = workspaces && workspaces.length > 0;
@@ -177,6 +181,19 @@ const AppLayout = ({ session, onSignOut }) => {
     initializeTheme();
     const cleanup = setupThemeListener();
     return cleanup;
+  }, []);
+
+  useEffect(() => {
+    const syncPageTransitions = () => {
+      setPageTransitionsEnabled(localStorage.getItem('pageTransitions') !== 'off');
+    };
+
+    window.addEventListener('storage', syncPageTransitions);
+    window.addEventListener('page-transitions-changed', syncPageTransitions);
+    return () => {
+      window.removeEventListener('storage', syncPageTransitions);
+      window.removeEventListener('page-transitions-changed', syncPageTransitions);
+    };
   }, []);
 
   // Keyboard shortcuts for mode switching
@@ -436,7 +453,10 @@ const AppLayout = ({ session, onSignOut }) => {
       />
 
       <main className={`flex-1 overflow-hidden h-full ${isTopMenuBarVisible() ? 'pt-10' : ''}`}>
-        <div className="animate-fadeIn h-full pb-20">
+        <div
+          key={routeTransitionKey}
+          className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full pb-20`}
+        >
           <Outlet context={{
               selectedProject: getProjectValue(true),
               onProjectSelect: handleProjectSelect,
