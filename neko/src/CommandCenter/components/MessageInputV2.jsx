@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChevronDown, Cloud, Cpu, Loader2, Send, Wrench, X } from "lucide-react";
+import { ChevronDown, Cloud, Cpu, Loader2, Send, Wrench, X, Zap } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -19,6 +19,8 @@ export const MessageInputV2 = ({
   prefillValue,
   toolsEnabled = true,
   onToggleTools,
+  autoApprove = false,
+  onToggleAutoApprove,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
@@ -367,6 +369,23 @@ export const MessageInputV2 = ({
                     >
                       <Wrench className="w-3.5 h-3.5" />
                       {toolsEnabled ? 'Tools ON' : 'Tools OFF'}
+                    </button>
+                  )}
+
+                  {onToggleAutoApprove && toolsEnabled && (
+                    <button
+                      type="button"
+                      onClick={onToggleAutoApprove}
+                      disabled={disabled}
+                      title={autoApprove ? "Auto-approve enabled — click to ask before risky tools" : "Ask before risky tools — click to auto-approve"}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                        autoApprove
+                          ? "bg-amber-50 dark:bg-amber-950/30 midnight:bg-amber-950/30 text-amber-700 dark:text-amber-300 midnight:text-amber-300 border border-amber-300 dark:border-amber-700"
+                          : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-500 dark:text-gray-400 midnight:text-gray-400 border border-transparent hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
+                      }`}
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      {autoApprove ? 'Auto ON' : 'Ask'}
                     </button>
                   )}
                 </div>

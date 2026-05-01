@@ -254,7 +254,13 @@ const CommandCenterV2Enhanced = () => {
   const [agentCurrentSessionId, setAgentCurrentSessionId] = useState(null);
   const [agentCurrentSession, setAgentCurrentSession] = useState(null);
   const [agentConversationHistory, setAgentConversationHistory] = useState([]);
-  const [agentAutoApprove, setAgentAutoApprove] = useState(false);
+  const [agentAutoApprove, setAgentAutoApprove] = useState(() => {
+    try {
+      return localStorage.getItem('asyncat_agent_auto_approve') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [alwaysAllowedTools, setAlwaysAllowedTools] = useState(() => {
     try {
       const stored = localStorage.getItem('asyncat_always_allow_tools');
@@ -660,6 +666,14 @@ const CommandCenterV2Enhanced = () => {
     } catch (err) {
       console.error('Failed to respond to ask_user:', err);
     }
+  }, []);
+
+  const handleToggleAgentAutoApprove = useCallback(() => {
+    setAgentAutoApprove(prev => {
+      const next = !prev;
+      try { localStorage.setItem('asyncat_agent_auto_approve', String(next)); } catch {}
+      return next;
+    });
   }, []);
 
   const handleAgentRename = useCallback(async () => {
@@ -1157,6 +1171,8 @@ const CommandCenterV2Enhanced = () => {
               conversationTokens={conversationTokens}
               toolsEnabled={toolsEnabled}
               onToggleTools={() => setToolsEnabled(!toolsEnabled)}
+              autoApprove={agentAutoApprove}
+              onToggleAutoApprove={handleToggleAgentAutoApprove}
             />
 
             {!isGhostMode && (
@@ -1412,6 +1428,8 @@ const CommandCenterV2Enhanced = () => {
                 conversationTokens={conversationTokens}
                 toolsEnabled={toolsEnabled}
                 onToggleTools={() => setToolsEnabled(!toolsEnabled)}
+                autoApprove={agentAutoApprove}
+                onToggleAutoApprove={handleToggleAgentAutoApprove}
               />
             </div>
           </>

@@ -172,15 +172,75 @@ SoulPreview.propTypes = {
   content: PropTypes.string.isRequired,
 };
 
-function ToolCard({ tool, isFirst }) {
-  const [expanded, setExpanded] = useState(false);
+function MarkdownPanel({ content, emptyText = 'No description' }) {
+  const blocks = useMemo(() => parseSoulMarkdown(content || ''), [content]);
+
+  if (!blocks.length) {
+    return <p className="text-sm leading-6 text-gray-500 dark:text-gray-400">{emptyText}</p>;
+  }
+
+  return (
+    <div className="space-y-3 text-sm leading-6 text-gray-600 dark:text-gray-300 midnight:text-slate-300">
+      {blocks.map((block, idx) => {
+        if (block.type === 'heading') {
+          const HeadingTag = block.depth === 1 ? 'h3' : 'h4';
+          const headingClass = block.depth === 1
+            ? 'pt-1 text-base font-semibold text-gray-950 dark:text-white'
+            : 'pt-3 text-xs font-semibold uppercase tracking-wide text-gray-800 dark:text-gray-200';
+          return (
+            <HeadingTag key={`md-heading-${idx}`} className={headingClass}>
+              {renderInlineMarkdown(block.text, `md-heading-${idx}`)}
+            </HeadingTag>
+          );
+        }
+
+        if (block.type === 'numbered') {
+          return (
+            <div key={`md-numbered-${idx}`} className="flex gap-3">
+              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                {block.number}
+              </span>
+              <p className="min-w-0">{renderInlineMarkdown(block.text, `md-numbered-${idx}`)}</p>
+            </div>
+          );
+        }
+
+        if (block.type === 'bullet') {
+          return (
+            <div key={`md-bullet-${idx}`} className="flex gap-3">
+              <span className="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400 dark:bg-gray-500" />
+              <p className="min-w-0">{renderInlineMarkdown(block.text, `md-bullet-${idx}`)}</p>
+            </div>
+          );
+        }
+
+        return (
+          <p key={`md-paragraph-${idx}`} className="min-w-0">
+            {renderInlineMarkdown(block.text, `md-paragraph-${idx}`)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+MarkdownPanel.propTypes = {
+  content: PropTypes.string,
+  emptyText: PropTypes.string,
+};
+
+function ToolCard({ tool, isFirst, selected, onSelect }) {
   const perm = PERM_META[tool.permission] || PERM_META.moderate;
 
   return (
     <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800'}>
       <button
-        onClick={() => setExpanded(v => !v)}
-        className="group w-full px-4 py-3 text-left transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-900/55"
+        onClick={onSelect}
+        className={`group w-full px-4 py-3 text-left transition-colors ${
+          selected
+            ? 'bg-gray-100/80 dark:bg-gray-800/70 midnight:bg-slate-900'
+            : 'hover:bg-gray-50/70 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-900/55'
+        }`}
       >
         <div className="flex items-start gap-3">
           <span className={'mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full ' + perm.dot} />
@@ -192,22 +252,10 @@ function ToolCard({ tool, isFirst }) {
             <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{tool.description || 'No description'}</p>
           </div>
           <div className="mt-0.5 text-gray-300 transition-colors group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400">
-            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <ChevronRight className="h-4 w-4" />
           </div>
         </div>
       </button>
-
-      {expanded && (
-        <div className="px-4 pb-4 pl-9">
-          <p className="max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-400">{tool.description || 'No description'}</p>
-          {tool.parameters && (
-            <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/60">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Parameters</p>
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-gray-700 dark:text-gray-300">{typeof tool.parameters === 'string' ? tool.parameters : JSON.stringify(tool.parameters, null, 2)}</pre>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -221,17 +269,22 @@ ToolCard.propTypes = {
     parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
   }).isRequired,
   isFirst: PropTypes.bool,
+  selected: PropTypes.bool,
+  onSelect: PropTypes.func.isRequired,
 };
 
-function SkillCard({ skill, isFirst }) {
-  const [expanded, setExpanded] = useState(false);
+function SkillCard({ skill, isFirst, selected, onSelect }) {
   const meta = getRegionMeta(skill.brain_region);
 
   return (
     <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800'}>
       <button
-        onClick={() => setExpanded(v => !v)}
-        className="group w-full px-4 py-3 text-left transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-900/55"
+        onClick={onSelect}
+        className={`group w-full px-4 py-3 text-left transition-colors ${
+          selected
+            ? 'bg-gray-100/80 dark:bg-gray-800/70 midnight:bg-slate-900'
+            : 'hover:bg-gray-50/70 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-900/55'
+        }`}
       >
         <div className="flex items-start gap-3">
           <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-300 dark:bg-gray-600" />
@@ -253,27 +306,10 @@ function SkillCard({ skill, isFirst }) {
             )}
           </div>
           <div className="mt-0.5 text-gray-300 transition-colors group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400">
-            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <ChevronRight className="h-4 w-4" />
           </div>
         </div>
       </button>
-
-      {expanded && (
-        <div className="space-y-2 px-4 pb-4 pl-9">
-          {skill.when_to_use && (
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/60">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">When to use</p>
-              <p className="text-xs leading-5 text-gray-600 dark:text-gray-400">{skill.when_to_use}</p>
-            </div>
-          )}
-          {skill.body && (
-            <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Process</p>
-              <p className="whitespace-pre-wrap text-xs leading-5 text-gray-600 dark:text-gray-400">{skill.body}</p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -289,9 +325,11 @@ SkillCard.propTypes = {
     body: PropTypes.string,
   }).isRequired,
   isFirst: PropTypes.bool,
+  selected: PropTypes.bool,
+  onSelect: PropTypes.func.isRequired,
 };
 
-function ToolSection({ category, catTools }) {
+function ToolSection({ category, catTools, selectedToolName, onSelectTool }) {
   const sortedTools = useMemo(() => [...catTools].sort((a, b) => a.name.localeCompare(b.name)), [catTools]);
 
   return (
@@ -304,7 +342,7 @@ function ToolSection({ category, catTools }) {
       </div>
       <div>
         {sortedTools.map((tool, idx) => (
-          <ToolCard key={tool.name} tool={tool} isFirst={idx === 0} />
+          <ToolCard key={tool.name} tool={tool} isFirst={idx === 0} selected={tool.name === selectedToolName} onSelect={() => onSelectTool(tool)} />
         ))}
       </div>
     </section>
@@ -320,9 +358,11 @@ ToolSection.propTypes = {
     category: PropTypes.string,
     parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
   })).isRequired,
+  selectedToolName: PropTypes.string,
+  onSelectTool: PropTypes.func.isRequired,
 };
 
-function SkillSection({ region, regionSkills }) {
+function SkillSection({ region, regionSkills, selectedSkillName, onSelectSkill }) {
   const meta = getRegionMeta(region);
   const sortedSkills = useMemo(() => [...regionSkills].sort((a, b) => a.name.localeCompare(b.name)), [regionSkills]);
 
@@ -337,7 +377,7 @@ function SkillSection({ region, regionSkills }) {
       </div>
       <div>
         {sortedSkills.map((skill, idx) => (
-          <SkillCard key={skill.name} skill={skill} isFirst={idx === 0} />
+          <SkillCard key={skill.name} skill={skill} isFirst={idx === 0} selected={skill.name === selectedSkillName} onSelect={() => onSelectSkill(skill)} />
         ))}
       </div>
     </section>
@@ -355,6 +395,123 @@ SkillSection.propTypes = {
     when_to_use: PropTypes.string,
     body: PropTypes.string,
   })).isRequired,
+  selectedSkillName: PropTypes.string,
+  onSelectSkill: PropTypes.func.isRequired,
+};
+
+function ToolInspector({ tool }) {
+  if (!tool) {
+    return (
+      <div className="flex h-full min-h-[280px] items-center justify-center px-6 text-center text-sm text-gray-400">
+        Select a tool to inspect its description and parameters.
+      </div>
+    );
+  }
+
+  const perm = PERM_META[tool.permission] || PERM_META.moderate;
+
+  return (
+    <div className="h-full overflow-y-auto p-5">
+      <div className="mb-5 flex items-start gap-3">
+        <span className={'mt-2 h-2 w-2 flex-shrink-0 rounded-full ' + perm.dot} />
+        <div className="min-w-0">
+          <h3 className="break-words font-mono text-base font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{tool.name}</h3>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${perm.badge}`}>{perm.label}</span>
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              {formatLabel(tool.category)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Description</p>
+        <MarkdownPanel content={tool.description} />
+      </div>
+
+      {tool.parameters && (
+        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Parameters</p>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-gray-100 bg-gray-50 p-3 font-mono text-xs leading-5 text-gray-700 dark:border-gray-800 dark:bg-gray-950/50 dark:text-gray-300 midnight:border-slate-800 midnight:bg-slate-950/60">
+            {typeof tool.parameters === 'string' ? tool.parameters : JSON.stringify(tool.parameters, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ToolInspector.propTypes = {
+  tool: PropTypes.shape({
+    name: PropTypes.string.isRequired,
+    description: PropTypes.string,
+    permission: PropTypes.string,
+    category: PropTypes.string,
+    parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
+  }),
+};
+
+function SkillInspector({ skill }) {
+  if (!skill) {
+    return (
+      <div className="flex h-full min-h-[280px] items-center justify-center px-6 text-center text-sm text-gray-400">
+        Select a skill to read its description and process.
+      </div>
+    );
+  }
+
+  const meta = getRegionMeta(skill.brain_region);
+
+  return (
+    <div className="h-full overflow-y-auto p-5">
+      <div className="mb-5">
+        <div className="flex items-center gap-2">
+          <h3 className="break-words text-base font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{skill.name}</h3>
+          {skill.source === 'user' && (
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Custom</span>
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{meta.label}</span>
+          {skill.tags?.map(tag => (
+            <span key={tag} className="rounded border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-gray-800 dark:text-gray-500">{tag}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Description</p>
+        <MarkdownPanel content={skill.description} />
+      </div>
+
+      {skill.when_to_use && (
+        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">When to use</p>
+          <MarkdownPanel content={skill.when_to_use} />
+        </div>
+      )}
+
+      {skill.body && (
+        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Process</p>
+          <MarkdownPanel content={skill.body} emptyText="No process notes" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+SkillInspector.propTypes = {
+  skill: PropTypes.shape({
+    brain_region: PropTypes.string,
+    name: PropTypes.string.isRequired,
+    source: PropTypes.string,
+    description: PropTypes.string,
+    tags: PropTypes.arrayOf(PropTypes.string),
+    when_to_use: PropTypes.string,
+    body: PropTypes.string,
+  }),
 };
 
 export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
@@ -367,6 +524,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [errorSkills, setErrorSkills] = useState(null);
   const [toolSearch, setToolSearch] = useState('');
   const [skillSearch, setSkillSearch] = useState('');
+  const [selectedToolName, setSelectedToolName] = useState(null);
+  const [selectedSkillName, setSelectedSkillName] = useState(null);
   const toolsFetchedRef = useRef(false);
   const skillsFetchedRef = useRef(false);
 
@@ -540,6 +699,17 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     return groups;
   }, [filteredSkills]);
 
+  const selectedTool = useMemo(
+    () => filteredTools.find(tool => tool.name === selectedToolName) || filteredTools[0] || null,
+    [filteredTools, selectedToolName]
+  );
+  const activeToolName = selectedTool?.name || null;
+  const selectedSkill = useMemo(
+    () => filteredSkills.find(skill => skill.name === selectedSkillName) || filteredSkills[0] || null,
+    [filteredSkills, selectedSkillName]
+  );
+  const activeSkillName = selectedSkill?.name || null;
+
   const safeCount   = tools.filter(t => t.permission === 'safe').length;
   const modCount    = tools.filter(t => t.permission === 'moderate').length;
   const dangerCount = tools.filter(t => t.permission === 'dangerous').length;
@@ -610,8 +780,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {toolsTabActive && (
-          <div className="grid min-h-full grid-cols-1 bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
-            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:border-b-0 lg:border-r">
+          <div className="grid h-full overflow-hidden bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
@@ -637,59 +807,67 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
               </div>
             </aside>
 
-            <main className="min-w-0 px-4 py-5 sm:px-6">
-              <div className="mx-auto max-w-5xl">
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Tool Catalog</h2>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, or group. Expand a row to inspect parameters.</p>
+            <main className="min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
+              <div className="mx-auto grid h-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(280px,42vh)] gap-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:grid-rows-none">
+                <section className="flex min-h-0 min-w-0 flex-col">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Tool Catalog</h2>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, or group. Select a row to inspect parameters.</p>
+                    </div>
+                    <div className="relative w-full sm:w-80">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={toolSearch}
+                        onChange={e => setToolSearch(e.target.value)}
+                        placeholder="Search tools"
+                        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+                      />
+                    </div>
                   </div>
-                  <div className="relative w-full sm:w-80">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      value={toolSearch}
-                      onChange={e => setToolSearch(e.target.value)}
-                      placeholder="Search tools"
-                      className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
-                    />
-                  </div>
-                </div>
 
-                {loadingTools && (
-                  <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
+                  <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  {loadingTools && (
+                    <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span className="text-sm">Loading tools...</span>
-                  </div>
-                )}
-                {errorTools && (
-                  <div className="flex flex-col items-center justify-center gap-3 py-20">
+                    </div>
+                  )}
+                  {errorTools && (
+                    <div className="flex flex-col items-center justify-center gap-3 py-20">
                     <AlertCircle className="h-6 w-6 text-red-500" />
                     <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load tools</p>
                     <button onClick={fetchTools} className="text-xs text-gray-500 underline hover:text-gray-700">Try again</button>
-                  </div>
-                )}
-                {!loadingTools && !errorTools && Object.keys(toolsByCategory).length === 0 && (
-                  <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+                    </div>
+                  )}
+                  {!loadingTools && !errorTools && Object.keys(toolsByCategory).length === 0 && (
+                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
                     <Search className="h-6 w-6" />
                     <p className="text-sm">{toolSearch ? 'No tools match your search' : 'No tools available'}</p>
+                    </div>
+                  )}
+                  {!loadingTools && !errorTools && Object.entries(toolsByCategory).length > 0 && (
+                    <div className="space-y-4 pb-4">
+                      {Object.entries(toolsByCategory).map(([category, catTools]) => (
+                        <ToolSection key={category} category={category} catTools={catTools} selectedToolName={activeToolName} onSelectTool={tool => setSelectedToolName(tool.name)} />
+                      ))}
+                    </div>
+                  )}
                   </div>
-                )}
-                {!loadingTools && !errorTools && Object.entries(toolsByCategory).length > 0 && (
-                  <div className="space-y-4">
-                    {Object.entries(toolsByCategory).map(([category, catTools]) => (
-                      <ToolSection key={category} category={category} catTools={catTools} />
-                    ))}
-                  </div>
-                )}
+                </section>
+
+                <aside className="min-h-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+                  <ToolInspector tool={selectedTool} />
+                </aside>
               </div>
             </main>
           </div>
         )}
 
         {skillsTabActive && (
-          <div className="grid min-h-full grid-cols-1 bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
-            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:border-b-0 lg:border-r">
+          <div className="grid h-full overflow-hidden bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
@@ -714,53 +892,61 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
               </div>
             </aside>
 
-            <main className="min-w-0 px-4 py-5 sm:px-6">
-              <div className="mx-auto max-w-5xl">
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Skill Library</h2>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Expand a row to read its instructions.</p>
+            <main className="min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
+              <div className="mx-auto grid h-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(280px,42vh)] gap-4 xl:grid-cols-[minmax(0,1fr)_420px] xl:grid-rows-none">
+                <section className="flex min-h-0 min-w-0 flex-col">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Skill Library</h2>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Select a row to read its instructions.</p>
+                    </div>
+                    <div className="relative w-full sm:w-80">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={skillSearch}
+                        onChange={e => setSkillSearch(e.target.value)}
+                        placeholder="Search skills"
+                        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+                      />
+                    </div>
                   </div>
-                  <div className="relative w-full sm:w-80">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      value={skillSearch}
-                      onChange={e => setSkillSearch(e.target.value)}
-                      placeholder="Search skills"
-                      className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
-                    />
-                  </div>
-                </div>
 
-                {loadingSkills && (
-                  <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
+                  <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  {loadingSkills && (
+                    <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span className="text-sm">Loading skills...</span>
-                  </div>
-                )}
-                {errorSkills && (
-                  <div className="flex flex-col items-center justify-center gap-3 py-20">
+                    </div>
+                  )}
+                  {errorSkills && (
+                    <div className="flex flex-col items-center justify-center gap-3 py-20">
                     <AlertCircle className="h-6 w-6 text-red-500" />
                     <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load skills</p>
                     <button onClick={fetchSkills} className="text-xs text-gray-500 underline hover:text-gray-700">Try again</button>
-                  </div>
-                )}
-                {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length === 0 && (
-                  <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+                    </div>
+                  )}
+                  {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length === 0 && (
+                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
                     <Search className="h-6 w-6" />
                     <p className="text-sm">{skillSearch ? 'No skills match your search' : 'No skills available'}</p>
+                    </div>
+                  )}
+                  {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length > 0 && (
+                    <div className="space-y-4 pb-4">
+                      {REGION_ORDER.map(region => {
+                        const regionSkills = skillsByRegion[region];
+                        if (!regionSkills?.length) return null;
+                        return <SkillSection key={region} region={region} regionSkills={regionSkills} selectedSkillName={activeSkillName} onSelectSkill={skill => setSelectedSkillName(skill.name)} />;
+                      })}
+                    </div>
+                  )}
                   </div>
-                )}
-                {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length > 0 && (
-                  <div className="space-y-4">
-                    {REGION_ORDER.map(region => {
-                      const regionSkills = skillsByRegion[region];
-                      if (!regionSkills?.length) return null;
-                      return <SkillSection key={region} region={region} regionSkills={regionSkills} />;
-                    })}
-                  </div>
-                )}
+                </section>
+
+                <aside className="min-h-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+                  <SkillInspector skill={selectedSkill} />
+                </aside>
               </div>
             </main>
           </div>
