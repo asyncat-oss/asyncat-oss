@@ -248,9 +248,9 @@ const DynamicSidebar = ({
         case 'navCalendar': navigate("/calendar"); break;
         case 'navFiles': navigate("/files"); break;
         case 'navModels': navigate("/models"); break;
-        case 'navTools': navigate("/agents/tools"); break;
-        case 'navScheduler': navigate("/agents/schedule"); break;
-        case 'navProfiles': navigate("/agents/profiles"); break;
+        case 'navTools': navigate("/tools"); break;
+        case 'navScheduler': navigate("/scheduler"); break;
+        case 'navProfiles': navigate("/profiles"); break;
         default: break;
       }
     };
@@ -276,9 +276,9 @@ const DynamicSidebar = ({
   const isOnCalendar = basePage === "calendar";
   const isOnFiles = basePage === "files";
   const isOnModels = basePage === "models";
-  const isOnScheduler = location.pathname.startsWith("/agents/schedule");
-  const isOnProfiles  = location.pathname.startsWith("/agents/profiles");
-  const isOnTools = basePage === "agents" && !isOnScheduler && !isOnProfiles;
+  const isOnScheduler = location.pathname.startsWith("/scheduler");
+  const isOnProfiles  = location.pathname.startsWith("/profiles");
+  const isOnTools = location.pathname.startsWith("/tools");
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
 
@@ -382,7 +382,7 @@ const DynamicSidebar = ({
         {/* Tools & Skills — standalone app */}
         <DockItem
           label="Tools & Skills  ⌘7"
-          onClick={() => navigate("/agents/tools")}
+          onClick={() => navigate("/tools")}
           isActive={isOnTools}
         >
           <Wrench className="w-5 h-5" />
@@ -391,7 +391,7 @@ const DynamicSidebar = ({
         {/* Scheduler */}
         <DockItem
           label="Scheduler  ⌘8"
-          onClick={() => navigate("/agents/schedule")}
+          onClick={() => navigate("/scheduler")}
           isActive={isOnScheduler}
         >
           <Clock className="w-5 h-5" />
@@ -400,7 +400,7 @@ const DynamicSidebar = ({
         {/* Profiles */}
         <DockItem
           label="Profiles  ⌘9"
-          onClick={() => navigate("/agents/profiles")}
+          onClick={() => navigate("/profiles")}
           isActive={isOnProfiles}
         >
           <Layers className="w-5 h-5" />

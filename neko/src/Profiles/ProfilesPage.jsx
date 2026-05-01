@@ -1,4 +1,4 @@
-// neko/src/Agent/AgentProfilesPage.jsx
+// neko/src/Profiles/ProfilesPage.jsx
 // ─── Agent Profiles UI ────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react';

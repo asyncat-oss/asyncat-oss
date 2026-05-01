@@ -22,9 +22,9 @@ import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Settings/ModelsPage';
-import AgentToolsSkillsPage from '../Agent/AgentToolsSkillsPage';
-import SchedulerPage from '../Agent/SchedulerPage';
-import AgentProfilesPage from '../Agent/AgentProfilesPage';
+import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
+import SchedulerPage from '../Scheduler/SchedulerPage';
+import ProfilesPage from '../Profiles/ProfilesPage';
 import FilesPage from '../files/FilesPage';
 
 
@@ -227,23 +227,23 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
-        path: "agents/tools",
-        element: <AgentToolsSkillsPage initialTab="tools" />,
+        path: "tools",
+        element: <ToolsSkillsPage initialTab="tools" />,
         errorElement: <RouteErrorElement />
       },
       {
-        path: "agents/skills",
-        element: <AgentToolsSkillsPage initialTab="skills" />,
+        path: "skills",
+        element: <ToolsSkillsPage initialTab="skills" />,
         errorElement: <RouteErrorElement />
       },
       {
-        path: "agents/schedule",
+        path: "scheduler",
         element: <SchedulerPage />,
         errorElement: <RouteErrorElement />
       },
       {
-        path: "agents/profiles",
-        element: <AgentProfilesPage />,
+        path: "profiles",
+        element: <ProfilesPage />,
         errorElement: <RouteErrorElement />
       },
       {

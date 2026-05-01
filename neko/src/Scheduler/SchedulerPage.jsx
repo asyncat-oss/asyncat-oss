@@ -1,4 +1,4 @@
-// neko/src/Agent/SchedulerPage.jsx
+// neko/src/Scheduler/SchedulerPage.jsx
 // ─── Agent Scheduler UI ───────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react';

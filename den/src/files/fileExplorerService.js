@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 
 const SKIP_NAMES = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dist', 'build', 'venv', '.venv']);
-const TEXT_PREVIEW_LIMIT = 1024 * 1024;
+const TEXT_PREVIEW_LIMIT = 5 * 1024 * 1024;
 
 function existsDir(dir) {
   try {

@@ -192,8 +192,8 @@ import {
   useMemo,
 } from "react";
 import { MessageInputV2 } from "./components/MessageInputV2";
-import AgentRunFeed from '../Agent/components/AgentRunFeed';
-import AgentChangesPanel, { AgentRunSummary } from '../Agent/components/AgentChangesPanel';
+import AgentRunFeed from './components/AgentRunFeed';
+import AgentChangesPanel, { AgentRunSummary } from './components/AgentChangesPanel';
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
 import { chatApi, agentApi } from "./commandCenterApi";
