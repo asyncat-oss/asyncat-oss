@@ -16,6 +16,7 @@ import {
   HardDrive,
   Clock,
   Layers,
+  Trash2,
 } from "lucide-react";
 
 import UniversalSearch from "./UniversalSearch";
@@ -278,6 +279,7 @@ const DynamicSidebar = ({
   const isOnScheduler = location.pathname.startsWith("/agents/schedule");
   const isOnProfiles  = location.pathname.startsWith("/agents/profiles");
   const isOnTools = basePage === "agents" && !isOnScheduler && !isOnProfiles;
+  const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
 
   return (
@@ -402,6 +404,15 @@ const DynamicSidebar = ({
           isActive={isOnProfiles}
         >
           <Layers className="w-5 h-5" />
+        </DockItem>
+
+        {/* Trash */}
+        <DockItem
+          label="Trash"
+          onClick={() => navigate("/trash")}
+          isActive={isOnTrash}
+        >
+          <Trash2 className="w-5 h-5" />
         </DockItem>
 
         <DockSep />

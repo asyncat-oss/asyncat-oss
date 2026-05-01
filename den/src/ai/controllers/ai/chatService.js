@@ -601,20 +601,29 @@ class ChatService {
       const supabaseClient = authenticatedDb || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
-      const { data, error } = await supabaseClient
-        .schema('aichats')
+      // First verify the conversation exists in trash.
+      // We do this as a separate SELECT so the restore UPDATE doesn't have to
+      // return a row (the compat layer can't SELECT back after setting deleted_at = null
+      // because the WHERE deleted_at IS NOT NULL condition no longer matches).
+      const { data: existing } = await supabaseClient
         .from('conversations')
-        .update({ deleted_at: null })
+        .select('id')
         .eq('id', conversationId)
         .eq('user_id', userId)
         .eq('workspace_id', effectiveWorkspaceId)
         .not('deleted_at', 'is', null)
-        .select('id')
         .single();
 
-      if (error || !data) {
+      if (!existing) {
         throw new Error('Conversation not found in trash');
       }
+
+      // Restore without trying to SELECT back
+      await supabaseClient
+        .from('conversations')
+        .update({ deleted_at: null })
+        .eq('id', conversationId)
+        .eq('user_id', userId);
 
       this.clearUserWorkspaceCache(userId, effectiveWorkspaceId);
       return { success: true };

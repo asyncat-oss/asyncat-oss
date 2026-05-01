@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { trashApi } from "./commandCenterApi";
+import eventBus from "../utils/eventBus.js";
 import { Trash2, RotateCcw, MessageSquare, AlertTriangle } from "lucide-react";
 
 const TrashPage = () => {
@@ -27,6 +28,7 @@ const TrashPage = () => {
     try {
       await trashApi.restore(id);
       setTrashItems((prev) => prev.filter((c) => c.id !== id));
+      eventBus.emit("conversationsUpdated");
     } catch (err) {
       console.error("Failed to restore:", err);
     }

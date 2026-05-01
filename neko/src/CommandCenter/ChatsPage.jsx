@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../contexts/WorkspaceContext';
+import eventBus from '../utils/eventBus.js';
 import { chatApi, chatFoldersApi } from './commandCenterApi';
 import { useCommandCenter } from './CommandCenterContextEnhanced';
 import { MessageSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Trash2, Check, X, Wrench } from 'lucide-react';
@@ -81,6 +82,12 @@ const ChatsPage = () => {
 
   useEffect(() => {
     loadAll();
+  }, [loadAll]);
+
+  // Refresh when a conversation is restored from trash
+  useEffect(() => {
+    const unsub = eventBus.on('conversationsUpdated', () => loadAll());
+    return () => unsub();
   }, [loadAll]);
 
   const toggleFolder = (folderId) => {
