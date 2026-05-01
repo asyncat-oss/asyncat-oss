@@ -111,6 +111,19 @@ function FeedFrame({ children, className = '' }) {
   );
 }
 
+function ModeBadge({ toolsEnabled }) {
+  if (typeof toolsEnabled !== 'boolean') return null;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+      toolsEnabled
+        ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300'
+        : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+    }`}>
+      {toolsEnabled ? 'Tools ON' : 'Answer only'}
+    </span>
+  );
+}
+
 // ── Individual event components ───────────────────────────────────────────────
 
 function UserGoalEvent({ data }) {
@@ -121,6 +134,9 @@ function UserGoalEvent({ data }) {
     <div className="group mb-6">
       <div className="max-w-4xl mx-auto flex justify-end">
         <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
+          <div className="mb-1 flex justify-end">
+            <ModeBadge toolsEnabled={data?.toolsEnabled} />
+          </div>
           <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
             {goal}
           </div>
@@ -486,6 +502,9 @@ function AnswerEvent({ data }) {
       {thinkFallback && <ThinkingEvent data={{ thought: thinkFallback }} />}
       {displayAnswer && <div className="group mb-6">
         <div className="max-w-4xl mx-auto">
+          <div className="mb-2">
+            <ModeBadge toolsEnabled={data?.toolsEnabled} />
+          </div>
           <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
             {blocks.length > 0
               ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
@@ -511,11 +530,21 @@ function ErrorEvent({ data }) {
   );
 }
 
-function StatusEvent({ data }) {
+function StatusEvent({ data, onRunWithTools }) {
   return (
     <FeedFrame className="mb-3">
-      <div className="text-xs text-gray-400 dark:text-gray-500">
-        {data?.message || 'Agent stopped.'}
+      <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+        <span>{data?.message || 'Agent stopped.'}</span>
+        {data?.canRetryWithTools && data?.goal && (
+          <button
+            type="button"
+            onClick={() => onRunWithTools?.(data.goal)}
+            className="inline-flex items-center gap-1 rounded border border-blue-200 px-2 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+          >
+            <Zap className="w-3 h-3" />
+            Run with Tools ON
+          </button>
+        )}
       </div>
     </FeedFrame>
   );
@@ -623,7 +652,7 @@ function RunningIndicator() {
 
 // ── Main feed component ───────────────────────────────────────────────────────
 
-export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision, onAskUserAnswer, onRetryTool }) {
+export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithTools }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
@@ -638,7 +667,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
           case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} onRetryTool={onRetryTool} />;
           case 'answer':             return <AnswerEvent key={i} data={ev.data} />;
           case 'error':              return <ErrorEvent key={i} data={ev.data} />;
-          case 'status':             return <StatusEvent key={i} data={ev.data} />;
+          case 'status':             return <StatusEvent key={i} data={ev.data} onRunWithTools={onRunWithTools} />;
           case 'run_start':          return <RunDivider key={i} data={ev.data} />;
           case 'skills_loaded':      return <SkillsLoadedEvent key={i} data={ev.data} />;
           default:                   return null;

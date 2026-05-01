@@ -272,7 +272,13 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       const apiHistory = [];
       for (const msg of conversation.messages) {
         if (msg.type === 'user' || msg.type === 'assistant') {
-          apiHistory.push({ role: msg.type, content: msg.content });
+          apiHistory.push({
+            role: msg.type,
+            content: msg.content,
+            toolsEnabled: msg.toolsEnabled,
+            agentSummary: msg.agentSummary,
+            agentSessionId: msg.agentSessionId,
+          });
         }
       }
       dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: apiHistory.slice(-8) });

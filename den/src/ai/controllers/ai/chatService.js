@@ -153,6 +153,18 @@ class ChatService {
         baseMessage.toolCalls = msg.toolCalls;
       }
 
+      if (typeof msg.toolsEnabled === 'boolean') {
+        baseMessage.toolsEnabled = msg.toolsEnabled;
+      }
+
+      if (msg.agentSessionId) {
+        baseMessage.agentSessionId = msg.agentSessionId;
+      }
+
+      if (msg.agentSummary && typeof msg.agentSummary === 'object') {
+        baseMessage.agentSummary = msg.agentSummary;
+      }
+
       // Preserve web search event (images + sources) so they survive navigation
       if (msg.searchEvent && typeof msg.searchEvent === 'object') {
         baseMessage.searchEvent = msg.searchEvent;
@@ -217,6 +229,18 @@ class ChatService {
       // Restore tool calls (AI function call results)
       if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
         baseMessage.toolCalls = msg.toolCalls;
+      }
+
+      if (typeof msg.toolsEnabled === 'boolean') {
+        baseMessage.toolsEnabled = msg.toolsEnabled;
+      }
+
+      if (msg.agentSessionId) {
+        baseMessage.agentSessionId = msg.agentSessionId;
+      }
+
+      if (msg.agentSummary && typeof msg.agentSummary === 'object') {
+        baseMessage.agentSummary = msg.agentSummary;
       }
 
       // Restore web search event (images + sources)

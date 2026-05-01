@@ -111,6 +111,69 @@ function cleanAgentActivityDetail(detail) {
     .trim();
 }
 
+const MUTATING_AGENT_TOOLS = new Set([
+  'write_file', 'create_file', 'edit_file', 'create_directory',
+  'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
+  'run_command', 'run_python', 'run_node',
+  'create_task', 'create_note', 'create_event',
+]);
+
+function buildCompactAgentSummary(events = [], finalAnswer = '') {
+  const toolsUsed = [];
+  const filesChanged = [];
+  const commandsRun = [];
+  const failures = [];
+
+  events.forEach(event => {
+    if (event.type !== 'tool_start') return;
+    const tool = event.data?.tool;
+    if (!tool) return;
+    if (!toolsUsed.includes(tool)) toolsUsed.push(tool);
+
+    const args = event.data?.args || {};
+    if (MUTATING_AGENT_TOOLS.has(tool)) {
+      const filePath = args.path || args.destination;
+      if (filePath && !filesChanged.includes(filePath)) filesChanged.push(filePath);
+    }
+    if (typeof args.command === 'string' && args.command.trim()) {
+      commandsRun.push(args.command.trim().slice(0, 160));
+    }
+    const result = event.result;
+    if (result && (result.error || result.success === false)) {
+      failures.push(`${tool}: ${result.error || 'failed'}`.slice(0, 220));
+    }
+  });
+
+  return {
+    toolsUsed: toolsUsed.slice(0, 20),
+    filesChanged: filesChanged.slice(0, 20),
+    commandsRun: commandsRun.slice(0, 8),
+    failures: failures.slice(0, 8),
+    finalState: String(finalAnswer || '').replace(/\s+/g, ' ').trim().slice(0, 500),
+  };
+}
+
+function isLikelyToolActionRequest(goal = '') {
+  return /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify)\b/i.test(goal);
+}
+
+function buildEventsFromMessages(messages = []) {
+  const events = [];
+  for (const msg of messages) {
+    if (msg.type === 'user') {
+      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled } });
+    } else if (msg.type === 'assistant') {
+      events.push({
+        type: msg.isError ? 'error' : 'answer',
+        data: msg.isError
+          ? { message: msg.content }
+          : { answer: msg.content, toolsEnabled: msg.toolsEnabled, agentSummary: msg.agentSummary },
+      });
+    }
+  }
+  return events;
+}
+
 function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false }) {
   const feedEndRef = useRef(null);
 
@@ -388,10 +451,14 @@ const CommandCenterV2Enhanced = () => {
   );
 
   // ── Agent handlers ────────────────────────────────────────────────────────
-  const handleAgentRun = useCallback(async (messageObj) => {
+  const handleAgentRun = useCallback(async (messageObj, runOptions = {}) => {
     const goal = typeof messageObj === 'string' ? messageObj : messageObj?.content;
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
+    const effectiveToolsEnabled = runOptions.enableTools ?? toolsEnabled;
+    const activeConversationHistory = agentConversationHistory.length > 0
+      ? agentConversationHistory
+      : conversationHistory;
 
     if (!currentConversationId && messages.length === 0) {
       generateAndSetTitle(submittedGoal);
@@ -401,10 +468,13 @@ const CommandCenterV2Enhanced = () => {
     setError(null);
     setAgentCurrentGoal(submittedGoal);
 
-    setAgentEvents(prev => [
-      ...prev,
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString() }, arrivedAt: Date.now() },
-    ]);
+    setAgentEvents(prev => {
+      const baseEvents = prev.length > 0 ? prev : buildEventsFromMessages(messages);
+      return [
+        ...baseEvents,
+        { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled }, arrivedAt: Date.now() },
+      ];
+    });
 
     setAgentStreamingText('');
     setAgentRunning(true);
@@ -419,13 +489,16 @@ const CommandCenterV2Enhanced = () => {
     let sawErrorEvent = false;
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
+    const runEvents = [
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled } },
+    ];
 
     try {
-      for await (const event of agentApi.runStream(submittedGoal, agentConversationHistory, null, 25, controller.signal, agentCurrentSessionId, {
+      for await (const event of agentApi.runStream(submittedGoal, activeConversationHistory, null, 25, controller.signal, agentCurrentSessionId, {
         autoApprove: agentAutoApprove,
         preApprovedTools: [...alwaysAllowedTools],
         profileId: selectedProfileId,
-        enableTools: toolsEnabled,
+        enableTools: effectiveToolsEnabled,
       })) {
         if (controller.signal.aborted) break;
         if (event.type === 'session_start') {
@@ -458,6 +531,7 @@ const CommandCenterV2Enhanced = () => {
               data: {
                 answer: doneAnswer,
                 round: event.data.rounds,
+                toolsEnabled: effectiveToolsEnabled,
               },
               arrivedAt: Date.now(),
             }]);
@@ -480,11 +554,18 @@ const CommandCenterV2Enhanced = () => {
         }
         if (event.type === 'tool_result') {
           const completedAt = Date.now();
+          runEvents.push(event);
           setAgentEvents(prev => {
             const updated = [...prev];
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].type === 'tool_start' && updated[i].data?.tool === event.data?.tool && updated[i].result === undefined) {
                 updated[i] = { ...updated[i], result: event.data?.result, completedAt };
+                for (let j = runEvents.length - 1; j >= 0; j--) {
+                  if (runEvents[j].type === 'tool_start' && runEvents[j].data?.tool === event.data?.tool && runEvents[j].result === undefined) {
+                    runEvents[j] = { ...runEvents[j], result: event.data?.result, completedAt };
+                    break;
+                  }
+                }
                 return updated;
               }
             }
@@ -492,7 +573,11 @@ const CommandCenterV2Enhanced = () => {
           });
           continue;
         }
-        setAgentEvents(prev => [...prev, { ...event, arrivedAt: Date.now() }]);
+        const eventWithMode = event.type === 'answer'
+          ? { ...event, data: { ...event.data, toolsEnabled: effectiveToolsEnabled } }
+          : event;
+        runEvents.push(eventWithMode);
+        setAgentEvents(prev => [...prev, { ...eventWithMode, arrivedAt: Date.now() }]);
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -512,10 +597,13 @@ const CommandCenterV2Enhanced = () => {
         }]);
       }
       if (capturedFinalAnswer) {
+        const agentSummary = effectiveToolsEnabled
+          ? buildCompactAgentSummary(runEvents, capturedFinalAnswer)
+          : null;
         const nextHistory = [
-          ...agentConversationHistory,
-          { role: 'user', content: submittedGoal },
-          { role: 'assistant', content: capturedFinalAnswer },
+          ...activeConversationHistory,
+          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled },
+          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentSummary, agentSessionId: runSessionId },
         ];
         setAgentConversationHistory(nextHistory);
         setConversationHistory(nextHistory);
@@ -525,6 +613,7 @@ const CommandCenterV2Enhanced = () => {
           content: submittedGoal,
           type: 'user',
           timestamp: new Date().toISOString(),
+          toolsEnabled: effectiveToolsEnabled,
         };
         const assistantMsg = {
           id: `msg_${Date.now()}_assistant_${Math.random().toString(36).substr(2, 9)}`,
@@ -532,7 +621,8 @@ const CommandCenterV2Enhanced = () => {
           type: 'assistant',
           timestamp: new Date().toISOString(),
           agentSessionId: runSessionId,
-          toolsEnabled,
+          toolsEnabled: effectiveToolsEnabled,
+          agentSummary,
         };
         const finalMessages = [...messages, userMsg, assistantMsg];
         setMessages(finalMessages);
@@ -550,6 +640,26 @@ const CommandCenterV2Enhanced = () => {
             }).catch(() => {});
           }
         }
+
+        if (!effectiveToolsEnabled && isLikelyToolActionRequest(submittedGoal)) {
+          setAgentEvents(prev => [...prev, {
+            type: 'status',
+            data: {
+              message: 'Tools were off for this request. Run it again with Tools ON if you want the agent to act.',
+              canRetryWithTools: true,
+              goal: submittedGoal,
+            },
+          }]);
+        }
+      } else if (!controller.signal.aborted && !effectiveToolsEnabled && isLikelyToolActionRequest(submittedGoal)) {
+        setAgentEvents(prev => [...prev, {
+          type: 'status',
+          data: {
+            message: 'Tools are off for this request. Turn Tools ON to let the agent act on it.',
+            canRetryWithTools: true,
+            goal: submittedGoal,
+          },
+        }]);
       } else if (!controller.signal.aborted && sawErrorEvent) {
         setError('Agent run failed');
       }
@@ -566,6 +676,7 @@ const CommandCenterV2Enhanced = () => {
   }, [
     agentRunning,
     agentConversationHistory,
+    conversationHistory,
     agentCurrentSessionId,
     agentAutoApprove,
     alwaysAllowedTools,
@@ -604,6 +715,12 @@ const CommandCenterV2Enhanced = () => {
   const handleQuestionClick = useCallback((questionText) => {
     handleAgentRun({ content: questionText });
   }, [handleAgentRun]);
+
+  const handleRunWithTools = useCallback((goal) => {
+    if (!goal?.trim() || agentRunning) return;
+    setToolsEnabled(true);
+    handleAgentRun({ content: goal }, { enableTools: true });
+  }, [agentRunning, handleAgentRun, setToolsEnabled]);
 
   const handleAgentStop = useCallback(() => {
     if (!agentAbortRef.current) return;
@@ -713,15 +830,7 @@ const CommandCenterV2Enhanced = () => {
 
   const persistedAgentEvents = useMemo(() => {
     if (agentEvents.length > 0) return agentEvents;
-    const events = [];
-    for (const msg of messages) {
-      if (msg.type === 'user') {
-        events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp } });
-      } else if (msg.type === 'assistant') {
-        events.push({ type: msg.isError ? 'error' : 'answer', data: msg.isError ? { message: msg.content } : { answer: msg.content } });
-      }
-    }
-    return events;
+    return buildEventsFromMessages(messages);
   }, [agentEvents, messages]);
 
   const agentActivityItems = useMemo(() => {
@@ -1397,6 +1506,7 @@ const CommandCenterV2Enhanced = () => {
                     onPermissionDecision={handleAgentPermission}
                     onAskUserAnswer={handleAgentAskUser}
                     onRetryTool={handleRetryTool}
+                    onRunWithTools={handleRunWithTools}
                   />
                   {!agentRunning && (
                     <>

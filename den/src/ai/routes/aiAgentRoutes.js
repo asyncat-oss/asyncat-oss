@@ -70,6 +70,32 @@ function markStaleActiveSessions() {
   }
 }
 
+function buildToolHistorySummary(conversationHistory = []) {
+  const summaries = conversationHistory
+    .filter(m => m?.role === 'assistant' && m?.agentSummary)
+    .slice(-3)
+    .map((m, index) => {
+      const summary = m.agentSummary || {};
+      const parts = [];
+      if (Array.isArray(summary.toolsUsed) && summary.toolsUsed.length) {
+        parts.push(`tools: ${summary.toolsUsed.slice(0, 8).join(', ')}`);
+      }
+      if (Array.isArray(summary.filesChanged) && summary.filesChanged.length) {
+        parts.push(`files changed: ${summary.filesChanged.slice(0, 8).join(', ')}`);
+      }
+      if (Array.isArray(summary.commandsRun) && summary.commandsRun.length) {
+        parts.push(`commands: ${summary.commandsRun.slice(0, 4).join(' | ')}`);
+      }
+      if (summary.finalState) {
+        parts.push(`outcome: ${String(summary.finalState).slice(0, 300)}`);
+      }
+      return parts.length ? `- Prior tool run ${index + 1}: ${parts.join('; ')}` : null;
+    })
+    .filter(Boolean);
+
+  return summaries.length ? `\n\nRecent tool-run summaries from earlier in this conversation:\n${summaries.join('\n')}` : '';
+}
+
 // ─── Auth middleware ──────────────────────────────────────────────────────────
 
 const authenticate = (req, res, next) => {
@@ -679,10 +705,11 @@ router.post('/run', authenticate, async (req, res) => {
         const systemPrompt = [
           'You are a helpful AI assistant in answer-only mode.',
           'Tools are disabled for this message, so you cannot inspect files, modify data, create tasks/events/notes, browse, or call any external tools.',
+          'Recent earlier messages may include agent/tool actions from when Tools were ON. You may refer to their summarized outcomes, but you cannot inspect fresh state or perform new actions right now.',
           'Do not claim that you used tools or completed actions outside the chat.',
           'If the user asks you to perform an action that requires tools, explain what you can answer directly and tell them to turn Tools ON if they want you to act.',
           'Respond clearly and concisely.',
-        ].join(' ');
+        ].join(' ') + buildToolHistorySummary(conversationHistory);
 
         const stream = await aiClient.client.chat.completions.create({
           model,
