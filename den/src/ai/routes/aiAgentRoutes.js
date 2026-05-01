@@ -676,7 +676,13 @@ router.post('/run', authenticate, async (req, res) => {
           ...conversationHistory.slice(-6).map(m => ({ role: m.role, content: m.content })),
           { role: 'user', content: goal },
         ];
-        const systemPrompt = 'You are a helpful AI assistant. Respond clearly and concisely.';
+        const systemPrompt = [
+          'You are a helpful AI assistant in answer-only mode.',
+          'Tools are disabled for this message, so you cannot inspect files, modify data, create tasks/events/notes, browse, or call any external tools.',
+          'Do not claim that you used tools or completed actions outside the chat.',
+          'If the user asks you to perform an action that requires tools, explain what you can answer directly and tell them to turn Tools ON if they want you to act.',
+          'Respond clearly and concisely.',
+        ].join(' ');
 
         const stream = await aiClient.client.chat.completions.create({
           model,
