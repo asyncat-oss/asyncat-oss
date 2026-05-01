@@ -10,8 +10,9 @@ import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.j
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import { loadSkills, listSkills } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
-import { getAiClientForUser } from '../controllers/ai/clientFactory.js';
-import { scheduleJob, listJobs, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
+import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
@@ -43,6 +44,67 @@ function writeAgentSseComment(res, comment) {
 
 function getWorkspaceContext(req) {
   return req.query?.workspaceId || req.body?.workspaceId || null;
+}
+
+function parseProviderJson(value, fallback = null) {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function providerSnapshotFromRow(row) {
+  if (!row) return null;
+  const pub = publicProvider({
+    id: row.profile_id || row.id || null,
+    name: row.name || null,
+    provider_type: row.provider_type,
+    provider_id: row.provider_id,
+    base_url: row.base_url,
+    model: row.model,
+    settings: row.settings,
+    supports_tools: row.supports_tools,
+    api_key: row.api_key,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  });
+  return {
+    id: pub?.id || row.profile_id || row.id || null,
+    name: pub?.name || row.name || row.provider_id,
+    provider_type: pub?.provider_type || row.provider_type,
+    provider_id: pub?.provider_id || row.provider_id,
+    base_url: pub?.base_url || row.base_url,
+    model: pub?.model || row.model,
+    settings: pub?.settings || parseProviderJson(row.settings, {}),
+    supports_tools: Boolean(pub?.supports_tools ?? row.supports_tools),
+    local: Boolean(pub?.local),
+    managed: Boolean(pub?.managed),
+  };
+}
+
+function resolveScheduledProvider(userId, providerProfileId = null) {
+  if (providerProfileId) {
+    const row = db.prepare('SELECT * FROM ai_provider_profiles WHERE user_id = ? AND id = ?').get(userId, providerProfileId);
+    if (!row) throw new Error('Selected AI provider profile was not found.');
+    return { providerProfileId: row.id, providerSnapshot: providerSnapshotFromRow(row) };
+  }
+
+  const active = db.prepare('SELECT * FROM ai_provider_config WHERE user_id = ?').get(userId);
+  if (!active) throw new Error('No active AI provider is configured. Choose a model on the Models page first.');
+  return {
+    providerProfileId: active.profile_id || null,
+    providerSnapshot: providerSnapshotFromRow(active),
+  };
+}
+
+function enrichScheduledJob(job) {
+  if (!job) return job;
+  return {
+    ...job,
+    provider_snapshot: job.provider_snapshot || {},
+    provider: job.provider_snapshot && Object.keys(job.provider_snapshot).length
+      ? job.provider_snapshot
+      : null,
+  };
 }
 
 function markStaleActiveSessions() {
@@ -113,35 +175,31 @@ const authenticate = (req, res, next) => {
 await initializeAgent();
 markStaleActiveSessions();
 
-initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId }) => {
-  try {
-    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(userId);
-    const profile = profileId ? getProfile(profileId, userId) : getDefaultProfile(userId);
-    let resolvedSoul = null;
-    if (profile?.soul_override) {
-      const withoutFrontmatter = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim();
-      resolvedSoul = withoutFrontmatter || null;
-    } else if (profile?.soul_name && profile.soul_name !== 'default') {
-      resolvedSoul = loadSoul(profile.soul_name);
-    }
-    const agent = new AgentRuntime({
-      aiClient, model, isLocal, supportsNativeTools,
-      userId, workspaceId,
-      workingDir: workingDir || profile?.working_dir || process.cwd(),
-      maxRounds: profile?.max_rounds || 20,
-      autoApprove: profile?.auto_approve || false,
-      soul: resolvedSoul,
-      providerInfo,
-    });
-    if (Array.isArray(profile?.always_allowed_tools)) {
-      profile.always_allowed_tools.forEach(tool => {
-        if (typeof tool === 'string' && tool.trim()) agent.sessionApprovedTools.add(tool.trim());
-      });
-    }
-    return await agent.run(goal);
-  } catch (err) {
-    console.error('[scheduler] Agent run failed:', err.message);
+initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId, providerProfileId, providerSnapshot }) => {
+  const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForScheduledProvider(userId, providerProfileId, providerSnapshot);
+  const profile = profileId ? getProfile(profileId, userId) : getDefaultProfile(userId);
+  let resolvedSoul = null;
+  if (profile?.soul_override) {
+    const withoutFrontmatter = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim();
+    resolvedSoul = withoutFrontmatter || null;
+  } else if (profile?.soul_name && profile.soul_name !== 'default') {
+    resolvedSoul = loadSoul(profile.soul_name);
   }
+  const agent = new AgentRuntime({
+    aiClient, model, isLocal, supportsNativeTools,
+    userId, workspaceId,
+    workingDir: workingDir || profile?.working_dir || process.cwd(),
+    maxRounds: profile?.max_rounds || 20,
+    autoApprove: profile?.auto_approve || false,
+    soul: resolvedSoul,
+    providerInfo,
+  });
+  if (Array.isArray(profile?.always_allowed_tools)) {
+    profile.always_allowed_tools.forEach(tool => {
+      if (typeof tool === 'string' && tool.trim()) agent.sessionApprovedTools.add(tool.trim());
+    });
+  }
+  return await agent.run(goal);
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1422,21 +1480,24 @@ router.delete('/profiles/:id', authenticate, (req, res) => {
 
 router.post('/schedule', authenticate, async (req, res) => {
   try {
-    const { name, goal, schedule, profileId } = req.body;
+    const { name, goal, schedule, profileId, providerProfileId } = req.body;
     if (!name || !goal || !schedule) {
       return res.status(400).json({ success: false, error: 'name, goal, and schedule are required' });
     }
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    const provider = resolveScheduledProvider(req.user.id, providerProfileId || null);
 
     const job = scheduleJob({
       name, goal, schedule,
       userId: req.user.id,
       workspaceId: workspaceId || 'default',
       profileId: profileId || null,
+      providerProfileId: provider.providerProfileId,
+      providerSnapshot: provider.providerSnapshot,
       workingDir: req.body.workingDir || req.body.working_dir || '.',
     });
-    res.json({ success: true, job });
+    res.json({ success: true, job: enrichScheduledJob(job) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1447,7 +1508,34 @@ router.get('/schedule', authenticate, async (req, res) => {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
     const jobs = listJobs(req.user.id, workspaceId || 'default');
-    res.json({ success: true, count: jobs.length, jobs });
+    res.json({ success: true, count: jobs.length, jobs: jobs.map(enrichScheduledJob) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/schedule/:id/runs', authenticate, async (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 20)));
+    const runs = listJobRuns(req.params.id, req.user.id, workspaceId || 'default', limit);
+    if (!runs) return res.status(404).json({ success: false, error: 'Job not found' });
+    res.json({ success: true, count: runs.length, runs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/schedule/:id/run-now', authenticate, async (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    const job = db.prepare('SELECT id FROM scheduled_jobs WHERE id = ? AND user_id = ? AND workspace_id = ?')
+      .get(req.params.id, req.user.id, workspaceId || 'default');
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+    const run = await runJobNow(req.params.id);
+    res.json({ success: true, run });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

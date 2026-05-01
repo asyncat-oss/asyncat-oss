@@ -18,6 +18,8 @@ db.exec(`
     user_id      TEXT NOT NULL,
     workspace_id TEXT NOT NULL,
     profile_id   TEXT,
+    provider_profile_id TEXT,
+    provider_snapshot TEXT NOT NULL DEFAULT '{}',
     working_dir  TEXT NOT NULL DEFAULT '.',
     enabled      INTEGER NOT NULL DEFAULT 1,
     last_run_at  TEXT,
@@ -33,6 +35,33 @@ try {
 } catch (err) {
   if (!String(err.message || '').includes('duplicate column')) throw err;
 }
+try {
+  db.prepare('ALTER TABLE scheduled_jobs ADD COLUMN provider_profile_id TEXT').run();
+} catch (err) {
+  if (!String(err.message || '').includes('duplicate column')) throw err;
+}
+try {
+  db.prepare("ALTER TABLE scheduled_jobs ADD COLUMN provider_snapshot TEXT NOT NULL DEFAULT '{}'").run();
+} catch (err) {
+  if (!String(err.message || '').includes('duplicate column')) throw err;
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scheduled_job_runs (
+    id                  TEXT PRIMARY KEY,
+    job_id              TEXT NOT NULL REFERENCES scheduled_jobs(id) ON DELETE CASCADE,
+    agent_session_id    TEXT,
+    status              TEXT NOT NULL DEFAULT 'running'
+                          CHECK (status IN ('running','completed','failed')),
+    provider_profile_id TEXT,
+    provider_snapshot   TEXT NOT NULL DEFAULT '{}',
+    started_at          TEXT NOT NULL,
+    finished_at         TEXT,
+    answer              TEXT,
+    error               TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_job ON scheduled_job_runs(job_id, started_at DESC);
+`);
 
 // In-memory timer map: job.id -> NodeJS.Timer
 const _timers = new Map();
@@ -49,7 +78,7 @@ export function initScheduler(runAgentFn) {
 }
 
 /** Create a new scheduled job. */
-export function scheduleJob({ name, goal, schedule, userId, workspaceId, workingDir = process.cwd(), profileId = null }) {
+export function scheduleJob({ name, goal, schedule, userId, workspaceId, workingDir = process.cwd(), profileId = null, providerProfileId = null, providerSnapshot = null }) {
   if (!_runAgent) throw new Error('Scheduler not initialized. Call initScheduler() first.');
 
   const id = randomUUID();
@@ -57,19 +86,34 @@ export function scheduleJob({ name, goal, schedule, userId, workspaceId, working
   if (!nextRunAt) throw new Error(`Invalid schedule: "${schedule}". Use: interval:<ms> | at:<ISO> | once:<ms>`);
 
   db.prepare(`
-    INSERT INTO scheduled_jobs (id, name, goal, schedule, user_id, workspace_id, profile_id, working_dir, next_run_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, goal, schedule, userId, workspaceId, profileId, workingDir, nextRunAt.toISOString());
+    INSERT INTO scheduled_jobs (id, name, goal, schedule, user_id, workspace_id, profile_id, provider_profile_id, provider_snapshot, working_dir, next_run_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, goal, schedule, userId, workspaceId, profileId, providerProfileId, JSON.stringify(providerSnapshot || {}), workingDir, nextRunAt.toISOString());
 
   _armTimer(id);
-  return { id, name, goal, schedule, profile_id: profileId, nextRunAt: nextRunAt.toISOString() };
+  return { id, name, goal, schedule, profile_id: profileId, provider_profile_id: providerProfileId, provider_snapshot: providerSnapshot || {}, nextRunAt: nextRunAt.toISOString() };
 }
 
 /** List all scheduled jobs for a user. */
 export function listJobs(userId, workspaceId) {
   return db.prepare(
     'SELECT * FROM scheduled_jobs WHERE user_id = ? AND workspace_id = ? ORDER BY next_run_at ASC'
-  ).all(userId, workspaceId);
+  ).all(userId, workspaceId).map(_hydrateJob);
+}
+
+export function listJobRuns(id, userId, workspaceId, limit = 20) {
+  const job = db.prepare('SELECT id FROM scheduled_jobs WHERE id = ? AND user_id = ? AND workspace_id = ?').get(id, userId, workspaceId);
+  if (!job) return null;
+  return db.prepare(`
+    SELECT * FROM scheduled_job_runs
+    WHERE job_id = ?
+    ORDER BY started_at DESC
+    LIMIT ?
+  `).all(id, limit).map(_hydrateRun);
+}
+
+export async function runJobNow(id) {
+  return _fireJob(id, { manual: true });
 }
 
 /** Disable / delete a job. */
@@ -121,23 +165,50 @@ function _clearTimer(id) {
   }
 }
 
-async function _fireJob(id) {
+async function _fireJob(id, { manual = false } = {}) {
   const job = db.prepare('SELECT * FROM scheduled_jobs WHERE id = ?').get(id);
-  if (!job || !job.enabled) return;
+  if (!job || (!job.enabled && !manual)) return;
 
   const now = new Date();
+  const runId = randomUUID();
+  db.prepare(`
+    INSERT INTO scheduled_job_runs (id, job_id, status, provider_profile_id, provider_snapshot, started_at)
+    VALUES (?, ?, 'running', ?, ?, ?)
+  `).run(runId, id, job.provider_profile_id || null, job.provider_snapshot || '{}', now.toISOString());
+
   console.log(`[scheduler] Running job "${job.name}" (${id})`);
 
   try {
-    await _runAgent({
+    const result = await _runAgent({
       goal: job.goal,
       userId: job.user_id,
       workspaceId: job.workspace_id,
       workingDir: job.working_dir === '.' ? null : job.working_dir,
       profileId: job.profile_id,
+      providerProfileId: job.provider_profile_id,
+      providerSnapshot: _safeJson(job.provider_snapshot, {}),
+      scheduledJobId: job.id,
+      scheduledRunId: runId,
     });
+    db.prepare(`
+      UPDATE scheduled_job_runs
+      SET status = 'completed', agent_session_id = ?, answer = ?, finished_at = ?
+      WHERE id = ?
+    `).run(result?.session?.id || null, result?.answer || null, new Date().toISOString(), runId);
   } catch (err) {
     console.error(`[scheduler] Job "${job.name}" failed:`, err.message);
+    db.prepare(`
+      UPDATE scheduled_job_runs
+      SET status = 'failed', error = ?, finished_at = ?
+      WHERE id = ?
+    `).run(err.message || 'Scheduled run failed', new Date().toISOString(), runId);
+  }
+
+  if (manual) {
+    db.prepare(`
+      UPDATE scheduled_jobs SET last_run_at = ?, run_count = run_count + 1, updated_at = datetime('now') WHERE id = ?
+    `).run(now.toISOString(), id);
+    return _hydrateRun(db.prepare('SELECT * FROM scheduled_job_runs WHERE id = ?').get(runId));
   }
 
   // Recalculate next run
@@ -151,6 +222,35 @@ async function _fireJob(id) {
     // 'once' schedule — done, disable
     db.prepare("UPDATE scheduled_jobs SET enabled = 0, run_count = run_count + 1, updated_at = datetime('now') WHERE id = ?").run(id);
   }
+}
+
+function _safeJson(value, fallback = null) {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function _hydrateRun(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    provider_snapshot: _safeJson(row.provider_snapshot, {}),
+  };
+}
+
+function _hydrateJob(row) {
+  if (!row) return row;
+  const latestRun = db.prepare(`
+    SELECT * FROM scheduled_job_runs
+    WHERE job_id = ?
+    ORDER BY started_at DESC
+    LIMIT 1
+  `).get(row.id);
+  return {
+    ...row,
+    provider_snapshot: _safeJson(row.provider_snapshot, {}),
+    latest_run: latestRun ? _hydrateRun(latestRun) : null,
+  };
 }
 
 /**
@@ -201,4 +301,4 @@ function _calcNextRun(schedule, fromDate) {
   return null;
 }
 
-export default { initScheduler, scheduleJob, listJobs, deleteJob, enableJob, disableJob };
+export default { initScheduler, scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob };

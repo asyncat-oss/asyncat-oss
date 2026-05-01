@@ -118,4 +118,79 @@ export function getAiClientForUser(userId) {
   }
 }
 
+function clientFromProviderRow(row, { allowGlobalApiKeyFallback = true } = {}) {
+  const isLocal = row.provider_type === 'local';
+  const requiresLocalServer = providerRequiresBuiltinServer(row);
+  const baseUrl = normalizeBaseUrl(row.base_url, row.provider_id);
+  const settings = parseSettings(row.settings);
+  const supportsNativeTools = providerSupportsTools(row);
+  const localStatus = requiresLocalServer ? assertLocalModelReady() : null;
+  if (requiresLocalServer && row.model && localStatus?.model && localStatus.model !== row.model) {
+    throw new Error(`Local model mismatch: scheduled job expects ${row.model}, but ${localStatus.model} is loaded.`);
+  }
+  const apiKey = isLocal ? (row.api_key || 'local') : (row.api_key || (allowGlobalApiKeyFallback ? GLOBAL_AI_API_KEY : ''));
+
+  if (!isLocal && !apiKey) {
+    throw new Error(`Provider ${row.name || row.provider_id || 'profile'} is missing an API key.`);
+  }
+
+  const client = new OpenAIClient({
+    endpoint:     baseUrl,
+    apiKey,
+    defaultModel: localStatus?.model || row.model,
+    providerId:   row.provider_id,
+    settings,
+    defaultHeaders: row.provider_id === 'openrouter'
+      ? { 'HTTP-Referer': 'https://asyncat.local', 'X-OpenRouter-Title': 'Asyncat' }
+      : undefined,
+  });
+
+  return {
+    client,
+    model: localStatus?.model || row.model,
+    isLocal,
+    requiresLocalServer,
+    supportsNativeTools,
+    provider_type: row.provider_type,
+    providerInfo: {
+      type:              row.provider_type,
+      providerId:        row.provider_id,
+      baseUrl:           row.base_url,
+      model:             row.model,
+      profileId:         row.profile_id || row.id || null,
+      supportsNativeTools,
+      name:              row.name || null,
+    },
+  };
+}
+
+/**
+ * Resolve a provider for a scheduled job. Prefer the saved provider profile so
+ * API keys stay in the provider table; fall back to the job snapshot for
+ * profile-less local providers and legacy schedules.
+ */
+export function getAiClientForScheduledProvider(userId, providerProfileId = null, providerSnapshot = null) {
+  if (providerProfileId) {
+    const row = db.prepare('SELECT * FROM ai_provider_profiles WHERE user_id = ? AND id = ?').get(userId, providerProfileId);
+    if (!row) throw new Error('Scheduled provider profile was deleted or is no longer available.');
+    return clientFromProviderRow(row, { allowGlobalApiKeyFallback: false });
+  }
+
+  if (providerSnapshot && providerSnapshot.provider_id && providerSnapshot.base_url && providerSnapshot.model) {
+    return clientFromProviderRow({
+      profile_id: null,
+      name: providerSnapshot.name || providerSnapshot.provider_name || null,
+      provider_type: providerSnapshot.provider_type || providerSnapshot.type || 'custom',
+      provider_id: providerSnapshot.provider_id,
+      base_url: providerSnapshot.base_url,
+      model: providerSnapshot.model,
+      api_key: providerSnapshot.api_key || null,
+      settings: JSON.stringify(providerSnapshot.settings || {}),
+      supports_tools: providerSnapshot.supports_tools ? 1 : 0,
+    }, { allowGlobalApiKeyFallback: true });
+  }
+
+  return getAiClientForUser(userId);
+}
+
 export default getAiClientForUser;

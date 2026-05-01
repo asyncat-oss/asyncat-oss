@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 // neko/src/Scheduler/SchedulerPage.jsx
 // ─── Agent Scheduler UI ───────────────────────────────────────────────────────
 
@@ -5,9 +6,10 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Clock, Plus, Trash2, Play, Pause, Loader2, AlertCircle,
   Calendar, RefreshCw, CheckCircle2, XCircle, ChevronDown,
-  ChevronRight, Zap, Timer, Repeat, Layers,
+  ChevronRight, Zap, Timer, Repeat, Layers, Cloud, RotateCcw,
 } from 'lucide-react';
 import { schedulerApi, profilesApi } from '../CommandCenter/commandCenterApi';
+import { aiProviderApi } from '../Settings/settingApi.js';
 
 // ── Schedule type helpers ─────────────────────────────────────────────────────
 
@@ -73,10 +75,50 @@ function getScheduleIcon(schedule) {
 
 // ── Create Job Modal ──────────────────────────────────────────────────────────
 
-function CreateJobModal({ onClose, onCreate, profiles = [] }) {
+function providerLabel(provider) {
+  if (!provider) return 'Uses active provider';
+  const name = provider.name || provider.provider_id || provider.providerId || 'AI provider';
+  const model = provider.model ? ` · ${provider.model}` : '';
+  return `${name}${model}`;
+}
+
+function runStatusMeta(status) {
+  if (status === 'completed') return { label: 'Completed', cls: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' };
+  if (status === 'failed') return { label: 'Failed', cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' };
+  if (status === 'running') return { label: 'Running', cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' };
+  return { label: 'No runs', cls: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' };
+}
+
+function cleanRunText(text) {
+  return String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function compactRunText(text, max = 220) {
+  const cleaned = cleanRunText(text).replace(/\s+/g, ' ');
+  if (!cleaned) return '';
+  return cleaned.length > max ? `${cleaned.slice(0, max - 1).trim()}…` : cleaned;
+}
+
+function runDisplayText(run) {
+  if (!run) return '';
+  if (run.error) return cleanRunText(run.error);
+  if (run.answer) return cleanRunText(run.answer);
+  if (run.status === 'running') return 'Still running…';
+  return 'No result text recorded.';
+}
+
+function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [], activeProvider = null }) {
   const [name, setName]           = useState('');
   const [goal, setGoal]           = useState('');
   const [profileId, setProfileId] = useState('');
+  const [providerProfileId, setProviderProfileId] = useState(activeProvider ? (activeProvider.profile_id || '') : (providerProfiles[0]?.id || ''));
   const [scheduleType, setScheduleType] = useState('interval:3600000');
   const [dailyTime, setDailyTime] = useState('09:00');
   const [onceDelay, setOnceDelay] = useState('30');
@@ -113,10 +155,11 @@ function CreateJobModal({ onClose, onCreate, profiles = [] }) {
     if (!name.trim()) { setError('Name is required'); return; }
     if (!goal.trim()) { setError('Goal is required'); return; }
     if (!schedule)    { setError('Please complete the schedule configuration'); return; }
+    if (!providerProfileId && !activeProvider) { setError('Choose an AI provider on the Models page first'); return; }
 
     setSaving(true);
     try {
-      await onCreate({ name: name.trim(), goal: goal.trim(), schedule, profileId: profileId || null });
+      await onCreate({ name: name.trim(), goal: goal.trim(), schedule, profileId: profileId || null, providerProfileId: providerProfileId || null });
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to create job');
@@ -183,6 +226,23 @@ function CreateJobModal({ onClose, onCreate, profiles = [] }) {
               </select>
             </div>
           )}
+
+          <div>
+            <label className={labelCls}>AI Model / Provider</label>
+            <select value={providerProfileId} onChange={e => setProviderProfileId(e.target.value)} className={inputCls}>
+              {activeProvider && (
+                <option value="">
+                  Current active: {providerLabel(activeProvider)}
+                </option>
+              )}
+              {providerProfiles.map(provider => (
+                <option key={provider.id} value={provider.id}>
+                  {providerLabel(provider)}{activeProvider?.profile_id === provider.id ? ' (active)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-[10px] text-gray-400">This model is saved with the job, so future active-model changes will not silently change scheduled runs.</p>
+          </div>
 
           <div>
             <label className={labelCls}>Schedule</label>
@@ -293,12 +353,37 @@ function CreateJobModal({ onClose, onCreate, profiles = [] }) {
 
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
-function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
+function JobCard({ job, profile, onDelete, onToggle, onRunNow, deletingId, togglingId, runningNowId }) {
   const [expanded, setExpanded] = useState(false);
+  const [runs, setRuns] = useState([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsError, setRunsError] = useState(null);
   const ScheduleIcon = getScheduleIcon(job.schedule);
   const isEnabled = !!job.enabled;
   const isDeleting = deletingId === job.id;
   const isToggling = togglingId === job.id;
+  const isRunningNow = runningNowId === job.id;
+  const latestRun = job.latest_run;
+  const latestStatus = runStatusMeta(latestRun?.status);
+  const provider = job.provider || job.provider_snapshot;
+  const latestPreview = latestRun
+    ? compactRunText(latestRun.error || latestRun.answer || (latestRun.status === 'running' ? 'Run is currently in progress.' : 'Run completed.'))
+    : '';
+
+  useEffect(() => {
+    if (!expanded) return;
+    let cancelled = false;
+    setRunsLoading(true);
+    setRunsError(null);
+    schedulerApi.listRuns(job.id).then(res => {
+      if (!cancelled) setRuns(res.runs || []);
+    }).catch(err => {
+      if (!cancelled) setRunsError(err.message || 'Failed to load runs');
+    }).finally(() => {
+      if (!cancelled) setRunsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [expanded, job.id, latestRun?.id]);
 
   const typeLabel = (() => {
     if (job.schedule === 'hourly' || job.schedule?.startsWith('interval:')) return 'Repeating';
@@ -335,6 +420,9 @@ function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
             {!isEnabled && (
               <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500">Paused</span>
             )}
+            {latestRun && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${latestStatus.cls}`}>{latestStatus.label}</span>
+            )}
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{job.goal}</p>
 
@@ -356,6 +444,12 @@ function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
                 {profile.name}
               </span>
             )}
+            {provider && (
+              <span className="flex items-center gap-1">
+                <Cloud className="w-3 h-3" />
+                {providerLabel(provider)}
+              </span>
+            )}
             {job.last_run_at && (
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3 text-emerald-500" />
@@ -366,6 +460,12 @@ function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
               <span>{job.run_count} run{job.run_count !== 1 ? 's' : ''}</span>
             )}
           </div>
+          {latestRun && (
+            <div className={`mt-2 max-w-4xl text-xs leading-5 ${latestRun.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+              <span className="font-medium text-gray-500 dark:text-gray-400">Latest: </span>
+              <span>{latestPreview || (latestRun.status === 'failed' ? 'Run failed.' : 'Run completed.')}</span>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -376,6 +476,15 @@ function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
             title="View details"
           >
             {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() => onRunNow(job.id)}
+            disabled={isRunningNow}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+            title="Run now"
+          >
+            {isRunningNow ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
           </button>
 
           <button
@@ -410,10 +519,10 @@ function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
       {/* Expanded detail */}
       {expanded && (
         <div className="px-4 pb-4 border-t border-gray-50 dark:border-gray-800 pt-3">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-            <div>
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)] gap-x-8 gap-y-4 text-xs">
+            <div className="min-w-0">
               <span className="text-gray-400 dark:text-gray-500 block mb-0.5">Goal</span>
-              <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{job.goal}</span>
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed break-words">{job.goal}</p>
             </div>
             <div className="space-y-2">
               <div>
@@ -436,6 +545,12 @@ function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
                   <span className="text-gray-600 dark:text-gray-400">{profile.name}</span>
                 </div>
               )}
+              {provider && (
+                <div>
+                  <span className="text-gray-400 dark:text-gray-500 block mb-0.5">AI provider</span>
+                  <span className="text-gray-600 dark:text-gray-400">{providerLabel(provider)}</span>
+                </div>
+              )}
               <div>
                 <span className="text-gray-400 dark:text-gray-500 block mb-0.5">Created</span>
                 <span className="text-gray-600 dark:text-gray-400">
@@ -443,6 +558,42 @@ function JobCard({ job, profile, onDelete, onToggle, deletingId, togglingId }) {
                 </span>
               </div>
             </div>
+          </div>
+          <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Run history</span>
+              <button onClick={() => onRunNow(job.id)} disabled={isRunningNow} className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 disabled:opacity-50">
+                {isRunningNow ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                Run now
+              </button>
+            </div>
+            {runsLoading && <div className="text-xs text-gray-400">Loading runs…</div>}
+            {runsError && <div className="text-xs text-red-500">{runsError}</div>}
+            {!runsLoading && !runsError && runs.length === 0 && (
+              <div className="text-xs text-gray-400">No runs recorded yet.</div>
+            )}
+            {!runsLoading && !runsError && runs.length > 0 && (
+              <div className="space-y-2">
+                {runs.map(run => {
+                  const meta = runStatusMeta(run.status);
+                  const displayText = runDisplayText(run);
+                  return (
+                    <div key={run.id} className="rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${meta.cls}`}>{meta.label}</span>
+                        <span className="text-[10px] text-gray-400">{run.started_at ? new Date(run.started_at).toLocaleString() : '—'}</span>
+                      </div>
+                      <p className={`mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 ${run.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                        {displayText}
+                      </p>
+                      {run.agent_session_id && (
+                        <code className="mt-1 block text-[10px] text-gray-400 dark:text-gray-600 font-mono">Session: {run.agent_session_id}</code>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -480,19 +631,26 @@ export default function SchedulerPage() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [profiles, setProfiles]   = useState([]);
+  const [providerProfiles, setProviderProfiles] = useState([]);
+  const [activeProvider, setActiveProvider] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [runningNowId, setRunningNowId] = useState(null);
 
   const fetchJobs = useCallback(async () => {
     setError(null);
     try {
-      const [res, profileRes] = await Promise.all([
+      const [res, profileRes, providerProfilesRes, activeProviderRes] = await Promise.all([
         schedulerApi.listJobs(),
         profilesApi.listProfiles().catch(() => ({ profiles: [] })),
+        aiProviderApi.listProfiles().catch(() => ({ profiles: [], active: null })),
+        aiProviderApi.getConfig().catch(() => null),
       ]);
       setJobs(res.jobs || []);
       setProfiles(profileRes.profiles || []);
+      setProviderProfiles(providerProfilesRes.profiles || []);
+      setActiveProvider(activeProviderRes?.model ? activeProviderRes : null);
     } catch (err) {
       setError(err.message || 'Failed to load scheduled jobs');
     } finally {
@@ -539,6 +697,18 @@ export default function SchedulerPage() {
       setError(err.message || 'Failed to update job');
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function handleRunNow(id) {
+    setRunningNowId(id);
+    try {
+      await schedulerApi.runNow(id);
+      await fetchJobs();
+    } catch (err) {
+      setError(err.message || 'Failed to run job');
+    } finally {
+      setRunningNowId(null);
     }
   }
 
@@ -625,8 +795,10 @@ export default function SchedulerPage() {
                       profile={profilesById.get(job.profile_id)}
                       onDelete={handleDelete}
                       onToggle={handleToggle}
+                      onRunNow={handleRunNow}
                       deletingId={deletingId}
                       togglingId={togglingId}
+                      runningNowId={runningNowId}
                     />
                   ))}
                 </div>
@@ -649,8 +821,10 @@ export default function SchedulerPage() {
                       profile={profilesById.get(job.profile_id)}
                       onDelete={handleDelete}
                       onToggle={handleToggle}
+                      onRunNow={handleRunNow}
                       deletingId={deletingId}
                       togglingId={togglingId}
+                      runningNowId={runningNowId}
                     />
                   ))}
                 </div>
@@ -661,7 +835,13 @@ export default function SchedulerPage() {
       </div>
 
       {showModal && (
-        <CreateJobModal onClose={() => setShowModal(false)} onCreate={handleCreate} profiles={profiles} />
+        <CreateJobModal
+          onClose={() => setShowModal(false)}
+          onCreate={handleCreate}
+          profiles={profiles}
+          providerProfiles={providerProfiles}
+          activeProvider={activeProvider}
+        />
       )}
     </div>
   );
