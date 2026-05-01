@@ -129,7 +129,7 @@ const TopMenuBar = ({ onSearchOpen }) => {
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[70] h-10 bg-white/90 dark:bg-gray-900/90 midnight:bg-black/90 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-800 midnight:border-gray-900">
+    <div className="fixed top-0 left-0 right-0 z-[70] h-10 bg-white/90 dark:bg-gray-900/90 midnight:bg-slate-950/95 backdrop-blur-xl">
       <div className="h-full px-4 flex items-center justify-between">
         {/* Left side - App Name */}
         <div className="flex items-center gap-4">
@@ -158,10 +158,7 @@ const TopMenuBar = ({ onSearchOpen }) => {
             <RotateCw className="w-4 h-4" />
           </button>
 
-          <div className="w-px h-5 bg-gray-300/50 dark:bg-gray-700/50 midnight:bg-gray-800/50" />
-
           <NetworkStatus />
-          <div className="w-px h-5 bg-gray-300/50 dark:bg-gray-700/50 midnight:bg-gray-800/50" />
           <SystemClock />
         </div>
       </div>

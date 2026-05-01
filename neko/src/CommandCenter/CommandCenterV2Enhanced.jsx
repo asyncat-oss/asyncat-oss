@@ -120,7 +120,7 @@ function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700 flex items-center gap-2">
+      <div className="px-4 py-3 flex items-center gap-2">
         <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
           Steps
         </span>
@@ -1081,22 +1081,17 @@ const CommandCenterV2Enhanced = () => {
 
   const [activeCategory, setActiveCategory] = useState(null);
 
-  const TopBar = (
-    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-      <div />
-      <div className="flex items-center gap-2">
-        {isGhostMode && (
-          <button
-            onClick={toggleGhostMode}
-            className="p-1.5 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50"
-            title={isGhostMode ? "Exit Ghost Mode" : "Ghost Mode"}
-          >
-            <Ghost className={`w-4 h-4 ${isGhostMode ? "text-gray-600 dark:text-gray-400" : "text-gray-300 dark:text-gray-600"}`} />
-          </button>
-        )}
-      </div>
+  const TopBar = isGhostMode ? (
+    <div className="flex items-center justify-end px-4 py-2">
+      <button
+        onClick={toggleGhostMode}
+        className="p-1.5 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50"
+        title="Exit Ghost Mode"
+      >
+        <Ghost className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+      </button>
     </div>
-  );
+  ) : null;
 
   if (!commandCenterContext) {
     return (
