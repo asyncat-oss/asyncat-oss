@@ -1,5 +1,7 @@
 # Asyncat — AI Agent OS
 
+![Asyncat title animation](neko/public/asyncat-title.gif)
+
 > Forget the "productivity workspace" marketing. Forget the Kanban boards.
 >
 > This is about one thing: giving full, unbridled access to your entire computer to a quantized local model that is arguably less intelligent than a caffeinated squirrel.
