@@ -137,33 +137,34 @@ export const uploadAttachment = async (req, res) => {
 
     let resultFilename;
     let blobName;
+    let uploadResult;
 
     if (isBanner === "true") {
       const bannerFilename = `banner_${Date.now()}_${sanitizedFilename}`;
       blobName = `${subPath}/${bannerFilename}`;
 
-      const result = await localStorageService.uploadFileWithName(
+      uploadResult = await localStorageService.uploadFileWithName(
         req.file,
         ATTACHMENTS_CONTAINER,
         subPath,
         bannerFilename
       );
       resultFilename = bannerFilename;
-      blobName = result.blobName;
+      blobName = uploadResult.blobName;
     } else {
       blobName = `${subPath}/${sanitizedFilename}`;
 
-      const result = await localStorageService.uploadFileWithName(
+      uploadResult = await localStorageService.uploadFileWithName(
         req.file,
         ATTACHMENTS_CONTAINER,
         subPath,
         sanitizedFilename
       );
-      resultFilename = result.blobName.split("/").pop();
-      blobName = result.blobName;
+      resultFilename = uploadResult.blobName.split("/").pop();
+      blobName = uploadResult.blobName;
     }
 
-    const attachmentUrl = result.fileUrl;
+    const attachmentUrl = uploadResult.fileUrl;
 
     if (isBanner === "true") {
       try {
@@ -305,6 +306,7 @@ export const downloadAttachment = async (req, res) => {
       res.setHeader("Cache-Control", "private, max-age=3600");
       res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "*");
       res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
       const fileStream = fs.createReadStream(filePath, { start, end });
       fileStream.on('error', (err) => {
@@ -321,6 +323,7 @@ export const downloadAttachment = async (req, res) => {
         res.setHeader("Cache-Control", "private, max-age=3600");
         res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "*");
         res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
         if (needsRangeSupport) {
           res.setHeader("Accept-Ranges", "bytes");
         }

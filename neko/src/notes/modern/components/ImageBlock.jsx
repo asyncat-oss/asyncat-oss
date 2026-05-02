@@ -70,6 +70,7 @@ const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef(null);
   const controlRevealTimeoutRef = useRef(null);
+  const imageRetryRef = useRef({ filename: "", attempts: 0 });
   const { selectedNote } = useNoteContext();
 
   const imageUrl = block.properties?.url || "";
@@ -87,6 +88,52 @@ const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
 
   const handleCloseUploadAlert = () => {
     setUploadAlert(createInitialUploadAlert());
+  };
+
+  const handleImageLoad = () => {
+    imageRetryRef.current = { filename, attempts: 0 };
+    setIsImageLoaded(true);
+    setError(null);
+    setTimeout(() => {
+      setShowImage(true);
+      scheduleControlReveal();
+    }, 50);
+  };
+
+  const handleImageLoadError = () => {
+    if (
+      filename &&
+      selectedNote?.id &&
+      imageRetryRef.current.filename !== filename
+    ) {
+      imageRetryRef.current = { filename, attempts: 0 };
+    }
+
+    if (
+      filename &&
+      selectedNote?.id &&
+      imageRetryRef.current.attempts < 1
+    ) {
+      imageRetryRef.current.attempts += 1;
+      const newUrl = attachmentsApi.getAttachmentUrl(selectedNote.id, filename);
+      const separator = newUrl.includes("?") ? "&" : "?";
+      const refreshedUrl = `${newUrl}${separator}retry=${imageRetryRef.current.attempts}&t=${Date.now()}`;
+
+      if (refreshedUrl !== imageUrl) {
+        onChange(block.id, {
+          properties: {
+            ...block.properties,
+            url: refreshedUrl,
+          },
+        });
+        return;
+      }
+    }
+
+    setError("Failed to load image");
+    setIsImageLoaded(false);
+    setShowImage(false);
+    setShouldAnimate(false);
   };
 
   const scheduleControlReveal = () => {
@@ -582,42 +629,8 @@ const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                 src={imageUrl}
                 alt={alt}
                 style={{ display: "none" }}
-                onLoad={() => {
-                  setIsImageLoaded(true);
-                  setTimeout(() => {
-                    setShowImage(true);
-                    // Show controls after reveal animation if needed
-                    scheduleControlReveal();
-                  }, 50);
-                }}
-                onError={() => {
-                  // Try to refresh the URL with a new token if it's an auth-related failure
-                  if (filename && selectedNote?.id) {
-                    const newUrl = attachmentsApi.getAttachmentUrl(
-                      selectedNote.id,
-                      filename
-                    );
-                    // Add cache-busting parameter
-                    const separator = newUrl.includes("?") ? "&" : "?";
-                    const refreshedUrl = `${newUrl}${separator}t=${Date.now()}`;
-
-                    // Only try to refresh if the URL is different (has a new token)
-                    if (refreshedUrl !== imageUrl) {
-                      onChange(block.id, {
-                        properties: {
-                          ...block.properties,
-                          url: refreshedUrl,
-                        },
-                      });
-                      return; // Don't set error state yet, let the refresh attempt happen
-                    }
-                  }
-
-                  setError("Failed to load image");
-                  setIsImageLoaded(false);
-                  setShowImage(false);
-                  setShouldAnimate(false);
-                }}
+                onLoad={handleImageLoad}
+                onError={handleImageLoadError}
               />
             </div>
           ) : (
@@ -642,42 +655,8 @@ const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                     : "inset(0 0 0 0)",
                 }}
                 className={`rounded-lg shadow-sm hover:shadow-md transition-all duration-300`}
-                onLoad={() => {
-                  setIsImageLoaded(true);
-                  setTimeout(() => {
-                    setShowImage(true);
-                    // Show controls after reveal animation if needed
-                    scheduleControlReveal();
-                  }, 50);
-                }}
-                onError={() => {
-                  // Try to refresh the URL with a new token if it's an auth-related failure
-                  if (filename && selectedNote?.id) {
-                    const newUrl = attachmentsApi.getAttachmentUrl(
-                      selectedNote.id,
-                      filename
-                    );
-                    // Add cache-busting parameter
-                    const separator = newUrl.includes("?") ? "&" : "?";
-                    const refreshedUrl = `${newUrl}${separator}t=${Date.now()}`;
-
-                    // Only try to refresh if the URL is different (has a new token)
-                    if (refreshedUrl !== imageUrl) {
-                      onChange(block.id, {
-                        properties: {
-                          ...block.properties,
-                          url: refreshedUrl,
-                        },
-                      });
-                      return; // Don't set error state yet, let the refresh attempt happen
-                    }
-                  }
-
-                  setError("Failed to load image");
-                  setIsImageLoaded(false);
-                  setShowImage(false);
-                  setShouldAnimate(false);
-                }}
+                onLoad={handleImageLoad}
+                onError={handleImageLoadError}
               />
 
               {/* Replacing overlay - shows throughout the entire replacement process */}
@@ -792,28 +771,7 @@ const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                   maxHeight: "calc(100vh - 2rem)",
                 }}
                 onClick={(e) => e.stopPropagation()}
-                onError={() => {
-                  // Try to refresh the URL with a new token if it's an auth-related failure
-                  if (filename && selectedNote?.id) {
-                    const newUrl = attachmentsApi.getAttachmentUrl(
-                      selectedNote.id,
-                      filename
-                    );
-                    // Add cache-busting parameter
-                    const separator = newUrl.includes("?") ? "&" : "?";
-                    const refreshedUrl = `${newUrl}${separator}t=${Date.now()}`;
-
-                    // Only try to refresh if the URL is different (has a new token)
-                    if (refreshedUrl !== imageUrl) {
-                      onChange(block.id, {
-                        properties: {
-                          ...block.properties,
-                          url: refreshedUrl,
-                        },
-                      });
-                    }
-                  }
-                }}
+                onError={handleImageLoadError}
               />
               {caption && (
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 dark:bg-black/70 midnight:bg-black/80 text-white px-4 py-2 rounded-lg text-sm max-w-[90%] text-center">

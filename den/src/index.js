@@ -4,7 +4,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import logger, { flushLogs, logError, morganStream } from './logger.js';
@@ -88,7 +87,6 @@ app.use(cors({
 }));
 
 // ─── Core middleware ──────────────────────────────────────────────────────────
-app.use(helmet({ contentSecurityPolicy: false })); // CSP off — frontend handles it
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'tiny', {
   stream: morganStream,
