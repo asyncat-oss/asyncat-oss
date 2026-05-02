@@ -47,6 +47,21 @@ const getPriorityColor = (priority) => {
 	}
 };
 
+// Helper: get due status key for filtering
+const dueStatusKey = (dueDate) => {
+	if (!dueDate) return null;
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	const due = new Date(dueDate);
+	due.setHours(0, 0, 0, 0);
+	if (due < today) return "overdue";
+	if (due.getTime() === today.getTime()) return "today";
+	const nextWeek = new Date(today);
+	nextWeek.setDate(today.getDate() + 7);
+	if (due > today && due <= nextWeek) return "thisWeek";
+	return null;
+};
+
 const GalleryView = ({ selectedProject }) => {
 	const { columns, error } = useColumnContext();
 	const { setSelectedCard } = useCardContext();
@@ -127,20 +142,6 @@ const GalleryView = ({ selectedProject }) => {
 			dueStatus: [],
 			completed: false,
 		});
-	};
-
-	const dueStatusKey = (dueDate) => {
-		if (!dueDate) return null;
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-		const due = new Date(dueDate);
-		due.setHours(0, 0, 0, 0);
-		if (due < today) return "overdue";
-		if (due.getTime() === today.getTime()) return "today";
-		const nextWeek = new Date(today);
-		nextWeek.setDate(today.getDate() + 7);
-		if (due > today && due <= nextWeek) return "thisWeek";
-		return null;
 	};
 
 	if (error) {

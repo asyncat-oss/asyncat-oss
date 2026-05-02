@@ -22,9 +22,6 @@ import {
 	formatDuration,
 	getDueDateStyle,
 	getProgressColor,
-	getProfilePicture,
-	getMemberDisplayName,
-	getMemberInitial,
 } from "./ListViewUtils";
 import { useCardActions } from "../hooks/useCardActions";
 
@@ -46,75 +43,6 @@ export const PriorityBadge = ({ priority }) => {
 		>
 			{priority || "None"}
 		</span>
-	);
-};
-
-// Clean Assignee Avatars
-export const AssigneeAvatars = ({
-	assigneeIds,
-	assigneeDetails,
-	isLoadingAssignees,
-	size = "small",
-}) => {
-	if (!assigneeIds || assigneeIds.length === 0) return null;
-
-	const sizeClasses =
-		size === "small" ? "w-6 h-6 text-xs" : "w-8 h-8 text-sm";
-
-	return (
-		<div className="flex -space-x-1">
-			{isLoadingAssignees ? (
-				<div
-					className={`${sizeClasses} rounded-full bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 animate-pulse`}
-				></div>
-			) : (
-				<>
-					{assigneeIds.slice(0, 3).map((assigneeId) => {
-						const id =
-							typeof assigneeId === "object"
-								? assigneeId.id
-								: assigneeId;
-						const member = assigneeDetails[id];
-
-						if (!member) return null;
-
-						const profilePicture = getProfilePicture(
-							member.profile_picture
-						);
-
-						return (
-							<div
-								key={id}
-								className={`${sizeClasses} rounded-full border-2 border-white dark:border-gray-800 midnight:border-gray-900 
-                  flex items-center justify-center font-medium shadow-sm
-                  transition-transform duration-200 hover:scale-110 hover:z-10`}
-								title={getMemberDisplayName(member)}
-							>
-								{profilePicture ? (
-									<img
-										src={profilePicture}
-										alt={getMemberDisplayName(member)}
-										className="w-full h-full rounded-full object-cover"
-									/>
-								) : (
-									<div className="w-full h-full rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center">
-										{getMemberInitial(member)}
-									</div>
-								)}
-							</div>
-						);
-					})}
-
-					{assigneeIds.length > 3 && (
-						<div
-							className={`${sizeClasses} rounded-full bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 border-2 border-white dark:border-gray-800 midnight:border-gray-900 flex items-center justify-center text-gray-600 dark:text-gray-400 midnight:text-gray-500 font-medium shadow-sm`}
-						>
-							+{assigneeIds.length - 3}
-						</div>
-					)}
-				</>
-			)}
-		</div>
 	);
 };
 

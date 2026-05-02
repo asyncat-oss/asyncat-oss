@@ -97,14 +97,8 @@ const ListViewSkeleton = () => {
 										<div className="w-16 h-6 bg-red-200 dark:bg-red-800 midnight:bg-red-800 rounded-full animate-pulse"></div>
 									</div>
 
-									{/* Assignee */}
-									<div className="col-span-2 flex items-center space-x-2">
-										<div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full animate-pulse"></div>
-										<div className="w-20 h-4 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded animate-pulse"></div>
-									</div>
-
 									{/* Progress and actions */}
-									<div className="col-span-2 flex items-center justify-between">
+									<div className="col-span-4 flex items-center justify-between">
 										<div className="flex-1 mr-3">
 											<div className="w-full h-2 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full animate-pulse"></div>
 										</div>

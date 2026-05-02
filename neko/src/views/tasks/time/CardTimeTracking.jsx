@@ -170,28 +170,10 @@ const CardTimeTracking = ({ card, onCardUpdated, readOnly = false }) => {
     return administratorId === currentUser.id;
   }, [currentUser, card.administrator_id]);
 
-  // Check if current user is assigned to any subtask
-  const isUserSubtaskAssignee = useMemo(() => {
-    if (!currentUser || !card.checklist || !Array.isArray(card.checklist)) {
-      return false;
-    }
-
-    return card.checklist.some((subtask) => {
-      if (subtask.assignees && Array.isArray(subtask.assignees)) {
-        return subtask.assignees.some((assignee) => {
-          const assigneeId =
-            typeof assignee === "object" ? assignee.id : assignee;
-          return assigneeId === currentUser.id;
-        });
-      }
-      return false;
-    });
-  }, [currentUser, card.checklist]);
-
-  // Check if current user is assigned to this card (administrator or subtask assignee)
+  // Check if current user can track time for this card
   const isUserAssigned = useMemo(() => {
-    return isUserAdministrator || isUserSubtaskAssignee;
-  }, [isUserAdministrator, isUserSubtaskAssignee]);
+    return isUserAdministrator;
+  }, [isUserAdministrator]);
 
   // Calculate total time spent (filtered by permissions)
   const totalTimeSpent = useMemo(() => {
@@ -199,10 +181,6 @@ const CardTimeTracking = ({ card, onCardUpdated, readOnly = false }) => {
       // Administrators can see all time entries
       if (isUserAdministrator) {
         return entry.endTime; // Only completed entries
-      }
-      // Subtask assignees can only see their own entries
-      if (isUserSubtaskAssignee && entry.User) {
-        return entry.endTime && entry.User.id === currentUser?.id;
       }
       return false;
     });
@@ -215,8 +193,6 @@ const CardTimeTracking = ({ card, onCardUpdated, readOnly = false }) => {
   }, [
     timeEntries,
     isUserAdministrator,
-    isUserSubtaskAssignee,
-    currentUser?.id,
   ]);
 
   return (
@@ -230,11 +206,10 @@ const CardTimeTracking = ({ card, onCardUpdated, readOnly = false }) => {
                 <AlertCircle className="w-5 h-5 text-gray-400" />
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                Only administrators and subtask assignees can track time
+                Only the card administrator can track time
               </p>
               <p className="text-xs text-gray-500">
-                You need to be the administrator or assigned to a subtask to
-                start a timer
+                You need to be the administrator to start a timer
               </p>
             </div>
           </div>
@@ -321,17 +296,7 @@ const CardTimeTracking = ({ card, onCardUpdated, readOnly = false }) => {
             </div>
           ) : (
             timeEntries
-              .filter((entry) => {
-                // Administrators can see all time entries
-                if (isUserAdministrator) {
-                  return true;
-                }
-                // Subtask assignees can only see their own entries
-                if (isUserSubtaskAssignee && entry.User) {
-                  return entry.User.id === currentUser?.id;
-                }
-                return false;
-              })
+              .filter(() => isUserAdministrator)
               .map((entry) => (
                 <div
                   key={entry.id}

@@ -6,9 +6,6 @@ const CardSubtasksSection = ({
   checklist = [],
   tasks = { completed: 0, total: 0 },
   onChecklistUpdate,
-  projectMembers = [],
-  isLoadingMembers = false,
-  onChecklistItemAssigneeChange,
   onUnsavedTextChange,
   shouldBounceSaveAll = false,
 }) => {
@@ -40,9 +37,6 @@ const CardSubtasksSection = ({
                 onChecklistUpdate(allTasks, shouldImmediateSave);
               }}
               isCreating={true}
-              projectMembers={projectMembers}
-              isLoadingMembers={isLoadingMembers}
-              onAssigneeChange={onChecklistItemAssigneeChange}
               enableEditing={true}
               showAddInput={true}
               onUnsavedTextChange={onUnsavedTextChange}
@@ -103,9 +97,6 @@ const CardSubtasksSection = ({
                     ];
                     onChecklistUpdate(allTasks, shouldImmediateSave);
                   }}
-                  projectMembers={projectMembers}
-                  isLoadingMembers={isLoadingMembers}
-                  onAssigneeChange={onChecklistItemAssigneeChange}
                   enableEditing={true}
                   isCreating={false}
                   showAddInput={false}
@@ -139,9 +130,6 @@ const CardSubtasksSection = ({
                     ];
                     onChecklistUpdate(allTasks, shouldImmediateSave);
                   }}
-                  projectMembers={projectMembers}
-                  isLoadingMembers={isLoadingMembers}
-                  onAssigneeChange={onChecklistItemAssigneeChange}
                   enableEditing={true}
                   isCreating={false}
                   showAddInput={false}
@@ -171,9 +159,6 @@ const CardSubtasksSection = ({
                 onChecklistUpdate(allTasks, shouldImmediateSave);
               }}
               isCreating={true}
-              projectMembers={projectMembers}
-              isLoadingMembers={isLoadingMembers}
-              onAssigneeChange={onChecklistItemAssigneeChange}
               enableEditing={true}
               showAddInput={true}
               onUnsavedTextChange={onUnsavedTextChange}

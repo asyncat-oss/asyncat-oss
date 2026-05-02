@@ -115,9 +115,6 @@ const TimelineViewSkeleton = () => {
 															{/* Status badge */}
 															<div className="w-20 h-5 bg-blue-200 dark:bg-blue-800 midnight:bg-blue-800 rounded-full animate-pulse"></div>
 
-															{/* Assignee avatar */}
-															<div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full animate-pulse"></div>
-
 															{/* Progress */}
 															<div className="flex-1 max-w-20">
 																<div className="w-full h-1 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full animate-pulse"></div>

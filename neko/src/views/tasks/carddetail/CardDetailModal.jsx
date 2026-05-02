@@ -722,17 +722,11 @@ const CardDetailModal = ({
 	const handleChecklistUpdate = useCallback(
 		(newChecklist, shouldImmediateSave = false) => {
 			const processedChecklist = newChecklist.map((item) => {
-				if (item.assignees && Array.isArray(item.assignees)) {
-					return {
-						...item,
-						assignees: item.assignees.map((assignee) =>
-							typeof assignee === "object" && assignee !== null
-								? assignee.id
-								: assignee
-						),
-					};
-				}
-				return item;
+				const normalized = { ...item };
+				delete normalized.assignees;
+				delete normalized.assigneeDetails;
+				delete normalized.assignee_id;
+				return normalized;
 			});
 
 			const completedTasks = processedChecklist.filter(
@@ -1211,8 +1205,6 @@ const CardDetailModal = ({
 														onChecklistUpdate={
 															handleChecklistUpdate
 														}
-														projectMembers={[]}
-														isLoadingMembers={false}
 														onUnsavedTextChange={
 															setHasUnsavedSubtaskText
 														}

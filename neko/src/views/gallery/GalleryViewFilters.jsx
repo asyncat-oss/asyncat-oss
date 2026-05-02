@@ -38,7 +38,7 @@ const GalleryViewFilters = ({
 							<input
 								type="text"
 								className="block w-full pl-10 pr-4 py-2.5 text-sm bg-white/70 dark:bg-gray-800/70 midnight:bg-gray-900/70 border border-gray-200/60 dark:border-gray-600/60 midnight:border-gray-700/60 rounded-xl text-gray-900 dark:text-gray-100 midnight:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/60 transition-all duration-200 min-w-[280px] sm:min-w-[350px]"
-								placeholder="Search tasks, assignees, priorities..."
+								placeholder="Search tasks and priorities..."
 								value={searchTerm}
 								onChange={(e) => setSearchTerm(e.target.value)}
 							/>

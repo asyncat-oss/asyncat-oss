@@ -1,11 +1,10 @@
 import { useDraggable } from "@dnd-kit/core";
 import { motion } from "framer-motion";
-import { CheckSquare, Tag, Users } from "lucide-react";
+import { CheckSquare, Tag } from "lucide-react";
 
 const DraggableCard = ({
 	card,
 	onCardClick,
-	currentUserId,
 	style = {},
 	draggableId = null,
 }) => {
@@ -46,32 +45,6 @@ const DraggableCard = ({
 	const progressPercentage = card.progress || 0;
 	const hasProgress = progressPercentage > 0;
 
-	// Check if card has assignees (derived from checklist for compatibility)
-	const hasAssignees = card.assignees && card.assignees.length > 0;
-	const assigneeCount = hasAssignees ? card.assignees.length : 0;
-
-	// Check current user relationships to this card
-	const isAssignedToCurrentUser =
-		currentUserId && hasAssignees && card.assignees.includes(currentUserId);
-	const isAdministrator =
-		currentUserId && card.administrator_id === currentUserId;
-
-	// Check if user is assigned to any subtasks
-	const isAssignedToSubtask =
-		currentUserId &&
-		card.checklist &&
-		Array.isArray(card.checklist) &&
-		card.checklist.some(
-			(item) =>
-				item.assignees &&
-				Array.isArray(item.assignees) &&
-				item.assignees.includes(currentUserId)
-		);
-
-	// Check if user has any relationship to this card
-	const _hasUserRelationship =
-		isAdministrator || isAssignedToCurrentUser || isAssignedToSubtask;
-
 	return (
 		<motion.div
 			ref={setNodeRef}
@@ -97,20 +70,6 @@ const DraggableCard = ({
 			<div className="flex justify-between items-start mb-0.5">
 				<div className="font-medium truncate pr-1">{card.title}</div>
 				<div className="flex items-center gap-1">
-					{/* Administrator indicator */}
-					{isAdministrator && (
-						<div
-							className="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 midnight:bg-emerald-400"
-							title="You are the administrator"
-						></div>
-					)}
-					{/* Assignment indicator */}
-					{(isAssignedToCurrentUser || isAssignedToSubtask) && (
-						<div
-							className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400 midnight:bg-blue-400"
-							title="Assigned to you"
-						></div>
-					)}
 					{/* Completion indicator */}
 					{card.isCompleted && (
 						<div className="flex-shrink-0 w-3 h-3 rounded-full bg-green-500 dark:bg-green-400 midnight:bg-green-400"></div>
@@ -146,13 +105,6 @@ const DraggableCard = ({
 					</div>
 				)}
 
-				{/* Assignee count if available */}
-				{hasAssignees && (
-					<div className="flex items-center">
-						<Users className="w-3 h-3 mr-0.5" />
-						<span>{assigneeCount}</span>
-					</div>
-				)}
 			</div>
 
 			{/* Progress bar */}

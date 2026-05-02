@@ -19,8 +19,6 @@ const GalleryViewSkeleton = () => {
 							<div className="flex items-center gap-2 overflow-x-auto pb-1">
 								{/* Completed */}
 								<div className="w-24 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 animate-pulse"></div>
-								{/* Assigned to me */}
-								<div className="w-28 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 animate-pulse"></div>
 								{/* Priority: High/Medium/Low */}
 								<div className="w-16 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 animate-pulse"></div>
 								<div className="w-20 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 animate-pulse"></div>
@@ -87,25 +85,6 @@ const GalleryViewSkeleton = () => {
 									<div className="w-16 h-3 bg-gray-100 dark:bg-gray-600 midnight:bg-gray-700 rounded"></div>
 								</div>
 
-								{/* Assignees section */}
-								<div className="flex items-center mt-2 space-x-2">
-									{/* Generate random number of assignee avatars */}
-									{Array(Math.floor(Math.random() * 4) + 1)
-										.fill(0)
-										.map((_, avatarIndex) => (
-											<div
-												key={avatarIndex}
-												className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-600 midnight:bg-gray-800"
-											></div>
-										))}
-
-									{/* Sometimes show overflow indicator */}
-									{Math.random() > 0.7 && (
-										<div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 flex items-center justify-center">
-											<div className="w-2 h-2 bg-gray-300 dark:bg-gray-500 midnight:bg-gray-600 rounded-full"></div>
-										</div>
-									)}
-								</div>
 							</div>
 
 							{/* Optional card footer with additional info */}
