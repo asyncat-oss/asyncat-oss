@@ -130,7 +130,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     try { return localStorage.getItem('asyncat_tools_enabled') !== 'false'; } catch { return true; }
   });
   const [conversationListRefresh, setConversationListRefresh] = useState(null);
-  const isSavingRef = useRef(false);
+  const savingConversationIdsRef = useRef(new Set());
 
   const handleSetToolsEnabled = useCallback((val) => {
     setToolsEnabled(val);
@@ -182,23 +182,26 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const saveCurrentConversation = useCallback(async (options = {}) => {
     if (!shouldSaveConversations() || state.isGhostMode) return null;
     const messagesToSave = options.messages || state.messages;
-    if (isSavingRef.current || messagesToSave.length === 0 || !currentWorkspace?.id) return null;
-    if (state.currentConversationId && messagesToSave.length < 2) return null;
-    if (!state.currentConversationId && messagesToSave.length < 1) return null;
+    const targetConversationId = options.conversationId !== undefined ? options.conversationId : state.currentConversationId;
+    const savingCurrentConversation = targetConversationId === state.currentConversationId;
+    const savingKey = targetConversationId || '__new__';
+    if (savingConversationIdsRef.current.has(savingKey) || messagesToSave.length === 0 || !currentWorkspace?.id) return null;
+    if (targetConversationId && messagesToSave.length < 2) return null;
+    if (!targetConversationId && messagesToSave.length < 1) return null;
 
-    isSavingRef.current = true;
+    savingConversationIdsRef.current.add(savingKey);
     try {
       const result = await commandCenterApi.chat.saveConversation({
         messages: messagesToSave,
-        title: options.title || state.conversationTitle,
+        title: options.title || (savingCurrentConversation ? state.conversationTitle : undefined),
         mode: options.mode || 'chat',
         projectIds: state.selectedProjects,
-        conversationId: options.conversationId !== undefined ? options.conversationId : state.currentConversationId,
+        conversationId: targetConversationId,
         metadata: { workspaceId: currentWorkspace?.id },
       });
 
       if (result.success) {
-        if (!state.currentConversationId && result.conversationId) {
+        if (savingCurrentConversation && !state.currentConversationId && result.conversationId) {
           dispatch({ type: ActionTypes.SET_CURRENT_CONVERSATION_ID, payload: result.conversationId });
           if (result.title && result.title !== state.conversationTitle) {
             dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: result.title });
@@ -208,15 +211,16 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           }
           setTimeout(() => triggerConversationRefresh(), 50);
         }
-        if (result.title && result.title !== state.conversationTitle) {
+        if (savingCurrentConversation && result.title && result.title !== state.conversationTitle) {
           dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: result.title });
         }
+        if (!savingCurrentConversation) setTimeout(() => triggerConversationRefresh(), 50);
         return result;
       } else {
         throw new Error(result.error || 'Save failed');
       }
     } finally {
-      isSavingRef.current = false;
+      savingConversationIdsRef.current.delete(savingKey);
     }
   }, [state.messages, state.selectedProjects, state.currentConversationId, state.conversationTitle, state.isGhostMode, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations]);
 
@@ -276,7 +280,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
             role: msg.type,
             content: msg.content,
             toolsEnabled: msg.toolsEnabled,
-            agentSummary: msg.agentSummary,
             agentSessionId: msg.agentSessionId,
           });
         }

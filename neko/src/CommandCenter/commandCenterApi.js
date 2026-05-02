@@ -206,13 +206,6 @@ export const chatApi = {
   },
 
   /**
-   * Get conversation statistics
-   */
-  getStats: async () => {
-    return await apiRequest(`${ENDPOINTS.CHATS}/stats/summary`);
-  },
-
-  /**
    * Get conversation workspaces
    */
   getConversationWorkspaces: async () => {

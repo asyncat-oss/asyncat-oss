@@ -111,48 +111,6 @@ function cleanAgentActivityDetail(detail) {
     .trim();
 }
 
-const MUTATING_AGENT_TOOLS = new Set([
-  'write_file', 'create_file', 'edit_file', 'create_directory',
-  'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
-  'run_command', 'run_python', 'run_node',
-  'create_task', 'create_note', 'create_event',
-]);
-
-function buildCompactAgentSummary(events = [], finalAnswer = '') {
-  const toolsUsed = [];
-  const filesChanged = [];
-  const commandsRun = [];
-  const failures = [];
-
-  events.forEach(event => {
-    if (event.type !== 'tool_start') return;
-    const tool = event.data?.tool;
-    if (!tool) return;
-    if (!toolsUsed.includes(tool)) toolsUsed.push(tool);
-
-    const args = event.data?.args || {};
-    if (MUTATING_AGENT_TOOLS.has(tool)) {
-      const filePath = args.path || args.destination;
-      if (filePath && !filesChanged.includes(filePath)) filesChanged.push(filePath);
-    }
-    if (typeof args.command === 'string' && args.command.trim()) {
-      commandsRun.push(args.command.trim().slice(0, 160));
-    }
-    const result = event.result;
-    if (result && (result.error || result.success === false)) {
-      failures.push(`${tool}: ${result.error || 'failed'}`.slice(0, 220));
-    }
-  });
-
-  return {
-    toolsUsed: toolsUsed.slice(0, 20),
-    filesChanged: filesChanged.slice(0, 20),
-    commandsRun: commandsRun.slice(0, 8),
-    failures: failures.slice(0, 8),
-    finalState: String(finalAnswer || '').replace(/\s+/g, ' ').trim().slice(0, 500),
-  };
-}
-
 function isLikelyToolActionRequest(goal = '') {
   return /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify)\b/i.test(goal);
 }
@@ -167,7 +125,7 @@ function buildEventsFromMessages(messages = []) {
         type: msg.isError ? 'error' : 'answer',
         data: msg.isError
           ? { message: msg.content }
-          : { answer: msg.content, toolsEnabled: msg.toolsEnabled, agentSummary: msg.agentSummary },
+          : { answer: msg.content, toolsEnabled: msg.toolsEnabled },
       });
     }
   }
@@ -265,7 +223,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/MessageInputV2";
 import AgentRunFeed from './components/AgentRunFeed';
-import AgentChangesPanel, { AgentRunSummary } from './components/AgentChangesPanel';
+import AgentChangesPanel from './components/AgentChangesPanel';
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
 import { chatApi, agentApi } from "./commandCenterApi";
@@ -321,7 +279,6 @@ const CommandCenterV2Enhanced = () => {
     conversationHistory = [],
     setMessages,
     setConversationHistory,
-    setProcessing,
     setError,
     toolsEnabled,
     setToolsEnabled,
@@ -349,12 +306,7 @@ const CommandCenterV2Enhanced = () => {
       return true;
     }
   });
-  const [agentRunning, setAgentRunning] = useState(false);
-  const [agentEvents, setAgentEvents] = useState([]);
-  const [agentCurrentGoal, setAgentCurrentGoal] = useState('');
-  const [agentCurrentSessionId, setAgentCurrentSessionId] = useState(null);
-  const [agentCurrentSession, setAgentCurrentSession] = useState(null);
-  const [agentConversationHistory, setAgentConversationHistory] = useState([]);
+  const [chatRuns, setChatRuns] = useState({});
   const [agentAutoApprove, setAgentAutoApprove] = useState(() => {
     try {
       return localStorage.getItem('asyncat_agent_auto_approve') === 'true';
@@ -370,13 +322,49 @@ const CommandCenterV2Enhanced = () => {
   });
   const [selectedProfileId, setSelectedProfileId] = useState(null);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
-  const [agentStreamingText, setAgentStreamingText] = useState('');
-  const [agentRunDuration, setAgentRunDuration] = useState(null);
   const [editGoalText, setEditGoalText] = useState('');
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const agentAbortRef = useRef(null);
-  const agentRunStartTime = useRef(null);
+  const agentAbortControllersRef = useRef(new Map());
+
+  const currentRunKey = currentConversationId || '__draft__';
+  const currentRun = chatRuns[currentRunKey] || {};
+  const agentRunning = Boolean(currentRun.running);
+  const agentEvents = currentRun.events || [];
+  const agentCurrentGoal = currentRun.goal || '';
+  const agentCurrentSessionId = currentRun.sessionId || null;
+  const agentCurrentSession = currentRun.session || null;
+  const agentConversationHistory = currentRun.conversationHistory || [];
+  const agentStreamingText = currentRun.streamingText || '';
+  const activeConversationIds = useMemo(
+    () => new Set(
+      Object.entries(chatRuns)
+        .filter(([key, run]) => key !== '__draft__' && run?.running)
+        .map(([key]) => key)
+    ),
+    [chatRuns],
+  );
+  const hasActiveRuns = useMemo(
+    () => Object.values(chatRuns).some(run => run?.running),
+    [chatRuns],
+  );
+  const currentConversationIdRef = useRef(currentConversationId);
+
+  useEffect(() => {
+    currentConversationIdRef.current = currentConversationId;
+  }, [currentConversationId]);
+
+  const updateChatRun = useCallback((runKey, updater) => {
+    setChatRuns(prev => {
+      const existing = prev[runKey] || {};
+      const next = typeof updater === 'function' ? updater(existing) : { ...existing, ...updater };
+      return { ...prev, [runKey]: next };
+    });
+  }, []);
+
+  const setCurrentChatRun = useCallback((updater) => {
+    updateChatRun(currentRunKey, updater);
+  }, [currentRunKey, updateChatRun]);
 
   const conversationTokens = useMemo(() => {
     const historyChars = (conversationHistory || []).reduce(
@@ -481,11 +469,17 @@ const CommandCenterV2Enhanced = () => {
       <button
         type="button"
         onClick={() => setShowConversationMenu((v) => !v)}
-        className={`${compact ? 'p-2' : 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium'} text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors`}
+        className={`relative ${compact ? 'p-2' : 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium'} text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors`}
         title="Recent conversations"
       >
         <History className={compact ? "w-5 h-5" : "w-4 h-4"} />
         {!compact && <span>History</span>}
+        {hasActiveRuns && (
+          <span
+            className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-900 animate-pulse"
+            title="A chat is generating"
+          />
+        )}
       </button>
 
       {showConversationMenu && (
@@ -519,6 +513,7 @@ const CommandCenterV2Enhanced = () => {
             ) : (
               recentConversations.map((conversation) => {
                 const active = conversation.id === currentConversationId;
+                const running = activeConversationIds.has(conversation.id);
                 return (
                   <button
                     key={conversation.id}
@@ -531,11 +526,19 @@ const CommandCenterV2Enhanced = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
-                        {conversation.title || 'Untitled conversation'}
-                      </span>
+                      <div className="min-w-0 flex items-center gap-2">
+                        {running && (
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.15)] animate-pulse"
+                            title="Generating"
+                          />
+                        )}
+                        <span className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                          {conversation.title || 'Untitled conversation'}
+                        </span>
+                      </div>
                       <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
-                        {getRelativeConversationTime(conversation.updated_at)}
+                        {running ? 'Generating' : getRelativeConversationTime(conversation.updated_at)}
                       </span>
                     </div>
                     {(conversation.preview || conversation.messages?.[0]?.content) && (
@@ -563,7 +566,9 @@ const CommandCenterV2Enhanced = () => {
       )}
     </div>
   ), [
+    activeConversationIds,
     currentConversationId,
+    hasActiveRuns,
     handleStartNewConversation,
     handleOpenConversation,
     navigate,
@@ -640,6 +645,9 @@ const CommandCenterV2Enhanced = () => {
     const goal = typeof messageObj === 'string' ? messageObj : messageObj?.content;
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
+    const runKey = currentRunKey;
+    const runConversationId = currentConversationId;
+    const runMessages = messages;
     const effectiveToolsEnabled = runOptions.enableTools ?? toolsEnabled;
     const activeConversationHistory = agentConversationHistory.length > 0
       ? agentConversationHistory
@@ -649,25 +657,24 @@ const CommandCenterV2Enhanced = () => {
       generateAndSetTitle(submittedGoal);
     }
 
-    setProcessing(true);
     setError(null);
-    setAgentCurrentGoal(submittedGoal);
-
-    setAgentEvents(prev => {
-      const baseEvents = prev.length > 0 ? prev : buildEventsFromMessages(messages);
-      return [
-        ...baseEvents,
-        { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled }, arrivedAt: Date.now() },
-      ];
+    updateChatRun(runKey, prev => {
+      const baseEvents = prev.events?.length ? prev.events : buildEventsFromMessages(runMessages);
+      return {
+        ...prev,
+        goal: submittedGoal,
+        running: true,
+        streamingText: '',
+        session: null,
+        events: [
+          ...baseEvents,
+          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled }, arrivedAt: Date.now() },
+        ],
+      };
     });
 
-    setAgentStreamingText('');
-    setAgentRunning(true);
-    setAgentRunDuration(null);
-    setAgentCurrentSession(null);
-    agentRunStartTime.current = Date.now();
     const controller = new AbortController();
-    agentAbortRef.current = controller;
+    agentAbortControllersRef.current.set(runKey, controller);
 
     let capturedFinalAnswer = '';
     let sawFinalResponse = false;
@@ -689,21 +696,21 @@ const CommandCenterV2Enhanced = () => {
         if (event.type === 'session_start') {
           if (event.data?.sessionId) {
             runSessionId = event.data.sessionId;
-            setAgentCurrentSessionId(event.data.sessionId);
+            updateChatRun(runKey, { sessionId: event.data.sessionId });
           }
           continue;
         }
         if (event.type === 'delta') {
-          setAgentStreamingText(prev => prev + (event.data?.content || ''));
+          updateChatRun(runKey, prev => ({ ...prev, streamingText: (prev.streamingText || '') + (event.data?.content || '') }));
           continue;
         }
         if (event.type === 'thinking' || event.type === 'tool_start' || event.type === 'answer') {
-          setAgentStreamingText('');
+          updateChatRun(runKey, { streamingText: '' });
         }
         if (event.type === 'done') {
           if (event.data?.sessionId) {
             runSessionId = event.data.sessionId;
-            setAgentCurrentSessionId(event.data.sessionId);
+            updateChatRun(runKey, { sessionId: event.data.sessionId });
           }
           const doneAnswer = String(event.data?.answer || '').trim();
           if (doneAnswer) {
@@ -711,15 +718,21 @@ const CommandCenterV2Enhanced = () => {
           }
           if (!capturedFinalAnswer && doneAnswer) {
             capturedFinalAnswer = doneAnswer;
-            setAgentEvents(prev => [...prev, {
-              type: 'answer',
-              data: {
-                answer: doneAnswer,
-                round: event.data.rounds,
-                toolsEnabled: effectiveToolsEnabled,
-              },
-              arrivedAt: Date.now(),
-            }]);
+            updateChatRun(runKey, prev => ({
+              ...prev,
+              events: [
+                ...(prev.events || []),
+                {
+                  type: 'answer',
+                  data: {
+                    answer: doneAnswer,
+                    round: event.data.rounds,
+                    toolsEnabled: effectiveToolsEnabled,
+                  },
+                  arrivedAt: Date.now(),
+                },
+              ],
+            }));
           } else if (!doneAnswer) {
             sawDoneWithoutAnswer = true;
           }
@@ -740,8 +753,8 @@ const CommandCenterV2Enhanced = () => {
         if (event.type === 'tool_result') {
           const completedAt = Date.now();
           runEvents.push(event);
-          setAgentEvents(prev => {
-            const updated = [...prev];
+          updateChatRun(runKey, prev => {
+            const updated = [...(prev.events || [])];
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].type === 'tool_start' && updated[i].data?.tool === event.data?.tool && updated[i].result === undefined) {
                 updated[i] = { ...updated[i], result: event.data?.result, completedAt };
@@ -751,10 +764,10 @@ const CommandCenterV2Enhanced = () => {
                     break;
                   }
                 }
-                return updated;
+                return { ...prev, events: updated };
               }
             }
-            return updated;
+            return prev;
           });
           continue;
         }
@@ -762,36 +775,44 @@ const CommandCenterV2Enhanced = () => {
           ? { ...event, data: { ...event.data, toolsEnabled: effectiveToolsEnabled } }
           : event;
         runEvents.push(eventWithMode);
-        setAgentEvents(prev => [...prev, { ...eventWithMode, arrivedAt: Date.now() }]);
+        updateChatRun(runKey, prev => ({
+          ...prev,
+          events: [...(prev.events || []), { ...eventWithMode, arrivedAt: Date.now() }],
+        }));
       }
     } catch (err) {
       if (!controller.signal.aborted) {
         sawErrorEvent = true;
-        setAgentStreamingText('');
-        setAgentEvents(prev => [...prev, { type: 'error', data: { message: err.message } }]);
+        updateChatRun(runKey, prev => ({
+          ...prev,
+          streamingText: '',
+          events: [...(prev.events || []), { type: 'error', data: { message: err.message } }],
+        }));
       }
     } finally {
       if (!controller.signal.aborted && !sawFinalResponse && !sawErrorEvent) {
-        setAgentEvents(prev => [...prev, {
-          type: 'status',
-          data: {
-            message: sawDoneWithoutAnswer
-              ? 'Agent finished but did not return a final answer.'
-              : 'Agent stream ended before a final answer was received.',
-          },
-        }]);
+        updateChatRun(runKey, prev => ({
+          ...prev,
+          events: [...(prev.events || []), {
+            type: 'status',
+            data: {
+              message: sawDoneWithoutAnswer
+                ? 'Agent finished but did not return a final answer.'
+                : 'Agent stream ended before a final answer was received.',
+            },
+          }],
+        }));
       }
       if (capturedFinalAnswer) {
-        const agentSummary = effectiveToolsEnabled
-          ? buildCompactAgentSummary(runEvents, capturedFinalAnswer)
-          : null;
         const nextHistory = [
           ...activeConversationHistory,
           { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled },
-          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentSummary, agentSessionId: runSessionId },
+          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentSessionId: runSessionId },
         ];
-        setAgentConversationHistory(nextHistory);
-        setConversationHistory(nextHistory);
+        updateChatRun(runKey, { conversationHistory: nextHistory });
+        if (runConversationId === currentConversationIdRef.current) {
+          setConversationHistory(nextHistory);
+        }
 
         const userMsg = {
           id: `msg_${Date.now()}_user_${Math.random().toString(36).substr(2, 9)}`,
@@ -807,59 +828,80 @@ const CommandCenterV2Enhanced = () => {
           timestamp: new Date().toISOString(),
           agentSessionId: runSessionId,
           toolsEnabled: effectiveToolsEnabled,
-          agentSummary,
         };
-        const finalMessages = [...messages, userMsg, assistantMsg];
-        setMessages(finalMessages);
+        const finalMessages = [...runMessages, userMsg, assistantMsg];
+        if (runConversationId === currentConversationIdRef.current) {
+          setMessages(finalMessages);
+        }
 
         if (!isGhostMode) {
-          const saveResult = await saveCurrentConversation({ messages: finalMessages });
-          if (!currentConversationId && saveResult?.conversationId) {
+          const saveResult = await saveCurrentConversation({
+            messages: finalMessages,
+            conversationId: runConversationId,
+          });
+          if (!runConversationId && saveResult?.conversationId) {
+            setChatRuns(prev => {
+              const draftRun = prev[runKey];
+              if (!draftRun) return prev;
+              const next = {
+                ...prev,
+                [saveResult.conversationId]: { ...draftRun, running: false, streamingText: '' },
+              };
+              delete next[runKey];
+              return next;
+            });
+          }
+          if (!runConversationId && currentConversationIdRef.current === runConversationId && saveResult?.conversationId) {
             setCurrentConversationId(saveResult.conversationId);
             if (saveResult.title) setConversationTitle(saveResult.title);
             setTimeout(() => triggerConversationRefresh(), 50);
           }
-          if (!currentConversationId && messages.length === 0) {
+          if (!runConversationId && runMessages.length === 0) {
             chatApi.generateTitle(submittedGoal, capturedFinalAnswer).then(result => {
-              if (result?.success && result.title) setConversationTitle(result.title);
+              if (currentConversationIdRef.current === runConversationId && result?.success && result.title) {
+                setConversationTitle(result.title);
+              }
             }).catch(() => {});
           }
         }
 
         if (!effectiveToolsEnabled && isLikelyToolActionRequest(submittedGoal)) {
-          setAgentEvents(prev => [...prev, {
+          updateChatRun(runKey, prev => ({
+            ...prev,
+            events: [...(prev.events || []), {
+              type: 'status',
+              data: {
+                message: 'Tools were off for this request. Run it again with Tools ON if you want the agent to act.',
+                canRetryWithTools: true,
+                goal: submittedGoal,
+              },
+            }],
+          }));
+        }
+      } else if (!controller.signal.aborted && !effectiveToolsEnabled && isLikelyToolActionRequest(submittedGoal)) {
+        updateChatRun(runKey, prev => ({
+          ...prev,
+          events: [...(prev.events || []), {
             type: 'status',
             data: {
-              message: 'Tools were off for this request. Run it again with Tools ON if you want the agent to act.',
+              message: 'Tools are off for this request. Turn Tools ON to let the agent act on it.',
               canRetryWithTools: true,
               goal: submittedGoal,
             },
-          }]);
-        }
-      } else if (!controller.signal.aborted && !effectiveToolsEnabled && isLikelyToolActionRequest(submittedGoal)) {
-        setAgentEvents(prev => [...prev, {
-          type: 'status',
-          data: {
-            message: 'Tools are off for this request. Turn Tools ON to let the agent act on it.',
-            canRetryWithTools: true,
-            goal: submittedGoal,
-          },
-        }]);
+          }],
+        }));
       } else if (!controller.signal.aborted && sawErrorEvent) {
-        setError('Agent run failed');
+        if (runConversationId === currentConversationIdRef.current) {
+          setError('Agent run failed');
+        }
       }
-      if (agentRunStartTime.current) {
-        setAgentRunDuration(Date.now() - agentRunStartTime.current);
-        agentRunStartTime.current = null;
-      }
-      setAgentStreamingText('');
-      setAgentRunning(false);
-      setProcessing(false);
-      agentAbortRef.current = null;
+      updateChatRun(runKey, { streamingText: '', running: false });
+      agentAbortControllersRef.current.delete(runKey);
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
   }, [
     agentRunning,
+    currentRunKey,
     agentConversationHistory,
     conversationHistory,
     agentCurrentSessionId,
@@ -871,7 +913,6 @@ const CommandCenterV2Enhanced = () => {
     messages,
     isGhostMode,
     generateAndSetTitle,
-    setProcessing,
     setError,
     setConversationHistory,
     setMessages,
@@ -879,6 +920,7 @@ const CommandCenterV2Enhanced = () => {
     setCurrentConversationId,
     setConversationTitle,
     triggerConversationRefresh,
+    updateChatRun,
   ]);
 
   const handleRetryTool = useCallback((failure) => {
@@ -908,17 +950,17 @@ const CommandCenterV2Enhanced = () => {
   }, [agentRunning, handleAgentRun, setToolsEnabled]);
 
   const handleAgentStop = useCallback(() => {
-    if (!agentAbortRef.current) return;
-    agentAbortRef.current.abort();
-    if (agentRunStartTime.current) {
-      setAgentRunDuration(Date.now() - agentRunStartTime.current);
-      agentRunStartTime.current = null;
-    }
-    setAgentStreamingText('');
-    setAgentRunning(false);
-    setAgentEvents(prev => [...prev, { type: 'status', data: { message: 'Stopped by user.' } }]);
-    agentAbortRef.current = null;
-  }, []);
+    const controller = agentAbortControllersRef.current.get(currentRunKey);
+    if (!controller) return;
+    controller.abort();
+    agentAbortControllersRef.current.delete(currentRunKey);
+    setCurrentChatRun(prev => ({
+      ...prev,
+      streamingText: '',
+      running: false,
+      events: [...(prev.events || []), { type: 'status', data: { message: 'Stopped by user.' } }],
+    }));
+  }, [currentRunKey, setCurrentChatRun]);
 
   const handleAgentPermission = useCallback(async (requestId, decision) => {
     if (!requestId) return;
@@ -939,36 +981,48 @@ const CommandCenterV2Enhanced = () => {
       resolvedDecision = 'allow_session';
     }
 
-    setAgentEvents(prev => prev.map(ev =>
-      ev.type === 'permission_request' && ev.data?.requestId === requestId
-        ? { ...ev, data: { ...ev.data, resolving: true } } : ev
-    ));
+    setCurrentChatRun(prev => ({
+      ...prev,
+      events: (prev.events || []).map(ev =>
+        ev.type === 'permission_request' && ev.data?.requestId === requestId
+          ? { ...ev, data: { ...ev.data, resolving: true } } : ev
+      ),
+    }));
     try {
       await agentApi.respondPermission(requestId, resolvedDecision);
-      setAgentEvents(prev => prev.map(ev =>
-        ev.type === 'permission_request' && ev.data?.requestId === requestId
-          ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision } } : ev
-      ));
+      setCurrentChatRun(prev => ({
+        ...prev,
+        events: (prev.events || []).map(ev =>
+          ev.type === 'permission_request' && ev.data?.requestId === requestId
+            ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision } } : ev
+        ),
+      }));
     } catch (err) {
-      setAgentEvents(prev => prev.map(ev =>
-        ev.type === 'permission_request' && ev.data?.requestId === requestId
-          ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision: 'error', error: err.message } } : ev
-      ));
+      setCurrentChatRun(prev => ({
+        ...prev,
+        events: (prev.events || []).map(ev =>
+          ev.type === 'permission_request' && ev.data?.requestId === requestId
+            ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision: 'error', error: err.message } } : ev
+        ),
+      }));
     }
-  }, [agentEvents]);
+  }, [agentEvents, setCurrentChatRun]);
 
   const handleAgentAskUser = useCallback(async (requestId, answer) => {
     if (!requestId) return;
-    setAgentEvents(prev => prev.map(ev =>
-      ev.type === 'ask_user' && ev.data?.requestId === requestId
-        ? { ...ev, data: { ...ev.data, answered: true } } : ev
-    ));
+    setCurrentChatRun(prev => ({
+      ...prev,
+      events: (prev.events || []).map(ev =>
+        ev.type === 'ask_user' && ev.data?.requestId === requestId
+          ? { ...ev, data: { ...ev.data, answered: true } } : ev
+      ),
+    }));
     try {
       await agentApi.respondAskUser(requestId, answer);
     } catch (err) {
       console.error('Failed to respond to ask_user:', err);
     }
-  }, []);
+  }, [setCurrentChatRun]);
 
   const handleToggleAgentAutoApprove = useCallback(() => {
     setAgentAutoApprove(prev => {
@@ -983,35 +1037,43 @@ const CommandCenterV2Enhanced = () => {
     if (newGoal && newGoal !== agentCurrentGoal && agentCurrentSessionId) {
       try {
         await agentApi.renameSession(agentCurrentSessionId, newGoal);
-        setAgentCurrentGoal(newGoal);
+        setCurrentChatRun({ goal: newGoal });
         triggerConversationRefresh();
       } catch { /* non-fatal */ }
     }
     setIsEditingGoal(false);
-  }, [editGoalText, agentCurrentGoal, agentCurrentSessionId, triggerConversationRefresh]);
+  }, [editGoalText, agentCurrentGoal, agentCurrentSessionId, setCurrentChatRun, triggerConversationRefresh]);
 
   const handleNewAgentRun = useCallback(() => {
-    setAgentEvents([]);
-    setAgentCurrentGoal('');
-    setAgentCurrentSession(null);
-    setAgentConversationHistory([]);
-    setAgentCurrentSessionId(null);
+    setCurrentChatRun({
+      events: [],
+      goal: '',
+      session: null,
+      conversationHistory: [],
+      sessionId: null,
+      streamingText: '',
+      running: false,
+    });
     setIsEditingGoal(false);
-  }, []);
+  }, [setCurrentChatRun]);
 
   const handleAgentDelete = useCallback(async () => {
     if (!agentCurrentSessionId) return;
     try {
       await agentApi.deleteSession(agentCurrentSessionId);
-      setAgentEvents([]);
-      setAgentCurrentGoal('');
-      setAgentCurrentSession(null);
-      setAgentCurrentSessionId(null);
-      setAgentConversationHistory([]);
+      setCurrentChatRun({
+        events: [],
+        goal: '',
+        session: null,
+        sessionId: null,
+        conversationHistory: [],
+        streamingText: '',
+        running: false,
+      });
       triggerConversationRefresh();
     } catch { /* non-fatal */ }
     setShowDeleteAgentConfirm(false);
-  }, [agentCurrentSessionId, triggerConversationRefresh]);
+  }, [agentCurrentSessionId, setCurrentChatRun, triggerConversationRefresh]);
 
   const persistedAgentEvents = useMemo(() => {
     if (agentEvents.length > 0) return agentEvents;
@@ -1727,7 +1789,6 @@ const CommandCenterV2Enhanced = () => {
                   />
                   {!agentRunning && (
                     <>
-                      <AgentRunSummary events={persistedAgentEvents} duration={agentRunDuration} />
                       <AgentChangesPanel
                         events={persistedAgentEvents}
                         sessionId={agentCurrentSessionId}

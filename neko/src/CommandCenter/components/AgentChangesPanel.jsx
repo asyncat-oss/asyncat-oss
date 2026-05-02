@@ -307,65 +307,6 @@ function RevertRunModal({ open, goal, total, checkpoint, reverting, onCancel, on
   );
 }
 
-function formatRunDuration(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return null;
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
-export function AgentRunSummary({ events = [], duration = null }) {
-  const tools = new Map();
-  const files = new Set();
-  const failures = [];
-
-  for (const ev of events) {
-    if (ev.type !== 'tool_start') continue;
-    const tool = ev.data?.tool || 'tool';
-    tools.set(tool, (tools.get(tool) || 0) + 1);
-    const args = ev.data?.args || {};
-    if (args.path) files.add(args.path);
-    if (args.destination) files.add(args.destination);
-    if (ev.result && (ev.result.error || ev.result.success === false)) {
-      failures.push({ tool, error: ev.result.error || 'failed' });
-    }
-  }
-
-  const answerSeen = events.some(ev => ev.type === 'answer');
-  const durationLabel = formatRunDuration(duration);
-  if (!events.length || (!tools.size && !failures.length && !durationLabel && !answerSeen)) return null;
-
-  const toolLabel = tools.size
-    ? [...tools.entries()].map(([name, count]) => `${name}${count > 1 ? ` x${count}` : ''}`).join(' · ')
-    : 'No tools';
-
-  return (
-    <div className="mt-4 max-w-4xl mx-auto rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-950 overflow-hidden">
-      <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-800/60 flex items-center gap-2">
-        <CheckCircle2 className={`w-3.5 h-3.5 ${failures.length ? 'text-amber-500' : 'text-emerald-500'}`} />
-        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Run summary</span>
-        {durationLabel && <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500">{durationLabel}</span>}
-      </div>
-      <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-        <div>
-          <div className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Tools</div>
-          <div className="mt-1 text-gray-700 dark:text-gray-300 truncate" title={toolLabel}>{toolLabel}</div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Files</div>
-          <div className="mt-1 text-gray-700 dark:text-gray-300">{files.size}</div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Failures</div>
-          <div className={failures.length ? 'mt-1 text-amber-600 dark:text-amber-400 truncate' : 'mt-1 text-gray-700 dark:text-gray-300'}>
-            {failures.length ? `${failures.length}: ${failures[0].tool}` : 'None'}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function AgentChangesPanel({ events = [], sessionId = null, session = null }) {
   const [collapsed, setCollapsed] = useState(false);
   const [stateData, setStateData] = useState(null);
