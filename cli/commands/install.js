@@ -389,6 +389,8 @@ async function checkLlama(python, args = []) {
 }
 
 export async function run(args = []) {
+	const skipPackages = args.includes("--skip-packages");
+
 	log("");
 	log(col("bold", "  Checking dependencies..."));
 	log("");
@@ -439,7 +441,11 @@ export async function run(args = []) {
 	log("");
 	log(col("bold", "  Installing packages..."));
 	log("");
-	await runWithSpinner("npm", ["install"], ROOT, "workspace");
+	if (skipPackages) {
+		info("Packages already installed by bootstrap installer.");
+	} else {
+		await runWithSpinner("npm", ["install"], ROOT, "workspace");
+	}
 	ensureNativeRuntimeDeps();
 
 	log("");

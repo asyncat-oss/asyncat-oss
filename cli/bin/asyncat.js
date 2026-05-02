@@ -33,7 +33,14 @@ if (isInsideRepo) {
       execSync(`git clone --depth=1 "${REPO_URL}" "${ASYNCAT_HOME}"`, { stdio: 'inherit' });
       console.log('\n[asyncat] Installing dependencies (this may take a moment)...\n');
       execSync('npm install --loglevel=error', { cwd: ASYNCAT_HOME, stdio: 'inherit' });
-      console.log('\n[asyncat] Installed! Run  asyncat install  to finish setup.\n');
+      console.log('\n[asyncat] Finishing first-run setup...\n');
+      execFileSync(process.execPath, [
+        path.join(ASYNCAT_HOME, 'cat'),
+        'install',
+        '--skip-packages',
+        '--skip-local-engine',
+      ], { cwd: ASYNCAT_HOME, stdio: 'inherit' });
+      console.log('\n[asyncat] Installed and ready.\n');
     } catch (e) {
       console.error('\n[asyncat] Installation failed:', e.message);
       process.exit(1);

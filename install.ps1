@@ -101,14 +101,20 @@ node "$InstallDir\cat" %*
 
 Ok "Command ready: asyncat"
 
-# -- 8. Add to PATH ------------------------------------------------------------
+# -- 8. Finish first-run setup automatically ----------------------------------
+Info "Finishing first-run setup..."
+& node (Join-Path $InstallDir "cat") install --skip-packages --skip-local-engine
+if ($LASTEXITCODE -ne 0) { Die "First-run setup failed." }
+Ok "First-run setup complete"
+
+# -- 9. Add to PATH ------------------------------------------------------------
 $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
 if ($userPath -notlike "*$BinDir*") {
     [Environment]::SetEnvironmentVariable("PATH", "$userPath;$BinDir", "User")
     Warn "Added $BinDir to PATH - restart your terminal for it to take effect."
 }
 
-# -- 9. Copy all PWA icons to system locations ---------------------------------
+# -- 10. Copy all PWA icons to system locations --------------------------------
 Info "Installing icons..."
 
 $iconSrcDir = Join-Path $InstallDir "neko\public"
@@ -142,7 +148,7 @@ if (Test-Path $svgIcon) { Copy-Item $svgIcon (Join-Path $iconDestDir "cat.svg") 
 
 Ok "Icons installed"
 
-# -- 10. Desktop launcher (for humans) ------------------------------------------
+# -- 11. Desktop launcher (for humans) ------------------------------------------
 $uiScript = Join-Path $BinDir "asyncat-ui.ps1"
 $iconSrc = Join-Path $InstallDir "neko\public\pwa-192x192.png"
 
@@ -270,11 +276,12 @@ Write-Host ""
 Write-Host "  For humans (UI app):"
 Write-Host "    Click " -NoNewline; Write-Host "Asyncat" -ForegroundColor Cyan -NoNewline; Write-Host " on your Desktop or Start Menu"
 Write-Host ""
-Write-Host "  For terminal gremlins:"
+Write-Host "  For terminal users:"
 Write-Host "    asyncat              " -NoNewline; Write-Host "open the interactive CLI REPL" -ForegroundColor Cyan
 Write-Host "    asyncat start        " -NoNewline; Write-Host "start backend only" -ForegroundColor Cyan
 Write-Host "    asyncat-ui.ps1       " -NoNewline; Write-Host "launch the web app" -ForegroundColor Cyan
 Write-Host "    asyncat --help       " -NoNewline; Write-Host "see all commands" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  First time? Run:  asyncat install"
+Write-Host "  Optional local AI engine:"
+Write-Host "    asyncat install --local-engine"
 Write-Host ""

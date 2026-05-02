@@ -79,7 +79,12 @@ SCRIPT
 chmod +x "$BIN_DIR/asyncat"
 ok "Command ready: asyncat"
 
-# ── 8. Add ~/.local/bin to PATH if needed ─────────────────────────────────────
+# ── 8. Finish first-run setup automatically ──────────────────────────────────
+info "Finishing first-run setup..."
+(cd "$INSTALL_DIR" && node "$INSTALL_DIR/cat" install --skip-packages --skip-local-engine) \
+  && ok "First-run setup complete"
+
+# ── 9. Add ~/.local/bin to PATH if needed ─────────────────────────────────────
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
   # Detect shell config file
   if [ -n "$ZSH_VERSION" ] || [ "$(basename "$SHELL")" = "zsh" ]; then
@@ -99,7 +104,7 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
   warn "Restart your terminal or run: source $SHELL_RC"
 fi
 
-# ── 9. Copy all PWA icons to system locations ─────────────────────────────────
+# ── 10. Copy all PWA icons to system locations ────────────────────────────────
 info "Installing icons..."
 
 # Icon source directory
@@ -150,7 +155,7 @@ fi
 
 ok "Icons installed"
 
-# ── 10. Desktop launcher (for humans) ──────────────────────────────────────────
+# ── 11. Desktop launcher (for humans) ─────────────────────────────────────────
 LAUNCHER="$BIN_DIR/asyncat-ui"
 STATIC_SERVER="$INSTALL_DIR/neko/dist"
 
@@ -310,11 +315,12 @@ echo ""
 echo "  For humans (UI app):"
 echo -e "    Click ${CYAN}Asyncat${NC} in your app menu / Launchpad / launcher"
 echo ""
-echo "  For terminal gremlins:"
+echo "  For terminal users:"
 echo -e "    ${CYAN}asyncat${NC}              open the interactive CLI REPL"
 echo -e "    ${CYAN}asyncat start${NC}        start backend only"
 echo -e "    ${CYAN}asyncat-ui${NC}           launch the web app"
 echo -e "    ${CYAN}asyncat --help${NC}       see all commands"
 echo ""
-echo "  First time? Run:  asyncat install"
+echo "  Optional local AI engine:"
+echo -e "    ${CYAN}asyncat install --local-engine${NC}"
 echo ""

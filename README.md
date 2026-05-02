@@ -57,7 +57,7 @@ npm i -g @asyncat/asyncat
 asyncat start
 ```
 
-Default login: `admin@local` / `changeme`
+Default login email: `admin@local`. The generated password is in `den/.env` as `LOCAL_PASSWORD`.
 
 ---
 
@@ -87,7 +87,6 @@ We just have code, a lot of GGUF files, a few pending lab reports, and a cat tha
 
 ```bash
 npm i -g @asyncat/asyncat
-asyncat install
 ```
 
 ### Run
@@ -101,7 +100,7 @@ Opens at `http://localhost:8717`.
 ### Log in
 
 - Email: `admin@local`
-- Password: `changeme`
+- Password: check `LOCAL_PASSWORD` in `den/.env`
 
 Done. The AI has keys to your kingdom.
 
@@ -413,5 +412,5 @@ SQLite at `data/asyncat.db`, created automatically on first run. Tables include:
 
 ### Environment
 
-- `.env` files are auto-created by `scripts/postinstall.js`
+- `.env` files are auto-created and first-run local credentials are hardened by `scripts/postinstall.js`
 - Config: `den/.env` (backend settings)
