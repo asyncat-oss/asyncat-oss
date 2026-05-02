@@ -224,6 +224,7 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
                   </option>
                 ))}
               </select>
+              <p className="mt-1.5 text-[10px] text-gray-400">Scheduled runs use the selected profile for working dir, soul, rounds, and pre-approved tools. Tools that need live approval are blocked unless the profile pre-approves them or auto-approve is enabled.</p>
             </div>
           )}
 

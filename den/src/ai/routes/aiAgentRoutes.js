@@ -191,6 +191,10 @@ initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId, provide
     workingDir: workingDir || profile?.working_dir || process.cwd(),
     maxRounds: profile?.max_rounds || 20,
     autoApprove: profile?.auto_approve || false,
+    requestPermission: async ({ tool, permission }) => ({
+      decision: 'deny',
+      reason: `Scheduled runs cannot request live approval for ${permission} tool "${tool}". Pre-approve this tool in the selected agent profile or enable auto-approve for that profile.`,
+    }),
     soul: resolvedSoul,
     providerInfo,
   });

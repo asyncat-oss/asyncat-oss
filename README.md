@@ -4,6 +4,8 @@
 >
 > This is about one thing: giving full, unbridled access to your entire computer to a quantized local model that is arguably less intelligent than a caffeinated squirrel.
 
+![Asyncat home screen](neko/public/image.png)
+
 ---
 
 ## What is Asyncat?
