@@ -156,13 +156,6 @@ const updateColumnOrder = asyncHandler(async (req, res) => {
 	}
 });
 
-const getUserColumns = asyncHandler(async (req, res) => {
-	// Use the authenticated user's ID from the request
-	const userId = req.user.id;
-	const columns = await columnService.getUserColumns(userId, req.db);
-	res.json(columns);
-});
-
 // New controller method to update column completion status
 const updateColumnCompletionStatus = asyncHandler(async (req, res) => {
 	const { id } = req.params;
@@ -214,6 +207,5 @@ export default {
 	updateColumn,
 	deleteColumn,
 	updateColumnOrder,
-	getUserColumns,
 	updateColumnCompletionStatus,
 };

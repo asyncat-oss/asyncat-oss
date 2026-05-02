@@ -174,7 +174,7 @@ function buildEventsFromMessages(messages = []) {
   return events;
 }
 
-function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false }) {
+function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false, onClose }) {
   const feedEndRef = useRef(null);
 
   useEffect(() => {
@@ -194,6 +194,14 @@ function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false
         ) : (
           <span className="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{items.length}</span>
         )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-1 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800"
+          title="Hide steps"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -254,6 +262,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/MessageInputV2";
 import AgentRunFeed from './components/AgentRunFeed';
 import AgentChangesPanel, { AgentRunSummary } from './components/AgentChangesPanel';
@@ -274,11 +283,27 @@ import {
   Download,
   BookOpen,
   Loader2,
-  Wrench,
+  History,
+  Plus,
+  MessageSquare,
+  PanelRightOpen,
 } from "lucide-react";
+
+const getRelativeConversationTime = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffH = Math.floor((Date.now() - date.getTime()) / 3_600_000);
+  if (diffH < 1) return 'Just now';
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return `${diffD}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 const CommandCenterV2Enhanced = () => {
   const commandCenterContext = useCommandCenter();
+  const navigate = useNavigate();
   const { userName } = useUser();
 
   const {
@@ -286,6 +311,7 @@ const CommandCenterV2Enhanced = () => {
     isProcessing = false,
     isConversationLoading = false,
     handleClearConversation = () => {},
+    handleNewConversation = () => {},
     currentConversationId = null,
     conversationTitle = "",
     triggerConversationRefresh = () => {},
@@ -307,10 +333,22 @@ const CommandCenterV2Enhanced = () => {
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
+  const conversationMenuRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showConversationMenu, setShowConversationMenu] = useState(false);
+  const [recentConversations, setRecentConversations] = useState([]);
+  const [recentConversationsLoading, setRecentConversationsLoading] = useState(false);
+  const [recentConversationsError, setRecentConversationsError] = useState(null);
+  const [showActivitySidebar, setShowActivitySidebar] = useState(() => {
+    try {
+      return localStorage.getItem('asyncat_show_steps_sidebar') !== 'false';
+    } catch {
+      return true;
+    }
+  });
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentEvents, setAgentEvents] = useState([]);
   const [agentCurrentGoal, setAgentCurrentGoal] = useState('');
@@ -387,6 +425,161 @@ const CommandCenterV2Enhanced = () => {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showExportMenu]);
+
+  const loadRecentConversations = useCallback(async () => {
+    try {
+      setRecentConversationsLoading(true);
+      setRecentConversationsError(null);
+      const result = await chatApi.getConversationHistory({ limit: 8, archived: false });
+      const conversations = result?.conversations || [];
+      conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      setRecentConversations(conversations);
+    } catch (error) {
+      console.error('Failed to load recent conversations:', error);
+      setRecentConversationsError('Could not load recent chats');
+    } finally {
+      setRecentConversationsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showConversationMenu) loadRecentConversations();
+  }, [showConversationMenu, loadRecentConversations]);
+
+  useEffect(() => {
+    if (!showConversationMenu) return;
+    const handler = (e) => {
+      if (!conversationMenuRef.current?.contains(e.target)) {
+        setShowConversationMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showConversationMenu]);
+
+  const handleStartNewConversation = useCallback(async () => {
+    setShowConversationMenu(false);
+    navigate('/home');
+    await handleNewConversation();
+  }, [handleNewConversation, navigate]);
+
+  const handleOpenConversation = useCallback((conversationId) => {
+    if (!conversationId) return;
+    setShowConversationMenu(false);
+    navigate(`/conversations/${conversationId}`);
+  }, [navigate]);
+
+  const handleSetActivitySidebarVisible = useCallback((visible) => {
+    setShowActivitySidebar(visible);
+    try {
+      localStorage.setItem('asyncat_show_steps_sidebar', String(visible));
+    } catch {}
+  }, []);
+
+  const ConversationSwitcher = useCallback(({ compact = false } = {}) => (
+    <div className="relative" ref={conversationMenuRef}>
+      <button
+        type="button"
+        onClick={() => setShowConversationMenu((v) => !v)}
+        className={`${compact ? 'p-2' : 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium'} text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors`}
+        title="Recent conversations"
+      >
+        <History className={compact ? "w-5 h-5" : "w-4 h-4"} />
+        {!compact && <span>History</span>}
+      </button>
+
+      {showConversationMenu && (
+        <div className="absolute right-0 top-full mt-2 z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-3 py-2.5">
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">
+                Recent
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+                Jump back without leaving the chat
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleStartNewConversation}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New
+            </button>
+          </div>
+
+          <div className="max-h-80 overflow-y-auto py-1.5">
+            {recentConversationsLoading ? (
+              <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-gray-500 dark:text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading recent chats
+              </div>
+            ) : recentConversationsError ? (
+              <div className="px-4 py-8 text-center text-sm text-red-500">
+                {recentConversationsError}
+              </div>
+            ) : recentConversations.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <MessageSquare className="mx-auto mb-2 h-7 w-7 text-gray-300 dark:text-gray-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">No saved conversations yet</p>
+              </div>
+            ) : (
+              recentConversations.map((conversation) => {
+                const active = conversation.id === currentConversationId;
+                return (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => handleOpenConversation(conversation.id)}
+                    className={`w-full px-3 py-2.5 text-left transition-colors ${
+                      active
+                        ? 'bg-indigo-50 dark:bg-indigo-950/30 midnight:bg-indigo-950/30'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-800/70 midnight:hover:bg-slate-800/70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                        {conversation.title || 'Untitled conversation'}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
+                        {getRelativeConversationTime(conversation.updated_at)}
+                      </span>
+                    </div>
+                    {(conversation.preview || conversation.messages?.[0]?.content) && (
+                      <p className="mt-0.5 line-clamp-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+                        {conversation.preview || conversation.messages?.[0]?.content}
+                      </p>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowConversationMenu(false);
+              navigate('/all-chats');
+            }}
+            className="flex w-full items-center justify-center gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 transition-colors"
+          >
+            View all history
+          </button>
+        </div>
+      )}
+    </div>
+  ), [
+    currentConversationId,
+    handleStartNewConversation,
+    handleOpenConversation,
+    navigate,
+    recentConversations,
+    recentConversationsError,
+    recentConversationsLoading,
+    showConversationMenu,
+  ]);
 
   const handleStartRename = useCallback(() => {
     setEditTitle(conversationTitle || "");
@@ -1249,6 +1442,11 @@ const CommandCenterV2Enhanced = () => {
   const welcomeScreenJSX =
     !hasConversationContent ? (
       <div className="flex flex-col min-h-full relative">
+        {!isGhostMode && (
+          <div className="absolute right-4 top-4 z-10">
+            <ConversationSwitcher compact />
+          </div>
+        )}
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
           <div className="max-w-3xl w-full">
             <div className="flex flex-col items-center gap-3 mb-6 text-center">
@@ -1385,6 +1583,33 @@ const CommandCenterV2Enhanced = () => {
                   </div>
 
                   <div className="flex items-center gap-3">
+                    {!isGhostMode && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleStartNewConversation}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                          title="Start new conversation"
+                        >
+                          <Plus className="h-4 w-4" />
+                          New
+                        </button>
+                        <ConversationSwitcher />
+                      </>
+                    )}
+
+                    {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && !showActivitySidebar && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetActivitySidebarVisible(true)}
+                        className="hidden xl:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                        title="Show steps"
+                      >
+                        <PanelRightOpen className="h-4 w-4" />
+                        Steps
+                      </button>
+                    )}
+
                     {hasConversationContent && (
                       <div className="relative">
                         <button
@@ -1546,12 +1771,13 @@ const CommandCenterV2Enhanced = () => {
         )}
       </div>
 
-      {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && showActivitySidebar && (
         <aside className="hidden xl:block w-60 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50/30 dark:bg-gray-900/30 midnight:bg-slate-950/30">
           <AgentActivitySidebar
             items={agentActivityItems}
             isLoading={agentLoadingSession}
             isRunning={agentRunning}
+            onClose={() => handleSetActivitySidebarVisible(false)}
           />
         </aside>
       )}

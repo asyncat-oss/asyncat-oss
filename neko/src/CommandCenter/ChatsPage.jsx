@@ -296,14 +296,14 @@ const ChatsPage = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6 flex-shrink-0">
           <h1 className="text-2xl font-serif text-gray-900 dark:text-white midnight:text-slate-100">
-            History
+            Conversation History
           </h1>
           <button
             onClick={handleNewChat}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            New Conversation
+            New
           </button>
         </div>
 

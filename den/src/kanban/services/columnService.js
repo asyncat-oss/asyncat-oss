@@ -536,51 +536,6 @@ const updateColumnOrder = async (projectId, orderData, db) => {
 	}
 };
 
-const getUserColumns = async (userId, db) => {
-	try {
-		if (!isValidUUID(userId)) {
-			throw new Error("Invalid user ID format");
-		}
-
-		const { data: columns, error } = await db
-			.schema("kanban")
-			.from("Columns")
-			.select("*")
-			.eq("createdBy", userId)
-			.order('"order"', { ascending: true });
-
-		if (error) throw error;
-
-		// Fetch cards for each column separately, filtering by user
-		if (columns && columns.length > 0) {
-			for (const column of columns) {
-				const { data: cards, error: cardsError } = await db
-					.schema("kanban")
-					.from("Cards")
-					.select("*")
-					.eq("columnId", column.id)
-					.eq("createdBy", userId)
-					.order('"order"', { ascending: true });
-
-				if (cardsError) {
-					console.error(
-						`Error fetching cards for column ${column.id}:`,
-						cardsError
-					);
-					column.Cards = [];
-				} else {
-					column.Cards = cards || [];
-				}
-			}
-		}
-
-		return columns || [];
-	} catch (error) {
-		console.error("Error getting user columns:", error);
-		throw error;
-	}
-};
-
 const diagnosticColumnCheck = async (db) => {
 	try {
 		// Attempt to find columns with different projectId possibilities
@@ -619,6 +574,5 @@ export default {
 	updateColumn,
 	deleteColumn,
 	updateColumnOrder,
-	getUserColumns,
 	diagnosticColumnCheck,
 };

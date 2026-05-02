@@ -271,7 +271,7 @@ const DynamicSidebar = ({
 
   // Active states
   const isOnHome = basePage === "home";
-  const isOnConversations = ["conversations", "all-chats"].includes(basePage);
+  const isOnConversations = basePage === "all-chats";
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnCalendar = basePage === "calendar";
   const isOnFiles = basePage === "files";
@@ -323,9 +323,9 @@ const DynamicSidebar = ({
 
         <DockSep />
 
-        {/* Chat — navigates to all chats history */}
+        {/* History — navigates to all chats history */}
         <DockItem
-          label="Chat  ⌘2"
+          label="History  ⌘2"
           onClick={() => navigate("/all-chats")}
           isActive={isOnConversations}
         >

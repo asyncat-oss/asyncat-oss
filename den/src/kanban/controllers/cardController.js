@@ -191,37 +191,6 @@ const updateCardAdministrator = async (req, res) => {
 	}
 };
 
-// Update subtask assignees
-const updateSubtaskAssignees = async (req, res) => {
-	try {
-		const { id, subtaskId } = req.params;
-		const { assignees } = req.body;
-
-		// Get current card
-		const card = await cardService.getCardById(id, req.db);
-		if (!card) {
-			return res.status(404).json({ error: "Card not found" });
-		}
-
-		// Update specific subtask assignees
-		const updatedChecklist = card.checklist.map((item) =>
-			item.id === subtaskId ? { ...item, assignees } : item
-		);
-
-		const updatedCard = await cardService.updateChecklist(
-			id,
-			updatedChecklist,
-			req.db
-		);
-
-		res.status(200).json(updatedCard);
-	} catch (error) {
-		console.error("Error updating subtask assignees:", error);
-		const statusCode = error.message === "Card not found" ? 404 : 500;
-		res.status(statusCode).json({ error: error.message });
-	}
-};
-
 // Update subtask duration
 const updateSubtaskDuration = async (req, res) => {
 	try {
@@ -323,15 +292,13 @@ const getCalendarData = async (req, res) => {
 							const slotStart = new Date(slot.startTime);
 							const slotEnd = new Date(slot.endTime);
 
-							// Only include slots within the requested date range
-							// AND slots assigned to the current user (for individual scheduling)
+							// Only include slots within the requested date range.
 							if (
 								slotStart >= start &&
-								slotEnd <= end &&
-								slot.assigneeId === userId
+								slotEnd <= end
 							) {
 								scheduledSubtasks.push({
-									id: `subtask-${subtask.id}-${slot.assigneeId}-${slot.startTime}`,
+									id: `subtask-${subtask.id}-${slot.startTime}`,
 									title: `${slot.title || subtask.text}`,
 									startTime: slot.startTime,
 									endTime: slot.endTime,
@@ -340,8 +307,6 @@ const getCalendarData = async (req, res) => {
 									cardId: card.id,
 									cardTitle: card.title,
 									subtaskId: subtask.id,
-									assigneeId: slot.assigneeId, // Track specific assignee
-									assignedTo: slot.assigneeId, // For frontend display
 								});
 							}
 						});
@@ -544,7 +509,6 @@ export default {
 	moveCard,
 	updateChecklist,
 	updateCardAdministrator,
-	updateSubtaskAssignees,
 	updateSubtaskDuration,
 	getCalendarData,
 	// Dependency management

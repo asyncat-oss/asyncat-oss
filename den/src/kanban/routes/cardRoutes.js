@@ -68,6 +68,7 @@ router.use(verifyUser, attachDb);
 
 // Basic card routes
 router.get("/column/:columnId", cardController.getCards);
+router.get("/calendar-data", cardController.getCalendarData);
 router.get("/:id", cardController.getCard);
 router.post("/", upload.array("file", 10), cardController.createCard); // Accept up to 10 files
 router.put("/:id", cardController.updateCard);
@@ -75,7 +76,7 @@ router.delete("/:id", cardController.deleteCard);
 router.post("/:id/move", cardController.moveCard);
 router.put("/:id/checklist", cardController.updateChecklist);
 
-// Card administrator (changed from assignees)
+// Card administrator
 router.put("/:id/administrator", cardController.updateCardAdministrator);
 
 // Attachment management routes
@@ -94,17 +95,10 @@ router.delete(
 	cardController.removeAttachment
 );
 
-// Subtask management routes
-router.put(
-	"/:id/subtasks/:subtaskId/assignees",
-	cardController.updateSubtaskAssignees
-);
 router.put(
 	"/:id/subtasks/:subtaskId/duration",
 	cardController.updateSubtaskDuration
 );
-
-router.get("/calendar-data", cardController.getCalendarData);
 
 // Dependency management routes
 router.get("/:id/dependencies", cardController.getCardDependencies);

@@ -10,6 +10,25 @@ const isValidUUID = (uuid) => {
 	);
 };
 
+const normalizeChecklistItem = (item) => {
+	const normalized = { ...item };
+	delete normalized.assignees;
+	delete normalized.assigneeDetails;
+
+	return {
+		...normalized,
+		duration:
+			item.duration && parseInt(item.duration) > 0
+				? parseInt(item.duration)
+				: null,
+	};
+};
+
+const normalizeChecklist = (checklist = []) => {
+	if (!Array.isArray(checklist)) return [];
+	return checklist.map(normalizeChecklistItem);
+};
+
 const getCards = async (columnId, db) => {
 	try {
 		if (!isValidUUID(columnId)) {
@@ -103,25 +122,7 @@ const createCard = async (cardData, db, files = []) => {
 			throw new Error("Invalid user ID format");
 		}
 
-		// Process checklist to ensure proper structure
-		let processedChecklist = checklist.map((item) => {
-			// Process multiple assignees for subtasks
-			let assignees = [];
-			if (item.assignees && Array.isArray(item.assignees)) {
-				assignees = item.assignees.map((assignee) =>
-					typeof assignee === "object" ? assignee.id : assignee
-				);
-			}
-
-			return {
-				...item,
-				assignees,
-				duration:
-					item.duration && parseInt(item.duration) > 0
-						? parseInt(item.duration)
-						: null,
-			};
-		});
+		const processedChecklist = normalizeChecklist(checklist);
 
 		// Calculate progress
 		const completedTasks = processedChecklist.filter(
@@ -216,8 +217,9 @@ const updateCard = async (id, cardData, db) => {
 		// First get the existing card
 		const existingCard = await getCardById(id, db);
 
-		// Remove assignees from updates since it's no longer a card field
-		const { assignees, ...updateData } = cardData;
+		// Keep old collaboration payloads from leaking into local-first card data.
+		const updateData = { ...cardData };
+		delete updateData.assignees;
 
 		// Process administrator_id if present (single administrator)
 		if (updateData.administrator_id !== undefined) {
@@ -228,35 +230,9 @@ const updateCard = async (id, cardData, db) => {
 					: updateData.administrator_id;
 		}
 
-		// Process checklist if present (multiple assignees + duration for each subtask)
+		// Process checklist if present for the local-first subtask shape.
 		if (updateData.checklist) {
-			console.log(
-				"📄 Backend processing checklist update:",
-				updateData.checklist
-			);
-			updateData.checklist = updateData.checklist.map((item) => {
-				// Process multiple assignees for subtasks
-				let processedAssignees = [];
-				if (item.assignees && Array.isArray(item.assignees)) {
-					processedAssignees = item.assignees.map((assignee) =>
-						typeof assignee === "object" && assignee !== null
-							? assignee.id
-							: assignee
-					);
-				}
-
-				const processedItem = {
-					...item,
-					assignees: processedAssignees,
-					duration:
-						item.duration && parseInt(item.duration) > 0
-							? parseInt(item.duration)
-							: null,
-				};
-
-				console.log("📄 Processed checklist item:", processedItem);
-				return processedItem;
-			});
+			updateData.checklist = normalizeChecklist(updateData.checklist);
 
 			// Calculate progress if checklist was updated
 			const completedTasks = updateData.checklist.filter(
@@ -770,27 +746,7 @@ const updateChecklist = async (id, checklist, db) => {
 			throw new Error("Invalid card ID format");
 		}
 
-		const card = await getCardById(id, db);
-
-		// Process checklist to ensure proper structure with multiple assignees and duration
-		let processedChecklist = checklist.map((item) => {
-			// Process multiple assignees for subtasks
-			let assignees = [];
-			if (item.assignees && Array.isArray(item.assignees)) {
-				assignees = item.assignees.map((assignee) =>
-					typeof assignee === "object" ? assignee.id : assignee
-				);
-			}
-
-			return {
-				...item,
-				assignees,
-				duration:
-					item.duration && parseInt(item.duration) > 0
-						? parseInt(item.duration)
-						: null,
-			};
-		});
+		const processedChecklist = normalizeChecklist(checklist);
 
 		// Calculate progress
 		const completedTasks = processedChecklist.filter(
@@ -847,7 +803,6 @@ const updateChecklist = async (id, checklist, db) => {
 	}
 };
 
-// Changed from updateCardAssignees to updateCardAdministrator
 const updateCardAdministrator = async (id, administratorId, db) => {
 	try {
 		if (!isValidUUID(id)) {
@@ -954,18 +909,6 @@ const addDependencyCountsToCards = async (cards, db) => {
 			allUserIds.add(card.administrator_id);
 		}
 
-		// Collect subtask assignee IDs
-		if (card.checklist && Array.isArray(card.checklist)) {
-			card.checklist.forEach((item) => {
-				if (item.assignees && Array.isArray(item.assignees)) {
-					item.assignees.forEach((assigneeId) => {
-						if (assigneeId) {
-							allUserIds.add(assigneeId);
-						}
-					});
-				}
-			});
-		}
 	});
 
 	try {
@@ -986,7 +929,7 @@ const addDependencyCountsToCards = async (cards, db) => {
 					.select("targetCardId")
 					.in("targetCardId", cardIds),
 
-				// Fetch user details for administrators and subtask assignees
+				// Fetch user details for administrators
 				fetchUserDetails(allUserIds),
 			]);
 
@@ -1023,19 +966,8 @@ const addDependencyCountsToCards = async (cards, db) => {
 				);
 			}
 
-			// Add preloaded subtask assignee details to checklist items
 			if (card.checklist && Array.isArray(card.checklist)) {
-				card.checklist = card.checklist.map((item) => {
-					const itemWithAssigneeDetails = { ...item };
-
-					if (item.assignees && Array.isArray(item.assignees)) {
-						itemWithAssigneeDetails.assigneeDetails = item.assignees
-							.map((assigneeId) => userDetailsMap.get(assigneeId))
-							.filter((details) => details !== undefined);
-					}
-
-					return itemWithAssigneeDetails;
-				});
+				card.checklist = normalizeChecklist(card.checklist);
 
 				// Calculate total estimated duration from incomplete checklist items only
 				const totalDuration = card.checklist.reduce((total, item) => {

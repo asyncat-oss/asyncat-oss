@@ -13,7 +13,6 @@ router.use(verifyUser, attachDb);
 router.get("/", columnController.getColumns);
 router.post("/", columnController.createColumn);
 router.put("/order", columnController.updateColumnOrder);
-router.get("/my-columns", columnController.getUserColumns);
 router.put("/:id", columnController.updateColumn);
 router.delete("/:id", columnController.deleteColumn);
 
