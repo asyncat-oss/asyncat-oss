@@ -267,6 +267,7 @@ function PermissionEvent({ data, onDecision }) {
   ), [data?.requestId, data?.expiresInMs]);
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : null;
   const expired = !resolved && remainingMs === 0;
+  const showDecision = resolved || expired;
   const subject = getPermissionSubject(data);
 
   useEffect(() => {
@@ -302,7 +303,7 @@ function PermissionEvent({ data, onDecision }) {
               </span>
               {!resolved && remainingMs !== null && (
                 <span className={`text-[10px] font-medium ${expired ? 'text-red-600 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}`}>
-                  {expired ? 'Expired, denying...' : `Auto-deny in ${formatCountdown(remainingMs)}`}
+                  {expired ? 'Expired, denied' : `Auto-deny in ${formatCountdown(remainingMs)}`}
                 </span>
               )}
             </div>
@@ -345,13 +346,13 @@ function PermissionEvent({ data, onDecision }) {
         </div>
       </div>
       <div className="border-t border-amber-200/70 dark:border-amber-800/40 px-3 py-2 flex items-center justify-end gap-2 flex-wrap">
-        {resolved ? (
+        {showDecision ? (
           <span className={`text-xs font-medium flex items-center gap-1 ${
             isAllowed ? 'text-green-700 dark:text-green-300'
-            : isDenied ? 'text-red-700 dark:text-red-300'
+            : isDenied || expired ? 'text-red-700 dark:text-red-300'
             : 'text-amber-700 dark:text-amber-300'
           }`}>
-            {isAllowed ? '✓ Approved' : isDenied ? '✗ Denied' : 'Resolved'}
+            {isAllowed ? '✓ Approved' : isDenied ? '✗ Denied' : expired ? '✗ Expired, denied' : 'Resolved'}
             {decision === 'allow_always' && <span className="text-[10px] opacity-70">(always)</span>}
             {decision === 'allow_session' && <span className="text-[10px] opacity-70">(this run)</span>}
           </span>
