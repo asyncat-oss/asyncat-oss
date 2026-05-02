@@ -499,14 +499,6 @@ const CommandCenterV2Enhanced = () => {
                 Jump back without leaving the chat
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleStartNewConversation}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New
-            </button>
           </div>
 
           <div className="max-h-80 overflow-y-auto py-1.5">
