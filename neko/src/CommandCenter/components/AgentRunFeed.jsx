@@ -571,6 +571,7 @@ function SkillsLoadedEvent({ data }) {
   const [expanded, setExpanded] = useState(false);
   const skills = data?.skills || [];
   if (skills.length === 0) return null;
+  const methodLabel = data?.method === 'llm' ? 'model-selected' : null;
 
   return (
     <FeedFrame className="mb-2">
@@ -583,10 +584,14 @@ function SkillsLoadedEvent({ data }) {
           : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />}
         <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 tracking-wide select-none">
           Skills loaded · {skills.map(s => s.name).join(', ')}
+          {methodLabel ? ` · ${methodLabel}` : ''}
         </span>
       </button>
       {expanded && (
         <div className="mt-1 pl-5 space-y-1">
+          {data?.reason && (
+            <p className="text-[10px] text-gray-400 dark:text-gray-600">{data.reason}</p>
+          )}
           {skills.map(s => (
             <div key={s.name} className="flex items-start gap-1.5">
               <span className="text-[10px] font-medium text-indigo-500 dark:text-indigo-400">{s.name}</span>

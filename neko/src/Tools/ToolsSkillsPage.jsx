@@ -26,9 +26,35 @@ const BRAIN_REGION_META = {
 
 const REGION_ORDER = ['prefrontal', 'cerebellum', 'hippocampus', 'amygdala', 'basal_ganglia', 'limbic', 'unknown'];
 
+const SKILL_ORIGIN_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'default', label: 'Default' },
+  { id: 'user', label: 'User-created' },
+  { id: 'auto', label: 'Auto-created' },
+];
+
+const SKILL_ORIGIN_META = {
+  default: { label: 'Default', className: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
+  user: { label: 'User', className: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' },
+  auto: { label: 'Auto', className: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' },
+};
+
 function getRegionMeta(region) {
   const key = (region || 'unknown').toLowerCase().replace(/[\s-]+/g, '_');
   return BRAIN_REGION_META[key] || BRAIN_REGION_META.unknown;
+}
+
+function getSkillOrigin(skill) {
+  if (skill?.source !== 'user') return 'default';
+  const tags = Array.isArray(skill.tags) ? skill.tags.map(tag => String(tag).toLowerCase()) : [];
+  if (
+    skill.created_by === 'basal-ganglia' ||
+    tags.includes('auto-generated') ||
+    tags.includes('learned')
+  ) {
+    return 'auto';
+  }
+  return 'user';
 }
 
 function formatLabel(value) {
@@ -275,6 +301,8 @@ ToolCard.propTypes = {
 
 function SkillCard({ skill, isFirst, selected, onSelect }) {
   const meta = getRegionMeta(skill.brain_region);
+  const origin = getSkillOrigin(skill);
+  const originMeta = SKILL_ORIGIN_META[origin] || SKILL_ORIGIN_META.default;
 
   return (
     <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800'}>
@@ -291,9 +319,7 @@ function SkillCard({ skill, isFirst, selected, onSelect }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{skill.name}</span>
-              {skill.source === 'user' && (
-                <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Custom</span>
-              )}
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${originMeta.className}`}>{originMeta.label}</span>
               <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{meta.label}</span>
             </div>
             <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{skill.description || 'No description'}</p>
@@ -319,6 +345,7 @@ SkillCard.propTypes = {
     brain_region: PropTypes.string,
     name: PropTypes.string.isRequired,
     source: PropTypes.string,
+    created_by: PropTypes.string,
     description: PropTypes.string,
     tags: PropTypes.arrayOf(PropTypes.string),
     when_to_use: PropTypes.string,
@@ -390,6 +417,7 @@ SkillSection.propTypes = {
     brain_region: PropTypes.string,
     name: PropTypes.string.isRequired,
     source: PropTypes.string,
+    created_by: PropTypes.string,
     description: PropTypes.string,
     tags: PropTypes.arrayOf(PropTypes.string),
     when_to_use: PropTypes.string,
@@ -462,15 +490,15 @@ function SkillInspector({ skill }) {
   }
 
   const meta = getRegionMeta(skill.brain_region);
+  const origin = getSkillOrigin(skill);
+  const originMeta = SKILL_ORIGIN_META[origin] || SKILL_ORIGIN_META.default;
 
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="mb-5">
         <div className="flex items-center gap-2">
           <h3 className="break-words text-base font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{skill.name}</h3>
-          {skill.source === 'user' && (
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Custom</span>
-          )}
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${originMeta.className}`}>{originMeta.label}</span>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{meta.label}</span>
@@ -507,6 +535,7 @@ SkillInspector.propTypes = {
     brain_region: PropTypes.string,
     name: PropTypes.string.isRequired,
     source: PropTypes.string,
+    created_by: PropTypes.string,
     description: PropTypes.string,
     tags: PropTypes.arrayOf(PropTypes.string),
     when_to_use: PropTypes.string,
@@ -524,6 +553,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [errorSkills, setErrorSkills] = useState(null);
   const [toolSearch, setToolSearch] = useState('');
   const [skillSearch, setSkillSearch] = useState('');
+  const [skillOriginFilter, setSkillOriginFilter] = useState('all');
   const [selectedToolName, setSelectedToolName] = useState(null);
   const [selectedSkillName, setSelectedSkillName] = useState(null);
   const toolsFetchedRef = useRef(false);
@@ -669,15 +699,18 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   }, [tools, toolSearch]);
 
   const filteredSkills = useMemo(() => {
-    if (!skillSearch.trim()) return skills;
+    const byOrigin = skillOriginFilter === 'all'
+      ? skills
+      : skills.filter(skill => getSkillOrigin(skill) === skillOriginFilter);
+    if (!skillSearch.trim()) return byOrigin;
     const q = skillSearch.toLowerCase();
-    return skills.filter(s =>
+    return byOrigin.filter(s =>
       s.name.toLowerCase().includes(q) ||
       (s.description || '').toLowerCase().includes(q) ||
       (s.brain_region || '').toLowerCase().includes(q) ||
       (s.tags || []).some(t => t.toLowerCase().includes(q))
     );
-  }, [skills, skillSearch]);
+  }, [skills, skillSearch, skillOriginFilter]);
 
   const toolsByCategory = useMemo(() => {
     const groups = {};
@@ -715,7 +748,9 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const dangerCount = tools.filter(t => t.permission === 'dangerous').length;
   const toolCategoryCount = Object.keys(toolsByCategory).length;
   const skillRegionCount = Object.values(skillsByRegion).filter(group => group.length > 0).length;
-  const customSkillCount = skills.filter(s => s.source === 'user').length;
+  const defaultSkillCount = skills.filter(s => getSkillOrigin(s) === 'default').length;
+  const userSkillCount = skills.filter(s => getSkillOrigin(s) === 'user').length;
+  const autoSkillCount = skills.filter(s => getSkillOrigin(s) === 'auto').length;
   const soulStats = useMemo(() => {
     const source = editingSoul ? soulEdited : soulContent;
     const trimmed = source.trim();
@@ -880,7 +915,9 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                   <div className="mt-3 space-y-2 text-xs">
                     <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Visible skills</span><span className="font-mono text-gray-800 dark:text-gray-200">{filteredSkills.length}</span></div>
                     <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200">{skillRegionCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Custom</span><span className="font-mono text-gray-800 dark:text-gray-200">{customSkillCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Default</span><span className="font-mono text-gray-800 dark:text-gray-200">{defaultSkillCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">User-created</span><span className="font-mono text-gray-800 dark:text-gray-200">{userSkillCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Auto-created</span><span className="font-mono text-gray-800 dark:text-gray-200">{autoSkillCount}</span></div>
                   </div>
                 </div>
                 <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
@@ -900,15 +937,33 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                       <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Skill Library</h2>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Select a row to read its instructions.</p>
                     </div>
-                    <div className="relative w-full sm:w-80">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        value={skillSearch}
-                        onChange={e => setSkillSearch(e.target.value)}
-                        placeholder="Search skills"
-                        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
-                      />
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                      <div className="relative w-full sm:w-80">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={skillSearch}
+                          onChange={e => setSkillSearch(e.target.value)}
+                          placeholder="Search skills"
+                          className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+                        />
+                      </div>
+                      <div className="flex w-full flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800 sm:w-auto">
+                        {SKILL_ORIGIN_FILTERS.map(filter => (
+                          <button
+                            key={filter.id}
+                            type="button"
+                            onClick={() => setSkillOriginFilter(filter.id)}
+                            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                              skillOriginFilter === filter.id
+                                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white midnight:bg-slate-700 midnight:text-slate-100'
+                                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                            }`}
+                          >
+                            {filter.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -929,7 +984,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                   {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length === 0 && (
                     <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
                     <Search className="h-6 w-6" />
-                    <p className="text-sm">{skillSearch ? 'No skills match your search' : 'No skills available'}</p>
+                    <p className="text-sm">{skillSearch || skillOriginFilter !== 'all' ? 'No skills match your filters' : 'No skills available'}</p>
                     </div>
                   )}
                   {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length > 0 && (

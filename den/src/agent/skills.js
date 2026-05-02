@@ -84,51 +84,109 @@ export function listSkills() {
   return loadedSkills;
 }
 
-const STOP_WORDS = new Set([
-  'a', 'an', 'the', 'and', 'or', 'but', 'for', 'nor', 'yet', 'so',
-  'in', 'on', 'at', 'to', 'by', 'up', 'of', 'as', 'is', 'it',
-  'its', 'be', 'do', 'did', 'has', 'had', 'was', 'are', 'not',
-  'can', 'you', 'me', 'my', 'we', 'us', 'i', 'he', 'she', 'they',
-  'that', 'this', 'with', 'from', 'have', 'will', 'would', 'could',
-  'should', 'your', 'our', 'their', 'what', 'how', 'when', 'where',
-  'which', 'who', 'make', 'want', 'need', 'get', 'show', 'tell',
-  'load', 'use', 'run', 'add', 'new', 'some', 'any', 'all', 'more',
-  'also', 'just', 'now', 'then', 'too', 'very', 'about', 'like',
-  'into', 'than', 'over', 'such', 'here', 'there', 'please',
-]);
-
-export function findRelevantSkills(goal, limit = 3) {
-  if (!goal || loadedSkills.length === 0) return [];
-  const q = goal.toLowerCase();
-
-  const tokens = q
-    .split(/\s+/)
-    .map(t => t.replace(/[^a-z0-9-]/g, ''))
-    .filter(t => t.length > 3 && !STOP_WORDS.has(t));
-
-  if (tokens.length === 0) return [];
-
-  return loadedSkills
-    .map(skill => {
-      const nameStr = (skill.name || '').toLowerCase();
-      const descStr = (skill.description || '').toLowerCase();
-      const whenStr = (skill.when_to_use || '').toLowerCase();
-      const tagsStr = (Array.isArray(skill.tags) ? skill.tags.join(' ') : String(skill.tags || '')).toLowerCase();
-      const bodyStr = (skill.body || '').toLowerCase();
-
-      // Name/description hits are strong signals
-      const nameHit = tokens.some(t => nameStr.includes(t)) ? 4 : 0;
-      const descHit = tokens.filter(t => descStr.includes(t)).length * 2;
-      const whenHit = tokens.filter(t => whenStr.includes(t)).length * 2;
-      const tagsHit = tokens.filter(t => tagsStr.includes(t)).length * 2;
-      // Body token hits are weak — only count unique matches
-      const bodyTokens = new Set(tokens.filter(t => bodyStr.includes(t)));
-      const bodyHit = bodyTokens.size;
-
-      return { skill, score: nameHit + descHit + whenHit + tagsHit + bodyHit };
-    })
-    .filter(item => item.score >= 2)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(item => item.skill);
+function normalizeTags(tags) {
+  if (Array.isArray(tags)) return tags.map(t => String(t).trim()).filter(Boolean);
+  if (typeof tags !== 'string') return [];
+  return tags
+    .replace(/^\s*\[/, '')
+    .replace(/\]\s*$/, '')
+    .split(',')
+    .map(t => t.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean);
 }
+
+function extractJsonObject(text = '') {
+  const cleaned = String(text || '')
+    .replace(/```(?:json)?/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+export async function selectRelevantSkillsWithLlm({
+  aiClient,
+  model,
+  goal,
+  conversationHistory = [],
+  limit = 5,
+} = {}) {
+  if (!goal || loadedSkills.length === 0 || !aiClient?.messages?.create) {
+    return { skills: [], method: 'llm-unavailable' };
+  }
+
+  const catalog = loadedSkills.map(skill => ({
+    name: skill.name,
+    description: skill.description || '',
+    when_to_use: skill.when_to_use || '',
+    brain_region: skill.brain_region || 'unknown',
+    tags: normalizeTags(skill.tags),
+  }));
+
+  const recentContext = conversationHistory
+    .filter(m => m?.role === 'user' || m?.role === 'assistant')
+    .slice(-4)
+    .map(m => `${m.role}: ${String(m.content || '').slice(0, 600)}`)
+    .join('\n');
+
+  try {
+    const response = await aiClient.messages.create({
+      model,
+      max_completion_tokens: 600,
+      system: [
+        'You select reusable agent skills for the next task.',
+        'Choose only skills that materially improve the agent response or workflow.',
+        'Prefer zero skills for ordinary chat, explanation, or tasks that do not match a skill.',
+        `Return only JSON: {"skills":["exact-skill-name"],"reason":"short reason"}.`,
+        `Select at most ${limit} skills. Use exact names from the catalog. Do not invent names.`,
+      ].join(' '),
+      messages: [{
+        role: 'user',
+        content: JSON.stringify({
+          goal,
+          recent_context: recentContext,
+          skill_catalog: catalog,
+        }),
+      }],
+    });
+
+    const raw = response.content?.[0]?.text || '';
+    const parsed = extractJsonObject(raw);
+    const requested = Array.isArray(parsed?.skills) ? parsed.skills : [];
+    const byName = new Map(loadedSkills.map(skill => [skill.name, skill]));
+    const selected = [];
+
+    for (const name of requested) {
+      const skill = byName.get(String(name || '').trim());
+      if (skill && !selected.some(s => s.name === skill.name)) {
+        selected.push(skill);
+      }
+      if (selected.length >= limit) break;
+    }
+
+    return {
+      skills: selected,
+      method: 'llm',
+      reason: typeof parsed?.reason === 'string' ? parsed.reason.slice(0, 240) : '',
+    };
+  } catch (err) {
+    console.warn('[agent] LLM skill selection failed; no skills will be injected:', err.message);
+    return {
+      skills: [],
+      method: 'llm-failed',
+      reason: err.message,
+    };
+  }
+}
+
+export { normalizeTags };

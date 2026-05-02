@@ -8,7 +8,7 @@ import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
-import { loadSkills, listSkills } from '../../agent/skills.js';
+import { loadSkills, listSkills, normalizeTags } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
@@ -653,10 +653,11 @@ router.get('/skills', authenticate, (req, res) => {
     description: s.description || '',
     brain_region: s.brain_region || 'unknown',
     weight: parseFloat(s.weight || 1),
-    tags: Array.isArray(s.tags) ? s.tags : (typeof s.tags === 'string' ? s.tags.split(',').map(t => t.trim()) : []),
+    tags: normalizeTags(s.tags),
     when_to_use: s.when_to_use || '',
     body: s.body || '',
     source: s.source || 'bundled',
+    created_by: s.created_by || null,
   }));
   res.json({ success: true, count: skills.length, skills });
 });
@@ -672,10 +673,11 @@ router.get('/skills/:name', authenticate, (req, res) => {
       description: skill.description || '',
       brain_region: skill.brain_region || 'unknown',
       weight: parseFloat(skill.weight || 1),
-      tags: Array.isArray(skill.tags) ? skill.tags : (typeof skill.tags === 'string' ? skill.tags.split(',').map(t => t.trim()) : []),
+      tags: normalizeTags(skill.tags),
       when_to_use: skill.when_to_use || '',
       body: skill.body || '',
       source: skill.source || 'bundled',
+      created_by: skill.created_by || null,
     },
   });
 });

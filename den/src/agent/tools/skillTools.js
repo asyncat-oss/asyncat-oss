@@ -2,7 +2,7 @@
 // ─── Skill Tools ──────────────────────────────────────────────────────────────
 // Lets the agent list and load skills on demand during a run.
 
-import { listSkills } from '../skills.js';
+import { listSkills, normalizeTags } from '../skills.js';
 import { PermissionLevel } from './toolRegistry.js';
 
 export const skillTools = [
@@ -22,7 +22,7 @@ export const skillTools = [
         skills: skills.map(s => ({
           name: s.name,
           description: s.description || '',
-          tags: Array.isArray(s.tags) ? s.tags : (typeof s.tags === 'string' ? s.tags.replace(/[\[\]]/g, '').split(',').map(t => t.trim()).filter(Boolean) : []),
+          tags: normalizeTags(s.tags),
           when_to_use: s.when_to_use || '',
         })),
         count: skills.length,

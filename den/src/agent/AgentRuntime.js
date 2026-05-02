@@ -17,7 +17,7 @@ import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js';
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
-import { findRelevantSkills } from './skills.js';
+import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
 import { listMemories, searchMemories } from './tools/memoryTools.js';
 import fs from 'fs';
 import path from 'path';
@@ -155,17 +155,26 @@ export class AgentRuntime {
       toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
     );
 
-    // Get relevant skills based on the goal (Cerebellum)
-    const relevantSkills = findRelevantSkills(goal);
+    // Let the model choose which skills are worth injecting for this run.
+    const skillSelection = await selectRelevantSkillsWithLlm({
+      aiClient: this.aiClient,
+      model: this.model,
+      goal,
+      conversationHistory,
+      limit: 5,
+    });
+    const relevantSkills = skillSelection.skills || [];
 
     if (relevantSkills.length > 0) {
       this.onEvent({
         type: 'skills_loaded',
         data: {
+          method: skillSelection.method || 'unknown',
+          reason: skillSelection.reason || '',
           skills: relevantSkills.map(s => ({
             name: s.name,
             description: s.description || '',
-            tags: Array.isArray(s.tags) ? s.tags : [],
+            tags: normalizeTags(s.tags),
             source: s.source || 'bundled',
           })),
         },
