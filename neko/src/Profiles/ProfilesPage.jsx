@@ -1,11 +1,13 @@
 // neko/src/Profiles/ProfilesPage.jsx
 // ─── Agent Profiles UI ────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import {
   Layers, Plus, Trash2, Edit2, Loader2, AlertCircle,
   Check, X, Star, StarOff, ChevronDown, ChevronRight,
-  Zap, RefreshCw,
+  Zap, RefreshCw, Search, ShieldCheck, ShieldAlert, Wrench,
+  FolderOpen, Sparkles, SlidersHorizontal,
 } from 'lucide-react';
 import { profilesApi, agentApi } from '../CommandCenter/commandCenterApi';
 
@@ -31,9 +33,80 @@ const DEFAULT_PROFILES = [
   { name: 'Turbo Agent',     icon: '⚡', color: 'amber',   description: 'Auto-approves all tools. Maximum speed, minimal friction.', soulName: 'default', maxRounds: 40, autoApprove: true },
 ];
 
+const TOOL_PERMISSION_META = {
+  safe:      { label: 'Safe',      dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-300' },
+  moderate:  { label: 'Moderate',  dot: 'bg-amber-500',   badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-300' },
+  dangerous: { label: 'Dangerous', dot: 'bg-red-500',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-300' },
+};
+
+const TOOL_PRESETS = [
+  { key: 'safe', label: 'Safe only', description: 'Low-risk lookup and read actions.', filter: tool => tool.permission === 'safe' },
+  { key: 'files', label: 'File work', description: 'Common read, write, and edit tools.', names: ['read_file', 'list_directory', 'write_file', 'edit_file', 'create_file', 'create_directory'] },
+  { key: 'research', label: 'Research', description: 'Search, fetch, and memory helpers.', names: ['web_search', 'fetch_url', 'save_memory', 'search_memory'] },
+];
+
 function getColorMeta(key) {
   return PROFILE_COLORS.find(c => c.key === key) || PROFILE_COLORS[0];
 }
+
+function formatToolCategory(value) {
+  return (value || 'general')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function getPermissionMeta(permission) {
+  return TOOL_PERMISSION_META[permission] || TOOL_PERMISSION_META.moderate;
+}
+
+function compactToolDescription(tool) {
+  return tool?.description ? tool.description.replace(/\s+/g, ' ').trim() : 'No description';
+}
+
+const profileInputShape = PropTypes.shape({
+  id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  _isTemplate: PropTypes.bool,
+  name: PropTypes.string,
+  description: PropTypes.string,
+  icon: PropTypes.string,
+  color: PropTypes.string,
+  soul_name: PropTypes.string,
+  soulName: PropTypes.string,
+  soul_override: PropTypes.string,
+  soulOverride: PropTypes.string,
+  working_dir: PropTypes.string,
+  workingDir: PropTypes.string,
+  max_rounds: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  maxRounds: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  auto_approve: PropTypes.bool,
+  autoApprove: PropTypes.bool,
+  always_allowed_tools: PropTypes.arrayOf(PropTypes.string),
+  alwaysAllowedTools: PropTypes.arrayOf(PropTypes.string),
+  is_default: PropTypes.bool,
+  isDefault: PropTypes.bool,
+});
+
+const toolShape = PropTypes.shape({
+  name: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  category: PropTypes.string,
+  permission: PropTypes.string,
+});
+
+const profileShape = PropTypes.shape({
+  id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  name: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  icon: PropTypes.string,
+  color: PropTypes.string,
+  soul_name: PropTypes.string,
+  soul_override: PropTypes.string,
+  working_dir: PropTypes.string,
+  max_rounds: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  auto_approve: PropTypes.bool,
+  always_allowed_tools: PropTypes.arrayOf(PropTypes.string),
+  is_default: PropTypes.bool,
+});
 
 // ── Profile Form ──────────────────────────────────────────────────────────────
 
@@ -63,17 +136,57 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
   const [toolSearch, setToolSearch] = useState('');
   const [showToolPicker, setShowToolPicker] = useState(false);
 
-  const inputCls = 'w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg text-gray-700 dark:text-gray-200 midnight:text-slate-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600';
-  const labelCls = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5';
+  const inputCls = 'w-full px-3 py-2 text-sm bg-white dark:bg-gray-950 midnight:bg-slate-950 border border-gray-200 dark:border-gray-800 midnight:border-slate-800 rounded-lg text-gray-800 dark:text-gray-100 midnight:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-700';
+  const labelCls = 'block text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-slate-400 mb-1.5';
+  const selectedColor = getColorMeta(color);
 
-  const filteredTools = tools.filter(t =>
-    !toolSearch || t.name.toLowerCase().includes(toolSearch.toLowerCase())
-  );
+  const normalizedTools = useMemo(() => (
+    tools
+      .filter(t => t?.name)
+      .map(t => ({ ...t, category: t.category || 'general', permission: t.permission || 'moderate' }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  ), [tools]);
+
+  const selectedTools = useMemo(() => (
+    alwaysAllowedTools
+      .map(toolName => normalizedTools.find(t => t.name === toolName) || { name: toolName, category: 'custom', permission: 'moderate' })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  ), [alwaysAllowedTools, normalizedTools]);
+
+  const filteredTools = useMemo(() => {
+    const query = toolSearch.trim().toLowerCase();
+    if (!query) return normalizedTools;
+    return normalizedTools.filter(t =>
+      t.name.toLowerCase().includes(query) ||
+      compactToolDescription(t).toLowerCase().includes(query) ||
+      formatToolCategory(t.category).toLowerCase().includes(query)
+    );
+  }, [normalizedTools, toolSearch]);
+
+  const toolStats = useMemo(() => {
+    const selectedSet = new Set(alwaysAllowedTools);
+    return {
+      total: normalizedTools.length,
+      selected: alwaysAllowedTools.length,
+      safe: normalizedTools.filter(t => selectedSet.has(t.name) && t.permission === 'safe').length,
+      moderate: normalizedTools.filter(t => selectedSet.has(t.name) && t.permission === 'moderate').length,
+      dangerous: normalizedTools.filter(t => selectedSet.has(t.name) && t.permission === 'dangerous').length,
+    };
+  }, [alwaysAllowedTools, normalizedTools]);
 
   function toggleTool(toolName) {
     setAlwaysAllowedTools(prev =>
       prev.includes(toolName) ? prev.filter(t => t !== toolName) : [...prev, toolName]
     );
+  }
+
+  function applyPreset(preset) {
+    const presetNames = preset.filter
+      ? normalizedTools.filter(preset.filter).map(t => t.name)
+      : normalizedTools.filter(t => preset.names.includes(t.name)).map(t => t.name);
+
+    if (!presetNames.length) return;
+    setAlwaysAllowedTools(prev => [...new Set([...prev, ...presetNames])]);
   }
 
   function handleSubmit(e) {
@@ -95,146 +208,269 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Name + icon */}
-      <div className="flex gap-3 items-end">
-        <div>
-          <label className={labelCls}>Icon</label>
-          <div className="relative">
-            <select
-              value={icon}
-              onChange={e => setIcon(e.target.value)}
-              className="w-16 px-2 py-2 text-lg bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 appearance-none text-center"
-            >
-              {PROFILE_ICONS.map(i => <option key={i} value={i}>{i}</option>)}
-            </select>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Identity</h3>
           </div>
-        </div>
-        <div className="flex-1">
-          <label className={labelCls}>Profile Name <span className="text-red-400">*</span></label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Dev Agent" className={inputCls} required />
-        </div>
+
+          <div className="flex gap-3">
+            <div>
+              <label className={labelCls}>Icon</label>
+              <select
+                value={icon}
+                onChange={e => setIcon(e.target.value)}
+                className={`h-11 w-14 rounded-lg border border-gray-200 bg-white text-center text-xl outline-none focus:ring-2 focus:ring-gray-300 dark:border-gray-800 dark:bg-gray-950 dark:focus:ring-gray-700 midnight:border-slate-800 midnight:bg-slate-950 ${selectedColor.text}`}
+                aria-label="Profile icon"
+              >
+                {PROFILE_ICONS.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </div>
+            <div className="min-w-0 flex-1">
+              <label className={labelCls}>Profile Name <span className="text-red-400">*</span></label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Dev Agent" className={inputCls} required />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Description</label>
+            <input type="text" value={description} onChange={e => setDesc(e.target.value)} placeholder="What should this agent be good at?" className={inputCls} />
+          </div>
+
+          <div>
+            <label className={labelCls}>Accent</label>
+            <div className="flex flex-wrap gap-2">
+              {PROFILE_COLORS.map(c => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setColor(c.key)}
+                  className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-xs font-medium transition-colors ${
+                    color === c.key
+                      ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white midnight:border-slate-700 midnight:bg-slate-900'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-900'
+                  }`}
+                  title={c.key}
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full ${c.dot}`} />
+                  {c.key}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <aside className="rounded-lg border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/50 midnight:border-slate-800 midnight:bg-slate-900/35">
+          <p className="mb-3 text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">Preview</p>
+          <div className="flex items-start gap-3">
+            <span className={`flex h-11 w-11 items-center justify-center rounded-lg text-xl ${selectedColor.bg}`}>{icon}</span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">{name.trim() || 'New profile'}</p>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{description.trim() || 'A reusable agent setup.'}</p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
+              <span className="block text-[10px] uppercase tracking-wide text-gray-400">Rounds</span>
+              <span className="font-mono text-gray-800 dark:text-gray-200">{maxRounds || 25}</span>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
+              <span className="block text-[10px] uppercase tracking-wide text-gray-400">Tools</span>
+              <span className="font-mono text-gray-800 dark:text-gray-200">{autoApprove ? 'all' : toolStats.selected}</span>
+            </div>
+          </div>
+        </aside>
       </div>
 
-      {/* Color */}
-      <div>
-        <label className={labelCls}>Color</label>
-        <div className="flex gap-2 flex-wrap">
-          {PROFILE_COLORS.map(c => (
+      <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+        <div className="mb-4 flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-gray-400" />
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Behavior</h3>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className={labelCls}>Soul</label>
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setUseSoulOverride(false)}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${!useSoulOverride ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60'}`}
+              >
+                <span className="font-medium">Soul file</span>
+                <span className="mt-0.5 block text-[11px] text-gray-400">Use a saved prompt</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseSoulOverride(true)}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${useSoulOverride ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60'}`}
+              >
+                <span className="font-medium">Custom text</span>
+                <span className="mt-0.5 block text-[11px] text-gray-400">Override just here</span>
+              </button>
+            </div>
+            {!useSoulOverride ? (
+              <select value={soulName} onChange={e => setSoulName(e.target.value)} className={inputCls}>
+                {souls.length === 0 && <option value="default">default</option>}
+                {souls.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            ) : (
+              <textarea
+                value={soulOverride}
+                onChange={e => setSoulOverride(e.target.value)}
+                placeholder="Paste or write a custom soul for this profile..."
+                rows={5}
+                className={`${inputCls} resize-none font-mono text-xs leading-relaxed`}
+              />
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className={labelCls}>Working Directory <span className="font-normal text-gray-400">(optional)</span></label>
+              <div className="relative">
+                <FolderOpen className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input type="text" value={workingDir} onChange={e => setWorkingDir(e.target.value)} placeholder="Defaults to server cwd" className={`${inputCls} pl-9`} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Max Rounds</label>
+                <input type="number" min="1" max="100" value={maxRounds} onChange={e => setMaxRounds(e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Default</label>
+                <label className="flex h-10 cursor-pointer items-center gap-2.5 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 midnight:border-slate-800 midnight:bg-slate-950">
+                  <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} className="rounded text-gray-900" />
+                  New runs
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-gray-400" />
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Tool Access</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{autoApprove ? 'All tools can run without asking.' : `${toolStats.selected} of ${toolStats.total} tools pre-approved.`}</p>
+            </div>
+          </div>
+          <label className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
+            autoApprove
+              ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-300'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-950'
+          }`}>
+            <input type="checkbox" checked={autoApprove} onChange={e => setAutoApprove(e.target.checked)} className="rounded text-amber-600" />
+            <Zap className="h-4 w-4" />
+            Auto-approve all
+          </label>
+        </div>
+
+        <div className="mb-4 grid gap-2 sm:grid-cols-3">
+          {TOOL_PRESETS.map(preset => (
             <button
-              key={c.key}
+              key={preset.key}
               type="button"
-              onClick={() => setColor(c.key)}
-              className={`w-7 h-7 rounded-full ${c.dot} transition-all ${color === c.key ? 'ring-2 ring-offset-2 ring-gray-400 dark:ring-gray-600 scale-110' : 'opacity-60 hover:opacity-100'}`}
-              title={c.key}
-            />
+              onClick={() => applyPreset(preset)}
+              className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-colors hover:border-gray-300 hover:bg-white dark:border-gray-800 dark:bg-gray-950 dark:hover:border-gray-700 dark:hover:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950"
+            >
+              <span className="block text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">{preset.label}</span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{preset.description}</span>
+            </button>
           ))}
         </div>
-      </div>
 
-      {/* Description */}
-      <div>
-        <label className={labelCls}>Description</label>
-        <input type="text" value={description} onChange={e => setDesc(e.target.value)} placeholder="What is this profile for?" className={inputCls} />
-      </div>
-
-      {/* Soul */}
-      <div>
-        <label className={labelCls}>Soul</label>
-        <div className="flex items-center gap-3 mb-2">
-          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
-            <input type="radio" checked={!useSoulOverride} onChange={() => setUseSoulOverride(false)} className="text-indigo-500" />
-            Use soul file
-          </label>
-          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
-            <input type="radio" checked={useSoulOverride} onChange={() => setUseSoulOverride(true)} className="text-indigo-500" />
-            Custom soul text
-          </label>
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
+            <ShieldCheck className="h-3 w-3 text-emerald-500" /> {toolStats.safe} safe
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
+            <ShieldAlert className="h-3 w-3 text-amber-500" /> {toolStats.moderate} moderate
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
+            <ShieldAlert className="h-3 w-3 text-red-500" /> {toolStats.dangerous} dangerous
+          </span>
+          {selectedTools.length > 0 && (
+            <button type="button" onClick={() => setAlwaysAllowedTools([])} className="ml-auto text-xs text-gray-400 hover:text-red-500">
+              Clear selected
+            </button>
+          )}
         </div>
-        {!useSoulOverride ? (
-          <select value={soulName} onChange={e => setSoulName(e.target.value)} className={inputCls}>
-            {souls.length === 0 && <option value="default">default</option>}
-            {souls.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        ) : (
-          <textarea
-            value={soulOverride}
-            onChange={e => setSoulOverride(e.target.value)}
-            placeholder="Paste or write a custom soul for this profile…"
-            rows={5}
-            className={`${inputCls} resize-none leading-relaxed font-mono text-xs`}
-          />
-        )}
-      </div>
 
-      {/* Working dir */}
-      <div>
-        <label className={labelCls}>Working Directory <span className="text-gray-400 font-normal">(optional)</span></label>
-        <input type="text" value={workingDir} onChange={e => setWorkingDir(e.target.value)} placeholder="Defaults to server cwd" className={inputCls} />
-      </div>
-
-      {/* Max rounds + auto-approve */}
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <label className={labelCls}>Max Rounds</label>
-          <input type="number" min="1" max="100" value={maxRounds} onChange={e => setMaxRounds(e.target.value)} className={inputCls} />
-        </div>
-        <div className="flex-1">
-          <label className={labelCls}>Permissions</label>
-          <label className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-pointer text-sm text-gray-700 dark:text-gray-300">
-            <input type="checkbox" checked={autoApprove} onChange={e => setAutoApprove(e.target.checked)} className="text-indigo-500 rounded" />
-            Auto-approve all tools
-          </label>
-        </div>
-      </div>
-
-      {/* Always-allowed tools */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label className={labelCls + ' mb-0'}>Always-Allowed Tools <span className="text-gray-400 font-normal">({alwaysAllowedTools.length} selected)</span></label>
-          <button type="button" onClick={() => setShowToolPicker(v => !v)} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-            {showToolPicker ? 'Hide' : 'Pick tools'}
-          </button>
-        </div>
-        {alwaysAllowedTools.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {alwaysAllowedTools.map(t => (
-              <span key={t} className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[11px] font-medium">
-                {t}
-                <button type="button" onClick={() => toggleTool(t)} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
-              </span>
-            ))}
-          </div>
-        )}
-        {showToolPicker && (
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+        <div className="rounded-lg border border-gray-200 dark:border-gray-800 midnight:border-slate-800">
+          <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 p-2 dark:border-gray-800 midnight:border-slate-800">
+            <div className="relative min-w-[180px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 value={toolSearch}
-                onChange={e => setToolSearch(e.target.value)}
-                placeholder="Search tools…"
-                className="w-full text-xs bg-transparent text-gray-600 dark:text-gray-300 placeholder-gray-400 focus:outline-none"
+                onFocus={() => setShowToolPicker(true)}
+                onChange={e => {
+                  setToolSearch(e.target.value);
+                  setShowToolPicker(true);
+                }}
+                placeholder="Search tools"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-gray-300 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:focus:ring-gray-700 midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-200"
               />
             </div>
-            <div className="max-h-40 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-800">
-              {filteredTools.slice(0, 50).map(t => (
-                <label key={t.name} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-xs text-gray-600 dark:text-gray-300">
-                  <input type="checkbox" checked={alwaysAllowedTools.includes(t.name)} onChange={() => toggleTool(t.name)} className="text-gray-600 rounded" />
-                  <span className="font-mono">{t.name}</span>
-                  <span className="text-gray-400 truncate">{t.description?.slice(0, 50)}</span>
-                </label>
-              ))}
-              {filteredTools.length === 0 && <p className="px-3 py-3 text-xs text-gray-400">No tools found</p>}
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowToolPicker(v => !v)}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+            >
+              {showToolPicker ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              Browse
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* Set as default */}
-      <label className="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-        <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} className="text-indigo-500 rounded" />
-        Set as default profile for new runs
-      </label>
+          {selectedTools.length > 0 && (
+            <div className="border-b border-gray-100 p-3 dark:border-gray-800 midnight:border-slate-800">
+              <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
+                {selectedTools.map(t => {
+                  const perm = getPermissionMeta(t.permission);
+                  return (
+                    <span key={t.name} className="inline-flex min-w-0 items-center gap-1.5 rounded bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${perm.dot}`} />
+                      <span className="max-w-[180px] truncate font-mono">{t.name}</span>
+                      <button type="button" onClick={() => toggleTool(t.name)} className="text-gray-400 hover:text-red-500" aria-label={`Remove ${t.name}`}>
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {showToolPicker && (
+            <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
+              {filteredTools.map(t => {
+                const perm = getPermissionMeta(t.permission);
+                const checked = alwaysAllowedTools.includes(t.name);
+                return (
+                  <label key={t.name} className={`flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors ${checked ? 'bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/60' : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/40 midnight:hover:bg-slate-900/45'}`}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleTool(t.name)} className="mt-1 rounded text-gray-900" />
+                    <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${perm.dot}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="truncate font-mono text-xs font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{t.name}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${perm.badge}`}>{perm.label}</span>
+                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-900 midnight:text-slate-400">{formatToolCategory(t.category)}</span>
+                      </span>
+                      <span className="mt-1 block line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{compactToolDescription(t)}</span>
+                    </span>
+                  </label>
+                );
+              })}
+              {filteredTools.length === 0 && <p className="px-3 py-5 text-center text-xs text-gray-400">No tools found</p>}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
@@ -253,6 +489,15 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
     </form>
   );
 }
+
+ProfileForm.propTypes = {
+  initial: profileInputShape,
+  souls: PropTypes.arrayOf(PropTypes.string),
+  tools: PropTypes.arrayOf(toolShape),
+  onSave: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+  saving: PropTypes.bool,
+};
 
 // ── Profile Card ──────────────────────────────────────────────────────────────
 
@@ -361,6 +606,15 @@ function ProfileCard({ profile, onEdit, onDelete, onSetDefault, deleting, settin
   );
 }
 
+ProfileCard.propTypes = {
+  profile: profileShape.isRequired,
+  onEdit: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+  onSetDefault: PropTypes.func.isRequired,
+  deleting: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  settingDefault: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+};
+
 // ── Starter Templates ─────────────────────────────────────────────────────────
 
 function StarterTemplates({ onCreate }) {
@@ -389,6 +643,10 @@ function StarterTemplates({ onCreate }) {
   );
 }
 
+StarterTemplates.propTypes = {
+  onCreate: PropTypes.func.isRequired,
+};
+
 // ── Empty State ───────────────────────────────────────────────────────────────
 
 function EmptyState({ onAdd }) {
@@ -407,6 +665,10 @@ function EmptyState({ onAdd }) {
     </div>
   );
 }
+
+EmptyState.propTypes = {
+  onAdd: PropTypes.func.isRequired,
+};
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 

@@ -12,8 +12,6 @@ import {
   ChevronUp,
   AlertCircle,
   Loader2,
-  Database,
-  HardDrive,
 } from "lucide-react";
 import { localModelsApi } from "./settingApi.js";
 
@@ -178,7 +176,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
-const LocalModelsSection = ({ storage, onRefresh, hideStorage = false }) => {
+const LocalModelsSection = ({ onRefresh }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
   const [showCustomUrl, setShowCustomUrl] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
@@ -391,10 +389,6 @@ const LocalModelsSection = ({ storage, onRefresh, hideStorage = false }) => {
           {Object.entries(activeDownloads).map(([filename, dl]) => {
             const pct = dl.progress || 0;
             const totalBytes = dl.total || 0;
-            const freeAfterDownload =
-              storage?.disk?.availableBytes && totalBytes
-                ? Math.max(0, storage.disk.availableBytes - totalBytes)
-                : null;
             return (
               <div
                 key={filename}
@@ -447,65 +441,12 @@ const LocalModelsSection = ({ storage, onRefresh, hideStorage = false }) => {
                       {totalBytes > 0 && (
                         <span>Download size {formatBytes(totalBytes)}</span>
                       )}
-                      {freeAfterDownload !== null && (
-                        <span>
-                          Free after download about {formatBytes(freeAfterDownload)}
-                        </span>
-                      )}
                     </div>
                   </>
                 )}
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* ── Storage info bar ── */}
-      {!hideStorage && storage && (
-        <div className="px-4 py-3 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-300">
-                <Database className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Model Storage
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {storage.modelCount} model
-                  {storage.modelCount !== 1 ? "s" : ""} taking{" "}
-                  {storage.totalFormatted}
-                </div>
-              </div>
-            </div>
-            {storage.disk && (
-              <div className="sm:min-w-72">
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-                    <HardDrive className="w-3.5 h-3.5" />
-                    Device storage
-                  </span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">
-                    {storage.disk.availableFormatted} free
-                  </span>
-                </div>
-                <div className="mt-2 h-1.5 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gray-700 dark:bg-gray-300 midnight:bg-gray-400 rounded-full"
-                    style={{
-                      width: `${Math.min(100, Math.max(0, storage.disk.usedPercent || 0))}%`,
-                    }}
-                  />
-                </div>
-                <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
-                  <span>{storage.disk.usedFormatted} used</span>
-                  <span>{storage.disk.totalFormatted} total</span>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
 

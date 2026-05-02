@@ -241,11 +241,6 @@ export const localModelsApi = {
     return apiCall(`${AI_API_BASE}/local-models`);
   },
 
-  // Get storage info
-  getStorage: async () => {
-    return apiCall(`${AI_API_BASE}/local-models/storage`);
-  },
-
   // Delete a model
   deleteModel: async (filename) => {
     return apiCall(`${AI_API_BASE}/local-models/${encodeURIComponent(filename)}`, {

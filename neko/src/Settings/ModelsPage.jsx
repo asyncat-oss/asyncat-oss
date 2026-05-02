@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Activity, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff, FolderOpen } from 'lucide-react';
+import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff, FolderOpen } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import MlxModelsSection from './MlxModelsSection';
 import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from './settingApi.js';
@@ -1306,102 +1306,6 @@ const EngineAdvisorSection = ({
   );
 };
 
-const SystemInfoSection = () => {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      setLoading(true);
-      try {
-        const res = await aiProviderApi.getStats();
-        if (res.success) setStats(res);
-      } catch { /* ignore */ }
-      finally { setLoading(false); }
-    };
-    fetchStats();
-    const interval = setInterval(fetchStats, 8000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const cpu = stats?.hardware?.cpu;
-  const ram = stats?.hardware?.ram;
-  const gpu = stats?.hardware?.gpu?.[0];
-
-  return (
-    <div className="bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
-      <div className="flex items-center gap-2 mb-4">
-        <Activity className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">System Resources</h3>
-        {loading && <RefreshCw className="w-3 h-3 animate-spin text-gray-400 ml-auto" />}
-      </div>
-
-      {cpu && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-              <Cpu className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[120px]">{cpu.model?.split('@')[0]?.trim() || 'CPU'}</span>
-            </div>
-            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{cpu.usagePercent}%</span>
-          </div>
-          <MiniBar value={cpu.usagePercent} color="bg-blue-500" />
-        </div>
-      )}
-
-      {ram && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-gray-600 dark:text-gray-400">RAM</span>
-            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
-              {ram.usedGb}/{ram.totalGb} GB
-            </span>
-          </div>
-          <MiniBar value={ram.usagePercent} color="bg-indigo-500" />
-        </div>
-      )}
-
-      {gpu && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-              <Zap className="w-3.5 h-3.5 text-yellow-500" />
-              <span className="truncate max-w-[120px]">{gpu.name?.split(' ').slice(0, 2).join(' ') || 'GPU'}</span>
-            </div>
-            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
-              {gpu.utilizationPercent}%{gpu.temperatureC ? ` · ${gpu.temperatureC}°C` : ''}
-            </span>
-          </div>
-          <MiniBar value={gpu.utilizationPercent} color="bg-yellow-500" />
-          {gpu.vramTotalGb > 0 && (
-            <div className="mt-2">
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="text-[10px] text-gray-400 dark:text-gray-500">VRAM</span>
-                <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">
-                  {gpu.vramUsedGb}/{gpu.vramTotalGb} GB
-                </span>
-              </div>
-              <MiniBar value={gpu.vramUsedGb} max={gpu.vramTotalGb} color="bg-green-500" />
-            </div>
-          )}
-        </div>
-      )}
-
-      {!cpu && !gpu && !loading && (
-        <div className="text-xs text-gray-400 dark:text-gray-500">No hardware data available</div>
-      )}
-
-      {stats?.modelHardwareInfo && (
-        <div className="pt-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
-          <div className="font-medium text-gray-600 dark:text-gray-400">{stats.modelHardwareInfo.name}</div>
-          {stats.modelHardwareInfo.sizeVram && <div className="mt-0.5">{stats.modelHardwareInfo.sizeVram} VRAM</div>}
-          {stats.modelHardwareInfo.gpuLayers && <div className="mt-0.5">{stats.modelHardwareInfo.gpuLayers} GPU layers</div>}
-        </div>
-      )}
-    </div>
-  );
-};
-
 const providerLabel = (profile, catalog = []) => {
   const preset = catalog.find(item => item.providerId === profile?.provider_id || item.id === profile?.provider_id);
   return preset?.name || profile?.name || profile?.provider_id || 'Provider';
@@ -2049,7 +1953,6 @@ const ModelsPage = () => {
   const [engineData, setEngineData] = useState(null);
   const [engineCatalog, setEngineCatalog] = useState(null);
   const [installJob, setInstallJob] = useState(null);
-  const [storage, setStorage] = useState(null);
   const [activeTab, setActiveTab] = useState('library');
   const [hasMlxModels, setHasMlxModels] = useState(false);
   const [loadingModels, setLoadingModels] = useState(true);
@@ -2641,11 +2544,6 @@ const ModelsPage = () => {
       : recommendationState === 'not_installed'
         ? 'Install GPU engine'
         : 'Setup looks healthy';
-  const storageDetail = storage?.disk
-    ? `${storage.totalFormatted} models · ${storage.disk.availableFormatted} free on device`
-    : storage?.totalFormatted
-      ? `${storage.totalFormatted} stored locally`
-      : 'Ready for GGUF downloads';
   const hardwareBadgeLabel = engineData?.hardware ? conciseHardwareSummary(engineData.hardware) : '';
   const currentCapabilityLabel = engineData?.current?.capabilityLabel || '';
   const showHardwareBadge = Boolean(
@@ -2656,7 +2554,6 @@ const ModelsPage = () => {
     { id: 'library',    label: 'Models',    icon: HardDriveDownload },
     { id: 'providers',  label: 'Providers', icon: Cloud },
     { id: 'engine',     label: 'Engine',    icon: Wrench },
-    { id: 'system',     label: 'System',    icon: Activity },
   ];
 
   return (
@@ -2705,7 +2602,7 @@ const ModelsPage = () => {
                 icon={HardDriveDownload}
                 label="Local Library"
                 value={`${models.length} model${models.length === 1 ? '' : 's'}`}
-                detail={storageDetail}
+                detail="Ready for GGUF downloads"
                 tone="blue"
               />
               <OverviewCard
@@ -2820,7 +2717,7 @@ const ModelsPage = () => {
 
                   {/* Add Model panel — HF search + custom URL, always visible */}
                   <div className="mb-6 rounded-3xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-6 shadow-sm">
-                    <LocalModelsSection storage={storage} onRefresh={loadModelList} hideStorage />
+                    <LocalModelsSection onRefresh={loadModelList} />
                   </div>
 
                   {/* Unified Path Loader */}
@@ -3136,50 +3033,6 @@ const ModelsPage = () => {
                   onBuildGpuRuntime={handleBuildGpuRuntime}
                   onRefreshCatalog={loadEngineCatalog}
                 />
-              </div>
-              )}
-
-              {activeTab === 'system' && (
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] gap-6">
-                <SystemInfoSection />
-                <div className="bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <HardDriveDownload className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">Storage Footprint</h3>
-                  </div>
-                  {storage ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 midnight:text-slate-500">Models</div>
-                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{storage.totalFormatted}</div>
-                        </div>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 midnight:text-slate-500">Device Free</div>
-                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{storage.disk?.availableFormatted || 'Unknown'}</div>
-                        </div>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 midnight:text-slate-500">Device Total</div>
-                          <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{storage.disk?.totalFormatted || 'Unknown'}</div>
-                        </div>
-                      </div>
-                      {storage.disk && (
-                        <div>
-                          <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
-                            <span>{storage.disk.usedFormatted} used</span>
-                            <span>{storage.disk.usedPercent}%</span>
-                          </div>
-                          <MiniBar value={storage.disk.usedPercent || 0} color="bg-gray-700" />
-                          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                            GGUF models use {storage.disk.modelPercent}% of this device.
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Storage details are unavailable.</p>
-                  )}
-                </div>
               </div>
               )}
 

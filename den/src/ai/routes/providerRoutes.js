@@ -16,7 +16,6 @@ import {
   cancelDownload,
   getDownloadStatus,
   listActiveDownloads,
-  getStorageInfo,
   MODELS_DIR,
   clearCache as clearGgufCache,
 } from '../controllers/ai/modelManager.js';
@@ -571,21 +570,10 @@ router.get('/models', verifyUser, async (req, res) => {
 router.get('/local-models', verifyUser, (req, res) => {
   try {
     const models = listModels();
-    const storage = getStorageInfo();
-    res.json({ success: true, models, storage });
+    res.json({ success: true, models });
   } catch (err) {
     console.error('List local models error:', err);
     res.status(500).json({ success: false, error: 'Failed to list models' });
-  }
-});
-
-// ── GET /local-models/storage — disk usage info ───────────────────────────────
-router.get('/local-models/storage', verifyUser, (req, res) => {
-  try {
-    const storage = getStorageInfo();
-    res.json({ success: true, ...storage });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to get storage info' });
   }
 });
 

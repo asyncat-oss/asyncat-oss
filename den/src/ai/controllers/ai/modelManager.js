@@ -489,53 +489,6 @@ export function getModelsDir() {
   return MODELS_DIR;
 }
 
-/**
- * Get disk usage info for the models directory.
- */
-export function getStorageInfo() {
-  const models = listModels();
-  const totalBytes = models.reduce((sum, m) => sum + m.sizeBytes, 0);
-  let disk = null;
-
-  try {
-    const stat = fs.statfsSync(MODELS_DIR);
-    const blockSize = Number(stat.bsize || stat.frsize || 0);
-    const blocks = Number(stat.blocks || 0);
-    const availableBlocks = Number(stat.bavail || stat.bfree || 0);
-    const freeBlocks = Number(stat.bfree || availableBlocks || 0);
-    const diskTotalBytes = blockSize * blocks;
-    const diskAvailableBytes = blockSize * availableBlocks;
-    const diskFreeBytes = blockSize * freeBlocks;
-    const diskUsedBytes = Math.max(0, diskTotalBytes - diskFreeBytes);
-
-    if (Number.isFinite(diskTotalBytes) && diskTotalBytes > 0) {
-      disk = {
-        totalBytes: diskTotalBytes,
-        availableBytes: diskAvailableBytes,
-        freeBytes: diskFreeBytes,
-        usedBytes: diskUsedBytes,
-        totalFormatted: formatBytes(diskTotalBytes),
-        availableFormatted: formatBytes(diskAvailableBytes),
-        freeFormatted: formatBytes(diskFreeBytes),
-        usedFormatted: formatBytes(diskUsedBytes),
-        usedPercent: Math.round((diskUsedBytes / diskTotalBytes) * 100),
-        modelPercent: Math.round((totalBytes / diskTotalBytes) * 1000) / 10,
-      };
-    }
-  } catch {
-    disk = null;
-  }
-
-  return {
-    modelsDir: MODELS_DIR,
-    modelCount: models.length,
-    totalBytes,
-    totalFormatted: formatBytes(totalBytes),
-    totalGb: +(totalBytes / 1024 ** 3).toFixed(2),
-    disk,
-  };
-}
-
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
   const gb = bytes / 1e9;
