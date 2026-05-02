@@ -5,7 +5,6 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	CheckCircle,
-	User,
 	X,
 } from "lucide-react";
 
@@ -15,10 +14,8 @@ const GanttFilters = ({
 	filterConfig,
 	toggleCompletedFilter,
 	togglePriorityFilter,
-	toggleAssignedToMeFilter,
 	toggleDueStatusFilter,
 	onClearFilters,
-	session,
 	onCreateTask,
 	visibleRange,
 	navigatePrevious,
@@ -36,14 +33,12 @@ const GanttFilters = ({
 	const hasActiveFilters =
 		filterConfig.completed ||
 		(filterConfig.priority && filterConfig.priority.length > 0) ||
-		(filterConfig.assignees && filterConfig.assignees.length > 0) ||
 		(filterConfig.dueStatus && filterConfig.dueStatus.length > 0);
 
 	// Count total active filters
 	const activeFilterCount =
 		(filterConfig.completed ? 1 : 0) +
 		(filterConfig.priority?.length || 0) +
-		(filterConfig.assignees?.length || 0) +
 		(filterConfig.dueStatus?.length || 0);
 	// Helper function to get week start (Monday)
 	const getWeekStart = (date) => {
@@ -261,7 +256,7 @@ const GanttFilters = ({
 							<input
 								type="text"
 								className="block w-full pl-10 pr-4 py-2.5 text-sm bg-white/70 dark:bg-gray-800/70 midnight:bg-gray-900/70 border border-gray-200/60 dark:border-gray-600/60 midnight:border-gray-700/60 rounded-xl text-gray-900 dark:text-gray-100 midnight:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/60 transition-all duration-200 min-w-[350px]"
-								placeholder="Search tasks, assignees, priorities..."
+								placeholder="Search tasks and priorities..."
 								value={searchTerm}
 								onChange={(e) => setSearchTerm(e.target.value)}
 							/>
@@ -313,26 +308,6 @@ const GanttFilters = ({
 									<CheckCircle className="w-3.5 h-3.5" />
 									<span className="hidden sm:inline">
 										Completed
-									</span>
-								</div>
-							</button>
-
-							{/* Assigned to Me Filter */}
-							<button
-								onClick={toggleAssignedToMeFilter}
-								className={`group px-3 py-2 text-xs font-medium border rounded-lg transition-all duration-200 whitespace-nowrap ${
-									session?.user?.id &&
-									filterConfig.assignees.includes(
-										session.user.id
-									)
-										? "bg-purple-50 dark:bg-purple-900/30 midnight:bg-purple-900/20 text-purple-700 dark:text-purple-400 midnight:text-purple-300 border-purple-200 dark:border-purple-600 midnight:border-purple-700"
-										: "bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-600 dark:text-gray-400 midnight:text-gray-500 border-gray-200 dark:border-gray-600 midnight:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
-								}`}
-							>
-								<div className="flex items-center gap-1.5">
-									<User className="w-3.5 h-3.5" />
-									<span className="hidden lg:inline">
-										Assigned to me
 									</span>
 								</div>
 							</button>

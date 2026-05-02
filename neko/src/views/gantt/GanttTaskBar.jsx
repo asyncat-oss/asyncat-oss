@@ -8,132 +8,6 @@ import {
   Search,
 } from "lucide-react";
 
-// Import profile pictures
-import catDP from "../../assets/dp/CAT.webp";
-import dogDP from "../../assets/dp/DOG.webp";
-import dolphinDP from "../../assets/dp/DOLPHIN.webp";
-import dragonDP from "../../assets/dp/DRAGON.webp";
-import elephantDP from "../../assets/dp/ELEPHANT.webp";
-import foxDP from "../../assets/dp/FOX.webp";
-import lionDP from "../../assets/dp/LION.webp";
-import owlDP from "../../assets/dp/OWL.webp";
-import penguinDP from "../../assets/dp/PENGUIN.webp";
-import wolfDP from "../../assets/dp/WOLF.webp";
-
-// Assignee Avatars Component with Profile Pictures
-const AssigneeAvatars = ({ assigneeIds, assigneeDetails, size = "small" }) => {
-  // React hooks must be called first, before any conditions or early returns
-  const [imageLoadError, setImageLoadError] = useState(false);
-
-  if (!assigneeIds || assigneeIds.length === 0) return null;
-
-  const sizeClasses = size === "small" ? "w-4 h-4 text-xs" : "w-5 h-5 text-sm";
-
-  // Profile picture mapping (keep existing)
-  const profilePictureMap = {
-    CAT: catDP,
-    DOG: dogDP,
-    DOLPHIN: dolphinDP,
-    DRAGON: dragonDP,
-    ELEPHANT: elephantDP,
-    FOX: foxDP,
-    LION: lionDP,
-    OWL: owlDP,
-    PENGUIN: penguinDP,
-    WOLF: wolfDP,
-  };
-
-  const getProfilePicture = (profilePicId) => {
-    if (!profilePicId) return null;
-
-    // Check if it's a custom uploaded image (URL starts with https://)
-    if (profilePicId.startsWith("https://")) {
-      return profilePicId;
-    }
-
-    // Handle predefined avatars
-    if (profilePictureMap[profilePicId]) {
-      return profilePictureMap[profilePicId];
-    }
-    return null;
-  };
-
-  const getMemberInitial = (member) => {
-    if (!member) return "U";
-
-    const name = member.name || "";
-    if (name) return name.charAt(0).toUpperCase();
-
-    const email = member.email || "";
-    if (email) return email.charAt(0).toUpperCase();
-
-    return "U";
-  };
-
-  const handleImageError = () => {
-    setImageLoadError(true);
-  };
-
-  const handleImageLoad = () => {
-    setImageLoadError(false);
-  };
-
-  return (
-    <div className="flex -space-x-1">
-      {assigneeIds.slice(0, 3).map((assigneeId) => {
-        const id =
-          typeof assigneeId === "object" && assigneeId !== null
-            ? assigneeId.id
-            : assigneeId;
-        const member = assigneeDetails[id];
-
-        if (!member) return null;
-
-        const profilePicture = getProfilePicture(member.profile_picture);
-
-        return (
-          <div
-            key={id}
-            className={`${sizeClasses} rounded-full border border-white/50 
-              transition-transform duration-200 hover:scale-110 backdrop-blur-sm overflow-hidden`}
-            title={member.name || member.email || "Assignee"}
-          >
-            {profilePicture && !imageLoadError ? (
-              <img
-                src={profilePicture}
-                alt={member.name || "Assignee"}
-                className="w-full h-full object-cover"
-                onError={handleImageError}
-                onLoad={handleImageLoad}
-              />
-            ) : (
-              <div
-                className="w-full h-full rounded-full bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 
-                  text-gray-600 dark:text-gray-300 midnight:text-gray-400 
-                  flex items-center justify-center font-medium"
-              >
-                {getMemberInitial(member)}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      
-      {assigneeIds.length > 3 && (
-        <div
-          className={`${sizeClasses} rounded-full border border-white/50 
-            bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 
-            text-gray-600 dark:text-gray-300 midnight:text-gray-400 
-            flex items-center justify-center font-medium backdrop-blur-sm`}
-          title={`+${assigneeIds.length - 3} more assignees`}
-        >
-          +{assigneeIds.length - 3}
-        </div>
-      )}
-    </div>
-  );
-};
-
 // Out of Range Indicator Component
 const OutOfRangeIndicator = ({ card, taskBar, setSelectedCard, position }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -218,7 +92,6 @@ const GanttTaskBar = ({
   card,
   taskBar,
   setSelectedCard,
-  assigneeDetails,
   isSearchResult = false,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -350,34 +223,6 @@ const GanttTaskBar = ({
 
         {/* Right side content */}
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          {/* Subtask assignees avatars */}
-          {(() => {
-            // Collect all unique subtask assignees
-            const subtaskAssignees = new Set();
-            if (card.checklist && Array.isArray(card.checklist)) {
-              card.checklist.forEach((subtask) => {
-                if (subtask.assignees && Array.isArray(subtask.assignees)) {
-                  subtask.assignees.forEach((assignee) => {
-                    const assigneeId = typeof assignee === "object" ? assignee.id : assignee;
-                    if (assigneeId) {
-                      subtaskAssignees.add(assigneeId);
-                    }
-                  });
-                }
-              });
-            }
-            
-            const uniqueAssigneeIds = Array.from(subtaskAssignees);
-            
-            return uniqueAssigneeIds.length > 0 ? (
-              <AssigneeAvatars
-                assigneeIds={uniqueAssigneeIds}
-                assigneeDetails={assigneeDetails}
-                size="small"
-              />
-            ) : null;
-          })()}
-
           {/* Progress percentage - show on hover */}
           {isHovered && (
             <span className="text-xs font-medium text-white/80 bg-black/20 px-1.5 py-0.5 rounded">

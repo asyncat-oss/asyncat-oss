@@ -8,6 +8,15 @@ export const useCardActions = () => {
 	const { columns, setColumns } = useColumnContext();
 	const [completionError, setCompletionError] = useState(null);
 
+	const normalizeChecklist = (checklist = []) =>
+		checklist.map((item) => {
+			const normalized = { ...item };
+			delete normalized.assignees;
+			delete normalized.assigneeDetails;
+			delete normalized.assignee_id;
+			return normalized;
+		});
+
 	// Add function to communicate with The Cat (using MAIN_API_URL)
 	const sendCatMessage = async (message) => {
 		try {
@@ -70,20 +79,9 @@ export const useCardActions = () => {
 				delete processedCardData.assignees;
 			}
 
-			// Process checklist to ensure proper structure with multiple assignees for subtasks
 			if (processedCardData.checklist) {
-				processedCardData.checklist = processedCardData.checklist.map(
-					(item) => ({
-						...item,
-						assignees: item.assignees
-							? item.assignees.map((assignee) =>
-									typeof assignee === "object" &&
-									assignee !== null
-										? assignee.id
-										: assignee
-							  )
-							: [],
-					})
+				processedCardData.checklist = normalizeChecklist(
+					processedCardData.checklist
 				);
 			}
 
@@ -288,34 +286,10 @@ export const useCardActions = () => {
 				delete updatedData.assignees;
 			}
 
-			// Process checklist if present (multiple assignees for subtasks)
 			if (updatedData.checklist) {
-				updatedData.checklist = updatedData.checklist.map((item) => {
-					// Handle multiple assignees for subtasks
-					if (item.assignees && Array.isArray(item.assignees)) {
-						return {
-							...item,
-							assignees: item.assignees.map((assignee) =>
-								typeof assignee === "object" &&
-								assignee !== null
-									? assignee.id
-									: assignee
-							),
-						};
-					}
-					// Handle legacy single assignee format
-					if (
-						item.assignee_id &&
-						typeof item.assignee_id === "object"
-					) {
-						return {
-							...item,
-							assignees: [item.assignee_id.id],
-							assignee_id: undefined, // Remove legacy field
-						};
-					}
-					return item;
-				});
+				updatedData.checklist = normalizeChecklist(
+					updatedData.checklist
+				);
 			}
 
 			// Validate dates if both are being updated or if one is being updated relative to existing
@@ -400,21 +374,8 @@ export const useCardActions = () => {
 													card.administratorDetails ||
 													updatedCard.administratorDetails,
 												checklist: updatedCard.checklist
-													? updatedCard.checklist.map(
-															(item, index) => {
-																const originalItem =
-																	card
-																		.checklist?.[
-																		index
-																	];
-																return {
-																	...item,
-																	// Preserve preloaded assignee details for subtasks
-																	assigneeDetails:
-																		originalItem?.assigneeDetails ||
-																		item.assigneeDetails,
-																};
-															}
+													? normalizeChecklist(
+															updatedCard.checklist
 													  )
 													: card.checklist,
 										  }
@@ -595,28 +556,7 @@ export const useCardActions = () => {
 	};
 
 	const updateCardChecklist = async (columnId, cardId, newChecklist) => {
-		// Process multiple assignees in checklist items
-		const processedChecklist = newChecklist.map((item) => {
-			if (item.assignees && Array.isArray(item.assignees)) {
-				return {
-					...item,
-					assignees: item.assignees.map((assignee) =>
-						typeof assignee === "object" && assignee !== null
-							? assignee.id
-							: assignee
-					),
-				};
-			}
-			// Handle legacy single assignee format
-			if (item.assignee_id && typeof item.assignee_id === "object") {
-				return {
-					...item,
-					assignees: [item.assignee_id.id],
-					assignee_id: undefined, // Remove legacy field
-				};
-			}
-			return item;
-		});
+		const processedChecklist = normalizeChecklist(newChecklist);
 
 		const completedTasks = processedChecklist.filter(
 			(task) => task.completed
@@ -734,66 +674,6 @@ export const useCardActions = () => {
 		}
 	};
 
-	// Update a checklist item with multiple assignees (changed from updateChecklistItemAssignee)
-	const updateChecklistItemAssignees = async (
-		columnId,
-		cardId,
-		checklistItemId,
-		assignees
-	) => {
-		try {
-			// Process assignees - ensure we store just IDs
-			const processedAssignees = assignees.map((assignee) =>
-				typeof assignee === "object" && assignee !== null
-					? assignee.id
-					: assignee
-			);
-
-			const updatedCard = await viewsApi.card.updateSubtaskAssignees(
-				cardId,
-				checklistItemId,
-				processedAssignees
-			);
-
-			// Update the columns state with the new card data
-			setColumns((prev) =>
-				prev.map((col) => {
-					if (col.id === columnId) {
-						return {
-							...col,
-							Cards: col.Cards.map((card) =>
-								card.id === cardId ? updatedCard : card
-							),
-						};
-					}
-					return col;
-				})
-			);
-
-			return updatedCard;
-		} catch (error) {
-			console.error("Error updating checklist item assignees:", error);
-			throw error;
-		}
-	};
-
-	// Legacy support function for single assignee (converts to multiple assignees)
-	const updateChecklistItemAssignee = async (
-		columnId,
-		cardId,
-		checklistItemId,
-		assigneeId
-	) => {
-		// Convert single assignee to array and call the new function
-		const assignees = assigneeId ? [assigneeId] : [];
-		return await updateChecklistItemAssignees(
-			columnId,
-			cardId,
-			checklistItemId,
-			assignees
-		);
-	};
-
 	const getCardById = (cardId) => {
 		for (const column of columns) {
 			const card = column.Cards?.find((c) => c.id === cardId);
@@ -872,8 +752,6 @@ export const useCardActions = () => {
 		addAttachment,
 		removeAttachment,
 		updateCardAdministrator,
-		updateChecklistItemAssignees,
-		updateChecklistItemAssignee,
 		sendCatMessage,
 		completionError,
 		// Dependency management

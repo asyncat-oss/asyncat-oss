@@ -278,18 +278,6 @@ export const cardAPI = {
 		);
 	},
 
-	/**
-	 * Update subtask assignees
-	 */
-	updateSubtaskAssignees: async (cardId, checklistItemId, assignees) => {
-		return apiRequest(
-			`${KANBAN_API_URL}/cards/${cardId}/subtasks/${checklistItemId}/assignees`,
-			{
-				method: "PUT",
-				body: JSON.stringify({ assignees }),
-			}
-		);
-	},
 };
 
 // =============================================================================

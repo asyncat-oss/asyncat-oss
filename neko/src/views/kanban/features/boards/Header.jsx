@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearch } from "../shared/hooks/useSearch";
 import KanbanFilters from "../shared/components/KanbanFilters";
-import { useCardContext } from "../../../context/CardContext";
 
 // Function to generate project-specific filter storage key
 const getFilterStorageKey = (projectId) =>
@@ -14,7 +13,11 @@ function loadLocalFilters(projectId) {
 			getFilterStorageKey(projectId)
 		);
 		if (storedFilters) {
-			return JSON.parse(storedFilters);
+			const parsedFilters = JSON.parse(storedFilters);
+			return {
+				priority: parsedFilters.priority || [],
+				dueDates: parsedFilters.dueDates || [],
+			};
 		}
 	} catch (error) {
 		console.error("Error loading filters from localStorage:", error);
@@ -23,7 +26,6 @@ function loadLocalFilters(projectId) {
 	return {
 		priority: [],
 		dueDates: [],
-		assignments: [],
 	};
 }
 
@@ -177,14 +179,12 @@ const Header = ({
 	onFilterLoadingChange, // New prop to expose loading state to parent
 	projectId, // Add projectId prop
 }) => {
-	const { userId: contextUserId } = useCardContext(); // Get userId from context
 	const searchContainerRef = useRef(null);
 
 	// Filter state
 	const [activeFilters, setActiveFilters] = useState({
 		priority: [],
 		dueDates: [],
-		assignments: [], // Add assignments filter array
 	});
 
 	// Track if we've loaded the filters from localStorage
@@ -259,18 +259,13 @@ const Header = ({
 		// Skip if columns are not ready or we're still loading filters
 		if (!Array.isArray(columns) || isFilterLoading) return;
 
-		const sessionUserId = sessionStorage.getItem("userId");
-
-		// Use contextUserId as primary, fall back to sessionUserId
-		const currentUserId = contextUserId || sessionUserId;
 		const newFilteredColumns = columns
 			// First, determine if a column should be visible based on its cards
 			.filter((column) => {
 				// For card-level filters, check if the column has ANY cards that match
 				if (
 					activeFilters.priority?.length > 0 ||
-					activeFilters.dueDates?.length > 0 ||
-					activeFilters.assignments?.length > 0 // Add assignments filter check
+					activeFilters.dueDates?.length > 0
 				) {
 					// Ensure column has cards
 					if (
@@ -348,81 +343,6 @@ const Header = ({
 
 							if (!matchesDueDate) {
 								return false;
-							}
-						}
-
-						// Check assignments filter - UPDATED LOGIC
-						if (
-							activeFilters.assignments?.length > 0 &&
-							currentUserId
-						) {
-							// Check if "assignedToMe" filter is active
-							if (
-								activeFilters.assignments.includes(
-									"assignedToMe"
-								)
-							) {
-								// Check if card is assigned to current user
-								let isAssignedToMe = false;
-
-								// Check card administrator (single administrator)
-								if (card.administrator_id) {
-									if (
-										typeof card.administrator_id ===
-											"object" &&
-										card.administrator_id !== null
-									) {
-										isAssignedToMe =
-											card.administrator_id.id ===
-											currentUserId;
-									} else {
-										isAssignedToMe =
-											card.administrator_id ===
-											currentUserId;
-									}
-								}
-
-								// If not assigned at card level, check checklist items (multiple assignees for subtasks)
-								if (
-									!isAssignedToMe &&
-									card.checklist &&
-									Array.isArray(card.checklist) &&
-									card.checklist.length > 0
-								) {
-									isAssignedToMe = card.checklist.some(
-										(item) => {
-											if (
-												!item.assignees ||
-												!Array.isArray(item.assignees)
-											)
-												return false;
-
-											return item.assignees.some(
-												(assignee) => {
-													if (
-														typeof assignee ===
-															"object" &&
-														assignee !== null
-													) {
-														return (
-															assignee.id ===
-															currentUserId
-														);
-													}
-													return (
-														assignee ===
-														currentUserId
-													);
-												}
-											);
-										}
-									);
-								}
-
-								// If neither card nor any checklist item is assigned to current user, filter it out
-								if (!isAssignedToMe) {
-									return false;
-								}
 							}
 						}
 
@@ -507,83 +427,6 @@ const Header = ({
 								}
 							}
 
-							// Check assignments filter - UPDATED LOGIC
-							if (
-								activeFilters.assignments?.length > 0 &&
-								currentUserId
-							) {
-								// Check if "assignedToMe" filter is active
-								if (
-									activeFilters.assignments.includes(
-										"assignedToMe"
-									)
-								) {
-									// Check if card is assigned to current user
-									let isAssignedToMe = false;
-
-									// Check card administrator (single administrator)
-									if (card.administrator_id) {
-										if (
-											typeof card.administrator_id ===
-												"object" &&
-											card.administrator_id !== null
-										) {
-											isAssignedToMe =
-												card.administrator_id.id ===
-												currentUserId;
-										} else {
-											isAssignedToMe =
-												card.administrator_id ===
-												currentUserId;
-										}
-									}
-
-									// If not assigned at card level, check checklist items (multiple assignees for subtasks)
-									if (
-										!isAssignedToMe &&
-										card.checklist &&
-										Array.isArray(card.checklist) &&
-										card.checklist.length > 0
-									) {
-										isAssignedToMe = card.checklist.some(
-											(item) => {
-												if (
-													!item.assignees ||
-													!Array.isArray(
-														item.assignees
-													)
-												)
-													return false;
-
-												return item.assignees.some(
-													(assignee) => {
-														if (
-															typeof assignee ===
-																"object" &&
-															assignee !== null
-														) {
-															return (
-																assignee.id ===
-																currentUserId
-															);
-														}
-														return (
-															assignee ===
-															currentUserId
-														);
-													}
-												);
-											}
-										);
-									}
-
-									// If neither card nor any checklist item is assigned to current user, filter it out
-									if (!isAssignedToMe) {
-										return false;
-									}
-								}
-							}
-
 							return true;
 					  })
 					: [],
@@ -598,7 +441,6 @@ const Header = ({
 		activeFilters,
 		onFiltersChanged,
 		isFilterLoading,
-		contextUserId,
 	]);
 
 	const handleSearchFocus = () => {
@@ -657,8 +499,7 @@ const Header = ({
 		// Save filters to localStorage with project ID
 		if (
 			(filters.priority && filters.priority.length > 0) ||
-			(filters.dueDates && filters.dueDates.length > 0) ||
-			(filters.assignments && filters.assignments.length > 0)
+			(filters.dueDates && filters.dueDates.length > 0)
 		) {
 			saveLocalFilters(filters, projectId);
 		} else {
@@ -673,7 +514,6 @@ const Header = ({
 		setActiveFilters({
 			priority: [],
 			dueDates: [],
-			assignments: [], // Add assignments filter type
 		});
 
 		// Clear filters from localStorage for this project
@@ -701,36 +541,6 @@ const Header = ({
 		handleApplyFilters(newFilters);
 	};
 
-	const toggleAssignedToMeFilter = () => {
-		const currentUserId = contextUserId || sessionStorage.getItem("userId");
-		if (!currentUserId) return;
-
-		const assignedToMeValue = "assignedToMe";
-		const newFilters = {
-			...activeFilters,
-			assignments: activeFilters.assignments.includes(assignedToMeValue)
-				? activeFilters.assignments.filter(
-						(a) => a !== assignedToMeValue
-				  )
-				: [...activeFilters.assignments, assignedToMeValue],
-		};
-		handleApplyFilters(newFilters);
-	};
-
-	// Calculate if any filters are active
-	const hasActiveFilters =
-		activeFilters &&
-		((activeFilters.priority && activeFilters.priority.length > 0) ||
-			(activeFilters.dueDates && activeFilters.dueDates.length > 0) ||
-			(activeFilters.assignments &&
-				activeFilters.assignments.length > 0)); // Add assignments check
-
-	// Count total active filters
-	const activeFilterCount =
-		(activeFilters?.priority?.length || 0) +
-		(activeFilters?.dueDates?.length || 0) +
-		(activeFilters?.assignments?.length || 0); // Add assignments count
-
 	return (
 		<div>
 			<KanbanFilters
@@ -754,13 +564,7 @@ const Header = ({
 				activeFilters={activeFilters}
 				togglePriorityFilter={togglePriorityFilter}
 				toggleDueDateFilter={toggleDueDateFilter}
-				toggleAssignedToMeFilter={toggleAssignedToMeFilter}
 				onClearFilters={handleClearFilters}
-				session={{
-					user: {
-						id: contextUserId || sessionStorage.getItem("userId"),
-					},
-				}}
 				searchContext={{
 					isSearchActive: !!searchTerm,
 					totalResults: searchResults.length,

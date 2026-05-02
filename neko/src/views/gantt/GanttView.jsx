@@ -205,7 +205,7 @@ const AssigneeAvatars = ({
 	);
 };
 
-const GanttView = ({ selectedProject, session }) => {
+const GanttView = ({ selectedProject }) => {
 	const { columns, isLoading, error } = useColumnContext();
 	const { setSelectedCard } = useCardContext();
 
@@ -230,7 +230,6 @@ const GanttView = ({ selectedProject, session }) => {
 	});
 	const [filterConfig, setFilterConfig] = useState({
 		priority: [],
-		assignees: [],
 		dueStatus: [],
 		completed: false,
 	});
@@ -460,7 +459,7 @@ const GanttView = ({ selectedProject, session }) => {
 		setCards(processedCards);
 	}, [columns]);
 
-	// Fetch assignee details
+	// Fetch administrator details
 	useEffect(() => {
 		const fetchAllAssigneeDetails = async () => {
 			const allAssigneeIds = new Set();
@@ -473,24 +472,6 @@ const GanttView = ({ selectedProject, session }) => {
 							? card.administrator_id.id
 							: card.administrator_id;
 					allAssigneeIds.add(adminId);
-				}
-
-				// Collect assignee IDs from subtasks/checklist
-				if (card.checklist && Array.isArray(card.checklist)) {
-					card.checklist.forEach((subtask) => {
-						if (
-							subtask.assignees &&
-							Array.isArray(subtask.assignees)
-						) {
-							subtask.assignees.forEach((assignee) => {
-								const assigneeId =
-									typeof assignee === "object"
-										? assignee.id
-										: assignee;
-								allAssigneeIds.add(assigneeId);
-							});
-						}
-					});
 				}
 			});
 
@@ -644,29 +625,6 @@ const GanttView = ({ selectedProject, session }) => {
 					}
 				}
 
-				// Search in subtask assignees
-				if (card.checklist && Array.isArray(card.checklist)) {
-					card.checklist.forEach((subtask) => {
-						if (
-							subtask.assignees &&
-							Array.isArray(subtask.assignees)
-						) {
-							subtask.assignees.forEach((assigneeId) => {
-								const id =
-									typeof assigneeId === "object"
-										? assigneeId.id
-										: assigneeId;
-								const assignee = assigneeDetails[id];
-								if (assignee?.name) {
-									searchableFields.push(
-										assignee.name.toLowerCase()
-									);
-								}
-							});
-						}
-					});
-				}
-
 				return searchableFields.some((field) => field.includes(search));
 			});
 
@@ -731,48 +689,6 @@ const GanttView = ({ selectedProject, session }) => {
 			filtered = filtered.filter((card) =>
 				filterConfig.priority.includes(card.priority)
 			);
-		}
-
-		if (filterConfig.assignees.length > 0) {
-			filtered = filtered.filter((card) => {
-				// Check if user is administrator of the card
-				let isAssignedToUser = false;
-
-				if (card.administrator_id) {
-					const adminId =
-						typeof card.administrator_id === "object"
-							? card.administrator_id.id
-							: card.administrator_id;
-					isAssignedToUser = filterConfig.assignees.includes(adminId);
-				}
-
-				// If not assigned at card level, check subtasks/checklist
-				if (
-					!isAssignedToUser &&
-					card.checklist &&
-					Array.isArray(card.checklist)
-				) {
-					isAssignedToUser = card.checklist.some((subtask) => {
-						if (
-							subtask.assignees &&
-							Array.isArray(subtask.assignees)
-						) {
-							return subtask.assignees.some((assignee) => {
-								const assigneeId =
-									typeof assignee === "object"
-										? assignee.id
-										: assignee;
-								return filterConfig.assignees.includes(
-									assigneeId
-								);
-							});
-						}
-						return false;
-					});
-				}
-
-				return isAssignedToUser;
-			});
 		}
 
 		// Apply due status filters
@@ -1141,28 +1057,6 @@ const GanttView = ({ selectedProject, session }) => {
 		}));
 	};
 
-	const toggleAssignedToMeFilter = () => {
-		const currentUserId = session?.user?.id;
-		if (!currentUserId) return;
-
-		setFilterConfig((prev) => {
-			const isActive = prev.assignees.includes(currentUserId);
-			if (isActive) {
-				return {
-					...prev,
-					assignees: prev.assignees.filter(
-						(id) => id !== currentUserId
-					),
-				};
-			} else {
-				return {
-					...prev,
-					assignees: [...prev.assignees, currentUserId],
-				};
-			}
-		});
-	};
-
 	const toggleDueStatusFilter = (status) => {
 		setFilterConfig((prev) => {
 			if (prev.dueStatus.includes(status)) {
@@ -1183,7 +1077,6 @@ const GanttView = ({ selectedProject, session }) => {
 	const clearFilters = () => {
 		setFilterConfig({
 			priority: [],
-			assignees: [],
 			dueStatus: [],
 			completed: false,
 		});
@@ -1271,10 +1164,8 @@ const GanttView = ({ selectedProject, session }) => {
 					filterConfig={filterConfig}
 					toggleCompletedFilter={toggleCompletedFilter}
 					togglePriorityFilter={togglePriorityFilter}
-					toggleAssignedToMeFilter={toggleAssignedToMeFilter}
 					toggleDueStatusFilter={toggleDueStatusFilter}
 					onClearFilters={clearFilters}
-					session={session}
 					onCreateTask={() => setShowCreateTask(true)}
 					visibleRange={visibleRange}
 					navigatePrevious={navigatePrevious}
@@ -1571,10 +1462,8 @@ const GanttView = ({ selectedProject, session }) => {
 				filterConfig={filterConfig}
 				toggleCompletedFilter={toggleCompletedFilter}
 				togglePriorityFilter={togglePriorityFilter}
-				toggleAssignedToMeFilter={toggleAssignedToMeFilter}
 				toggleDueStatusFilter={toggleDueStatusFilter}
 				onClearFilters={clearFilters}
-				session={session}
 				onCreateTask={() => setShowCreateTask(true)}
 				visibleRange={visibleRange}
 				navigatePrevious={navigatePrevious}
@@ -2039,9 +1928,6 @@ const GanttView = ({ selectedProject, session }) => {
 													}
 													onUpdateProgress={
 														handleUpdateProgress
-													}
-													assigneeDetails={
-														assigneeDetails
 													}
 													columns={columns}
 													viewType={viewType}

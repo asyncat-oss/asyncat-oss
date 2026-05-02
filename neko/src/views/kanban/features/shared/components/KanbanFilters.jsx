@@ -1,5 +1,5 @@
 
-import { Search, User, Calendar, AlertCircle, X, ZoomIn, ZoomOut, Maximize2, Siren, Disc3Icon, LifeBuoy } from "lucide-react";
+import { Search, Calendar, AlertCircle, X, ZoomIn, ZoomOut, Maximize2, Siren, Disc3Icon, LifeBuoy } from "lucide-react";
 
 const KanbanFilters = ({
   searchTerm,
@@ -22,9 +22,7 @@ const KanbanFilters = ({
   activeFilters,
   togglePriorityFilter,
   toggleDueDateFilter,
-  toggleAssignedToMeFilter,
   onClearFilters,
-  session,
   searchContext = { isSearchActive: false, totalResults: 0 },
   // Zoom props
   zoomLevel,
@@ -36,14 +34,12 @@ const KanbanFilters = ({
   const hasActiveFilters =
     activeFilters &&
     ((activeFilters.priority && activeFilters.priority.length > 0) ||
-      (activeFilters.dueDates && activeFilters.dueDates.length > 0) ||
-      (activeFilters.assignments && activeFilters.assignments.length > 0));
+      (activeFilters.dueDates && activeFilters.dueDates.length > 0));
 
   // Count total active filters
   const activeFilterCount =
     (activeFilters?.priority?.length || 0) +
-    (activeFilters?.dueDates?.length || 0) +
-    (activeFilters?.assignments?.length || 0);
+    (activeFilters?.dueDates?.length || 0);
 
   return (
     <div className="bg-white dark:bg-gray-900 midnight:bg-gray-950 border-b border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60">
@@ -167,21 +163,6 @@ const KanbanFilters = ({
 
             {/* Enhanced Filter Pills */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 align-middle">
-              {/* Assigned to Me Filter */}
-              <button
-                onClick={toggleAssignedToMeFilter}
-                className={`group px-3 py-2 text-xs font-medium border rounded-lg transition-all duration-200 whitespace-nowrap ${
-                  session?.user?.id && activeFilters?.assignments?.includes("assignedToMe")
-                    ? "bg-purple-50 dark:bg-purple-900/30 midnight:bg-purple-900/20 text-purple-700 dark:text-purple-400 midnight:text-purple-300 border-purple-200 dark:border-purple-600 midnight:border-purple-700"
-                    : "bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-600 dark:text-gray-400 midnight:text-gray-500 border-gray-200 dark:border-gray-600 midnight:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5" />
-                  <span className="hidden lg:inline">Assigned to me</span>
-                </div>
-              </button>
-
               {/* Priority Filters */}
               <div className="flex items-center gap-1">
                 {["High", "Medium", "Low"].map((priority) => {
