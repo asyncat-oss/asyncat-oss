@@ -4,7 +4,6 @@ import { useCardContext } from "../../views/context/CardContext";
 import ListViewFilters from "./ListViewFilters";
 import ListViewTable from "./ListViewTable";
 import AddCardModal from "../kanban/features/cards/AddCardModal";
-import viewsApi from "../viewsApi";
 
 const ListView = ({ selectedProject, session }) => {
 	const { columns, isLoading, error } = useColumnContext();
@@ -20,17 +19,12 @@ const ListView = ({ selectedProject, session }) => {
 		completed: false,
 		hasDependencies: false,
 		isBlocked: false,
-		hasTimer: false,
 	});
 	const [cards, setCards] = useState([]);
 	const [expandedCards, setExpandedCards] = useState(new Set());
-	const [timeEntries, setTimeEntries] = useState({});
-	const [activeTimer, setActiveTimer] = useState(null);
 	const [cardDependencies, setCardDependencies] = useState({});
 	const [dependentCards, setDependentCards] = useState({});
 	const [isLoadingDependencies, setIsLoadingDependencies] = useState(false);
-	const [isLoadingTimeEntries, setIsLoadingTimeEntries] = useState(false);
-	const [expandedTimeEntries, setExpandedTimeEntries] = useState(new Set());
 	const [showCreateTask, setShowCreateTask] = useState(false);
 
 	// Process cards from all columns
@@ -53,73 +47,11 @@ const ListView = ({ selectedProject, session }) => {
 		setCards(allCards);
 	}, [columns]);
 
-	// Fetch time entries for all cards
-	useEffect(() => {
-		const fetchTimeEntries = async () => {
-			if (!cards.length || !session?.user?.id) return;
-
-			setIsLoadingTimeEntries(true);
-			try {
-				// Use the batch API to fetch time entries for all cards
-				const cardIds = cards.map((card) => card.id);
-				const entriesMap =
-					await viewsApi.batch.fetchTimeEntriesForCards(cardIds);
-				setTimeEntries(entriesMap);
-			} catch (error) {
-				console.error("Error fetching time entries:", error);
-			} finally {
-				setIsLoadingTimeEntries(false);
-			}
-		};
-
-		fetchTimeEntries();
-	}, [cards, session?.user?.id]);
-
-	// Timer control functions
-	const handleStartTimer = async (cardId, e) => {
-		e.stopPropagation();
-		try {
-			const timeEntry = await viewsApi.time.startTimer(cardId);
-			setActiveTimer(timeEntry);
-		} catch (error) {
-			console.error("Error starting timer:", error);
-		}
-	};
-
-	const handleStopTimer = async (cardId, e) => {
-		e.stopPropagation();
-		try {
-			const timeEntry = await viewsApi.time.stopTimer(cardId, "");
-			setActiveTimer(null);
-
-			setTimeEntries((prev) => ({
-				...prev,
-				[cardId]: [timeEntry, ...(prev[cardId] || [])],
-			}));
-		} catch (error) {
-			console.error("Error stopping timer:", error);
-		}
-	};
-
 	// Toggle expanded state for a card
 	const toggleCardExpanded = (cardId, event) => {
 		event.stopPropagation();
 		setExpandedCards((prevExpanded) => {
 			const newExpanded = new Set(prevExpanded);
-			if (newExpanded.has(cardId)) {
-				newExpanded.delete(cardId);
-			} else {
-				newExpanded.add(cardId);
-			}
-			return newExpanded;
-		});
-	};
-
-	// Toggle time entries expanded state
-	const toggleTimeEntriesExpanded = (cardId, event) => {
-		event.stopPropagation();
-		setExpandedTimeEntries((prev) => {
-			const newExpanded = new Set(prev);
 			if (newExpanded.has(cardId)) {
 				newExpanded.delete(cardId);
 			} else {
@@ -193,13 +125,6 @@ const ListView = ({ selectedProject, session }) => {
 			filteredCards = filteredCards.filter((card) => isCardBlocked(card));
 		}
 
-		// Apply active timer filter
-		if (filterConfig.hasTimer) {
-			filteredCards = filteredCards.filter(
-				(card) => activeTimer && activeTimer.cardId === card.id
-			);
-		}
-
 		// Apply sorting
 		filteredCards.sort((a, b) => {
 			const { key, direction } = sortConfig;
@@ -224,10 +149,6 @@ const ListView = ({ selectedProject, session }) => {
 					valueA = priorityValue[a[key]] || 0;
 					valueB = priorityValue[b[key]] || 0;
 					break;
-				case "timeSpent":
-					valueA = a[key] || 0;
-					valueB = b[key] || 0;
-					break;
 				case "duration":
 					valueA = a[key] ?? Infinity;
 					valueB = b[key] ?? Infinity;
@@ -247,7 +168,6 @@ const ListView = ({ selectedProject, session }) => {
 		cards,
 		searchTerm,
 		filterConfig,
-		activeTimer,
 		dependentCards,
 		sortConfig,
 		isCardBlocked,
@@ -305,13 +225,6 @@ const ListView = ({ selectedProject, session }) => {
 		}));
 	};
 
-	const toggleTimerFilter = () => {
-		setFilterConfig((prev) => ({
-			...prev,
-			hasTimer: !prev.hasTimer,
-		}));
-	};
-
 	const togglePriorityFilter = (priority) => {
 		setFilterConfig((prev) => {
 			if (prev.priority.includes(priority)) {
@@ -351,7 +264,6 @@ const ListView = ({ selectedProject, session }) => {
 			completed: false,
 			hasDependencies: false,
 			isBlocked: false,
-			hasTimer: false,
 		});
 	};
 
@@ -426,7 +338,6 @@ const ListView = ({ selectedProject, session }) => {
 				toggleCompletedFilter={toggleCompletedFilter}
 				toggleDependenciesFilter={toggleDependenciesFilter}
 				toggleBlockedFilter={toggleBlockedFilter}
-				toggleTimerFilter={toggleTimerFilter}
 				togglePriorityFilter={togglePriorityFilter}
 				toggleDueStatusFilter={toggleDueStatusFilter}
 				onClearFilters={clearFilters}
@@ -446,15 +357,9 @@ const ListView = ({ selectedProject, session }) => {
 						sortedFilteredCards={sortedFilteredCards}
 						expandedCards={expandedCards}
 						toggleCardExpanded={toggleCardExpanded}
-						expandedTimeEntries={expandedTimeEntries}
-						toggleTimeEntriesExpanded={toggleTimeEntriesExpanded}
 						setSelectedCard={setSelectedCard}
-						activeTimer={activeTimer}
-						timeEntries={timeEntries}
 						cardDependencies={cardDependencies}
 						dependentCards={dependentCards}
-						handleStartTimer={handleStartTimer}
-						handleStopTimer={handleStopTimer}
 						session={session}
 						isCardBlocked={isCardBlocked}
 						columns={columns}

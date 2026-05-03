@@ -26,7 +26,6 @@ import {
  	ChevronDown,
  	X,
  	Paperclip,
- 	Timer,
  	Calendar,
  	CalendarDays,
  	Lock,
@@ -50,7 +49,6 @@ import viewsApi from "../../viewsApi";
 // Import needed components
 import CardSubtasksSection from "../subtask/CardSubtasksSection";
 import CardAttachmentsSection from "../attachments/CardAttachmentsSection";
-import CardTimeTracking from "../time/CardTimeTracking";
 
 import { InteractiveStatusBadge } from "../../list/ListViewCard";
 import CustomDatePicker from "../../kanban/features/shared/components/CustomDatePicker";
@@ -70,99 +68,6 @@ const getAllCards = (columns) => {
 					},
 			  }))
 			: []
-	);
-};
-
-// Duration Display Component
-const DurationDisplay = ({
-	duration,
-	timeSpent = 0,
-	showTimeSpent = false,
-	className = "",
-	compact = false,
-}) => {
-	const formatDuration = (minutes) => {
-		if (!minutes || minutes === 0) return null;
-
-		const hours = Math.floor(minutes / 60);
-		const mins = minutes % 60;
-
-		if (compact) {
-			if (hours > 0 && mins > 0) return `${hours}h ${mins}m`;
-			if (hours > 0) return `${hours}h`;
-			return `${mins}m`;
-		} else {
-			const parts = [];
-			if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
-			if (mins > 0) parts.push(`${mins} minute${mins !== 1 ? "s" : ""}`);
-			return parts.join(" ");
-		}
-	};
-
-	const formatTimeSpent = (seconds) => {
-		if (!seconds || seconds === 0) return null;
-
-		const hours = Math.floor(seconds / 3600);
-		const mins = Math.floor((seconds % 3600) / 60);
-
-		if (compact) {
-			if (hours > 0 && mins > 0) return `${hours}h ${mins}m`;
-			if (hours > 0) return `${hours}h`;
-			return `${mins}m`;
-		} else {
-			const parts = [];
-			if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
-			if (mins > 0) parts.push(`${mins} minute${mins !== 1 ? "s" : ""}`);
-			return parts.join(" ");
-		}
-	};
-
-	const estimatedText = formatDuration(duration);
-	const spentText = formatTimeSpent(timeSpent);
-
-	if (!estimatedText && (!showTimeSpent || !spentText)) {
-		return null;
-	}
-
-	const progress =
-		duration && timeSpent
-			? Math.min((timeSpent / 60 / duration) * 100, 100)
-			: null;
-	const isOvertime = duration && timeSpent && timeSpent / 60 > duration;
-
-	return (
-		<div className={`flex items-center space-x-2 ${className}`}>
-			<Clock
-				className={`w-4 h-4 ${
-					isOvertime ? "text-red-500" : "text-gray-400"
-				}`}
-			/>
-
-			<div
-				className={`flex items-center space-x-2 text-sm ${
-					isOvertime
-						? "text-red-600"
-						: "text-gray-600 dark:text-gray-400 midnight:text-gray-300"
-				}`}
-			>
-				{estimatedText && <span>{estimatedText}</span>}
-
-				{showTimeSpent && spentText && (
-					<>
-						<span className="text-gray-400">/</span>
-						<span
-							className={
-								isOvertime
-									? "text-red-600 font-medium"
-									: "text-gray-900 dark:text-gray-400 midnight:text-gray-300"
-							}
-						>
-							{spentText}
-						</span>
-					</>
-				)}
-			</div>
-		</div>
 	);
 };
 
@@ -273,7 +178,6 @@ const CardDetailModal = ({
 		attachments: false,
 		dependencies: false,
 		dependentTasks: false,
-		timeTracking: false,
 	});
 
 	const allCards = getAllCards(columns);
@@ -285,7 +189,6 @@ const CardDetailModal = ({
 		checklist: frozenInitialCard.current.checklist || [],
 		files: [], // attachments disabled
 		attachments: frozenInitialCard.current.attachments || [],
-		timeSpent: frozenInitialCard.current.timeSpent || 0,
 		startDate: frozenInitialCard.current.startDate || null,
 		dueDate: frozenInitialCard.current.dueDate || null,
 		predictedMinutes: frozenInitialCard.current.predictedMinutes || null,
@@ -487,7 +390,6 @@ const CardDetailModal = ({
 				startDate: localCard.startDate,
 				dueDate: localCard.dueDate,
 				predictedMinutes: localCard.predictedMinutes,
-				timeSpent: localCard.timeSpent,
 				progress: localCard.progress,
 				columnId: localCard.columnId,
 				checklist: localCard.checklist,
@@ -1862,48 +1764,6 @@ const CardDetailModal = ({
 												</div>
 											</CollapsibleSection>
 
-											<CollapsibleSection
-												title="Time Tracking"
-												icon={
-													<Timer className="w-4 h-4 text-gray-600" />
-												}
-												isExpanded={
-													expandedSections.timeTracking
-												}
-												onToggle={() =>
-													toggleSection(
-														"timeTracking"
-													)
-												}
-												summary={
-													localCard.timeSpent > 0
-														? `${Math.floor(
-																localCard.timeSpent /
-																	3600
-														  )}h ${Math.floor(
-																(localCard.timeSpent %
-																	3600) /
-																	60
-														  )}m logged`
-														: null
-												}
-											>
-												<CardTimeTracking
-													card={localCard}
-													readOnly={readOnly}
-													onCardUpdated={(
-														updatedCard
-													) => {
-														if (readOnly) return;
-														setLocalCard(
-															(prev) => ({
-																...prev,
-																...updatedCard,
-															})
-														);
-													}}
-												/>
-											</CollapsibleSection>
 										</div>
 									</div>
 								</div>
@@ -1997,28 +1857,6 @@ const CardDetailModal = ({
 												</div>
 											</div>
 
-											{/* Time Tracking Summary */}
-											<div className="space-y-2">
-												<span className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-300">
-													Time Spent:
-												</span>
-												<DurationDisplay
-													duration={
-														localCard.predictedMinutes
-													}
-													timeSpent={
-														localCard.timeSpent
-													}
-													showTimeSpent={
-														localCard.timeSpent > 0
-													}
-												/>
-												{!localCard.predictedMinutes && (
-													<span className="text-sm text-gray-600 dark:text-gray-500 midnight:text-gray-400">
-														No time tracked
-													</span>
-												)}
-											</div>
 										</div>
 
 										{/* Dates */}

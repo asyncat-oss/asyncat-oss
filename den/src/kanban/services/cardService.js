@@ -803,40 +803,6 @@ const updateChecklist = async (id, checklist, db) => {
 	}
 };
 
-const updateCardAdministrator = async (id, administratorId, db) => {
-	try {
-		if (!isValidUUID(id)) {
-			throw new Error("Invalid card ID format");
-		}
-
-		const processedAdministratorId =
-			typeof administratorId === "object"
-				? administratorId.id
-				: administratorId;
-
-		const { data: updatedCard, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.update({
-				administrator_id: processedAdministratorId,
-				updatedAt: new Date().toISOString(),
-			})
-			.eq("id", id)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		// Add dependency counts to the returned card
-		await addDependencyCountsToCards([updatedCard], db);
-
-		return updatedCard;
-	} catch (error) {
-		console.error("Error updating card administrator:", error);
-		throw error;
-	}
-};
-
 // Helper function to fetch user details from the users service
 const fetchUserDetails = async (userIds, sessionToken = null) => {
 	if (!userIds || userIds.length === 0) return new Map();
@@ -1115,7 +1081,6 @@ export default {
 	deleteCard,
 	moveCard,
 	updateChecklist,
-	updateCardAdministrator,
 	// Attachment management
 	addAttachments,
 	removeAttachment,

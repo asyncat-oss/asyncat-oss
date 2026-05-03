@@ -149,7 +149,6 @@ const TimelineNavigation = ({
 		{ value: "priority", label: "Priority" },
 		{ value: "dueStatus", label: "Due Status" },
 		{ value: "completion", label: "Completion" },
-		{ value: "timeTracking", label: "Time Tracking" },
 	];
 
 	const selectedGroupByOption = groupByOptions.find(

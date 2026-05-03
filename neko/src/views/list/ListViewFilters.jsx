@@ -8,7 +8,6 @@ const ListViewFilters = ({
 	toggleCompletedFilter,
 	toggleDependenciesFilter,
 	toggleBlockedFilter,
-	toggleTimerFilter,
 	togglePriorityFilter,
 	toggleDueStatusFilter,
 	onClearFilters,
@@ -21,8 +20,7 @@ const ListViewFilters = ({
 		(filterConfig.priority && filterConfig.priority.length > 0) ||
 		(filterConfig.dueStatus && filterConfig.dueStatus.length > 0) ||
 		filterConfig.hasDependencies ||
-		filterConfig.isBlocked ||
-		filterConfig.hasTimer;
+		filterConfig.isBlocked;
 
 	// Count total active filters
 	const activeFilterCount =
@@ -30,8 +28,7 @@ const ListViewFilters = ({
 		(filterConfig.priority?.length || 0) +
 		(filterConfig.dueStatus?.length || 0) +
 		(filterConfig.hasDependencies ? 1 : 0) +
-		(filterConfig.isBlocked ? 1 : 0) +
-		(filterConfig.hasTimer ? 1 : 0);
+		(filterConfig.isBlocked ? 1 : 0);
 	return (
 		<div className="bg-white dark:bg-gray-900 midnight:bg-gray-950 border-b border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60">
 			<div className="px-6 py-4">

@@ -171,26 +171,6 @@ const updateChecklist = async (req, res) => {
 	}
 };
 
-// Update card administrator
-const updateCardAdministrator = async (req, res) => {
-	try {
-		const { id } = req.params;
-		const { administratorId } = req.body;
-
-		const updatedCard = await cardService.updateCardAdministrator(
-			id,
-			administratorId,
-			req.db
-		);
-
-		res.status(200).json(updatedCard);
-	} catch (error) {
-		console.error("Error updating card administrator:", error);
-		const statusCode = error.message === "Card not found" ? 404 : 500;
-		res.status(statusCode).json({ error: error.message });
-	}
-};
-
 // Update subtask duration
 const updateSubtaskDuration = async (req, res) => {
 	try {
@@ -508,7 +488,6 @@ export default {
 	deleteCard,
 	moveCard,
 	updateChecklist,
-	updateCardAdministrator,
 	updateSubtaskDuration,
 	getCalendarData,
 	// Dependency management

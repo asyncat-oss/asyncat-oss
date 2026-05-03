@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
 	File,
@@ -13,8 +13,6 @@ import {
 	Calendar,
 	CalendarDays,
 	AlertTriangle,
-	UserPlus,
-	User,
 	CheckCircle,
 	Paperclip,
 	Siren,
@@ -39,94 +37,6 @@ import viewsApi from "../../../viewsApi";
 import CustomDatePicker from "../shared/components/CustomDatePicker";
 import AddColumnModal from "../columns/components/AddColumnModal";
 
-import catDP from "../../../../assets/dp/CAT.webp";
-import dogDP from "../../../../assets/dp/DOG.webp";
-import dolphinDP from "../../../../assets/dp/DOLPHIN.webp";
-import dragonDP from "../../../../assets/dp/DRAGON.webp";
-import elephantDP from "../../../../assets/dp/ELEPHANT.webp";
-import foxDP from "../../../../assets/dp/FOX.webp";
-import lionDP from "../../../../assets/dp/LION.webp";
-import owlDP from "../../../../assets/dp/OWL.webp";
-import penguinDP from "../../../../assets/dp/PENGUIN.webp";
-import wolfDP from "../../../../assets/dp/WOLF.webp";
-
-const profilePictureMap = {
-	CAT: catDP,
-	DOG: dogDP,
-	DOLPHIN: dolphinDP,
-	DRAGON: dragonDP,
-	ELEPHANT: elephantDP,
-	FOX: foxDP,
-	LION: lionDP,
-	OWL: owlDP,
-	PENGUIN: penguinDP,
-	WOLF: wolfDP,
-};
-
-const getProfilePicture = (profilePicId) => {
-	if (!profilePicId) return null;
-
-	if (profilePicId.startsWith("https://")) {
-		return profilePicId;
-	}
-
-	if (profilePictureMap[profilePicId]) {
-		return profilePictureMap[profilePicId];
-	}
-	return null;
-};
-
-const getMemberInitial = (member) => {
-	if (!member) return "U";
-
-	const name = member.name || "";
-	if (name) return name.charAt(0).toUpperCase();
-
-	const email = member.email || "";
-	if (email) return email.charAt(0).toUpperCase();
-
-	return "U";
-};
-
-const AdministratorAvatar = ({ member, size = "medium" }) => {
-	const [imageLoadError, setImageLoadError] = useState(false);
-
-	if (!member) return null;
-
-	const sizeClasses =
-		size === "small"
-			? "w-4 h-4"
-			: size === "medium"
-			? "w-6 h-6"
-			: "w-8 h-8";
-	const profilePicture = getProfilePicture(member.profile_picture);
-
-	const handleImageError = () => setImageLoadError(true);
-	const handleImageLoad = () => setImageLoadError(false);
-
-	return (
-		<div
-			className={`${sizeClasses} rounded-full border-2 border-gray-200 dark:border-gray-700 midnight:border-gray-800 
-        flex items-center justify-center overflow-hidden transition-transform duration-200 hover:scale-110`}
-			title={member.name || member.email || "Administrator"}
-		>
-			{profilePicture && !imageLoadError ? (
-				<img
-					src={profilePicture}
-					alt={member.name || member.email || "Administrator"}
-					className="w-full h-full object-cover"
-					onError={handleImageError}
-					onLoad={handleImageLoad}
-				/>
-			) : (
-				<div className="w-full h-full rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-medium text-xs">
-					{getMemberInitial(member)}
-				</div>
-			)}
-		</div>
-	);
-};
-
 const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 	const { columns, selectedProject, loadColumns } = useColumnContext();
 	const { addCard } = useCardActions();
@@ -141,26 +51,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 	
 	// Column creation state
 	const [showCreateColumnModal, setShowCreateColumnModal] = useState(false);
-
-	// Add this ref at the top with other refs
-	const administratorSelectorRef = useRef(null);
-
-	// Add this useEffect
-	useEffect(() => {
-		const handleClickOutside = (event) => {
-			if (
-				administratorSelectorRef.current &&
-				!administratorSelectorRef.current.contains(event.target)
-			) {
-				setShowAddAdministrator(false);
-				setAdministratorSearch("");
-			}
-		};
-
-		document.addEventListener("mousedown", handleClickOutside);
-		return () =>
-			document.removeEventListener("mousedown", handleClickOutside);
-	}, []);
 
 	const [cardData, setCardData] = useState({
 		title: "",
@@ -179,14 +69,11 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 		progress: 0,
 		checklist: [],
 		tasks: { completed: 0, total: 0 },
-		administrator_id: null,
 		createdBy: createdBy,
 	});
 
 	const [projectMembers, setProjectMembers] = useState([]);
 	const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-	const [showAddAdministrator, setShowAddAdministrator] = useState(false);
-	const [administratorSearch, setAdministratorSearch] = useState("");
 
 	const [fileError, setFileError] = useState(null);
 	const [selectedFiles, setSelectedFiles] = useState([]);
@@ -225,55 +112,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 		setProjectMembers([]);
 		setIsLoadingMembers(false);
 	}, [cardData.columnId, columns]);
-
-	const getAdministrator = () => {
-		if (!cardData.administrator_id) return null;
-		const administratorId =
-			typeof cardData.administrator_id === "string"
-				? cardData.administrator_id
-				: cardData.administrator_id?.id;
-		const member = projectMembers.find(
-			(member) => member.id === administratorId
-		);
-		return (
-			member || {
-				id: administratorId,
-				name: `User ${administratorId?.slice(0, 5) || "Unknown"}`,
-				email: "No email available",
-			}
-		);
-	};
-
-	const administrator = getAdministrator();
-
-	const availableMembers = projectMembers.filter(
-		(member) =>
-			member.name
-				.toLowerCase()
-				.includes(administratorSearch.toLowerCase()) &&
-			member.id !== administrator?.id
-	);
-
-	const handleAddAdministrator = (member) => {
-		setCardData((prev) => ({
-			...prev,
-			administrator_id: member.id,
-		}));
-		setShowAddAdministrator(false);
-		setAdministratorSearch("");
-	};
-
-	const handleRemoveAdministrator = () => {
-		setCardData((prev) => ({
-			...prev,
-			administrator_id: null,
-		}));
-	};
-
-	const resetAdministratorState = () => {
-		setShowAddAdministrator(false);
-		setAdministratorSearch("");
-	};
 
 	// Dependency handlers
 	const handleAddDependency = (targetCard, type) => {
@@ -604,7 +442,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 	const handleBackdropClick = (e) => {
 		// Only close if clicking on the backdrop itself, not its children
 		if (e.target === e.currentTarget) {
-			resetAdministratorState();
 			resetDependencyState();
 			onClose();
 		}
@@ -813,111 +650,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 	const renderStep2Content = () => {
 		return (
 			<div className="space-y-8">
-				{/* Administrator Section - like Card.jsx */}
-				<div className="mb-6">
-					<div className="flex items-center justify-between mb-3">
-						<h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-indigo-200 flex items-center">
-							<User className="w-4 h-4 mr-1" />
-							Administrator
-						</h3>
-						{!administrator && (
-							<button
-								type="button"
-								onClick={() => setShowAddAdministrator(true)}
-								className="text-sm text-blue-600 dark:text-blue-400 midnight:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 midnight:hover:text-blue-300 flex items-center space-x-1"
-								disabled={isSubmitting}
-							>
-								<UserPlus className="w-4 h-4" />
-								<span>Assign</span>
-							</button>
-						)}
-					</div>
-
-					{showAddAdministrator && (
-						<div
-							ref={administratorSelectorRef}
-							className="mb-3 p-3 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-md bg-gray-50 dark:bg-gray-900 midnight:bg-gray-950"
-						>
-							<input
-								type="text"
-								value={administratorSearch}
-								onChange={(e) =>
-									setAdministratorSearch(e.target.value)
-								}
-								placeholder="Search members..."
-								className="w-full mb-3 px-0 py-2 border-0 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-transparent focus:outline-none focus:border-gray-400 dark:focus:border-gray-500 midnight:focus:border-indigo-500 text-gray-900 dark:text-white midnight:text-indigo-200 placeholder-gray-400 midnight:placeholder-gray-600"
-								disabled={isSubmitting}
-							/>
-							<div className="max-h-32 overflow-y-auto space-y-1">
-								{availableMembers.map((member) => (
-									<button
-										key={member.id}
-										type="button"
-										onClick={() =>
-											handleAddAdministrator(member)
-										}
-										className="w-full flex items-center space-x-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 rounded-md text-left"
-										disabled={isSubmitting}
-									>
-										<AdministratorAvatar
-											member={member}
-											size="medium"
-										/>
-										<div className="flex-1">
-											<div className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-indigo-200">
-												{member.name}
-											</div>
-											<div className="text-xs text-gray-500 midnight:text-gray-500">
-												{member.email}
-											</div>
-										</div>
-									</button>
-								))}
-								{availableMembers.length === 0 && (
-									<div className="text-sm text-gray-500 midnight:text-gray-500 text-center py-2">
-										{administratorSearch
-											? "No matching members"
-											: "No available members"}
-									</div>
-								)}
-							</div>
-						</div>
-					)}
-
-					<div className="space-y-2">
-						{!administrator ? (
-							<div className="text-sm text-gray-500 midnight:text-gray-500">
-								No administrator assigned
-							</div>
-						) : (
-							<div className="flex items-center justify-between p-2 bg-white dark:bg-gray-900 midnight:bg-gray-950 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-md">
-								<div className="flex items-center space-x-2 min-w-0 flex-1">
-									<AdministratorAvatar
-										member={administrator}
-										size="medium"
-									/>
-									<div className="flex-1 min-w-0">
-										<div className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-indigo-200 truncate">
-											{administrator.name}
-										</div>
-										<div className="text-xs text-gray-500 midnight:text-gray-500 truncate">
-											{administrator.email}
-										</div>
-									</div>
-								</div>
-								<button
-									type="button"
-									onClick={handleRemoveAdministrator}
-									className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 midnight:text-red-500 midnight:hover:text-red-400 p-1"
-									disabled={isSubmitting}
-								>
-									<X className="w-4 h-4" />
-								</button>
-							</div>
-						)}
-					</div>
-				</div>
-
 				{/* Subtasks Section */}
 				<div className="mb-6">
 					<h3 className="text-sm font-medium mb-3 text-gray-700 dark:text-gray-300 midnight:text-indigo-200 flex items-center">
@@ -1448,7 +1180,7 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 									{currentStep === 0
 										? "Enter the basic details for your task"
 										: currentStep === 1
-										? "Configure administrator, subtasks, and attachments"
+										? "Configure subtasks and attachments"
 										: activeDependencyType
 										? "Select a card to add as a dependency"
 										: "Set up card dependencies"}
@@ -1456,7 +1188,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 							</div>
 							<button
 								onClick={() => {
-									resetAdministratorState();
 									resetDependencyState();
 									onClose();
 								}}
@@ -1478,7 +1209,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 								<button
 									type="button"
 									onClick={() => {
-										resetAdministratorState();
 										resetDependencyState();
 										onClose();
 									}}

@@ -235,16 +235,6 @@ export const cardAPI = {
 	},
 
 	/**
-	 * Update card administrator
-	 */
-	updateAdministrator: async (cardId, administratorId) => {
-		return apiRequest(`${KANBAN_API_URL}/cards/${cardId}/administrator`, {
-			method: "PUT",
-			body: JSON.stringify({ administratorId }),
-		});
-	},
-
-	/**
 	 * Add attachment to card
 	 */
 	addAttachment: async (cardId, files) => {
@@ -344,57 +334,6 @@ export const dependencyAPI = {
 		return apiRequest(
 			`${KANBAN_API_URL}/cards/${cardId}/dependencies/unlocked`
 		);
-	},
-};
-
-// =============================================================================
-// TIME TRACKING API METHODS
-// =============================================================================
-
-export const timeAPI = {
-	/**
-	 * Get time entries for a card
-	 */
-	getTimeEntries: async (cardId) => {
-		return apiRequest(`${KANBAN_API_URL}/cards/${cardId}/time`);
-	},
-
-	/**
-	 * Start timer for a card
-	 */
-	startTimer: async (cardId) => {
-		return apiRequest(`${KANBAN_API_URL}/cards/${cardId}/time/start`, {
-			method: "POST",
-		});
-	},
-
-	/**
-	 * Stop timer for a card
-	 */
-	stopTimer: async (cardId, description = "") => {
-		return apiRequest(`${KANBAN_API_URL}/cards/${cardId}/time/stop`, {
-			method: "POST",
-			body: JSON.stringify({ description }),
-		});
-	},
-
-	/**
-	 * Update time entry
-	 */
-	updateTimeEntry: async (timeEntryId, updates) => {
-		return apiRequest(`${KANBAN_API_URL}/time/${timeEntryId}`, {
-			method: "PUT",
-			body: JSON.stringify(updates),
-		});
-	},
-
-	/**
-	 * Delete time entry
-	 */
-	deleteTimeEntry: async (timeEntryId) => {
-		return apiRequestRaw(`${KANBAN_API_URL}/time/${timeEntryId}`, {
-			method: "DELETE",
-		});
 	},
 };
 
@@ -520,26 +459,6 @@ export const batchAPI = {
 		}
 	},
 
-	/**
-	 * Fetch time entries for multiple cards
-	 */
-	fetchTimeEntriesForCards: async (cardIds) => {
-		const promises = cardIds.map(async (cardId) => {
-			try {
-				const entries = await timeAPI.getTimeEntries(cardId);
-				return entries && entries.length > 0
-					? { [cardId]: entries }
-					: null;
-			} catch {
-				return null;
-			}
-		});
-
-		const results = await Promise.all(promises);
-		return results
-			.filter(Boolean)
-			.reduce((acc, entry) => ({ ...acc, ...entry }), {});
-	},
 };
 
 // =============================================================================
@@ -550,7 +469,6 @@ const viewsApi = {
 	column: columnAPI,
 	card: cardAPI,
 	dependency: dependencyAPI,
-	time: timeAPI,
 	user: userAPI,
 	ai: aiAPI,
 	batch: batchAPI,

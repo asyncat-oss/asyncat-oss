@@ -11,8 +11,6 @@ import {
   LifeBuoy,
   BadgeAlert,
   User,
-  Play,
-  Square,
   Calendar,
   Check,
   MoveRight,
@@ -56,17 +54,6 @@ const profilePictureMap = {
 
 // Session-level cache for administrator details to persist across dependency updates
 const administratorCache = new Map();
-
-// Helper function to format time duration
-const formatDuration = (seconds) => {
-  if (!seconds) return "0h 0m";
-
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (hours === 0) return `${minutes}m`;
-  return `${hours}h ${minutes}m`;
-};
 
 // Format predicted time in minutes to readable form (e.g., "4h 30m" or "2h")
 const formatPredictedTime = (minutes) => {
@@ -211,10 +198,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
 
   const [cardData, setCardData] = useState(card);
   const [isExiting, setIsExiting] = useState(false);
-  const [activeTimer, setActiveTimer] = useState(null);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
   const [assigneeDetails, setAssigneeDetails] = useState([]);
   const [isLoadingAssignees, setIsLoadingAssignees] = useState(false);
   const [completionTarget, setCompletionTarget] = useState(null);
@@ -297,20 +280,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       setIsExiting(false);
     }
   }, [isDeleting, isExiting]);
-
-  // Fetch current user info
-  useEffect(() => {
-    const getCurrentUser = async () => {
-      try {
-        const userData = await viewsApi.user.getCurrentUser();
-        setCurrentUser(userData.data);
-      } catch (error) {
-        console.error("Error fetching current user:", error);
-      }
-    };
-
-    getCurrentUser();
-  }, []);
 
   // Fetch administrator details
   useEffect(() => {
@@ -436,84 +405,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     fetchDependencyCounts();
   }, [cardData.id]);
 
-  // Load time entries for this card
-  const loadTimeEntries = React.useCallback(async () => {
-    // Check if user is authenticated before making API calls
-    if (!authService.isAuthenticated()) {
-      setActiveTimer(null);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const data = await viewsApi.time.getTimeEntries(card.id);
-
-      // Check if there's an active timer
-      const active = data.find((entry) => !entry.endTime);
-      setActiveTimer(active);
-    } catch (error) {
-      console.error("Error loading time entries:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [card.id]);
-
-  // Start a timer
-  const startTimer = async (e) => {
-    if (e) {
-      e.stopPropagation(); // Prevent card selection
-    }
-
-    // Check if user is authenticated before making API calls
-    if (!authService.isAuthenticated()) {
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const newTimer = await viewsApi.time.startTimer(card.id);
-      setActiveTimer(newTimer);
-      loadTimeEntries();
-    } catch (error) {
-      console.error("Error starting timer:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Stop the active timer
-  const stopTimer = async (e) => {
-    if (e) {
-      e.stopPropagation(); // Prevent card selection
-    }
-
-    if (!activeTimer) return;
-
-    // Check if user is authenticated before making API calls
-    if (!authService.isAuthenticated()) {
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      await viewsApi.time.stopTimer(card.id, "");
-
-      setActiveTimer(null);
-      loadTimeEntries();
-
-      // Update the card data with new time information
-      const updatedCard = await viewsApi.card.getCard(card.id);
-      setCardData((prev) => ({
-        ...prev,
-        timeSpent: updatedCard.timeSpent || 0,
-      }));
-    } catch (error) {
-      console.error("Error stopping timer:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Handle automatic completion of a task
   const handleCompleteTask = async (e) => {
     if (e) {
@@ -582,82 +473,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       setIsCompletingTask(false);
     }
   };
-
-  // Update elapsed time for active timer
-  useEffect(() => {
-    let interval;
-
-    if (activeTimer) {
-      interval = setInterval(() => {
-        const startTime = new Date(activeTimer.startTime);
-        const now = new Date();
-        setElapsedTime(Math.floor((now - startTime) / 1000));
-      }, 1000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [activeTimer]);
-
-  // Check if current user is the administrator or subtask assignee of this card
-  const isUserAssigned = useMemo(() => {
-    if (!currentUser) {
-      return false;
-    }
-
-    // Check if current user's ID matches the administrator ID
-    if (cardData.administrator_id) {
-      const administratorId =
-        typeof cardData.administrator_id === "object"
-          ? cardData.administrator_id.id
-          : cardData.administrator_id;
-      if (administratorId === currentUser.id) {
-        return true;
-      }
-    }
-
-    // Check preloaded administrator data
-    if (cardData.administrator && typeof cardData.administrator === "object") {
-      if (cardData.administrator.id === currentUser.id) {
-        return true;
-      }
-    }
-
-    // Check preloaded administrator data (capital A)
-    if (cardData.Administrator && typeof cardData.Administrator === "object") {
-      if (cardData.Administrator.id === currentUser.id) {
-        return true;
-      }
-    }
-
-    // Check if current user is assigned to any subtask
-    if (cardData.checklist && Array.isArray(cardData.checklist)) {
-      return cardData.checklist.some((subtask) => {
-        if (subtask.assignees && Array.isArray(subtask.assignees)) {
-          return subtask.assignees.some((assignee) => {
-            const assigneeId =
-              typeof assignee === "object" ? assignee.id : assignee;
-            return assigneeId === currentUser.id;
-          });
-        }
-        return false;
-      });
-    }
-
-    return false;
-  }, [
-    currentUser,
-    cardData.administrator_id,
-    cardData.administrator,
-    cardData.Administrator,
-    cardData.checklist,
-  ]);
-
-  // Load time entries on mount
-  useEffect(() => {
-    loadTimeEntries();
-  }, [card.id, loadTimeEntries]);
 
   const defaultCardStyles = {
     fontFamily: "sans-serif",
@@ -842,10 +657,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
 
   if (!cardData) return null;
 
-  // Calculate total time (current timer + previously recorded time)
-  const totalTimeSpent =
-    (cardData.timeSpent || 0) + (activeTimer ? elapsedTime : 0);
-
   // Enhanced card styling with editing indicators
   const getCardClasses = () => {
     let baseClasses = `p-4 rounded-xl mb-3 touch-none transition-all duration-200 search-result-card`;
@@ -978,14 +789,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
             {getPriorityIcon(cardData.priority)}
             <span className="ml-1">{cardData.priority}</span>
           </div>
-
-          {/* Show time spent */}
-          {totalTimeSpent > 0 && (
-            <div className="flex items-center">
-              <Clock className="w-3 h-3 mr-1" />
-              {formatDuration(totalTimeSpent)}
-            </div>
-          )}
 
           {/* Attachments display disabled */}
           {getAttachmentCount() > 0 && (
@@ -1322,14 +1125,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
           </>
         )}
 
-        {/* Time tracking indicator */}
-        {totalTimeSpent > 0 && (
-          <div className="flex items-center text-gray-500 dark:text-gray-200 midnight:text-gray-500">
-            <Clock className="w-3 h-3 mr-1" />
-            {formatDuration(totalTimeSpent)}
-          </div>
-        )}
-
         {/* Time prediction indicator */}
         {cardData.predictedMinutes > 0 && (
           <div className="flex items-center text-gray-500 dark:text-gray-200 midnight:text-gray-500">
@@ -1461,50 +1256,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
         </div>
       )}
 
-      {/* Quick Time Tracking Control */}
-      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600 midnight:border-gray-800">
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-gray-500 dark:text-gray-300 midnight:text-gray-500">
-            {activeTimer ? (
-              <div className="flex items-center">
-                <div className="animate-pulse w-2 h-2 bg-green-500 rounded-full mr-1"></div>
-                <span>Timer running: {formatDuration(elapsedTime)}</span>
-              </div>
-            ) : (
-              <span>Total time: {formatDuration(cardData.timeSpent || 0)}</span>
-            )}
-          </div>
-
-          {isUserAssigned && !isBeingEdited && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent card selection
-                activeTimer ? stopTimer(e) : startTimer(e);
-              }}
-              disabled={isLoading}
-              className={`p-1.5 rounded-md text-xs flex items-center ${
-                activeTimer
-                  ? "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 midnight:bg-red-900/10 midnight:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 midnight:hover:bg-red-900/20"
-                  : "bg-gray-100 text-gray-600 dark:bg-gray-600 dark:text-gray-300 midnight:bg-gray-800 midnight:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-550 midnight:hover:bg-gray-750"
-              }`}
-            >
-              {isLoading ? (
-                <div className="w-3 h-3 border-2 border-t-transparent border-gray-600 dark:border-gray-300 midnight:border-gray-400 rounded-full animate-spin"></div>
-              ) : activeTimer ? (
-                <>
-                  <Square className="w-3 h-3 mr-1" />
-                  <span>Stop</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-3 h-3 mr-1" />
-                  <span>Start</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 };

@@ -395,12 +395,7 @@ export const getDueStatus = (dueDate) => {
 };
 
 // Enhanced get color for a card based on priority and completion
-export const getCardColor = (card, activeTimer) => {
-  // Check for active timer first
-  if (activeTimer && activeTimer.cardId === card.id) {
-    return "bg-blue-500 dark:bg-blue-600 midnight:bg-blue-700 hover:bg-blue-600 dark:hover:bg-blue-500";
-  }
-
+export const getCardColor = (card) => {
   // If completed, use green styling
   if (card.progress === 100 || card.isCompletionColumn) {
     return "bg-green-500 dark:bg-green-600 midnight:bg-green-700 hover:bg-green-600 dark:hover:bg-green-500";

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useColumnContext } from "../context/ColumnContext";
 import { useCardContext } from "../context/CardContext";
-import viewsApi from "../viewsApi";
 
 // Import components
 import TimelineFilters from "./TimelineFilters";
@@ -56,12 +55,8 @@ const TimelineView = ({ selectedProject, session }) => {
 		start: null,
 		end: null,
 	});
-	const [groupBy, setGroupBy] = useState("status"); // "status", "priority", "completion", "timeTracking"
+	const [groupBy, setGroupBy] = useState("status");
 	const [containerWidth, setContainerWidth] = useState(0);
-
-	// Time tracking state
-	const [timeEntries, setTimeEntries] = useState({});
-	const [isLoadingTimeEntries, setIsLoadingTimeEntries] = useState(false);
 
 	// Filter settings
 	const [activeFilters, setActiveFilters] = useState({
@@ -191,72 +186,6 @@ const TimelineView = ({ selectedProject, session }) => {
 		);
 		setCards(sortedCards);
 	}, [columns]);
-
-	// Fetch time entries for all cards
-	useEffect(() => {
-		const fetchTimeEntries = async () => {
-			if (!cards.length || !session?.user?.id) return;
-
-			setIsLoadingTimeEntries(true);
-			try {
-				// Use the batch API to fetch time entries for all cards
-				const cardIds = cards.map((card) => card.id);
-				const entriesMap =
-					await viewsApi.batch.fetchTimeEntriesForCards(cardIds);
-				setTimeEntries(entriesMap);
-			} catch (error) {
-				console.error("Error fetching time entries:", error);
-			} finally {
-				setIsLoadingTimeEntries(false);
-			}
-		};
-
-		fetchTimeEntries();
-	}, [cards, session?.user?.id]);
-
-	// Timer control functions
-	const handleStartTimer = async (cardId, e) => {
-		e.stopPropagation();
-		try {
-			await viewsApi.time.startTimer(cardId);
-
-			// Refresh time entries after starting timer
-			const entries = await viewsApi.time.getTimeEntries(cardId);
-			setTimeEntries((prev) => ({
-				...prev,
-				[cardId]: entries,
-			}));
-		} catch (error) {
-			console.error("Error starting timer:", error);
-		}
-	};
-
-	const handleStopTimer = async (cardId, e) => {
-		e.stopPropagation();
-		try {
-			const timeEntry = await viewsApi.time.stopTimer(cardId, "");
-
-			// Update time entries for this card
-			setTimeEntries((prev) => ({
-				...prev,
-				[cardId]: [timeEntry, ...(prev[cardId] || [])],
-			}));
-		} catch (error) {
-			console.error("Error stopping timer:", error);
-		}
-	};
-
-	// Get active timer from time entries
-	const activeTimer = Object.keys(timeEntries).reduce((timer, cardId) => {
-		const entries = timeEntries[cardId];
-		if (entries && entries.length > 0) {
-			const activeEntry = entries.find((entry) => !entry.endTime);
-			if (activeEntry) {
-				return { cardId, entry: activeEntry };
-			}
-		}
-		return timer;
-	}, null);
 
 	// Initialize current period on component mount
 	useEffect(() => {
@@ -904,36 +833,6 @@ const TimelineView = ({ selectedProject, session }) => {
 					}));
 			}
 
-			case "timeTracking": {
-				// Group by time tracking status
-				const timeGroups = {
-					"Has Time Entries": [],
-					"No Time Tracked": [],
-				};
-
-				displayCards.forEach((card) => {
-					if (
-						timeEntries[card.id] &&
-						timeEntries[card.id].length > 0
-					) {
-						timeGroups["Has Time Entries"].push(card);
-					} else {
-						timeGroups["No Time Tracked"].push(card);
-					}
-				});
-
-				return Object.entries(timeGroups)
-					.filter(([_, cards]) => cards.length > 0)
-					.map(([status, cards]) => ({
-						title: status,
-						cards: cards,
-						color:
-							status === "Has Time Entries"
-								? "bg-purple-500"
-								: "bg-gray-500",
-					}));
-			}
-
 			default:
 				return [
 					{
@@ -1237,12 +1136,8 @@ const TimelineView = ({ selectedProject, session }) => {
 					timelineRef={timelineRef}
 					timelineDates={timelineDates}
 					groupedCards={groupedCards}
-					activeTimer={activeTimer}
-					handleStartTimer={handleStartTimer}
-					handleStopTimer={handleStopTimer}
 					visibleDateRange={visibleDateRange}
 					groupBy={groupBy}
-					session={session}
 					setSelectedCard={setSelectedCard}
 					hasCards={hasCards}
 					containerWidth={containerWidth}

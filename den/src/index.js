@@ -27,7 +27,6 @@ import eventRoutes from './calendar/routes/eventRoutes.js';
 // ─── Kanban (from asy_b_kanban) ───────────────────────────────────────────────
 import cardRoutes from './kanban/routes/cardRoutes.js';
 import columnRoutes from './kanban/routes/columnRoutes.js';
-import timeRoutes from './kanban/routes/timeRoutes.js';
 import dependencyRoutes from './kanban/routes/dependencyRoutes.js';
 
 // ─── Notes (from asy_b_notes) ─────────────────────────────────────────────────
@@ -118,7 +117,6 @@ app.use('/api/events', eventRoutes);
 app.use('/api/cards', cardRoutes);
 app.use('/api/columns', columnRoutes);
 app.use('/api/dependencies', dependencyRoutes);
-app.use('/api', timeRoutes); // timeRoutes defines its own sub-paths under /api
 
 // ─── Routes: Notes ────────────────────────────────────────────────────────────
 app.use('/api/notes', noteRoutes);

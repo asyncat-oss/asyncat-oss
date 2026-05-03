@@ -76,9 +76,6 @@ router.delete("/:id", cardController.deleteCard);
 router.post("/:id/move", cardController.moveCard);
 router.put("/:id/checklist", cardController.updateChecklist);
 
-// Card administrator
-router.put("/:id/administrator", cardController.updateCardAdministrator);
-
 // Attachment management routes
 router.post(
 	"/:id/attachments",

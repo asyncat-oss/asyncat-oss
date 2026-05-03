@@ -7,12 +7,8 @@ const TimelineContent = ({
   timelineRef,
   timelineDates,
   groupedCards,
-  activeTimer,
-  handleStartTimer,
-  handleStopTimer,
   visibleDateRange,
   groupBy,
-  session,
   setSelectedCard,
   hasCards,
   containerWidth,
@@ -51,8 +47,6 @@ const TimelineContent = ({
                   ? "Due Status"
                   : groupBy === "completion"
                   ? "Completion"
-                  : groupBy === "timeTracking"
-                  ? "Time Tracking"
                   : "Groups"}
               </div>
             </div>
@@ -140,8 +134,6 @@ const TimelineContent = ({
                   ? "Due Status"
                   : groupBy === "completion"
                   ? "Completion"
-                  : groupBy === "timeTracking"
-                  ? "Time Tracking"
                   : "Groups"}
               </div>
             </div>
@@ -359,9 +351,6 @@ const TimelineContent = ({
                         card={card}
                         position={position}
                         index={cardIndex}
-                        activeTimer={activeTimer}
-                        handleStartTimer={handleStartTimer}
-                        handleStopTimer={handleStopTimer}
                         onCardSelect={setSelectedCard}
                         totalTimelineWidth={totalTimelineWidth}
                         isHighlighted={isHighlighted}

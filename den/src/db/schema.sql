@@ -8,7 +8,7 @@
 --
 -- Schema prefixes removed (SQLite has no schemas):
 --   kanban.Columns  → Columns      kanban.Cards  → Cards
---   kanban.TaskDependencies         kanban.TimeEntries
+--   kanban.TaskDependencies
 --   aichats.conversations / chat_folders
 --
 -- SQLite adaptations:
@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS note_operations (
 );
 
 -- ─── Kanban ───────────────────────────────────────────────────────────────────
--- Table names kept as "Columns" / "Cards" / "TaskDependencies" / "TimeEntries"
+-- Table names kept as "Columns" / "Cards" / "TaskDependencies"
 -- to match the existing service and controller code exactly.
 
 CREATE TABLE IF NOT EXISTS Columns (
@@ -214,7 +214,6 @@ CREATE TABLE IF NOT EXISTS Cards (
   checklist        TEXT NOT NULL DEFAULT '[]',   -- JSON
   tags             TEXT NOT NULL DEFAULT '[]',   -- JSON array of strings
   attachments      TEXT NOT NULL DEFAULT '[]',   -- JSON
-  timeSpent        INTEGER NOT NULL DEFAULT 0,
   predictedMinutes INTEGER,
   dependencies     TEXT NOT NULL DEFAULT '[]',   -- JSON array of UUIDs
   commentCount     INTEGER NOT NULL DEFAULT 0,
@@ -235,17 +234,6 @@ CREATE TABLE IF NOT EXISTS TaskDependencies (
   lag          INTEGER NOT NULL DEFAULT 0,
   createdAt    TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt    TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS TimeEntries (
-  id          TEXT PRIMARY KEY,
-  cardId      TEXT NOT NULL REFERENCES Cards(id) ON DELETE CASCADE,
-  userId      TEXT NOT NULL REFERENCES users(id),
-  startTime   TEXT NOT NULL,
-  endTime     TEXT,
-  description TEXT,
-  createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
-  updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ─── AI Chats ─────────────────────────────────────────────────────────────────
@@ -295,8 +283,6 @@ CREATE INDEX IF NOT EXISTS idx_events_createdBy         ON Events(createdBy);
 CREATE INDEX IF NOT EXISTS idx_Columns_projectId        ON Columns(projectId);
 CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);
 CREATE INDEX IF NOT EXISTS idx_Cards_createdBy          ON Cards(createdBy);
-CREATE INDEX IF NOT EXISTS idx_TimeEntries_cardId       ON TimeEntries(cardId);
-CREATE INDEX IF NOT EXISTS idx_TimeEntries_userId       ON TimeEntries(userId);
 CREATE INDEX IF NOT EXISTS idx_conversations_user       ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_workspace  ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_deleted    ON conversations(deleted_at);

@@ -628,52 +628,6 @@ export const useCardActions = () => {
 		}
 	};
 
-	// Update card administrator (changed from updateCardAssignees)
-	const updateCardAdministrator = async (
-		columnId,
-		cardId,
-		administratorId
-	) => {
-		try {
-			// Extract just the ID from the administrator
-			const processedAdministratorId =
-				typeof administratorId === "object" && administratorId !== null
-					? administratorId.id
-					: administratorId;
-
-			const updatedCard = await viewsApi.card.updateAdministrator(
-				cardId,
-				processedAdministratorId
-			);
-
-			// Update the columns state with the new card data
-			setColumns((prev) =>
-				prev.map((col) => {
-					if (col.id === columnId) {
-						return {
-							...col,
-							Cards: col.Cards.map((card) =>
-								card.id === cardId
-									? {
-											...card,
-											administrator_id:
-												updatedCard.administrator_id,
-									  }
-									: card
-							),
-						};
-					}
-					return col;
-				})
-			);
-
-			return updatedCard;
-		} catch (error) {
-			console.error("Error updating card administrator:", error);
-			throw error;
-		}
-	};
-
 	const getCardById = (cardId) => {
 		for (const column of columns) {
 			const card = column.Cards?.find((c) => c.id === cardId);
@@ -751,7 +705,6 @@ export const useCardActions = () => {
 		refreshCard,
 		addAttachment,
 		removeAttachment,
-		updateCardAdministrator,
 		sendCatMessage,
 		completionError,
 		// Dependency management

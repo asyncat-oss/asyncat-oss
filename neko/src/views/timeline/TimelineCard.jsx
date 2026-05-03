@@ -1,13 +1,10 @@
 import { useState } from "react";
-import { CheckCircle, Clock, Play, Square, AlertCircle } from "lucide-react";
+import { CheckCircle, Clock, AlertCircle } from "lucide-react";
 
 const TimelineCard = ({
 	card,
 	position,
 	index,
-	activeTimer,
-	handleStartTimer,
-	handleStopTimer,
 	onCardSelect,
 	isHighlighted = false,
 }) => {
@@ -16,7 +13,6 @@ const TimelineCard = ({
 	if (!position) return null;
 
 	const isCompleted = card.progress === 100 || card.isCompletionColumn;
-	const hasActiveTimer = activeTimer && activeTimer.cardId === card.id;
 
 	// Check if overdue
 	const today = new Date();
@@ -36,10 +32,6 @@ const TimelineCard = ({
 		bgColor = "bg-red-600 dark:bg-red-700 midnight:bg-red-800";
 		borderColor =
 			"border-red-500 dark:border-red-600 midnight:border-red-700";
-	} else if (hasActiveTimer) {
-		bgColor = "bg-blue-500 dark:bg-blue-600 midnight:bg-blue-700";
-		borderColor =
-			"border-blue-400 dark:border-blue-500 midnight:border-blue-600";
 	} else if (card.priority === "High") {
 		bgColor = "bg-red-500 dark:bg-red-600 midnight:bg-red-700";
 		borderColor =
@@ -114,9 +106,7 @@ const TimelineCard = ({
 			onMouseLeave={() => setIsHovered(false)}
 			title={`${card.title} (${formatDateRange()})${
 				isOverdue ? " - Overdue" : ""
-			}${hasActiveTimer ? " - Timer Active" : ""}${
-				isHighlighted ? " - Search Result" : ""
-			}`}
+			}${isHighlighted ? " - Search Result" : ""}`}
 		>
 			{/* Background gradient */}
 			<div className="absolute inset-0 bg-white/10 pointer-events-none rounded-md" />
@@ -130,8 +120,6 @@ const TimelineCard = ({
 							<CheckCircle className="w-4 h-4 text-white/90 drop-shadow-sm" />
 						) : isOverdue ? (
 							<AlertCircle className="w-4 h-4 text-white/90 drop-shadow-sm animate-pulse" />
-						) : hasActiveTimer ? (
-							<Clock className="w-4 h-4 text-white/90 drop-shadow-sm animate-pulse" />
 						) : card.priority === "High" ? (
 							<AlertCircle className="w-4 h-4 text-white/90 drop-shadow-sm" />
 						) : (
@@ -147,26 +135,6 @@ const TimelineCard = ({
 
 				{/* Right side content */}
 				<div className="flex items-center gap-2 flex-shrink-0 ml-2">
-					{/* Timer controls */}
-					{hasActiveTimer ? (
-						<button
-							onClick={(e) => handleStopTimer(card.id, e)}
-							className="p-1 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
-							title="Stop timer"
-						>
-							<Square className="w-3 h-3" />
-						</button>
-					) : (
-						<button
-							onClick={(e) => handleStartTimer(card.id, e)}
-							className="p-1 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
-							title="Start timer"
-							disabled={activeTimer !== null}
-						>
-							<Play className="w-3 h-3" />
-						</button>
-					)}
-
 					{/* Progress percentage - show on hover */}
 					{isHovered && (
 						<span className="text-xs font-medium text-white/80 bg-black/20 px-1.5 py-0.5 rounded">

@@ -1,7 +1,6 @@
 
 import {
   ArrowUpDown,
-  Clock,
   Filter,
   ChevronUp,
   ChevronDown,
@@ -13,16 +12,10 @@ const ListViewTable = ({
   handleSort,
   sortedFilteredCards,
   expandedCards,
-  expandedTimeEntries,
   toggleCardExpanded,
-  toggleTimeEntriesExpanded,
   setSelectedCard,
-  activeTimer,
-  timeEntries,
   cardDependencies,
   dependentCards,
-  handleStartTimer,
-  handleStopTimer,
   session,
   isCardBlocked,
   columns,
@@ -106,18 +99,6 @@ const ListViewTable = ({
                   {getSortIcon("progress")}
                 </div>
               </th>
-              {/* Time column */}
-              <th
-                scope="col"
-                className="w-20 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
-                onClick={() => handleSort("timeSpent")}
-              >
-                <div className="flex items-center justify-center">
-                  <Clock className="w-4 h-4 mr-1" />
-                  Time
-                  {getSortIcon("timeSpent")}
-                </div>
-              </th>
               {/* Details column */}
               <th
                 scope="col"
@@ -142,16 +123,10 @@ const ListViewTable = ({
                   card={card}
                   isCardBlocked={isCardBlocked}
                   expandedCards={expandedCards}
-                  expandedTimeEntries={expandedTimeEntries}
                   toggleCardExpanded={toggleCardExpanded}
-                  toggleTimeEntriesExpanded={toggleTimeEntriesExpanded}
                   setSelectedCard={setSelectedCard}
-                  activeTimer={activeTimer}
-                  timeEntries={timeEntries}
                   cardDependencies={cardDependencies}
                   dependentCards={dependentCards}
-                  handleStartTimer={handleStartTimer}
-                  handleStopTimer={handleStopTimer}
                   session={session}
                   columns={columns}
                 />

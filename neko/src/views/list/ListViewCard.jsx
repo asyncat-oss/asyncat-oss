@@ -10,8 +10,6 @@ import {
 	CheckCircle,
 	Circle,
 	Link2,
-	Play,
-	Square,
 	Loader2,
 	Siren,
 	Disc3Icon,
@@ -43,74 +41,6 @@ export const PriorityBadge = ({ priority }) => {
 		>
 			{priority || "None"}
 		</span>
-	);
-};
-
-// Time Entries Renderer Component
-export const TimeEntriesRenderer = ({
-	cardId,
-	timeEntries,
-}) => {
-	const entries = timeEntries[cardId] || [];
-
-	if (entries.length === 0) {
-		return (
-			<div className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500 italic py-4 text-center">
-				No time entries recorded
-			</div>
-		);
-	}
-
-	return (
-		<div className="space-y-2 mt-2">
-			{entries.map((entry) => (
-				<div
-					key={entry.id}
-					className="flex items-start py-3 px-4 rounded-lg bg-gray-50/50 dark:bg-gray-800/30 midnight:bg-gray-900/30"
-				>
-					<div className="flex items-start flex-1">
-						<div className="flex-shrink-0 mr-3 mt-0.5">
-							<Clock className="w-4 h-4 text-blue-500 dark:text-blue-400 midnight:text-blue-600" />
-						</div>
-						<div className="flex-1 min-w-0">
-							<div className="flex justify-between items-start mb-1">
-								<div className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-									{formatDate(entry.startTime)} •{" "}
-									{new Date(
-										entry.startTime
-									).toLocaleTimeString(undefined, {
-										hour: "2-digit",
-										minute: "2-digit",
-									})}
-									{entry.endTime && (
-										<>
-											{" "}
-											-{" "}
-											{new Date(
-												entry.endTime
-											).toLocaleTimeString(undefined, {
-												hour: "2-digit",
-												minute: "2-digit",
-											})}
-										</>
-									)}
-								</div>
-								<div className="font-medium text-sm text-gray-700 dark:text-gray-300 midnight:text-gray-400">
-									{entry.duration
-										? formatDuration(entry.duration)
-										: "In progress"}
-								</div>
-							</div>
-							{entry.description && (
-								<div className="text-sm mt-1 text-gray-700 dark:text-gray-300 midnight:text-gray-400">
-									{entry.description}
-								</div>
-							)}
-						</div>
-					</div>
-				</div>
-			))}
-		</div>
 	);
 };
 
@@ -488,21 +418,14 @@ const ListViewCard = ({
 	card,
 	isCardBlocked,
 	expandedCards,
-	expandedTimeEntries,
 	toggleCardExpanded,
-	toggleTimeEntriesExpanded,
 	setSelectedCard,
-	activeTimer,
-	timeEntries,
 	cardDependencies,
 	dependentCards,
-	handleStartTimer,
-	handleStopTimer,
 	session,
 	columns,
 }) => {
 	const isFullyCompleted = card.progress === 100 || card.isCompletionColumn;
-	const hasActiveTimer = activeTimer && activeTimer.cardId === card.id;
 	const isBlocked = isCardBlocked(card);
 	const hasDependencies = card.dependencies && card.dependencies.length > 0;
 	const hasDependent =
@@ -656,31 +579,6 @@ const ListViewCard = ({
 					</div>
 				</td>
 				<td className="px-6 py-4 text-center">
-					<div className="flex items-center justify-center">
-						<Clock className="w-4 h-4 mr-1.5 text-gray-500 dark:text-gray-400 midnight:text-gray-500" />
-						<span className="text-sm text-gray-700 dark:text-gray-300 midnight:text-gray-400">
-							{card.timeSpent
-								? formatDuration(card.timeSpent)
-								: "0m"}
-						</span>
-						{timeEntries[card.id] &&
-							timeEntries[card.id].length > 0 && (
-								<button
-									onClick={(e) =>
-										toggleTimeEntriesExpanded(card.id, e)
-									}
-									className="ml-1.5 text-blue-500 dark:text-blue-400 midnight:text-blue-500 hover:text-blue-600 transition-colors"
-								>
-									{expandedTimeEntries.has(card.id) ? (
-										<ChevronDown className="w-3 h-3" />
-									) : (
-										<ChevronRight className="w-3 h-3" />
-									)}
-								</button>
-							)}
-					</div>
-				</td>
-				<td className="px-6 py-4 text-center">
 					<div className="flex items-center justify-center space-x-3 text-gray-500 dark:text-gray-400 midnight:text-gray-500">
 						{card.checklist?.length > 0 && (
 							<div className="flex items-center text-xs">
@@ -709,34 +607,13 @@ const ListViewCard = ({
 				</td>
 				<td className="px-6 py-4 text-center">
 					<div className="flex items-center justify-center space-x-2">
-						{hasActiveTimer ? (
-							<button
-								onClick={(e) => handleStopTimer(card.id, e)}
-								className="flex items-center px-2.5 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 midnight:bg-red-900/20 text-red-700 dark:text-red-400 midnight:text-red-300 text-xs hover:bg-red-200 dark:hover:bg-red-900/40 midnight:hover:bg-red-900/30 transition-colors font-medium"
-								title="Stop timer"
-							>
-								<Square className="w-3 h-3 mr-1" />
-								Stop
-							</button>
-						) : (
-							<button
-								onClick={(e) => handleStartTimer(card.id, e)}
-								className={`flex items-center px-2.5 py-1.5 rounded-lg text-xs transition-colors font-medium ${
-									isFullyCompleted || activeTimer !== null
-										? "bg-gray-100 dark:bg-gray-700/50 midnight:bg-gray-800/50 text-gray-400 dark:text-gray-500 midnight:text-gray-600 cursor-not-allowed"
-										: "bg-blue-100 dark:bg-blue-900/30 midnight:bg-blue-900/20 text-blue-700 dark:text-blue-400 midnight:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/40 midnight:hover:bg-blue-900/30"
-								}`}
-								title={
-									isFullyCompleted
-										? "Cannot start timer on completed card"
-										: "Start timer"
-								}
-								disabled={isFullyCompleted || activeTimer !== null}
-							>
-								<Play className="w-3 h-3 mr-1" />
-								Start
-							</button>
-						)}
+						<button
+							onClick={handleCardClick}
+							className="flex items-center px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700/50 midnight:bg-gray-800/50 text-gray-700 dark:text-gray-300 midnight:text-gray-300 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 transition-colors font-medium"
+							title="Open task"
+						>
+							Open
+						</button>
 					</div>
 				</td>
 			</tr>
@@ -746,7 +623,7 @@ const ListViewCard = ({
 				<tr
 					className={`${getRowStyle()} border-t border-gray-100 dark:border-gray-800 midnight:border-gray-900`}
 				>
-					<td colSpan="10" className="px-6 py-6">
+					<td colSpan="8" className="px-6 py-6">
 						<div className="pl-12">
 							<InteractiveChecklistRenderer
 								checklist={card.checklist}
@@ -759,27 +636,6 @@ const ListViewCard = ({
 				</tr>
 			)}
 
-			{/* Expanded Time Entries */}
-			{expandedTimeEntries.has(card.id) && (
-				<tr
-					className={`${getRowStyle()} border-t border-gray-100 dark:border-gray-800 midnight:border-gray-900`}
-				>
-					<td colSpan="10" className="px-6 py-4">
-						<div className="pl-12">
-							<div className="border-l-2 border-gray-200 dark:border-gray-700 midnight:border-gray-800 pl-4">
-								<h4 className="text-sm font-medium text-gray-700 dark:text-white midnight:text-indigo-200 mb-3 flex items-center">
-									<Clock className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400 midnight:text-gray-500" />
-									Time Entries
-								</h4>
-								<TimeEntriesRenderer
-									cardId={card.id}
-									timeEntries={timeEntries}
-								/>
-							</div>
-						</div>
-					</td>
-				</tr>
-			)}
 		</React.Fragment>
 	);
 };
