@@ -31,6 +31,8 @@ const TOOL_META = {
   run_node:          { icon: Terminal,    label: 'Run Node' },
   run_shell_command: { icon: Terminal,    label: 'Run command' },
   execute_shell:     { icon: Terminal,    label: 'Run command' },
+  delegate_to_profile:{ icon: Brain,       label: 'Delegate to agent' },
+  delegate_task:      { icon: Brain,       label: 'Delegate task' },
   web_search:        { icon: Globe,       label: 'Web search' },
   browse_website:    { icon: Globe,       label: 'Browse URL' },
   remember:          { icon: BookMarked,  label: 'Remember' },
@@ -140,6 +142,16 @@ function UserGoalEvent({ data }) {
           <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
             {goal}
           </div>
+          {Array.isArray(data?.agentMentions) && data.agentMentions.length > 0 && (
+            <div className="mt-2 flex flex-wrap justify-end gap-1">
+              {data.agentMentions.map(agent => (
+                <span key={agent.id || agent.handle} className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+                  <span>{agent.icon || '🤖'}</span>
+                  @{agent.handle}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -551,6 +563,48 @@ function StatusEvent({ data, onRunWithTools }) {
   );
 }
 
+function AgentDelegateEvent({ data, result, pending = false }) {
+  const profile = result?.profile || data?.profile || {};
+  const handle = profile.handle || data?.profileHandle;
+  const name = profile.name || data?.profileName || handle || 'agent';
+  const icon = profile.icon || data?.profileIcon || '🤖';
+  const answer = result?.answer || data?.answer || '';
+  const isError = result?.success === false || data?.success === false;
+
+  return (
+    <FeedFrame className="mb-2">
+      <div className="flex items-start gap-2.5 text-xs">
+        <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${isError ? 'bg-red-50 dark:bg-red-950/30' : 'bg-blue-50 dark:bg-blue-950/30'}`}>
+          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" /> : <span className="text-sm">{icon}</span>}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium text-gray-700 dark:text-gray-300">
+              {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
+            </span>
+            {handle && <code className="text-[10px] text-gray-400">@{handle}</code>}
+          </div>
+          {data?.task && (
+            <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 dark:text-gray-500">
+              {data.task}
+            </p>
+          )}
+          {answer && (
+            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+              {answer.length > 260 ? `${answer.slice(0, 260)}...` : answer}
+            </p>
+          )}
+          {(result?.sessionId || data?.sessionId) && (
+            <p className="mt-1 text-[10px] text-gray-300 dark:text-gray-700">
+              Session {result?.sessionId || data?.sessionId}
+            </p>
+          )}
+        </div>
+      </div>
+    </FeedFrame>
+  );
+}
+
 // Visual separator between consecutive goals in a single session
 function RunDivider({ data }) {
   return (
@@ -674,6 +728,8 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
           case 'answer':             return <AnswerEvent key={i} data={ev.data} />;
           case 'error':              return <ErrorEvent key={i} data={ev.data} />;
           case 'status':             return <StatusEvent key={i} data={ev.data} onRunWithTools={onRunWithTools} />;
+          case 'agent_delegate_start': return <AgentDelegateEvent key={i} data={ev.data} pending />;
+          case 'agent_delegate_result': return <AgentDelegateEvent key={i} data={ev.data} result={ev.data} />;
           case 'run_start':          return <RunDivider key={i} data={ev.data} />;
           case 'skills_loaded':      return <SkillsLoadedEvent key={i} data={ev.data} />;
           default:                   return null;

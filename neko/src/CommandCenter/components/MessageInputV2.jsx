@@ -1,10 +1,40 @@
 // MessageInputV2.jsx
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ChevronDown, Cloud, Cpu, Loader2, Send, Wrench, X, Zap } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi } from "../../Settings/settingApi.js";
+import { profilesApi } from "../commandCenterApi.js";
+
+function getMentionTrigger(value, cursor) {
+  const beforeCursor = value.slice(0, cursor);
+  const match = beforeCursor.match(/(^|\s)@([a-zA-Z0-9_-]*)$/);
+  if (!match) return null;
+  const start = beforeCursor.length - match[2].length - 1;
+  return { start, end: cursor, query: match[2].toLowerCase() };
+}
+
+function extractAgentMentions(value, profiles) {
+  const handles = new Set(
+    [...String(value || '').matchAll(/(^|[\s(])@([a-zA-Z0-9_-]+)/g)]
+      .map(match => match[2].toLowerCase())
+  );
+  const seen = new Set();
+  return profiles
+    .filter(profile => profile?.handle && handles.has(String(profile.handle).toLowerCase()))
+    .filter(profile => {
+      if (seen.has(profile.id)) return false;
+      seen.add(profile.id);
+      return true;
+    })
+    .map(profile => ({
+      id: profile.id,
+      handle: profile.handle,
+      name: profile.name,
+      icon: profile.icon,
+    }));
+}
 
 export const MessageInputV2 = ({
   onSubmit,
@@ -30,12 +60,33 @@ export const MessageInputV2 = ({
   const [isSwitchingModel, setIsSwitchingModel] = useState(false);
   const [modelSwitchError, setModelSwitchError] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
+  const [agentProfiles, setAgentProfiles] = useState([]);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(0);
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
   const { config: modelConfig } = useModelConfig();
   const textareaRef = useRef(null);
   const toolbarRef = useRef(null);
+  const mentionTrigger = useMemo(
+    () => getMentionTrigger(value, cursorPosition),
+    [value, cursorPosition],
+  );
+  const mentionSuggestions = useMemo(() => {
+    if (!mentionTrigger) return [];
+    return agentProfiles
+      .filter(profile => {
+        const handle = String(profile.handle || '').toLowerCase();
+        const name = String(profile.name || '').toLowerCase();
+        return !mentionTrigger.query || handle.includes(mentionTrigger.query) || name.includes(mentionTrigger.query);
+      })
+      .slice(0, 6);
+  }, [agentProfiles, mentionTrigger]);
+  const detectedAgentMentions = useMemo(
+    () => extractAgentMentions(value, agentProfiles),
+    [agentProfiles, value],
+  );
 
   const inputTokens = Math.ceil(value.length / 4);
   const totalTokens = conversationTokens + inputTokens;
@@ -58,6 +109,25 @@ export const MessageInputV2 = ({
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [prefillValue]);
 
+  useEffect(() => {
+    let cancelled = false;
+    profilesApi
+      .listProfiles()
+      .then((res) => {
+        if (!cancelled) setAgentProfiles(res.profiles || []);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentProfiles([]);
+      })
+      .finally(() => {
+        if (!cancelled) setProfilesLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const prevDisabledRef = useRef(disabled);
   useEffect(() => {
     if (prevDisabledRef.current && !disabled && textareaRef.current) {
@@ -69,6 +139,7 @@ export const MessageInputV2 = ({
   const handleInputChange = useCallback((e) => {
     const newValue = e.target.value;
     setValue(newValue);
+    setCursorPosition(e.target.selectionStart || newValue.length);
 
     const textarea = textareaRef.current;
     if (textarea) {
@@ -76,6 +147,35 @@ export const MessageInputV2 = ({
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   }, []);
+
+  const handleCursorChange = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) setCursorPosition(textarea.selectionStart || 0);
+  }, []);
+
+  const insertMention = useCallback((profile) => {
+    if (!mentionTrigger || !profile?.handle) return;
+    const mention = `@${profile.handle}`;
+    const nextValue = `${value.slice(0, mentionTrigger.start)}${mention} ${value.slice(mentionTrigger.end)}`;
+    const nextCursor = mentionTrigger.start + mention.length + 1;
+    setValue(nextValue);
+    setCursorPosition(nextCursor);
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      textareaRef.current.selectionStart = nextCursor;
+      textareaRef.current.selectionEnd = nextCursor;
+    });
+  }, [mentionTrigger, value]);
+
+  const removeMention = useCallback((handle) => {
+    const nextValue = value
+      .replace(new RegExp(`(^|\\s)@${String(handle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'i'), '$1')
+      .replace(/\s{2,}/g, ' ')
+      .trimStart();
+    setValue(nextValue);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [value]);
 
   const handleSubmit = useCallback(
     async (e) => {
@@ -86,6 +186,7 @@ export const MessageInputV2 = ({
         const messageToSend = {
           content: value.trim(),
           modelConfig,
+          agentMentions: detectedAgentMentions,
         };
 
         await onSubmit(messageToSend, []);
@@ -97,12 +198,18 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, modelConfig, onSubmit],
+    [value, disabled, modelConfig, onSubmit, detectedAgentMentions],
   );
 
   const handleKeyDown = useCallback(
     (e) => {
       const nativeIsComposing = Boolean(e.nativeEvent?.isComposing);
+
+      if (mentionSuggestions.length > 0 && (e.key === "Tab" || e.key === "Enter")) {
+        e.preventDefault();
+        insertMention(mentionSuggestions[0]);
+        return;
+      }
 
       if (
         e.key === "Enter" &&
@@ -114,7 +221,7 @@ export const MessageInputV2 = ({
         handleSubmit();
       }
     },
-    [handleSubmit, isComposing],
+    [handleSubmit, insertMention, isComposing, mentionSuggestions],
   );
 
   const canSubmit = value.trim() && !disabled;
@@ -275,6 +382,8 @@ export const MessageInputV2 = ({
                 value={value}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
+                onClick={handleCursorChange}
+                onKeyUp={handleCursorChange}
                 onCompositionStart={() => setIsComposing(true)}
                 onCompositionEnd={() => setIsComposing(false)}
                 disabled={disabled}
@@ -287,6 +396,63 @@ export const MessageInputV2 = ({
                 rows="2"
                 className="w-full resize-none bg-transparent text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-500 focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50"
               />
+
+              {detectedAgentMentions.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {detectedAgentMentions.map(agent => (
+                    <span
+                      key={agent.id || agent.handle}
+                      className="inline-flex max-w-full items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 dark:border-blue-800/70 dark:bg-blue-950/30 dark:text-blue-300 midnight:border-blue-800/70 midnight:bg-blue-950/30 midnight:text-blue-300"
+                      title={`Mentioned agent: ${agent.name}`}
+                    >
+                      <span className="shrink-0">{agent.icon || "🤖"}</span>
+                      <span className="truncate">@{agent.handle}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeMention(agent.handle)}
+                        className="ml-0.5 rounded p-0.5 text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/50 dark:hover:text-blue-200"
+                        title={`Remove @${agent.handle}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {mentionTrigger && (
+                <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+                  {mentionSuggestions.length > 0 ? (
+                    <div className="max-h-56 overflow-y-auto p-1">
+                      {mentionSuggestions.map(profile => (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => insertMention(profile)}
+                          className="flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                        >
+                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 text-sm dark:bg-gray-800 midnight:bg-slate-800">
+                            {profile.icon || "🤖"}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">
+                              {profile.name}
+                            </span>
+                            <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                              @{profile.handle}{profile.description ? ` · ${profile.description}` : ''}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">
+                      {profilesLoaded ? 'No matching agent profiles' : 'Loading agent profiles...'}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {localModel.isReady && (
                 <div className="mt-2 flex items-center justify-between text-[10px]">

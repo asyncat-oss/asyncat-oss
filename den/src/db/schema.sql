@@ -395,6 +395,26 @@ CREATE INDEX IF NOT EXISTS idx_agent_memory_workspace  ON agent_memory(workspace
 CREATE INDEX IF NOT EXISTS idx_agent_memory_key        ON agent_memory(user_id, workspace_id, key);
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_user     ON agent_sessions(user_id);
 
+CREATE TABLE IF NOT EXISTS agent_profiles (
+  id                   TEXT PRIMARY KEY,
+  user_id              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  handle               TEXT,
+  name                 TEXT NOT NULL,
+  description          TEXT NOT NULL DEFAULT '',
+  icon                 TEXT NOT NULL DEFAULT '🤖',
+  color                TEXT NOT NULL DEFAULT 'indigo',
+  soul_name            TEXT NOT NULL DEFAULT 'default',
+  soul_override        TEXT,
+  working_dir          TEXT,
+  max_rounds           INTEGER NOT NULL DEFAULT 25,
+  auto_approve         INTEGER NOT NULL DEFAULT 0,
+  always_allowed_tools TEXT NOT NULL DEFAULT '[]',
+  is_default           INTEGER NOT NULL DEFAULT 0,
+  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_profiles_user_handle ON agent_profiles(user_id, handle);
+
 -- =============================================
 -- EPISODIC MEMORY (FTS5) - Full-Text Search
 -- =============================================

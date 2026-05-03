@@ -59,6 +59,7 @@ export function listSouls() {
  * @param {object[]} opts.memories - Relevant memories from store
  * @param {string} opts.scratchpad - Current scratchpad state
  * @param {object[]} opts.skills - Relevant skills from Cerebellum
+ * @param {object[]} opts.mentionedAgents - Agent profiles explicitly mentioned by the user
  * @param {string} [opts.soul] - Soul/persona content loaded from souls/*.md
  * @returns {string}
  */
@@ -76,6 +77,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     memories = [],
     scratchpad = '',
     skills = [],
+    mentionedAgents = [],
     soul = null,
     platform = process.platform,
   } = opts;
@@ -101,6 +103,23 @@ export function buildAgentSystemPrompt(opts = {}) {
       const body = s.body || s.description || '';
       return `### ${s.name}\n${s.description ? `_${s.description}_\n\n` : ''}${body}`;
     }).join('\n\n---\n\n')}\n`
+    : '';
+
+  const mentionedAgentsSection = mentionedAgents.length > 0
+    ? `\n## Mentioned Agent Profiles\n${mentionedAgents.map(agent => {
+      const tools = Array.isArray(agent.always_allowed_tools) && agent.always_allowed_tools.length
+        ? agent.always_allowed_tools.join(', ')
+        : 'none pre-approved';
+      return [
+        `- @${agent.handle}: ${agent.name}`,
+        agent.description ? `  Description: ${agent.description}` : null,
+        `  Profile id: ${agent.id}`,
+        `  Working dir: ${agent.working_dir || workingDir}`,
+        `  Max rounds: ${agent.max_rounds || 25}`,
+        `  Auto approve: ${agent.auto_approve ? 'yes' : 'no'}`,
+        `  Pre-approved tools: ${tools}`,
+      ].filter(Boolean).join('\n');
+    }).join('\n')}\n\nUse \`delegate_to_profile\` when the user asks a mentioned profile to investigate or perform a subtask. The delegated profile can load relevant skills itself.\n`
     : '';
 
   return `${identity}
@@ -185,6 +204,7 @@ ${toolDescriptions}
 ${memorySection}
 ${scratchpadSection}
 ${skillsSection}
+${mentionedAgentsSection}
 
 ## Current Task
 ${goal}

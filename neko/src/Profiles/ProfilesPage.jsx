@@ -66,6 +66,7 @@ function compactToolDescription(tool) {
 const profileInputShape = PropTypes.shape({
   id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   _isTemplate: PropTypes.bool,
+  handle: PropTypes.string,
   name: PropTypes.string,
   description: PropTypes.string,
   icon: PropTypes.string,
@@ -95,6 +96,7 @@ const toolShape = PropTypes.shape({
 
 const profileShape = PropTypes.shape({
   id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  handle: PropTypes.string,
   name: PropTypes.string.isRequired,
   description: PropTypes.string,
   icon: PropTypes.string,
@@ -532,6 +534,9 @@ function ProfileCard({ profile, onEdit, onDelete, onSetDefault, deleting, settin
           </div>
           {profile.description && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{profile.description}</p>
+          )}
+          {profile.handle && (
+            <p className="text-[11px] font-mono text-gray-400 dark:text-gray-500 mt-0.5">@{profile.handle}</p>
           )}
           <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400 dark:text-gray-500 flex-wrap">
             <span>Soul: {profile.soul_override ? 'custom' : profile.soul_name}</span>

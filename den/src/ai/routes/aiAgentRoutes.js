@@ -15,7 +15,7 @@ import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, di
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
-import { listProfiles, getProfile, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
+import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -105,6 +105,23 @@ function enrichScheduledJob(job) {
       ? job.provider_snapshot
       : null,
   };
+}
+
+function resolveAgentMentions(rawMentions = [], userId) {
+  if (!Array.isArray(rawMentions)) return [];
+  const seen = new Set();
+  const profiles = [];
+  for (const mention of rawMentions.slice(0, 8)) {
+    const profile = mention?.id
+      ? getProfile(mention.id, userId)
+      : mention?.handle
+        ? getProfileByHandle(String(mention.handle).replace(/^@/, ''), userId)
+        : null;
+    if (!profile || seen.has(profile.id)) continue;
+    seen.add(profile.id);
+    profiles.push(profile);
+  }
+  return profiles;
 }
 
 function markStaleActiveSessions() {
@@ -714,7 +731,7 @@ router.put('/soul', authenticate, (req, res) => {
 router.post('/run', authenticate, async (req, res) => {
   let heartbeatInterval = null;
   try {
-    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true } = req.body;
+    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMentions = [] } = req.body;
     const goal = (rawGoal || rawMessage || '').trim();
 
     if (!goal) {
@@ -811,6 +828,7 @@ router.post('/run', authenticate, async (req, res) => {
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
     const resolvedAutoApprove = autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false;
     const profileTools = Array.isArray(profile?.always_allowed_tools) ? profile.always_allowed_tools : [];
+    const mentionedAgentProfiles = resolveAgentMentions(agentMentions, req.user.id);
 
     let resolvedSoul = null;
     if (profile?.soul_override) {
@@ -835,6 +853,7 @@ router.post('/run', authenticate, async (req, res) => {
       continueSessionId,
       soul: resolvedSoul,
       providerInfo,
+      mentionedAgents: mentionedAgentProfiles,
     });
 
     const allPreApproved = [...preApprovedTools, ...profileTools];
@@ -1415,10 +1434,10 @@ router.get('/profiles', authenticate, (req, res) => {
 
 router.post('/profiles', authenticate, (req, res) => {
   try {
-    const { name, description, icon, color, soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault } = req.body;
+    const { name, handle, description, icon, color, soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' });
     const profile = createProfile({
-      userId: req.user.id, name: name.trim(), description, icon, color,
+      userId: req.user.id, name: name.trim(), handle, description, icon, color,
       soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault,
     });
     res.json({ success: true, profile });

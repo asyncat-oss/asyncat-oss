@@ -70,6 +70,7 @@ export class AgentRuntime {
     this.continueSessionId = opts.continueSessionId || null;
     this.soulOverride = opts.soul || null;
     this.providerInfo = opts.providerInfo || null;
+    this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Local models handle much smaller contexts than cloud models — compact sooner.
@@ -191,6 +192,7 @@ export class AgentRuntime {
       memories,
       scratchpad: '',
       skills: relevantSkills,
+      mentionedAgents: this.mentionedAgents,
       soul,
     });
 
@@ -209,6 +211,9 @@ export class AgentRuntime {
       workingDir: this.workingDir,
       session: this.session,
       emitEvent: (event) => this.onEvent(event),
+      requestPermission: this.requestPermission
+        ? (request) => this.requestPermission(request)
+        : null,
       askUser: this.askUser
         ? (request) => this.askUser({ ...request, round: this.session?.totalRounds || 0 })
         : null,

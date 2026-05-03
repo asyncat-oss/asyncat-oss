@@ -115,11 +115,20 @@ function isLikelyToolActionRequest(goal = '') {
   return /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify)\b/i.test(goal);
 }
 
+function getLeadingProfileMention(goal = '', mentions = []) {
+  if (!Array.isArray(mentions) || mentions.length !== 1) return null;
+  const mention = mentions[0];
+  const handle = String(mention?.handle || '').toLowerCase();
+  if (!handle) return null;
+  const escaped = handle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\s*@${escaped}(?:\\b|\\s|$)`, 'i').test(goal) ? mention : null;
+}
+
 function buildEventsFromMessages(messages = []) {
   const events = [];
   for (const msg of messages) {
     if (msg.type === 'user') {
-      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled } });
+      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMentions: msg.agentMentions || [] } });
     } else if (msg.type === 'assistant') {
       events.push({
         type: msg.isError ? 'error' : 'answer',
@@ -645,6 +654,9 @@ const CommandCenterV2Enhanced = () => {
     const goal = typeof messageObj === 'string' ? messageObj : messageObj?.content;
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
+    const agentMentions = Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : [];
+    const leadingProfileMention = getLeadingProfileMention(submittedGoal, agentMentions);
+    const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
     const runKey = currentRunKey;
     const runConversationId = currentConversationId;
     const runMessages = messages;
@@ -666,9 +678,11 @@ const CommandCenterV2Enhanced = () => {
         running: true,
         streamingText: '',
         session: null,
+        selectedProfileId: effectiveProfileId || null,
+        agentMentions,
         events: [
           ...baseEvents,
-          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled }, arrivedAt: Date.now() },
+          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
         ],
       };
     });
@@ -682,14 +696,15 @@ const CommandCenterV2Enhanced = () => {
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
     const runEvents = [
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled } },
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, profileId: effectiveProfileId || null } },
     ];
 
     try {
       for await (const event of agentApi.runStream(submittedGoal, activeConversationHistory, null, 25, controller.signal, agentCurrentSessionId, {
         autoApprove: agentAutoApprove,
         preApprovedTools: [...alwaysAllowedTools],
-        profileId: selectedProfileId,
+        profileId: effectiveProfileId,
+        agentMentions,
         enableTools: effectiveToolsEnabled,
       })) {
         if (controller.signal.aborted) break;
@@ -806,7 +821,7 @@ const CommandCenterV2Enhanced = () => {
       if (capturedFinalAnswer) {
         const nextHistory = [
           ...activeConversationHistory,
-          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled },
+          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMentions },
           { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentSessionId: runSessionId },
         ];
         updateChatRun(runKey, { conversationHistory: nextHistory });
@@ -820,6 +835,7 @@ const CommandCenterV2Enhanced = () => {
           type: 'user',
           timestamp: new Date().toISOString(),
           toolsEnabled: effectiveToolsEnabled,
+          agentMentions,
         };
         const assistantMsg = {
           id: `msg_${Date.now()}_assistant_${Math.random().toString(36).substr(2, 9)}`,

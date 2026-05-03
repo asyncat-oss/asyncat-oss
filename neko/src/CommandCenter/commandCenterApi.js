@@ -710,6 +710,7 @@ export const agentApi = {
         autoApprove: opts.autoApprove || false,
         preApprovedTools: opts.preApprovedTools || [],
         profileId: opts.profileId || null,
+        agentMentions: opts.agentMentions || [],
         enableTools: opts.enableTools !== false,
       })
     });

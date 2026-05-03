@@ -161,6 +161,10 @@ class ChatService {
         baseMessage.agentSessionId = msg.agentSessionId;
       }
 
+      if (Array.isArray(msg.agentMentions)) {
+        baseMessage.agentMentions = msg.agentMentions;
+      }
+
       if (msg.agentSummary && typeof msg.agentSummary === 'object') {
         baseMessage.agentSummary = msg.agentSummary;
       }
@@ -237,6 +241,10 @@ class ChatService {
 
       if (msg.agentSessionId) {
         baseMessage.agentSessionId = msg.agentSessionId;
+      }
+
+      if (Array.isArray(msg.agentMentions)) {
+        baseMessage.agentMentions = msg.agentMentions;
       }
 
       if (msg.agentSummary && typeof msg.agentSummary === 'object') {
