@@ -369,16 +369,20 @@ CREATE INDEX IF NOT EXISTS idx_mcp_access_tokens_hash    ON mcp_access_tokens(to
 -- ─── Agent Memory & Sessions ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agent_memory (
-  id           TEXT PRIMARY KEY,
-  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  memory_type  TEXT NOT NULL DEFAULT 'fact'
-                 CHECK (memory_type IN ('fact','preference','context','task_state')),
-  key          TEXT,
-  content      TEXT NOT NULL,
-  relevance    REAL NOT NULL DEFAULT 1.0,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  memory_type      TEXT NOT NULL DEFAULT 'fact'
+                     CHECK (memory_type IN ('user','feedback','project','reference','fact','preference','context','task_state')),
+  key              TEXT,
+  content          TEXT NOT NULL,
+  relevance        REAL NOT NULL DEFAULT 1.0,
+  tags             TEXT NOT NULL DEFAULT '[]',
+  importance       REAL NOT NULL DEFAULT 0.5,
+  last_accessed_at TEXT,
+  access_count     INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS agent_sessions (

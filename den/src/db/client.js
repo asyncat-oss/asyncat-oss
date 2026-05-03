@@ -39,6 +39,102 @@ const schemaPath = path.join(__dirname, 'schema.sql');
 const schema = fs.readFileSync(schemaPath, 'utf8');
 db.exec(schema);
 
+function tableColumns(tableName) {
+  return new Set(db.prepare(`PRAGMA table_info(${tableName})`).all().map(col => col.name));
+}
+
+function ensureAgentMemorySchema() {
+  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_memory'").get();
+  if (!table) return;
+
+  const createSql = table.sql || '';
+  const hasOldMemoryTypeCheck = createSql.includes("memory_type IN ('fact','preference','context','task_state')");
+  let columns = tableColumns('agent_memory');
+
+  if (hasOldMemoryTypeCheck) {
+    db.exec(`
+      DROP TRIGGER IF EXISTS agent_memory_ai;
+      DROP TRIGGER IF EXISTS agent_memory_ad;
+      DROP TRIGGER IF EXISTS agent_memory_au;
+
+      CREATE TABLE IF NOT EXISTS agent_memory_next (
+        id               TEXT PRIMARY KEY,
+        user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        memory_type      TEXT NOT NULL DEFAULT 'fact'
+                           CHECK (memory_type IN ('user','feedback','project','reference','fact','preference','context','task_state')),
+        key              TEXT,
+        content          TEXT NOT NULL,
+        relevance        REAL NOT NULL DEFAULT 1.0,
+        tags             TEXT NOT NULL DEFAULT '[]',
+        importance       REAL NOT NULL DEFAULT 0.5,
+        last_accessed_at TEXT,
+        access_count     INTEGER NOT NULL DEFAULT 0,
+        created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO agent_memory_next (
+        id, user_id, workspace_id, memory_type, key, content, relevance,
+        tags, importance, last_accessed_at, access_count, created_at, updated_at
+      )
+      SELECT
+        id, user_id, workspace_id, memory_type, key, content, relevance,
+        '[]', 0.5, NULL, 0, created_at, updated_at
+      FROM agent_memory;
+
+      DROP TABLE agent_memory;
+      ALTER TABLE agent_memory_next RENAME TO agent_memory;
+    `);
+    columns = tableColumns('agent_memory');
+  }
+
+  const addColumn = (name, definition) => {
+    if (columns.has(name)) return;
+    db.exec(`ALTER TABLE agent_memory ADD COLUMN ${name} ${definition}`);
+    columns.add(name);
+  };
+
+  addColumn('tags', "TEXT NOT NULL DEFAULT '[]'");
+  addColumn('importance', 'REAL NOT NULL DEFAULT 0.5');
+  addColumn('last_accessed_at', 'TEXT');
+  addColumn('access_count', 'INTEGER NOT NULL DEFAULT 0');
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_agent_memory_user       ON agent_memory(user_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_memory_workspace  ON agent_memory(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_memory_key        ON agent_memory(user_id, workspace_id, key);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_fts USING fts5(
+      memory_id UNINDEXED,
+      key,
+      content,
+      tokenize='unicode61'
+    );
+
+    DELETE FROM agent_memory_fts;
+    INSERT INTO agent_memory_fts(memory_id, key, content)
+    SELECT id, key, content FROM agent_memory;
+
+    CREATE TRIGGER IF NOT EXISTS agent_memory_ai AFTER INSERT ON agent_memory BEGIN
+      INSERT INTO agent_memory_fts(memory_id, key, content)
+      VALUES (new.id, new.key, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS agent_memory_ad AFTER DELETE ON agent_memory BEGIN
+      DELETE FROM agent_memory_fts WHERE memory_id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS agent_memory_au AFTER UPDATE ON agent_memory BEGIN
+      DELETE FROM agent_memory_fts WHERE memory_id = old.id;
+      INSERT INTO agent_memory_fts(memory_id, key, content)
+      VALUES (new.id, new.key, new.content);
+    END;
+  `);
+}
+
+ensureAgentMemorySchema();
+
 logger.info(`Database: SQLite at ${DB_PATH}`);
 
 export default db;
