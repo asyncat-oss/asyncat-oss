@@ -14,7 +14,6 @@ import {
   Calendar,
   Check,
   MoveRight,
-  Edit3,
   Lock,
   Link2,
   Link,
@@ -106,20 +105,12 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
   const {
     setSelectedCard,
     deletingCards,
-    // New real-time features (with fallbacks for backward compatibility)
-    canUserEditCard = () => true,
-    getCardEditingUser = () => null,
   } = useCardContext();
 
   const { columns, onCardStatusChange } = useColumnContext();
 
   // Import needed functions from useCardActions
   const { moveCard, fetchFreshCardData } = useCardActions();
-
-  // Real-time editing state (with safe fallbacks)
-  const canEdit = canUserEditCard(card.id);
-  const editingUser = getCardEditingUser(card.id);
-  const isBeingEdited = !!editingUser;
 
   // Helper function to open card with cached data
   const openCardWithCache = () => {
@@ -165,23 +156,11 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     setSelectedCard(cardDataWithCache);
   };
 
-  // Enhanced card click handler with edit lock checking
+  // Card click handler
   const handleCardClick = async () => {
     if (isDragging || isDeleting || isExiting) return;
 
     try {
-      if (!canEdit) {
-        // Show read-only version with editing indicator
-        openCardWithCache();
-        // Add read-only metadata
-        setSelectedCard((prev) => ({
-          ...prev,
-          readOnly: true,
-          editingUser,
-        }));
-        return;
-      }
-
       // Open modal immediately with cached card data
       openCardWithCache();
 
@@ -192,7 +171,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       setSelectedCard(freshCardData);
     } catch (error) {
       console.error("Error fetching fresh card data:", error);
-      // Modal is already open with cached data, so no need for fallback
     }
   };
 
@@ -503,7 +481,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       columnId, // Make sure this is passed
       index,
     },
-    disabled: isBeingEdited || !areDependenciesMet, // Disable dragging if being edited or dependencies not met
+    disabled: !areDependenciesMet, // Disable dragging if dependencies not met
   });
 
   useEffect(() => {
@@ -598,32 +576,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     return cardData.completedAt || new Date().toISOString();
   };
 
-  // Editing user avatar component for real-time features
-  const EditingUserAvatar = ({ user }) => {
-    const profilePic = getProfilePicture(user.profilePicture);
-
-    return (
-      <div className="flex items-center gap-2">
-        <div className="w-5 h-5 rounded-full border border-blue-200 dark:border-blue-700 midnight:border-blue-800 overflow-hidden">
-          {profilePic ? (
-            <img
-              src={profilePic}
-              alt={user.userName}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full bg-blue-100 dark:bg-blue-900 midnight:bg-blue-900 text-blue-600 dark:text-blue-300 midnight:text-blue-300 flex items-center justify-center text-xs font-medium">
-              {user.userName.charAt(0).toUpperCase()}
-            </div>
-          )}
-        </div>
-        <span className="text-xs text-blue-600 dark:text-blue-400 midnight:text-blue-400 font-medium">
-          {user.userName}
-        </span>
-      </div>
-    );
-  };
-
   const style = {
     transform:
       isDeleting || isExiting
@@ -675,8 +627,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     if (!areDependenciesMet) {
       // Blocked by dependencies - red/orange border
       baseClasses += ` bg-orange-50/30 dark:bg-orange-900/10 midnight:bg-orange-950/10 ring-2 ring-orange-400 dark:ring-orange-600 midnight:ring-orange-700`;
-    } else if (isBeingEdited) {
-      baseClasses += ` bg-blue-50/50 dark:bg-blue-900/10 midnight:bg-blue-950/10 ring-2 ring-blue-200 dark:ring-blue-700 midnight:ring-blue-800`;
     } else if (isFullyCompleted) {
       baseClasses += ` bg-green-50/50 dark:bg-green-900/5 midnight:bg-green-950/5 ring-2 ring-green-200 dark:ring-green-800 midnight:ring-green-900 completed-card`;
     } else if (isReadyToComplete) {
@@ -699,10 +649,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       baseClasses += ` pointer-events-none`;
     }
 
-    if (isBeingEdited) {
-      baseClasses += ` cursor-not-allowed`;
-    }
-
     return baseClasses;
   };
 
@@ -713,29 +659,11 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
         id={`card-${card.id}`}
         ref={setNodeRef}
         {...attributes}
-        {...(isBeingEdited ? {} : listeners)} // Only enable drag listeners if not being edited
+        {...listeners}
         className={getCardClasses()}
         style={style}
         onClick={handleCardClick}
       >
-        {/* NEW: Editing indicator banner for completed cards */}
-        {isBeingEdited && (
-          <div className="mb-2 px-2 py-1 bg-blue-100 dark:bg-blue-900/20 midnight:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-700 midnight:border-blue-800">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1">
-                <Edit3 className="w-3 h-3 text-blue-600 dark:text-blue-400 midnight:text-blue-400" />
-                <span className="font-medium text-blue-700 dark:text-blue-400 midnight:text-blue-400">
-                  Being edited by
-                </span>
-                <EditingUserAvatar user={editingUser} />
-              </div>
-              <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 midnight:text-blue-400">
-                <Lock className="w-3 h-3" />
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Header with title and menu button */}
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center">
@@ -760,7 +688,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
           </div>
           <button
             className="p-1 rounded text-gray-500 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-indigo-300 hover:bg-gray-100 dark:hover:bg-gray-600 midnight:hover:bg-gray-800"
-            disabled={isBeingEdited}
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
@@ -837,7 +764,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
           )}
         </div>
 
-        {/* Administrator row */}
+        {/* Owner row */}
         {cardData.administrator_id && (
           <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800/30 midnight:border-green-900/30 flex justify-end">
             <div className="flex -space-x-2">
@@ -845,7 +772,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
                 <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 animate-pulse"></div>
               ) : (
                 <>
-                  {/* Show single administrator */}
+                  {/* Show single owner */}
                   {assigneeDetails.map((member) => {
                     const profilePicture = getProfilePicture(
                       member.profile_picture
@@ -892,29 +819,11 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       id={`card-${card.id}`}
       ref={setNodeRef}
       {...attributes}
-      {...(isBeingEdited ? {} : listeners)} // Only enable drag listeners if not being edited
+      {...listeners}
       className={getCardClasses()}
       style={style}
       onClick={handleCardClick}
     >
-      {/* NEW: Editing indicator banner */}
-      {isBeingEdited && (
-        <div className="mb-2 px-2 py-1 bg-blue-100 dark:bg-blue-900/20 midnight:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-700 midnight:border-blue-800">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1">
-              <Edit3 className="w-3 h-3 text-blue-600 dark:text-blue-400 midnight:text-blue-400" />
-              <span className="font-medium text-blue-700 dark:text-blue-400 midnight:text-blue-400">
-                Being edited by
-              </span>
-              <EditingUserAvatar user={editingUser} />
-            </div>
-            <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 midnight:text-blue-400">
-              <Lock className="w-3 h-3" />
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* NEW: Blocked by dependencies indicator */}
       {!areDependenciesMet && dependencyCounts.hasDependencies > 0 && (
         <div className="mb-2 px-2 py-1 bg-orange-100 dark:bg-orange-900/20 midnight:bg-orange-950/20 rounded-md border border-orange-200 dark:border-orange-700 midnight:border-orange-800">
@@ -955,14 +864,13 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
         </h3>
         <button
           className="p-2 rounded-lg text-gray-500 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 transition-all duration-200"
-          disabled={isBeingEdited}
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>
 
       {/* Ready to complete notification banner */}
-      {isReadyToComplete && !isBeingEdited && (
+      {isReadyToComplete && (
         <div
           className="mb-2 px-2 py-1 text-xs rounded-md flex items-center justify-between
                        bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/10 
@@ -1165,12 +1073,12 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
         )}
       </div>
 
-      {/* Integrated Administrator Section */}
+      {/* Integrated Owner Section */}
       {cardData.administrator_id && (
         <div className="flex items-center">
           <span className="text-xs text-gray-500 dark:text-gray-300 midnight:text-gray-500 mr-2 flex items-center">
             <User className="w-3 h-3 mr-1" />
-            Administrator
+            Owner
           </span>
 
           <div className="flex -space-x-2">
@@ -1178,7 +1086,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
               <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 animate-pulse"></div>
             ) : (
               <>
-                {/* Show single administrator */}
+                {/* Show single owner */}
                 {assigneeDetails.map((member) => {
                   const profilePicture = getProfilePicture(
                     member.profile_picture

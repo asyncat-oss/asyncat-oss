@@ -8,7 +8,6 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 	const [selectedCard, setSelectedCard] = useState(null);
 	const [showAddCardModal, setShowAddCardModal] = useState(false);
 	const [deletingCards, setDeletingCards] = useState([]);
-	const [isEditingCard, setIsEditingCard] = useState(false);
 
 	// Get column context for updates
 	const { setColumns, columns } = useColumnContext();
@@ -230,14 +229,6 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 		});
 	}, [setColumns]);
 
-	// Card edit locking hooks are no-ops in solo mode.
-	const editingSessions = new Map();
-	const startEditingCard = async (cardId) => true;
-	const stopEditingCard = async (cardId) => {};
-	const canEditCard = (cardId) => true;
-	const getEditingUser = (cardId) => null;
-	const broadcastCardUpdate = async (cardId, updates) => {};
-
 	// Periodic cleanup to prevent ghost cards (every 30 seconds)
 	useEffect(() => {
 		const cleanupInterval = setInterval(() => {
@@ -247,43 +238,22 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 		return () => clearInterval(cleanupInterval);
 	}, [forceRefreshCards]);
 
-	// Enhanced card selection with edit locking
+	// Simple card selection
 	const handleCardSelect = useCallback(
 		async (card) => {
 			if (!card) {
 				setSelectedCard(null);
 				return;
 			}
-
-			// Check if card can be edited
-			if (!canEditCard(card.id)) {
-				const editingUser = getEditingUser(card.id);
-				// Still allow viewing but show read-only mode
-				setSelectedCard({ ...card, readOnly: true, editingUser });
-				return;
-			}
-
-			// Try to acquire edit lock
-			const canEdit = await startEditingCard(card.id);
-			if (canEdit) {
-				setSelectedCard(card);
-				setIsEditingCard(true);
-			} else {
-				const editingUser = getEditingUser(card.id);
-				setSelectedCard({ ...card, readOnly: true, editingUser });
-			}
+			setSelectedCard(card);
 		},
-		[canEditCard, getEditingUser, startEditingCard]
+		[]
 	);
 
-	// Enhanced card close with edit lock cleanup
+	// Simple card close
 	const handleCardClose = useCallback(async () => {
-		if (selectedCard && isEditingCard) {
-			await stopEditingCard(selectedCard.id);
-			setIsEditingCard(false);
-		}
 		setSelectedCard(null);
-	}, [selectedCard, isEditingCard, stopEditingCard]);
+	}, []);
 
 	// Handle starting the card deletion process
 	const handleCardDeleteStart = useCallback((cardId) => {
@@ -295,10 +265,10 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 		}, 500);
 	}, []);
 
-	// Optimistic card update with real-time broadcast
+	// Optimistic card update
 	const updateCardOptimistically = useCallback(
 		async (cardId, updates) => {
-			// Update local state immediately (removed aggressive cleanup)
+			// Update local state immediately
 			setColumns((prevColumns) => {
 				return prevColumns.map((column) => ({
 					...column,
@@ -324,50 +294,22 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 					lastUpdated: Date.now(),
 				}));
 			}
-
-			// Broadcast to other users
-			await broadcastCardUpdate(cardId, updates);
 		},
-		[setColumns, selectedCard, broadcastCardUpdate]
+		[setColumns, selectedCard]
 	);
 
-	// Check if user can edit a specific card
-	const canUserEditCard = useCallback(
-		(cardId) => {
-			return canEditCard(cardId);
-		},
-		[canEditCard]
-	);
-
-	// Get editing user for a specific card
-	const getCardEditingUser = useCallback(
-		(cardId) => {
-			return getEditingUser(cardId);
-		},
-		[getEditingUser]
-	);
-
-	// Enhanced value with real-time features (keeping original API)
+	// Context value
 	const value = {
-		// Original context values (unchanged API)
 		selectedCard,
-		setSelectedCard: handleCardSelect, // Enhanced but same API
+		setSelectedCard: handleCardSelect,
 		showAddCardModal,
 		setShowAddCardModal,
 		deletingCards,
 		setDeletingCards,
 		userId,
 		createdBy: userId,
-
-		// Edit-locking hooks retained for components that share this context.
-		editingSessions,
-		isEditingCard,
 		updateCardOptimistically,
-		canUserEditCard,
-		getCardEditingUser,
-		forceRefreshCards, // Add force refresh function
-
-		// Enhanced handlers
+		forceRefreshCards,
 		onCardClose: handleCardClose,
 		onCardDeleteStart: handleCardDeleteStart,
 	};
@@ -376,15 +318,12 @@ export const CardProvider = ({ children, session, selectedProject }) => {
 		<CardContext.Provider value={value}>
 			{children}
 
-			{/* Enhanced CardDetailModal with edit locking */}
 			{selectedCard && (
 				<CardDetailModal
 					key={`card-modal-${selectedCard.id}`}
 					card={selectedCard}
 					onClose={handleCardClose}
 					onDeleteStart={handleCardDeleteStart}
-					readOnly={selectedCard.readOnly}
-					editingUser={selectedCard.editingUser}
 					onOptimisticUpdate={updateCardOptimistically}
 				/>
 			)}

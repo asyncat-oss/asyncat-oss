@@ -128,9 +128,6 @@ const CardDetailModal = ({
 	card: initialCard,
 	onClose,
 	onDeleteStart,
-	// New props for real-time features (with fallbacks for backward compatibility)
-	readOnly = false,
-	editingUser = null,
 	onOptimisticUpdate = () => {},
 }) => {
 	const { columns, setColumns } = useColumnContext();
@@ -213,13 +210,11 @@ const CardDetailModal = ({
 		setIsEntering(false);
 	}, []);
 
-	// Track editing session for real-time features
+	// Track editing session
 	useEffect(() => {
-		if (!readOnly) {
-			editingStartTimeRef.current = Date.now();
-			setIsLocallyEditing(true);
-		}
-	}, [readOnly]);
+		editingStartTimeRef.current = Date.now();
+		setIsLocallyEditing(true);
+	}, []);
 
 	// Enhanced close handler
 	const handleClose = useCallback(
@@ -246,58 +241,12 @@ const CardDetailModal = ({
 		return () => document.removeEventListener("keydown", handleEscape);
 	}, [handleClose]);
 
-	// Handle optimistic updates for real-time features
+	// Handle optimistic updates
 	const handleOptimisticUpdate = (updates) => {
-		if (readOnly) return;
-
 		setHasUnsavedChanges(true);
 		if (onOptimisticUpdate) {
 			onOptimisticUpdate(localCard.id, updates);
 		}
-	};
-
-	// Calculate editing duration
-	const getEditingDuration = () => {
-		if (!editingUser?.startedAt) return "";
-
-		const startTime = new Date(editingUser.startedAt);
-		const now = new Date();
-		const diffMinutes = Math.floor((now - startTime) / (1000 * 60));
-
-		if (diffMinutes < 1) return "just started";
-		if (diffMinutes === 1) return "1 minute";
-		return `${diffMinutes} minutes`;
-	};
-
-	// Editing user info component
-	const EditingUserInfo = ({ user }) => {
-		const profilePic = getProfilePicture(user.profilePicture);
-
-		return (
-			<div className="flex items-center gap-3">
-				<div className="w-8 h-8 rounded-full border-2 border-blue-200 dark:border-blue-700 midnight:border-blue-800 overflow-hidden">
-					{profilePic ? (
-						<img
-							src={profilePic}
-							alt={user.userName}
-							className="w-full h-full object-cover"
-						/>
-					) : (
-						<div className="w-full h-full bg-blue-100 dark:bg-blue-900 midnight:bg-blue-900 text-blue-600 dark:text-blue-300 midnight:text-blue-300 flex items-center justify-center text-sm font-medium">
-							{user.userName.charAt(0).toUpperCase()}
-						</div>
-					)}
-				</div>
-				<div>
-					<div className="font-medium text-blue-700 dark:text-blue-400 midnight:text-blue-400">
-						{user.userName}
-					</div>
-					<div className="text-xs text-blue-600 dark:text-blue-500 midnight:text-blue-500">
-						Editing for {getEditingDuration()}
-					</div>
-				</div>
-			</div>
-		);
 	};
 
 	// Memoize the current user fetch to prevent duplicate calls
@@ -809,11 +758,6 @@ const CardDetailModal = ({
             rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 midnight:border-gray-800/50 
             w-full max-w-4xl max-h-[90vh] 
             overflow-hidden transform transition-all duration-200
-            ${
-				readOnly
-					? "border-2 border-blue-200 dark:border-blue-700 midnight:border-blue-800"
-					: ""
-			}
             ${isLeaving ? "scale-95 opacity-0" : "scale-100 opacity-100"}
           `}
 				>
@@ -821,11 +765,6 @@ const CardDetailModal = ({
 					<div
 						className={`
             sticky top-0 z-10 px-6 py-4 bg-gradient-to-b from-white via-white/95 to-transparent dark:from-gray-900 dark:via-gray-900/95 dark:to-transparent midnight:from-gray-950 midnight:via-gray-950/95 midnight:to-transparent
-            ${
-				readOnly
-					? "from-blue-50/50 via-blue-50/25 to-transparent dark:from-blue-900/10 dark:via-blue-900/5 dark:to-transparent midnight:from-blue-950/10 midnight:via-blue-950/5 midnight:to-transparent"
-					: ""
-			}
           `}
 					>
 						<div className="flex items-center justify-between">
@@ -836,23 +775,13 @@ const CardDetailModal = ({
 										name="title"
 										value={localCard.title || ""}
 										onChange={handleTitleChange}
-										disabled={readOnly}
-										className="text-2xl font-semibold bg-transparent border-none focus:outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 disabled:opacity-75 flex-1 transition-colors duration-200"
+										className="text-2xl font-semibold bg-transparent border-none focus:outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 flex-1 transition-colors duration-200"
 										placeholder="Untitled"
 									/>
 
 									{/* Status Indicators - moved to right side */}
 									<div className="flex items-center gap-1.5">
-										{readOnly && editingUser && (
-											<div className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/20 midnight:bg-blue-950/20 rounded-md">
-												<Edit3 className="w-3 h-3 text-blue-600 dark:text-blue-400 midnight:text-blue-400" />
-												<span className="text-xs font-medium text-blue-700 dark:text-blue-400 midnight:text-blue-400">
-													Being Edited
-												</span>
-											</div>
-										)}
-
-										{!readOnly && isLocallyEditing && (
+										{isLocallyEditing && (
 											<div className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/20 midnight:bg-green-950/20 rounded-md">
 												<Edit3 className="w-3 h-3 text-green-600 dark:text-green-400 midnight:text-green-400" />
 												<span className="text-xs font-medium text-green-700 dark:text-green-400 midnight:text-green-400">
@@ -873,24 +802,10 @@ const CardDetailModal = ({
 									</div>
 								</div>
 
-								{/* Editing User Info */}
-								{readOnly && editingUser && (
-									<div className="flex items-center justify-between">
-										<EditingUserInfo user={editingUser} />
-										<div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 midnight:text-blue-400">
-											<Eye className="w-4 h-4" />
-											<span className="text-sm">
-												Read-only mode
-											</span>
-										</div>
-									</div>
-								)}
-
 							</div>
 
 							{/* Action Buttons */}
-							{!readOnly && (
-								<div className="ml-4 flex items-center space-x-2">
+							<div className="ml-4 flex items-center space-x-2">
 									{!isConfirmingDelete ? (
 										<button
 											onClick={handleDeleteCard}
@@ -966,82 +881,9 @@ const CardDetailModal = ({
 
 					{/* Modal Content */}
 					<div className="overflow-auto max-h-[calc(90vh-120px)]">
-						{readOnly && editingUser ? (
-							// Read-only content with limited functionality
-							<div className="p-6">
-								<div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/10 midnight:bg-blue-950/10 rounded-lg border border-blue-200 dark:border-blue-800 midnight:border-blue-800">
-									<div className="flex items-start gap-3">
-										<Lock className="w-5 h-5 text-blue-600 dark:text-blue-400 midnight:text-blue-400 mt-0.5" />
-										<div>
-											<h3 className="font-medium text-blue-900 dark:text-blue-300 midnight:text-blue-300 mb-1">
-												Card is currently being edited
-											</h3>
-											<p className="text-sm text-blue-700 dark:text-blue-400 midnight:text-blue-400">
-												<strong>
-													{editingUser.userName}
-												</strong>{" "}
-												is currently editing this card.
-												You can view the content but
-												cannot make changes until they
-												finish editing.
-											</p>
-											<p className="text-xs text-blue-600 dark:text-blue-500 midnight:text-blue-500 mt-2">
-												The card will be available for
-												editing once{" "}
-												{editingUser.userName} closes
-												their editor or after 5 minutes
-												of inactivity.
-											</p>
-										</div>
-									</div>
-								</div>
-
-								<div className="space-y-4 opacity-75">
-									<div>
-										<h3 className="text-lg font-medium text-gray-900 dark:text-white midnight:text-gray-100 mb-2">
-											{localCard.title}
-										</h3>
-										{localCard.description && (
-											<p className="text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-												{localCard.description}
-											</p>
-										)}
-									</div>
-
-									{localCard.progress > 0 && (
-										<div>
-											<div className="flex justify-between items-center mb-2">
-												<span className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">
-													Progress
-												</span>
-												<span className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-													{localCard.progress}%
-												</span>
-											</div>
-											<div className="w-full bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full h-2 overflow-hidden">
-												<div
-													className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 midnight:from-blue-300 midnight:to-blue-400 h-2 rounded-full transition-all duration-500 ease-out"
-													style={{
-														width: `${localCard.progress}%`,
-													}}
-												/>
-											</div>
-										</div>
-									)}
-
-									<div className="mt-6 p-3 bg-gray-50 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg text-center">
-										<p className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-											Full card details are not available
-											while the card is being edited.
-										</p>
-									</div>
-								</div>
-							</div>
-						) : (
-							// Full editable content
-							<div className="flex-1 flex overflow-hidden min-w-0">
-								{/* Left Column - Main Content */}
-								<div className="flex-1 overflow-y-auto min-w-0">
+						<div className="flex-1 flex overflow-hidden min-w-0">
+							{/* Left Column - Main Content */}
+							<div className="flex-1 overflow-y-auto min-w-0">
 									<div className="p-6 space-y-6">
 										{/* Description */}
 										<div>
@@ -1062,7 +904,7 @@ const CardDetailModal = ({
 														e.stopPropagation();
 													}
 												}}
-												disabled={readOnly}
+												
 												rows="4"
 												className="w-full p-4 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 bg-gray-50/30 dark:bg-gray-800/50 midnight:bg-gray-900/50 rounded-xl resize-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400 focus:bg-white dark:focus:bg-gray-800 midnight:focus:bg-gray-900 disabled:opacity-75 disabled:bg-gray-50 dark:disabled:bg-gray-700 midnight:disabled:bg-gray-800 transition-all duration-200"
 												placeholder="Add a description..."
@@ -1113,7 +955,7 @@ const CardDetailModal = ({
 														shouldBounceSaveAll={
 															shouldBounceSaveAll
 														}
-														readOnly={readOnly}
+														
 													/>
 												</div>
 											</CollapsibleSection>
@@ -1145,12 +987,12 @@ const CardDetailModal = ({
 														[]
 													}
 													fileError={fileError}
-													readOnly={readOnly}
+													
 													isUploading={
 														isUploadingFiles
 													}
 													onFileChange={async (e) => {
-														if (readOnly) return;
+														
 														const newFiles =
 															Array.from(
 																e.target.files
@@ -1226,7 +1068,7 @@ const CardDetailModal = ({
 													onDeleteFile={(
 														fileToDelete
 													) => {
-														if (readOnly) return;
+														
 														setLocalCard(
 															(prev) => ({
 																...prev,
@@ -1241,7 +1083,7 @@ const CardDetailModal = ({
 													onDeleteAttachment={async (
 														attachmentId
 													) => {
-														if (readOnly) return;
+														
 														try {
 															setSaveStatus(
 																"saving"
@@ -1463,14 +1305,14 @@ const CardDetailModal = ({
 																				<button
 																					key={card.id}
 																					type="button"
-																					onClick={(e) => {
+onClick={(e) => {
 																						e.preventDefault();
 																						e.stopPropagation();
-																						if (!alreadyAdded && !readOnly) {
+																						if (!alreadyAdded) {
 																							handleAddDependency(card, activeDependencyType);
 																						}
 																					}}
-																					disabled={alreadyAdded || readOnly}
+																				disabled={alreadyAdded}
 																					className={`w-full p-2.5 rounded border transition-all text-left ${
 																						alreadyAdded
 																							? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border-gray-200 dark:border-gray-700 midnight:border-gray-800'
@@ -1565,11 +1407,10 @@ const CardDetailModal = ({
 																											</span>
 																										</>
 																									)}
-																								</div>
-																							</div>
-																						</div>
-																						{!readOnly && (
-																							<button
+																					</div>
+																				</div>
+																			</div>
+																			<button
 																								type="button"
 																								onClick={() => handleRemoveDependency(dep.targetCardId)}
 																								className="p-1 text-red-500 hover:text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/10 rounded transition-colors ml-2 flex-shrink-0"
@@ -1583,9 +1424,7 @@ const CardDetailModal = ({
 																		</div>
 																	)}
 
-																	{!readOnly && (
-																		<>
-																			{/* Separator */}
+<>{/* Separator */}
 																			{dependencies.length > 0 && (
 																				<div className="border-t border-gray-200 dark:border-gray-700 my-4"></div>
 																			)}
@@ -1826,7 +1665,7 @@ const CardDetailModal = ({
 																localCard.id
 															}
 															columns={columns}
-															disabled={readOnly}
+															
 														/>
 													</div>
 												) : null;
@@ -1885,7 +1724,7 @@ const CardDetailModal = ({
 													})()}
 													onChange={handleChange}
 													disabled={
-														isSubmitting || readOnly
+														isSubmitting
 													}
 												/>
 											</div>
@@ -1914,7 +1753,7 @@ const CardDetailModal = ({
 													})()}
 													onChange={handleChange}
 													disabled={
-														isSubmitting || readOnly
+														isSubmitting
 													}
 												/>
 												{dueStatus && (
@@ -1946,7 +1785,7 @@ const CardDetailModal = ({
 											<DropdownBar
 												value={localCard.priority || ""}
 												onChange={(value) => {
-													if (readOnly) return;
+													
 													const updates = {
 														priority: value,
 													};
@@ -1974,7 +1813,7 @@ const CardDetailModal = ({
 												]}
 												type="priority"
 												placeholder="Select priority..."
-												disabled={readOnly}
+												
 											/>
 											{localCard.priority && (
 												<div className="mt-2 text-xs">
@@ -1994,7 +1833,7 @@ const CardDetailModal = ({
 					)}
 
 						{/* Optimistic update overlay for main content area */}
-						{hasUnsavedChanges && !readOnly && (
+						{hasUnsavedChanges && (
 							<div className="absolute top-4 right-4 bg-orange-100 dark:bg-orange-900/20 midnight:bg-orange-950/20 px-3 py-1 rounded-full">
 								<span className="text-xs font-medium text-orange-700 dark:text-orange-400 midnight:text-orange-400">
 									Changes pending...
