@@ -21,7 +21,7 @@ import ProjectOverview from '../projects/ProjectOverview';
 import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
-import ModelsPage from '../Settings/ModelsPage';
+import ModelsPage from '../Models/ModelsPage';
 import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
 import SchedulerPage from '../Scheduler/SchedulerPage';
 import ProfilesPage from '../Profiles/ProfilesPage';

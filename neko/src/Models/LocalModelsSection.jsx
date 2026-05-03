@@ -13,7 +13,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-import { localModelsApi } from "./settingApi.js";
+import { localModelsApi } from "../Settings/settingApi.js";
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 const formatBytes = (bytes) => {

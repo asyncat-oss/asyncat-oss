@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Play, Square, Trash2, Box, Cpu, Zap, Wrench, TriangleAlert, RotateCcw, TerminalSquare, ChevronDown, ChevronUp, Sparkles, HardDriveDownload, Download, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Wifi, WifiOff, FolderOpen } from 'lucide-react';
 import LocalModelsSection from './LocalModelsSection';
 import MlxModelsSection from './MlxModelsSection';
-import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from './settingApi.js';
+import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from '../Settings/settingApi.js';
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 

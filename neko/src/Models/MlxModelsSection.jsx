@@ -10,7 +10,7 @@ import {
   TriangleAlert,
   Square,
 } from 'lucide-react';
-import { mlxApi } from './settingApi.js';
+import { mlxApi } from "../Settings/settingApi.js";
 
 // ── Format helpers ─────────────────────────────────────────────────────────────
 const formatBytes = (bytes) => {
