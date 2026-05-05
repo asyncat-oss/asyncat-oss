@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useColumnContext } from "../../../../context/ColumnContext";
+import { useColumnContext } from "../../../../context/viewContexts";
 
 export const useSearch = () => {
   const { columns } = useColumnContext();

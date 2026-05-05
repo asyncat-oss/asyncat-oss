@@ -19,8 +19,8 @@ import {
   Link,
   Loader,
 } from "lucide-react";
-import { useCardContext } from "../../../context/CardContext";
-import { useColumnContext } from "../../../context/ColumnContext";
+import { useCardContext } from "../../../context/viewContexts";
+import { useColumnContext } from "../../../context/viewContexts";
 import { useCardActions } from "../../../hooks/useCardActions";
 import viewsApi from "../../../viewsApi";
 import authService from "../../../../services/authService";

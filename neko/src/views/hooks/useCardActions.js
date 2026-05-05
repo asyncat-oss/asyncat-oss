@@ -1,12 +1,10 @@
-import { useState } from "react";
-import { useCardContext } from "../context/CardContext";
-import { useColumnContext } from "../context/ColumnContext";
+import { useCardContext } from "../context/viewContexts";
+import { useColumnContext } from "../context/viewContexts";
 import viewsApi from "../viewsApi";
 
 export const useCardActions = () => {
 	const { setSelectedCard } = useCardContext();
 	const { columns, setColumns } = useColumnContext();
-	const [completionError, setCompletionError] = useState(null);
 
 	const normalizeChecklist = (checklist = []) =>
 		checklist.map((item) => {
@@ -219,7 +217,6 @@ export const useCardActions = () => {
 			);
 
 			// Detect if this is a status-affecting change
-			let isStatusChange = false;
 			let oldTasksCompleted = 0;
 			let newTasksCompleted = 0;
 
@@ -233,7 +230,6 @@ export const useCardActions = () => {
 					0;
 
 				if (oldTasksCompleted !== newTasksCompleted) {
-					isStatusChange = true;
 					console.log(
 						`🔄 Task completion change detected for card ${cardId}:`,
 						{
@@ -250,7 +246,6 @@ export const useCardActions = () => {
 				const oldCompleted = currentCard.tasks?.completed || 0;
 				const newCompleted = updates.tasks.completed || 0;
 				if (oldCompleted !== newCompleted) {
-					isStatusChange = true;
 					console.log(
 						`🔄 Tasks progress change detected for card ${cardId}:`,
 						{
@@ -706,7 +701,6 @@ export const useCardActions = () => {
 		addAttachment,
 		removeAttachment,
 		sendCatMessage,
-		completionError,
 		// Dependency management
 		addDependency,
 		removeDependency,

@@ -28,8 +28,8 @@ import {
 	ChevronDown,
 	Link2Off,
 } from "lucide-react";
-import { useColumnContext } from "../../../context/ColumnContext";
-import { useCardContext } from "../../../context/CardContext";
+import { useColumnContext } from "../../../context/viewContexts";
+import { useCardContext } from "../../../context/viewContexts";
 import { useCardActions } from "../../../hooks/useCardActions";
 import TaskChecklist from "../shared/components/TaskChecklist";
 import DropdownBar from "../shared/components/DropdownBar";

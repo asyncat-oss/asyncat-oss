@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useColumnContext } from "../../views/context/ColumnContext";
-import { useCardContext } from "../../views/context/CardContext";
+import { useColumnContext } from "../../views/context/viewContexts";
+import { useCardContext } from "../../views/context/viewContexts";
 import ListViewFilters from "./ListViewFilters";
 import ListViewTable from "./ListViewTable";
 import AddCardModal from "../kanban/features/cards/AddCardModal";

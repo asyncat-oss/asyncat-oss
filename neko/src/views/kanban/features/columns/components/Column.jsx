@@ -7,7 +7,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, Settings, CheckCircle, AlertTriangle } from "lucide-react";
 import Card from "../../cards/Card";
-import { useColumnContext } from "../../../../context/ColumnContext";
+import { useColumnContext } from "../../../../context/viewContexts";
 import LoadingCard from "../../shared/components/LoadingCard";
 import ColumnSettingsModal from "./ColumnSettingsModal";
 import AddCardModal from "../../cards/AddCardModal";

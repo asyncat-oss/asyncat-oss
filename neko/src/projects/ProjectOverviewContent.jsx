@@ -243,7 +243,7 @@ const ProjectOverview = React.memo(({
 				selectedProject={projectData}
 				viewType={currentTab}
 			>
-				<CardProvider session={session} selectedProject={projectData}>
+				<CardProvider session={session}>
 					<ViewComponent
 						session={session}
 						selectedProject={projectData}

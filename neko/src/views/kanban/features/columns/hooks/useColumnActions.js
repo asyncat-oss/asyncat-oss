@@ -1,23 +1,23 @@
-import { useColumnContext } from "../../../../context/ColumnContext";
+import { useColumnContext } from "../../../../context/viewContexts";
 import { useState } from "react";
 import viewsApi from "../../../../viewsApi";
 
+const getEffectiveProjectId = (selectedProject) =>
+	selectedProject?.id ||
+	sessionStorage.getItem("projectId") ||
+	sessionStorage.getItem("userId");
+
 export const useColumnActions = () => {
-	const { setColumns } = useColumnContext();
+	const { setColumns, selectedProject } = useColumnContext();
 	const [pendingOperations, setPendingOperations] = useState({
 		deletingColumns: [],
 	});
 
-	const addColumn = async (columnData) => {
-		const projectId = sessionStorage.getItem("projectId");
-		const userId = sessionStorage.getItem("userId");
-
-		const effectiveProjectId = projectId || userId;
-
+	const handleColumnAdd = async (columnData) => {
 		try {
 			const newColumn = await viewsApi.column.create({
 				...columnData,
-				projectId: effectiveProjectId,
+				projectId: getEffectiveProjectId(selectedProject),
 				Cards: [],
 			});
 
@@ -38,15 +38,11 @@ export const useColumnActions = () => {
 		}
 	};
 
-	const updateColumn = async (columnId, updates) => {
-		const projectId = sessionStorage.getItem("projectId");
-		const userId = sessionStorage.getItem("userId");
-		const effectiveProjectId = projectId || userId;
-
+	const handleColumnUpdate = async (columnId, updates) => {
 		try {
 			const updatedColumn = await viewsApi.column.update(columnId, {
 				...updates,
-				projectId: effectiveProjectId,
+				projectId: getEffectiveProjectId(selectedProject),
 			});
 
 			setColumns((prev) =>
@@ -69,27 +65,10 @@ export const useColumnActions = () => {
 		}
 	};
 
-	const deleteColumn = async (columnId) => {
-		const projectId = sessionStorage.getItem("projectId");
-		const userId = sessionStorage.getItem("userId");
-		const effectiveProjectId = projectId || userId;
-
-		try {
-			await viewsApi.column.delete(columnId, effectiveProjectId);
-
-			setColumns((prev) => prev.filter((col) => col.id !== columnId));
-		} catch (err) {
-			console.error("Error deleting column:", err);
-			throw err;
-		}
-	};
-
-	const updateColumnOrder = async (newOrder) => {
-		const projectId = sessionStorage.getItem("projectId");
-
+	const handleReorderColumns = async (newOrder) => {
 		try {
 			const updatedColumns = await viewsApi.column.updateOrder(
-				projectId || null,
+				getEffectiveProjectId(selectedProject),
 				newOrder
 			);
 
@@ -105,7 +84,7 @@ export const useColumnActions = () => {
 		}
 	};
 
-	const updateColumnCompletionStatus = async (
+	const handleUpdateCompletionStatus = async (
 		columnId,
 		isCompletionColumn
 	) => {
@@ -135,24 +114,6 @@ export const useColumnActions = () => {
 		}
 	};
 
-	const handleColumnAdd = async (columnData) => {
-		try {
-			return await addColumn(columnData);
-		} catch (error) {
-			console.error("Error adding column:", error);
-			throw error;
-		}
-	};
-
-	const handleColumnUpdate = async (columnId, updates) => {
-		try {
-			return await updateColumn(columnId, updates);
-		} catch (error) {
-			console.error("Error updating column:", error);
-			throw error;
-		}
-	};
-
 	const handleColumnDelete = async (columnId) => {
 		try {
 			setPendingOperations((prev) => ({
@@ -160,7 +121,11 @@ export const useColumnActions = () => {
 				deletingColumns: [...prev.deletingColumns, columnId],
 			}));
 
-			await deleteColumn(columnId);
+			await viewsApi.column.delete(
+				columnId,
+				getEffectiveProjectId(selectedProject)
+			);
+			setColumns((prev) => prev.filter((col) => col.id !== columnId));
 
 			setPendingOperations((prev) => ({
 				...prev,
@@ -192,30 +157,6 @@ export const useColumnActions = () => {
 
 	const handleColumnStyle = (columnId, styles) => {
 		return handleColumnUpdate(columnId, { styles });
-	};
-
-	const handleReorderColumns = async (newOrder) => {
-		try {
-			return await updateColumnOrder(newOrder);
-		} catch (error) {
-			console.error("Error reordering columns:", error);
-			throw error;
-		}
-	};
-
-	const handleUpdateCompletionStatus = async (
-		columnId,
-		isCompletionColumn
-	) => {
-		try {
-			return await updateColumnCompletionStatus(
-				columnId,
-				isCompletionColumn
-			);
-		} catch (error) {
-			console.error("Error updating column completion status:", error);
-			throw error;
-		}
 	};
 
 	return {

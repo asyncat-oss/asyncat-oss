@@ -5,8 +5,8 @@ import {
   useCallback,
   useLayoutEffect,
 } from "react";
-import { useColumnContext } from "../context/ColumnContext";
-import { useCardContext } from "../context/CardContext";
+import { useColumnContext } from "../context/viewContexts";
+import { useCardContext } from "../context/viewContexts";
 import { useCardActions } from "../hooks/useCardActions"; // Import useCardActions
 import AddCardModal from "../kanban/features/cards/AddCardModal"; // Import AddCardModal
 import viewsApi from "../viewsApi";

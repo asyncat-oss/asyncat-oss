@@ -42,8 +42,8 @@ import {
 	Network,
 } from "lucide-react";
 import { useCardActions } from "../../hooks/useCardActions";
-import { useColumnContext } from "../../context/ColumnContext";
-import { useCardContext } from "../../context/CardContext";
+import { useColumnContext } from "../../context/viewContexts";
+import { useCardContext } from "../../context/viewContexts";
 import viewsApi from "../../viewsApi";
 
 // Import needed components

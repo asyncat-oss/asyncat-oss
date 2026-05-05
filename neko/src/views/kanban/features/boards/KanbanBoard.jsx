@@ -33,8 +33,8 @@ import AddColumnModal from "../columns/components/AddColumnModal";
 import Header from "./Header";
 import { Plus, Filter, AlertTriangle } from "lucide-react";
 
-import { useColumnContext } from "../../../context/ColumnContext";
-import { useCardContext } from "../../../context/CardContext";
+import { useColumnContext } from "../../../context/viewContexts";
+import { useCardContext } from "../../../context/viewContexts";
 import { useCardActions } from "../../../hooks/useCardActions";
 import { keyframes } from "framer-motion";
 

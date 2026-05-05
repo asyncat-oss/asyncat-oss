@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useColumnContext } from "../../views/context/ColumnContext";
-import { useCardContext } from "../../views/context/CardContext";
+import { useColumnContext } from "../../views/context/viewContexts";
+import { useCardContext } from "../../views/context/viewContexts";
 import { useCardActions } from "../hooks/useCardActions";
 import viewsApi from "../viewsApi";
 import GanttFilters from "./GanttFilters";
