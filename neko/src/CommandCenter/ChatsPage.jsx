@@ -105,12 +105,11 @@ const ChatsPage = () => {
   const saveRename = async () => {
     const chatId = actionModal.id;
     const newTitle = actionModalTitle.trim();
-    if (!newTitle) return;
-    if (newTitle === actionModal.title) return;
+    if (!newTitle || newTitle === actionModal.title) { setActionModal(null); return; }
     try {
       await chatApi.updateConversation(chatId, { title: newTitle });
       setConversations(prev => prev.map(c => c.id === chatId ? { ...c, title: newTitle } : c));
-      setActionModal(prev => prev ? { ...prev, title: newTitle } : null);
+      setActionModal(null);
     } catch (err) {
       console.error('Failed to rename chat:', err);
     }
