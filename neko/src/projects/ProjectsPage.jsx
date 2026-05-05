@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ProjectGrid from "./views/ProjectGrid";
 import { useWorkspace } from "../contexts/WorkspaceContext";
@@ -8,7 +8,7 @@ import eventBus from "../utils/eventBus.js";
 const soraFontBase = "font-sora";
 
 const sortProjects = (projects) =>
-  projects.sort((a, b) => {
+  [...projects].sort((a, b) => {
     if (a.starred && !b.starred) return -1;
     if (!a.starred && b.starred) return 1;
     if (a.is_archived && !b.is_archived) return 1;
@@ -31,17 +31,9 @@ const ProjectsPage = ({
     return sessionStorage.getItem("projectViewMode") || "grid";
   });
 
-  const { currentWorkspace, getWorkspaceProjects } = useWorkspace();
+  const { currentWorkspace, getWorkspaceProjects, bustProjectsCache } = useWorkspace();
 
-  useEffect(() => {
-    sessionStorage.setItem("projectViewMode", projectViewMode);
-  }, [projectViewMode]);
-
-  useEffect(() => {
-    if (currentWorkspace) fetchProjects();
-  }, [currentWorkspace]);
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -56,7 +48,24 @@ const ProjectsPage = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [getWorkspaceProjects]);
+
+  useEffect(() => {
+    sessionStorage.setItem("projectViewMode", projectViewMode);
+  }, [projectViewMode]);
+
+  useEffect(() => {
+    if (currentWorkspace) fetchProjects();
+  }, [currentWorkspace, fetchProjects]);
+
+  useEffect(() => {
+    const handleProjectsUpdated = () => {
+      bustProjectsCache();
+      fetchProjects();
+    };
+
+    return eventBus.on('projectsUpdated', handleProjectsUpdated);
+  }, [bustProjectsCache, currentWorkspace, fetchProjects]);
 
   const handleOpenCreateProject = () => {
     eventBus.emit('openCreateProjectModal');

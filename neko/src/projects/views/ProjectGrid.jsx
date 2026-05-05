@@ -5,18 +5,18 @@ import ProjectListView from "./ProjectListView";
 
 // Empty state shown when there are no projects
 const EmptyState = ({ workspaceName, onCreateClick }) => (
-  <div className="h-[80vh] flex items-center justify-center">
+  <div className="h-full min-h-[420px] flex items-center justify-center">
     <div className="text-center max-w-md mx-auto p-6">
-      <h2 className="text-xl font-bold mb-2 dark:text-white midnight:text-indigo-100">
-        Every great idea starts with a first project in {workspaceName}
+      <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white midnight:text-indigo-100">
+        No projects yet
       </h2>
-      <p className="text-gray-500 dark:text-gray-400 midnight:text-indigo-300 mb-6">
-        Take the leap—create something amazing and let your journey begin!
+      <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-indigo-300 mb-6">
+        Create your first project in {workspaceName}.
       </p>
       {onCreateClick && (
         <button
           onClick={onCreateClick}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Project
@@ -245,7 +245,7 @@ const ProjectGrid = ({
       <div className="max-w-6xl w-full mx-auto p-4 md:p-8 flex flex-col h-full relative z-20">
         {/* Header */}
         <div className="flex items-center justify-between mb-8 flex-shrink-0">
-          <h1 className="text-2xl font-serif text-gray-900 dark:text-white midnight:text-slate-100">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white midnight:text-slate-100">
             {workspaceName} Projects
           </h1>
           {onCreateClick && (

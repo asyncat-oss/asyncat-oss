@@ -1,10 +1,9 @@
 import { useEffect } from "react";
 import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import ProjectOverviewOriginal from "../projects/ProjectOverviewContent.jsx";
-import eventBus from "../utils/eventBus.js";
 
 const ProjectOverview = () => {
-  const { selectedProject, session, refreshProjects } = useOutletContext();
+  const { selectedProject, session, refreshProjects, onProjectUpdated } = useOutletContext();
   const { projectId, tab } = useParams();
   const navigate = useNavigate();
 
@@ -35,10 +34,12 @@ const ProjectOverview = () => {
 
       const updatedProject = await projectApi.updateProject(selectedProject.id, updatedData);
 
-      eventBus.emit('projectsUpdated');
-
       if (refreshProjects) {
         refreshProjects();
+      }
+
+      if (onProjectUpdated) {
+        onProjectUpdated(updatedProject);
       }
 
       return updatedProject;
