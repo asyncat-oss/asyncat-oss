@@ -883,6 +883,34 @@ export const agentApi = {
   },
 };
 
+export const agentTaskRunsApi = {
+  list: async ({ projectId = null, cardId = null } = {}) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set('projectId', projectId);
+    if (cardId) params.set('cardId', cardId);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs${suffix}`);
+  },
+
+  create: async ({ cardId, profileId = null, goal = null }) => {
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs`, {
+      method: 'POST',
+      body: JSON.stringify({ cardId, profileId, goal }),
+    });
+  },
+
+  get: async (runId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs/${encodeURIComponent(runId)}`);
+  },
+
+  cancel: async (runId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+};
+
 export const profilesApi = {
   listProfiles: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/profiles`);

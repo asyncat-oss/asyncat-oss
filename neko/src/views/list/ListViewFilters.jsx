@@ -5,9 +5,7 @@ const ListViewFilters = ({
 	searchTerm,
 	setSearchTerm,
 	filterConfig,
-	toggleCompletedFilter,
-	toggleDependenciesFilter,
-	toggleBlockedFilter,
+	toggleRunningFilter,
 	togglePriorityFilter,
 	toggleDueStatusFilter,
 	onClearFilters,
@@ -16,19 +14,15 @@ const ListViewFilters = ({
 }) => {
 	// Check if any filters are active
 	const hasActiveFilters =
-		filterConfig.completed ||
+		filterConfig.running ||
 		(filterConfig.priority && filterConfig.priority.length > 0) ||
-		(filterConfig.dueStatus && filterConfig.dueStatus.length > 0) ||
-		filterConfig.hasDependencies ||
-		filterConfig.isBlocked;
+		(filterConfig.dueStatus && filterConfig.dueStatus.length > 0);
 
 	// Count total active filters
 	const activeFilterCount =
-		(filterConfig.completed ? 1 : 0) +
+		(filterConfig.running ? 1 : 0) +
 		(filterConfig.priority?.length || 0) +
-		(filterConfig.dueStatus?.length || 0) +
-		(filterConfig.hasDependencies ? 1 : 0) +
-		(filterConfig.isBlocked ? 1 : 0);
+		(filterConfig.dueStatus?.length || 0);
 	return (
 		<div className="bg-white dark:bg-gray-900 midnight:bg-gray-950 border-b border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60">
 			<div className="px-6 py-4">
@@ -83,11 +77,11 @@ const ListViewFilters = ({
 
 						{/* Enhanced Filter Pills */}
 						<div className="flex items-center gap-2 overflow-x-auto pb-1 align-middle">
-							{/* Completed Filter */}
+							{/* Running Filter */}
 							<button
-								onClick={toggleCompletedFilter}
+								onClick={toggleRunningFilter}
 								className={`group px-3 py-2 text-xs font-medium border rounded-lg transition-all duration-200 whitespace-nowrap ${
-									filterConfig.completed
+									filterConfig.running
 										? "bg-emerald-50 dark:bg-emerald-900/30 midnight:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 border-emerald-200 dark:border-emerald-600 midnight:border-emerald-700"
 										: "bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-600 dark:text-gray-400 midnight:text-gray-500 border-gray-200 dark:border-gray-600 midnight:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
 								}`}
@@ -95,7 +89,7 @@ const ListViewFilters = ({
 								<div className="flex items-center gap-1.5">
 									<CheckCircle className="w-3.5 h-3.5" />
 									<span className="hidden sm:inline">
-										Completed
+										Running
 									</span>
 								</div>
 							</button>

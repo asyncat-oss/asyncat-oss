@@ -268,7 +268,7 @@ const getRelativeConversationTime = (dateString) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const CommandCenterV2Enhanced = () => {
+const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
   const navigate = useNavigate();
   const { userName } = useUser();
@@ -374,6 +374,72 @@ const CommandCenterV2Enhanced = () => {
   const setCurrentChatRun = useCallback((updater) => {
     updateChatRun(currentRunKey, updater);
   }, [currentRunKey, updateChatRun]);
+
+  useEffect(() => {
+    if (!agentSessionId) return;
+
+    let cancelled = false;
+    const runKey = currentRunKey;
+
+    const loadPersistedAgentSession = async () => {
+      setAgentLoadingSession(true);
+      try {
+        const [sessionResult, auditResult] = await Promise.all([
+          agentApi.getSession(agentSessionId),
+          agentApi.getSessionAudit(agentSessionId).catch(() => ({ audit: [] })),
+        ]);
+
+        if (cancelled) return;
+
+        const session = sessionResult?.session;
+        if (!session) {
+          updateChatRun(runKey, {
+            goal: '',
+            sessionId: agentSessionId,
+            session: null,
+            running: false,
+            streamingText: '',
+            events: [{ type: 'error', data: { message: 'Agent session not found.' } }],
+          });
+          return;
+        }
+
+        const firstGoalLine = String(session.goal || '').split('\n').find(Boolean) || '';
+        const displayGoal = session.taskRun?.cardTitle && (!firstGoalLine || /^Work on task card\s+/i.test(firstGoalLine))
+          ? `Task: ${session.taskRun.cardTitle}`
+          : (firstGoalLine || session.goal || '');
+        setConversationTitle(displayGoal || 'Agent run');
+        const events = buildAgentEventsFromSession(session, auditResult?.audit || []);
+        updateChatRun(runKey, {
+          goal: displayGoal,
+          sessionId: session.id,
+          session,
+          running: session.status === 'active',
+          streamingText: '',
+          conversationHistory: Array.isArray(session.messages) ? session.messages : [],
+          events,
+        });
+      } catch (error) {
+        if (cancelled) return;
+        updateChatRun(runKey, {
+          goal: '',
+          sessionId: agentSessionId,
+          session: null,
+          running: false,
+          streamingText: '',
+          events: [{ type: 'error', data: { message: error.message || 'Failed to load agent session.' } }],
+        });
+      } finally {
+        if (!cancelled) setAgentLoadingSession(false);
+      }
+    };
+
+    loadPersistedAgentSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [agentSessionId, currentRunKey, setConversationTitle, updateChatRun]);
 
   const conversationTokens = useMemo(() => {
     const historyChars = (conversationHistory || []).reduce(

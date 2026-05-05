@@ -14,11 +14,11 @@ const ListViewTable = ({
   expandedCards,
   toggleCardExpanded,
   setSelectedCard,
-  cardDependencies,
-  dependentCards,
-  session,
-  isCardBlocked,
-  columns,
+  profiles,
+  assigningCardId,
+  onAssignAgent,
+  onCancelRun,
+  onOpenRun,
 }) => {
   const getSortIcon = (columnKey) => {
     if (sortConfig.key !== columnKey) {
@@ -37,10 +37,9 @@ const ListViewTable = ({
         <table className="min-w-full table-fixed">
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800">
-              {/* Task column - wider */}
               <th
                 scope="col"
-                className="w-1/4 px-3 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
+                className="w-1/3 px-3 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
                 onClick={() => handleSort("title")}
               >
                 <div className="flex items-center">
@@ -48,10 +47,31 @@ const ListViewTable = ({
                   {getSortIcon("title")}
                 </div>
               </th>
-              {/* Priority column */}
               <th
                 scope="col"
-                className="w-20 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
+                className="w-32 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider"
+              >
+                <div className="flex items-center justify-center">Agent</div>
+              </th>
+              <th
+                scope="col"
+                className="w-28 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
+                onClick={() => handleSort("runStatus")}
+              >
+                <div className="flex items-center justify-center">
+                  Run Status
+                  {getSortIcon("runStatus")}
+                </div>
+              </th>
+              <th
+                scope="col"
+                className="w-48 px-2 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider"
+              >
+                <div className="flex items-center">Current Activity</div>
+              </th>
+              <th
+                scope="col"
+                className="w-24 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
                 onClick={() => handleSort("priority")}
               >
                 <div className="flex items-center justify-center">
@@ -59,25 +79,6 @@ const ListViewTable = ({
                   {getSortIcon("priority")}
                 </div>
               </th>
-              {/* Duration column */}
-              <th
-                scope="col"
-                className="w-20 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
-                onClick={() => handleSort("duration")}
-              >
-                <div className="flex items-center justify-center">
-                  Duration
-                  {getSortIcon("duration")}
-                </div>
-              </th>
-              {/* Status column */}
-              <th
-                scope="col"
-                className="w-20 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider"
-              >
-                <div className="flex items-center justify-center">Status</div>
-              </th>
-              {/* Due Date column */}
               <th
                 scope="col"
                 className="w-28 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
@@ -88,23 +89,11 @@ const ListViewTable = ({
                   {getSortIcon("dueDate")}
                 </div>
               </th>
-              {/* Progress column */}
               <th
                 scope="col"
-                className="w-24 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
-                onClick={() => handleSort("progress")}
+                className="w-56 px-2 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider"
               >
-                <div className="flex items-center justify-center">
-                  Progress
-                  {getSortIcon("progress")}
-                </div>
-              </th>
-              {/* Details column */}
-              <th
-                scope="col"
-                className="w-20 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider"
-              >
-                <div className="flex items-center justify-center">Details</div>
+                <div className="flex items-center justify-end">Actions</div>
               </th>
             </tr>
           </thead>
@@ -114,14 +103,14 @@ const ListViewTable = ({
                 <ListViewCard
                   key={card.id}
                   card={card}
-                  isCardBlocked={isCardBlocked}
                   expandedCards={expandedCards}
                   toggleCardExpanded={toggleCardExpanded}
                   setSelectedCard={setSelectedCard}
-                  cardDependencies={cardDependencies}
-                  dependentCards={dependentCards}
-                  session={session}
-                  columns={columns}
+                  profiles={profiles}
+                  assigningCardId={assigningCardId}
+                  onAssignAgent={onAssignAgent}
+                  onCancelRun={onCancelRun}
+                  onOpenRun={onOpenRun}
                 />
               ))
             ) : (

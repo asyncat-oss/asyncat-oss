@@ -5,13 +5,6 @@ import {
 	useRef,
 } from "react";
 
-const getProfilePicture = (profilePicId) => {
-	if (!profilePicId) return null;
-	const baseUrl = import.meta.env?.VITE_API_URL || '';
-	return profilePicId.startsWith('http') 
-		? profilePicId 
-		: `${baseUrl}/api/files/${profilePicId}`;
-};
 import {
  	FileText,
  	File,
@@ -24,27 +17,20 @@ import {
  	AlertTriangle,
  	ChevronUp,
  	ChevronDown,
- 	X,
  	Paperclip,
  	Calendar,
  	CalendarDays,
- 	Lock,
- 	Eye,
  	Edit3,
- 	Link2,
- 	Plus,
- 	Search,
- 	Columns3,
- 	ArrowLeft,
- 	ArrowRight,
  	Loader,
- 	Link2Off,
-	Network,
+	Bot,
+	ExternalLink,
+	Play,
+	RotateCcw,
 } from "lucide-react";
 import { useCardActions } from "../../hooks/useCardActions";
 import { useColumnContext } from "../../context/viewContexts";
 import { useCardContext } from "../../context/viewContexts";
-import viewsApi from "../../viewsApi";
+import { agentTaskRunsApi, profilesApi } from "../../../CommandCenter/commandCenterApi";
 
 // Import needed components
 import CardSubtasksSection from "../subtask/CardSubtasksSection";
@@ -53,23 +39,6 @@ import CardAttachmentsSection from "../attachments/CardAttachmentsSection";
 import { InteractiveStatusBadge } from "../../list/ListViewCard";
 import CustomDatePicker from "../../kanban/features/shared/components/CustomDatePicker";
 import DropdownBar from "../../kanban/features/shared/components/DropdownBar";
-
-// Get all cards helper function
-const getAllCards = (columns) => {
-	return columns.flatMap((column) =>
-		Array.isArray(column.Cards)
-			? column.Cards.map((card) => ({
-					...card,
-					columnId: column.id,
-					Column: {
-						id: column.id,
-						title: column.title,
-						isCompletionColumn: column.isCompletionColumn,
-					},
-			  }))
-			: []
-	);
-};
 
 // Collapsible Section Component
 const CollapsibleSection = ({
@@ -161,8 +130,6 @@ const CardDetailModal = ({
 	const modalRef = useRef(null);
 	const editingStartTimeRef = useRef(null);
 
-	const [currentUser, setCurrentUser] = useState(null);
-
 	// FREEZE initial card data to prevent external prop changes from affecting modal state
 	const frozenInitialCard = useRef(null);
 	if (!frozenInitialCard.current) {
@@ -173,11 +140,8 @@ const CardDetailModal = ({
 	const [expandedSections, setExpandedSections] = useState({
 		subtasks: true,
 		attachments: false,
-		dependencies: false,
-		dependentTasks: false,
+		agentWork: true,
 	});
-
-	const allCards = getAllCards(columns);
 
 	// Initialize from FROZEN card data to prevent external prop updates
 	const [localCard, setLocalCard] = useState({
@@ -194,17 +158,11 @@ const CardDetailModal = ({
 	const { setSelectedCard } = useCardContext();
 	const [fileError, setFileError] = useState(null);
 
-	// Dependencies state
-	const [dependencies, setDependencies] = useState([]);
-	const [isLoadingDependencies, setIsLoadingDependencies] = useState(false);
-	const [activeDependencyType, setActiveDependencyType] = useState(null);
-	const [dependencySearch, setDependencySearch] = useState("");
-	const [selectedLagTime, setSelectedLagTime] = useState(0);
-	const [addingDependencyCardId, setAddingDependencyCardId] = useState(null);
-
-	// Dependent cards state (cards that depend on this card)
-	const [dependentCards, setDependentCards] = useState([]);
-	const [isLoadingDependents, setIsLoadingDependents] = useState(false);
+	const [agentProfiles, setAgentProfiles] = useState([]);
+	const [agentRuns, setAgentRuns] = useState([]);
+	const [isLoadingAgentRuns, setIsLoadingAgentRuns] = useState(false);
+	const [assigningAgent, setAssigningAgent] = useState(false);
+	const [selectedAgentProfileId, setSelectedAgentProfileId] = useState("");
 
 	useEffect(() => {
 		setIsEntering(false);
@@ -248,18 +206,6 @@ const CardDetailModal = ({
 			onOptimisticUpdate(localCard.id, updates);
 		}
 	};
-
-	// Memoize the current user fetch to prevent duplicate calls
-	const fetchCurrentUser = useCallback(async () => {
-		try {
-			const userData = await viewsApi.user.getCurrentUser();
-			setCurrentUser(userData.data);
-		} catch (error) {}
-	}, []);
-
-	useEffect(() => {
-		fetchCurrentUser();
-	}, [fetchCurrentUser]);
 
 	const validateDates = (startDate, dueDate) => {
 		if (!startDate || !dueDate) return null;
@@ -407,163 +353,64 @@ const CardDetailModal = ({
 		handleSaveRef.current = handleSave;
 	}, [handleSave]);
 
-	// Load dependencies when modal opens or when dependencies are updated
-	useEffect(() => {
-		const loadDependencies = async () => {
-			if (!localCard?.id) return;
-
-			setIsLoadingDependencies(true);
-			try {
-				const deps = await viewsApi.dependency.getDependencies(localCard.id);
-				setDependencies(Array.isArray(deps) ? deps : []);
-			} catch (error) {
-				console.error("Error loading dependencies:", error);
-				setDependencies([]);
-			} finally {
-				setIsLoadingDependencies(false);
-			}
-		};
-
-		loadDependencies();
-	}, [localCard?.id, initialCard?.dependenciesUpdated]);
-
-	// Load dependent cards (cards that depend on this card) when modal opens or when dependencies are updated
-	useEffect(() => {
-		const loadDependentCards = async () => {
-			if (!localCard?.id) return;
-
-			setIsLoadingDependents(true);
-			try {
-				const dependents = await viewsApi.dependency.getDependentCards(localCard.id);
-				setDependentCards(Array.isArray(dependents) ? dependents : []);
-			} catch (error) {
-				console.error("Error loading dependent cards:", error);
-				setDependentCards([]);
-			} finally {
-				setIsLoadingDependents(false);
-			}
-		};
-
-		loadDependentCards();
-	}, [localCard?.id, initialCard?.dependenciesUpdated]);
-
-	// Helper function to check if adding a dependency would create a circular dependency
-	const wouldCreateCircularDependency = useCallback((targetCardId) => {
-		// Check if localCard can reach targetCard through existing dependencies
-		// If yes, then adding targetCard -> localCard would create a cycle
-		const visited = new Set();
-
-		const canReach = (currentCardId, targetId) => {
-			if (currentCardId === targetId) return true;
-			if (visited.has(currentCardId)) return false;
-
-			visited.add(currentCardId);
-
-			// Get all dependencies of the current card
-			const cardDeps = dependencies.filter(d => d.sourceCardId === currentCardId);
-
-			// Recursively check each dependency
-			for (const dep of cardDeps) {
-				if (canReach(dep.targetCardId, targetId)) {
-					return true;
-				}
-			}
-
-			return false;
-		};
-
-		return canReach(localCard?.id, targetCardId);
-	}, [localCard?.id, dependencies]);
-
-	// Dependency handlers
-	const handleAddDependency = async (targetCard, dependencyType) => {
-		if (!localCard?.id || !targetCard?.id) return;
-
-		try {
-			setAddingDependencyCardId(targetCard.id);
-			setSaveStatus("saving");
-			await viewsApi.dependency.addDependency(
-				localCard.id,
-				targetCard.id,
-				dependencyType,
-				selectedLagTime
-			);
-
-			// Reload dependencies
-			const updatedDeps = await viewsApi.dependency.getDependencies(localCard.id);
-			setDependencies(Array.isArray(updatedDeps) ? updatedDeps : []);
-
-			// Reset view
-			setActiveDependencyType(null);
-			setDependencySearch("");
-
-			setSaveStatus("saved");
-			setTimeout(() => setSaveStatus(null), 2000);
-		} catch (error) {
-			console.error("Error adding dependency:", error);
-			setSaveStatus("error");
-			setTimeout(() => setSaveStatus(null), 2000);
-		} finally {
-			setAddingDependencyCardId(null);
-		}
-	};
-
-	const handleRemoveDependency = async (targetCardId) => {
+	const loadAgentRuns = useCallback(async () => {
 		if (!localCard?.id) return;
-
+		setIsLoadingAgentRuns(true);
 		try {
-			setSaveStatus("saving");
-			await viewsApi.dependency.removeDependency(localCard.id, targetCardId);
-
-			// Update local state
-			setDependencies(deps => deps.filter(d => d.targetCardId !== targetCardId));
-
-			setSaveStatus("saved");
-			setTimeout(() => setSaveStatus(null), 2000);
+			const result = await agentTaskRunsApi.list({ cardId: localCard.id });
+			const task = (result.tasks || []).find((item) => item.id === localCard.id);
+			setAgentRuns(task?.agentRuns || (task?.agentRun ? [task.agentRun] : []));
 		} catch (error) {
-			console.error("Error removing dependency:", error);
-			setSaveStatus("error");
-			setTimeout(() => setSaveStatus(null), 2000);
+			console.error("Error loading agent work:", error);
+			setAgentRuns([]);
+		} finally {
+			setIsLoadingAgentRuns(false);
+		}
+	}, [localCard?.id]);
+
+	useEffect(() => {
+		profilesApi
+			.listProfiles()
+			.then((result) => {
+				const profiles = result.profiles || [];
+				setAgentProfiles(profiles);
+				if (!selectedAgentProfileId && profiles[0]) {
+					setSelectedAgentProfileId(profiles[0].id);
+				}
+			})
+			.catch((error) => console.error("Error loading agent profiles:", error));
+	}, [selectedAgentProfileId]);
+
+	useEffect(() => {
+		loadAgentRuns();
+	}, [loadAgentRuns]);
+
+	useEffect(() => {
+		const active = agentRuns.some((run) =>
+			["queued", "running"].includes(run?.status)
+		);
+		if (!active) return;
+		const timer = setInterval(loadAgentRuns, 3000);
+		return () => clearInterval(timer);
+	}, [agentRuns, loadAgentRuns]);
+
+	const handleAssignAgent = async (profileId = selectedAgentProfileId) => {
+		if (!localCard?.id || !profileId) return;
+		setAssigningAgent(true);
+		try {
+			const result = await agentTaskRunsApi.create({
+				cardId: localCard.id,
+				profileId,
+			});
+			setAgentRuns(result.run ? [result.run] : []);
+		} catch (error) {
+			console.error("Error assigning agent:", error);
+		} finally {
+			setAssigningAgent(false);
 		}
 	};
 
-	const getDependencyTypeStyle = (type) => {
-		const styles = {
-			FS: {
-				bg: "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/10",
-				text: "text-blue-700 dark:text-blue-400 midnight:text-blue-400",
-				border: "border-blue-200 dark:border-blue-700 midnight:border-blue-800",
-				activeBg: "bg-blue-100 dark:bg-blue-800/30 midnight:bg-blue-800/20",
-				icon: "text-blue-600 dark:text-blue-400 midnight:text-blue-400",
-				hoverBg: "hover:bg-blue-100 dark:hover:bg-blue-900/30 midnight:hover:bg-blue-900/20",
-			},
-			SS: {
-				bg: "bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/10",
-				text: "text-green-700 dark:text-green-400 midnight:text-green-400",
-				border: "border-green-200 dark:border-green-700 midnight:border-green-800",
-				activeBg: "bg-green-100 dark:bg-green-800/30 midnight:bg-green-800/20",
-				icon: "text-green-600 dark:text-green-400 midnight:text-green-400",
-				hoverBg: "hover:bg-green-100 dark:hover:bg-green-900/30 midnight:hover:bg-green-900/20",
-			},
-			FF: {
-				bg: "bg-purple-50 dark:bg-purple-900/20 midnight:bg-purple-900/10",
-				text: "text-purple-700 dark:text-purple-400 midnight:text-purple-400",
-				border: "border-purple-200 dark:border-purple-700 midnight:border-purple-800",
-				activeBg: "bg-purple-100 dark:bg-purple-800/30 midnight:bg-purple-800/20",
-				icon: "text-purple-600 dark:text-purple-400 midnight:text-purple-400",
-				hoverBg: "hover:bg-purple-100 dark:hover:bg-purple-900/30 midnight:hover:bg-purple-900/20",
-			},
-			SF: {
-				bg: "bg-orange-50 dark:bg-orange-900/20 midnight:bg-orange-900/10",
-				text: "text-orange-700 dark:text-orange-400 midnight:text-orange-400",
-				border: "border-orange-200 dark:border-orange-700 midnight:border-orange-800",
-				activeBg: "bg-orange-100 dark:bg-orange-800/30 midnight:bg-orange-800/20",
-				icon: "text-orange-600 dark:text-orange-400 midnight:text-orange-400",
-				hoverBg: "hover:bg-orange-100 dark:hover:bg-orange-900/30 midnight:hover:bg-orange-900/20",
-			},
-		};
-		return styles[type] || styles.FS;
-	};
+	const latestAgentRun = agentRuns[0] || null;
 
 	const handleBlockedSaveClick = useCallback(() => {
 		setShouldBounceSaveAll(true);
@@ -1173,439 +1020,92 @@ const CardDetailModal = ({
 											</CollapsibleSection>
 
 											<CollapsibleSection
-												title="Dependencies"
-												icon={<Link2 className="w-4 h-4 text-gray-600" />}
-												isExpanded={expandedSections.dependencies}
-												onToggle={() => toggleSection("dependencies")}
-												count={isLoadingDependencies ? <Loader className="w-3 h-3 animate-spin" /> : dependencies.length}
+												title="Agent Work"
+												icon={<Bot className="w-4 h-4 text-gray-600" />}
+												isExpanded={expandedSections.agentWork}
+												onToggle={() => toggleSection("agentWork")}
+												count={isLoadingAgentRuns ? <Loader className="w-3 h-3 animate-spin" /> : agentRuns.length}
 											>
-												{(() => {
-													// Check if card has subtasks
-													const hasSubtasks = localCard?.checklist && localCard.checklist.length > 0;
+												<div className="space-y-4">
+													<div className="flex items-center gap-2">
+														<select
+															value={selectedAgentProfileId}
+															onChange={(event) => setSelectedAgentProfileId(event.target.value)}
+															disabled={assigningAgent || !agentProfiles.length}
+															className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+														>
+															{agentProfiles.length ? agentProfiles.map((profile) => (
+																<option key={profile.id} value={profile.id}>{profile.icon || ""} {profile.name}</option>
+															)) : <option value="">No agents available</option>}
+														</select>
+														<button
+															type="button"
+															onClick={() => handleAssignAgent()}
+															disabled={assigningAgent || !selectedAgentProfileId}
+															className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:bg-gray-300 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 dark:disabled:bg-gray-700"
+														>
+															{assigningAgent ? <Loader className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+															Assign
+														</button>
+													</div>
 
-													if (!hasSubtasks) {
-														return (
-															<div className="p-4 text-center border border-dashed border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800/50">
-																<div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/40 flex items-center justify-center mx-auto mb-2">
-																	<Link2Off className="w-5 h-5 text-amber-500" />
-																</div>
-																<p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-																	No Subtasks Available
-																</p>
-																<p className="text-xs text-gray-500 dark:text-gray-400">
-																	Add subtasks to this card before managing dependencies
-																</p>
-															</div>
-														);
-													}
-
-													const dependencyTypes = [
-														{
-															value: "FS",
-															label: "Finish-to-Start",
-															shortLabel: "FS",
-															description: "Target must finish before this starts",
-														},
-														{
-															value: "SS",
-															label: "Start-to-Start",
-															shortLabel: "SS",
-															description: "Target must start before this starts",
-														},
-														{
-															value: "FF",
-															label: "Finish-to-Finish",
-															shortLabel: "FF",
-															description: "Target must finish before this finishes",
-														},
-														{
-															value: "SF",
-															label: "Start-to-Finish",
-															shortLabel: "SF",
-															description: "Target must start before this finishes",
-														},
-													];
-
-													const availableCards = allCards
-														.filter(c =>
-															c.id !== localCard.id &&
-															c.title.toLowerCase().includes(dependencySearch.toLowerCase()) &&
-															!wouldCreateCircularDependency(c.id)
-														);
-
-													// Card selection view
-													if (activeDependencyType) {
-														const style = getDependencyTypeStyle(activeDependencyType);
-														const selectedType = dependencyTypes.find(t => t.value === activeDependencyType);
-
-														return (
-															<div className="space-y-3">
-																{/* Back Button */}
-																<div className="flex items-center space-x-2">
-																	<button
-																		type="button"
-																		onClick={(e) => {
-																			e.preventDefault();
-																			e.stopPropagation();
-																			setActiveDependencyType(null);
-																			setDependencySearch("");
-																		}}
-																		className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 rounded transition-colors"
-																	>
-																		<ArrowLeft className="w-4 h-4 text-gray-600 dark:text-gray-400 midnight:text-gray-500" />
-																	</button>
-																	<div className="flex-1">
-																		<h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200 flex items-center">
-																			<div className={`w-6 h-6 rounded ${style.activeBg} flex items-center justify-center mr-2`}>
-																				<span className={`text-xs font-bold ${style.icon}`}>
-																					{selectedType.shortLabel}
-																				</span>
-																			</div>
-																			{selectedType.label}
-																		</h4>
-																		<p className={`text-xs mt-0.5 ${style.text}`}>
-																			{selectedType.description}
-																		</p>
-																	</div>
-																</div>
-
-																{/* Search Bar */}
-																<div className={`p-2 rounded border ${style.border} ${style.bg}`}>
-																	<div className="relative">
-																		<Search className={`absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${style.icon}`} />
-																		<input
-																			type="text"
-																			value={dependencySearch}
-																			onChange={(e) => setDependencySearch(e.target.value)}
-																			placeholder="Search cards..."
-																			className={`w-full pl-8 pr-2 py-1.5 text-xs rounded border ${style.border} bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-900 dark:text-gray-100 midnight:text-indigo-200`}
-																			autoFocus
-																		/>
-																	</div>
-																</div>
-
-																{/* Card List */}
-																<div className="space-y-1.5 max-h-48 overflow-y-auto">
-																	{availableCards.length === 0 ? (
-																		<div className="p-6 text-center">
-																			<div className={`w-12 h-12 rounded-full ${style.bg} flex items-center justify-center mx-auto mb-2`}>
-																				<Search className={`w-6 h-6 ${style.icon}`} />
-																			</div>
-																			<p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 text-xs">
-																				{dependencySearch ? "No matching cards" : "No cards available"}
-																			</p>
-																		</div>
-																	) : (
-																		availableCards.map((card) => {
-																			const alreadyAdded = dependencies.some(
-																				d => d.targetCardId === card.id && d.type === activeDependencyType
-																			);
-																			return (
-																				<button
-																					key={card.id}
-																					type="button"
-onClick={(e) => {
-																						e.preventDefault();
-																						e.stopPropagation();
-																						if (!alreadyAdded) {
-																							handleAddDependency(card, activeDependencyType);
-																						}
-																					}}
-																				disabled={alreadyAdded}
-																					className={`w-full p-2.5 rounded border transition-all text-left ${
-																						alreadyAdded
-																							? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border-gray-200 dark:border-gray-700 midnight:border-gray-800'
-																							: `${style.border} ${style.bg} ${style.hoverBg}`
-																					}`}
-																				>
-																					<div className="flex items-start justify-between">
-																						<div className="flex-1 min-w-0">
-																							<div className="text-xs font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200 mb-0.5 truncate">
-																								{card.title}
-																							</div>
-																							<div className={`text-xs ${style.text} flex items-center space-x-1.5`}>
-																								<Columns3 className="w-3 h-3" />
-																								<span>{columns.find(col => col.id === card.columnId)?.title || 'Unknown'}</span>
-																								{alreadyAdded && (
-																									<>
-																										<span>•</span>
-																										<span className="font-medium">Added</span>
-																									</>
-																								)}
-																							</div>
-																						</div>
-																						{!alreadyAdded && (
-																							addingDependencyCardId === card.id ? (
-												<Loader className={`w-4 h-4 ${style.icon} flex-shrink-0 ml-2 animate-spin`} />
-											) : (
-												<Plus className={`w-4 h-4 ${style.icon} flex-shrink-0 ml-2`} />
-											)
-																						)}
-																					</div>
-																				</button>
-																			);
-																		})
-																	)}
-																</div>
-															</div>
-														);
-													}
-
-													// Main view
-													return (
-														<div className="space-y-3">
-															{/* Loading State */}
-															{isLoadingDependencies ? (
-																<div className="flex items-center justify-center py-4">
-																	<Loader className="w-4 h-4 animate-spin text-gray-400" />
-																</div>
-															) : (
-																<>
-																	{/* Added Dependencies List */}
-																	{dependencies.length === 0 ? (
-																		<div className="p-4 text-center border border-dashed border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded">
-																			<div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 flex items-center justify-center mx-auto mb-2">
-																				<Link2 className="w-5 h-5 text-gray-400 dark:text-gray-500 midnight:text-gray-600" />
-																			</div>
-																			<p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-600">
-																				No dependencies added
-																			</p>
-																		</div>
-																	) : (
-																		<div className="space-y-1.5">
-																			{dependencies.map((dep) => {
-																				const style = getDependencyTypeStyle(dep.type);
-																				const targetCard = allCards.find(c => c.id === dep.targetCardId);
-
-																				return (
-																					<div
-																						key={dep.id}
-																						className={`p-2.5 rounded border ${style.border} ${style.bg} flex items-start justify-between`}
-																					>
-																						<div className="flex items-start space-x-2 flex-1 min-w-0">
-																							<div className={`w-7 h-7 rounded ${style.activeBg} flex items-center justify-center flex-shrink-0`}>
-																								<span className={`text-xs font-bold ${style.icon}`}>
-																									{dep.type}
-																								</span>
-																							</div>
-																							<div className="flex-1 min-w-0">
-																								<div className="text-xs font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200 mb-0.5 truncate">
-																									{targetCard?.title || 'Unknown Card'}
-																								</div>
-																								<div className={`text-xs ${style.text} flex items-center flex-wrap gap-1.5`}>
-																									<span className="flex items-center space-x-1">
-																										<Columns3 className="w-3 h-3" />
-																										<span>{columns.find(col => col.id === targetCard?.columnId)?.title || 'Unknown'}</span>
-																									</span>
-																									{dep.lag > 0 && (
-																										<>
-																											<span>•</span>
-																											<span className="flex items-center space-x-1">
-																												<Clock className="w-3 h-3" />
-																												<span>{dep.lag}h lag</span>
-																											</span>
-																										</>
-																									)}
-																					</div>
-																				</div>
-																			</div>
-																			<button
-																								type="button"
-																								onClick={() => handleRemoveDependency(dep.targetCardId)}
-																								className="p-1 text-red-500 hover:text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/10 rounded transition-colors ml-2 flex-shrink-0"
-																							>
-																								<X className="w-3.5 h-3.5" />
-																							</button>
-																						)}
-																					</div>
-																				);
-																			})}
-																		</div>
-																	)}
-
-<>{/* Separator */}
-																			{dependencies.length > 0 && (
-																				<div className="border-t border-gray-200 dark:border-gray-700 my-4"></div>
-																			)}
-
-																			{/* Dependency Type Buttons */}
-																			<div className="space-y-1.5">
-																				<h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-indigo-200 mb-2">
-																					Add New Dependency
-																				</h4>
-																				{dependencyTypes.map((type) => {
-																					const style = getDependencyTypeStyle(type.value);
-																					const typeDependencies = dependencies.filter(d => d.type === type.value);
-
-																					return (
-																						<button
-																							key={type.value}
-																							type="button"
-																							onClick={(e) => {
-																								e.preventDefault();
-																								e.stopPropagation();
-																								setActiveDependencyType(type.value);
-																							}}
-																							className={`w-full p-2.5 rounded border transition-all text-left ${style.border} ${style.bg} ${style.hoverBg}`}
-																						>
-																							<div className="flex items-center justify-between">
-																								<div className="flex items-center space-x-2">
-																									<div className={`w-7 h-7 rounded ${style.activeBg} flex items-center justify-center flex-shrink-0`}>
-																										<span className={`text-xs font-bold ${style.icon}`}>
-																											{type.shortLabel}
-																										</span>
-																									</div>
-																									<div>
-																										<div className={`text-xs font-semibold ${style.text} mb-0.5`}>
-																											{type.label}
-																										</div>
-																										<div className={`text-xs ${style.text}`}>
-																											{type.description}
-																										</div>
-																									</div>
-																								</div>
-																								<div className="flex items-center space-x-2">
-																									{typeDependencies.length > 0 && (
-																										<span className={`px-1.5 py-0.5 text-xs font-medium rounded ${style.activeBg} ${style.text}`}>
-																											{typeDependencies.length}
-																										</span>
-																									)}
-																									<ArrowRight className={`w-4 h-4 ${style.icon} flex-shrink-0`} />
-																								</div>
-																							</div>
-																						</button>
-																					);
-																				})}
-																			</div>
-
-																			{/* Lag Time Configuration */}
-																			<div className="p-2.5 bg-gray-50 dark:bg-gray-900 midnight:bg-gray-950 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded mt-4">
-																				<label className="block text-xs font-medium mb-2 text-gray-700 dark:text-gray-300 midnight:text-indigo-200 flex items-center">
-																					<Clock className="w-3.5 h-3.5 mr-1.5" />
-																					Lag Time for New Dependencies
-																				</label>
-																				<div className="relative">
-																					<input
-																						type="number"
-																						value={selectedLagTime}
-																						onChange={(e) => setSelectedLagTime(Math.max(0, parseFloat(e.target.value) || 0))}
-																						min="0"
-																						step="0.5"
-																						className="w-full pl-2 pr-20 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 midnight:border-gray-700 bg-white dark:bg-gray-800 midnight:bg-gray-900 text-gray-900 dark:text-gray-100 midnight:text-indigo-200
-																						[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-																					/>
-																					<div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center space-x-1.5">
-																						<span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-																							hours
-																						</span>
-																						<div className="flex flex-col">
-																							<button
-																								type="button"
-																								onClick={() => setSelectedLagTime(prev => Math.max(0, (parseFloat(prev) || 0) + 0.5))}
-																								className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 text-gray-600 dark:text-gray-400 midnight:text-gray-500 transition-colors rounded-t"
-																							>
-																								<ChevronUp className="w-3 h-3" />
-																							</button>
-																							<button
-																								type="button"
-																								onClick={() => setSelectedLagTime(prev => Math.max(0, (parseFloat(prev) || 0) - 0.5))}
-																								className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 text-gray-600 dark:text-gray-400 midnight:text-gray-500 transition-colors rounded-b"
-																							>
-																								<ChevronDown className="w-3 h-3" />
-																							</button>
-																						</div>
-																					</div>
-																				</div>
-																				<p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-																					Delay applied to new dependencies
-																				</p>
-																			</div>
-																		</>
-																	)}
-																</>
-															)}
-														</div>
-													);
-												})()}
-											</CollapsibleSection>
-
-											<CollapsibleSection
-												title="Dependent Tasks"
-												icon={<Network className="w-4 h-4 text-gray-600" />}
-												isExpanded={expandedSections.dependentTasks}
-												onToggle={() => toggleSection("dependentTasks")}
-												count={isLoadingDependents ? <Loader className="w-3 h-3 animate-spin" /> : dependentCards.length}
-											>
-												<div className="space-y-3">
-													{isLoadingDependents ? (
-														<div className="flex items-center justify-center py-8">
-															<Loader className="w-5 h-5 animate-spin text-gray-400" />
-														</div>
-													) : dependentCards.length === 0 ? (
-														<div className="p-4 text-center border border-dashed border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800/50">
-															<div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/40 flex items-center justify-center mx-auto mb-2">
-																<Network className="w-5 h-5 text-blue-500" />
-															</div>
-															<p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-																No Dependent Tasks
-															</p>
-															<p className="text-xs text-gray-500 dark:text-gray-400">
-																No other tasks are waiting on this one
-															</p>
-														</div>
-													) : (
+													{isLoadingAgentRuns ? (
+														<div className="flex items-center justify-center py-6"><Loader className="h-5 w-5 animate-spin text-gray-400" /></div>
+													) : latestAgentRun ? (
 														<>
-															<div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-																These tasks are waiting for this task to be completed
+														<div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+															<div className="flex items-start justify-between gap-3">
+																<div className="min-w-0">
+																	<div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+																		<span>{latestAgentRun.profile?.icon || ""}</span>
+																		<span>{latestAgentRun.profile?.name || "Agent"}</span>
+																		<span className="rounded-md bg-white px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{latestAgentRun.status}</span>
+																	</div>
+																	<p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{latestAgentRun.lastEventLabel || "Queued"}</p>
+																</div>
+																<div className="flex items-center gap-1">
+																	{latestAgentRun.sessionId && (
+																		<a href={"/agents/" + latestAgentRun.sessionId} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title="Open session">
+																			<ExternalLink className="h-4 w-4" />
+																		</a>
+																	)}
+																	{latestAgentRun.status === "failed" && (
+																		<button type="button" onClick={() => handleAssignAgent(latestAgentRun.profileId)} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title="Retry">
+																			<RotateCcw className="h-4 w-4" />
+																		</button>
+																	)}
+																</div>
 															</div>
+															{latestAgentRun.summary && <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{latestAgentRun.summary}</p>}
+															{latestAgentRun.error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{latestAgentRun.error}</p>}
+														</div>
+														{agentRuns.length > 1 && (
 															<div className="space-y-2">
-																{dependentCards.map((dependent) => {
-																	const dependencyType = dependent.type || "FS";
-																	const style = getDependencyTypeStyle(dependencyType);
-
-																	// Find the actual card that depends on this one
-																	const sourceCard = allCards.find(c => c.id === dependent.sourceCardId);
-																	const sourceColumn = columns.find(col => col.id === sourceCard?.columnId);
-
-																	return (
-																		<div
-																			key={dependent.id || dependent.sourceCardId}
-																			className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-																		>
-																			<div className="flex items-center space-x-3 flex-1 min-w-0">
-																				<div className={`w-7 h-7 rounded ${style.activeBg} flex items-center justify-center flex-shrink-0`}>
-																					<span className={`text-xs font-bold ${style.icon}`}>
-																						{dependencyType}
-																					</span>
-																				</div>
-																				<div className="flex-1 min-w-0">
-																					<p className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-indigo-100 truncate">
-																						{sourceCard?.title || "Unknown Task"}
-																					</p>
-																					<p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-																						{sourceColumn?.title || "Unknown Column"}
-																					</p>
-																				</div>
-																			</div>
-																			{dependent.lag !== 0 && (
-																				<div className="flex items-center text-xs text-gray-500 dark:text-gray-400 ml-2">
-																					<Clock className="w-3 h-3 mr-1" />
-																					{dependent.lag > 0 ? `+${dependent.lag}d` : `${dependent.lag}d`}
-																				</div>
-																			)}
-																		</div>
-																	);
-																})}
+																<p className="text-xs font-medium uppercase tracking-wide text-gray-400">Previous Runs</p>
+																{agentRuns.slice(1, 5).map((run) => (
+																	<div key={run.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 text-xs dark:border-gray-700">
+																		<span className="truncate text-gray-600 dark:text-gray-300">{run.profile?.name || "Agent"} · {run.status}</span>
+																		{run.sessionId && (
+																			<a href={"/agents/" + run.sessionId} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+																				<ExternalLink className="h-3.5 w-3.5" />
+																			</a>
+																		)}
+																	</div>
+																))}
 															</div>
+														)}
 														</>
+													) : (
+														<div className="rounded-lg border border-dashed border-gray-200 p-5 text-center dark:border-gray-700">
+															<Bot className="mx-auto mb-2 h-6 w-6 text-gray-400" />
+															<p className="text-sm text-gray-500 dark:text-gray-400">No agent has worked on this task yet.</p>
+														</div>
 													)}
 												</div>
 											</CollapsibleSection>
-
 										</div>
 									</div>
 								</div>
-
 								{/* Right Column - Sidebar */}
 								<div className="w-80 min-w-0 border-l border-gray-150 dark:border-gray-750 midnight:border-gray-850 bg-gray-50/80 dark:bg-gray-900/60 midnight:bg-gray-950/80 overflow-y-auto overflow-x-hidden backdrop-blur-sm">
 									<div className="p-6 space-y-7 min-w-0">
@@ -1829,9 +1329,7 @@ onClick={(e) => {
 									</div>
 							</div>
 						</div>
-					)}
-
-						{/* Optimistic update overlay for main content area */}
+							{/* Optimistic update overlay for main content area */}
 						{hasUnsavedChanges && (
 							<div className="absolute top-4 right-4 bg-orange-100 dark:bg-orange-900/20 midnight:bg-orange-950/20 px-3 py-1 rounded-full">
 								<span className="text-xs font-medium text-orange-700 dark:text-orange-400 midnight:text-orange-400">

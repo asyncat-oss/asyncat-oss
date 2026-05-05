@@ -1,42 +1,42 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
 	Calendar,
-	Clock,
-	AlertCircle,
-	CheckSquare,
-	Paperclip,
+	CheckCircle,
 	ChevronDown,
 	ChevronRight,
-	CheckCircle,
 	Circle,
-	Link2,
+	ExternalLink,
 	Loader2,
-	Siren,
-	Disc3Icon,
-	LifeBuoy,
+	Play,
+	RotateCcw,
+	Square,
 } from "lucide-react";
-import {
-	formatDate,
-	formatDuration,
-	getDueDateStyle,
-	getProgressColor,
-} from "./ListViewUtils";
+import { formatDate, getDueDateStyle } from "./ListViewUtils";
 import { useCardActions } from "../hooks/useCardActions";
 
-// Modern Priority Badge Component
+const statusStyles = {
+	queued: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+	running: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
+	completed:
+		"bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
+	failed: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300",
+	cancelled:
+		"bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
+};
+
 export const PriorityBadge = ({ priority }) => {
 	const styles = {
-		High: "bg-red-50 dark:bg-red-900/10 midnight:bg-red-900/5 text-red-700 dark:text-red-400 midnight:text-red-300 border border-red-200 dark:border-red-800 midnight:border-red-900",
-		Medium: "bg-amber-50 dark:bg-amber-900/10 midnight:bg-amber-900/5 text-amber-700 dark:text-amber-400 midnight:text-amber-300 border border-amber-200 dark:border-amber-800 midnight:border-amber-900",
-		Low: "bg-emerald-50 dark:bg-emerald-900/10 midnight:bg-emerald-900/5 text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 border border-emerald-200 dark:border-emerald-800 midnight:border-emerald-900",
-		default:
-			"bg-gray-50 dark:bg-gray-900/10 midnight:bg-gray-900/5 text-gray-700 dark:text-gray-400 midnight:text-gray-500 border border-gray-200 dark:border-gray-800 midnight:border-gray-900",
+		High: "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/10 dark:text-red-300 dark:border-red-800",
+		Medium:
+			"bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/10 dark:text-amber-300 dark:border-amber-800",
+		Low: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/10 dark:text-emerald-300 dark:border-emerald-800",
 	};
 
 	return (
 		<span
-			className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-lg ${
-				styles[priority] || styles.default
+			className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md border ${
+				styles[priority] ||
+				"bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/10 dark:text-gray-300 dark:border-gray-800"
 			}`}
 		>
 			{priority || "None"}
@@ -44,149 +44,9 @@ export const PriorityBadge = ({ priority }) => {
 	);
 };
 
-// Enhanced Interactive Priority Badge with Icons
-export const InteractivePriorityBadge = ({
-	priority,
-	cardId,
-	columnId,
-	disabled = false,
-}) => {
-	const { handleCardUpdate } = useCardActions();
-	const [isUpdating, setIsUpdating] = useState(false);
-	const [showDropdown, setShowDropdown] = useState(false);
-	const [currentPriority, setCurrentPriority] = useState(priority);
-
-	useEffect(() => {
-		setCurrentPriority(priority);
-	}, [priority]);
-
-	const styles = {
-		High: "bg-red-50 dark:bg-red-900/10 midnight:bg-red-900/5 text-red-700 dark:text-red-400 midnight:text-red-300 border border-red-200 dark:border-red-800 midnight:border-red-900 hover:bg-red-100 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/10",
-		Medium: "bg-amber-50 dark:bg-amber-900/10 midnight:bg-amber-900/5 text-amber-700 dark:text-amber-400 midnight:text-amber-300 border border-amber-200 dark:border-amber-800 midnight:border-amber-900 hover:bg-amber-100 dark:hover:bg-amber-900/20 midnight:hover:bg-amber-900/10",
-		Low: "bg-emerald-50 dark:bg-emerald-900/10 midnight:bg-emerald-900/5 text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 border border-emerald-200 dark:border-emerald-800 midnight:border-emerald-900 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 midnight:hover:bg-emerald-900/10",
-		default:
-			"bg-gray-50 dark:bg-gray-900/10 midnight:bg-gray-900/5 text-gray-700 dark:text-gray-400 midnight:text-gray-500 border border-gray-200 dark:border-gray-800 midnight:border-gray-900 hover:bg-gray-100 dark:hover:bg-gray-900/20 midnight:hover:bg-gray-900/10",
-	};
-
-	const getPriorityIcon = (priorityLevel) => {
-		switch (priorityLevel) {
-			case "High":
-				return (
-					<Siren className="w-3 h-3 text-red-400 dark:text-red-600 midnight:text-red-400" />
-				);
-			case "Medium":
-				return (
-					<Disc3Icon className="w-3 h-3 text-yellow-400 dark:text-yellow-600 midnight:text-yellow-400" />
-				);
-			case "Low":
-				return (
-					<LifeBuoy className="w-3 h-3 text-green-400 dark:text-green-600 midnight:text-green-400" />
-				);
-			default:
-				return null;
-		}
-	};
-
-	const changePriority = async (newPriority) => {
-		if (newPriority === currentPriority) {
-			setShowDropdown(false);
-			return;
-		}
-
-		setIsUpdating(true);
-		try {
-			await handleCardUpdate(columnId, cardId, { priority: newPriority });
-			setCurrentPriority(newPriority);
-		} catch (error) {
-			console.error("Error updating priority:", error);
-		} finally {
-			setIsUpdating(false);
-			setShowDropdown(false);
-		}
-	};
-
-	useEffect(() => {
-		const handleClickOutside = () => setShowDropdown(false);
-		if (showDropdown) {
-			document.addEventListener("click", handleClickOutside);
-		}
-		return () => document.removeEventListener("click", handleClickOutside);
-	}, [showDropdown]);
-
-	return (
-		<div className="relative">
-			<button
-				type="button"
-				className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-lg transition-all duration-200 ${
-					styles[currentPriority] || styles.default
-				} ${
-					disabled
-						? "opacity-70 cursor-not-allowed"
-						: "cursor-pointer"
-				}`}
-				onClick={(e) => {
-					e.stopPropagation();
-					if (!disabled) setShowDropdown(!showDropdown);
-				}}
-				disabled={disabled || isUpdating}
-			>
-				{isUpdating ? (
-					<>
-						<Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-						Updating...
-					</>
-				) : (
-					<>
-						{currentPriority && getPriorityIcon(currentPriority)}
-						<span className={currentPriority ? "ml-1.5" : ""}>
-							{currentPriority || "None"}
-						</span>
-					</>
-				)}
-			</button>
-
-			{showDropdown && (
-				<div className="absolute z-10 mt-1 min-w-36 bg-white dark:bg-gray-800 midnight:bg-gray-900 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 overflow-hidden">
-					<div className="py-1">
-						{["High", "Medium", "Low"].map((priorityOption) => (
-							<button
-								key={priorityOption}
-								className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
-									currentPriority === priorityOption
-										? "bg-gray-100 dark:bg-gray-600 midnight:bg-gray-800"
-										: "hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
-								} ${
-									priorityOption === "High"
-										? "text-red-700 dark:text-red-400 midnight:text-red-300"
-										: priorityOption === "Medium"
-										? "text-amber-700 dark:text-amber-400 midnight:text-amber-300"
-										: "text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300"
-								}`}
-								onClick={(e) => {
-									e.stopPropagation();
-									changePriority(priorityOption);
-								}}
-							>
-								<div className="flex items-center">
-									{getPriorityIcon(priorityOption)}
-									<span className="ml-2">
-										{priorityOption}
-									</span>
-								</div>
-							</button>
-						))}
-					</div>
-				</div>
-			)}
-		</div>
-	);
-};
-
-// Enhanced Status Badge
 export const InteractiveStatusBadge = ({
 	columnId,
 	columnTitle,
-	isCompletionColumn,
 	cardId,
 	columns,
 	disabled = false,
@@ -195,36 +55,14 @@ export const InteractiveStatusBadge = ({
 	const [isMoving, setIsMoving] = useState(false);
 	const [showDropdown, setShowDropdown] = useState(false);
 
-	const getStatusColor = () => {
-		if (isCompletionColumn) {
-			return "bg-emerald-50 dark:bg-emerald-900/10 midnight:bg-emerald-900/5 text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 border border-emerald-200 dark:border-emerald-800 midnight:border-emerald-900";
-		}
-		return "bg-blue-50 dark:bg-blue-900/10 midnight:bg-blue-900/5 text-blue-700 dark:text-blue-400 midnight:text-blue-300 border border-blue-200 dark:border-blue-800 midnight:border-blue-900";
-	};
-
-	const handleMoveCard = async (destinationColumnId) => {
+	const handleMove = async (destinationColumnId) => {
 		if (destinationColumnId === columnId) {
 			setShowDropdown(false);
 			return;
 		}
-
 		setIsMoving(true);
 		try {
-			const result = await moveCard(
-				cardId,
-				columnId,
-				destinationColumnId
-			);
-
-			// Check if the move was blocked due to dependencies
-			if (result && result.blocked) {
-				console.warn("Card move blocked:", result.reason);
-				// You could show a toast notification here
-				alert(
-					result.reason ||
-						"Cannot move card due to unmet dependencies"
-				);
-			}
+			await moveCard(cardId, columnId, destinationColumnId);
 		} catch (error) {
 			console.error("Failed to move card:", error);
 		} finally {
@@ -233,77 +71,101 @@ export const InteractiveStatusBadge = ({
 		}
 	};
 
-	useEffect(() => {
-		const handleClickOutside = () => setShowDropdown(false);
-		if (showDropdown) {
-			document.addEventListener("click", handleClickOutside);
-		}
-		return () => document.removeEventListener("click", handleClickOutside);
-	}, [showDropdown]);
-
 	return (
 		<div className="relative">
 			<button
 				type="button"
-				className={`px-2.5 py-1 text-xs font-medium rounded-lg flex items-center transition-all duration-200 ${getStatusColor()} ${
-					disabled
-						? "opacity-70 cursor-not-allowed"
-						: "cursor-pointer hover:opacity-90"
-				}`}
-				onClick={(e) => {
-					e.stopPropagation();
-					if (!disabled) setShowDropdown(!showDropdown);
-				}}
+				onClick={() => !disabled && setShowDropdown((value) => !value)}
 				disabled={disabled || isMoving}
+				className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300"
 			>
-				{isMoving ? (
-					<>
-						<Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-						Moving...
-					</>
-				) : (
-					<>
-						<span>{columnTitle}</span>
-					</>
-				)}
+				{isMoving ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
+				{columnTitle || "Status"}
 			</button>
-
-			{showDropdown && columns && columns.length > 0 && (
-				<div className="absolute z-10 mt-1 min-w-52 max-w-72 bg-white dark:bg-gray-800 midnight:bg-gray-900 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800">
-					<div className="py-1 max-h-60 overflow-y-auto">
-						{columns.map((column) => (
-							<button
-								key={column.id}
-								className={`flex items-start w-full px-3 py-2.5 text-sm text-left transition-colors
-                  ${
-						column.id === columnId
-							? "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-950/10 text-blue-700 dark:text-blue-400 midnight:text-blue-300"
-							: "text-gray-700 dark:text-gray-300 midnight:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
-					}`}
-								onClick={(e) => {
-									e.stopPropagation();
-									handleMoveCard(column.id);
-								}}
-							>
-								<div className="flex-1 whitespace-normal break-words leading-tight">
-									{column.title}
-								</div>
-							</button>
-						))}
-					</div>
+			{showDropdown && columns?.length > 0 && (
+				<div className="absolute z-20 mt-1 min-w-48 overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+					{columns.map((column) => (
+						<button
+							type="button"
+							key={column.id}
+							onClick={() => handleMove(column.id)}
+							className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+						>
+							{column.title}
+						</button>
+					))}
 				</div>
 			)}
 		</div>
 	);
 };
 
-// Clean Interactive Checklist
-export const InteractiveChecklistRenderer = ({
-	checklist,
-	cardId,
-	columnId,
-	expandedCards,
-}) => {
+const RunStatusBadge = ({ run }) => {
+	const status = run?.status || "unassigned";
+	if (!run) {
+		return (
+			<span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+				Unassigned
+			</span>
+		);
+	}
+
+	return (
+		<span
+			className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md ${
+				statusStyles[status] || statusStyles.queued
+			}`}
+		>
+			{status === "running" && <Loader2 className="w-3 h-3 animate-spin" />}
+			{status === "completed" && <CheckCircle className="w-3 h-3" />}
+			{status}
+		</span>
+	);
+};
+
+const AgentPicker = ({ profiles, disabled, onAssign }) => {
+	const [profileId, setProfileId] = useState("");
+
+	useEffect(() => {
+		if (!profileId && profiles?.length) setProfileId(profiles[0].id);
+	}, [profiles, profileId]);
+
+	return (
+		<div className="flex items-center justify-end gap-2">
+			<select
+				value={profileId}
+				onChange={(event) => setProfileId(event.target.value)}
+				disabled={disabled || !profiles?.length}
+				className="max-w-36 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+			>
+				{profiles?.length ? (
+					profiles.map((profile) => (
+						<option key={profile.id} value={profile.id}>
+							{profile.icon || ""} {profile.name}
+						</option>
+					))
+				) : (
+					<option value="">No agents</option>
+				)}
+			</select>
+			<button
+				type="button"
+				onClick={() => onAssign(profileId)}
+				disabled={disabled || !profileId}
+				className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-800"
+				title="Assign agent"
+			>
+				{disabled ? (
+					<Loader2 className="h-4 w-4 animate-spin" />
+				) : (
+					<Play className="h-4 w-4" />
+				)}
+			</button>
+		</div>
+	);
+};
+
+export const InteractiveChecklistRenderer = ({ checklist, cardId, columnId }) => {
 	const { updateCardChecklist } = useCardActions();
 	const [checklistItems, setChecklistItems] = useState(checklist || []);
 	const [updatingItems, setUpdatingItems] = useState({});
@@ -312,319 +174,215 @@ export const InteractiveChecklistRenderer = ({
 		setChecklistItems(checklist || []);
 	}, [checklist]);
 
-	if (!checklistItems || checklistItems.length === 0) {
-		return (
-			<div className="text-center py-8">
-				<div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 flex items-center justify-center mx-auto mb-3">
-					<CheckSquare className="w-5 h-5 text-gray-400 dark:text-gray-500 midnight:text-gray-600" />
-				</div>
-				<p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-					No subtasks defined
-				</p>
-			</div>
-		);
-	}
-
 	const handleTaskToggle = async (taskId) => {
-		const task = checklistItems.find((t) => t.id === taskId);
-		if (!task) return;
-
+		const next = checklistItems.map((item) =>
+			item.id === taskId ? { ...item, completed: !item.completed } : item
+		);
+		setChecklistItems(next);
 		setUpdatingItems((prev) => ({ ...prev, [taskId]: true }));
-
 		try {
-			const updatedChecklist = checklistItems.map((item) =>
-				item.id === taskId
-					? { ...item, completed: !item.completed }
-					: item
-			);
-
-			setChecklistItems(updatedChecklist);
-			await updateCardChecklist(columnId, cardId, updatedChecklist);
+			await updateCardChecklist(columnId, cardId, next);
 		} catch (error) {
 			console.error("Error toggling task completion:", error);
-			setChecklistItems(checklist);
+			setChecklistItems(checklist || []);
 		} finally {
 			setUpdatingItems((prev) => ({ ...prev, [taskId]: false }));
 		}
 	};
-	const renderTaskItem = (task) => {
-		const isUpdating = updatingItems[task.id];
 
+	if (!checklistItems.length) {
 		return (
-			<div
-				key={task.id}
-				className={`flex items-center p-4 rounded-lg transition-all duration-200 cursor-pointer ${
-					task.completed
-						? "bg-gray-150 dark:bg-gray-800/60 midnight:bg-gray-900/40 hover:bg-gray-200 dark:hover:bg-gray-800/80 midnight:hover:bg-gray-900/60"
-						: "bg-gray-100 dark:bg-gray-800/50 midnight:bg-gray-900/30 hover:bg-gray-150 dark:hover:bg-gray-800/70 midnight:hover:bg-gray-900/50"
-				}`}
-			>
-				<button
-					onClick={(e) => {
-						e.stopPropagation();
-						handleTaskToggle(task.id);
-					}}
-					disabled={isUpdating}
-					className="flex-shrink-0 mr-3 focus:outline-none transition-all duration-200"
-				>
-					{isUpdating ? (
-						<Loader2 className="w-4 h-4 text-blue-500 dark:text-blue-400 animate-spin" />
-					) : task.completed ? (
-						<CheckCircle className="w-4 h-4 text-emerald-500 dark:text-emerald-400 midnight:text-emerald-400" />
-					) : (
-						<Circle className="w-4 h-4 text-gray-400 dark:text-gray-500 midnight:text-gray-600 hover:text-blue-500 dark:hover:text-blue-400" />
-					)}
-				</button>
-
-				<div className="flex-1 min-w-0">
-					<div
-						className={`text-sm leading-relaxed break-words ${
-							task.completed
-								? "line-through text-gray-500 dark:text-gray-400 midnight:text-gray-500"
-								: "text-gray-900 dark:text-gray-100 midnight:text-gray-200"
-						}`}
-					>
-						{task.text}
-					</div>
-				</div>
-			</div>
+			<p className="text-sm text-gray-500 dark:text-gray-400">
+				No subtasks defined.
+			</p>
 		);
-	};
-
-	// Organize tasks by completion status
-	const incompleteTasks = checklistItems.filter((task) => !task.completed);
-	const completedTasks = checklistItems.filter((task) => task.completed);
+	}
 
 	return (
 		<div className="space-y-2">
-			{/* Show incomplete tasks first */}
-			{incompleteTasks.map(renderTaskItem)}
-
-			{/* Visual separator between incomplete and completed tasks */}
-			{incompleteTasks.length > 0 && completedTasks.length > 0 && (
-				<div className="py-2">
-					<div className="w-full h-px bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800"></div>
+			{checklistItems.map((task) => (
+				<div
+					key={task.id}
+					className="flex items-center gap-3 rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-800/50"
+				>
+					<button
+						type="button"
+						onClick={(event) => {
+							event.stopPropagation();
+							handleTaskToggle(task.id);
+						}}
+						disabled={updatingItems[task.id]}
+						className="text-gray-400 hover:text-blue-500 disabled:opacity-50"
+					>
+						{updatingItems[task.id] ? (
+							<Loader2 className="w-4 h-4 animate-spin" />
+						) : task.completed ? (
+							<CheckCircle className="w-4 h-4 text-emerald-500" />
+						) : (
+							<Circle className="w-4 h-4" />
+						)}
+					</button>
+					<span
+						className={`text-sm ${
+							task.completed
+								? "text-gray-500 line-through"
+								: "text-gray-900 dark:text-gray-100"
+						}`}
+					>
+						{task.text || task.title || "Untitled subtask"}
+					</span>
 				</div>
-			)}
-
-			{/* Then completed tasks */}
-			{completedTasks.map(renderTaskItem)}
+			))}
 		</div>
 	);
 };
 
-// Main Card Component
 const ListViewCard = ({
 	card,
-	isCardBlocked,
 	expandedCards,
 	toggleCardExpanded,
 	setSelectedCard,
-	cardDependencies,
-	dependentCards,
-	session,
-	columns,
+	profiles = [],
+	assigningCardId = null,
+	onAssignAgent,
+	onCancelRun,
+	onOpenRun,
 }) => {
-	const isFullyCompleted = card.progress === 100 || card.isCompletionColumn;
-	const isBlocked = isCardBlocked(card);
-	const hasDependencies = card.dependencies && card.dependencies.length > 0;
-	const hasDependent =
-		dependentCards[card.id] && dependentCards[card.id].length > 0;
-
-	const handleCardClick = () => {
-		setSelectedCard(card);
-	};
-
-	const getRowStyle = () => {
-		if (isFullyCompleted) {
-			return "bg-green-100/40 dark:bg-green-900/15 midnight:bg-green-900/5 border-l-2 border-green-200 dark:border-green-800 midnight:border-green-900 hover:bg-green-50/50 dark:hover:bg-green-900/20 midnight:hover:bg-green-900/10";
-		}
-		return "hover:bg-gray-50/50 dark:hover:bg-gray-800/30 midnight:hover:bg-gray-900/30";
-	};
-
-	// Only show chevron if there are subtasks
-	const hasSubtasks = card.checklist && card.checklist.length > 0;
-	const subtaskCount = hasSubtasks ? card.checklist.length : 0;
+	const run = card.agentRun;
+	const hasSubtasks = Array.isArray(card.checklist) && card.checklist.length > 0;
+	const isExpanded = expandedCards.has(card.id);
+	const isRunning = run && ["queued", "running"].includes(run.status);
 
 	return (
 		<React.Fragment>
-			<tr className={`transition-all duration-200 ${getRowStyle()}`}>
+			<tr className="border-b border-gray-100 transition-colors hover:bg-gray-50/70 dark:border-gray-800 dark:hover:bg-gray-800/30">
 				<td className="px-6 py-4">
-					<div className="flex items-start">
+					<div className="flex items-start gap-3">
 						{hasSubtasks ? (
 							<button
-								onClick={(e) => toggleCardExpanded(card.id, e)}
-								className="mr-3 flex-shrink-0 text-gray-400 hover:text-blue-500 focus:outline-none mt-1 transition-colors"
-								title={
-									expandedCards.has(card.id)
-										? "Hide subtasks"
-										: "Show subtasks"
-								}
+								type="button"
+								onClick={(event) => toggleCardExpanded(card.id, event)}
+								className="mt-1 text-gray-400 hover:text-blue-500"
+								title={isExpanded ? "Hide subtasks" : "Show subtasks"}
 							>
-								{expandedCards.has(card.id) ? (
+								{isExpanded ? (
 									<ChevronDown className="w-4 h-4" />
 								) : (
 									<ChevronRight className="w-4 h-4" />
 								)}
 							</button>
 						) : (
-							<span className="mr-3 w-4 h-4" />
+							<span className="mt-1 w-4" />
 						)}
-						<div
-							className="flex-1 cursor-pointer"
-							onClick={handleCardClick}
+						<button
+							type="button"
+							onClick={() => setSelectedCard(card)}
+							className="min-w-0 text-left"
 						>
-							<div className="flex items-center">
-								{isBlocked && (
-									<AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400 midnight:text-red-500 mr-2 flex-shrink-0" />
-								)}
-								<div className="flex flex-col">
-									<div
-										className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-indigo-100 truncate max-w-35"
-										title={card.title} // Shows full title on hover
-									>
-										{card.title}
-									</div>
-									{hasSubtasks && (
-										<span className="text-xs font-normal text-gray-500 dark:text-gray-400 midnight:text-gray-400 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 rounded px-2 py-0.5 mt-1 inline-block w-fit">
-											{subtaskCount} subtask
-											{subtaskCount > 1 ? "s" : ""}
-										</span>
-									)}
-								</div>
+							<div className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+								{card.title}
 							</div>
 							{card.description && (
-								<div
-									className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-500 mt-1.5 line-clamp-2 whitespace-pre-line truncate"
-									title={card.description}
-								>
+								<div className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
 									{card.description}
 								</div>
 							)}
-						</div>
+							{hasSubtasks && (
+								<div className="mt-1 text-xs text-gray-400">
+									{card.tasks?.completed || 0}/{card.tasks?.total || card.checklist.length} subtasks
+								</div>
+							)}
+						</button>
 					</div>
 				</td>
-				<td className="px-6 py-4 text-center">
-					<div className="flex justify-center">
-						<InteractivePriorityBadge
-							priority={card.priority}
-							cardId={card.id}
-							columnId={card.columnId}
-							disabled={isFullyCompleted}
-						/>
+				<td className="px-3 py-4 text-center text-sm text-gray-700 dark:text-gray-300">
+					{run?.profile ? (
+						<span className="inline-flex items-center gap-1.5">
+							<span>{run.profile.icon || ""}</span>
+							<span>{run.profile.name}</span>
+						</span>
+					) : (
+						<span className="text-gray-400">None</span>
+					)}
+				</td>
+				<td className="px-3 py-4 text-center">
+					<RunStatusBadge run={run} />
+				</td>
+				<td className="px-3 py-4">
+					<div className="max-w-56 truncate text-sm text-gray-600 dark:text-gray-400">
+						{run?.lastEventLabel || "Ready for assignment"}
 					</div>
 				</td>
-				<td className="px-6 py-4 text-center">
-					<span className="text-sm text-gray-700 dark:text-gray-300 midnight:text-gray-400">
-						{card.duration
-							? formatDuration(card.duration * 60)
-							: "-"}
-					</span>
+				<td className="px-3 py-4 text-center">
+					<PriorityBadge priority={card.priority} />
 				</td>
-				<td className="px-6 py-4 text-center">
-					<div className="flex justify-center">
-						<InteractiveStatusBadge
-							columnId={card.columnId}
-							columnTitle={card.columnTitle}
-							isCompletionColumn={card.isCompletionColumn}
-							cardId={card.id}
-							columns={columns}
-							disabled={isBlocked}
-						/>
-					</div>
-				</td>
-				<td className="px-6 py-4 text-center min-w-fit">
+				<td className="px-3 py-4 text-center">
 					{card.dueDate ? (
-						<div
-							className={`text-sm flex items-center justify-center whitespace-nowrap min-w-max ${getDueDateStyle(
+						<span
+							className={`inline-flex items-center justify-center whitespace-nowrap text-sm ${getDueDateStyle(
 								card.dueDate
 							)}`}
 						>
-							<Calendar className="w-4 h-4 mr-1.5 flex-shrink-0" />
-							<span className="flex-shrink-0">
-								{formatDate(card.dueDate)}
-							</span>
-						</div>
-					) : (
-						<span className="text-gray-400 dark:text-gray-500 midnight:text-gray-600 text-sm whitespace-nowrap">
-							No date
+							<Calendar className="mr-1.5 h-4 w-4" />
+							{formatDate(card.dueDate)}
 						</span>
+					) : (
+						<span className="text-sm text-gray-400">No date</span>
 					)}
 				</td>
-				<td className="px-6 py-4 text-center">
-					<div className="flex justify-center">
-						<div className="w-32">
-							<div className="flex items-center">
-								<div className="w-full bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full h-2">
-									<div
-										className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
-											card.progress
-										)}`}
-										style={{
-											width: `${card.progress || 0}%`,
-										}}
-									></div>
-								</div>
-								<span
-									className={`text-xs font-medium ml-2 ${
-										isFullyCompleted
-											? "text-emerald-600 dark:text-emerald-500 midnight:text-emerald-500"
-											: "text-gray-600 dark:text-gray-400 midnight:text-gray-500"
-									}`}
-								>
-									{card.progress || 0}%
-								</span>
-							</div>
-						</div>
-					</div>
-				</td>
-				<td className="px-6 py-4 text-center">
-					<div className="flex items-center justify-center space-x-3 text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-						{card.checklist?.length > 0 && (
-							<div className="flex items-center text-xs">
-								<CheckSquare className="w-3.5 h-3.5 mr-1" />
-								{card.tasks?.completed || 0}/
-								{card.tasks?.total || 0}
-							</div>
+				<td className="px-3 py-4 text-right">
+					<div className="flex items-center justify-end gap-2">
+						{run?.id && (
+							<button
+								type="button"
+								onClick={() => onOpenRun(run)}
+								className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+								title="Open run"
+							>
+								<ExternalLink className="h-4 w-4" />
+							</button>
 						)}
-
-						{(card.attachments?.length > 0 ||
-							card.files?.length > 0) && (
-							<div className="flex items-center text-xs">
-								<Paperclip className="w-3.5 h-3.5 mr-1" />
-								{(card.attachments?.length || 0) +
-									(card.files?.length || 0)}
-							</div>
-						)}
-
-						{hasDependencies && (
-							<div className="flex items-center text-xs">
-								<Link2 className="w-3.5 h-3.5 mr-1" />
-								{card.dependencies.length}
-							</div>
+						{isRunning ? (
+							<button
+								type="button"
+								onClick={() => onCancelRun(run)}
+								className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+								title="Cancel run"
+							>
+								<Square className="h-4 w-4" />
+							</button>
+						) : run?.status === "failed" ? (
+							<button
+								type="button"
+								onClick={() => onAssignAgent(card, run.profileId)}
+								className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+								title="Retry"
+							>
+								<RotateCcw className="h-4 w-4" />
+							</button>
+						) : (
+							<AgentPicker
+								profiles={profiles}
+								disabled={assigningCardId === card.id}
+								onAssign={(profileId) => onAssignAgent(card, profileId)}
+							/>
 						)}
 					</div>
 				</td>
 			</tr>
-
-			{/* Expanded Subtasks */}
-			{expandedCards.has(card.id) && hasSubtasks && (
-				<tr
-					className={`${getRowStyle()} border-t border-gray-100 dark:border-gray-800 midnight:border-gray-900`}
-				>
-					<td colSpan="7" className="px-6 py-6">
-						<div className="pl-12">
+			{isExpanded && hasSubtasks && (
+				<tr className="border-b border-gray-100 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/30">
+					<td colSpan="7" className="px-6 py-5">
+						<div className="pl-8">
 							<InteractiveChecklistRenderer
 								checklist={card.checklist}
 								cardId={card.id}
 								columnId={card.columnId}
-								expandedCards={expandedCards}
 							/>
 						</div>
 					</td>
 				</tr>
 			)}
-
 		</React.Fragment>
 	);
 };

@@ -509,6 +509,29 @@ CREATE TABLE IF NOT EXISTS agent_tool_audit (
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_session ON agent_tool_audit(session_id);
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_user    ON agent_tool_audit(user_id, started_at);
 
+CREATE TABLE IF NOT EXISTS agent_task_runs (
+  id               TEXT PRIMARY KEY,
+  card_id          TEXT NOT NULL REFERENCES Cards(id) ON DELETE CASCADE,
+  session_id       TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL,
+  profile_id       TEXT REFERENCES agent_profiles(id) ON DELETE SET NULL,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  goal             TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'queued'
+                     CHECK (status IN ('queued','running','completed','failed','cancelled')),
+  last_event_type  TEXT,
+  last_event_label TEXT,
+  summary          TEXT,
+  error            TEXT,
+  started_at       TEXT,
+  completed_at     TEXT,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_agent_task_runs_card    ON agent_task_runs(card_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_agent_task_runs_user    ON agent_task_runs(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_agent_task_runs_session ON agent_task_runs(session_id);
+
 -- ─── Custom Model Paths ────────────────────────────────────────────────────────
 -- Stores absolute paths to models located outside the default directory.
 

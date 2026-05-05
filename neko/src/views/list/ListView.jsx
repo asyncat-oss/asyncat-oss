@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useColumnContext } from "../../views/context/viewContexts";
 import { useCardContext } from "../../views/context/viewContexts";
 import ListViewFilters from "./ListViewFilters";
 import ListViewTable from "./ListViewTable";
 import AddCardModal from "../kanban/features/cards/AddCardModal";
+import { agentTaskRunsApi, profilesApi } from "../../CommandCenter/commandCenterApi";
 
-const ListView = ({ selectedProject, session }) => {
+const ListView = ({ selectedProject }) => {
+	const navigate = useNavigate();
 	const { columns, isLoading, error } = useColumnContext();
 	const { setSelectedCard } = useCardContext();
 	const [searchTerm, setSearchTerm] = useState("");
@@ -16,16 +19,14 @@ const ListView = ({ selectedProject, session }) => {
 	const [filterConfig, setFilterConfig] = useState({
 		priority: [],
 		dueStatus: [],
-		completed: false,
-		hasDependencies: false,
-		isBlocked: false,
+		running: false,
 	});
 	const [cards, setCards] = useState([]);
 	const [expandedCards, setExpandedCards] = useState(new Set());
-	const [cardDependencies, setCardDependencies] = useState({});
-	const [dependentCards, setDependentCards] = useState({});
-	const [isLoadingDependencies, setIsLoadingDependencies] = useState(false);
 	const [showCreateTask, setShowCreateTask] = useState(false);
+	const [agentRunsByCard, setAgentRunsByCard] = useState({});
+	const [agentProfiles, setAgentProfiles] = useState([]);
+	const [assigningCardId, setAssigningCardId] = useState(null);
 
 	// Process cards from all columns
 	useEffect(() => {
@@ -38,6 +39,7 @@ const ListView = ({ selectedProject, session }) => {
 					columnId: column.id,
 					columnTitle: column.title,
 					isCompletionColumn: column.isCompletionColumn || false,
+					agentRun: agentRunsByCard[card.id] || null,
 				}));
 				return [...acc, ...cardsWithColumn];
 			}
@@ -45,7 +47,43 @@ const ListView = ({ selectedProject, session }) => {
 		}, []);
 
 		setCards(allCards);
-	}, [columns]);
+	}, [columns, agentRunsByCard]);
+
+	const loadAgentTaskRuns = useCallback(async () => {
+		if (!selectedProject?.id) return;
+		try {
+			const result = await agentTaskRunsApi.list({
+				projectId: selectedProject.id,
+			});
+			const next = {};
+			for (const task of result.tasks || []) {
+				if (task.agentRun) next[task.id] = task.agentRun;
+			}
+			setAgentRunsByCard(next);
+		} catch (error) {
+			console.error("Error loading agent task runs:", error);
+		}
+	}, [selectedProject?.id]);
+
+	useEffect(() => {
+		profilesApi
+			.listProfiles()
+			.then((result) => setAgentProfiles(result.profiles || []))
+			.catch((error) => console.error("Error loading agent profiles:", error));
+	}, []);
+
+	useEffect(() => {
+		loadAgentTaskRuns();
+	}, [loadAgentTaskRuns]);
+
+	useEffect(() => {
+		const hasActiveRuns = Object.values(agentRunsByCard).some((run) =>
+			["queued", "running"].includes(run?.status)
+		);
+		if (!hasActiveRuns) return;
+		const timer = setInterval(loadAgentTaskRuns, 3000);
+		return () => clearInterval(timer);
+	}, [agentRunsByCard, loadAgentTaskRuns]);
 
 	// Toggle expanded state for a card
 	const toggleCardExpanded = (cardId, event) => {
@@ -61,19 +99,6 @@ const ListView = ({ selectedProject, session }) => {
 		});
 	};
 
-	// Check if a card is blocked by dependencies
-	const isCardBlocked = useCallback(
-		(card) => {
-			if (card.dependencies?.length > 0 && cardDependencies[card.id]) {
-				return cardDependencies[card.id].some(
-					(dep) => !dep.Column?.isCompletionColumn
-				);
-			}
-			return false;
-		},
-		[cardDependencies]
-	);
-
 	// Get sorted and filtered cards
 	const getSortedFilteredCards = useCallback(() => {
 		let filteredCards = [...cards];
@@ -88,10 +113,10 @@ const ListView = ({ selectedProject, session }) => {
 			);
 		}
 
-		// Apply completed filter
-		if (filterConfig.completed) {
-			filteredCards = filteredCards.filter(
-				(card) => card.progress === 100 || card.isCompletionColumn
+		// Apply running filter
+		if (filterConfig.running) {
+			filteredCards = filteredCards.filter((card) =>
+				["queued", "running"].includes(card.agentRun?.status)
 			);
 		}
 
@@ -110,21 +135,6 @@ const ListView = ({ selectedProject, session }) => {
 			});
 		}
 
-		// Apply dependencies filter
-		if (filterConfig.hasDependencies) {
-			filteredCards = filteredCards.filter(
-				(card) =>
-					(card.dependencies && card.dependencies.length > 0) ||
-					(dependentCards[card.id] &&
-						dependentCards[card.id].length > 0)
-			);
-		}
-
-		// Apply blocked filter
-		if (filterConfig.isBlocked) {
-			filteredCards = filteredCards.filter((card) => isCardBlocked(card));
-		}
-
 		// Apply sorting
 		filteredCards.sort((a, b) => {
 			const { key, direction } = sortConfig;
@@ -140,18 +150,14 @@ const ListView = ({ selectedProject, session }) => {
 					valueA = a[key] ? new Date(a[key]).getTime() : Infinity;
 					valueB = b[key] ? new Date(b[key]).getTime() : Infinity;
 					break;
-				case "progress":
-					valueA = a[key] || 0;
-					valueB = b[key] || 0;
+				case "runStatus":
+					valueA = a.agentRun?.status || "unassigned";
+					valueB = b.agentRun?.status || "unassigned";
 					break;
 				case "priority":
 					const priorityValue = { High: 3, Medium: 2, Low: 1 };
 					valueA = priorityValue[a[key]] || 0;
 					valueB = priorityValue[b[key]] || 0;
-					break;
-				case "duration":
-					valueA = a[key] ?? Infinity;
-					valueB = b[key] ?? Infinity;
 					break;
 				default:
 					valueA = a[key] || "";
@@ -168,9 +174,7 @@ const ListView = ({ selectedProject, session }) => {
 		cards,
 		searchTerm,
 		filterConfig,
-		dependentCards,
 		sortConfig,
-		isCardBlocked,
 	]);
 
 	// Calculate due status for filtering
@@ -204,24 +208,10 @@ const ListView = ({ selectedProject, session }) => {
 	};
 
 	// Filter toggle functions
-	const toggleCompletedFilter = () => {
+	const toggleRunningFilter = () => {
 		setFilterConfig((prev) => ({
 			...prev,
-			completed: !prev.completed,
-		}));
-	};
-
-	const toggleDependenciesFilter = () => {
-		setFilterConfig((prev) => ({
-			...prev,
-			hasDependencies: !prev.hasDependencies,
-		}));
-	};
-
-	const toggleBlockedFilter = () => {
-		setFilterConfig((prev) => ({
-			...prev,
-			isBlocked: !prev.isBlocked,
+			running: !prev.running,
 		}));
 	};
 
@@ -261,10 +251,46 @@ const ListView = ({ selectedProject, session }) => {
 		setFilterConfig({
 			priority: [],
 			dueStatus: [],
-			completed: false,
-			hasDependencies: false,
-			isBlocked: false,
+			running: false,
 		});
+	};
+
+	const handleAssignAgent = async (card, profileId) => {
+		if (!card?.id || !profileId) return;
+		setAssigningCardId(card.id);
+		try {
+			const result = await agentTaskRunsApi.create({
+				cardId: card.id,
+				profileId,
+			});
+			if (result.run) {
+				setAgentRunsByCard((prev) => ({ ...prev, [card.id]: result.run }));
+			}
+			await loadAgentTaskRuns();
+		} catch (error) {
+			console.error("Error assigning agent:", error);
+		} finally {
+			setAssigningCardId(null);
+		}
+	};
+
+	const handleCancelRun = async (run) => {
+		if (!run?.id) return;
+		try {
+			const result = await agentTaskRunsApi.cancel(run.id);
+			if (result.run) {
+				setAgentRunsByCard((prev) => ({
+					...prev,
+					[result.run.cardId]: result.run,
+				}));
+			}
+		} catch (error) {
+			console.error("Error cancelling agent run:", error);
+		}
+	};
+
+	const handleOpenRun = (run) => {
+		if (run?.sessionId) navigate(`/agents/${run.sessionId}`);
 	};
 
 	if (error) {
@@ -335,9 +361,7 @@ const ListView = ({ selectedProject, session }) => {
 				searchTerm={searchTerm}
 				setSearchTerm={setSearchTerm}
 				filterConfig={filterConfig}
-				toggleCompletedFilter={toggleCompletedFilter}
-				toggleDependenciesFilter={toggleDependenciesFilter}
-				toggleBlockedFilter={toggleBlockedFilter}
+				toggleRunningFilter={toggleRunningFilter}
 				togglePriorityFilter={togglePriorityFilter}
 				toggleDueStatusFilter={toggleDueStatusFilter}
 				onClearFilters={clearFilters}
@@ -358,11 +382,11 @@ const ListView = ({ selectedProject, session }) => {
 						expandedCards={expandedCards}
 						toggleCardExpanded={toggleCardExpanded}
 						setSelectedCard={setSelectedCard}
-						cardDependencies={cardDependencies}
-						dependentCards={dependentCards}
-						session={session}
-						isCardBlocked={isCardBlocked}
-						columns={columns}
+						profiles={agentProfiles}
+						assigningCardId={assigningCardId}
+						onAssignAgent={handleAssignAgent}
+						onCancelRun={handleCancelRun}
+						onOpenRun={handleOpenRun}
 					/>
 				</div>
 			</div>

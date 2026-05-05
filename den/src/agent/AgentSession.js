@@ -216,11 +216,23 @@ export class AgentSession {
   }
 
   /** List recent sessions for a user. */
-  static listRecent(userId, limit = 20) {
+  static listRecent(userId, limit = 20, workspaceId = null) {
     try {
-      return db.prepare(
-        'SELECT id, goal, status, total_rounds, created_at, updated_at FROM agent_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?'
-      ).all(userId, limit);
+      return db.prepare(`
+        SELECT s.id, s.goal, s.status, s.total_rounds, s.created_at, s.updated_at,
+               atr.id AS task_run_id, atr.status AS task_run_status,
+               atr.last_event_label AS task_run_activity, atr.summary AS task_run_summary,
+               c.id AS task_card_id, c.title AS task_card_title,
+               ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon
+        FROM agent_sessions s
+        LEFT JOIN agent_task_runs atr ON atr.session_id = s.id
+        LEFT JOIN Cards c ON c.id = atr.card_id
+        LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
+        WHERE s.user_id = ?
+          AND (? IS NULL OR s.workspace_id = ?)
+        ORDER BY s.updated_at DESC
+        LIMIT ?
+      `).all(userId, workspaceId, workspaceId, limit);
     } catch {
       return [];
     }

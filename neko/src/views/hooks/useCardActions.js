@@ -655,7 +655,6 @@ export const useCardActions = () => {
 		return null;
 	};
 
-	// Dependency management functions
 	const addDependency = async (
 		sourceCardId,
 		targetCardId,
@@ -676,19 +675,6 @@ export const useCardActions = () => {
 		}
 	};
 
-	const removeDependency = async (sourceCardId, targetCardId) => {
-		try {
-			const result = await viewsApi.dependency.removeDependency(
-				sourceCardId,
-				targetCardId
-			);
-			return result;
-		} catch (error) {
-			console.error("Error removing dependency:", error);
-			throw error;
-		}
-	};
-
 	return {
 		addCard,
 		handleCardUpdate,
@@ -701,9 +687,7 @@ export const useCardActions = () => {
 		addAttachment,
 		removeAttachment,
 		sendCatMessage,
-		// Dependency management
 		addDependency,
-		removeDependency,
 	};
 };
 
