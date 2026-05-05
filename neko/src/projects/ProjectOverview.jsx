@@ -15,7 +15,6 @@ const ProjectOverview = () => {
     'timeline',
     'gantt',
     'network',
-    'gallery',
     'notes',
     'settings',
   ];

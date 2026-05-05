@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS projects (
   -- References workspaces instead of the old teams table.
   team_id         TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   is_archived     INTEGER NOT NULL DEFAULT 0,
-  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","timeline","gantt","network","notes","gallery"]',
+  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","timeline","gantt","network","notes"]',
   enabled_widgets TEXT NOT NULL DEFAULT '["metrics","progress","description","quick-stats","deadlines","team-members","features","project-details"]',
   emoji           TEXT NOT NULL DEFAULT '📁',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),

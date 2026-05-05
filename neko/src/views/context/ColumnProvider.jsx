@@ -7,7 +7,6 @@ import viewsApi from "../viewsApi";
 import ListViewSkeleton from "../list/ListViewSkeleton";
 import TimelineViewSkeleton from "../timeline/TimelineViewSkeleton";
 import GanttViewSkeleton from "../gantt/GanttViewSkeleton";
-import GalleryViewSkeleton from "../gallery/GalleryViewSkeleton";
 import { NetworkViewSkeleton } from "../network/NetworkView";
 
 const KanbanSkeleton = () => {
@@ -234,8 +233,6 @@ export const ColumnProvider = ({
 				return <TimelineViewSkeleton />;
 			case "gantt":
 				return <GanttViewSkeleton />;
-			case "gallery":
-				return <GalleryViewSkeleton />;
 			case "network":
 				return <NetworkViewSkeleton />;
 			case "kanban":

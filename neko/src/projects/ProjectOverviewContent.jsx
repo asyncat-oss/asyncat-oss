@@ -17,7 +17,6 @@ import ListView from "../views/list/ListView";
 import TimelineView from "../views/timeline/TimelineView";
 import GanttView from "../views/gantt/GanttView";
 import NetworkView from "../views/network/NetworkView";
-import GalleryView from "../views/gallery/GalleryView";
 import NotesIndex from "../notes/NotesIndex";
 
 // Import context providers
@@ -35,7 +34,6 @@ const PROJECT_VIEWS = [
 	{ key: 'timeline', label: 'Timeline', Icon: Clock },
 	{ key: 'gantt',    label: 'Gantt',    Icon: GanttChartSquare },
 	{ key: 'network',  label: 'Network',  Icon: Link2 },
-	{ key: 'gallery',  label: 'Gallery',  Icon: LayoutGrid },
 	{ key: 'notes',    label: 'Notes',    Icon: FileText },
 ];
 
@@ -341,21 +339,6 @@ const ProjectOverview = React.memo(({
 					</ColumnProvider>
 				);
 
-			case "gallery":
-				return (
-					<ColumnProvider
-						session={session}
-						selectedProject={projectData}
-						viewType="gallery"
-					>
-						<CardProvider session={session}>
-							<GalleryView
-								session={session}
-								selectedProject={projectData}
-							/>
-						</CardProvider>
-					</ColumnProvider>
-				);
 
 			case "notes":
 				return (
