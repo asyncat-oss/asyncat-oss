@@ -1947,7 +1947,7 @@ const ProvidersSection = ({
 };
 
 const ModelsPage = () => {
-  const { config, setConfig } = useModelConfig();
+  const { config: modelContextConfig, setConfig: setModelContextConfig } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
   const [models, setModels] = useState([]);
   const [engineData, setEngineData] = useState(null);
@@ -2354,7 +2354,7 @@ const ModelsPage = () => {
     const ctxSize = commitModelLoadCtxSize(filename, modelContextLimit);
     if (!ctxSize) return;
     setStartingModel(filename);
-    setConfig({ ctx_size: ctxSize });
+    setModelContextConfig({ ctx_size: ctxSize });
     try {
       await llamaServerApi.start(filename, ctxSize);
       setServerStatus(prev => ({ ...prev, status: 'loading', model: filename }));
@@ -2439,7 +2439,7 @@ const ModelsPage = () => {
     const key = `${selection.runtime}:${selection.path}${retryModelAfterSwitch ? ':retry' : ''}`;
     const ctxSize = retryModelAfterSwitch ? getRetryModelContext() : undefined;
     if (ctxSize) {
-      setConfig({ ctx_size: ctxSize });
+      setModelContextConfig({ ctx_size: ctxSize });
     }
     setSwitchingEngine(key);
     setSwitchError('');
@@ -2482,7 +2482,7 @@ const ModelsPage = () => {
     const key = `install:${profile}${retryModelAfterInstall ? ':retry' : ''}`;
     const ctxSize = retryModelAfterInstall ? getRetryModelContext() : undefined;
     if (ctxSize) {
-      setConfig({ ctx_size: ctxSize });
+      setModelContextConfig({ ctx_size: ctxSize });
     }
     setInstallingEngine(key);
     setInstallError('');
@@ -2750,7 +2750,7 @@ const ModelsPage = () => {
                               setSwitchSuccess('');
                               
                               try {
-                                const ctxSize = config?.ctx_size || 4096;
+                                const ctxSize = modelContextConfig?.ctx_size || 4096;
                                 const res = await localModelsApi.autoStart(p, ctxSize);
                                 
                                 setServerStatus(prev => ({ 

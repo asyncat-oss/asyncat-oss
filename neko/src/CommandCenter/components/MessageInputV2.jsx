@@ -66,7 +66,7 @@ export const MessageInputV2 = ({
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
-  const { config: modelConfig } = useModelConfig();
+  const { config: modelContextConfig } = useModelConfig();
   const textareaRef = useRef(null);
   const toolbarRef = useRef(null);
   const mentionTrigger = useMemo(
@@ -90,7 +90,7 @@ export const MessageInputV2 = ({
 
   const inputTokens = Math.ceil(value.length / 4);
   const totalTokens = conversationTokens + inputTokens;
-  const ctxSize = localModel.ctxSize || modelConfig.ctx_size || 8192;
+  const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || 8192;
   const contextPercent = Math.min(
     100,
     Math.round((totalTokens / ctxSize) * 100),
@@ -185,7 +185,6 @@ export const MessageInputV2 = ({
       try {
         const messageToSend = {
           content: value.trim(),
-          modelConfig,
           agentMentions: detectedAgentMentions,
         };
 
@@ -198,7 +197,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, modelConfig, onSubmit, detectedAgentMentions],
+    [value, disabled, onSubmit, detectedAgentMentions],
   );
 
   const handleKeyDown = useCallback(

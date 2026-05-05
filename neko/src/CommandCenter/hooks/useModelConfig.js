@@ -1,29 +1,39 @@
-// useModelConfig.js — per-session model parameter config, persisted in localStorage
+// useModelConfig.js — persisted local model context settings
 import { useState, useCallback } from 'react';
 
-export const DEFAULT_CONFIG = {
-  temperature:     0.7,
-  top_p:           0.9,
-  top_k:           40,
-  min_p:           0.05,
-  repeat_penalty:  1.1,
-  ctx_size:        32768,
-  system_prompt_prefix: '',  // injected before the main system prompt
+export const DEFAULT_MODEL_CONTEXT_CONFIG = {
+  ctx_size: 32768,
 };
 
 const STORAGE_KEY = 'asyncat_model_config';
 
+function normalizeCtxSize(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 512 ? Math.floor(n) : DEFAULT_MODEL_CONTEXT_CONFIG.ctx_size;
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULT_CONFIG, ...JSON.parse(raw) } : { ...DEFAULT_CONFIG };
+    if (!raw) return { ...DEFAULT_MODEL_CONTEXT_CONFIG };
+
+    const parsed = JSON.parse(raw);
+    return {
+      ctx_size: normalizeCtxSize(parsed?.ctx_size),
+    };
   } catch {
-    return { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_MODEL_CONTEXT_CONFIG };
   }
 }
 
 function save(cfg) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch {}
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ctx_size: normalizeCtxSize(cfg?.ctx_size),
+    }));
+  } catch {
+    // localStorage can be unavailable in private/embedded contexts.
+  }
 }
 
 export function useModelConfig() {
@@ -31,17 +41,13 @@ export function useModelConfig() {
 
   const setConfig = useCallback((patch) => {
     setConfigState(prev => {
-      const next = { ...prev, ...patch };
+      const next = {
+        ctx_size: normalizeCtxSize(patch?.ctx_size ?? prev.ctx_size),
+      };
       save(next);
       return next;
     });
   }, []);
 
-  const resetConfig = useCallback(() => {
-    const defaults = { ...DEFAULT_CONFIG };
-    save(defaults);
-    setConfigState(defaults);
-  }, []);
-
-  return { config, setConfig, resetConfig };
+  return { config, setConfig };
 }
