@@ -130,6 +130,9 @@ function buildEventsFromMessages(messages = []) {
     if (msg.type === 'user') {
       events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMentions: msg.agentMentions || [] } });
     } else if (msg.type === 'assistant') {
+      if (Array.isArray(msg.agentEvents) && msg.agentEvents.length > 0) {
+        events.push(...msg.agentEvents.filter(ev => ev?.type && ev.type !== 'user_goal' && ev.type !== 'answer'));
+      }
       events.push({
         type: msg.isError ? 'error' : 'answer',
         data: msg.isError
@@ -139,6 +142,18 @@ function buildEventsFromMessages(messages = []) {
     }
   }
   return events;
+}
+
+function getPersistableAgentEvents(events = []) {
+  return events
+    .filter(ev => ev?.type && !['user_goal', 'answer', 'delta', 'done', 'session_start', 'tool_result'].includes(ev.type))
+    .map(ev => ({
+      type: ev.type,
+      data: ev.data,
+      result: ev.result,
+      arrivedAt: ev.arrivedAt,
+      completedAt: ev.completedAt,
+    }));
 }
 
 function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false, onClose }) {
@@ -335,6 +350,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const agentAbortControllersRef = useRef(new Map());
+  const chatRunsRef = useRef(chatRuns);
+
+  useEffect(() => {
+    chatRunsRef.current = chatRuns;
+  }, [chatRuns]);
 
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
@@ -910,6 +930,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           timestamp: new Date().toISOString(),
           agentSessionId: runSessionId,
           toolsEnabled: effectiveToolsEnabled,
+          agentEvents: getPersistableAgentEvents(chatRunsRef.current[runKey]?.events?.length ? chatRunsRef.current[runKey].events : runEvents),
         };
         const finalMessages = [...runMessages, userMsg, assistantMsg];
         if (runConversationId === currentConversationIdRef.current) {

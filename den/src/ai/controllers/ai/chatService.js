@@ -169,6 +169,10 @@ class ChatService {
         baseMessage.agentSummary = msg.agentSummary;
       }
 
+      if (Array.isArray(msg.agentEvents)) {
+        baseMessage.agentEvents = msg.agentEvents;
+      }
+
       // Preserve web search event (images + sources) so they survive navigation
       if (msg.searchEvent && typeof msg.searchEvent === 'object') {
         baseMessage.searchEvent = msg.searchEvent;
@@ -249,6 +253,10 @@ class ChatService {
 
       if (msg.agentSummary && typeof msg.agentSummary === 'object') {
         baseMessage.agentSummary = msg.agentSummary;
+      }
+
+      if (Array.isArray(msg.agentEvents)) {
+        baseMessage.agentEvents = msg.agentEvents;
       }
 
       // Restore web search event (images + sources)

@@ -58,35 +58,6 @@ function truncateArgs(args) {
   } catch { return ''; }
 }
 
-function getPermissionSubject(data) {
-  const args = data?.args || {};
-  if (typeof args.command === 'string' && args.command.trim()) {
-    return {
-      label: 'Command',
-      value: args.command.trim(),
-      tone: data?.permission === 'dangerous' ? 'text-red-700 dark:text-red-200' : 'text-amber-900 dark:text-amber-100',
-    };
-  }
-  if (typeof args.code === 'string' && args.code.trim()) {
-    return {
-      label: data?.tool === 'run_python' ? 'Python code' : data?.tool === 'run_node' ? 'Node code' : 'Code',
-      value: args.code.trim(),
-      tone: data?.permission === 'dangerous' ? 'text-red-700 dark:text-red-200' : 'text-amber-900 dark:text-amber-100',
-    };
-  }
-  if (typeof args.path === 'string' && args.path.trim()) {
-    const action = data?.tool === 'write_file' ? 'Write file'
-      : data?.tool === 'edit_file' ? 'Edit file'
-        : data?.tool === 'file_delete' || data?.tool === 'delete_file' ? 'Delete file'
-          : 'Path';
-    return { label: action, value: args.path.trim(), tone: 'text-amber-900 dark:text-amber-100' };
-  }
-  if (typeof data?.description === 'string' && data.description.trim()) {
-    return { label: 'Action', value: data.description.trim(), tone: 'text-amber-900 dark:text-amber-100' };
-  }
-  return { label: 'Action', value: `Run ${data?.tool || 'tool'}`, tone: 'text-amber-900 dark:text-amber-100' };
-}
-
 function formatCountdown(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return 'expired';
   const totalSeconds = Math.ceil(ms / 1000);
@@ -103,6 +74,46 @@ function getResultSummary(result) {
   if (result.output !== undefined) { const s = String(result.output); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
   if (result.content) { const s = String(result.content); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
   try { const s = JSON.stringify(result); return s.length > 100 ? s.slice(0, 100) + '…' : s; } catch { return null; }
+}
+
+function getToolIntent(data) {
+  const args = data?.args || {};
+  const { label } = getToolMeta(data?.tool);
+
+  if (typeof args.command === 'string' && args.command.trim()) {
+    return { label: 'Run this command', value: args.command.trim(), kind: 'command' };
+  }
+  if (typeof args.code === 'string' && args.code.trim()) {
+    return { label: data?.tool === 'run_python' ? 'Run this Python' : 'Run this code', value: args.code.trim(), kind: 'code' };
+  }
+  if (typeof args.path === 'string' && args.path.trim()) {
+    const verb = data?.tool === 'write_file' ? 'Write this file'
+      : data?.tool === 'edit_file' ? 'Edit this file'
+        : data?.tool === 'file_delete' || data?.tool === 'delete_file' ? 'Delete this file'
+          : label;
+    return { label: verb, value: args.path.trim(), kind: 'path' };
+  }
+  if (typeof args.query === 'string' && args.query.trim()) {
+    return { label: 'Search for this', value: args.query.trim(), kind: 'query' };
+  }
+  if (typeof data?.description === 'string' && data.description.trim()) {
+    return { label, value: data.description.trim(), kind: 'description' };
+  }
+
+  return { label, value: truncateArgs(args) || `Use ${data?.tool || 'tool'}`, kind: 'tool' };
+}
+
+function getToolStatus(result, data) {
+  if (data?.resolved) {
+    const decision = data?.decision;
+    if (decision === 'deny') return { label: 'Denied', tone: 'text-red-500', icon: XCircle };
+    if (decision === 'allow' || decision === 'allow_session' || decision === 'allow_always') {
+      return { label: 'Approved', tone: 'text-green-600 dark:text-green-400', icon: CheckCircle2 };
+    }
+  }
+  if (result === undefined) return { label: 'Running', tone: 'text-amber-500', icon: Loader2 };
+  if (result?.error || result?.success === false) return { label: 'Failed', tone: 'text-red-500', icon: XCircle };
+  return { label: 'Done', tone: 'text-green-600 dark:text-green-400', icon: CheckCircle2 };
 }
 
 function FeedFrame({ children, className = '' }) {
@@ -188,99 +199,104 @@ function ThinkingEvent({ data }) {
   );
 }
 
-function ToolEvent({ data, result, onRetryTool }) {
+function ToolEvent({ data, result, onRetryTool, framed = true }) {
   const [expanded, setExpanded] = useState(false);
   const { icon: Icon, label } = getToolMeta(data?.tool);
-  const isPending = result === undefined;
-  const isError = result && (result.error || result.success === false);
+  const status = getToolStatus(result, data);
+  const StatusIcon = status.icon;
+  const isPending = status.label === 'Running';
+  const isError = status.label === 'Failed';
   const isMalformed = result?.code === 'invalid_tool_arguments';
   const summary = getResultSummary(result);
-  const argsStr = truncateArgs(data?.args);
+  const intent = getToolIntent(data);
 
-  return (
-    <FeedFrame className="mb-1.5">
-    <div className="flex items-start gap-2.5 group">
-      {/* Status dot / icon */}
-      <div className={`flex-shrink-0 w-5 h-5 rounded flex items-center justify-center mt-0.5 ${
-        isError   ? 'text-red-400'
-        : isPending ? 'text-amber-400'
-        : 'text-green-500'
-      }`}>
-        {isPending
-          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          : isError
-            ? <XCircle className="w-3.5 h-3.5" />
-            : <CheckCircle2 className="w-3.5 h-3.5" />}
-      </div>
+  const content = (
+    <div className="group rounded-md px-2 py-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40">
+      <div className="flex items-start gap-2.5">
+        <div className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded ${status.tone}`}>
+          <StatusIcon className={`h-3.5 w-3.5 ${isPending ? 'animate-spin' : ''}`} />
+        </div>
 
-      <div className="flex-1 min-w-0">
-        <button
-          onClick={() => result && setExpanded(v => !v)}
-          className={`w-full flex items-center gap-2 text-left ${result ? 'cursor-pointer' : 'cursor-default'}`}
-        >
-          <Icon className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{label}</span>
-          {argsStr && (
-            <code className="text-[10px] text-gray-400 dark:text-gray-600 font-mono truncate">{argsStr}</code>
-          )}
-          {result && (
-            expanded
-              ? <ChevronDown className="w-3 h-3 text-gray-400 ml-auto flex-shrink-0" />
-              : <ChevronRight className="w-3 h-3 text-gray-400 ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-          )}
-        </button>
-
-        {summary && !expanded && (
-          <p className={`text-[10px] font-mono mt-0.5 pl-5 truncate ${isError ? 'text-red-400' : 'text-gray-400 dark:text-gray-600'}`}>
-            {summary}
-          </p>
-        )}
-
-        {isMalformed && (
+        <div className="min-w-0 flex-1">
           <button
-            onClick={() => onRetryTool?.({ tool: data?.tool, args: data?.args, result, repairPrompt: data?.repairPrompt })}
-            className="mt-1 ml-5 inline-flex items-center gap-1 rounded border border-red-200 dark:border-red-800 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            onClick={() => (result || data?.args) && setExpanded(v => !v)}
+            className="flex w-full items-center gap-2 text-left"
           >
-            <RotateCcw className="w-3 h-3" />
-            Retry from here
+            <Icon className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{label}</span>
+            <span className={`ml-auto flex-shrink-0 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
+            {(result || data?.args) && (
+              expanded
+                ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400" />
+                : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
+            )}
           </button>
-        )}
 
-        {data?.permissionDecision && (
-          <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-0.5 pl-5">
-            Permission: {data.permissionDecision}
-            {data.workingDir ? ` · ${data.workingDir}` : ''}
+          <p className="mt-0.5 truncate pl-5 text-[11px] text-gray-400 dark:text-gray-500">
+            {intent.value}
           </p>
-        )}
 
-        {expanded && result && (
-          <div className="mt-1 ml-5 pl-2 border-l border-gray-100 dark:border-gray-800">
-            <pre className="text-[10px] text-gray-500 dark:text-gray-500 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto leading-relaxed py-1">
-              {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-            </pre>
-          </div>
-        )}
+          {summary && !expanded && (
+            <p className={`mt-0.5 truncate pl-5 font-mono text-[10px] ${isError ? 'text-red-400' : 'text-gray-400 dark:text-gray-600'}`}>
+              {summary}
+            </p>
+          )}
+
+          {isMalformed && (
+            <button
+              onClick={() => onRetryTool?.({ tool: data?.tool, args: data?.args, result, repairPrompt: data?.repairPrompt })}
+              className="ml-5 mt-1 inline-flex items-center gap-1 rounded border border-red-200 px-1.5 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Retry from here
+            </button>
+          )}
+
+          {data?.permissionDecision && (
+            <p className="mt-0.5 pl-5 text-[10px] text-gray-400 dark:text-gray-600">
+              Permission: {data.permissionDecision}
+              {data.workingDir ? ` · ${data.workingDir}` : ''}
+            </p>
+          )}
+
+          {expanded && (
+            <div className="ml-5 mt-1 border-l border-gray-100 pl-2 dark:border-gray-800">
+              {data?.args && (
+                <pre className="max-h-28 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono text-[10px] leading-relaxed text-gray-500 dark:bg-gray-900/60 dark:text-gray-500">
+                  {JSON.stringify(data.args, null, 2)}
+                </pre>
+              )}
+              {result && (
+                <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono text-[10px] leading-relaxed text-gray-500 dark:bg-gray-900/60 dark:text-gray-500">
+                  {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
-    </FeedFrame>
   );
+
+  return framed ? <FeedFrame className="mb-1.5">{content}</FeedFrame> : content;
 }
 
-function PermissionEvent({ data, onDecision }) {
+function CompactPermissionEvent({ data, onDecision }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const { icon: Icon, label } = getToolMeta(data?.tool);
+  const intent = getToolIntent(data);
   const resolved = data?.resolved;
   const decision = data?.decision;
+  const dangerous = data?.permission === 'dangerous';
   const isAllowed = decision === 'allow' || decision === 'allow_session' || decision === 'allow_always';
   const isDenied = decision === 'deny';
-  const [showDiff, setShowDiff] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
   const expiresAt = useMemo(() => (
     Number.isFinite(data?.expiresInMs) ? Date.now() + data.expiresInMs : null
-  ), [data?.requestId, data?.expiresInMs]);
+  ), [data?.expiresInMs]);
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : null;
   const expired = !resolved && remainingMs === 0;
   const showDecision = resolved || expired;
-  const subject = getPermissionSubject(data);
 
   useEffect(() => {
     if (resolved || !expiresAt) return undefined;
@@ -289,82 +305,59 @@ function PermissionEvent({ data, onDecision }) {
   }, [expiresAt, resolved]);
 
   return (
-    <FeedFrame className="mb-4">
-    <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/10 overflow-hidden">
-      <div className="px-3 py-3 flex items-start gap-2.5">
-        <div className="flex-shrink-0 w-6 h-6 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 flex items-center justify-center">
-          <ShieldAlert className="w-3.5 h-3.5" />
+    <div className={`overflow-hidden rounded-lg border ${dangerous ? 'border-rose-200 bg-rose-50/80 dark:border-rose-900/50 dark:bg-rose-950/10' : 'border-amber-200 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/10'}`}>
+      <div className="flex items-start gap-2.5 px-3 py-3">
+        <div className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${dangerous ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+          <ShieldAlert className="h-3.5 w-3.5" />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <Icon className="w-3 h-3 text-amber-600 dark:text-amber-300" />
-            <span className="text-xs font-semibold text-amber-900 dark:text-amber-100">Approve tool access</span>
-            <code className="text-[10px] px-1 py-0.5 rounded bg-amber-200/50 dark:bg-amber-800/30 text-amber-700 dark:text-amber-300">{data?.tool}</code>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-              data?.permission === 'dangerous'
-                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
-            }`}>
-              {data?.permission || 'moderate'}
-            </span>
-          </div>
-          <div className="mt-2 rounded-md border border-amber-200/80 dark:border-amber-800/50 bg-white/65 dark:bg-gray-950/30 overflow-hidden">
-            <div className="px-2.5 py-1.5 border-b border-amber-100 dark:border-amber-900/40 flex items-center justify-between gap-3">
-              <span className="text-[10px] uppercase tracking-wide font-semibold text-amber-700/70 dark:text-amber-300/70">
-                {subject.label}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Icon className={`h-3 w-3 ${dangerous ? 'text-rose-600 dark:text-rose-300' : 'text-amber-600 dark:text-amber-300'}`} />
+            <span className={`text-xs font-semibold ${dangerous ? 'text-rose-950 dark:text-rose-100' : 'text-amber-950 dark:text-amber-100'}`}>Permission needed</span>
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${dangerous ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>{label}</span>
+            {!resolved && remainingMs !== null && (
+              <span className={`ml-auto text-[10px] font-medium ${expired ? 'text-red-600 dark:text-red-300' : dangerous ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                {expired ? 'Expired' : `Auto-deny in ${formatCountdown(remainingMs)}`}
               </span>
-              {!resolved && remainingMs !== null && (
-                <span className={`text-[10px] font-medium ${expired ? 'text-red-600 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}`}>
-                  {expired ? 'Expired, denied' : `Auto-deny in ${formatCountdown(remainingMs)}`}
-                </span>
-              )}
-            </div>
-            <pre className={`text-xs whitespace-pre-wrap font-mono leading-relaxed max-h-36 overflow-y-auto p-2.5 break-words ${subject.tone}`}>
-              {subject.value}
-            </pre>
+            )}
           </div>
-          {data?.args && Object.keys(data.args).length > 0 && subject.value !== truncateArgs(data.args) && (
-            <details className="mt-1.5">
-              <summary className="text-[10px] text-amber-700 dark:text-amber-400 cursor-pointer">Raw arguments</summary>
-              <pre className="text-[10px] text-amber-700 dark:text-amber-300 whitespace-pre-wrap font-mono mt-1 max-h-24 overflow-y-auto bg-amber-100/50 dark:bg-amber-900/20 rounded p-1.5">
-                {JSON.stringify(data.args, null, 2)}
-              </pre>
-            </details>
+          <p className={`mt-1 text-sm font-medium ${dangerous ? 'text-rose-950 dark:text-rose-100' : 'text-amber-950 dark:text-amber-100'}`}>
+            The agent wants to {intent.label.toLowerCase()}.
+          </p>
+          <pre className={`mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-white/70 bg-white/75 p-2.5 font-mono text-xs leading-relaxed dark:border-white/10 dark:bg-gray-950/30 ${dangerous ? 'text-rose-800 dark:text-rose-100' : 'text-amber-900 dark:text-amber-100'}`}>
+            {intent.value}
+          </pre>
+          {(data?.args || data?.diff || data?.workingDir) && (
+            <button
+              type="button"
+              onClick={() => setShowDetails(v => !v)}
+              className={`mt-1.5 inline-flex items-center gap-1 text-[10px] hover:underline ${dangerous ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}
+            >
+              {showDetails ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Technical details
+            </button>
           )}
-          {data?.diff && (
-            <div className="mt-2">
-              <button
-                onClick={() => setShowDiff(v => !v)}
-                className="text-[10px] text-amber-700 dark:text-amber-400 flex items-center gap-1 hover:underline"
-              >
-                {showDiff ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                Show diff
-              </button>
-              {showDiff && (
-                <pre className="mt-1 text-[10px] font-mono bg-gray-900 text-gray-200 rounded p-2 max-h-48 overflow-y-auto whitespace-pre leading-relaxed">
+          {showDetails && (
+            <div className="mt-1 space-y-1">
+              {data?.workingDir && <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">{data.workingDir}</p>}
+              {data?.args && (
+                <pre className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded bg-white/60 p-1.5 font-mono text-[10px] text-gray-500 dark:bg-gray-950/30 dark:text-gray-500">
+                  {JSON.stringify(data.args, null, 2)}
+                </pre>
+              )}
+              {data?.diff && (
+                <pre className="max-h-40 overflow-y-auto whitespace-pre rounded bg-gray-950 p-2 font-mono text-[10px] leading-relaxed text-gray-200">
                   {data.diff}
                 </pre>
               )}
             </div>
           )}
-          {data?.workingDir && (
-            <p className="text-[10px] text-amber-700/60 dark:text-amber-300/60 mt-1 truncate">
-              {data.workingDir}
-            </p>
-          )}
-          {data?.error && (
-            <p className="text-[10px] text-red-600 dark:text-red-300 mt-1">{data.error}</p>
-          )}
         </div>
       </div>
-      <div className="border-t border-amber-200/70 dark:border-amber-800/40 px-3 py-2 flex items-center justify-end gap-2 flex-wrap">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/70 px-3 py-2 dark:border-white/10">
         {showDecision ? (
-          <span className={`text-xs font-medium flex items-center gap-1 ${
-            isAllowed ? 'text-green-700 dark:text-green-300'
-            : isDenied || expired ? 'text-red-700 dark:text-red-300'
-            : 'text-amber-700 dark:text-amber-300'
-          }`}>
-            {isAllowed ? '✓ Approved' : isDenied ? '✗ Denied' : expired ? '✗ Expired, denied' : 'Resolved'}
+          <span className={`flex items-center gap-1 text-xs font-medium ${isAllowed ? 'text-green-700 dark:text-green-300' : isDenied || expired ? 'text-red-700 dark:text-red-300' : dangerous ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>
+            {isAllowed ? 'Approved' : isDenied ? 'Denied' : expired ? 'Expired, denied' : 'Resolved'}
             {decision === 'allow_always' && <span className="text-[10px] opacity-70">(always)</span>}
             {decision === 'allow_session' && <span className="text-[10px] opacity-70">(this run)</span>}
           </span>
@@ -373,22 +366,22 @@ function PermissionEvent({ data, onDecision }) {
             <button
               onClick={() => onDecision?.(data?.requestId, 'deny')}
               disabled={data?.resolving || expired}
-              className="px-2.5 py-1 text-xs rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60 transition-colors"
+              className="rounded border border-gray-200 px-2.5 py-1 text-xs text-gray-600 transition-colors hover:bg-white disabled:opacity-60 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
             >
               Deny
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow')}
               disabled={data?.resolving || expired}
-              className="px-2.5 py-1 text-xs rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white flex items-center gap-1.5 transition-colors"
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs text-white transition-colors disabled:opacity-60 ${dangerous ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'}`}
             >
-              {data?.resolving && <Loader2 className="w-3 h-3 animate-spin" />}
+              {data?.resolving && <Loader2 className="h-3 w-3 animate-spin" />}
               Approve once
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow_session')}
               disabled={data?.resolving || expired}
-              className="px-2.5 py-1 text-xs rounded bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 disabled:opacity-60 text-white transition-colors"
+              className="rounded bg-gray-800 px-2.5 py-1 text-xs text-white transition-colors hover:bg-gray-900 disabled:opacity-60 dark:bg-gray-600 dark:hover:bg-gray-500"
             >
               Trust this run
             </button>
@@ -396,15 +389,64 @@ function PermissionEvent({ data, onDecision }) {
               onClick={() => onDecision?.(data?.requestId, 'allow_always')}
               disabled={data?.resolving || expired}
               title={`Always allow ${data?.tool} without asking`}
-              className="px-2.5 py-1 text-xs rounded border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 flex items-center gap-1 transition-colors"
+              className="flex items-center gap-1 rounded border border-red-300 px-2.5 py-1 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
             >
-              <ShieldOff className="w-3 h-3" />
+              <ShieldOff className="h-3 w-3" />
               Always allow
             </button>
           </>
         )}
       </div>
     </div>
+  );
+}
+
+function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
+  const hasPendingPermission = events.some(ev => ev.type === 'permission_request' && !ev.data?.resolved);
+  const [expanded, setExpanded] = useState(hasPendingPermission);
+  const toolCount = events.filter(ev => ev.type === 'tool_start').length;
+  const permissionCount = events.filter(ev => ev.type === 'permission_request').length;
+  const failedCount = events.filter(ev => ev.type === 'tool_start' && (ev.result?.error || ev.result?.success === false)).length;
+  const runningCount = events.filter(ev => ev.type === 'tool_start' && ev.result === undefined).length;
+
+  useEffect(() => {
+    if (hasPendingPermission) setExpanded(true);
+  }, [hasPendingPermission]);
+
+  const summary = [
+    toolCount ? `${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}` : null,
+    permissionCount ? `${permissionCount} ${permissionCount === 1 ? 'approval' : 'approvals'}` : null,
+    runningCount ? `${runningCount} running` : null,
+    failedCount ? `${failedCount} failed` : null,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <FeedFrame className="mb-4">
+      <div className="overflow-hidden rounded-lg border border-gray-100 bg-white/70 shadow-sm shadow-gray-100/60 dark:border-gray-800 dark:bg-gray-950/20 dark:shadow-none">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40"
+        >
+          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+          <Terminal className="h-3.5 w-3.5 text-gray-400" />
+          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Tools</span>
+          {summary && <span className="truncate text-[11px] text-gray-400 dark:text-gray-500">{summary}</span>}
+        </button>
+        {expanded && (
+          <div className="space-y-1 border-t border-gray-100 p-2 dark:border-gray-800">
+            {events.map((ev, i) => {
+              if (ev.type === 'permission_request') {
+                return <CompactPermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
+              }
+              if (ev.type === 'tool_start') {
+                return <ToolEvent key={i} data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} />;
+              }
+              return null;
+            })}
+          </div>
+        )}
+      </div>
     </FeedFrame>
   );
 }
@@ -488,7 +530,7 @@ function AskUserEvent({ data, onAnswer }) {
 }
 
 // Clean chat-like agent response — no "Agent response" header bar
-function AnswerEvent({ data }) {
+function AnswerEvent({ data, suppressThinkFallback = false }) {
   // Strip raw <think>...</think> blocks the model may have left in the answer
   const raw = data?.answer || '';
 
@@ -512,7 +554,7 @@ function AnswerEvent({ data }) {
 
   return (
     <>
-      {thinkFallback && <ThinkingEvent data={{ thought: thinkFallback }} />}
+      {!suppressThinkFallback && thinkFallback && <ThinkingEvent data={{ thought: thinkFallback }} />}
       {displayAnswer && <div className="group mb-6">
         <div className="max-w-4xl mx-auto">
           <div className="mb-2">
@@ -716,25 +758,75 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
+  let hasThinkingSinceLastGoal = false;
+  const renderedEvents = [];
+  let toolEvents = [];
+
+  const flushTools = () => {
+    if (!toolEvents.length) return;
+    const key = `tools_${renderedEvents.length}`;
+    renderedEvents.push(
+      <ToolsSection
+        key={key}
+        events={toolEvents}
+        onPermissionDecision={onPermissionDecision}
+        onRetryTool={onRetryTool}
+      />
+    );
+    toolEvents = [];
+  };
+
+  (events || []).forEach((ev, i) => {
+    if (ev.type === 'permission_request' || ev.type === 'tool_start') {
+      toolEvents.push(ev);
+      return;
+    }
+
+    flushTools();
+
+    switch (ev.type) {
+      case 'user_goal':
+        hasThinkingSinceLastGoal = false;
+        renderedEvents.push(<UserGoalEvent key={i} data={ev.data} />);
+        break;
+      case 'thinking':
+        hasThinkingSinceLastGoal = true;
+        renderedEvents.push(<ThinkingEvent key={i} data={ev.data} />);
+        break;
+      case 'ask_user':
+        renderedEvents.push(<AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />);
+        break;
+      case 'answer':
+        renderedEvents.push(<AnswerEvent key={i} data={ev.data} suppressThinkFallback={hasThinkingSinceLastGoal} />);
+        break;
+      case 'error':
+        renderedEvents.push(<ErrorEvent key={i} data={ev.data} />);
+        break;
+      case 'status':
+        renderedEvents.push(<StatusEvent key={i} data={ev.data} onRunWithTools={onRunWithTools} />);
+        break;
+      case 'agent_delegate_start':
+        renderedEvents.push(<AgentDelegateEvent key={i} data={ev.data} pending />);
+        break;
+      case 'agent_delegate_result':
+        renderedEvents.push(<AgentDelegateEvent key={i} data={ev.data} result={ev.data} />);
+        break;
+      case 'run_start':
+        renderedEvents.push(<RunDivider key={i} data={ev.data} />);
+        break;
+      case 'skills_loaded':
+        renderedEvents.push(<SkillsLoadedEvent key={i} data={ev.data} />);
+        break;
+      default:
+        break;
+    }
+  });
+
+  flushTools();
+
   return (
     <div className="space-y-0">
-      {(events || []).map((ev, i) => {
-        switch (ev.type) {
-          case 'user_goal':          return <UserGoalEvent key={i} data={ev.data} />;
-          case 'thinking':           return <ThinkingEvent key={i} data={ev.data} />;
-          case 'permission_request': return <PermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
-          case 'ask_user':           return <AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />;
-          case 'tool_start':         return <ToolEvent key={i} data={ev.data} result={ev.result} onRetryTool={onRetryTool} />;
-          case 'answer':             return <AnswerEvent key={i} data={ev.data} />;
-          case 'error':              return <ErrorEvent key={i} data={ev.data} />;
-          case 'status':             return <StatusEvent key={i} data={ev.data} onRunWithTools={onRunWithTools} />;
-          case 'agent_delegate_start': return <AgentDelegateEvent key={i} data={ev.data} pending />;
-          case 'agent_delegate_result': return <AgentDelegateEvent key={i} data={ev.data} result={ev.data} />;
-          case 'run_start':          return <RunDivider key={i} data={ev.data} />;
-          case 'skills_loaded':      return <SkillsLoadedEvent key={i} data={ev.data} />;
-          default:                   return null;
-        }
-      })}
+      {renderedEvents}
 
       {isRunning && <StreamingPreview text={streamingText} />}
       {isRunning && !streamingText && <RunningIndicator />}
