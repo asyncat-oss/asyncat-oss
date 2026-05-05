@@ -171,23 +171,6 @@ const AppLayout = ({ session, onSignOut }) => {
     }
   };
 
-  const handleProjectUpdated = useCallback((updatedProject) => {
-    if (!updatedProject?.id) return;
-
-    setSelectedProject(prev => {
-      if (!prev || String(prev.id) !== String(updatedProject.id)) {
-        return updatedProject;
-      }
-
-      return {
-        ...prev,
-        ...updatedProject,
-        owner_id: updatedProject.owner_id ?? prev.owner_id,
-        user_role: updatedProject.user_role ?? prev.user_role,
-      };
-    });
-  }, []);
-
   // Use CommandCenter context to get new chat functionality
   const { handleNewConversation } = useCommandCenter();
 
@@ -481,7 +464,6 @@ const AppLayout = ({ session, onSignOut }) => {
               session,
               currentTab: params.tab,
               refreshProjects,
-              onProjectUpdated: handleProjectUpdated,
               onOpenSettings: handleOpenSettings,
               onSignOut,
             }} />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
 	ArrowLeft,
@@ -144,8 +144,6 @@ const ProjectOverview = React.memo(({
 	selectedProject,
 	projectId,
 	currentTab,
-	onUpdate,
-	onDelete,
 	session,
 }) => {
 	const navigate = useNavigate();
@@ -214,41 +212,6 @@ const ProjectOverview = React.memo(({
 			return () => clearTimeout(timeoutId);
 		}
 	}, [currentTab, selectedProject?.id]);
-
-
-	const handleSaveEdit = async (editedProject) => {
-		// Check if this is a refresh request
-		if (editedProject && editedProject._refreshRequired) {
-			// Just refresh the project data without calling onUpdate
-			await refreshProjectData();
-			return true;
-		}
-
-		// For actual project updates (general settings like name, description, etc.)
-		const updatedProject = await onUpdate(editedProject);
-		if (updatedProject) {
-			setProjectInfo(updatedProject);
-			return updatedProject;
-		}
-		return null;
-	};
-
-	// Add a function to update local project preferences immediately
-	const updateLocalProjectPreferences = useCallback(
-		(preferences) => {
-			if (projectInfo) {
-				setProjectInfo((prev) => ({
-					...prev,
-					...preferences,
-				}));
-			}
-		},
-		[projectInfo]
-	);
-
-	const handleDeleteProject = async () => {
-		await onDelete(projectInfo);
-	};
 
 
 	const renderViewContent = () => {

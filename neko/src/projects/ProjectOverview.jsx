@@ -3,7 +3,7 @@ import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import ProjectOverviewOriginal from "../projects/ProjectOverviewContent.jsx";
 
 const ProjectOverview = () => {
-  const { selectedProject, session, refreshProjects, onProjectUpdated } = useOutletContext();
+  const { selectedProject, session } = useOutletContext();
   const { projectId, tab } = useParams();
   const navigate = useNavigate();
 
@@ -28,40 +28,12 @@ const ProjectOverview = () => {
     }
   }, [tab, projectId, navigate, validTabs]);
 
-  const handleUpdate = async (updatedData) => {
-    try {
-      const { projectApi } = await import('./projectApi.js');
-
-      const updatedProject = await projectApi.updateProject(selectedProject.id, updatedData);
-
-      if (refreshProjects) {
-        refreshProjects();
-      }
-
-      if (onProjectUpdated) {
-        onProjectUpdated(updatedProject);
-      }
-
-      return updatedProject;
-    } catch (error) {
-      console.error('Error updating project:', error);
-      throw error;
-    }
-  };
-
-  const handleDelete = async () => {
-    refreshProjects();
-    navigate('/projects');
-  };
-
   // ProjectOverviewContent handles showing skeleton when selectedProject is null and projectId exists
   return (
     <ProjectOverviewOriginal
       selectedProject={selectedProject}
       projectId={projectId}
       currentTab={currentTab}
-      onUpdate={handleUpdate}
-      onDelete={handleDelete}
       session={session}
     />
   );
