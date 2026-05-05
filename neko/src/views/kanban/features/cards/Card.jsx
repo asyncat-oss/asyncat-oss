@@ -321,7 +321,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
             : cardData.administrator_id;
 
         // Fetch administrator details
-        const data = await viewsApi.user.getUserById(administratorId);
+        const data = await viewsApi.user.getById(administratorId);
         setAssigneeDetails([data.data]); // Single administrator in array for consistent rendering
 
         // Store in cache for future use

@@ -4,10 +4,8 @@
 
 import {
   verifyUser,
-  getDefaultEnabledViews,
+  normalizeProjectViews,
   getDefaultViewPermissions,
-  getMemberEffectiveViews,
-  getMemberEffectiveViewPermissions,
   validateUserViewPreferences,
 } from './projectPermissionHelpers.js';
 
@@ -38,7 +36,7 @@ async function updateUserViewPreferences(req, res) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
 
-    const availableViews = project.enabled_views || getDefaultEnabledViews();
+    const availableViews = normalizeProjectViews(project.enabled_views);
 
     const validation = validateUserViewPreferences(view_preferences, availableViews, availableViews);
     if (!validation.isValid) {
@@ -73,7 +71,7 @@ async function resetUserViewPreferences(req, res) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
 
-    const availableViews = project.enabled_views || getDefaultEnabledViews();
+    const availableViews = normalizeProjectViews(project.enabled_views);
     const effectiveViewPermissions = getDefaultViewPermissions('owner', availableViews);
 
     res.json({
@@ -136,7 +134,7 @@ async function getUserStarredProjects(req, res) {
     if (error) throw error;
 
     const result = (projects || []).map(p => {
-      const availableViews = p.enabled_views || getDefaultEnabledViews();
+      const availableViews = normalizeProjectViews(p.enabled_views);
       return {
         ...p,
         user_role: 'owner',
@@ -164,7 +162,7 @@ async function getUserViewPermissions(req, res) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
 
-    const availableViews = project.enabled_views || getDefaultEnabledViews();
+    const availableViews = normalizeProjectViews(project.enabled_views);
     const effectiveViewPermissions = getDefaultViewPermissions('owner', availableViews);
 
     res.json({

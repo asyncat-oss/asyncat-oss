@@ -8,8 +8,8 @@ import {
 	sanitizeWorkspaceEmoji,
 	OWNER_PERMISSIONS,
 	getDefaultEnabledViews,
+	normalizeProjectViews,
 	validateProjectEnabledViews,
-	getMemberEffectiveViews,
 	getDefaultViewPermissions,
 } from "./projectPermissionHelpers.js";
 
@@ -50,7 +50,7 @@ async function getProjects(req, res) {
 		const workspaceMap = workspaceList.reduce((acc, w) => { if (w) acc[w.id] = w; return acc; }, {});
 
 		const processedProjects = projects.map((project) => {
-			const availableViews = project.enabled_views || getDefaultEnabledViews();
+			const availableViews = normalizeProjectViews(project.enabled_views);
 			const sanitizedEmoji = sanitizeEmoji(project.emoji);
 
 			const rawWorkspace = workspaceMap[project.team_id] || null;
@@ -117,7 +117,7 @@ async function getTeamProjects(req, res) {
 			: workspace;
 
 		const processedProjects = (projects || []).map((project) => {
-			const availableViews = project.enabled_views || getDefaultEnabledViews();
+			const availableViews = normalizeProjectViews(project.enabled_views);
 			return {
 				id: project.id,
 				name: project.name,
@@ -262,7 +262,14 @@ async function updateProject(req, res) {
 
 		let finalEnabledViews = enabled_views;
 		if (enabled_views !== undefined) {
-			const validation = validateProjectEnabledViews(enabled_views);
+			if (!Array.isArray(enabled_views)) {
+				return res.status(400).json({ success: false, error: "Enabled views must be an array" });
+			}
+			finalEnabledViews = enabled_views.filter(view => view !== "timeline");
+			if (finalEnabledViews.length === 0) {
+				finalEnabledViews = getDefaultEnabledViews();
+			}
+			const validation = validateProjectEnabledViews(finalEnabledViews);
 			if (!validation.isValid) {
 				return res.status(400).json({ success: false, error: validation.error });
 			}
@@ -294,7 +301,7 @@ async function updateProject(req, res) {
 			? { ...workspace, emoji: sanitizeWorkspaceEmoji(workspace.emoji) }
 			: workspace;
 
-		const availableViews = updatedProject.enabled_views || getDefaultEnabledViews();
+		const availableViews = normalizeProjectViews(updatedProject.enabled_views);
 
 		res.json({
 			success: true,

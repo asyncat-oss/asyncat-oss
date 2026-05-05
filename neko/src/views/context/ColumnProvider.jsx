@@ -5,7 +5,6 @@ import viewsApi from "../viewsApi";
 
 // Import view-specific skeletons
 import ListViewSkeleton from "../list/ListViewSkeleton";
-import TimelineViewSkeleton from "../timeline/TimelineViewSkeleton";
 import GanttViewSkeleton from "../gantt/GanttViewSkeleton";
 import { NetworkViewSkeleton } from "../network/NetworkView";
 
@@ -229,8 +228,6 @@ export const ColumnProvider = ({
 		switch (viewType) {
 			case "list":
 				return <ListViewSkeleton />;
-			case "timeline":
-				return <TimelineViewSkeleton />;
 			case "gantt":
 				return <GanttViewSkeleton />;
 			case "network":

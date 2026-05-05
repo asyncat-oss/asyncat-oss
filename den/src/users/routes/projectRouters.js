@@ -18,6 +18,9 @@ import {
   resetUserViewPreferences,
   toggleProjectStarred,
 } from '../controllers/project/projectPreferencesController.js';
+import {
+  normalizeProjectViews,
+} from '../controllers/project/projectPermissionHelpers.js';
 
 const router = express.Router();
 
@@ -49,7 +52,7 @@ router.get('/:id/user/view-preferences', auth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
 
-    res.json({ success: true, data: { view_preferences: project.enabled_views || [] } });
+    res.json({ success: true, data: { view_preferences: normalizeProjectViews(project.enabled_views) } });
   } catch (error) {
     console.error('Get user view preferences error:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to get view preferences' });

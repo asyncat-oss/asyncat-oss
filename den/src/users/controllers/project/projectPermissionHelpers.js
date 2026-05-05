@@ -257,12 +257,24 @@ const OWNER_PERMISSIONS = {
   canManageViewPermissions: true
 };
 
+const VALID_PROJECT_VIEW_KEYS = [
+  'storage', 'kanban', 'list', 'gantt',
+  'network', 'notes', 'activity'
+];
+
 // Helper function to get default enabled views
 const getDefaultEnabledViews = () => {
   return [
-    'kanban', 'list', 'timeline',
+    'kanban', 'list',
     'gantt', 'network', 'notes', 'activity', 'storage'
   ];
+};
+
+const normalizeProjectViews = (views) => {
+  if (!Array.isArray(views)) return getDefaultEnabledViews();
+
+  const cleanedViews = views.filter(view => VALID_PROJECT_VIEW_KEYS.includes(view));
+  return cleanedViews.length > 0 ? cleanedViews : getDefaultEnabledViews();
 };
 
 // Helper function to validate project-level enabled views
@@ -271,12 +283,7 @@ const validateProjectEnabledViews = (enabledViews) => {
     return { isValid: false, error: 'Enabled views must be an array' };
   }
   
-  const validViewKeys = [
-    'storage', 'kanban', 'list', 'timeline', 'gantt',
-    'network', 'notes', 'activity'
-  ];
-  
-  const invalidViews = enabledViews.filter(view => !validViewKeys.includes(view));
+  const invalidViews = enabledViews.filter(view => !VALID_PROJECT_VIEW_KEYS.includes(view));
   if (invalidViews.length > 0) {
     return { isValid: false, error: `Invalid views: ${invalidViews.join(', ')}` };
   }
@@ -435,7 +442,7 @@ const getUserProjectRole = async (db, projectId, userId) => {
       .eq('id', projectId)
       .single();
 
-    const enabledViews = project?.enabled_views || getDefaultEnabledViews();
+    const enabledViews = normalizeProjectViews(project?.enabled_views);
     
     return {
       role: 'owner',
@@ -629,6 +636,7 @@ export {
   requireViewPermission,
   // Default functions
   getDefaultEnabledViews,
+  normalizeProjectViews,
   // Validation functions
   validateProjectEnabledViews,
   validateUserViewPreferences,

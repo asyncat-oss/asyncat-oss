@@ -482,7 +482,7 @@ const GanttView = ({ selectedProject }) => {
 				const detailsPromises = Array.from(allAssigneeIds).map(
 					async (id) => {
 						try {
-							const data = await viewsApi.user.getUserById(id);
+							const data = await viewsApi.user.getById(id);
 							return data.data;
 						} catch (error) {
 							console.error(`Failed to fetch user ${id}:`, error);

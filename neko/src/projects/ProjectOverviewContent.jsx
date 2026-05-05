@@ -5,7 +5,6 @@ import {
 	LayoutGrid,
 	KanbanSquare,
 	List,
-	Clock,
 	GanttChartSquare,
 	Link2,
 	FileText,
@@ -14,7 +13,6 @@ import {
 // Import view components directly here
 import KanIndex from "../views/kanban/KanIndex";
 import ListView from "../views/list/ListView";
-import TimelineView from "../views/timeline/TimelineView";
 import GanttView from "../views/gantt/GanttView";
 import NetworkView from "../views/network/NetworkView";
 import NotesIndex from "../notes/NotesIndex";
@@ -29,13 +27,19 @@ import { useWorkspace } from "../contexts/WorkspaceContext";
 const soraFontBase = "font-sora";
 
 const PROJECT_VIEWS = [
-	{ key: 'kanban',   label: 'Kanban',   Icon: KanbanSquare },
+	{ key: 'kanban',   label: 'Board',    Icon: KanbanSquare },
 	{ key: 'list',     label: 'List',     Icon: List },
-	{ key: 'timeline', label: 'Timeline', Icon: Clock },
-	{ key: 'gantt',    label: 'Gantt',    Icon: GanttChartSquare },
+	{ key: 'gantt',    label: 'Plan',     Icon: GanttChartSquare },
 	{ key: 'network',  label: 'Network',  Icon: Link2 },
 	{ key: 'notes',    label: 'Notes',    Icon: FileText },
 ];
+
+const TASK_VIEW_COMPONENTS = {
+	kanban: KanIndex,
+	list: ListView,
+	gantt: GanttView,
+	network: NetworkView,
+};
 
 // Comprehensive skeleton component for the project overview
 const ProjectOverviewSkeleton = () => (
@@ -66,7 +70,7 @@ const ProjectOverviewSkeleton = () => (
 				{/* Tab navigation skeleton */}
 				<div className="border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800">
 					<div className="flex space-x-8">
-						{[...Array(6)].map((_, i) => (
+						{[...Array(PROJECT_VIEWS.length + 1)].map((_, i) => (
 							<div key={i} className="w-16 h-10 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 rounded-t"></div>
 						))}
 					</div>
@@ -221,99 +225,32 @@ const ProjectOverview = React.memo(({
 			? selectedProject 
 			: (projectInfo || selectedProject);
 
-		switch (currentTab) {
-			case "kanban":
-				return (
-					<ColumnProvider
-						session={session}
-						selectedProject={projectData}
-						viewType="kanban"
-					>
-						<CardProvider session={session}>
-							<KanIndex
-								session={session}
-								selectedProject={projectData}
-							/>
-						</CardProvider>
-					</ColumnProvider>
-				);
-
-			case "list":
-				return (
-					<ColumnProvider
-						session={session}
-						selectedProject={projectData}
-						viewType="list"
-					>
-						<CardProvider session={session}>
-							<ListView
-								session={session}
-								selectedProject={projectData}
-							/>
-						</CardProvider>
-					</ColumnProvider>
-				);
-
-			case "timeline":
-				return (
-					<ColumnProvider
-						session={session}
-						selectedProject={projectData}
-						viewType="timeline"
-					>
-						<CardProvider session={session}>
-							<TimelineView
-								session={session}
-								selectedProject={projectData}
-							/>
-						</CardProvider>
-					</ColumnProvider>
-				);
-
-			case "gantt":
-				return (
-					<ColumnProvider
-						session={session}
-						selectedProject={projectData}
-						viewType="gantt"
-					>
-						<CardProvider session={session}>
-							<GanttView
-								session={session}
-								selectedProject={projectData}
-							/>
-						</CardProvider>
-					</ColumnProvider>
-				);
-
-			case "network":
-				return (
-					<ColumnProvider
-						session={session}
-						selectedProject={projectData}
-						viewType="network"
-					>
-						<CardProvider session={session}>
-							<NetworkView
-								session={session}
-								selectedProject={projectData}
-							/>
-						</CardProvider>
-					</ColumnProvider>
-				);
-
-
-			case "notes":
-				return (
-					<NotesIndex
-						selectedProject={projectData}
-						session={session}
-					/>
-				);
-
-			default:
-				return <div>No content available</div>;
+		if (currentTab === "notes") {
+			return (
+				<NotesIndex
+					selectedProject={projectData}
+					session={session}
+				/>
+			);
 		}
+
+		const ViewComponent = TASK_VIEW_COMPONENTS[currentTab];
+		if (!ViewComponent) return <div>No content available</div>;
+
+		return (
+			<ColumnProvider
+				session={session}
+				selectedProject={projectData}
+				viewType={currentTab}
+			>
+				<CardProvider session={session} selectedProject={projectData}>
+					<ViewComponent
+						session={session}
+						selectedProject={projectData}
+					/>
+				</CardProvider>
+			</ColumnProvider>
+		);
 	};
 
 	// Check skeleton state first - if loading, show skeleton even without selectedProject
