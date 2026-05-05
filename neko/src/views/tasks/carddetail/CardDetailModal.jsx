@@ -863,7 +863,6 @@ const CardDetailModal = ({
 										)}
 									</button>
 								</div>
-							)}
 						</div>
 					</div>
 

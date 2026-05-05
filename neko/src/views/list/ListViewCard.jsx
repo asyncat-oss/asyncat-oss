@@ -605,17 +605,6 @@ const ListViewCard = ({
 						)}
 					</div>
 				</td>
-				<td className="px-6 py-4 text-center">
-					<div className="flex items-center justify-center space-x-2">
-						<button
-							onClick={handleCardClick}
-							className="flex items-center px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700/50 midnight:bg-gray-800/50 text-gray-700 dark:text-gray-300 midnight:text-gray-300 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 transition-colors font-medium"
-							title="Open task"
-						>
-							Open
-						</button>
-					</div>
-				</td>
 			</tr>
 
 			{/* Expanded Subtasks */}
@@ -623,7 +612,7 @@ const ListViewCard = ({
 				<tr
 					className={`${getRowStyle()} border-t border-gray-100 dark:border-gray-800 midnight:border-gray-900`}
 				>
-					<td colSpan="8" className="px-6 py-6">
+					<td colSpan="7" className="px-6 py-6">
 						<div className="pl-12">
 							<InteractiveChecklistRenderer
 								checklist={card.checklist}

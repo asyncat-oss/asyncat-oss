@@ -106,13 +106,6 @@ const ListViewTable = ({
               >
                 <div className="flex items-center justify-center">Details</div>
               </th>
-              {/* Actions column */}
-              <th
-                scope="col"
-                className="w-20 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider"
-              >
-                <div className="flex items-center justify-center">Actions</div>
-              </th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-900 midnight:bg-gray-950">
@@ -133,7 +126,7 @@ const ListViewTable = ({
               ))
             ) : (
               <tr>
-                <td colSpan="8" className="px-6 py-16 text-center">
+                <td colSpan="7" className="px-6 py-16 text-center">
                   <div className="flex flex-col items-center">
                     <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 flex items-center justify-center mb-4">
                       <Filter className="w-5 h-5 text-gray-400 dark:text-gray-500 midnight:text-gray-600" />

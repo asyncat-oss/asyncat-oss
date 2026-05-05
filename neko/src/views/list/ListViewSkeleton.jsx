@@ -18,11 +18,6 @@ const ListViewSkeleton = () => {
 							</div>
 						</div>
 
-						{/* Action buttons skeleton */}
-						<div className="flex items-center space-x-2">
-							<div className="w-24 h-9 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-md animate-pulse"></div>
-							<div className="w-28 h-9 bg-blue-200 dark:bg-blue-800 midnight:bg-blue-800 rounded-md animate-pulse"></div>
-						</div>
 					</div>
 
 					{/* Filter chips skeleton */}
@@ -97,14 +92,10 @@ const ListViewSkeleton = () => {
 										<div className="w-16 h-6 bg-red-200 dark:bg-red-800 midnight:bg-red-800 rounded-full animate-pulse"></div>
 									</div>
 
-									{/* Progress and actions */}
-									<div className="col-span-4 flex items-center justify-between">
-										<div className="flex-1 mr-3">
+									{/* Progress */}
+									<div className="col-span-4 flex items-center">
+										<div className="w-full mr-3">
 											<div className="w-full h-2 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full animate-pulse"></div>
-										</div>
-										<div className="flex space-x-1">
-											<div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded animate-pulse"></div>
-											<div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded animate-pulse"></div>
 										</div>
 									</div>
 								</div>
