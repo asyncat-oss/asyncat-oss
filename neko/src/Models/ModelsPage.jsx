@@ -2962,20 +2962,40 @@ const ModelsPage = () => {
                                 </div>
                                 <label className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
                                   <span className="block text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Load context</span>
-                                  <input
-                                    type="number"
-                                    min="512"
-                                    max={modelContextLimit}
-                                    step="1024"
-                                    value={modelLoadCtxValue}
-                                    onChange={(e) => updateModelLoadCtxSize(m.filename, e.target.value)}
-                                    onBlur={() => commitModelLoadCtxSize(m.filename, modelContextLimit)}
-                                    className={`mt-1 w-full min-w-0 bg-transparent text-sm font-medium outline-none ${
-                                      loadCtxError
-                                        ? 'text-red-700 dark:text-red-400 midnight:text-red-400'
-                                        : 'text-gray-800 dark:text-gray-200 midnight:text-slate-100'
-                                    }`}
-                                  />
+                                  <div className="mt-1 flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min="512"
+                                      max={modelContextLimit}
+                                      step="1024"
+                                      value={modelLoadCtxValue}
+                                      onChange={(e) => updateModelLoadCtxSize(m.filename, e.target.value)}
+                                      onBlur={() => commitModelLoadCtxSize(m.filename, modelContextLimit)}
+                                      className={`w-full min-w-0 bg-transparent text-sm font-medium outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                        loadCtxError
+                                          ? 'text-red-700 dark:text-red-400 midnight:text-red-400'
+                                          : 'text-gray-800 dark:text-gray-200 midnight:text-slate-100'
+                                      }`}
+                                    />
+                                    <div className="flex flex-col flex-shrink-0">
+                                      <button
+                                        type="button"
+                                        tabIndex={-1}
+                                        onClick={() => updateModelLoadCtxSize(m.filename, String(Math.min(Number(modelLoadCtxValue) + 1024, modelContextLimit)))}
+                                        className="flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors"
+                                      >
+                                        <ChevronUp className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        tabIndex={-1}
+                                        onClick={() => updateModelLoadCtxSize(m.filename, String(Math.max(Number(modelLoadCtxValue) - 1024, 512)))}
+                                        className="flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors"
+                                      >
+                                        <ChevronDown className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
                                 </label>
                                 <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
                                   <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Status</div>

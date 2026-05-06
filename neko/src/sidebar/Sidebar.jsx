@@ -22,6 +22,7 @@ import {
 import UniversalSearch from "./UniversalSearch";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
+import eventBus from "../utils/eventBus.js";
 
 let globalProfileCache = null;
 let profileCacheInitialized = false;
@@ -191,20 +192,18 @@ const DynamicSidebar = ({
 
   // Listen for profile picture updates
   useEffect(() => {
-    const handler = (e) => {
-      const p = { profilePicture: e.detail.profilePicture, name: e.detail.name || e.detail.fullName || profileData.name };
+    const handler = (data) => {
+      const p = { profilePicture: data.profilePicture, name: data.name || data.fullName || profileData.name };
       globalProfileCache = p;
       setProfileData(p);
       setProfileImageError(false);
     };
-    window.addEventListener("profile-updated", handler);
-    return () => window.removeEventListener("profile-updated", handler);
+    return eventBus.on("profile-updated", handler);
   }, [profileData.name]);
 
-  // Resolve profile picture URL
+  // Resolve profile picture URL — default to CAT when no picture is set
   const profilePictureUrl = useMemo(() => {
-    const pic = profileData.profilePicture;
-    if (!pic) return null;
+    const pic = profileData.profilePicture || "CAT";
     if (pic.startsWith("https://")) return pic;
     try {
       const dpMap = {
