@@ -433,7 +433,7 @@ const LocalModelsSection = ({ onRefresh }) => {
                   <>
                     <div className="h-1.5 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gray-600 dark:bg-gray-400 midnight:bg-gray-500 rounded-full transition-all duration-300"
+                        className="h-full rounded-full bg-gray-700 transition-all duration-300 dark:bg-gray-300 midnight:bg-slate-300"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -522,7 +522,7 @@ const LocalModelsSection = ({ onRefresh }) => {
                       onClick={() =>
                         setExpandedRepo(isExpanded ? null : repoId)
                       }
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 midnight:bg-gray-800 midnight:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 shadow-sm"
+                      className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-950 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 midnight:hover:bg-slate-800"
                     >
                       <Download className="w-3 h-3" />
                       {isExpanded ? "Hide" : "Select"}
@@ -599,7 +599,7 @@ const LocalModelsSection = ({ onRefresh }) => {
             )}
             <button
               onClick={handleCustomDownload}
-              className="flex items-center justify-center w-full gap-2 px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 midnight:bg-gray-800 midnight:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200"
             >
               <Download className="w-4 h-4" />
               Start Download
