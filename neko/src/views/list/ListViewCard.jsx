@@ -19,6 +19,8 @@ const statusStyles = {
 	running: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
 	completed:
 		"bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
+	needs_input:
+		"bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
 	failed: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300",
 	cancelled:
 		"bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
@@ -101,7 +103,7 @@ export const InteractiveStatusBadge = ({
 };
 
 const RunStatusBadge = ({ run }) => {
-	const status = run?.status || "unassigned";
+	const status = run?.displayStatus || (run?.needsInput ? "needs_input" : run?.status) || "unassigned";
 	if (!run) {
 		return (
 			<span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
@@ -118,7 +120,7 @@ const RunStatusBadge = ({ run }) => {
 		>
 			{status === "running" && <Loader2 className="w-3 h-3 animate-spin" />}
 			{status === "completed" && <CheckCircle className="w-3 h-3" />}
-			{status}
+			{status === "needs_input" ? "Needs input" : status}
 		</span>
 	);
 };
@@ -252,6 +254,7 @@ const ListViewCard = ({
 	const hasSubtasks = Array.isArray(card.checklist) && card.checklist.length > 0;
 	const isExpanded = expandedCards.has(card.id);
 	const isRunning = run && ["queued", "running"].includes(run.status);
+	const needsInput = run?.displayStatus === "needs_input" || run?.needsInput;
 
 	return (
 		<React.Fragment>
@@ -350,6 +353,16 @@ const ListViewCard = ({
 								title="Cancel run"
 							>
 								<Square className="h-4 w-4" />
+							</button>
+						) : needsInput && run?.sessionId ? (
+							<button
+								type="button"
+								onClick={() => onOpenRun(run)}
+								className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
+								title="Reply to agent"
+							>
+								Reply
+								<ExternalLink className="h-3.5 w-3.5" />
 							</button>
 						) : run?.status === "failed" ? (
 							<button

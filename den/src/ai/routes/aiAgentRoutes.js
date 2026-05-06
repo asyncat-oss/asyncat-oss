@@ -180,6 +180,7 @@ function formatTaskCard(row) {
 
 function formatTaskRun(row) {
   if (!row) return null;
+  const displayStatus = inferTaskRunDisplayStatus(row);
   return {
     id: row.id,
     cardId: row.card_id,
@@ -189,6 +190,8 @@ function formatTaskRun(row) {
     workspaceId: row.workspace_id,
     goal: row.goal,
     status: row.status,
+    displayStatus,
+    needsInput: displayStatus === 'needs_input',
     lastEventType: row.last_event_type,
     lastEventLabel: row.last_event_label,
     summary: row.summary,
@@ -205,6 +208,28 @@ function formatTaskRun(row) {
       color: row.profile_color,
     } : null,
   };
+}
+
+function inferTaskRunDisplayStatus(row) {
+  if (!row) return null;
+  if (row.status !== 'failed') return row.status;
+  const text = [
+    row.last_event_type,
+    row.last_event_label,
+    row.summary,
+    row.error,
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (
+    text.includes('ask_user') ||
+    text.includes('clarification') ||
+    text.includes('needs user input') ||
+    text.includes('need user clarification') ||
+    text.includes('user did not answer') ||
+    text.includes('missing information')
+  ) {
+    return 'needs_input';
+  }
+  return row.status;
 }
 
 function agentEventLabel(event) {
@@ -375,6 +400,16 @@ async function runAgentTaskInBackground(runId) {
         decision: 'deny',
         reason: `Task runs cannot request live approval for ${permission} tool "${tool}". Pre-approve the tool in the selected profile or enable auto-approve.`,
       }),
+      askUser: async ({ question }) => {
+        const message = `Needs user input: ${String(question || 'The agent needs clarification before continuing.').trim()}`;
+        updateTaskRun(runId, {
+          status: 'failed',
+          error: message,
+          lastEventType: 'ask_user',
+          lastEventLabel: 'Needs input',
+        });
+        return { success: false, error: message };
+      },
       soul: resolvedSoul,
       providerInfo,
       onEvent: (event) => {
@@ -395,9 +430,19 @@ async function runAgentTaskInBackground(runId) {
     }
 
     const result = await agent.run(run.goal);
-    const latest = db.prepare('SELECT status FROM agent_task_runs WHERE id = ?').get(runId);
+    const latest = db.prepare('SELECT * FROM agent_task_runs WHERE id = ?').get(runId);
     if (latest?.status === 'cancelled' || cancelledTaskRuns.has(runId)) {
       cancelledTaskRuns.delete(runId);
+      return;
+    }
+    if (inferTaskRunDisplayStatus(latest) === 'needs_input') {
+      updateTaskRun(runId, {
+        sessionId: result.session?.id || null,
+        summary: result.answer || latest.summary || '',
+        completedAt: new Date().toISOString(),
+        lastEventType: 'ask_user',
+        lastEventLabel: 'Needs input',
+      });
       return;
     }
 
@@ -1057,6 +1102,9 @@ router.post('/run', authenticate, async (req, res) => {
     const resolvedAutoApprove = autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false;
     const profileTools = Array.isArray(profile?.always_allowed_tools) ? profile.always_allowed_tools : [];
     const mentionedAgentProfiles = resolveAgentMentions(agentMentions, req.user.id);
+    const continuedTaskRun = continueSessionId
+      ? db.prepare('SELECT id FROM agent_task_runs WHERE session_id = ? AND user_id = ? ORDER BY updated_at DESC LIMIT 1').get(continueSessionId, req.user.id)
+      : null;
 
     let resolvedSoul = null;
     if (profile?.soul_override) {
@@ -1082,6 +1130,13 @@ router.post('/run', authenticate, async (req, res) => {
       soul: resolvedSoul,
       providerInfo,
       mentionedAgents: mentionedAgentProfiles,
+      onEvent: continuedTaskRun ? (event) => {
+        updateTaskRun(continuedTaskRun.id, {
+          ...(event?.type === 'session_start' ? { status: 'running' } : {}),
+          lastEventType: event?.type || 'event',
+          lastEventLabel: agentEventLabel(event),
+        });
+      } : undefined,
     });
 
     const allPreApproved = [...preApprovedTools, ...profileTools];
@@ -1093,7 +1148,17 @@ router.post('/run', authenticate, async (req, res) => {
       });
     }
 
-    await agent.runStreaming(goal, conversationHistory, res);
+    const result = await agent.runStreaming(goal, conversationHistory, res);
+    if (continuedTaskRun) {
+      updateTaskRun(continuedTaskRun.id, {
+        status: 'completed',
+        sessionId: result.session?.id || continueSessionId,
+        summary: result.answer || '',
+        completedAt: new Date().toISOString(),
+        lastEventType: 'answer',
+        lastEventLabel: 'Completed',
+      });
+    }
 
   } catch (error) {
     console.error('Agent error:', error);
@@ -1332,20 +1397,32 @@ router.get('/sessions/:id', authenticate, (req, res) => {
   const taskRun = db.prepare(`
     SELECT atr.id, atr.card_id, atr.status, atr.last_event_label, atr.summary,
            c.title AS card_title,
+           p.id AS project_id, p.name AS project_name,
            ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon
     FROM agent_task_runs atr
     LEFT JOIN Cards c ON c.id = atr.card_id
+    LEFT JOIN Columns col ON col.id = c.columnId
+    LEFT JOIN projects p ON p.id = col.projectId
     LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
     WHERE atr.session_id = ? AND atr.user_id = ?
     ORDER BY atr.updated_at DESC
     LIMIT 1
   `).get(req.params.id, req.user.id);
   if (taskRun) {
+    const displayStatus = inferTaskRunDisplayStatus({
+      status: taskRun.status,
+      last_event_label: taskRun.last_event_label,
+      summary: taskRun.summary,
+    });
     session.taskRun = {
       id: taskRun.id,
       cardId: taskRun.card_id,
       cardTitle: taskRun.card_title,
+      projectId: taskRun.project_id,
+      projectName: taskRun.project_name,
       status: taskRun.status,
+      displayStatus,
+      needsInput: displayStatus === 'needs_input',
       activity: taskRun.last_event_label,
       summary: taskRun.summary,
       profileName: taskRun.profile_name,

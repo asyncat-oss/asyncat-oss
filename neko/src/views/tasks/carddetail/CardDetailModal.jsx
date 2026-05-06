@@ -90,6 +90,29 @@ const CollapsibleSection = ({
 	);
 };
 
+const getAgentRunDisplayStatus = (run) => {
+	const status = run?.displayStatus || run?.status || "";
+	if (status === "needs_input" || run?.needsInput) {
+		return {
+			label: "Needs input",
+			badge: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
+			message: "Reply in the agent session with the missing details.",
+		};
+	}
+	if (status === "failed") {
+		return {
+			label: "Failed",
+			badge: "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+			message: null,
+		};
+	}
+	return {
+		label: status || "queued",
+		badge: "bg-white text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+		message: null,
+	};
+};
+
 /**
  * CardDetailModal Component with Real-time Editing Features
  */
@@ -411,6 +434,7 @@ const CardDetailModal = ({
 	};
 
 	const latestAgentRun = agentRuns[0] || null;
+	const latestAgentRunDisplay = getAgentRunDisplayStatus(latestAgentRun);
 
 	const handleBlockedSaveClick = useCallback(() => {
 		setShouldBounceSaveAll(true);
@@ -1059,13 +1083,18 @@ const CardDetailModal = ({
 																	<div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
 																		<span>{latestAgentRun.profile?.icon || ""}</span>
 																		<span>{latestAgentRun.profile?.name || "Agent"}</span>
-																		<span className="rounded-md bg-white px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{latestAgentRun.status}</span>
+																		<span className={`rounded-md px-2 py-0.5 text-xs ${latestAgentRunDisplay.badge}`}>
+																			{latestAgentRunDisplay.label}
+																		</span>
 																	</div>
 																	<p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{latestAgentRun.lastEventLabel || "Queued"}</p>
+																	{latestAgentRunDisplay.message && (
+																		<p className="mt-1 text-xs text-amber-600 dark:text-amber-300">{latestAgentRunDisplay.message}</p>
+																	)}
 																</div>
 																<div className="flex items-center gap-1">
 																	{latestAgentRun.sessionId && (
-																		<a href={"/agents/" + latestAgentRun.sessionId} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title="Open session">
+																		<a href={"/agents/" + latestAgentRun.sessionId} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title={latestAgentRun.needsInput || latestAgentRun.displayStatus === "needs_input" ? "Reply to agent" : "Open session"}>
 																			<ExternalLink className="h-4 w-4" />
 																		</a>
 																	)}
@@ -1076,6 +1105,15 @@ const CardDetailModal = ({
 																	)}
 																</div>
 															</div>
+															{(latestAgentRun.needsInput || latestAgentRun.displayStatus === "needs_input") && latestAgentRun.sessionId && (
+																<a
+																	href={"/agents/" + latestAgentRun.sessionId}
+																	className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
+																>
+																	Reply to agent
+																	<ExternalLink className="h-3.5 w-3.5" />
+																</a>
+															)}
 															{latestAgentRun.summary && <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{latestAgentRun.summary}</p>}
 															{latestAgentRun.error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{latestAgentRun.error}</p>}
 														</div>

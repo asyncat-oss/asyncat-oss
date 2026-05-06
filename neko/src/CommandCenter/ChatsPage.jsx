@@ -98,7 +98,7 @@ const ChatsPage = () => {
             projectName: task.projectName,
             columnTitle: task.columnTitle,
             title: cleanTaskAgentTitle(task, run) || 'Task agent run',
-            preview: run.lastEventLabel || run.summary || run.goal || '',
+            preview: run.needsInput ? 'Needs input' : (run.lastEventLabel || run.summary || run.goal || ''),
             updated_at: run.updatedAt,
           };
         })
@@ -312,7 +312,9 @@ const ChatsPage = () => {
             {isTaskAgent && chat.status && (
               <>
                 <span>•</span>
-                <span className="capitalize flex-shrink-0">{chat.status}</span>
+                <span className="capitalize flex-shrink-0">
+                  {chat.displayStatus === 'needs_input' || chat.needsInput ? 'Needs input' : chat.status}
+                </span>
               </>
             )}
             {(chat.preview || lastAssistant?.content) && (

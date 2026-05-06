@@ -253,6 +253,9 @@ import { useCommandCenter } from "./CommandCenterContextEnhanced";
 import { chatApi, agentApi } from "./commandCenterApi";
 import { useUser } from "../contexts/UserContext";
 import {
+  AlertCircle,
+  ArrowLeft,
+  Bot,
   Edit2,
   Trash2,
   Check,
@@ -281,6 +284,38 @@ const getRelativeConversationTime = (dateString) => {
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}d ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const getTaskRunDisplayStatus = (taskRun) => {
+  const status = taskRun?.displayStatus || taskRun?.status || '';
+  if (status === 'needs_input' || taskRun?.needsInput) {
+    return {
+      label: 'Needs input',
+      className: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300',
+    };
+  }
+  if (status === 'running') {
+    return {
+      label: 'Running',
+      className: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/70 dark:bg-blue-950/30 dark:text-blue-300',
+    };
+  }
+  if (status === 'completed') {
+    return {
+      label: 'Completed',
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-300',
+    };
+  }
+  if (status === 'failed') {
+    return {
+      label: 'Failed',
+      className: 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-300',
+    };
+  }
+  return {
+    label: status ? status[0].toUpperCase() + status.slice(1) : 'Task run',
+    className: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  };
 };
 
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
@@ -363,6 +398,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const agentCurrentGoal = currentRun.goal || '';
   const agentCurrentSessionId = currentRun.sessionId || null;
   const agentCurrentSession = currentRun.session || null;
+  const agentTaskRun = agentCurrentSession?.taskRun || null;
+  const agentTaskRunStatus = getTaskRunDisplayStatus(agentTaskRun);
   const agentConversationHistory = currentRun.conversationHistory || [];
   const agentStreamingText = currentRun.streamingText || '';
   const activeConversationIds = useMemo(
@@ -1871,6 +1908,69 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       )}
                   </div>
                 </div>
+                {agentTaskRun && (
+                  <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/70 px-3.5 py-3 dark:border-gray-700 dark:bg-gray-800/50 midnight:border-slate-700 midnight:bg-slate-900/50">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-gray-500 dark:bg-gray-900 dark:text-gray-300">
+                          {agentTaskRun.needsInput || agentTaskRun.displayStatus === 'needs_input'
+                            ? <AlertCircle className="h-4 w-4 text-amber-500" />
+                            : <Bot className="h-4 w-4" />
+                          }
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                              Task agent run
+                            </span>
+                            <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${agentTaskRunStatus.className}`}>
+                              {agentTaskRunStatus.label}
+                            </span>
+                            {agentTaskRun.profileName && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {agentTaskRun.profileIcon || ''} {agentTaskRun.profileName}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                            <span className="font-medium text-gray-700 dark:text-gray-300">
+                              {agentTaskRun.cardTitle || 'Untitled task'}
+                            </span>
+                            {agentTaskRun.projectName && (
+                              <>
+                                <span>·</span>
+                                <span>{agentTaskRun.projectName}</span>
+                              </>
+                            )}
+                            {agentTaskRun.activity && (
+                              <>
+                                <span>·</span>
+                                <span>{agentTaskRun.activity}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {agentTaskRun.projectId && (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/projects/${agentTaskRun.projectId}/list`)}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                          >
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            Task list
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {(agentTaskRun.needsInput || agentTaskRun.displayStatus === 'needs_input') && (
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                        Reply below to give this task agent the missing details, then it will continue this task session.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1911,7 +2011,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 autoFocus={!isProcessing && !agentRunning}
                 onReset={handleClearConversation}
                 placeholder={
-                  isGhostMode
+                  agentTaskRun
+                    ? `Reply to the task agent about "${agentTaskRun.cardTitle || 'this task'}"...`
+                    : isGhostMode
                     ? "👻 Ghost Mode - Messages won't be saved..."
                     : "Ask anything..."
                 }
