@@ -28,6 +28,52 @@ const STATUS_META = {
   error:   { label: 'Error',           color: 'red'   },
 };
 
+const ConfirmDeleteDialog = ({ model, onConfirm, onCancel }) => {
+  if (!model) return null;
+  const identifier = model.isExternal ? model.name : model.filename;
+  const isExternal = model.isExternal;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 p-6">
+        <div className="flex items-start gap-4 mb-5">
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <Trash2 size={18} className="text-red-600 dark:text-red-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">
+              {isExternal ? 'Remove from library?' : 'Delete model?'}
+            </h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 break-all">
+              <span className="font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{identifier}</span>
+            </p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+              {isExternal
+                ? 'The file on disk will not be affected.'
+                : 'This will permanently delete the file from your disk.'}
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-600 text-gray-700 dark:text-gray-300 midnight:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+          >
+            {isExternal ? 'Remove' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ENGINE_STATE_META = {
   current_ok:             { title: 'Current setup is fine', color: 'green' },
   recommended_available:  { title: 'Recommended engine available on this machine', color: 'amber' },
@@ -1981,6 +2027,8 @@ const ModelsPage = () => {
   const [loadingProviders, setLoadingProviders] = useState(true);
   const [providerAction, setProviderAction] = useState(null);
   const [providerError, setProviderError] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
   const pollCleanup = useRef(null);
   const installPollCleanup = useRef(null);
   const pythonBuildPollCleanup = useRef(null);
@@ -2390,14 +2438,16 @@ const ModelsPage = () => {
     }
   };
 
-  const handleDelete = async (m) => {
-    const identifier = m.isExternal ? m.name : m.filename;
-    const confirmMsg = m.isExternal 
-      ? `Remove "${identifier}" from your library? (The actual file will NOT be deleted)`
-      : `Are you sure you want to delete "${identifier}"? (This will permanently delete the file from your disk)`;
+  const handleDelete = (m) => {
+    setDeleteError('');
+    setDeleteConfirm(m);
+  };
 
-    if (!window.confirm(confirmMsg)) return;
+  const confirmDelete = async () => {
+    const m = deleteConfirm;
+    setDeleteConfirm(null);
     setDeletingModel(m.filename);
+    setDeleteError('');
     try {
       if (m.isExternal) {
         await localModelsApi.deleteCustomPath(m.id);
@@ -2406,7 +2456,7 @@ const ModelsPage = () => {
       }
       await loadModelList();
     } catch (err) {
-      alert(err.message || 'Failed to remove model');
+      setDeleteError(err.message || 'Failed to remove model');
     } finally {
       setDeletingModel(null);
     }
@@ -2558,6 +2608,11 @@ const ModelsPage = () => {
 
   return (
     <div className="flex h-full w-full bg-white dark:bg-gray-900 midnight:bg-slate-950 font-sans">
+      <ConfirmDeleteDialog
+        model={deleteConfirm}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm(null)}
+      />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800/60 midnight:border-slate-800/60 flex-shrink-0 bg-white/90 dark:bg-gray-900/90 midnight:bg-slate-950/90 backdrop-blur z-10 sticky top-0">
@@ -2596,6 +2651,13 @@ const ModelsPage = () => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto w-full">
+          {deleteError && (
+            <div className="mx-8 mt-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 text-sm text-red-700 dark:text-red-400">
+              <TriangleAlert size={15} className="flex-shrink-0" />
+              <span className="flex-1">{deleteError}</span>
+              <button onClick={() => setDeleteError('')} className="flex-shrink-0 hover:opacity-70 transition-opacity"><X size={14} /></button>
+            </div>
+          )}
           <div className="max-w-[1400px] mx-auto w-full px-8 py-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <OverviewCard
