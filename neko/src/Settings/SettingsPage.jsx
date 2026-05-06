@@ -231,7 +231,7 @@ const SettingsPage = () => {
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto w-full flex justify-center">
-          <div className="max-w-3xl w-full px-8 py-8">
+          <div className="max-w-4xl w-full px-8 py-8">
             <div className="bg-white dark:bg-gray-900 midnight:bg-gray-950">
               {renderTabContent()}
             </div>

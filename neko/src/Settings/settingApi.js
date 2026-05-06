@@ -592,7 +592,7 @@ export const configApi = {
     });
   },
 
-  // Get secrets (returns unmasked for authenticated user)
+  // Get secrets (masked; use updateSecret to replace values)
   getSecrets: async () => {
     return apiCall(`${MAIN_URL}/api/config/secrets`);
   },
@@ -675,7 +675,9 @@ export const updateApi = {
               if (type === 'log') onLog?.(text);
               else if (type === 'done') onDone?.(text);
               else if (type === 'error') onError?.(text);
-            } catch (_) {}
+            } catch {
+              // Ignore malformed update stream chunks.
+            }
           }
         }
       } catch (e) {

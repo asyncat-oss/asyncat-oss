@@ -101,7 +101,7 @@ export function getSecrets(req, res) {
 
   const secrets = {};
   for (const s of SECRETS) {
-    secrets[s] = env[s] || '';
+    secrets[s] = env[s] ? maskSecret(env[s]) : '';
   }
 
   res.json({ success: true, secrets });

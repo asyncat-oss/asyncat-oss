@@ -1,5 +1,5 @@
 // Settings/ServerSection.jsx — server config and secrets management
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Server, Eye, EyeOff, Loader2, RotateCcw } from 'lucide-react';
 import { configApi, apiUtils } from './settingApi';
 
@@ -17,9 +17,8 @@ const readOnlyCls =
   'bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 ' +
   'text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-sm cursor-default select-none';
 
-const ServerSection = ({ session: _session }) => {
+const ServerSection = () => {
   const [config, setConfig] = useState({});
-  const [, setSecrets] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -27,33 +26,26 @@ const ServerSection = ({ session: _session }) => {
   const [editValues, setEditValues] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
 
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  const flash = (msg, ms = 3000) => {
+  const flash = useCallback((msg, ms = 3000) => {
     setMessage(msg);
     setTimeout(() => setMessage(null), ms);
-  };
+  }, []);
 
-  const loadConfig = async () => {
+  const loadConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const [cfg, sec] = await Promise.all([
-        configApi.getConfig(),
-        configApi.getSecrets(),
-      ]);
+      const cfg = await configApi.getConfig();
       if (cfg.success) setConfig(cfg.config);
-      if (sec.success) {
-        setSecrets(sec.secrets);
-        setEditValues(sec.secrets);
-      }
     } catch (err) {
       flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to load config') });
     } finally {
       setLoading(false);
     }
-  };
+  }, [flash]);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
   const saveSecret = async (key) => {
     const value = editValues[key]?.trim();
@@ -67,7 +59,8 @@ const ServerSection = ({ session: _session }) => {
       const res = await configApi.updateSecret(key, value);
       if (!res.success) throw new Error(res.error);
 
-      setSecrets(prev => ({ ...prev, [key]: value }));
+      setEditValues(prev => ({ ...prev, [key]: '' }));
+      await loadConfig();
       flash({ type: 'success', text: res.message || `${key} updated` });
     } catch (err) {
       flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to save') });
@@ -96,20 +89,15 @@ const ServerSection = ({ session: _session }) => {
   ];
 
   if (loading) {
+    const skeletonRows = ['h-10', 'h-8', 'h-6'];
     return (
       <div className={`space-y-3 ${soraFontBase}`}>
-        {[20, 16, 12].map((h, i) => (
-          <div key={i} className={`h-${h / 2} bg-gray-100 dark:bg-gray-800 rounded`} />
+        {skeletonRows.map((heightClass) => (
+          <div key={heightClass} className={`${heightClass} bg-gray-100 dark:bg-gray-800 rounded`} />
         ))}
       </div>
     );
   }
-
-  const _getDisplayValue = (key, value) => {
-    if (showPasswords[key]) return value;
-    if (!value || value.length < 8) return '••••••••';
-    return value.slice(0, 4) + '••••••••' + value.slice(-4);
-  };
 
   return (
     <div className={`space-y-6 ${soraFontBase}`}>
@@ -207,8 +195,9 @@ const ServerSection = ({ session: _session }) => {
       <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
         <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/20 border border-amber-200 dark:border-amber-800 midnight:border-amber-800">
           <p className="text-sm text-amber-800 dark:text-amber-200 midnight:text-amber-200">
-            <strong>Note:</strong> After updating secrets, restart the server for changes to take effect.
-            Run <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-800 midnight:bg-amber-800">asyncat restart</code> in your terminal.
+            <strong>Note:</strong> After saving a server secret, Asyncat usually applies it automatically.
+            If it does not take effect after a minute, run
+            <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-800 midnight:bg-amber-800">asyncat restart</code>.
           </p>
         </div>
       </div>
