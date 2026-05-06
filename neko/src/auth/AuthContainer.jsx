@@ -42,12 +42,17 @@ const AuthContainer = () => {
     return cleanup;
   }, []);
 
-  // Fetch local account metadata on mount
+  // Fetch local account metadata on mount; auto-redirect on first run
   useEffect(() => {
     let cancelled = false;
     authService.getAuthStatus()
-      .then((status) => {
-        if (!cancelled) setLocalEmail(status.localEmail || authService.currentSession?.user?.email || 'admin@local');
+      .then(async (status) => {
+        if (cancelled) return;
+        setLocalEmail(status.localEmail || authService.currentSession?.user?.email || 'admin@local');
+        if (status.isFirstRun) {
+          await authService.firstRunLogin();
+          if (!cancelled) navigate('/', { replace: true });
+        }
       })
       .catch(() => {
         if (!cancelled) setLocalEmail(authService.currentSession?.user?.email || 'admin@local');

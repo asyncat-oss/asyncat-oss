@@ -66,6 +66,16 @@ class AuthService {
 
   // ── Auth operations ────────────────────────────────────────────────────────
 
+  async firstRunLogin() {
+    const res = await fetch(`${API_BASE}/api/auth/first-run`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'First-run login failed');
+    setToken(data.token);
+    this.currentSession = { user: data.user, access_token: data.token };
+    this.notifyListeners('SIGNED_IN', this.currentSession);
+    return this.currentSession;
+  }
+
   async signIn(email, password) {
     const res  = await fetch(`${API_BASE}/api/auth/login`, {
       method:  'POST',

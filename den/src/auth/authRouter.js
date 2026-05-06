@@ -164,11 +164,30 @@ router.post('/logout', (_req, res) => {
 
 router.get('/status', (_req, res) => {
   const user = db.prepare('SELECT email FROM users LIMIT 1').get();
+  const hasWorkspace = !!db.prepare('SELECT id FROM workspaces LIMIT 1').get();
   res.json({
     success: true,
     mode: 'local',
     localEmail: user?.email || process.env.LOCAL_EMAIL || process.env.SOLO_EMAIL || 'admin@local',
+    isFirstRun: !hasWorkspace,
   });
+});
+
+// ─── POST /api/auth/first-run ─────────────────────────────────────────────────
+// Issues a token automatically during first-run (no workspace created yet).
+// Once a workspace exists this endpoint returns 403.
+
+router.post('/first-run', (_req, res) => {
+  const hasWorkspace = !!db.prepare('SELECT id FROM workspaces LIMIT 1').get();
+  if (hasWorkspace) {
+    return res.status(403).json({ success: false, error: 'First-run setup already completed.' });
+  }
+  const user = db.prepare('SELECT * FROM users LIMIT 1').get();
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'No local user found.' });
+  }
+  const token = issueToken(user);
+  res.json({ success: true, token, user: publicUser(user) });
 });
 
 export default router;
