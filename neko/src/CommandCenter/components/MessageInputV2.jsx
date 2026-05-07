@@ -90,6 +90,7 @@ export const MessageInputV2 = ({
   conversationTokens = 0,
   contextInfo = null,
   contextLoading = false,
+  contextError = false,
   onCompactContext,
   isCompacting = false,
   onDraftChange,
@@ -140,7 +141,7 @@ export const MessageInputV2 = ({
 
   const inputTokens = Math.ceil(value.length / 4);
   const totalTokens = conversationTokens + inputTokens;
-  const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || 8192;
+  const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || (activeBrain.isLocal ? 8192 : 128000);
   const estimatedContextPercent = Math.min(
     100,
     Math.round((totalTokens / ctxSize) * 100),
@@ -360,7 +361,7 @@ export const MessageInputV2 = ({
   return (
     <div className="bg-transparent">
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
-        {(localModel.isReady || activeBrain.isReady || contextInfo) && contextPercent > 90 && (
+        {contextInfo && contextPercent > 90 && (
           <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border-l-4 border-red-500 rounded-lg">
             <div className="flex items-start gap-2">
               <svg
@@ -501,7 +502,9 @@ export const MessageInputV2 = ({
               {(localModel.isReady || activeBrain.isReady || contextInfo) && (
                 <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
                   <span className="min-w-0 truncate text-gray-400 dark:text-gray-500">
-                    {contextLoading ? 'Checking context...' : (
+                    {contextLoading ? 'Checking context...' : contextError ? (
+                      <span className="text-amber-500 dark:text-amber-400">Context unavailable</span>
+                    ) : (
                       <>
                         {contextExact ? '' : '~'}
                         {displayTokens.toLocaleString()} / {displayCtxSize.toLocaleString()}{" "}

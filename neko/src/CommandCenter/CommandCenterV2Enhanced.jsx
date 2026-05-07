@@ -677,6 +677,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [draftGoal, setDraftGoal] = useState('');
   const [contextInfo, setContextInfo] = useState(null);
   const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState(false);
   const [isCompactingContext, setIsCompactingContext] = useState(false);
   const autoCompactRef = useRef(null);
   const agentAbortControllersRef = useRef(new Map());
@@ -794,12 +795,20 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [agentSessionId, currentRunKey, setConversationTitle, updateChatRun]);
 
   const conversationTokens = useMemo(() => {
-    const historyChars = (conversationHistory || []).reduce(
+    if (contextInfo?.inputTokens) {
+      const currentInputTokens = Math.ceil((draftGoal || '').length / 4);
+      return Math.max(0, contextInfo.inputTokens - currentInputTokens);
+    }
+    const sliced = toolsEnabled
+      ? (conversationHistory || []).slice(-4)
+      : (conversationHistory || []).slice(-6);
+    const historyChars = sliced.reduce(
       (sum, m) => sum + (m.content?.length || 0),
       0,
     );
-    return Math.round(historyChars / 4) + 500;
-  }, [conversationHistory]);
+    const systemOverhead = toolsEnabled ? 4000 : 1500;
+    return Math.round(historyChars / 4) + systemOverhead;
+  }, [conversationHistory, toolsEnabled, contextInfo, draftGoal]);
 
   const contextHistoryForMeter = agentConversationHistory.length > 0
     ? agentConversationHistory
@@ -810,15 +819,22 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const timer = setTimeout(async () => {
       try {
         setContextLoading(true);
+        setContextError(false);
         const result = await agentApi.getContext({
           goal: draftGoal,
           conversationHistory: contextHistoryForMeter,
           enableTools: toolsEnabled,
           profileId: selectedProfileId,
         });
-        if (!cancelled) setContextInfo(result?.context || null);
+        if (!cancelled) {
+          setContextInfo(result?.context || null);
+          setContextError(false);
+        }
       } catch {
-        if (!cancelled) setContextInfo(null);
+        if (!cancelled) {
+          setContextInfo(null);
+          setContextError(true);
+        }
       } finally {
         if (!cancelled) setContextLoading(false);
       }
@@ -2100,6 +2116,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               conversationTokens={conversationTokens}
               contextInfo={contextInfo}
               contextLoading={contextLoading}
+              contextError={contextError}
               onCompactContext={handleCompactContext}
               isCompacting={isCompactingContext}
               onDraftChange={setDraftGoal}
@@ -2469,6 +2486,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 conversationTokens={conversationTokens}
                 contextInfo={contextInfo}
                 contextLoading={contextLoading}
+                contextError={contextError}
                 onCompactContext={handleCompactContext}
                 isCompacting={isCompactingContext}
                 onDraftChange={setDraftGoal}
