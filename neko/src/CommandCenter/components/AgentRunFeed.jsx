@@ -599,14 +599,14 @@ function SourcesPanel({ searchEvent }) {
             <Image className="w-3 h-3" />
             <span>Images for this answer ({images.length})</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {images.map((img, i) => (
               <a
                 key={img.image || img.thumbnail || img.url || i}
                 href={img.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-700"
+                className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-700"
                 title={img.title}
               >
                 <img

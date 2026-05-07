@@ -182,8 +182,33 @@ const InlineLinkModal = ({ href, onClose }) => {
   );
 };
 
-const InlineLink = ({ href, label }) => {
+const InlineLink = ({ href, label, variant = 'inline' }) => {
   const [open, setOpen] = useState(false);
+
+  if (variant === 'chip') {
+    const domain = getUrlDomain(href);
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-blue-700 dark:hover:bg-blue-950/30 midnight:border-slate-700 midnight:bg-slate-800"
+          title={href}
+        >
+          <img
+            src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
+            alt=""
+            className="h-3.5 w-3.5 flex-shrink-0 rounded object-contain"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+          <span className="truncate">{label || domain}</span>
+          <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-50" />
+        </button>
+        {open && <InlineLinkModal href={href} label={label} onClose={() => setOpen(false)} />}
+      </>
+    );
+  }
+
   return (
     <>
       <button
@@ -362,7 +387,7 @@ const AnnotatedTerm = ({ term, definition, onTermClick }) => (
 
 // ─── Inline Markdown Parser (with math + link + term annotation support) ─────
 
-const parseInlineMarkdown = (text, onTermClick) => {
+const parseInlineMarkdown = (text, onTermClick, options = {}) => {
   if (!text) return [];
 
   // First split by math expressions
@@ -415,10 +440,14 @@ const parseInlineMarkdown = (text, onTermClick) => {
         parts.push(<InlineImage key={`img-${key++}`} src={m[4]} alt={m[3]} />);
       } else if (m[5] !== undefined && m[6] !== undefined) {
         // [label](url) — markdown link
-        parts.push(<InlineLink key={`lnk-${key++}`} href={m[6]} label={m[5]} />);
+        parts.push(<InlineLink key={`lnk-${key++}`} href={m[6]} label={m[5]} variant={options.linkVariant} />);
       } else if (m[7] !== undefined) {
         // bare https://... URL
-        parts.push(<InlineLink key={`url-${key++}`} href={m[7]} label={m[7]} />);
+        if (isLikelyImageUrl(m[7])) {
+          parts.push(<InlineImage key={`imgurl-${key++}`} src={m[7]} alt="Image" />);
+        } else {
+          parts.push(<InlineLink key={`url-${key++}`} href={m[7]} label={m[7]} variant={options.linkVariant} />);
+        }
       } else if (m[8] !== undefined) {
         // **bold**
         parts.push(<strong key={`b-${key++}`} className="font-bold">{m[8]}</strong>);
@@ -458,8 +487,8 @@ const parseInlineMarkdown = (text, onTermClick) => {
 export const BlockRenderer = ({ block, onTermClick }) => {
   const baseStyles = "leading-relaxed text-gray-900 dark:text-gray-100 midnight:text-slate-100";
 
-  const renderContent = (content) => {
-    const parsed = parseInlineMarkdown(content, onTermClick);
+  const renderContent = (content, options) => {
+    const parsed = parseInlineMarkdown(content, onTermClick, options);
     return <span>{parsed}</span>;
   };
 
@@ -660,7 +689,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
                 <tr className="bg-gray-50 dark:bg-gray-800/80 midnight:bg-slate-800">
                   {normalizedRows[0]?.map((header, i) => (
                     <th key={i} className={`min-w-[10rem] border-b border-r border-gray-200 px-3.5 py-3 text-left align-top text-xs font-semibold [overflow-wrap:anywhere] last:border-r-0 dark:border-gray-700 midnight:border-slate-700 ${baseStyles}`}>
-                      {renderContent(header)}
+                      {renderContent(header, { linkVariant: 'chip' })}
                     </th>
                   ))}
                 </tr>
@@ -670,7 +699,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
                   <tr key={i} className="transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-800/55 [&:last-child_td]:border-b-0">
                     {row.map((cell, j) => (
                       <td key={j} className={`min-w-[10rem] border-b border-r border-gray-200 px-3.5 py-3 align-top [overflow-wrap:anywhere] last:border-r-0 dark:border-gray-700 midnight:border-slate-700 ${baseStyles}`}>
-                        {renderContent(cell)}
+                        {renderContent(cell, { linkVariant: 'chip' })}
                       </td>
                     ))}
                   </tr>

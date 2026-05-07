@@ -362,6 +362,9 @@ import {
   Plus,
   MessageSquare,
   PanelRightOpen,
+  Image,
+  Link2,
+  ExternalLink,
 } from "lucide-react";
 
 const getRelativeConversationTime = (dateString) => {
@@ -407,6 +410,202 @@ const getTaskRunDisplayStatus = (taskRun) => {
     className: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
   };
 };
+
+const getSourceDomain = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url || '';
+  }
+};
+
+function buildConversationSourceCatalog(messages = [], events = []) {
+  const sources = [];
+  const images = [];
+  const seenSources = new Set();
+  const seenImages = new Set();
+
+  const addSearchEvent = (searchEvent, answerLabel) => {
+    if (!searchEvent) return;
+
+    for (const source of (searchEvent.sources || [])) {
+      const url = source?.url;
+      if (!url || seenSources.has(url)) continue;
+      seenSources.add(url);
+      sources.push({
+        ...source,
+        title: source.title || getSourceDomain(url),
+        domain: getSourceDomain(url),
+        answerLabel,
+      });
+    }
+
+    for (const img of (searchEvent.images || [])) {
+      const imageUrl = img?.image || img?.thumbnail || img?.url;
+      if (!imageUrl || seenImages.has(imageUrl)) continue;
+      seenImages.add(imageUrl);
+      images.push({
+        ...img,
+        image: img.image || imageUrl,
+        thumbnail: img.thumbnail || img.image || imageUrl,
+        title: img.title || img.source || 'Image',
+        answerLabel,
+      });
+    }
+  };
+
+  let answerNumber = 0;
+  for (const msg of messages || []) {
+    if (msg?.type !== 'assistant' && msg?.role !== 'assistant') continue;
+    answerNumber += 1;
+    addSearchEvent(msg.searchEvent, `Answer ${answerNumber}`);
+  }
+
+  for (const ev of events || []) {
+    if (ev?.type !== 'answer') continue;
+    addSearchEvent(ev.data?.searchEvent, 'Latest answer');
+  }
+
+  return {
+    sources,
+    images,
+    sourceCount: sources.length,
+    imageCount: images.length,
+    totalCount: sources.length + images.length,
+  };
+}
+
+function ChatSourcesMediaSidebar({ catalog, onClose }) {
+  const [tab, setTab] = useState(catalog.imageCount > 0 ? 'images' : 'sources');
+  const hasImages = catalog.imageCount > 0;
+  const hasSources = catalog.sourceCount > 0;
+
+  useEffect(() => {
+    if (tab === 'images' && !hasImages && hasSources) setTab('sources');
+    if (tab === 'sources' && !hasSources && hasImages) setTab('images');
+  }, [tab, hasImages, hasSources]);
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-700 midnight:border-slate-700">
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+            Sources & media
+          </span>
+          <span className="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{catalog.totalCount}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-1 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800"
+            title="Hide sources and media"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800">
+          <button
+            type="button"
+            onClick={() => setTab('images')}
+            disabled={!hasImages}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
+              tab === 'images'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100'
+                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+            }`}
+          >
+            <Image className="h-3.5 w-3.5" />
+            {catalog.imageCount}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('sources')}
+            disabled={!hasSources}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
+              tab === 'sources'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100'
+                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+            }`}
+          >
+            <Link2 className="h-3.5 w-3.5" />
+            {catalog.sourceCount}
+          </button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {tab === 'images' && (
+          <div className="grid grid-cols-2 gap-2">
+            {catalog.images.map((img, i) => (
+              <a
+                key={`${img.image || img.thumbnail || img.url}-${i}`}
+                href={img.url || img.image}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700"
+                title={img.title}
+              >
+                <div className="relative aspect-square bg-gray-100 dark:bg-gray-800">
+                  <img
+                    src={img.thumbnail || img.image}
+                    alt={img.title}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-white/90 p-0.5 text-gray-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:bg-gray-900/90 dark:text-gray-200" />
+                </div>
+                <div className="min-w-0 px-2 py-1.5">
+                  <p className="truncate text-[11px] font-medium text-gray-700 dark:text-gray-200">{img.title}</p>
+                  <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">{img.answerLabel}</p>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {tab === 'sources' && (
+          <div className="space-y-2">
+            {catalog.sources.map((source, i) => (
+              <a
+                key={`${source.url}-${i}`}
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
+              >
+                <div className="flex min-w-0 items-start gap-2">
+                  <img
+                    src={`https://icons.duckduckgo.com/ip3/${source.domain}.ico`}
+                    alt=""
+                    className="mt-0.5 h-4 w-4 flex-shrink-0 rounded object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{source.title}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-blue-600 dark:text-blue-400">{source.domain}</p>
+                    {source.snippet && (
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                        {source.snippet}
+                      </p>
+                    )}
+                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">{source.answerLabel}</p>
+                  </div>
+                  <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-300" />
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {catalog.totalCount === 0 && (
+          <p className="px-1 py-5 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+            No sources or images in this chat yet.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
@@ -455,6 +654,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return true;
     }
   });
+  const [showSourcesMediaSidebar, setShowSourcesMediaSidebar] = useState(false);
   const [chatRuns, setChatRuns] = useState({});
   const [agentAutoApprove, setAgentAutoApprove] = useState(() => {
     try {
@@ -1443,6 +1643,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return buildEventsFromMessages(messages);
   }, [agentEvents, messages]);
 
+  const sourceCatalog = useMemo(
+    () => buildConversationSourceCatalog(messages, persistedAgentEvents),
+    [messages, persistedAgentEvents],
+  );
+
   const agentActivityItems = useMemo(() => {
     return persistedAgentEvents
       .filter(event => ['thinking', 'tool_start', 'permission_request', 'ask_user', 'answer', 'error', 'status'].includes(event.type))
@@ -2020,6 +2225,21 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       </>
                     )}
 
+                    {sourceCatalog.totalCount > 0 && !showSourcesMediaSidebar && (
+                      <button
+                        type="button"
+                        onClick={() => setShowSourcesMediaSidebar(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                        title="Show all sources and media"
+                      >
+                        <Image className="h-4 w-4" />
+                        Media
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {sourceCatalog.totalCount}
+                        </span>
+                      </button>
+                    )}
+
                     {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && !showActivitySidebar && (
                       <button
                         type="button"
@@ -2264,7 +2484,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && showActivitySidebar && (
+      {sourceCatalog.totalCount > 0 && showSourcesMediaSidebar && (
+        <aside className="hidden xl:block w-80 shrink-0 border-l border-gray-200 bg-gray-50/30 dark:border-gray-700 dark:bg-gray-900/30 midnight:border-slate-700 midnight:bg-slate-950/30">
+          <ChatSourcesMediaSidebar
+            catalog={sourceCatalog}
+            onClose={() => setShowSourcesMediaSidebar(false)}
+          />
+        </aside>
+      )}
+
+      {!showSourcesMediaSidebar && (persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && showActivitySidebar && (
         <aside className="hidden xl:block w-60 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50/30 dark:bg-gray-900/30 midnight:bg-slate-950/30">
           <AgentActivitySidebar
             items={agentActivityItems}
