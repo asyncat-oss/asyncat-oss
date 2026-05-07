@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { X, User, FolderOpen } from "lucide-react";
+import { X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { COLORS } from "../../data/ColourConstants";
 import CustomDatePicker from "../shared/CustomDatePicker";
 import CustomTimePicker from "../shared/CustomTimePicker";
-import ProjectSelection from "./ProjectSelection";
 
 export function EditEventModal({ isOpen, onClose, onEditEvent, event }) {
 	const formatDateYMD = (date) => {
@@ -15,8 +14,6 @@ export function EditEventModal({ isOpen, onClose, onEditEvent, event }) {
 		return `${year}-${month}-${day}`;
 	};
 
-	const [isPersonalEvent, setIsPersonalEvent] = useState(true);
-	const [projectId, setProjectId] = useState(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	const {
@@ -25,7 +22,6 @@ export function EditEventModal({ isOpen, onClose, onEditEvent, event }) {
 		formState: { errors },
 		watch,
 		setValue,
-		_reset,
 	} = useForm({
 		defaultValues: {
 			title: "",
@@ -58,24 +54,11 @@ export function EditEventModal({ isOpen, onClose, onEditEvent, event }) {
 				setValue("color", event.color || "purple");
 				setValue("description", event.description || "");
 
-				// Set personal/project state
-				if (event.projectId) {
-					setProjectId(event.projectId);
-					setIsPersonalEvent(false);
-				} else {
-					setProjectId(null);
-					setIsPersonalEvent(true);
-				}
 			} catch (error) {
 				console.error("Error populating edit form:", error);
 			}
 		}
 	}, [event, isOpen, setValue]);
-
-	// Reset project when toggling personal
-	useEffect(() => {
-		if (isPersonalEvent) setProjectId(null);
-	}, [isPersonalEvent]);
 
 	const onSubmit = async (data) => {
 		const startDT = new Date(`${data.startDate}T${data.startTime}`);
@@ -98,9 +81,6 @@ export function EditEventModal({ isOpen, onClose, onEditEvent, event }) {
 				color: data.color,
 				description: data.description || "",
 				isMultiDay: data.startDate !== data.endDate,
-				isPersonalEvent,
-				projectId: isPersonalEvent ? null : projectId,
-				attendees: event?.attendees || [],
 			});
 			onClose();
 		} catch (error) {
@@ -156,53 +136,6 @@ export function EditEventModal({ isOpen, onClose, onEditEvent, event }) {
 							/>
 							{errors.title && <p className="text-red-500 text-xs mt-1">{errors.title.message}</p>}
 						</div>
-
-						{/* Personal / Project toggle */}
-						<div>
-							<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-								Event Type
-							</label>
-							<div className="flex gap-2">
-								<button
-									type="button"
-									onClick={() => setIsPersonalEvent(true)}
-									className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-										isPersonalEvent
-											? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
-											: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700"
-									}`}
-								>
-									<User className="w-4 h-4" />
-									Personal
-								</button>
-								<button
-									type="button"
-									onClick={() => setIsPersonalEvent(false)}
-									className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-										!isPersonalEvent
-											? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-300 dark:border-blue-700"
-											: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700"
-									}`}
-								>
-									<FolderOpen className="w-4 h-4" />
-									Project
-								</button>
-							</div>
-						</div>
-
-						{/* Project selection */}
-						{!isPersonalEvent && (
-							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-									Project
-								</label>
-								<ProjectSelection
-									projectId={projectId}
-									setProjectId={setProjectId}
-									isPersonalEvent={isPersonalEvent}
-								/>
-							</div>
-						)}
 
 						{/* Dates */}
 						<div className="grid grid-cols-2 gap-4">

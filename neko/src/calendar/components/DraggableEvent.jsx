@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { motion } from "framer-motion";
-import { Clock, X, HelpCircle } from "lucide-react";
+import { Clock } from "lucide-react";
 
 const DraggableEvent = ({
 	event,
@@ -10,31 +10,14 @@ const DraggableEvent = ({
 	showIcons = true,
 	resizable = true,
 	currentUserId = null,
-	currentUserEmail = null,
-	allProjects = [], // Add allProjects prop for permission checking
 	draggableId = null, // Optional override to ensure uniqueness across contexts
 }) => {
 	// Check if this is a Google Calendar event
 	const isGoogleEvent = event.sourceType === "google";
 
-	// Check if current user can edit this event (same logic as ViewEventModal)
 	const canEdit = () => {
 		if (!currentUserId) return false;
-
-		// Event creator can always edit
-		if (event.createdBy === currentUserId) {
-			return true;
-		}
-
-		// Check if user is project admin (project creator)
-		if (event.projectId && allProjects.length > 0) {
-			const project = allProjects.find((p) => p.id === event.projectId);
-			if (project && project.created_by === currentUserId) {
-				return true;
-			}
-		}
-
-		return false;
+		return event.createdBy === currentUserId;
 	};
 
 	const userCanEdit = canEdit();
@@ -75,28 +58,6 @@ const DraggableEvent = ({
 
 	// Determine if this event is in a pending state (optimistic update)
 	const isPending = event.isPending;
-	// Get current user's status for this event
-	const getCurrentUserStatus = () => {
-		if (!event.attendees || !Array.isArray(event.attendees)) {
-			return null;
-		}
-
-		// Check if user is the creator
-		if (currentUserId && event.createdBy === currentUserId) {
-			return "creator";
-		}
-
-		const userAttendee = event.attendees.find(
-			(attendee) =>
-				(currentUserId && attendee.user_id === currentUserId) ||
-				(currentUserEmail && attendee.email === currentUserEmail)
-		);
-
-		return userAttendee?.status || null;
-	};
-
-	const userStatus = getCurrentUserStatus();
-
 	// Function to get event style based on type or priority
 	const getEventCardStyle = () => {
 		// First try to use the provided getEventStyle function
@@ -122,13 +83,6 @@ const DraggableEvent = ({
 		} else {
 			baseColorClass =
 				"bg-blue-50 dark:bg-blue-900/40 midnight:bg-blue-900/40 border-l-4 border-blue-500 dark:border-blue-600 midnight:border-blue-700 text-blue-700 dark:text-blue-400 midnight:text-blue-300";
-		}
-
-		// Apply visual modifications based on user status
-		if (userStatus === "declined") {
-			return `${baseColorClass} opacity-60 saturate-50 border-dashed`;
-		} else if (userStatus === "maybe") {
-			return `${baseColorClass} opacity-80`;
 		}
 
 		return baseColorClass;
@@ -158,7 +112,7 @@ const DraggableEvent = ({
 					hour12: true,
 				});
 			}
-		} catch (e) {
+		} catch {
 			// If parsing fails, return the original string
 		}
 
@@ -169,12 +123,8 @@ const DraggableEvent = ({
 	const startTime = formatTime(event.startTime || event.time);
 	const endTime = formatTime(event.endTime);
 
-	const _hasTimeInfo = startTime || endTime;
 	const timeDisplay = endTime ? `${startTime} - ${endTime}` : startTime;
 
-	// Calculate progress if available
-	const progressPercentage = event.progress || 0;
-	const _hasProgress = progressPercentage > 0;
 	// Get base color for event styling
 	const getBaseColor = () => {
 		const style = getEventStyle(event);
@@ -241,28 +191,11 @@ const DraggableEvent = ({
 						showIcons ? "max-w-[65%]" : "max-w-[95%]"
 					}`}
 				>
-					{/* Title with subtle font weight and status indicators */}
+					{/* Title with subtle font weight */}
 					<div className="flex items-center gap-1">
-						<div
-							className={`font-medium truncate text-[14px] leading-tight ${
-								userStatus === "declined" ? "line-through" : ""
-							}`}
-						>
+						<div className="font-medium truncate text-[14px] leading-tight">
 							{event.title}
 						</div>
-						{/* Status indicator icons */}
-						{userStatus === "declined" && (
-							<X
-								className="w-3 h-3 text-red-500 dark:text-red-400 midnight:text-red-400 flex-shrink-0"
-								strokeWidth={2}
-							/>
-						)}
-						{userStatus === "maybe" && (
-							<HelpCircle
-								className="w-3 h-3 text-orange-500 dark:text-orange-400 midnight:text-orange-400 flex-shrink-0"
-								strokeWidth={2}
-							/>
-						)}
 					</div>
 
 					{/* Time with improved styling */}

@@ -15,6 +15,48 @@ function getMentionTrigger(value, cursor) {
   return { start, end: cursor, query: match[2].toLowerCase() };
 }
 
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function buildMentionOverlayHtml(value, profiles) {
+  if (!value) return "<br>";
+
+  const validHandles = new Set(
+    profiles.filter((p) => p?.handle).map((p) => String(p.handle).toLowerCase())
+  );
+
+  const mentionClass =
+    "rounded bg-blue-100/60 px-1 font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 midnight:text-blue-300";
+  const regex = /(^|[\s(])@([a-zA-Z0-9_-]+)/g;
+
+  let html = "";
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(value)) !== null) {
+    html += escapeHtml(value.slice(lastIndex, match.index));
+
+    const prefix = match[1];
+    const handle = match[2];
+
+    if (validHandles.has(handle.toLowerCase())) {
+      html += `${escapeHtml(prefix)}<span style="box-decoration-break: clone; -webkit-box-decoration-break: clone;" class="${mentionClass}">${escapeHtml("@" + handle)}</span>`;
+    } else {
+      html += escapeHtml(match[0]);
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  html += escapeHtml(value.slice(lastIndex));
+  return html.replace(/\n/g, "<br>") || "<br>";
+}
+
 function extractAgentMentions(value, profiles) {
   const handles = new Set(
     [...String(value || '').matchAll(/(^|[\s(])@([a-zA-Z0-9_-]+)/g)]
@@ -75,6 +117,7 @@ export const MessageInputV2 = ({
   const activeBrain = useActiveBrainStatus();
   const { config: modelContextConfig } = useModelConfig();
   const textareaRef = useRef(null);
+  const overlayRef = useRef(null);
   const toolbarRef = useRef(null);
   const mentionTrigger = useMemo(
     () => getMentionTrigger(value, cursorPosition),
@@ -182,14 +225,13 @@ export const MessageInputV2 = ({
     });
   }, [mentionTrigger, value]);
 
-  const removeMention = useCallback((handle) => {
-    const nextValue = value
-      .replace(new RegExp(`(^|\\s)@${String(handle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'i'), '$1')
-      .replace(/\s{2,}/g, ' ')
-      .trimStart();
-    setValue(nextValue);
-    requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [value]);
+  const handleScroll = useCallback(() => {
+    const textarea = textareaRef.current;
+    const overlay = overlayRef.current;
+    if (textarea && overlay) {
+      overlay.style.transform = `translate(-${textarea.scrollLeft}px, -${textarea.scrollTop}px)`;
+    }
+  }, []);
 
   const handleSubmit = useCallback(
     async (e) => {
@@ -391,48 +433,36 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              <textarea
-                ref={textareaRef}
-                value={value}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                onClick={handleCursorChange}
-                onKeyUp={handleCursorChange}
-                onCompositionStart={() => setIsComposing(true)}
-                onCompositionEnd={() => setIsComposing(false)}
-                disabled={disabled}
-                placeholder={placeholder}
-                maxLength={maxLength}
-                spellCheck={false}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                rows="2"
-                className="w-full resize-none bg-transparent text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-500 focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50"
-              />
-
-              {detectedAgentMentions.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {detectedAgentMentions.map(agent => (
-                    <span
-                      key={agent.id || agent.handle}
-                      className="inline-flex max-w-full items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 dark:border-blue-800/70 dark:bg-blue-950/30 dark:text-blue-300 midnight:border-blue-800/70 midnight:bg-blue-950/30 midnight:text-blue-300"
-                      title={`Mentioned agent: ${agent.name}`}
-                    >
-                      <span className="shrink-0">{agent.icon || "🤖"}</span>
-                      <span className="truncate">@{agent.handle}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeMention(agent.handle)}
-                        className="ml-0.5 rounded p-0.5 text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/50 dark:hover:text-blue-200"
-                        title={`Remove @${agent.handle}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
+              <div className="relative">
+                <div
+                  ref={overlayRef}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 h-full w-full overflow-hidden text-base leading-relaxed text-gray-900 dark:text-gray-100 midnight:text-gray-100 break-words"
+                  dangerouslySetInnerHTML={{
+                    __html: buildMentionOverlayHtml(value, agentProfiles),
+                  }}
+                />
+                <textarea
+                  ref={textareaRef}
+                  value={value}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  onClick={handleCursorChange}
+                  onKeyUp={handleCursorChange}
+                  onScroll={handleScroll}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
+                  disabled={disabled}
+                  placeholder={placeholder}
+                  maxLength={maxLength}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  rows="2"
+                  className="w-full resize-none bg-transparent text-transparent caret-gray-900 dark:caret-gray-100 midnight:caret-gray-100 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-500 focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50"
+                />
+              </div>
 
               {mentionTrigger && (
                 <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">

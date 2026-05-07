@@ -106,15 +106,6 @@ router.delete('/:teamId', auth, (req, res) => {
     if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
 
     db.transaction(() => {
-      const projectIds = db.prepare('SELECT id FROM projects WHERE team_id = ?')
-        .all(teamId)
-        .map(project => project.id);
-
-      if (projectIds.length > 0) {
-        const placeholders = projectIds.map(() => '?').join(', ');
-        db.prepare(`DELETE FROM Events WHERE projectId IN (${placeholders})`).run(...projectIds);
-      }
-
       db.prepare('DELETE FROM mcp_auth_codes WHERE workspace_id = ?').run(teamId);
       db.prepare('DELETE FROM mcp_access_tokens WHERE workspace_id = ?').run(teamId);
       db.prepare('DELETE FROM agent_patterns WHERE workspace_id = ?').run(teamId);

@@ -353,7 +353,6 @@ async function deleteProject(req, res) {
 
 		// Delete related data
 		try {
-			await db.from("Events").delete().eq("projectId", id);
 			await db.from("Columns").delete().eq("projectId", id);
 		} catch (relatedError) {
 			console.error("Error deleting project related data:", relatedError);

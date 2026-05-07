@@ -3,7 +3,7 @@
 --
 -- Drops (SaaS-only, not needed locally):
 --   public.teams / team_members → replaced by slim "workspaces" table
---   stripe.*  invitations.*  event_attendees  version_collaborators
+--   stripe.*  invitations.*  version_collaborators
 --   note_version_groups  aichats.usage_tracking  aichats.ai_credits
 --
 -- Schema prefixes removed (SQLite has no schemas):
@@ -109,7 +109,6 @@ CREATE TABLE IF NOT EXISTS project_folder_items (
 CREATE TABLE IF NOT EXISTS Events (
   id          TEXT PRIMARY KEY,
   title       TEXT NOT NULL,
-  projectId   TEXT REFERENCES projects(id) ON DELETE SET NULL,
   description TEXT,
   startTime   TEXT NOT NULL,
   endTime     TEXT NOT NULL,
@@ -117,7 +116,6 @@ CREATE TABLE IF NOT EXISTS Events (
   location    TEXT,
   isAllDay    INTEGER NOT NULL DEFAULT 0,
   recurrence  TEXT,              -- JSON
-  attendees   TEXT NOT NULL DEFAULT '[]',   -- JSON array (inline, no join table)
   reminders   TEXT NOT NULL DEFAULT '[]',   -- JSON
   status      TEXT NOT NULL DEFAULT 'confirmed'
                 CHECK (status IN ('confirmed','tentative','cancelled')),
@@ -126,17 +124,6 @@ CREATE TABLE IF NOT EXISTS Events (
   createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
-CREATE TABLE IF NOT EXISTS event_attendees (
-  id           TEXT PRIMARY KEY,
-  event_id     TEXT NOT NULL REFERENCES Events(id) ON DELETE CASCADE,
-  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','declined')),
-  responded_at TEXT,
-  UNIQUE(event_id, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_event_attendees_event  ON event_attendees(event_id);
-CREATE INDEX IF NOT EXISTS idx_event_attendees_user   ON event_attendees(user_id);
 
 -- ─── Notes ────────────────────────────────────────────────────────────────────
 
@@ -278,7 +265,6 @@ CREATE INDEX IF NOT EXISTS idx_project_members_user_id  ON project_members(user_
 CREATE INDEX IF NOT EXISTS idx_notes_projectid          ON notes(projectid);
 CREATE INDEX IF NOT EXISTS idx_note_versions_note_id    ON note_versions(note_id);
 CREATE INDEX IF NOT EXISTS idx_note_operations_note_id  ON note_operations(note_id);
-CREATE INDEX IF NOT EXISTS idx_events_projectId         ON Events(projectId);
 CREATE INDEX IF NOT EXISTS idx_events_createdBy         ON Events(createdBy);
 CREATE INDEX IF NOT EXISTS idx_Columns_projectId        ON Columns(projectId);
 CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);

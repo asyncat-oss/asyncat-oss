@@ -90,15 +90,6 @@ export const formatEventForBackend = (eventData) => {
     throw new Error('Missing required event data');
   }
   
-  let projectId = null;
-  if (eventData.projectId) {
-    if (typeof eventData.projectId === 'object' && eventData.projectId.id) {
-      projectId = eventData.projectId.id;
-    } else if (typeof eventData.projectId === 'string') {
-      projectId = eventData.projectId;
-    }
-  }
-  
   let startDate, endDate;
   
   if (eventData.startDate && eventData.endDate && 
@@ -144,18 +135,6 @@ export const formatEventForBackend = (eventData) => {
     location: eventData.location || ''
   };
 
-  if (projectId) {
-    formattedEvent.projectId = projectId;
-  }
-  
-  if (eventData.attendees && Array.isArray(eventData.attendees)) {
-    formattedEvent.attendees = eventData.attendees;
-  }
-
-  if (eventData.isPersonalEvent !== undefined) {
-    formattedEvent.isPersonalEvent = eventData.isPersonalEvent;
-  }
-  
   return formattedEvent;
 };
 
@@ -175,13 +154,10 @@ export const formatEventForFrontend = (event) => {
       end: endDateTime.toTimeString().slice(0, 5),
       color: event.color || 'purple',
       description: event.description,
-      projectId: event.projectId,
-      projectName: event.projectName,
       createdBy: event.createdBy,
       startTime: event.startTime,
       endTime: event.endTime,
       isMultiDay: isMultiDay,
-      attendees: event.attendees || [],
       location: event.location || ''
     };
     
@@ -203,8 +179,7 @@ export const formatEventForFrontend = (event) => {
       description: `Error processing event: ${error.message}`,
       startTime: event.startTime,
       endTime: event.endTime,
-      projectName: event.projectName,
-      attendees: []
+      location: event.location || ''
     };
   }
 };

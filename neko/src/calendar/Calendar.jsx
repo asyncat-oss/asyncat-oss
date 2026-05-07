@@ -29,7 +29,6 @@ const Calendar = ({
 	onCardClick, // Add handler for card clicks
 	fetchEvents,
 	projectsMap = {}, // Add projects map for card modal
-	allProjects = [], // Add all projects for permissions
 	currentUserId, // Add current user ID
 	currentUserEmail, // Add current user email
 }) => {
@@ -106,22 +105,6 @@ const Calendar = ({
 
 	// Optimistic UI for deleting an event
 	const handleDeleteAndClose = (event) => {
-		// Check if current user can delete this event
-		// Event creators and project admins can delete events
-		const canDelete =
-			currentUserId &&
-			(event.createdBy === currentUserId ||
-				(event.projectId &&
-					allProjects.some(
-						(p) =>
-							p.id === event.projectId &&
-							p.created_by === currentUserId
-					)));
-
-		if (!canDelete) {
-			return; // Exit early if user doesn't have permission
-		}
-
 		// Optimistically update UI
 		setIsOptimisticUpdate(true);
 		setLocalEvents((prev) => prev.filter((e) => e.id !== event.id));
@@ -516,7 +499,6 @@ const Calendar = ({
 					onDateChange={onDateChange} // Add onDateChange prop for day navigation
 					currentUserId={currentUserId} // Pass current user ID
 					currentUserEmail={currentUserEmail} // Pass current user email
-					allProjects={allProjects} // Pass all projects for permissions
 					// Modal props
 					showMultipleEvents={showMultipleEvents}
 					selectedDateEvents={selectedDateEvents}
@@ -566,7 +548,6 @@ const Calendar = ({
 					onDateChange={onDateChange} // Add onDateChange prop for week navigation
 					currentUserId={currentUserId} // Pass current user ID
 					currentUserEmail={currentUserEmail} // Pass current user email
-					allProjects={allProjects} // Pass all projects for permissions
 					// Modal props
 					showMultipleEvents={showMultipleEvents}
 					selectedDateEvents={selectedDateEvents}
@@ -625,7 +606,6 @@ const Calendar = ({
 					fetchEvents={fetchEvents}
 					currentUserId={currentUserId} // Pass current user ID
 					currentUserEmail={currentUserEmail} // Pass current user email
-					allProjects={allProjects} // Pass all projects for permissions
 					// Modal props
 					showMultipleEvents={showMultipleEvents}
 					selectedDateEvents={selectedDateEvents}
@@ -678,7 +658,6 @@ const Calendar = ({
 						onDelete={handleDeleteAndClose}
 						currentUserId={currentUserId}
 						currentUserEmail={currentUserEmail}
-						allProjects={allProjects}
 						fetchEvents={fetchEvents}
 					/>
 				)}
