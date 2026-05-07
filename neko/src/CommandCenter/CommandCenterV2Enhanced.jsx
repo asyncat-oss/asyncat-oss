@@ -103,14 +103,6 @@ function buildAgentEventsFromSession(session, auditRows = []) {
   return events;
 }
 
-function cleanAgentActivityDetail(detail) {
-  return String(detail || '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/\s*<tool_call>[\s\S]*?<\/(?:\w+:)?tool_call>/gi, '')
-    .replace(/\s*<tool_call[\s\S]*$/i, '')
-    .trim();
-}
-
 function isLikelyToolActionRequest(goal = '') {
   return /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify)\b/i.test(goal);
 }
@@ -245,87 +237,6 @@ function buildSearchEvent(events = []) {
   };
 }
 
-function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false, onClose }) {
-  const feedEndRef = useRef(null);
-
-  useEffect(() => {
-    if (isRunning) feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [items.length, isRunning]);
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 flex items-center gap-2">
-        <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-          Steps
-        </span>
-        {isLoading ? (
-          <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
-        ) : isRunning ? (
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-        ) : (
-          <span className="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{items.length}</span>
-        )}
-        <button
-          type="button"
-          onClick={onClose}
-          className="ml-1 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800"
-          title="Hide steps"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        {items.length === 0 && !isLoading && (
-          <p className="px-4 py-5 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-            Nothing yet.
-          </p>
-        )}
-        <div className="py-1.5 px-1.5 space-y-px">
-          {items.map((item, i) => {
-            const detail = cleanAgentActivityDetail(item.detail);
-            const isLast = i === items.length - 1;
-
-            return (
-              <div
-                key={item.id}
-                title={detail || item.label}
-                className={`rounded-lg px-2.5 py-2 transition-colors ${
-                  isLast && isRunning
-                    ? 'bg-blue-50/50 dark:bg-blue-950/20 midnight:bg-blue-950/20'
-                    : 'hover:bg-gray-100/60 dark:hover:bg-gray-800/40 midnight:hover:bg-slate-800/40'
-                }`}
-              >
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 ${item.dot}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 truncate leading-none">
-                        {item.label}
-                      </span>
-                      {item.duration && (
-                        <span className="shrink-0 text-[10px] tabular-nums text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                          · {item.duration}
-                        </span>
-                      )}
-                    </div>
-                    {detail && (
-                      <p className="mt-0.5 text-[10px] leading-snug text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2 break-all">
-                        {detail}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={feedEndRef} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 import {
   useState,
   useRef,
@@ -337,6 +248,9 @@ import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel } from './components/AgentRunFeed';
 import AgentChangesPanel from './components/AgentChangesPanel';
+import AgentActivitySidebar from './components/AgentActivitySidebar';
+import ChatSourcesMediaSidebar from './components/ChatSourcesMediaSidebar';
+import ConversationLoadingSkeleton from './components/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
 import { chatApi, agentApi } from "./commandCenterApi";
@@ -358,8 +272,6 @@ import {
   MessageSquare,
   PanelRightOpen,
   Image,
-  Link2,
-  ExternalLink,
 } from "lucide-react";
 
 const getRelativeConversationTime = (dateString) => {
@@ -468,138 +380,6 @@ function buildConversationSourceCatalog(messages = [], events = []) {
     imageCount: images.length,
     totalCount: sources.length + images.length,
   };
-}
-
-function ChatSourcesMediaSidebar({ catalog, onClose }) {
-  const [tab, setTab] = useState(catalog.imageCount > 0 ? 'images' : 'sources');
-  const hasImages = catalog.imageCount > 0;
-  const hasSources = catalog.sourceCount > 0;
-
-  useEffect(() => {
-    if (tab === 'images' && !hasImages && hasSources) setTab('sources');
-    if (tab === 'sources' && !hasSources && hasImages) setTab('images');
-  }, [tab, hasImages, hasSources]);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-700 midnight:border-slate-700">
-        <div className="flex items-center gap-2">
-          <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-            Sources & media
-          </span>
-          <span className="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{catalog.totalCount}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-1 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800"
-            title="Hide sources and media"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800">
-          <button
-            type="button"
-            onClick={() => setTab('images')}
-            disabled={!hasImages}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
-              tab === 'images'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100'
-                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
-            }`}
-          >
-            <Image className="h-3.5 w-3.5" />
-            {catalog.imageCount}
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('sources')}
-            disabled={!hasSources}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
-              tab === 'sources'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100'
-                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
-            }`}
-          >
-            <Link2 className="h-3.5 w-3.5" />
-            {catalog.sourceCount}
-          </button>
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {tab === 'images' && (
-          <div className="grid grid-cols-2 gap-2">
-            {catalog.images.map((img, i) => (
-              <a
-                key={`${img.image || img.thumbnail || img.url}-${i}`}
-                href={img.url || img.image}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700"
-                title={img.title}
-              >
-                <div className="relative aspect-square bg-gray-100 dark:bg-gray-800">
-                  <img
-                    src={img.thumbnail || img.image}
-                    alt={img.title}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                  <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-white/90 p-0.5 text-gray-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:bg-gray-900/90 dark:text-gray-200" />
-                </div>
-                <div className="min-w-0 px-2 py-1.5">
-                  <p className="truncate text-[11px] font-medium text-gray-700 dark:text-gray-200">{img.title}</p>
-                  <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">{img.answerLabel}</p>
-                </div>
-              </a>
-            ))}
-          </div>
-        )}
-
-        {tab === 'sources' && (
-          <div className="space-y-2">
-            {catalog.sources.map((source, i) => (
-              <a
-                key={`${source.url}-${i}`}
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
-              >
-                <div className="flex min-w-0 items-start gap-2">
-                  <img
-                    src={`https://icons.duckduckgo.com/ip3/${source.domain}.ico`}
-                    alt=""
-                    className="mt-0.5 h-4 w-4 flex-shrink-0 rounded object-contain"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{source.title}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-blue-600 dark:text-blue-400">{source.domain}</p>
-                    {source.snippet && (
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-                        {source.snippet}
-                      </p>
-                    )}
-                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">{source.answerLabel}</p>
-                  </div>
-                  <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-300" />
-                </div>
-              </a>
-            ))}
-          </div>
-        )}
-
-        {catalog.totalCount === 0 && (
-          <p className="px-1 py-5 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-            No sources or images in this chat yet.
-          </p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
@@ -929,11 +709,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     navigate(`/conversations/${conversationId}`);
   }, [navigate]);
 
-  const handleSetActivitySidebarVisible = useCallback((visible) => {
-    setShowActivitySidebar(visible);
-    try {
-      localStorage.setItem('asyncat_show_steps_sidebar', String(visible));
-    } catch {}
+  const toggleActivitySidebar = useCallback(() => {
+    setShowActivitySidebar(prev => {
+      const next = !prev;
+      try { localStorage.setItem('asyncat_show_steps_sidebar', String(next)); } catch {}
+      return next;
+    });
   }, []);
 
   const ConversationSwitcher = useCallback(({ compact = false } = {}) => (
@@ -1860,68 +1641,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     window.print();
   }, [messages]);
 
-  const ConversationLoadingSkeleton = () => (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
-      <div className="flex-shrink-0hite dark:bg-gray-900 midnight:bg-slate-950">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 py-4">
-          <div className="flex items-center justify-between animate-pulse">
-            <div className="h-6 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded w-48"></div>
-            <div className="flex items-center gap-3">
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded w-16"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 space-y-8">
-          <div className="group mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded-full animate-pulse"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-12 animate-pulse"></div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-900 midnight:bg-slate-950 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg p-4">
-              <div className="space-y-3">
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-3/4 animate-pulse"></div>
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-1/2 animate-pulse"></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="group mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded-full animate-pulse"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-16 animate-pulse"></div>
-              </div>
-              <div className="flex gap-1">
-                <div className="w-2 h-2 rounded-full animate-bounce bg-gray-400"></div>
-                <div
-                  className="w-2 h-2 rounded-full animate-bounce bg-gray-400"
-                  style={{ animationDelay: "0.2s" }}
-                ></div>
-                <div
-                  className="w-2 h-2 rounded-full animate-bounce bg-gray-400"
-                  style={{ animationDelay: "0.4s" }}
-                ></div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-900 midnight:bg-slate-950 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg p-4">
-              <div className="space-y-3">
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-full animate-pulse"></div>
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-4/5 animate-pulse"></div>
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-3/4 animate-pulse"></div>
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded w-5/6 animate-pulse"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   const TopBar = isGhostMode ? (
     <div className="flex items-center justify-end px-4 py-2">
       <button
@@ -2082,11 +1801,15 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       </>
                     )}
 
-                    {sourceCatalog.totalCount > 0 && !showSourcesMediaSidebar && (
+                    {sourceCatalog.totalCount > 0 && (
                       <button
                         type="button"
-                        onClick={() => setShowSourcesMediaSidebar(true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                        onClick={() => setShowSourcesMediaSidebar(prev => !prev)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          showSourcesMediaSidebar
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
                         title="Show all sources and media"
                       >
                         <Image className="h-4 w-4" />
@@ -2097,11 +1820,15 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       </button>
                     )}
 
-                    {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && !showActivitySidebar && (
+                    {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
                       <button
                         type="button"
-                        onClick={() => handleSetActivitySidebarVisible(true)}
-                        className="hidden xl:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                        onClick={toggleActivitySidebar}
+                        className={`hidden xl:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          showActivitySidebar
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
                         title="Show steps"
                       >
                         <PanelRightOpen className="h-4 w-4" />
@@ -2355,20 +2082,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
       {sourceCatalog.totalCount > 0 && showSourcesMediaSidebar && (
         <aside className="hidden xl:block w-80 shrink-0 border-l border-gray-200 bg-gray-50/30 dark:border-gray-700 dark:bg-gray-900/30 midnight:border-slate-700 midnight:bg-slate-950/30">
-          <ChatSourcesMediaSidebar
-            catalog={sourceCatalog}
-            onClose={() => setShowSourcesMediaSidebar(false)}
-          />
+          <ChatSourcesMediaSidebar catalog={sourceCatalog} />
         </aside>
       )}
 
-      {!showSourcesMediaSidebar && (persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && showActivitySidebar && (
+      {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && showActivitySidebar && (
         <aside className="hidden xl:block w-60 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50/30 dark:bg-gray-900/30 midnight:bg-slate-950/30">
           <AgentActivitySidebar
             items={agentActivityItems}
             isLoading={agentLoadingSession}
             isRunning={agentRunning}
-            onClose={() => handleSetActivitySidebarVisible(false)}
           />
         </aside>
       )}
