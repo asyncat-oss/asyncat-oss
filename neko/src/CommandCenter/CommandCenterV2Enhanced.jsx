@@ -351,12 +351,7 @@ import {
   Check,
   X,
   Ghost,
-  LayoutList,
-  Calendar,
-  PenLine,
-  Lightbulb,
   Download,
-  BookOpen,
   Loader2,
   History,
   Plus,
@@ -1451,10 +1446,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     handleAgentRun({ content: goal });
   }, [agentCurrentGoal, handleAgentRun]);
 
-  const handleQuestionClick = useCallback((questionText) => {
-    handleAgentRun({ content: questionText });
-  }, [handleAgentRun]);
-
   const handleRunWithTools = useCallback((goal) => {
     if (!goal?.trim() || agentRunning) return;
     setToolsEnabled(true);
@@ -1931,146 +1922,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     </div>
   );
 
-  const CATEGORIES = [
-    {
-      id: "plan",
-      icon: LayoutList,
-      label: "Plan",
-      prompts: [
-        {
-          label: "Plan my day",
-          prompt: `Review my tasks and calendar events for today. Suggest a prioritized schedule based on urgency and help me decide what to focus on first.`,
-        },
-        {
-          label: "Quick task creation",
-          prompt: `Create a high priority task called 'Weekly Review' and set the deadline for this Friday. Ask me which project it belongs to if you need to.`,
-        },
-        {
-          label: "Status report",
-          prompt: `Check all my projects for overdue tasks and group them by priority. What should I tackle immediately?`,
-        },
-        {
-          label: "Reschedule my workload",
-          prompt: `Look at my tasks due this week and suggest a better distribution based on my upcoming calendar events.`,
-        },
-        {
-          label: "Turn a goal into tasks",
-          prompt: `I have a large goal I want to achieve. Help me break it down into actionable steps, and then automatically create those tasks in my workspace.`,
-        },
-      ],
-    },
-    {
-      id: "learn",
-      icon: BookOpen,
-      label: "Learn",
-      prompts: [
-        {
-          label: "Explain something simply",
-          prompt: `I want to understand a complex topic. Ask me what I am struggling with, then explain it in plain language without jargon, using an analogy.`,
-        },
-        {
-          label: "Save a study note",
-          prompt: `Explain the key principles of a technical concept I'm learning, and automatically save the explanation as a new note in my workspace for future reference.`,
-        },
-        {
-          label: "Quiz me",
-          prompt: `I want to test my knowledge. Ask me what topic to quiz me on and my current level, then give me 5 questions one at a time.`,
-        },
-        {
-          label: "Summarise my notes",
-          prompt: `Search my existing notes in the workspace for a specific topic, pull out the key points, and give me a clean, structured summary.`,
-        },
-        {
-          label: "Track my learning",
-          prompt: `Create a series of tasks for learning a new skill over the next month, broken down week by week, and add them to my workspace.`,
-        },
-      ],
-    },
-    {
-      id: "write",
-      icon: PenLine,
-      label: "Write",
-      prompts: [
-        {
-          label: "Take meeting minutes",
-          prompt: `Help me write meeting minutes. I'll provide the rough points. Create a well-formatted note with the summary, and ask if you should automatically create tasks for any action items.`,
-        },
-        {
-          label: "Draft a project update",
-          prompt: `Look at the tasks I've completed recently and help me draft a professional progress update to share with my team.`,
-        },
-        {
-          label: "Save a quick idea",
-          prompt: `I have an idea I want to flesh out. Ask me for the premise, help me brainstorm 5 bullet points to expand on it, and save it all as a new note.`,
-        },
-        {
-          label: "Write a lesson plan",
-          prompt: `Help me write a structured lesson or presentation plan. Ask me the topic and audience, then create the plan and save it as a document in my notes.`,
-        },
-        {
-          label: "Draft a team message",
-          prompt: `I need to send an important message to my team. Ask me the details and the tone, and draft it for me.`,
-        },
-      ],
-    },
-    {
-      id: "schedule",
-      icon: Calendar,
-      label: "Schedule",
-      prompts: [
-        {
-          label: "Schedule a meeting",
-          prompt: `Create a 'Team Sync' calendar event for tomorrow at 10 AM for 45 minutes.`,
-        },
-        {
-          label: "Weekly review",
-          prompt: `Summarize all my calendar events and upcoming task deadlines for this week so I know exactly what's on my plate.`,
-        },
-        {
-          label: "Plan focus time",
-          prompt: `Find a 2-hour gap in my calendar this week where I don't have events, and schedule a 'Deep Work Focus Time' event for me.`,
-        },
-        {
-          label: "Check for conflicts",
-          prompt: `Look at my upcoming events and tasks this week. Tell me if any deadlines overlap with heavy meeting days, and suggest how I could rearrange things.`,
-        },
-        {
-          label: "Assign deadlines",
-          prompt: `Search my projects for high-priority tasks that don't have due dates yet, and suggest when I should schedule them based on my calendar.`,
-        },
-      ],
-    },
-    {
-      id: "think",
-      icon: Lightbulb,
-      label: "Brainstorm",
-      prompts: [
-        {
-          label: "Brainstorm ideas",
-          prompt: `I want to brainstorm ideas for a project. Ask me for the topic, give me a range of creative options, and offer to turn the best ones into tasks or notes.`,
-        },
-        {
-          label: "Help me decide",
-          prompt: `I need help making a decision. Ask me what the decision is, then walk me through the pros and cons to help me figure out the best path.`,
-        },
-        {
-          label: "Review my plan",
-          prompt: `Look at the current tasks in my projects. Are there any critical steps missing? Tell me what looks solid and what is risky.`,
-        },
-        {
-          label: "Suggest improvements",
-          prompt: `I want to improve my workflow. Analyze my overdue tasks and suggest concrete ways I can manage my time or projects better.`,
-        },
-        {
-          label: "Troubleshoot a problem",
-          prompt: `I'm stuck on a problem and need a sounding board. Ask me to describe it, and let's work through potential solutions step-by-step.`,
-        },
-      ],
-    },
-  ];
-
-  const [activeCategory, setActiveCategory] = useState(null);
-
   const TopBar = isGhostMode ? (
     <div className="flex items-center justify-end px-4 py-2">
       <button
@@ -2163,55 +2014,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onToggleAutoApprove={handleToggleAgentAutoApprove}
             />
 
-            {!isGhostMode && (
-              <div className="mt-4 px-4 sm:px-6">
-                <div className="flex gap-2 flex-wrap justify-center mb-3">
-                  {CATEGORIES.map((cat) => {
-                    const Icon = cat.icon;
-                    const isActive = activeCategory === cat.id;
-                    return (
-                      <button
-                        key={cat.id}
-                        onClick={() =>
-                          setActiveCategory(isActive ? null : cat.id)
-                        }
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-all duration-150
-                          ${
-                            isActive
-                              ? "border-gray-400 dark:border-gray-500 midnight:border-slate-500 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 text-gray-900 dark:text-white midnight:text-slate-100"
-                              : "border-gray-200 dark:border-gray-800 midnight:border-slate-800 text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:border-gray-300 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-slate-300"
-                          }`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {cat.label}
-                      </button>
-                    );
-                  })}
-                </div>
 
-                {activeCategory &&
-                  (() => {
-                    const cat = CATEGORIES.find((c) => c.id === activeCategory);
-                    return (
-                      <div className="flex flex-col border border-gray-200 dark:border-gray-800 midnight:border-slate-800 rounded-xl overflow-hidden">
-                        {cat.prompts.map((p, i) => (
-                          <button
-                            key={i}
-                            onClick={() => {
-                              handleQuestionClick(p.prompt);
-                              setActiveCategory(null);
-                            }}
-                            className={`px-4 py-2.5 text-sm text-left text-gray-600 dark:text-gray-400 midnight:text-slate-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 midnight:hover:bg-slate-800/40 hover:text-gray-900 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors duration-100
-                            ${i < cat.prompts.length - 1 ? "border-b border-gray-100 dark:border-gray-800/80 midnight:border-slate-800/80" : ""}`}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })()}
-              </div>
-            )}
           </div>
         </div>
       </div>
