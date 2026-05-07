@@ -1,65 +1,32 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { ChevronDown, Cloud, Cpu, Loader2, Send, Square, Wrench, X, Zap } from "lucide-react";
+import { ChevronDown, Cloud, Cpu, HardDrive, Loader2, Send, Square, Wrench, X, Zap } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi } from "../../Settings/settingApi.js";
-import { profilesApi } from "../commandCenterApi.js";
+import { profilesApi, filesApi } from "../commandCenterApi.js";
+import { dirname, fileIconMeta } from "../../files/fileUtils.js";
 
-function getMentionTrigger(value, cursor) {
+function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
-  const match = beforeCursor.match(/(^|\s)@([a-zA-Z0-9_-]*)$/);
+  const match = beforeCursor.match(/(^|\s)#([a-zA-Z0-9_-]*)$/);
   if (!match) return null;
   const start = beforeCursor.length - match[2].length - 1;
   return { start, end: cursor, query: match[2].toLowerCase() };
 }
 
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function buildMentionOverlayHtml(value, profiles) {
-  if (!value) return "<br>";
-
-  const validHandles = new Set(
-    profiles.filter((p) => p?.handle).map((p) => String(p.handle).toLowerCase())
-  );
-
-  const mentionClass =
-    "rounded bg-blue-100/60 px-1 font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 midnight:text-blue-300";
-  const regex = /(^|[\s(])@([a-zA-Z0-9_-]+)/g;
-
-  let html = "";
-  let lastIndex = 0;
-  let match;
-
-  while ((match = regex.exec(value)) !== null) {
-    html += escapeHtml(value.slice(lastIndex, match.index));
-
-    const prefix = match[1];
-    const handle = match[2];
-
-    if (validHandles.has(handle.toLowerCase())) {
-      html += `${escapeHtml(prefix)}<span style="box-decoration-break: clone; -webkit-box-decoration-break: clone;" class="${mentionClass}">${escapeHtml("@" + handle)}</span>`;
-    } else {
-      html += escapeHtml(match[0]);
-    }
-
-    lastIndex = regex.lastIndex;
-  }
-
-  html += escapeHtml(value.slice(lastIndex));
-  return html.replace(/\n/g, "<br>") || "<br>";
+function getFileTrigger(value, cursor) {
+  const beforeCursor = value.slice(0, cursor);
+  const match = beforeCursor.match(/(^|\s)@([^\s]*)$/);
+  if (!match) return null;
+  const start = beforeCursor.length - match[2].length - 1;
+  return { start, end: cursor, query: match[2] };
 }
 
 function extractAgentMentions(value, profiles) {
   const handles = new Set(
-    [...String(value || '').matchAll(/(^|[\s(])@([a-zA-Z0-9_-]+)/g)]
+    [...String(value || '').matchAll(/(^|[\s(])#([a-zA-Z0-9_-]+)/g)]
       .map(match => match[2].toLowerCase())
   );
   const seen = new Set();
@@ -87,6 +54,32 @@ function formatElapsed(ms) {
   return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
 }
 
+function splitFileQuery(query = "") {
+  const trimmed = String(query || "").replace(/^\/+/, "");
+  if (!trimmed) return { dirPath: ".", filter: "" };
+  if (trimmed.endsWith("/")) return { dirPath: trimmed.replace(/\/+$/, "") || ".", filter: "" };
+  if (!trimmed.includes("/")) return { dirPath: ".", filter: trimmed };
+  return { dirPath: dirname(trimmed), filter: trimmed.split("/").pop() || "" };
+}
+
+function fileSubtitle(file) {
+  if (!file?.path) return "";
+  if (file.type === "dir") return file.path === "." ? "Folder" : file.path;
+  const dir = dirname(file.path);
+  return dir === "." ? file.ext?.toUpperCase() || "File" : dir;
+}
+
+function formatRootLabel(rootPath = "") {
+  const parts = String(rootPath || "").split(/[\\/]/).filter(Boolean);
+  if (parts.length === 0) return "Workspace";
+  return parts.slice(-2).join("/");
+}
+
+const suggestionPanelClass =
+  "absolute bottom-full left-0 right-0 z-30 mb-1 overflow-hidden rounded-lg border border-gray-200/80 bg-white/95 backdrop-blur-sm dark:border-gray-700/80 dark:bg-gray-800/95 midnight:border-slate-700/80 midnight:bg-gray-900/95";
+const suggestionActiveClass = "bg-gray-100/80 dark:bg-gray-700/70 midnight:bg-slate-800/75";
+const suggestionIdleClass = "hover:bg-gray-50/90 dark:hover:bg-gray-700/60 midnight:hover:bg-slate-800/65";
+
 export const MessageInputV2 = ({
   onSubmit,
   disabled,
@@ -103,6 +96,7 @@ export const MessageInputV2 = ({
   onCompactContext,
   isCompacting = false,
   onDraftChange,
+  onFileAttachmentsChange,
   prefillValue,
   toolsEnabled = true,
   onToggleTools,
@@ -123,28 +117,53 @@ export const MessageInputV2 = ({
   const [agentProfiles, setAgentProfiles] = useState([]);
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [dismissedTrigger, setDismissedTrigger] = useState(null);
   const [runElapsed, setRunElapsed] = useState(0);
+
+  // File attachments state
+  const [fileAttachments, setFileAttachments] = useState([]);
+  const [fileSearchResults, setFileSearchResults] = useState([]);
+  const [fileSearchLoading, setFileSearchLoading] = useState(false);
+  const [fileSearchLoaded, setFileSearchLoaded] = useState(false);
+  const [fileRoot, setFileRoot] = useState(null);
+  const [activeAgentIndex, setActiveAgentIndex] = useState(0);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
   const { config: modelContextConfig } = useModelConfig();
   const textareaRef = useRef(null);
-  const overlayRef = useRef(null);
   const toolbarRef = useRef(null);
-  const mentionTrigger = useMemo(
-    () => getMentionTrigger(value, cursorPosition),
+  const rawAgentTrigger = useMemo(
+    () => getAgentTrigger(value, cursorPosition),
     [value, cursorPosition],
   );
-  const mentionSuggestions = useMemo(() => {
-    if (!mentionTrigger) return [];
+  const rawFileTrigger = useMemo(
+    () => getFileTrigger(value, cursorPosition),
+    [value, cursorPosition],
+  );
+  const agentTrigger = dismissedTrigger?.kind === "agent"
+    && dismissedTrigger.value === value
+    && dismissedTrigger.start === rawAgentTrigger?.start
+    && dismissedTrigger.end === rawAgentTrigger?.end
+    ? null
+    : rawAgentTrigger;
+  const fileTrigger = dismissedTrigger?.kind === "file"
+    && dismissedTrigger.value === value
+    && dismissedTrigger.start === rawFileTrigger?.start
+    && dismissedTrigger.end === rawFileTrigger?.end
+    ? null
+    : rawFileTrigger;
+  const agentSuggestions = useMemo(() => {
+    if (!agentTrigger) return [];
     return agentProfiles
       .filter(profile => {
         const handle = String(profile.handle || '').toLowerCase();
         const name = String(profile.name || '').toLowerCase();
-        return !mentionTrigger.query || handle.includes(mentionTrigger.query) || name.includes(mentionTrigger.query);
+        return !agentTrigger.query || handle.includes(agentTrigger.query) || name.includes(agentTrigger.query);
       })
       .slice(0, 6);
-  }, [agentProfiles, mentionTrigger]);
+  }, [agentProfiles, agentTrigger]);
   const detectedAgentMentions = useMemo(
     () => extractAgentMentions(value, agentProfiles),
     [agentProfiles, value],
@@ -175,7 +194,7 @@ export const MessageInputV2 = ({
     if (autoFocus && !disabled) {
       requestAnimationFrame(() => textareaRef.current?.focus());
     }
-  }, [autoFocus]);
+  }, [autoFocus, disabled]);
 
   useEffect(() => {
     if (!prefillValue) return;
@@ -203,6 +222,71 @@ export const MessageInputV2 = ({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    filesApi
+      .getRoots()
+      .then((res) => {
+        if (cancelled) return;
+        const workspaceRoot = (res.roots || []).find(root => root.id === "workspace") || res.roots?.[0] || null;
+        setFileRoot(workspaceRoot);
+      })
+      .catch(() => {
+        if (!cancelled) setFileRoot(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // File search effect
+  useEffect(() => {
+    if (!fileTrigger) {
+      setFileSearchResults([]);
+      setFileSearchLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setFileSearchLoading(true);
+        const query = fileTrigger.query;
+        const { dirPath, filter } = splitFileQuery(query);
+        let res;
+        if (!query || query.includes("/")) {
+          res = await filesApi.listDirectory("workspace", dirPath, false);
+          const needle = filter.toLowerCase();
+          res = {
+            ...res,
+            entries: (res.entries || []).filter((entry) => !needle || entry.name.toLowerCase().includes(needle)),
+          };
+        } else {
+          res = await filesApi.search("workspace", ".", query, false, 160);
+        }
+        if (!cancelled) {
+          setFileSearchResults((res.entries || []).slice(0, 24));
+          setActiveFileIndex(0);
+        }
+      } catch {
+        if (!cancelled) setFileSearchResults([]);
+      } finally {
+        if (!cancelled) {
+          setFileSearchLoading(false);
+          setFileSearchLoaded(true);
+        }
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fileTrigger]);
+
+  useEffect(() => {
+    setActiveAgentIndex(0);
+  }, [agentTrigger?.query]);
+
   const prevDisabledRef = useRef(disabled);
   useEffect(() => {
     if (prevDisabledRef.current && !disabled && textareaRef.current) {
@@ -214,6 +298,7 @@ export const MessageInputV2 = ({
   const handleInputChange = useCallback((e) => {
     const newValue = e.target.value;
     setValue(newValue);
+    setDismissedTrigger(null);
     onDraftChange?.(newValue);
     setCursorPosition(e.target.selectionStart || newValue.length);
 
@@ -229,12 +314,13 @@ export const MessageInputV2 = ({
     if (textarea) setCursorPosition(textarea.selectionStart || 0);
   }, []);
 
-  const insertMention = useCallback((profile) => {
-    if (!mentionTrigger || !profile?.handle) return;
-    const mention = `@${profile.handle}`;
-    const nextValue = `${value.slice(0, mentionTrigger.start)}${mention} ${value.slice(mentionTrigger.end)}`;
-    const nextCursor = mentionTrigger.start + mention.length + 1;
+  const insertAgentMention = useCallback((profile) => {
+    if (!agentTrigger || !profile?.handle) return;
+    const mention = `#${profile.handle}`;
+    const nextValue = `${value.slice(0, agentTrigger.start)}${mention} ${value.slice(agentTrigger.end)}`;
+    const nextCursor = agentTrigger.start + mention.length + 1;
     setValue(nextValue);
+    onDraftChange?.(nextValue);
     setCursorPosition(nextCursor);
     requestAnimationFrame(() => {
       if (!textareaRef.current) return;
@@ -242,15 +328,51 @@ export const MessageInputV2 = ({
       textareaRef.current.selectionStart = nextCursor;
       textareaRef.current.selectionEnd = nextCursor;
     });
-  }, [mentionTrigger, value]);
+  }, [agentTrigger, onDraftChange, value]);
 
-  const handleScroll = useCallback(() => {
-    const textarea = textareaRef.current;
-    const overlay = overlayRef.current;
-    if (textarea && overlay) {
-      overlay.style.transform = `translate(-${textarea.scrollLeft}px, -${textarea.scrollTop}px)`;
+  const attachFile = useCallback((file) => {
+    if (!fileTrigger) return;
+    if (file?.type === "dir") {
+      const nextMention = `@${file.path.replace(/\/?$/, "/")}`;
+      const nextValue = `${value.slice(0, fileTrigger.start)}${nextMention}${value.slice(fileTrigger.end)}`;
+      const nextCursor = fileTrigger.start + nextMention.length;
+      setValue(nextValue);
+      onDraftChange?.(nextValue);
+      setCursorPosition(nextCursor);
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) return;
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = nextCursor;
+        textareaRef.current.selectionEnd = nextCursor;
+      });
+      return;
     }
-  }, []);
+
+    const nextValue = value.slice(0, fileTrigger.start) + value.slice(fileTrigger.end);
+    setValue(nextValue);
+    onDraftChange?.(nextValue);
+    setCursorPosition(fileTrigger.start);
+    setFileAttachments(prev => {
+      if (prev.some(f => f.path === file.path)) return prev;
+      const next = [...prev, { path: file.path, name: file.name, ext: file.ext }];
+      onFileAttachmentsChange?.(next);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      textareaRef.current.selectionStart = fileTrigger.start;
+      textareaRef.current.selectionEnd = fileTrigger.start;
+    });
+  }, [fileTrigger, onDraftChange, value, onFileAttachmentsChange]);
+
+  const removeFileAttachment = useCallback((path) => {
+    setFileAttachments(prev => {
+      const next = prev.filter(f => f.path !== path);
+      onFileAttachmentsChange?.(next);
+      return next;
+    });
+  }, [onFileAttachmentsChange]);
 
   const handleSubmit = useCallback(
     async (e) => {
@@ -261,10 +383,13 @@ export const MessageInputV2 = ({
         const messageToSend = {
           content: value.trim(),
           agentMentions: detectedAgentMentions,
+          fileAttachments: fileAttachments.length > 0 ? fileAttachments : undefined,
         };
 
         await onSubmit(messageToSend, []);
         setValue("");
+        setFileAttachments([]);
+        onFileAttachmentsChange?.([]);
         onDraftChange?.("");
         setError(null);
         if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -273,16 +398,55 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, onSubmit, detectedAgentMentions, onDraftChange],
+    [value, disabled, onSubmit, detectedAgentMentions, fileAttachments, onDraftChange, onFileAttachmentsChange],
   );
 
   const handleKeyDown = useCallback(
     (e) => {
       const nativeIsComposing = Boolean(e.nativeEvent?.isComposing);
 
-      if (mentionSuggestions.length > 0 && (e.key === "Tab" || e.key === "Enter")) {
+      if (e.key === "Escape") {
+        if (agentTrigger || fileTrigger) {
+          e.preventDefault();
+          const trigger = agentTrigger || fileTrigger;
+          setDismissedTrigger({
+            kind: agentTrigger ? "agent" : "file",
+            start: trigger.start,
+            end: trigger.end,
+            value,
+          });
+          requestAnimationFrame(() => textareaRef.current?.focus());
+          return;
+        }
+      }
+
+      if (agentSuggestions.length > 0 && agentTrigger && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
         e.preventDefault();
-        insertMention(mentionSuggestions[0]);
+        setActiveAgentIndex((current) => {
+          const delta = e.key === "ArrowDown" ? 1 : -1;
+          return (current + delta + agentSuggestions.length) % agentSuggestions.length;
+        });
+        return;
+      }
+
+      if (fileSearchResults.length > 0 && fileTrigger && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+        setActiveFileIndex((current) => {
+          const delta = e.key === "ArrowDown" ? 1 : -1;
+          return (current + delta + fileSearchResults.length) % fileSearchResults.length;
+        });
+        return;
+      }
+
+      if (agentSuggestions.length > 0 && (e.key === "Tab" || e.key === "Enter")) {
+        e.preventDefault();
+        insertAgentMention(agentSuggestions[activeAgentIndex] || agentSuggestions[0]);
+        return;
+      }
+
+      if (fileSearchResults.length > 0 && (e.key === "Tab" || e.key === "Enter")) {
+        e.preventDefault();
+        attachFile(fileSearchResults[activeFileIndex] || fileSearchResults[0]);
         return;
       }
 
@@ -296,7 +460,7 @@ export const MessageInputV2 = ({
         handleSubmit();
       }
     },
-    [handleSubmit, insertMention, isComposing, mentionSuggestions],
+    [handleSubmit, insertAgentMention, attachFile, isComposing, agentSuggestions, fileSearchResults, agentTrigger, fileTrigger, activeAgentIndex, activeFileIndex, value],
   );
 
   const canSubmit = value.trim() && !disabled && !isRunning;
@@ -453,14 +617,6 @@ export const MessageInputV2 = ({
               )}
 
               <div className="relative">
-                <div
-                  ref={overlayRef}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 h-full w-full overflow-hidden text-base leading-relaxed text-gray-900 dark:text-gray-100 midnight:text-gray-100 break-words"
-                  dangerouslySetInnerHTML={{
-                    __html: buildMentionOverlayHtml(value, agentProfiles),
-                  }}
-                />
                 <textarea
                   ref={textareaRef}
                   value={value}
@@ -468,7 +624,6 @@ export const MessageInputV2 = ({
                   onKeyDown={handleKeyDown}
                   onClick={handleCursorChange}
                   onKeyUp={handleCursorChange}
-                  onScroll={handleScroll}
                   onCompositionStart={() => setIsComposing(true)}
                   onCompositionEnd={() => setIsComposing(false)}
                   disabled={disabled}
@@ -479,41 +634,120 @@ export const MessageInputV2 = ({
                   autoCorrect="off"
                   autoCapitalize="off"
                   rows="2"
-                  className="w-full resize-none bg-transparent text-transparent caret-gray-900 dark:caret-gray-100 midnight:caret-gray-100 placeholder-gray-400 dark:placeholder-gray-500 midnight:placeholder-gray-500 focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50"
+                  className="w-full resize-none bg-transparent text-gray-900 caret-gray-900 placeholder-gray-400 focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50 dark:text-gray-100 dark:caret-gray-100 dark:placeholder-gray-500 midnight:text-gray-100 midnight:caret-gray-100 midnight:placeholder-gray-500"
                 />
+
+                {agentTrigger && (
+                  <div className={suggestionPanelClass}>
+                    {agentSuggestions.length > 0 ? (
+                      <div className="max-h-72 overflow-y-auto p-1">
+                        {agentSuggestions.map((profile, index) => (
+                          <button
+                            key={profile.id}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => insertAgentMention(profile)}
+                            className={`flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors ${
+                              index === activeAgentIndex
+                                ? suggestionActiveClass
+                                : suggestionIdleClass
+                            }`}
+                          >
+                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 text-sm dark:bg-gray-800 midnight:bg-slate-800">
+                              {profile.icon || "🤖"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">
+                                {profile.name}
+                              </span>
+                              <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                                #{profile.handle}{profile.description ? ` · ${profile.description}` : ''}
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">
+                        {profilesLoaded ? 'No matching agent profiles' : 'Loading agent profiles...'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {fileTrigger && (
+                  <div className={suggestionPanelClass}>
+                    {fileSearchLoading ? (
+                      <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Searching files...
+                      </div>
+                    ) : fileSearchResults.length > 0 ? (
+                      <div className="max-h-72 overflow-y-auto p-1">
+                        {fileSearchResults.map((file, index) => {
+                          const { Icon, color } = fileIconMeta(file.ext, file.type);
+                          return (
+                            <button
+                              key={file.path}
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => attachFile(file)}
+                              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors ${
+                                index === activeFileIndex
+                                  ? suggestionActiveClass
+                                  : suggestionIdleClass
+                              }`}
+                            >
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100/80 dark:bg-gray-700/80 midnight:bg-slate-800/80">
+                                <Icon className={`h-4 w-4 ${color}`} />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex min-w-0 items-baseline gap-2">
+                                  <span className="truncate text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">
+                                    {file.name}
+                                  </span>
+                                  {file.type === "dir" && (
+                                    <span className="shrink-0 text-[10px] font-medium text-amber-500">folder</span>
+                                  )}
+                                </span>
+                                <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                                  {fileSubtitle(file)}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">
+                        {fileSearchLoaded ? 'No matching files' : 'Searching files...'}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {mentionTrigger && (
-                <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                  {mentionSuggestions.length > 0 ? (
-                    <div className="max-h-56 overflow-y-auto p-1">
-                      {mentionSuggestions.map(profile => (
+              {fileAttachments.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {fileAttachments.map(file => {
+                    const { Icon, color } = fileIconMeta(file.ext, "file");
+                    return (
+                      <span
+                        key={file.path}
+                        className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 midnight:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-700 dark:text-slate-300"
+                      >
+                        <Icon className={`h-3.5 w-3.5 ${color}`} />
+                        <span className="truncate max-w-[12rem]">{file.name}</span>
                         <button
-                          key={profile.id}
                           type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => insertMention(profile)}
-                          className="flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                          onClick={() => removeFileAttachment(file.path)}
+                          className="ml-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                         >
-                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 text-sm dark:bg-gray-800 midnight:bg-slate-800">
-                            {profile.icon || "🤖"}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">
-                              {profile.name}
-                            </span>
-                            <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                              @{profile.handle}{profile.description ? ` · ${profile.description}` : ''}
-                            </span>
-                          </span>
+                          <X className="w-3 h-3" />
                         </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">
-                      {profilesLoaded ? 'No matching agent profiles' : 'Loading agent profiles...'}
-                    </div>
-                  )}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
 
@@ -634,6 +868,7 @@ export const MessageInputV2 = ({
                       {autoApprove ? 'Auto ON' : 'Ask'}
                     </button>
                   )}
+
                 </div>
 
                 <div className="shrink-0">
@@ -672,6 +907,19 @@ export const MessageInputV2 = ({
               </div>
             </div>
           </form>
+        )}
+
+        {fileRoot?.path && (
+          <div className="mt-2 flex justify-center">
+            <div
+              title={`@ file search is scoped to ${fileRoot.path}`}
+              className="inline-flex max-w-full items-center gap-1.5 px-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+            >
+              <HardDrive className="h-3 w-3 shrink-0" />
+              <span className="shrink-0">@ files search</span>
+              <span className="min-w-0 truncate">{formatRootLabel(fileRoot.path)}</span>
+            </div>
+          </div>
         )}
 
         {hasMessages && (

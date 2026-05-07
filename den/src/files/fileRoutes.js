@@ -77,11 +77,13 @@ router.get('/preview', authenticate, (req, res) => {
 
 router.get('/search', authenticate, (req, res) => {
   try {
+    const maxResults = Math.min(Math.max(parseInt(req.query.max || '120', 10) || 120, 1), 500);
     res.json(searchEntries({
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
       query: req.query.q || '',
       includeHidden: req.query.hidden === 'true',
+      maxResults,
     }));
   } catch (err) {
     sendRouteError(res, err);

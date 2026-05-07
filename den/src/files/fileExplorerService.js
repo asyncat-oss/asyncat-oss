@@ -4,6 +4,7 @@ import path from 'path';
 
 const SKIP_NAMES = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dist', 'build', 'venv', '.venv']);
 const TEXT_PREVIEW_LIMIT = 5 * 1024 * 1024;
+const SEARCH_COLLECT_LIMIT = 2000;
 
 function existsDir(dir) {
   try {
@@ -165,6 +166,37 @@ export function loadEntry({ rootId = 'workspace', relativePath = '.', includeHid
   }
 }
 
+function searchScore(entry, needle) {
+  const name = entry.name.toLowerCase();
+  const ext = entry.ext ? `.${entry.ext}` : '';
+  const base = ext && name.endsWith(ext) ? name.slice(0, -ext.length) : name;
+  const entryPath = entry.path.toLowerCase();
+  const segments = entryPath.split(/[\\/]/g);
+
+  let score = 1000;
+  if (base === needle) score = 0;
+  else if (name === needle) score = 1;
+  else if (base.startsWith(needle)) score = 10;
+  else if (name.startsWith(needle)) score = 20;
+  else if (segments.some(segment => segment.startsWith(needle))) score = 35;
+  else if (base.includes(needle)) score = 50;
+  else if (name.includes(needle)) score = 60;
+  else score = 90;
+
+  if (entry.type === 'dir') score += 8;
+  score += Math.min(entryPath.length / 1000, 2);
+  return score;
+}
+
+function sortSearchEntries(entries, needle) {
+  return entries.sort((a, b) => {
+    const scoreDiff = searchScore(a, needle) - searchScore(b, needle);
+    if (scoreDiff !== 0) return scoreDiff;
+    if (a.type !== b.type) return a.type === 'file' ? -1 : 1;
+    return a.path.localeCompare(b.path, undefined, { sensitivity: 'base', numeric: true });
+  });
+}
+
 export function searchEntries({ rootId = 'workspace', relativePath = '.', query = '', includeHidden = false, maxResults = 80 }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
   const needle = query.trim().toLowerCase();
@@ -172,12 +204,13 @@ export function searchEntries({ rootId = 'workspace', relativePath = '.', query 
 
   const results = [];
   function walk(dir) {
-    if (results.length >= maxResults) return;
+    if (results.length >= SEARCH_COLLECT_LIMIT) return;
     let names = [];
     try { names = fs.readdirSync(dir); } catch { return; }
+    names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
 
     for (const name of names) {
-      if (results.length >= maxResults) break;
+      if (results.length >= SEARCH_COLLECT_LIMIT) break;
       if (!includeHidden && (name.startsWith('.') || SKIP_NAMES.has(name))) continue;
       const full = path.join(dir, name);
       let meta;
@@ -188,7 +221,12 @@ export function searchEntries({ rootId = 'workspace', relativePath = '.', query 
   }
   walk(ctx.absolutePath);
 
-  return { success: true, root: publicRoot(ctx.root), path: ctx.relativePath, entries: sortEntries(results) };
+  return {
+    success: true,
+    root: publicRoot(ctx.root),
+    path: ctx.relativePath,
+    entries: sortSearchEntries(results, needle).slice(0, maxResults),
+  };
 }
 
 export function createDirectory({ rootId = 'workspace', relativePath }) {

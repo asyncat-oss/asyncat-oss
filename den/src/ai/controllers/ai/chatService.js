@@ -173,6 +173,11 @@ class ChatService {
         baseMessage.agentEvents = msg.agentEvents;
       }
 
+      // Preserve file attachments so they survive navigation
+      if (Array.isArray(msg.fileAttachments) && msg.fileAttachments.length > 0) {
+        baseMessage.fileAttachments = msg.fileAttachments;
+      }
+
       // Preserve web search event (images + sources) so they survive navigation
       if (msg.searchEvent && typeof msg.searchEvent === 'object') {
         baseMessage.searchEvent = msg.searchEvent;
@@ -257,6 +262,11 @@ class ChatService {
 
       if (Array.isArray(msg.agentEvents)) {
         baseMessage.agentEvents = msg.agentEvents;
+      }
+
+      // Restore file attachments
+      if (Array.isArray(msg.fileAttachments) && msg.fileAttachments.length > 0) {
+        baseMessage.fileAttachments = msg.fileAttachments;
       }
 
       // Restore web search event (images + sources)

@@ -121,14 +121,14 @@ function getLeadingProfileMention(goal = '', mentions = []) {
   const handle = String(mention?.handle || '').toLowerCase();
   if (!handle) return null;
   const escaped = handle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^\\s*@${escaped}(?:\\b|\\s|$)`, 'i').test(goal) ? mention : null;
+  return new RegExp(`^\\s*#${escaped}(?:\\b|\\s|$)`, 'i').test(goal) ? mention : null;
 }
 
 function buildEventsFromMessages(messages = []) {
   const events = [];
   for (const msg of messages) {
     if (msg.type === 'user') {
-      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMentions: msg.agentMentions || [] } });
+      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMentions: msg.agentMentions || [], fileAttachments: msg.fileAttachments || [] } });
     } else if (msg.type === 'assistant') {
       if (Array.isArray(msg.agentEvents) && msg.agentEvents.length > 0) {
         events.push(...msg.agentEvents.filter(ev => ev?.type && ev.type !== 'user_goal' && ev.type !== 'answer'));
@@ -675,6 +675,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [draftGoal, setDraftGoal] = useState('');
+  const [draftFileAttachments, setDraftFileAttachments] = useState([]);
   const [contextInfo, setContextInfo] = useState(null);
   const [contextLoading, setContextLoading] = useState(false);
   const [contextError, setContextError] = useState(false);
@@ -826,6 +827,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           conversationHistory: contextHistoryForMeter,
           enableTools: toolsEnabled,
           profileId: selectedProfileId,
+          fileAttachments: draftFileAttachments,
         });
         if (!cancelled) {
           setContextInfo(result?.context || null);
@@ -920,6 +922,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const handleStartNewConversation = useCallback(async () => {
     setShowConversationMenu(false);
+    setDraftFileAttachments([]);
     navigate('/home');
     await handleNewConversation();
   }, [handleNewConversation, navigate]);
@@ -927,6 +930,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const handleOpenConversation = useCallback((conversationId) => {
     if (!conversationId) return;
     setShowConversationMenu(false);
+    setDraftFileAttachments([]);
     navigate(`/conversations/${conversationId}`);
   }, [navigate]);
 
@@ -1119,6 +1123,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
     const agentMentions = Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : [];
+    const fileAttachments = Array.isArray(messageObj?.fileAttachments) ? messageObj.fileAttachments : [];
     const leadingProfileMention = getLeadingProfileMention(submittedGoal, agentMentions);
     const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
     const runKey = currentRunKey;
@@ -1145,9 +1150,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         session: null,
         selectedProfileId: effectiveProfileId || null,
         agentMentions,
+        fileAttachments,
         events: [
           ...baseEvents,
-          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
+          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, fileAttachments, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
         ],
       };
     });
@@ -1161,7 +1167,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
     const runEvents = [
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, profileId: effectiveProfileId || null } },
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, fileAttachments, profileId: effectiveProfileId || null } },
     ];
 
     try {
@@ -1170,6 +1176,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         preApprovedTools: [...alwaysAllowedTools],
         profileId: effectiveProfileId,
         agentMentions,
+        fileAttachments,
         enableTools: effectiveToolsEnabled,
       })) {
         if (controller.signal.aborted) break;
@@ -1288,7 +1295,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       if (capturedFinalAnswer) {
         const nextHistory = [
           ...activeConversationHistory,
-          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMentions },
+          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMentions, fileAttachments },
           { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentSessionId: runSessionId },
         ];
         const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
@@ -1304,6 +1311,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           timestamp: new Date().toISOString(),
           toolsEnabled: effectiveToolsEnabled,
           agentMentions,
+          fileAttachments,
         };
         const runEventsForMsg = runEvents;
         const searchEvent = buildSearchEvent(runEventsForMsg);
@@ -2148,6 +2156,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onCompactContext={handleCompactContext}
               isCompacting={isCompactingContext}
               onDraftChange={setDraftGoal}
+              onFileAttachmentsChange={setDraftFileAttachments}
               toolsEnabled={toolsEnabled}
               onToggleTools={() => setToolsEnabled(!toolsEnabled)}
               autoApprove={agentAutoApprove}
@@ -2527,6 +2536,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onCompactContext={handleCompactContext}
                 isCompacting={isCompactingContext}
                 onDraftChange={setDraftGoal}
+                onFileAttachmentsChange={setDraftFileAttachments}
                 toolsEnabled={toolsEnabled}
                 onToggleTools={() => setToolsEnabled(!toolsEnabled)}
                 autoApprove={agentAutoApprove}

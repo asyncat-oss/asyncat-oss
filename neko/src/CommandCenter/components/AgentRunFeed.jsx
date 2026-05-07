@@ -180,7 +180,17 @@ function UserGoalEvent({ data }) {
               {data.agentMentions.map(agent => (
                 <span key={agent.id || agent.handle} className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
                   <span>{agent.icon || '🤖'}</span>
-                  @{agent.handle}
+                  #{agent.handle}
+                </span>
+              ))}
+            </div>
+          )}
+          {Array.isArray(data?.fileAttachments) && data.fileAttachments.length > 0 && (
+            <div className="mt-2 flex flex-wrap justify-end gap-1">
+              {data.fileAttachments.map(file => (
+                <span key={file.path || file.name} className="inline-flex max-w-full items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+                  <File className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{file.path || file.name}</span>
                 </span>
               ))}
             </div>

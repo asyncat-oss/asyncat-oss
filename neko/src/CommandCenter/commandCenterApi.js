@@ -711,6 +711,7 @@ export const agentApi = {
         preApprovedTools: opts.preApprovedTools || [],
         profileId: opts.profileId || null,
         agentMentions: opts.agentMentions || [],
+        fileAttachments: opts.fileAttachments || [],
         enableTools: opts.enableTools !== false,
       })
     });
@@ -795,10 +796,10 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/health?limit=${encodeURIComponent(String(limit))}`);
   },
 
-  getContext: async ({ goal = '', conversationHistory = [], enableTools = true, profileId = null, agentMentions = [] } = {}) => {
+  getContext: async ({ goal = '', conversationHistory = [], enableTools = true, profileId = null, agentMentions = [], fileAttachments = [] } = {}) => {
     return await apiRequest(`${API_BASE_URL}/agent/context`, {
       method: 'POST',
-      body: JSON.stringify({ goal, conversationHistory, enableTools, profileId, agentMentions }),
+      body: JSON.stringify({ goal, conversationHistory, enableTools, profileId, agentMentions, fileAttachments }),
     });
   },
 
@@ -1002,8 +1003,8 @@ export const filesApi = {
     return await apiRequest(`${API_BASE_URL}/files/list?${params}`);
   },
 
-  search: async (rootId = 'workspace', dirPath = '.', query = '', hidden = false) => {
-    const params = new URLSearchParams({ rootId, path: dirPath, q: query, hidden: String(hidden) });
+  search: async (rootId = 'workspace', dirPath = '.', query = '', hidden = false, max = 120) => {
+    const params = new URLSearchParams({ rootId, path: dirPath, q: query, hidden: String(hidden), max: String(max) });
     return await apiRequest(`${API_BASE_URL}/files/search?${params}`);
   },
 

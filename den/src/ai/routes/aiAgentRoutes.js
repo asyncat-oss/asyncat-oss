@@ -14,6 +14,7 @@ import { getAiClientForScheduledProvider, getAiClientForUser } from '../controll
 import { getStatus as getLlamaStatus } from '../controllers/ai/llamaServerManager.js';
 import { resolveContextWindow } from '../controllers/ai/modelContextResolver.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { loadEntry } from '../../files/fileExplorerService.js';
 import { getProviderPreset, publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
@@ -395,13 +396,40 @@ function resolveAgentMentions(rawMentions = [], userId) {
     const profile = mention?.id
       ? getProfile(mention.id, userId)
       : mention?.handle
-        ? getProfileByHandle(String(mention.handle).replace(/^@/, ''), userId)
+        ? getProfileByHandle(String(mention.handle).replace(/^#/, ''), userId)
         : null;
     if (!profile || seen.has(profile.id)) continue;
     seen.add(profile.id);
     profiles.push(profile);
   }
   return profiles;
+}
+
+function resolveFileAttachments(fileAttachments = []) {
+  if (!Array.isArray(fileAttachments)) return [];
+  const results = [];
+  for (const attachment of fileAttachments.slice(0, 10)) {
+    const filePath = typeof attachment === 'string' ? attachment : attachment?.path;
+    if (!filePath) continue;
+    try {
+      const entry = loadEntry({ rootId: 'workspace', relativePath: filePath });
+      if (entry.success && entry.type === 'file' && entry.content) {
+        results.push({ path: filePath, name: entry.name, content: entry.content });
+      }
+    } catch (err) {
+      console.warn(`[agent] Failed to load attached file ${filePath}:`, err.message);
+    }
+  }
+  return results;
+}
+
+function injectFileAttachments(goal, fileAttachments = []) {
+  if (!fileAttachments.length) return goal;
+  const blocks = fileAttachments.map(f => {
+    const ext = f.name ? f.name.split('.').pop() : '';
+    return `--- File: ${f.path} ---\n\`\`\`${ext}\n${f.content}\n\`\`\`\n`;
+  }).join('\n');
+  return `${blocks}\n\n${goal}`;
 }
 
 function markStaleActiveSessions() {
@@ -457,8 +485,10 @@ router.post('/context', authenticate, async (req, res) => {
       enableTools = true,
       profileId = null,
       agentMentions = [],
+      fileAttachments = [],
     } = req.body || {};
-    const goal = String(rawGoal || '').trim();
+    const resolvedFiles = resolveFileAttachments(fileAttachments);
+    const goal = injectFileAttachments(String(rawGoal || '').trim(), resolvedFiles);
     const provider = getAiClientForUser(req.user.id);
     const contextLimitMeta = resolvePromptContextMeta(provider, 8192);
     const ctxLimit = contextLimitMeta.contextWindow;
@@ -1289,8 +1319,9 @@ router.post('/run', authenticate, async (req, res) => {
     abortController.abort();
   });
   try {
-    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMentions = [] } = req.body;
-    const goal = (rawGoal || rawMessage || '').trim();
+    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMentions = [], fileAttachments = [] } = req.body;
+    const resolvedFiles = resolveFileAttachments(fileAttachments);
+    const goal = injectFileAttachments((rawGoal || rawMessage || '').trim(), resolvedFiles);
 
     if (!goal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
