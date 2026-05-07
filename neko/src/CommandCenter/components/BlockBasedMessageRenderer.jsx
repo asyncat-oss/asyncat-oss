@@ -445,31 +445,37 @@ export const BlockRenderer = ({ block, onTermClick }) => {
     case 'table':
       const tableData = block.properties?.tableData || [];
       if (tableData.length === 0) return null;
+      const columnCount = Math.max(...tableData.map(row => row.length), 1);
+      const normalizedRows = tableData.map(row =>
+        Array.from({ length: columnCount }, (_, index) => row[index] ?? '')
+      );
 
       return (
-        <div className="mb-6 overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-300 dark:border-gray-600 midnight:border-slate-500 rounded-lg overflow-hidden">
-            <thead>
-              <tr className="bg-gray-100 dark:bg-gray-800 midnight:bg-slate-700">
-                {tableData[0]?.map((header, i) => (
-                  <th key={i} className={`border border-gray-300 dark:border-gray-600 midnight:border-slate-500 px-4 py-3 text-left font-semibold ${baseStyles}`}>
-                    {renderContent(header)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tableData.slice(1).map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-700/50 transition-colors">
-                  {row.map((cell, j) => (
-                    <td key={j} className={`border border-gray-300 dark:border-gray-600 midnight:border-slate-500 px-4 py-3 ${baseStyles}`}>
-                      {renderContent(cell)}
-                    </td>
+        <div className="mb-7 max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-auto border-collapse text-sm">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-800/80 midnight:bg-slate-800">
+                  {normalizedRows[0]?.map((header, i) => (
+                    <th key={i} className={`min-w-[10rem] border-b border-r border-gray-200 px-3.5 py-3 text-left align-top text-xs font-semibold [overflow-wrap:anywhere] last:border-r-0 dark:border-gray-700 midnight:border-slate-700 ${baseStyles}`}>
+                      {renderContent(header)}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {normalizedRows.slice(1).map((row, i) => (
+                  <tr key={i} className="transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-800/55 [&:last-child_td]:border-b-0">
+                    {row.map((cell, j) => (
+                      <td key={j} className={`min-w-[10rem] border-b border-r border-gray-200 px-3.5 py-3 align-top [overflow-wrap:anywhere] last:border-r-0 dark:border-gray-700 midnight:border-slate-700 ${baseStyles}`}>
+                        {renderContent(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       );
 
@@ -633,6 +639,16 @@ const BlockType = {
   CALLOUT: 'callout'
 };
 
+const normalizeMarkdownTableRow = (line) => {
+  const rawCells = line.split('|').map(cell => cell.trim());
+  if (rawCells[0] === '') rawCells.shift();
+  if (rawCells[rawCells.length - 1] === '') rawCells.pop();
+  return rawCells;
+};
+
+const isMarkdownTableSeparator = (row) =>
+  row.length > 0 && row.every(cell => /^:?-{3,}:?$/.test(cell));
+
 // Helper to create unique block IDs
 const createId = () => `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -792,14 +808,12 @@ export const parseAIResponseToBlocks = (content) => {
         inTable = true;
         tableRows = [];
       }
-      tableRows.push(trimmed.split('|').map(cell => cell.trim()).filter(cell => cell));
+      tableRows.push(normalizeMarkdownTableRow(trimmed));
       continue;
     } else if (inTable) {
       if (tableRows.length >= 2) {
         const headers = tableRows[0];
-        const dataRows = tableRows.slice(1).filter(row =>
-          !row.every(cell => cell.match(/^[-:]+$/))
-        );
+        const dataRows = tableRows.slice(1).filter(row => !isMarkdownTableSeparator(row));
 
         if (dataRows.length > 0) {
           blocks.push({
@@ -944,9 +958,7 @@ export const parseAIResponseToBlocks = (content) => {
   // Handle remaining content
   if (inTable && tableRows.length >= 2) {
     const headers = tableRows[0];
-    const dataRows = tableRows.slice(1).filter(row =>
-      !row.every(cell => cell.match(/^[-:]+$/))
-    );
+    const dataRows = tableRows.slice(1).filter(row => !isMarkdownTableSeparator(row));
 
     if (dataRows.length > 0) {
       blocks.push({

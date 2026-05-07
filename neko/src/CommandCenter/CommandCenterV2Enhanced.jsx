@@ -1853,8 +1853,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   // Chat Layout
   return (
-    <div className="flex h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
-      <div className="flex flex-col h-full transition-all duration-300 min-w-0 flex-1">
+    <div className="flex h-full min-h-0 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+      <div className="flex min-h-0 flex-1 min-w-0 flex-col h-full transition-all duration-300">
         {TopBar}
         {isConversationLoading ? (
           <ConversationLoadingSkeleton />
@@ -2095,13 +2095,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               </div>
             </div>
 
-            <div className="flex-1 overflow-hidden h-full relative">
+            <div className="min-h-0 flex-1 overflow-hidden relative">
               <div
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto h-full relative"
+                className="h-full min-h-0 overflow-y-auto relative"
                 style={{ maxHeight: '100%' }}
               >
-                <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 min-h-full">
+                <div className="max-w-5xl mx-auto px-4 md:px-8 pt-8 pb-12 min-h-full">
                   <AgentRunFeed
                     events={persistedAgentEvents}
                     isRunning={agentRunning}

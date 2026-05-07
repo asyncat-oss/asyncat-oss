@@ -1,4 +1,4 @@
-// chatService.js - Simplified with Supabase client
+// chatService.js - Simplified with SQLite client
 import { sqliteDb as db } from '../../../db/sqlite.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -21,13 +21,13 @@ class ChatService {
   async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, authenticatedDb = null) {
     try {
       // Use authenticated client if provided, otherwise fall back to base client
-      const supabaseClient = authenticatedDb || db;
+      const dbClient = authenticatedDb || db;
 
       await this.setUserContext(userId);
 
       if (preferredWorkspaceId) {
         // First check if user has access to the preferred workspace using RLS-compatible query
-        const { data: ws } = await supabaseClient
+        const { data: ws } = await dbClient
           .from('workspaces')
           .select('id')
           .eq('id', preferredWorkspaceId)
@@ -40,7 +40,7 @@ class ChatService {
       }
 
       // Get user's first workspace
-      const { data: userWorkspaces, error: wsError } = await supabaseClient
+      const { data: userWorkspaces, error: wsError } = await dbClient
         .from('workspaces')
         .select('id, name, emoji, owner_id')
         .eq('owner_id', userId)
@@ -268,7 +268,7 @@ class ChatService {
     });
   }
 
-  // Simplified save conversation using Supabase
+  // Simplified save conversation using SQLite
   async saveConversation(userId, messages, options = {}) {
     const {
       mode = 'chat',
@@ -286,7 +286,7 @@ class ChatService {
     const dbMode = mode === 'visual' ? 'chat' : mode;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedDb || db;
+    const dbClient = authenticatedDb || db;
 
     try {
       // Validation
@@ -331,7 +331,7 @@ class ChatService {
         }
         if (projectIds.length > 0) updateData.project_ids = projectIds;
 
-        const { data, error } = await supabaseClient
+        const { data, error } = await dbClient
           .schema('aichats')
           .from('conversations')
           .update(updateData)
@@ -349,7 +349,7 @@ class ChatService {
         // CREATE new conversation
         const conversationTitle = title || this.generateTitle(messages[0]?.content || 'New Chat');
 
-        const { error } = await supabaseClient
+        const { error } = await dbClient
           .schema('aichats')
           .from('conversations')
           .insert({
@@ -386,21 +386,21 @@ class ChatService {
     }
   }
 
-  // Simplified get conversation using Supabase
+  // Simplified get conversation using SQLite
   async getConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     const cacheKey = `conversation_${conversationId}_${userId}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedDb || db;
+    const dbClient = authenticatedDb || db;
 
     try {
       await this.setUserContext(userId);
 
       // Build query - when loading a specific conversation, don't filter by workspace
       // The conversation's workspace will be returned in the data
-      let query = supabaseClient
+      let query = dbClient
         .schema('aichats')
         .from('conversations')
         .select(`
@@ -439,7 +439,7 @@ class ChatService {
     }
   }
 
-  // Get user's conversations using Supabase
+  // Get user's conversations using SQLite
   async getUserConversations(userId, options = {}) {
     const {
       mode = null,
@@ -452,7 +452,7 @@ class ChatService {
     } = options;
 
     // Use authenticated client if provided, otherwise fall back to base client
-    const supabaseClient = authenticatedDb || db;
+    const dbClient = authenticatedDb || db;
 
     try {
       await this.setUserContext(userId);
@@ -473,7 +473,7 @@ class ChatService {
       }
 
       // Build the query using the appropriate client
-      let query = supabaseClient
+      let query = dbClient
         .schema('aichats')
         .from('conversations')
         .select(`
@@ -520,7 +520,7 @@ class ChatService {
       }));
 
       // Get total count using the same client
-      let countQuery = supabaseClient
+      let countQuery = dbClient
         .schema('aichats')
         .from('conversations')
         .select('*', { count: 'exact', head: true })
@@ -552,7 +552,7 @@ class ChatService {
   async updateConversation(userId, conversationId, updates, workspaceId = null, authenticatedDb = null) {
     try {
       // Use authenticated client if provided, otherwise fall back to base client
-      const supabaseClient = authenticatedDb || db;
+      const dbClient = authenticatedDb || db;
 
       // Get effective workspace ID
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
@@ -570,7 +570,7 @@ class ChatService {
         throw new Error('No valid fields to update');
       }
 
-      const { data, error } = await supabaseClient
+      const { data, error } = await dbClient
         .schema('aichats')
         .from('conversations')
         .update(updateData)
@@ -599,14 +599,14 @@ class ChatService {
   // Soft-delete (move to trash)
   async deleteConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedDb || db;
+      const dbClient = authenticatedDb || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       // First verify the conversation exists and belongs to this user/workspace.
       // We do this as a separate SELECT so the soft-delete UPDATE doesn't have to
       // return a row (the compat layer can't SELECT back after setting deleted_at
       // because the WHERE deleted_at IS NULL condition no longer matches).
-      const { data: existing } = await supabaseClient
+      const { data: existing } = await dbClient
         .from('conversations')
         .select('id')
         .eq('id', conversationId)
@@ -620,7 +620,7 @@ class ChatService {
       }
 
       // Soft-delete: set deleted_at without trying to SELECT back
-      await supabaseClient
+      await dbClient
         .from('conversations')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', conversationId)
@@ -638,14 +638,14 @@ class ChatService {
   // Restore from trash
   async restoreConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedDb || db;
+      const dbClient = authenticatedDb || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
       // First verify the conversation exists in trash.
       // We do this as a separate SELECT so the restore UPDATE doesn't have to
       // return a row (the compat layer can't SELECT back after setting deleted_at = null
       // because the WHERE deleted_at IS NOT NULL condition no longer matches).
-      const { data: existing } = await supabaseClient
+      const { data: existing } = await dbClient
         .from('conversations')
         .select('id')
         .eq('id', conversationId)
@@ -659,7 +659,7 @@ class ChatService {
       }
 
       // Restore without trying to SELECT back
-      await supabaseClient
+      await dbClient
         .from('conversations')
         .update({ deleted_at: null })
         .eq('id', conversationId)
@@ -675,10 +675,10 @@ class ChatService {
   // Permanent delete (from trash only)
   async permanentDeleteConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedDb || db;
+      const dbClient = authenticatedDb || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
-      const { data, error } = await supabaseClient
+      const { data, error } = await dbClient
         .schema('aichats')
         .from('conversations')
         .delete()
@@ -704,11 +704,11 @@ class ChatService {
   // Get trashed conversations
   async getTrashConversations(userId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedDb || db;
+      const dbClient = authenticatedDb || db;
       await this.setUserContext(userId);
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
-      const { data, error } = await supabaseClient
+      const { data, error } = await dbClient
         .schema('aichats')
         .from('conversations')
         .select('id, title, deleted_at, last_message_at, mode')
@@ -728,11 +728,11 @@ class ChatService {
   // Empty trash (permanently delete all trashed conversations)
   async emptyTrash(userId, workspaceId = null, authenticatedDb = null) {
     try {
-      const supabaseClient = authenticatedDb || db;
+      const dbClient = authenticatedDb || db;
       await this.setUserContext(userId);
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
-      const { error } = await supabaseClient
+      const { error } = await dbClient
         .schema('aichats')
         .from('conversations')
         .delete()
