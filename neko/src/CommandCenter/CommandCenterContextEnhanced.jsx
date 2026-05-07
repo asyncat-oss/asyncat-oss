@@ -197,7 +197,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         mode: options.mode || 'chat',
         projectIds: state.selectedProjects,
         conversationId: targetConversationId,
-        metadata: { workspaceId: currentWorkspace?.id },
+        metadata: { workspaceId: currentWorkspace?.id, ...(options.metadata || {}) },
       });
 
       if (result.success) {
@@ -284,7 +284,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           });
         }
       }
-      dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: apiHistory.slice(-8) });
+      const compactedHistory = Array.isArray(conversation.metadata?.compactedConversationHistory)
+        ? conversation.metadata.compactedConversationHistory
+        : null;
+      dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: compactedHistory || apiHistory.slice(-8) });
     } catch (error) {
       console.error('Load conversation error:', error);
       dispatch({ type: ActionTypes.SET_ERROR, payload: 'Failed to load conversation' });

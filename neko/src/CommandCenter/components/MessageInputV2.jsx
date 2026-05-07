@@ -46,6 +46,11 @@ export const MessageInputV2 = ({
   hasMessages = false,
   conversationTooLong = false,
   conversationTokens = 0,
+  contextInfo = null,
+  contextLoading = false,
+  onCompactContext,
+  isCompacting = false,
+  onDraftChange,
   prefillValue,
   toolsEnabled = true,
   onToggleTools,
@@ -91,10 +96,15 @@ export const MessageInputV2 = ({
   const inputTokens = Math.ceil(value.length / 4);
   const totalTokens = conversationTokens + inputTokens;
   const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || 8192;
-  const contextPercent = Math.min(
+  const estimatedContextPercent = Math.min(
     100,
     Math.round((totalTokens / ctxSize) * 100),
   );
+  const displayTokens = contextInfo?.inputTokens ?? totalTokens;
+  const displayCtxSize = contextInfo?.ctxLimit ?? ctxSize;
+  const contextPercent = contextInfo?.percent ?? estimatedContextPercent;
+  const contextExact = Boolean(contextInfo?.exact);
+  const contextLabel = contextInfo?.label || 'estimated tokens';
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -106,8 +116,9 @@ export const MessageInputV2 = ({
   useEffect(() => {
     if (!prefillValue) return;
     setValue(prefillValue);
+    onDraftChange?.(prefillValue);
     requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [prefillValue]);
+  }, [onDraftChange, prefillValue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +150,7 @@ export const MessageInputV2 = ({
   const handleInputChange = useCallback((e) => {
     const newValue = e.target.value;
     setValue(newValue);
+    onDraftChange?.(newValue);
     setCursorPosition(e.target.selectionStart || newValue.length);
 
     const textarea = textareaRef.current;
@@ -146,7 +158,7 @@ export const MessageInputV2 = ({
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
-  }, []);
+  }, [onDraftChange]);
 
   const handleCursorChange = useCallback(() => {
     const textarea = textareaRef.current;
@@ -190,6 +202,7 @@ export const MessageInputV2 = ({
 
         await onSubmit(messageToSend, []);
         setValue("");
+        onDraftChange?.("");
         setError(null);
         if (textareaRef.current) textareaRef.current.style.height = "auto";
       } catch (err) {
@@ -197,7 +210,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, onSubmit, detectedAgentMentions],
+    [value, disabled, onSubmit, detectedAgentMentions, onDraftChange],
   );
 
   const handleKeyDown = useCallback(
@@ -303,7 +316,7 @@ export const MessageInputV2 = ({
   return (
     <div className="bg-transparent">
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
-        {localModel.isReady && contextPercent > 90 && (
+        {(localModel.isReady || activeBrain.isReady || contextInfo) && contextPercent > 90 && (
           <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border-l-4 border-red-500 rounded-lg">
             <div className="flex items-start gap-2">
               <svg
@@ -453,14 +466,29 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              {localModel.isReady && (
-                <div className="mt-2 flex items-center justify-between text-[10px]">
-                  <span className="text-gray-400 dark:text-gray-500">
-                    {value.length > 0 && `+${inputTokens.toLocaleString()} · `}~
-                    {totalTokens.toLocaleString()} / {ctxSize.toLocaleString()}{" "}
-                    tokens ({contextPercent}%)
+              {(localModel.isReady || activeBrain.isReady || contextInfo) && (
+                <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
+                  <span className="min-w-0 truncate text-gray-400 dark:text-gray-500">
+                    {contextLoading ? 'Checking context...' : (
+                      <>
+                        {contextExact ? '' : '~'}
+                        {displayTokens.toLocaleString()} / {displayCtxSize.toLocaleString()}{" "}
+                        {contextLabel} ({contextPercent}%)
+                        {contextInfo?.contextWindowSource ? ` · ${contextInfo.contextWindowSource}` : ''}
+                      </>
+                    )}
                   </span>
-                  <div className="flex items-center gap-2" />
+                  {onCompactContext && contextPercent >= 50 && (
+                    <button
+                      type="button"
+                      onClick={onCompactContext}
+                      disabled={disabled || isCompacting}
+                      className="shrink-0 rounded-md border border-amber-200 px-2 py-1 text-[10px] font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-60 dark:border-amber-800/70 dark:text-amber-300 dark:hover:bg-amber-950/20"
+                      title="Summarize older context while keeping this chat visible"
+                    >
+                      {isCompacting ? 'Compacting...' : 'Compact'}
+                    </button>
+                  )}
                 </div>
               )}
 

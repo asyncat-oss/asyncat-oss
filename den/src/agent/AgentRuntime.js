@@ -19,6 +19,7 @@ import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
 import { listMemories, searchMemories } from './tools/memoryTools.js';
+import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -255,12 +256,14 @@ export class AgentRuntime {
       // Call the LLM
       let responseText = '';
       let apiToolCalls = null;
+      let streamedReasoning = '';
 
       try {
         const promptTokens = this._estimateTokens(systemPrompt) + this._estimateTokens(JSON.stringify(messages));
         const result = await this._callLLM(systemPrompt, messages);
         responseText = result.text;
         apiToolCalls = result.toolCalls;
+        streamedReasoning = result.reasoning || '';
         const inputTokens = result.usage?.prompt_tokens || promptTokens;
         const outputTokens = result.usage?.completion_tokens || this._estimateTokens(responseText);
         this.usage.inputTokens += inputTokens;
@@ -295,7 +298,7 @@ export class AgentRuntime {
       const toolCalls = ToolCallFormatter.parseToolCalls(responseText, apiToolCalls, knownTools);
 
       // Extract thinking/answer from text
-      const { thinking, finalAnswer } = this._parseResponse(responseText);
+      const { thinking, finalAnswer } = this._parseResponse(responseText, streamedReasoning);
 
       if (thinking) {
         reasoningEvents.push({ thought: thinking, round, timestamp: new Date().toISOString() });
@@ -338,10 +341,7 @@ export class AgentRuntime {
         }
 
         if (!answer) {
-          answer = responseText
-            .replace(/(?:\*\*)?Thought:(?:\*\*)?[\s\S]*?(?=(?:\*\*)?(?:Action|Answer):(?:\*\*)?|<tool_call>|<think>|$)/i, '')
-            .replace(/(?:\*\*)?Action:(?:\*\*)?\s*/i, '')
-            .trim();
+          answer = cleanReasoningAnswer(finalAnswer || responseText);
           if (!answer) answer = responseText; // fallback if stripping removes everything
         }
         this.onEvent({ type: 'answer', data: { answer, round } });
@@ -697,6 +697,7 @@ export class AgentRuntime {
 
     const stream = await this.aiClient.client.chat.completions.create(params);
     let fullText = '';
+    let reasoningText = '';
     const toolCalls = {};
     let finishReason = null;
 
@@ -705,6 +706,11 @@ export class AgentRuntime {
       if (!delta) continue;
       
       finishReason = chunk.choices[0]?.finish_reason || finishReason;
+
+      const reasoningDelta = reasoningTextFromDelta(delta);
+      if (reasoningDelta) {
+        reasoningText += reasoningDelta;
+      }
 
       if (delta.content) {
         fullText += delta.content;
@@ -728,6 +734,7 @@ export class AgentRuntime {
 
     return {
       text: fullText,
+      reasoning: reasoningText,
       toolCalls: apiToolCalls,
       finishReason: finishReason,
     };
@@ -900,25 +907,19 @@ export class AgentRuntime {
     }
   }
 
-  _parseResponse(text) {
-    let thinking = null;
+  _parseResponse(text, streamedReasoning = '') {
+    const parsed = extractReasoningFromText(text);
     let finalAnswer = null;
 
-    // 1. DeepSeek format: <think>...</think>
-    const thinkTagMatch = text.match(/<think>\s*([\s\S]*?)\s*<\/think>/i);
-    if (thinkTagMatch) {
-      thinking = thinkTagMatch[1].trim();
-    }
-
-    // 2. Markdown format: **Thought:** ...
-    const thoughtMatch = text.match(/(?:\*\*)?Thought:(?:\*\*)?\s*([\s\S]*?)(?=(?:\*\*)?(?:Action|Answer):(?:\*\*)?|<tool_call>|<think>|$)/i);
-    if (thoughtMatch && !thinking) {
-      thinking = thoughtMatch[1].trim();
-    }
-
     // Extract Answer: section (signals task completion)
-    const answerMatch = text.match(/(?:\*\*)?Answer:(?:\*\*)?\s*([\s\S]*?)$/i);
-    if (answerMatch) finalAnswer = answerMatch[1].trim();
+    const answerMatch = parsed.answer.match(/(?:\*\*)?Answer:(?:\*\*)?\s*([\s\S]*?)$/i);
+    if (answerMatch) {
+      finalAnswer = cleanReasoningAnswer(answerMatch[1]);
+    } else if (parsed.answer !== text) {
+      finalAnswer = parsed.answer;
+    }
+
+    const thinking = combineReasoningParts(streamedReasoning, parsed.thinking);
 
     return { thinking, finalAnswer };
   }

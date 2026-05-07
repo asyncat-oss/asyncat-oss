@@ -7,6 +7,7 @@ import {
   ShieldOff, Brain, RotateCcw,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
+import { extractReasoningFromText } from '../reasoningParser.js';
 
 // ── Tool icon / label map ─────────────────────────────────────────────────────
 const TOOL_META = {
@@ -531,18 +532,8 @@ function AskUserEvent({ data, onAnswer }) {
 
 // Clean chat-like agent response — no "Agent response" header bar
 function AnswerEvent({ data, suppressThinkFallback = false }) {
-  // Strip raw <think>...</think> blocks the model may have left in the answer
   const raw = data?.answer || '';
-
-  // Extract any think-block content as a fallback before stripping
-  const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
-  const thinkFallback = thinkMatch ? thinkMatch[1].trim() : null;
-
-  const answer = raw
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/\s*<tool_call>[\s\S]*?<\/(?:\w+:)?tool_call>/gi, '')
-    .replace(/\s*<tool_call[\s\S]*$/i, '')
-    .trim();
+  const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
 
   const displayAnswer = answer;
   if (!displayAnswer && !thinkFallback) return null;
@@ -706,24 +697,26 @@ function SkillsLoadedEvent({ data }) {
 function StreamingPreview({ text }) {
   if (!text?.trim()) return null;
 
-  const clean = text
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<think>[\s\S]*$/gi, '')
-    .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-    .replace(/\*\*Thought:\*\*[\s\S]*?(?=\*\*[A-Z]|$)/g, '')
-    .replace(/\*\*Action:\*\*[\s\S]*$/s, '')
-    .trim();
+  const { thinking, answer } = extractReasoningFromText(text);
+  const clean = answer.trim();
 
   if (!clean) {
     return (
-      <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-1 pl-1 mb-1">
-        <span className="flex gap-0.5">
-          <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
-          <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
-          <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
-        </span>
-        Reasoning…
-      </div>
+      <FeedFrame className="mb-2">
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-1 pl-1">
+          <span className="flex gap-0.5">
+            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </span>
+          <span>Reasoning…</span>
+          {thinking && (
+            <span className="truncate text-[10px] text-gray-300 dark:text-gray-700">
+              {thinking.length > 120 ? `${thinking.slice(0, 120)}...` : thinking}
+            </span>
+          )}
+        </div>
+      </FeedFrame>
     );
   }
 

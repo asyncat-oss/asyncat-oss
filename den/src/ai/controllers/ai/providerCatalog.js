@@ -1,3 +1,5 @@
+import { resolveContextWindow } from './modelContextResolver.js';
+
 const LLAMA_PORT = parseInt(process.env.LLAMA_SERVER_PORT ?? '8765', 10);
 
 export const LLAMA_PROVIDER_ID = 'llamacpp-builtin';
@@ -74,6 +76,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: true,
+    contextWindow: 128000,
     local: false,
     description: 'OpenAI platform API.',
   },
@@ -87,6 +90,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: false,
+    contextWindow: 200000,
     local: false,
     description: 'Claude through Anthropic OpenAI compatibility.',
   },
@@ -100,6 +104,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: true,
+    contextWindow: 1048576,
     local: false,
     description: 'Google Gemini through OpenAI compatibility.',
   },
@@ -113,6 +118,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: true,
+    contextWindow: 204800,
     local: false,
     description: 'MiniMax international OpenAI-compatible API.',
   },
@@ -126,6 +132,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: true,
+    contextWindow: 204800,
     local: false,
     description: 'MiniMax China OpenAI-compatible API.',
   },
@@ -139,6 +146,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: true,
+    contextWindow: 131072,
     local: false,
     description: 'Groq OpenAI-compatible API.',
   },
@@ -152,6 +160,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: true,
+    contextWindow: 128000,
     local: false,
     description: 'Route through OpenRouter with one API key.',
   },
@@ -165,6 +174,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: false,
+    contextWindow: 128000,
     local: false,
     settings: { apiVersion: '2024-10-21' },
     description: 'Azure OpenAI deployment endpoint.',
@@ -179,6 +189,7 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: false,
     supportsTools: true,
     supportsModelList: true,
+    contextWindow: 8192,
     local: false,
     description: 'Any OpenAI-compatible endpoint.',
   },
@@ -239,6 +250,12 @@ export function publicProvider(row) {
   if (!row) return null;
   const preset = getProviderPreset(row.provider_id);
   const settings = parseSettings(row.settings);
+  const resolvedContext = resolveContextWindow({
+    providerId: row.provider_id,
+    model: row.model,
+    settings,
+    preset,
+  });
   return {
     id: row.id,
     name: row.name || preset?.name || row.provider_id || row.provider_type,
@@ -250,6 +267,9 @@ export function publicProvider(row) {
     settings,
     supports_tools: providerSupportsTools(row),
     supports_model_list: Boolean(preset?.supportsModelList),
+    context_window: resolvedContext.contextWindow,
+    context_window_source: resolvedContext.source,
+    context_window_confidence: resolvedContext.confidence,
     local: providerIsLocal(row),
     managed: row.provider_id === LLAMA_PROVIDER_ID,
     last_test_status: row.last_test_status || null,

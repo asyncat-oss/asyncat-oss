@@ -5,7 +5,8 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { getStorageSummary } from './storageService.js';
+import { verifyUser } from '../auth/authMiddleware.js';
+import { clearManagedUploads, getStorageSummary } from './storageService.js';
 
 const router = express.Router();
 
@@ -19,12 +20,30 @@ const sanitizePath = (inputPath) => {
   return path.normalize(inputPath).replace(/^(\.\.(\/|\\|$))+/, '');
 };
 
-router.get('/summary', (req, res) => {
+router.get('/summary', verifyUser, (req, res) => {
   try {
     const summary = getStorageSummary();
     res.json(summary);
   } catch (err) {
     console.error('Storage summary error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/uploads', verifyUser, async (req, res) => {
+  try {
+    const confirm = String(req.body?.confirm || '').trim().toLowerCase();
+    if (confirm !== 'clear uploads') {
+      return res.status(400).json({
+        success: false,
+        error: 'Confirmation text must be "clear uploads"',
+      });
+    }
+
+    const result = await clearManagedUploads();
+    res.json(result);
+  } catch (err) {
+    console.error('Storage clear uploads error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

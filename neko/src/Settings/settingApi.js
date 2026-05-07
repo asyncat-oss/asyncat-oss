@@ -614,6 +614,13 @@ export const storageApi = {
   getSummary: async () => {
     return apiCall(`${MAIN_URL}/api/storage/summary`);
   },
+
+  clearUploads: async () => {
+    return apiCall(`${MAIN_URL}/api/storage/uploads`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: 'clear uploads' }),
+    });
+  },
 };
 
 // ===========================================

@@ -1,10 +1,12 @@
 import fs from 'fs';
+import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import db from '../db/client.js';
 import { getModelsDir } from '../ai/controllers/ai/modelManager.js';
 
 const DEFAULT_SCAN_LIMIT = 25000;
+const MANAGED_UPLOAD_CONTAINERS = ['notes', 'kanban-attachments'];
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -157,6 +159,11 @@ function getStoragePath() {
     : path.resolve('data', 'uploads');
 }
 
+function assertInside(parentPath, childPath) {
+  const relative = path.relative(parentPath, childPath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
 function fileUsage(filePath) {
   const stat = safeStat(filePath);
   const bytes = stat?.size || 0;
@@ -257,5 +264,37 @@ export function getStorageSummary() {
       paths,
     },
     database,
+  };
+}
+
+export async function clearManagedUploads() {
+  const uploadsPath = getStoragePath();
+  const before = directoryUsage(uploadsPath);
+
+  await fsp.mkdir(uploadsPath, { recursive: true });
+
+  for (const container of MANAGED_UPLOAD_CONTAINERS) {
+    const containerPath = path.join(uploadsPath, container);
+    if (!assertInside(uploadsPath, containerPath)) {
+      throw new Error(`Refusing to clear unsafe storage path: ${containerPath}`);
+    }
+    await fsp.rm(containerPath, { recursive: true, force: true });
+    await fsp.mkdir(containerPath, { recursive: true });
+  }
+
+  const after = directoryUsage(uploadsPath);
+  const deletedBytes = Math.max(0, (before.bytes || 0) - (after.bytes || 0));
+  const deletedFiles = Math.max(0, (before.files || 0) - (after.files || 0));
+
+  return {
+    success: true,
+    action: 'clear-managed-uploads',
+    path: uploadsPath,
+    containers: MANAGED_UPLOAD_CONTAINERS,
+    deletedBytes,
+    deletedFormatted: formatBytes(deletedBytes),
+    deletedFiles,
+    before,
+    after,
   };
 }

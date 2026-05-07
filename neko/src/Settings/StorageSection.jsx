@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   CalendarClock,
   Database,
   Folder,
@@ -8,6 +9,7 @@ import {
   Loader2,
   RefreshCw,
   Server,
+  Trash2,
 } from 'lucide-react';
 import { storageApi, apiUtils } from './settingApi';
 
@@ -212,6 +214,9 @@ export default function StorageSection() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmClearUploads, setConfirmClearUploads] = useState(false);
+  const [clearingUploads, setClearingUploads] = useState(false);
+  const [actionMessage, setActionMessage] = useState(null);
 
   const loadSummary = useCallback(async ({ silent = false } = {}) => {
     if (silent) setRefreshing(true);
@@ -231,6 +236,33 @@ export default function StorageSection() {
   useEffect(() => {
     loadSummary();
   }, [loadSummary]);
+
+  const clearUploads = useCallback(async () => {
+    if (!confirmClearUploads) {
+      setActionMessage(null);
+      setConfirmClearUploads(true);
+      return;
+    }
+
+    setClearingUploads(true);
+    setActionMessage(null);
+    try {
+      const res = await storageApi.clearUploads();
+      setActionMessage({
+        type: 'success',
+        text: `Cleared ${res.deletedFormatted || formatBytes(res.deletedBytes)} across ${res.deletedFiles || 0} files.`,
+      });
+      setConfirmClearUploads(false);
+      await loadSummary({ silent: true });
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: apiUtils.handleError(err, 'Failed to clear uploads'),
+      });
+    } finally {
+      setClearingUploads(false);
+    }
+  }, [confirmClearUploads, loadSummary]);
 
   const { tables: topTables, maxRows } = useTopTables(summary?.database?.tables || []);
 
@@ -377,6 +409,56 @@ export default function StorageSection() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      </div>
+
+      <div className={`${panelCls} p-4 border-red-200 dark:border-red-900/60 midnight:border-red-900/60`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+                Storage Maintenance
+              </h4>
+            </div>
+            <p className={`mt-1 text-xs ${mutedText}`}>
+              Clear local upload files from notes and kanban attachments. Database rows stay intact.
+            </p>
+            {actionMessage ? (
+              <div
+                className={`mt-3 text-xs ${
+                  actionMessage.type === 'error'
+                    ? 'text-red-600 dark:text-red-400 midnight:text-red-400'
+                    : 'text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400'
+                }`}
+              >
+                {actionMessage.text}
+              </div>
+            ) : null}
+          </div>
+          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            <button
+              onClick={clearUploads}
+              disabled={clearingUploads}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-50 ${
+                confirmClearUploads
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'border border-red-200 dark:border-red-900/60 midnight:border-red-900/60 text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 midnight:hover:bg-red-950/30'
+              }`}
+            >
+              {clearingUploads ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              {confirmClearUploads ? 'Confirm Clear' : 'Clear Uploads'}
+            </button>
+            {confirmClearUploads ? (
+              <button
+                onClick={() => setConfirmClearUploads(false)}
+                disabled={clearingUploads}
+                className={`text-xs ${mutedText} hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 disabled:opacity-50`}
+              >
+                Cancel
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

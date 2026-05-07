@@ -48,6 +48,7 @@ import {
   providerSupportsTools,
   publicProvider,
 } from '../controllers/ai/providerCatalog.js';
+import { resolveContextWindow } from '../controllers/ai/modelContextResolver.js';
 import {
   listMlxModels,
   isMlxAvailable,
@@ -205,11 +206,25 @@ async function listProviderModels(row) {
   const client = clientForProvider(row);
   const result = await withTimeout(client.client.models.list(), 8000, 'Model list');
   const data = Array.isArray(result?.data) ? result.data : [];
-  return data.map(model => ({
-    id: model.id,
-    name: model.id,
-    owned_by: model.owned_by || model.owner || '',
-  }));
+  const settings = parseSettings(row.settings);
+  const preset = getProviderPreset(row.provider_id);
+  return data.map(model => {
+    const resolvedContext = resolveContextWindow({
+      providerId: row.provider_id,
+      model: model.id,
+      settings,
+      modelMetadata: model,
+      preset,
+    });
+    return {
+      id: model.id,
+      name: model.id,
+      owned_by: model.owned_by || model.owner || '',
+      context_window: resolvedContext.contextWindow,
+      context_window_source: resolvedContext.source,
+      context_window_confidence: resolvedContext.confidence,
+    };
+  });
 }
 
 async function testProvider(row) {

@@ -109,6 +109,7 @@ export function getAiClientForUser(userId) {
         model:             row.model,
         profileId:         row.profile_id,
         supportsNativeTools,
+        settings,
       },
     };
   } catch (err) {
@@ -160,6 +161,7 @@ function clientFromProviderRow(row, { allowGlobalApiKeyFallback = true } = {}) {
       profileId:         row.profile_id || row.id || null,
       supportsNativeTools,
       name:              row.name || null,
+      settings,
     },
   };
 }

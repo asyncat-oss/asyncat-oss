@@ -290,18 +290,21 @@ const RemoteModelPickerModal = ({
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{modelId}</p>
                           {isCurrent && <Badge color="green">Current</Badge>}
+                          {model.context_window && <Badge color="gray">{Number(model.context_window).toLocaleString()} ctx</Badge>}
                         </div>
-                        {model.owned_by && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{model.owned_by}</p>}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          {[model.owned_by, model.context_window_source].filter(Boolean).join(' · ')}
+                        </p>
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <button
-                          onClick={() => onSelect(modelId)}
+                          onClick={() => onSelect(model)}
                           className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
                         >
                           Set Model
                         </button>
                         <button
-                          onClick={() => onSelectAndActivate(modelId)}
+                          onClick={() => onSelectAndActivate(model)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
                         >
                           <Zap className="w-3.5 h-3.5" />
@@ -579,13 +582,21 @@ const ProvidersSection = ({
           loading={modelLoading === modelPickerProfile.id}
           onClose={() => setModelPickerProfile(null)}
           onRefresh={() => fetchModels(modelPickerProfile, true)}
-          onSelect={async (modelId) => {
-            await onSave(modelPickerProfile.id, { model: modelId });
-            setModelPickerProfile(prev => prev ? { ...prev, model: modelId } : prev);
+          onSelect={async (model) => {
+            const modelId = model.id || model.name;
+            const nextSettings = model.context_window
+              ? { ...(modelPickerProfile.settings || {}), context_window: model.context_window }
+              : (modelPickerProfile.settings || {});
+            await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
+            setModelPickerProfile(prev => prev ? { ...prev, model: modelId, settings: nextSettings } : prev);
           }}
-          onSelectAndActivate={async (modelId) => {
-            await onSave(modelPickerProfile.id, { model: modelId });
-            const nextProfile = { ...modelPickerProfile, model: modelId };
+          onSelectAndActivate={async (model) => {
+            const modelId = model.id || model.name;
+            const nextSettings = model.context_window
+              ? { ...(modelPickerProfile.settings || {}), context_window: model.context_window }
+              : (modelPickerProfile.settings || {});
+            await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
+            const nextProfile = { ...modelPickerProfile, model: modelId, settings: nextSettings };
             setModelPickerProfile(null);
             activate(nextProfile);
           }}

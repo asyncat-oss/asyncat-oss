@@ -251,6 +251,7 @@ import AgentChangesPanel from './components/AgentChangesPanel';
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
 import { chatApi, agentApi } from "./commandCenterApi";
+import { cleanReasoningAnswer } from "./reasoningParser.js";
 import { useUser } from "../contexts/UserContext";
 import {
   AlertCircle,
@@ -384,6 +385,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [editGoalText, setEditGoalText] = useState('');
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [draftGoal, setDraftGoal] = useState('');
+  const [contextInfo, setContextInfo] = useState(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [isCompactingContext, setIsCompactingContext] = useState(false);
+  const autoCompactRef = useRef(null);
   const agentAbortControllersRef = useRef(new Map());
   const chatRunsRef = useRef(chatRuns);
 
@@ -505,6 +511,35 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     );
     return Math.round(historyChars / 4) + 500;
   }, [conversationHistory]);
+
+  const contextHistoryForMeter = agentConversationHistory.length > 0
+    ? agentConversationHistory
+    : conversationHistory;
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setContextLoading(true);
+        const result = await agentApi.getContext({
+          goal: draftGoal,
+          conversationHistory: contextHistoryForMeter,
+          enableTools: toolsEnabled,
+          profileId: selectedProfileId,
+        });
+        if (!cancelled) setContextInfo(result?.context || null);
+      } catch {
+        if (!cancelled) setContextInfo(null);
+      } finally {
+        if (!cancelled) setContextLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [contextHistoryForMeter, draftGoal, selectedProfileId, toolsEnabled]);
 
   const scrollToBottom = useCallback((force = false) => {
     let shouldScroll = force;
@@ -842,7 +877,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           updateChatRun(runKey, prev => ({ ...prev, streamingText: (prev.streamingText || '') + (event.data?.content || '') }));
           continue;
         }
-        if (event.type === 'thinking' || event.type === 'tool_start' || event.type === 'answer') {
+        if (event.type === 'thinking') {
+          updateChatRun(runKey, prev => ({ ...prev, streamingText: cleanReasoningAnswer(prev.streamingText || '') }));
+        } else if (event.type === 'tool_start' || event.type === 'answer') {
           updateChatRun(runKey, { streamingText: '' });
         }
         if (event.type === 'done') {
@@ -947,6 +984,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMentions },
           { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentSessionId: runSessionId },
         ];
+        const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
         updateChatRun(runKey, { conversationHistory: nextHistory });
         if (runConversationId === currentConversationIdRef.current) {
           setConversationHistory(nextHistory);
@@ -978,6 +1016,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           const saveResult = await saveCurrentConversation({
             messages: finalMessages,
             conversationId: runConversationId,
+            metadata: shouldPersistCompactedHistory ? { compactedConversationHistory: nextHistory } : undefined,
           });
           if (!runConversationId && saveResult?.conversationId) {
             setChatRuns(prev => {
@@ -1088,6 +1127,83 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setToolsEnabled(true);
     handleAgentRun({ content: goal }, { enableTools: true });
   }, [agentRunning, handleAgentRun, setToolsEnabled]);
+
+  const handleCompactContext = useCallback(async (reason = 'manual') => {
+    const history = agentConversationHistory.length > 0 ? agentConversationHistory : conversationHistory;
+    if (isCompactingContext || agentRunning || history.length < 4) return;
+
+    setIsCompactingContext(true);
+    try {
+      const result = await agentApi.compactConversation({
+        conversationHistory: history,
+        visibleMessages: messages,
+      });
+      if (!result?.success || !Array.isArray(result.conversationHistory)) {
+        throw new Error(result?.error || 'Compaction failed');
+      }
+      updateChatRun(currentRunKey, prev => ({
+        ...prev,
+        conversationHistory: result.conversationHistory,
+        events: [
+          ...(prev.events || []),
+          {
+            type: 'status',
+            data: {
+              message: reason === 'auto'
+                ? 'Context was automatically compacted so the conversation can continue.'
+                : 'Context compacted. Older turns stay visible, and future prompts use a continuation summary.',
+            },
+          },
+        ],
+      }));
+      if (currentConversationId === currentConversationIdRef.current) {
+        setConversationHistory(result.conversationHistory);
+      }
+      if (!isGhostMode && currentConversationId) {
+        saveCurrentConversation({
+          messages,
+          conversationId: currentConversationId,
+          metadata: { compactedConversationHistory: result.conversationHistory },
+        }).catch(() => {});
+      }
+      setContextInfo(null);
+    } catch (err) {
+      updateChatRun(currentRunKey, prev => ({
+        ...prev,
+        events: [...(prev.events || []), { type: 'error', data: { message: err.message || 'Failed to compact context.' } }],
+      }));
+    } finally {
+      setIsCompactingContext(false);
+    }
+  }, [
+    agentConversationHistory,
+    agentRunning,
+    conversationHistory,
+    currentConversationId,
+    currentRunKey,
+    isCompactingContext,
+    isGhostMode,
+    messages,
+    saveCurrentConversation,
+    setConversationHistory,
+    updateChatRun,
+  ]);
+
+  useEffect(() => {
+    const key = `${currentRunKey}:${contextInfo?.inputTokens || 0}`;
+    if (
+      !contextInfo ||
+      contextInfo.percent < 90 ||
+      autoCompactRef.current === key ||
+      agentRunning ||
+      isCompactingContext ||
+      contextHistoryForMeter.length < 6
+    ) {
+      return;
+    }
+    autoCompactRef.current = key;
+    handleCompactContext('auto');
+  }, [agentRunning, contextHistoryForMeter.length, contextInfo, currentRunKey, handleCompactContext, isCompactingContext]);
 
   const handleAgentStop = useCallback(() => {
     const controller = agentAbortControllersRef.current.get(currentRunKey);
@@ -1670,6 +1786,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               }
               hasMessages={hasConversationContent}
               conversationTokens={conversationTokens}
+              contextInfo={contextInfo}
+              contextLoading={contextLoading}
+              onCompactContext={handleCompactContext}
+              isCompacting={isCompactingContext}
+              onDraftChange={setDraftGoal}
               toolsEnabled={toolsEnabled}
               onToggleTools={() => setToolsEnabled(!toolsEnabled)}
               autoApprove={agentAutoApprove}
@@ -2019,6 +2140,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 }
                 hasMessages={hasConversationContent}
                 conversationTokens={conversationTokens}
+                contextInfo={contextInfo}
+                contextLoading={contextLoading}
+                onCompactContext={handleCompactContext}
+                isCompacting={isCompactingContext}
+                onDraftChange={setDraftGoal}
                 toolsEnabled={toolsEnabled}
                 onToggleTools={() => setToolsEnabled(!toolsEnabled)}
                 autoApprove={agentAutoApprove}

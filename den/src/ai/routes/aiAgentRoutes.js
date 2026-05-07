@@ -9,13 +9,18 @@ import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import { loadSkills, listSkills, normalizeTags } from '../../agent/skills.js';
-import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
+import { buildAgentSystemPrompt, loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
+import { getStatus as getLlamaStatus } from '../controllers/ai/llamaServerManager.js';
+import { resolveContextWindow } from '../controllers/ai/modelContextResolver.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
-import { publicProvider } from '../controllers/ai/providerCatalog.js';
+import { getProviderPreset, publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
+import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from '../../agent/reasoningParser.js';
+import { toolRegistry } from '../../agent/tools/toolRegistry.js';
+import { ToolCallFormatter } from '../../agent/ToolCallFormatter.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -26,6 +31,111 @@ const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
 const cancelledTaskRuns = new Set();
 const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
+
+function stripOpenAiPath(baseUrl = '') {
+  return String(baseUrl || '').replace(/\/v1\/?$/i, '').replace(/\/+$/, '');
+}
+
+function roughTokenCount(text = '') {
+  return Math.ceil(String(text || '').length / 4);
+}
+
+function normalizeConversationHistory(history = []) {
+  return (Array.isArray(history) ? history : [])
+    .filter(m => m?.role === 'user' || m?.role === 'assistant')
+    .map(m => ({ role: m.role, content: String(m.content || '') }));
+}
+
+function resolvePromptContextMeta(providerInfo, fallback = 8192) {
+  if (providerInfo?.requiresLocalServer || providerInfo?.providerInfo?.providerId === 'llamacpp-builtin' || providerInfo?.providerInfo?.provider_id === 'llamacpp-builtin') {
+    const snap = getLlamaStatus();
+    return {
+      contextWindow: snap.ctxSize || snap.ctxTrain || fallback,
+      source: snap.ctxSize ? 'llama.cpp-runtime' : 'llama.cpp-model',
+      confidence: 'runtime',
+    };
+  }
+  const settings = providerInfo?.providerInfo?.settings || {};
+  const providerId = providerInfo?.providerInfo?.providerId || providerInfo?.providerInfo?.provider_id;
+  const preset = getProviderPreset(providerId);
+  return resolveContextWindow({
+    providerId,
+    model: providerInfo?.model || providerInfo?.providerInfo?.model,
+    settings,
+    preset,
+    fallback,
+  });
+}
+
+async function countWithLlamaServer(messages, { baseUrl, fallbackText = '' } = {}) {
+  const rootUrl = stripOpenAiPath(baseUrl);
+  if (!rootUrl) throw new Error('No llama.cpp base URL available.');
+
+  const templateRes = await fetch(`${rootUrl}/apply-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  });
+  if (!templateRes.ok) throw new Error(`apply-template failed: ${templateRes.status}`);
+  const templateJson = await templateRes.json();
+  const prompt = String(templateJson.prompt || fallbackText || '');
+
+  const tokenRes = await fetch(`${rootUrl}/tokenize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: prompt, add_special: false, parse_special: true }),
+  });
+  if (!tokenRes.ok) throw new Error(`tokenize failed: ${tokenRes.status}`);
+  const tokenJson = await tokenRes.json();
+  return {
+    inputTokens: Array.isArray(tokenJson.tokens) ? tokenJson.tokens.length : roughTokenCount(prompt),
+    method: 'llama.cpp-tokenize',
+    exact: Array.isArray(tokenJson.tokens),
+    promptChars: prompt.length,
+  };
+}
+
+function buildAnswerOnlyPrompt(goal, conversationHistory = []) {
+  const messages = [
+    ...normalizeConversationHistory(conversationHistory).slice(-6),
+    { role: 'user', content: goal },
+  ];
+  const systemPrompt = [
+    'You are a helpful AI assistant in answer-only mode.',
+    'Tools are disabled for this message, so you cannot inspect files, modify data, create tasks/events/notes, browse, or call any external tools.',
+    'Recent earlier messages may include agent/tool actions from when Tools were ON, but you cannot inspect fresh state or perform new actions right now.',
+    'Do not claim that you used tools or completed actions outside the chat.',
+    'If the user asks you to perform an action that requires tools, explain what you can answer directly and tell them to turn Tools ON if they want you to act.',
+    'Respond clearly and concisely.',
+  ].join(' ');
+  return {
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    fallbackText: `${systemPrompt}\n${messages.map(m => `${m.role}: ${m.content}`).join('\n')}`,
+  };
+}
+
+function buildToolPrompt(goal, conversationHistory = [], { workingDir = process.cwd(), soul = null, mentionedAgents = [], memories = [] } = {}) {
+  const toolDefs = toolRegistry.all();
+  const toolDescriptions = ToolCallFormatter.formatToolsForPrompt(
+    toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
+  );
+  const systemPrompt = buildAgentSystemPrompt({
+    goal,
+    workingDir,
+    toolDescriptions,
+    memories,
+    scratchpad: '',
+    skills: [],
+    mentionedAgents,
+    soul: soul ?? loadSoul('default'),
+  });
+  const historyPrefix = normalizeConversationHistory(conversationHistory).slice(-4);
+  const messages = [{ role: 'system', content: systemPrompt }, ...historyPrefix, { role: 'user', content: goal }];
+  return {
+    messages,
+    fallbackText: `${systemPrompt}\n${historyPrefix.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${goal}`,
+  };
+}
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -331,6 +441,170 @@ const authenticate = (req, res, next) => {
 await initializeAgent();
 ensureAgentTaskRunsTable();
 markStaleActiveSessions();
+
+// ── Context accounting / compaction ──────────────────────────────────────────
+
+router.post('/context', authenticate, async (req, res) => {
+  try {
+    const {
+      goal: rawGoal = '',
+      conversationHistory = [],
+      enableTools = true,
+      profileId = null,
+      agentMentions = [],
+    } = req.body || {};
+    const goal = String(rawGoal || '').trim();
+    const provider = getAiClientForUser(req.user.id);
+    const contextLimitMeta = resolvePromptContextMeta(provider, 8192);
+    const ctxLimit = contextLimitMeta.contextWindow;
+
+    let profile = null;
+    if (profileId) profile = getProfile(profileId, req.user.id);
+    if (!profile && !profileId) profile = getDefaultProfile(req.user.id);
+
+    let soul = null;
+    if (profile?.soul_override) {
+      soul = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim() || null;
+    } else if (profile?.soul_name && profile.soul_name !== 'default') {
+      soul = loadSoul(profile.soul_name);
+    }
+
+    const mentionedAgentProfiles = resolveAgentMentions(agentMentions, req.user.id);
+    let memories = [];
+    if (enableTools) {
+      try {
+        memories = searchMemories({
+          userId: req.user.id,
+          workspaceId: req.workspaceId,
+          query: goal,
+          kind: 'all',
+          limit: 10,
+          bumpAccess: false,
+        });
+        if (!memories.length) {
+          memories = listMemories({
+            userId: req.user.id,
+            workspaceId: req.workspaceId,
+            kind: 'all',
+            limit: 5,
+          });
+        }
+      } catch {
+        memories = [];
+      }
+    }
+    const prompt = enableTools
+      ? buildToolPrompt(goal, conversationHistory, {
+          workingDir: profile?.working_dir || process.cwd(),
+          soul,
+          mentionedAgents: mentionedAgentProfiles,
+          memories,
+        })
+      : buildAnswerOnlyPrompt(goal, conversationHistory);
+
+    let count = null;
+    const providerId = provider?.providerInfo?.providerId || provider?.providerInfo?.provider_id;
+    const isBuiltInLlama = providerId === 'llamacpp-builtin' || /127\.0\.0\.1:8765|localhost:8765/i.test(provider?.providerInfo?.baseUrl || '');
+    if (isBuiltInLlama && getLlamaStatus().status === 'ready') {
+      try {
+        count = await countWithLlamaServer(prompt.messages, {
+          baseUrl: provider?.providerInfo?.baseUrl || provider?.client?.endpoint || 'http://127.0.0.1:8765/v1',
+          fallbackText: prompt.fallbackText,
+        });
+        if (enableTools) {
+          count = { ...count, exact: false, method: 'llama.cpp-tokenized-agent-estimate' };
+        }
+      } catch (err) {
+        count = null;
+      }
+    }
+
+    if (!count) {
+      count = {
+        inputTokens: roughTokenCount(prompt.fallbackText),
+        method: 'rough-char-estimate',
+        exact: false,
+        promptChars: prompt.fallbackText.length,
+      };
+    }
+
+    res.json({
+      success: true,
+      context: {
+        inputTokens: count.inputTokens,
+        ctxLimit,
+        percent: Math.min(100, Math.round((count.inputTokens / Math.max(1, ctxLimit)) * 100)),
+        exact: Boolean(count.exact),
+        method: count.method,
+        contextWindowSource: contextLimitMeta.source,
+        contextWindowConfidence: contextLimitMeta.confidence,
+        promptChars: count.promptChars,
+        historyMessagesSent: enableTools
+          ? normalizeConversationHistory(conversationHistory).slice(-4).length
+          : normalizeConversationHistory(conversationHistory).slice(-6).length,
+        label: count.exact ? 'prompt tokens' : 'estimated prompt tokens',
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to estimate context.' });
+  }
+});
+
+router.post('/compact', authenticate, async (req, res) => {
+  try {
+    const { conversationHistory = [], visibleMessages = [] } = req.body || {};
+    const history = normalizeConversationHistory(conversationHistory);
+    if (history.length < 4) {
+      return res.json({ success: true, compacted: false, conversationHistory: history });
+    }
+
+    const { client: aiClient, model, isLocal } = getAiClientForUser(req.user.id);
+    const transcript = history
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n\n');
+    const summaryPrompt = [
+      'Compact this conversation into a detailed continuation summary for another AI assistant.',
+      'Preserve user preferences, decisions, unresolved questions, concrete facts, tasks completed, and important context.',
+      'Do not add new facts. Keep it concise but complete enough that the next turn can continue naturally.',
+      '',
+      transcript,
+    ].join('\n');
+
+    const response = await aiClient.client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'You write faithful conversation continuation summaries.' },
+        { role: 'user', content: summaryPrompt },
+      ],
+      max_tokens: isLocal ? 1024 : 1800,
+    });
+
+    const summary = String(response.choices?.[0]?.message?.content || '').trim();
+    if (!summary) throw new Error('Model returned an empty compaction summary.');
+
+    const tail = history.slice(-4);
+    const compactedHistory = [
+      {
+        role: 'assistant',
+        content: `Conversation summary so far:\n${summary}`,
+        compacted: true,
+        compactedAt: new Date().toISOString(),
+      },
+      ...tail,
+    ];
+
+    res.json({
+      success: true,
+      compacted: true,
+      summary,
+      conversationHistory: compactedHistory,
+      usage: response.usage || null,
+      visibleMessagesCount: Array.isArray(visibleMessages) ? visibleMessages.length : 0,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to compact conversation.' });
+  }
+});
 
 initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId, providerProfileId, providerSnapshot }) => {
   const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForScheduledProvider(userId, providerProfileId, providerSnapshot);
@@ -1047,15 +1321,29 @@ router.post('/run', authenticate, async (req, res) => {
         });
 
         let fullContent = '';
+        let fullReasoning = '';
         for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta?.content;
-          if (delta) {
-            fullContent += delta;
-            writeAgentSse(res, { type: 'delta', data: { content: delta } });
+          const delta = chunk.choices[0]?.delta;
+          if (!delta) continue;
+
+          const reasoningDelta = reasoningTextFromDelta(delta);
+          if (reasoningDelta) {
+            fullReasoning += reasoningDelta;
+          }
+
+          if (delta.content) {
+            fullContent += delta.content;
+            writeAgentSse(res, { type: 'delta', data: { content: delta.content } });
           }
         }
 
-        writeAgentSse(res, { type: 'done', data: { answer: fullContent } });
+        const parsed = extractReasoningFromText(fullContent);
+        const thinking = combineReasoningParts(fullReasoning, parsed.thinking);
+        if (thinking) {
+          writeAgentSse(res, { type: 'thinking', data: { thought: thinking, round: 1 } });
+        }
+
+        writeAgentSse(res, { type: 'done', data: { answer: cleanReasoningAnswer(parsed.answer || fullContent) } });
       } catch (err) {
         writeAgentSse(res, { type: 'error', data: { message: err.message } });
       } finally {
