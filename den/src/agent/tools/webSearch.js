@@ -327,6 +327,10 @@ function stripHtml(str) {
  * Fetch image results from DuckDuckGo.
  * Uses the internal vqd token + pagination API.
  */
+export async function searchImages(query, max = 6) {
+  return getDDGImages(query, max);
+}
+
 async function getDDGImages(query, max) {
   try {
     // Step 1: Get vqd token from search page

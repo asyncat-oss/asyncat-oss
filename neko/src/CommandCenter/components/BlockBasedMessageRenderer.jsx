@@ -1,6 +1,6 @@
 // BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
 import { useMemo, useState, useCallback, memo, useEffect } from 'react';
-import { Copy, Check, RotateCcw, Zap } from 'lucide-react';
+import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2 } from 'lucide-react';
 import { tokenTracker } from './LocalModelStats';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -198,6 +198,154 @@ const InlineLink = ({ href, label }) => {
   );
 };
 
+const getUrlDomain = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+};
+
+const cleanMarkdownLabel = (value = '') => value
+  .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+  .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+  .replace(/\*\*(.+?)\*\*/g, '$1')
+  .replace(/\*(.+?)\*/g, '$1')
+  .replace(/`([^`]+)`/g, '$1')
+  .replace(/^[-•\d.\s]+/, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const isLikelyImageUrl = (url = '') => /\.(png|jpe?g|webp|gif|avif)(?:[?#].*)?$/i.test(url);
+
+const parseWebLinkItem = (text = '') => {
+  const markdownLink = text.match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/);
+  const rawUrl = markdownLink?.[2] || text.match(/https?:\/\/[^\s<>"')\]]+/)?.[0];
+  if (!rawUrl) return null;
+
+  const beforeUrl = text.slice(0, text.indexOf(rawUrl));
+  const afterUrl = text.slice(text.indexOf(rawUrl) + rawUrl.length);
+  const beforeParts = beforeUrl.split(/\s+[—-]\s+/).map(part => part.trim()).filter(Boolean);
+  const titleSource = markdownLink?.[1] || beforeParts[0] || beforeUrl;
+  const descriptionSource = afterUrl.replace(/^[\s—-]+/, '') || beforeParts.slice(1).join(' — ');
+  const title = cleanMarkdownLabel(titleSource) || getUrlDomain(rawUrl);
+  const description = cleanMarkdownLabel(descriptionSource);
+
+  return {
+    title,
+    description: description && description !== title ? description : '',
+    url: rawUrl,
+    domain: getUrlDomain(rawUrl),
+    isImage: isLikelyImageUrl(rawUrl),
+  };
+};
+
+const WebsiteCard = ({ item, number }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="group flex min-w-0 items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:bg-slate-800"
+        title={item.url}
+      >
+        {item.isImage ? (
+          <img
+            src={item.url}
+            alt=""
+            loading="lazy"
+            className="h-14 w-16 flex-shrink-0 rounded-md border border-gray-200 object-cover dark:border-gray-700"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
+            <img
+              src={`https://icons.duckduckgo.com/ip3/${item.domain}.ico`}
+              alt=""
+              className="h-5 w-5 rounded object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+            <Globe2 className="hidden h-4 w-4 text-gray-400" />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-2">
+            {number && <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">{number}</span>}
+            <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{item.title}</span>
+          </span>
+          {item.description && (
+            <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{item.description}</span>
+          )}
+          <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 midnight:text-blue-300">
+            <span className="truncate">{item.domain}</span>
+            <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-55 transition-opacity group-hover:opacity-100" />
+          </span>
+        </span>
+      </button>
+      {open && <InlineLinkModal href={item.url} onClose={() => setOpen(false)} />}
+    </>
+  );
+};
+
+const InlineImage = ({ src, alt }) => {
+  const [open, setOpen] = useState(false);
+  const label = alt || 'Image';
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="my-1 inline-flex align-middle overflow-hidden rounded-md border border-gray-200 bg-gray-50 shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-800"
+        title={label}
+      >
+        <img
+          src={src}
+          alt={label}
+          loading="lazy"
+          className="h-16 w-20 object-cover"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700 midnight:border-slate-700">
+              <span className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{label}</span>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
+                  className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600"
+                >
+                  Open
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg leading-none text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                  aria-label="Close image preview"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="max-h-[calc(90vh-3.5rem)] overflow-auto bg-gray-950/95 p-3">
+              <img src={src} alt={label} className="mx-auto max-h-[78vh] max-w-full object-contain" />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 // ─── Annotated term chip (clickable, opens explain panel) ───────────────────
 
 const AnnotatedTerm = ({ term, definition, onTermClick }) => (
@@ -236,10 +384,11 @@ const parseInlineMarkdown = (text, onTermClick) => {
     // Plain text segment — scan for all inline patterns in one pass
     const t = seg.value;
     // Combined regex — term annotations first (before [label](url) to avoid conflict),
-    // then markdown links, bare URLs, bold, italic, code, citations.
-    // Groups: 1=annot-term, 2=annot-def, 3=md-label, 4=md-url, 5=bare-url,
-    //         6=bold, 7=italic, 8=code, 9=citation
-    const inlineRegex = /\[\[([^\]|]+)\|([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"')\]]+)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\*?\(from ([^)]+)\)\*?/g;
+    // then markdown images, markdown links, bare URLs, bold, italic, code, citations.
+    // Groups: 1=annot-term, 2=annot-def, 3=img-alt, 4=img-url,
+    //         5=md-label, 6=md-url, 7=bare-url, 8=bold, 9=italic,
+    //         10=code, 11=citation
+    const inlineRegex = /\[\[([^\]|]+)\|([^\]]+)\]\]|!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"')\]]+)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\*?\(from ([^)]+)\)\*?/g;
 
     let last = 0;
     let m;
@@ -262,29 +411,32 @@ const parseInlineMarkdown = (text, onTermClick) => {
           />
         );
       } else if (m[3] !== undefined && m[4] !== undefined) {
+        // ![alt](url) — inline image preview
+        parts.push(<InlineImage key={`img-${key++}`} src={m[4]} alt={m[3]} />);
+      } else if (m[5] !== undefined && m[6] !== undefined) {
         // [label](url) — markdown link
-        parts.push(<InlineLink key={`lnk-${key++}`} href={m[4]} label={m[3]} />);
-      } else if (m[5] !== undefined) {
-        // bare https://... URL
-        parts.push(<InlineLink key={`url-${key++}`} href={m[5]} label={m[5]} />);
-      } else if (m[6] !== undefined) {
-        // **bold**
-        parts.push(<strong key={`b-${key++}`} className="font-bold">{m[6]}</strong>);
+        parts.push(<InlineLink key={`lnk-${key++}`} href={m[6]} label={m[5]} />);
       } else if (m[7] !== undefined) {
-        // *italic*
-        parts.push(<em key={`i-${key++}`} className="italic">{m[7]}</em>);
+        // bare https://... URL
+        parts.push(<InlineLink key={`url-${key++}`} href={m[7]} label={m[7]} />);
       } else if (m[8] !== undefined) {
+        // **bold**
+        parts.push(<strong key={`b-${key++}`} className="font-bold">{m[8]}</strong>);
+      } else if (m[9] !== undefined) {
+        // *italic*
+        parts.push(<em key={`i-${key++}`} className="italic">{m[9]}</em>);
+      } else if (m[10] !== undefined) {
         // `code`
         parts.push(
           <code key={`c-${key++}`} className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-700 rounded text-sm font-mono">
-            {m[8]}
+            {m[10]}
           </code>
         );
-      } else if (m[9] !== undefined) {
+      } else if (m[11] !== undefined) {
         // (from Source)
         parts.push(
           <span key={`cite-${key++}`} className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 italic ml-1">
-            (from {m[9]})
+            (from {m[11]})
           </span>
         );
       }
@@ -334,9 +486,31 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       );
 
     case 'bulletList':
-      return (
-        <ul className="mb-5 space-y-2.5 ml-2">
-          {block.content.split('\n').filter(line => line.trim()).map((item, i) => {
+      {
+        const items = block.content.split('\n').filter(line => line.trim());
+        const linkItems = items.map(parseWebLinkItem);
+        const shouldRenderCards = linkItems.filter(Boolean).length >= Math.max(2, Math.ceil(items.length * 0.6));
+
+        if (shouldRenderCards) {
+          return (
+            <div className="mb-6 grid gap-2 sm:grid-cols-2">
+              {items.map((item, i) => {
+                const linkItem = linkItems[i];
+                if (linkItem) return <WebsiteCard key={`${linkItem.url}-${i}`} item={linkItem} />;
+
+                return (
+                  <div key={i} className={`rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900 ${baseStyles}`}>
+                    {renderContent(item)}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        }
+
+        return (
+          <ul className="mb-5 space-y-2.5 ml-2">
+            {items.map((item, i) => {
             // Block parser already stripped the bullet prefix before storing content.
             // Only strip real bullet chars (•, -) here — never *, which could be italic markdown.
             const text = item.replace(/^[•\-]\s+/, '');
@@ -353,59 +527,87 @@ export const BlockRenderer = ({ block, onTermClick }) => {
               </li>
             );
           })}
-        </ul>
-      );
+          </ul>
+        );
+      }
 
     case 'numberedList':
-      const allLines = block.content.split('\n').filter(line => line.trim());
-      const structuredItems = [];
-      let currentItem = null;
+      {
+        const allLines = block.content.split('\n').filter(line => line.trim());
+        const structuredItems = [];
+        let currentItem = null;
 
-      allLines.forEach(line => {
-        const mainMatch = line.match(/^(\d+)\.\s+(.+)/);
-        const subMatch = line.match(/^[→\-]\s+(.+)/);
+        allLines.forEach(line => {
+          const mainMatch = line.match(/^(\d+)\.\s+(.+)/);
+          const subMatch = line.match(/^[→\-]\s+(.+)/);
 
-        if (mainMatch) {
-          if (currentItem) structuredItems.push(currentItem);
-          currentItem = {
-            number: mainMatch[1],
-            text: mainMatch[2],
-            subItems: []
-          };
-        } else if (subMatch && currentItem) {
-          currentItem.subItems.push(subMatch[1]);
-        }
-      });
-      if (currentItem) structuredItems.push(currentItem);
+          if (mainMatch) {
+            if (currentItem) structuredItems.push(currentItem);
+            currentItem = {
+              number: mainMatch[1],
+              text: mainMatch[2],
+              subItems: []
+            };
+          } else if (subMatch && currentItem) {
+            currentItem.subItems.push(subMatch[1]);
+          }
+        });
+        if (currentItem) structuredItems.push(currentItem);
 
-      return (
-        <ol className="mb-6 space-y-3.5 ml-1">
-          {structuredItems.map((item, i) => (
-            <li key={i} className="relative flex gap-3" style={{ listStyle: 'none' }}>
-              <span className="font-bold text-gray-700 dark:text-gray-300 midnight:text-slate-300 min-w-[1.75rem] text-base mt-0.5">
-                {item.number}.
-              </span>
-              <div className="flex-1 space-y-1.5">
-                <div className={baseStyles}>
-                  {renderContent(item.text)}
-                </div>
-                {item.subItems.length > 0 && (
-                  <div className="pl-6 space-y-1 text-sm">
-                    {item.subItems.map((sub, j) => (
-                      <div key={j} className="flex gap-2 items-start">
-                        <span className="text-gray-500 dark:text-gray-500 midnight:text-slate-500 font-normal mt-0.5 text-xs">→</span>
-                        <span className="flex-1 text-gray-600 dark:text-gray-400 midnight:text-slate-400 leading-relaxed">
-                          {renderContent(sub)}
-                        </span>
-                      </div>
-                    ))}
+        const linkItems = structuredItems.map(item => parseWebLinkItem(item.text));
+        const shouldRenderCards = linkItems.filter(Boolean).length >= Math.max(2, Math.ceil(structuredItems.length * 0.6));
+
+        if (shouldRenderCards) {
+          return (
+            <div className="mb-6 grid gap-2 sm:grid-cols-2">
+              {structuredItems.map((item, i) => {
+                const linkItem = linkItems[i];
+                if (linkItem) {
+                  const withSubtext = item.subItems.length > 0 && !linkItem.description
+                    ? { ...linkItem, description: cleanMarkdownLabel(item.subItems.join(' ')) }
+                    : linkItem;
+                  return <WebsiteCard key={`${withSubtext.url}-${i}`} item={withSubtext} number={`${item.number}.`} />;
+                }
+
+                return (
+                  <div key={i} className={`rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900 ${baseStyles}`}>
+                    {item.number}. {renderContent(item.text)}
                   </div>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-      );
+                );
+              })}
+            </div>
+          );
+        }
+
+        return (
+          <ol className="mb-6 space-y-3.5 ml-1">
+            {structuredItems.map((item, i) => (
+              <li key={i} className="relative flex gap-3" style={{ listStyle: 'none' }}>
+                <span className="font-bold text-gray-700 dark:text-gray-300 midnight:text-slate-300 min-w-[1.75rem] text-base mt-0.5">
+                  {item.number}.
+                </span>
+                <div className="flex-1 space-y-1.5">
+                  <div className={baseStyles}>
+                    {renderContent(item.text)}
+                  </div>
+                  {item.subItems.length > 0 && (
+                    <div className="pl-6 space-y-1 text-sm">
+                      {item.subItems.map((sub, j) => (
+                        <div key={j} className="flex gap-2 items-start">
+                          <span className="text-gray-500 dark:text-gray-500 midnight:text-slate-500 font-normal mt-0.5 text-xs">→</span>
+                          <span className="flex-1 text-gray-600 dark:text-gray-400 midnight:text-slate-400 leading-relaxed">
+                            {renderContent(sub)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        );
+      }
 
     case 'todo':
       return (

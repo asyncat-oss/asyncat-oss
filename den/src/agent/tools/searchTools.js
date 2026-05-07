@@ -284,5 +284,44 @@ export const httpRequestTool = {
   },
 };
 
-export const searchTools = [webSearchTool, fetchUrlTool, httpGetTool, httpRequestTool];
+export const searchImagesTool = {
+  name: 'search_images',
+  description: 'Search the web for images. Returns image URLs, thumbnails, titles, dimensions, and source pages. Use when the user asks for images, visuals, or wants to see what something looks like.',
+  category: 'search',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Image search query' },
+      max_results: { type: 'number', description: 'Maximum results (default: 6, max: 12)' },
+    },
+    required: ['query'],
+  },
+  execute: async (args) => {
+    try {
+      const { searchImages } = await import('./webSearch.js');
+      const max = Math.min(Math.max(1, args.max_results || 6), 12);
+      const images = await searchImages(args.query, max);
+      return {
+        success: true,
+        query: args.query,
+        count: images.length,
+        images: images.map((img, i) => ({
+          index: i + 1,
+          title: img.title,
+          url: img.url,
+          image: img.image,
+          thumbnail: img.thumbnail,
+          source: img.source,
+          width: img.width,
+          height: img.height,
+        })),
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const searchTools = [webSearchTool, fetchUrlTool, httpGetTool, httpRequestTool, searchImagesTool];
 export default searchTools;

@@ -137,7 +137,7 @@ function buildEventsFromMessages(messages = []) {
         type: msg.isError ? 'error' : 'answer',
         data: msg.isError
           ? { message: msg.content }
-          : { answer: msg.content, toolsEnabled: msg.toolsEnabled },
+          : { answer: msg.content, toolsEnabled: msg.toolsEnabled, searchEvent: msg.searchEvent || null },
       });
     }
   }
@@ -154,6 +154,95 @@ function getPersistableAgentEvents(events = []) {
       arrivedAt: ev.arrivedAt,
       completedAt: ev.completedAt,
     }));
+}
+
+function buildSearchEvent(events = []) {
+  const sources = [];
+  const images = [];
+  const seenUrls = new Set();
+
+  const lastGoalIndex = events.reduce((lastIndex, ev, index) => (
+    ev?.type === 'user_goal' ? index : lastIndex
+  ), -1);
+  const scopedEvents = lastGoalIndex >= 0 ? events.slice(lastGoalIndex + 1) : events;
+
+  for (const ev of scopedEvents) {
+    if (ev.type !== 'tool_start' || !ev.result) continue;
+    const tool = ev.data?.tool;
+    const result = ev.result;
+
+    if (tool === 'web_search' && result?.success) {
+      if (result.query && !sources.some(s => s.query === result.query)) {
+        // Add search query as a group header
+      }
+      for (const r of (result.results || [])) {
+        if (r.url && !seenUrls.has(r.url)) {
+          seenUrls.add(r.url);
+          sources.push({
+            title: r.title,
+            url: r.url,
+            snippet: r.snippet,
+            query: result.query,
+            tool: 'web_search',
+          });
+        }
+      }
+      for (const img of (result.images || [])) {
+        if (img.image && !seenUrls.has(img.image)) {
+          seenUrls.add(img.image);
+          images.push({
+            title: img.title,
+            url: img.url,
+            image: img.image,
+            thumbnail: img.thumbnail,
+            source: img.source,
+            width: img.width,
+            height: img.height,
+          });
+        }
+      }
+    }
+
+    if ((tool === 'fetch_url' || tool === 'http_get' || tool === 'browse_url') && result?.success) {
+      const url = result.url || result.finalUrl || ev.data?.args?.url;
+      if (url && !seenUrls.has(url)) {
+        seenUrls.add(url);
+        sources.push({
+          title: result.title || url,
+          url,
+          snippet: result.content ? String(result.content).slice(0, 200) : '',
+          query: null,
+          tool,
+        });
+      }
+    }
+
+    if (tool === 'search_images' && result?.success) {
+      for (const img of (result.images || [])) {
+        if (img.image && !seenUrls.has(img.image)) {
+          seenUrls.add(img.image);
+          images.push({
+            title: img.title,
+            url: img.url,
+            image: img.image,
+            thumbnail: img.thumbnail,
+            source: img.source,
+            width: img.width,
+            height: img.height,
+          });
+        }
+      }
+    }
+  }
+
+  if (sources.length === 0 && images.length === 0) return null;
+
+  return {
+    sources,
+    images,
+    sourceCount: sources.length,
+    imageCount: images.length,
+  };
 }
 
 function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false, onClose }) {
@@ -998,6 +1087,23 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           toolsEnabled: effectiveToolsEnabled,
           agentMentions,
         };
+        const runEventsForMsg = runEvents;
+        const searchEvent = buildSearchEvent(runEventsForMsg);
+
+        // Patch the last answer event in the live feed with searchEvent so sources show immediately
+        if (searchEvent) {
+          updateChatRun(runKey, prev => {
+            const events = [...(prev.events || [])];
+            for (let i = events.length - 1; i >= 0; i--) {
+              if (events[i].type === 'answer') {
+                events[i] = { ...events[i], data: { ...events[i].data, searchEvent } };
+                break;
+              }
+            }
+            return { ...prev, events };
+          });
+        }
+
         const assistantMsg = {
           id: `msg_${Date.now()}_assistant_${Math.random().toString(36).substr(2, 9)}`,
           content: capturedFinalAnswer,
@@ -1005,7 +1111,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           timestamp: new Date().toISOString(),
           agentSessionId: runSessionId,
           toolsEnabled: effectiveToolsEnabled,
-          agentEvents: getPersistableAgentEvents(chatRunsRef.current[runKey]?.events?.length ? chatRunsRef.current[runKey].events : runEvents),
+          agentEvents: getPersistableAgentEvents(runEventsForMsg),
+          searchEvent,
         };
         const finalMessages = [...runMessages, userMsg, assistantMsg];
         if (runConversationId === currentConversationIdRef.current) {

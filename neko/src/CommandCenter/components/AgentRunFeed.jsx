@@ -4,7 +4,7 @@ import {
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send,
-  ShieldOff, Brain, RotateCcw,
+  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 import { extractReasoningFromText } from '../reasoningParser.js';
@@ -36,6 +36,7 @@ const TOOL_META = {
   delegate_task:      { icon: Brain,       label: 'Delegate task' },
   web_search:        { icon: Globe,       label: 'Web search' },
   browse_website:    { icon: Globe,       label: 'Browse URL' },
+  search_images:     { icon: Image,       label: 'Search images' },
   remember:          { icon: BookMarked,  label: 'Remember' },
   recall_memory:     { icon: BookMarked,  label: 'Recall memory' },
   list_memories:     { icon: BookMarked,  label: 'List memories' },
@@ -530,6 +531,115 @@ function AskUserEvent({ data, onAnswer }) {
   );
 }
 
+function SourceChip({ source }) {
+  const [open, setOpen] = useState(false);
+  const domain = (() => {
+    try { return new URL(source.url).hostname.replace('www.', ''); } catch { return source.url; }
+  })();
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors max-w-[16rem]"
+        title={source.title || source.url}
+      >
+        <img
+          src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
+          alt=""
+          className="w-3.5 h-3.5 rounded flex-shrink-0 object-contain"
+          onError={(e) => { e.target.style.display = 'none'; }}
+        />
+        <span className="truncate">{source.title || domain}</span>
+        <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-50" />
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-gray-900 midnight:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 overflow-hidden">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                  <Link2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="font-semibold text-gray-900 dark:text-white text-sm">Web source</span>
+              </div>
+              <button onClick={() => setOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-lg leading-none">×</button>
+            </div>
+            <div className="mx-5 mb-4 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2 min-w-0">
+                <img src={`https://icons.duckduckgo.com/ip3/${domain}.ico`} alt="" className="w-4 h-4 rounded flex-shrink-0 object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+                <span className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono select-all">{source.url}</span>
+              </div>
+              {source.title && <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{source.title}</p>}
+              {source.snippet && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-3">{source.snippet}</p>}
+            </div>
+            <div className="flex gap-2 px-5 pb-5">
+              <button onClick={() => setOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Close</button>
+              <button onClick={() => { window.open(source.url, '_blank', 'noopener,noreferrer'); setOpen(false); }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5">Open ↗</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function SourcesPanel({ searchEvent }) {
+  if (!searchEvent) return null;
+  const { sources = [], images = [] } = searchEvent;
+  if (sources.length === 0 && images.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+      {images.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+            <Image className="w-3 h-3" />
+            <span>Images for this answer ({images.length})</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {images.map((img, i) => (
+              <a
+                key={img.image || img.thumbnail || img.url || i}
+                href={img.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-700"
+                title={img.title}
+              >
+                <img
+                  src={img.thumbnail || img.image}
+                  alt={img.title}
+                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  loading="lazy"
+                  onError={(e) => { e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="%23999"%3E%3Crect width="40" height="40" fill="%23eee"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-size="10"%3EIMG%3C/text%3E%3C/svg%3E'; }}
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-white/90 p-0.5 text-gray-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:bg-gray-900/90 dark:text-gray-200" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+      {sources.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+            <Link2 className="w-3 h-3" />
+            <span>Sources for this answer ({sources.length})</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {sources.map((source, i) => (
+              <SourceChip key={source.url || i} source={source} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Clean chat-like agent response — no "Agent response" header bar
 function AnswerEvent({ data, suppressThinkFallback = false }) {
   const raw = data?.answer || '';
@@ -556,6 +666,7 @@ function AnswerEvent({ data, suppressThinkFallback = false }) {
               ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
               : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
           </div>
+          <SourcesPanel searchEvent={data?.searchEvent} />
           {data?.round > 1 && (
             <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
           )}
