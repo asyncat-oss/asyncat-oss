@@ -842,18 +842,9 @@ export const agentApi = {
     return await handleResponse(res);
   },
 
-  readFile: async (filePath) => {
-    return await apiRequest(`${API_BASE_URL}/agent/files/read?path=${encodeURIComponent(filePath)}`);
-  },
-
-  listDirectory: async (dirPath = '.', depth = 1) => {
-    const params = new URLSearchParams({ path: dirPath, depth: String(depth) });
-    return await apiRequest(`${API_BASE_URL}/agent/files/list?${params}`);
-  },
-
   loadEntry: async (entryPath = '.') => {
-    const params = new URLSearchParams({ path: entryPath });
-    return await apiRequest(`${API_BASE_URL}/agent/files/entry?${params}`);
+    const params = new URLSearchParams({ rootId: 'workspace', path: entryPath });
+    return await apiRequest(`${API_BASE_URL}/files/entry?${params}`);
   },
 
   getTools: async () => {
@@ -1049,6 +1040,25 @@ export const filesApi = {
       method: 'POST',
       body: JSON.stringify({ rootId, path: filePath, recursive }),
     });
+  },
+
+  getRawUrl: (rootId, filePath) => {
+    const params = new URLSearchParams({ rootId, path: filePath });
+    return `${API_BASE_URL}/files/raw?${params}`;
+  },
+
+  upload: async (rootId, filePath, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('rootId', rootId);
+    formData.append('path', filePath);
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/files/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token?.access_token}` },
+      body: formData,
+    });
+    return await handleResponse(res);
   },
 };
 

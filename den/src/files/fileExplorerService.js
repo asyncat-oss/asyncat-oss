@@ -23,7 +23,6 @@ export function getFileRoots() {
     { id: 'workspace', label: 'Workspace', path: process.cwd(), kind: 'workspace' },
     { id: 'home', label: 'Home', path: home, kind: 'home' },
     { id: 'dev', label: 'Dev', path: path.join(home, 'Dev'), kind: 'dev' },
-    { id: 'hermes', label: 'Hermes', path: path.join(home, 'Hermes'), kind: 'folder' },
     { id: 'desktop', label: 'Desktop', path: path.join(home, 'Desktop'), kind: 'place' },
     { id: 'documents', label: 'Documents', path: path.join(home, 'Documents'), kind: 'place' },
     { id: 'downloads', label: 'Downloads', path: path.join(home, 'Downloads'), kind: 'downloads' },
@@ -201,7 +200,11 @@ export function createDirectory({ rootId = 'workspace', relativePath }) {
 export function writeFile({ rootId = 'workspace', relativePath, content = '' }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
   fs.mkdirSync(path.dirname(ctx.absolutePath), { recursive: true });
-  fs.writeFileSync(ctx.absolutePath, content, 'utf8');
+  if (Buffer.isBuffer(content)) {
+    fs.writeFileSync(ctx.absolutePath, content);
+  } else {
+    fs.writeFileSync(ctx.absolutePath, content, 'utf8');
+  }
   return { success: true, entry: entryMeta(ctx.rootPath, ctx.absolutePath) };
 }
 

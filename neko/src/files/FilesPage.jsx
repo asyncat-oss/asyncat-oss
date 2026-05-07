@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, Bot, Check, ChevronRight, Copy, Edit3,
   Eye, EyeOff, FilePlus, Folder, FolderPlus, Grid3X3, List, Loader2, MoreHorizontal,
-  RefreshCw, Save, Search, Trash2, X,
+  RefreshCw, Save, Search, Trash2, Upload, X,
 } from 'lucide-react';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -379,7 +379,11 @@ function DirectoryView({ entries, viewMode, selectedPath, onSelect, onOpen, sear
 }
 
 // ─── File Preview ───────────────────────────────────────────────────────────
-function FilePreview({ entry, onCopy }) {
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico']);
+const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov', 'mkv']);
+const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a']);
+
+function FilePreview({ entry, rootId, onCopy }) {
   const highlighted = useMemo(() => {
     if (!entry?.content || entry.tooLarge || entry.binary || BINARY_EXTS.has(entry.ext || '')) return '';
     try {
@@ -390,6 +394,11 @@ function FilePreview({ entry, onCopy }) {
     }
   }, [entry]);
 
+  const rawUrl = useMemo(() => {
+    if (!entry || entry.type !== 'file') return null;
+    return filesApi.getRawUrl(rootId, entry.path);
+  }, [entry, rootId]);
+
   if (!entry) return null;
   if (entry.tooLarge) {
     return (
@@ -397,6 +406,42 @@ function FilePreview({ entry, onCopy }) {
         <AlertCircle className="w-8 h-8 mb-2 opacity-40" />
         <p className="text-sm font-medium">File too large to preview</p>
         <p className="text-xs mt-1">{formatSize(entry.size)} · preview limit is 5 MB</p>
+      </div>
+    );
+  }
+  if (IMAGE_EXTS.has(entry.ext || '')) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col bg-[#1a1d21]">
+        <div className="flex items-center justify-between px-5 py-2 border-b border-white/5 bg-[#22262d]">
+          <span className="text-xs font-mono text-gray-400">{entry.name}</span>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-5">
+          <img src={rawUrl} alt={entry.name} className="max-w-full max-h-full object-contain rounded-lg shadow-lg" />
+        </div>
+      </div>
+    );
+  }
+  if (VIDEO_EXTS.has(entry.ext || '')) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col bg-[#1a1d21]">
+        <div className="flex items-center justify-between px-5 py-2 border-b border-white/5 bg-[#22262d]">
+          <span className="text-xs font-mono text-gray-400">{entry.name}</span>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-5">
+          <video src={rawUrl} controls className="max-w-full max-h-full rounded-lg shadow-lg" />
+        </div>
+      </div>
+    );
+  }
+  if (AUDIO_EXTS.has(entry.ext || '')) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col bg-[#1a1d21]">
+        <div className="flex items-center justify-between px-5 py-2 border-b border-white/5 bg-[#22262d]">
+          <span className="text-xs font-mono text-gray-400">{entry.name}</span>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-5">
+          <audio src={rawUrl} controls className="w-full max-w-md" />
+        </div>
       </div>
     );
   }
@@ -572,6 +617,9 @@ export default function FilesPage() {
   const [nameModalConfig, setNameModalConfig] = useState({ title: '', placeholder: '', onConfirm: () => {} });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+  const fileInputRef = useRef(null);
 
   const activeRoot = roots.find(root => root.id === rootId) || roots[0];
   const activeEntry = entry?.type === 'file' ? entry : selectedPreview;
@@ -751,6 +799,51 @@ export default function FilesPage() {
     }
   }, [activeEntry, editText, loadEntry, rootId]);
 
+  const handleUpload = useCallback(async (file) => {
+    if (!file) return;
+    const targetPath = joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), file.name);
+    try {
+      await filesApi.upload(rootId, targetPath, file);
+      setNotice('Uploaded');
+      setTimeout(() => setNotice(null), 1200);
+      await loadEntry();
+    } catch (err) {
+      setError(err.message || 'Upload failed');
+    }
+  }, [currentPath, entry, loadEntry, rootId]);
+
+  const onDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const onDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    setIsDragOver(true);
+  }, []);
+
+  const onDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleUpload(files[0]);
+    }
+  }, [handleUpload]);
+
   return (
     <div className="h-full flex bg-white dark:bg-gray-900 midnight:bg-gray-950 overflow-hidden">
       <main className="flex-1 min-w-0 flex flex-col">
@@ -826,6 +919,13 @@ export default function FilesPage() {
                 <FolderPlus className="w-3.5 h-3.5" />
                 New Folder
               </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Upload
+              </button>
               <button onClick={agentPrompt} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-gray-100 dark:bg-white/[0.08] midnight:bg-white/[0.08] border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/[0.12] midnight:hover:bg-white/[0.12] transition-colors">
                 <Bot className="w-3.5 h-3.5" />
                 Agent
@@ -837,7 +937,27 @@ export default function FilesPage() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div
+          className={`flex-1 min-h-0 overflow-auto relative ${isDragOver ? 'bg-[#5555a0]/5' : ''}`}
+          onDragOver={onDragOver}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={e => { handleUpload(e.target.files?.[0]); e.target.value = ''; }}
+          />
+          {isDragOver && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#5555a0]/10 border-2 border-dashed border-[#5555a0] m-4 rounded-xl pointer-events-none">
+              <div className="flex flex-col items-center gap-2 text-[#5555a0]">
+                <Upload className="w-10 h-10" />
+                <span className="text-sm font-medium">Drop file to upload</span>
+              </div>
+            </div>
+          )}
           {loading && (
             <div className="h-full flex items-center justify-center gap-2 text-gray-400">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -923,7 +1043,7 @@ export default function FilesPage() {
                   </button>
                 </div>
               </div>
-              <FilePreview entry={entry} onCopy={() => navigator.clipboard?.writeText(entry.content || '')} />
+              <FilePreview entry={entry} rootId={rootId} onCopy={() => navigator.clipboard?.writeText(entry.content || '')} />
             </div>
           )}
         </div>
