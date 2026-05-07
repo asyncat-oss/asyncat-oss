@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { verifyUser } from '../auth/authMiddleware.js';
-import { clearManagedUploads, getStorageSummary } from './storageService.js';
+import { clearManagedUploads, getStorageSummary, getLogsSummary, clearLogs, readLogFile } from './storageService.js';
 
 const router = express.Router();
 
@@ -44,6 +44,52 @@ router.delete('/uploads', verifyUser, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('Storage clear uploads error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/logs', verifyUser, (req, res) => {
+  try {
+    const summary = getLogsSummary();
+    res.json(summary);
+  } catch (err) {
+    console.error('Logs summary error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/logs', verifyUser, async (req, res) => {
+  try {
+    const confirm = String(req.body?.confirm || '').trim().toLowerCase();
+    if (confirm !== 'clear logs') {
+      return res.status(400).json({
+        success: false,
+        error: 'Confirmation text must be "clear logs"',
+      });
+    }
+
+    const result = await clearLogs();
+    res.json(result);
+  } catch (err) {
+    console.error('Storage clear logs error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/logs/read', verifyUser, (req, res) => {
+  try {
+    const category = String(req.query?.category || '').trim();
+    const filename = String(req.query?.filename || '').trim();
+    const lines = Math.min(1000, Math.max(1, parseInt(req.query?.lines || '200', 10))) || 200;
+
+    if (!category || !filename) {
+      return res.status(400).json({ success: false, error: 'category and filename are required' });
+    }
+
+    const result = readLogFile(category, filename, lines);
+    res.json(result);
+  } catch (err) {
+    console.error('Read log file error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

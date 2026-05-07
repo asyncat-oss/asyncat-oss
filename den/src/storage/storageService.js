@@ -2,8 +2,22 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import db from '../db/client.js';
 import { getModelsDir } from '../ai/controllers/ai/modelManager.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
+const LOGS_ROOT = path.join(PROJECT_ROOT, 'logs');
+
+const LOG_CATEGORIES = {
+  'backend-app': { dir: 'backend/app', label: 'Backend App' },
+  'backend-error': { dir: 'backend/error', label: 'Backend Error' },
+  'backend-http': { dir: 'backend/http', label: 'Backend HTTP' },
+  'backend-process': { dir: 'backend/process', label: 'Backend Process' },
+  'cli': { dir: 'cli', label: 'CLI' },
+  'other': { dir: '.', label: 'Other Logs' },
+};
 
 const DEFAULT_SCAN_LIMIT = 25000;
 const MANAGED_UPLOAD_CONTAINERS = ['notes', 'kanban-attachments'];
@@ -296,5 +310,138 @@ export async function clearManagedUploads() {
     deletedFiles,
     before,
     after,
+  };
+}
+
+function listFilesInDir(dirPath, recursive = true) {
+  const files = [];
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory() && recursive) {
+        files.push(...listFilesInDir(entryPath, recursive));
+      } else if (entry.isFile()) {
+        const stat = safeStat(entryPath);
+        if (stat) {
+          files.push({
+            name: entry.name,
+            relativePath: path.relative(LOGS_ROOT, entryPath),
+            bytes: stat.size,
+            formatted: formatBytes(stat.size),
+            modifiedAt: stat.mtime.toISOString(),
+          });
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return files;
+}
+
+export function getLogsSummary() {
+  const categories = Object.keys(LOG_CATEGORIES).map((id) => {
+    const config = LOG_CATEGORIES[id];
+    const dirPath = path.join(LOGS_ROOT, config.dir);
+    const usage = directoryUsage(dirPath);
+
+    const fileList =
+      id === 'other'
+        ? listFilesInDir(dirPath, false)
+        : listFilesInDir(dirPath, true);
+
+    fileList.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+
+    return {
+      id,
+      label: config.label,
+      ...usage,
+      latestModifiedAt: fileList[0]?.modifiedAt || null,
+      recentFiles: fileList.slice(0, 10),
+    };
+  });
+
+  const rootUsage = directoryUsage(LOGS_ROOT);
+
+  return {
+    success: true,
+    generatedAt: new Date().toISOString(),
+    totalBytes: rootUsage.bytes,
+    totalFormatted: formatBytes(rootUsage.bytes),
+    categories,
+  };
+}
+
+export async function clearLogs() {
+  const before = directoryUsage(LOGS_ROOT);
+
+  async function clearDir(dirPath) {
+    const entries = await fsp.readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        await clearDir(entryPath);
+      } else {
+        await fsp.unlink(entryPath);
+      }
+    }
+  }
+
+  if (fs.existsSync(LOGS_ROOT)) {
+    await clearDir(LOGS_ROOT);
+  }
+
+  const after = directoryUsage(LOGS_ROOT);
+  const deletedBytes = Math.max(0, (before.bytes || 0) - (after.bytes || 0));
+  const deletedFiles = Math.max(0, (before.files || 0) - (after.files || 0));
+
+  return {
+    success: true,
+    action: 'clear-logs',
+    path: LOGS_ROOT,
+    deletedBytes,
+    deletedFormatted: formatBytes(deletedBytes),
+    deletedFiles,
+    before,
+    after,
+  };
+}
+
+export function readLogFile(category, filename, lines = 200) {
+  const config = LOG_CATEGORIES[category];
+  if (!config) {
+    throw new Error('Invalid log category');
+  }
+
+  const sanitized = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
+  if (sanitized.includes('..') || path.isAbsolute(sanitized)) {
+    throw new Error('Invalid filename');
+  }
+
+  const categoryDir = path.join(LOGS_ROOT, config.dir);
+  const filePath = path.join(categoryDir, sanitized);
+
+  if (!assertInside(categoryDir, filePath)) {
+    throw new Error('Invalid file path');
+  }
+
+  const stat = safeStat(filePath);
+  if (!stat || !stat.isFile()) {
+    throw new Error('Log file not found');
+  }
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const allLines = content.split('\n');
+  const start = Math.max(0, allLines.length - Math.min(1000, lines));
+  const tail = allLines.slice(start).join('\n');
+
+  return {
+    success: true,
+    category,
+    filename: sanitized,
+    lines: allLines.length,
+    returnedLines: tail.split('\n').length,
+    content: tail,
   };
 }

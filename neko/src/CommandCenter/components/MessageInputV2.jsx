@@ -78,6 +78,15 @@ function extractAgentMentions(value, profiles) {
     }));
 }
 
+function formatElapsed(ms) {
+  if (!ms || ms < 0) return '0s';
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+}
+
 export const MessageInputV2 = ({
   onSubmit,
   disabled,
@@ -101,6 +110,7 @@ export const MessageInputV2 = ({
   onToggleAutoApprove,
   isRunning = false,
   onStop,
+  runStartedAt = null,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
@@ -113,6 +123,7 @@ export const MessageInputV2 = ({
   const [agentProfiles, setAgentProfiles] = useState([]);
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [runElapsed, setRunElapsed] = useState(0);
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
@@ -151,6 +162,13 @@ export const MessageInputV2 = ({
   const contextPercent = contextInfo?.percent ?? estimatedContextPercent;
   const contextExact = Boolean(contextInfo?.exact);
   const contextLabel = contextInfo?.label || 'estimated tokens';
+
+  useEffect(() => {
+    if (!isRunning || !runStartedAt) { setRunElapsed(0); return; }
+    setRunElapsed(Date.now() - runStartedAt);
+    const id = setInterval(() => setRunElapsed(Date.now() - runStartedAt), 1000);
+    return () => clearInterval(id);
+  }, [isRunning, runStartedAt]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -620,15 +638,22 @@ export const MessageInputV2 = ({
 
                 <div className="shrink-0">
                   {isRunning ? (
-                    <button
-                      type="button"
-                      onClick={onStop}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-600 transition-all duration-200 hover:bg-red-100 active:scale-95 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50 midnight:bg-red-950/30 midnight:text-red-300"
-                      title="Stop generating"
-                    >
-                      <Square className="h-3.5 w-3.5 fill-current" />
-                      Stop
-                    </button>
+                    <div className="inline-flex items-center gap-2">
+                      {runElapsed > 0 && (
+                        <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
+                          {formatElapsed(runElapsed)}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={onStop}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-600 transition-all duration-200 hover:bg-red-100 active:scale-95 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50 midnight:bg-red-950/30 midnight:text-red-300"
+                        title="Stop generating"
+                      >
+                        <Square className="h-3.5 w-3.5 fill-current" />
+                        Stop
+                      </button>
+                    </div>
                   ) : (
                     <button
                       type="submit"

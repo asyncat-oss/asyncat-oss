@@ -335,7 +335,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/MessageInputV2";
-import AgentRunFeed from './components/AgentRunFeed';
+import AgentRunFeed, { CurrentPlanPanel } from './components/AgentRunFeed';
 import AgentChangesPanel from './components/AgentChangesPanel';
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
@@ -682,6 +682,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const autoCompactRef = useRef(null);
   const agentAbortControllersRef = useRef(new Map());
   const chatRunsRef = useRef(chatRuns);
+  const runStartedAtRef = useRef(null);
 
   useEffect(() => {
     chatRunsRef.current = chatRuns;
@@ -1133,6 +1134,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
 
     setError(null);
+    runStartedAtRef.current = Date.now();
     updateChatRun(runKey, prev => {
       const baseEvents = prev.events?.length ? prev.events : buildEventsFromMessages(runMessages);
       return {
@@ -1659,6 +1661,19 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return buildEventsFromMessages(messages);
   }, [agentEvents, messages]);
 
+  const currentPlanEvent = useMemo(() => {
+    const lastGoalIndex = persistedAgentEvents.reduce((lastIndex, event, index) => (
+      event?.type === 'user_goal' ? index : lastIndex
+    ), -1);
+    for (let i = persistedAgentEvents.length - 1; i > lastGoalIndex; i--) {
+      const event = persistedAgentEvents[i];
+      if (event?.type === 'plan_update' && Array.isArray(event.data?.plan) && event.data.plan.length > 0) {
+        return event;
+      }
+    }
+    return null;
+  }, [persistedAgentEvents]);
+
   const sourceCatalog = useMemo(
     () => buildConversationSourceCatalog(messages, persistedAgentEvents),
     [messages, persistedAgentEvents],
@@ -1666,7 +1681,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const agentActivityItems = useMemo(() => {
     return persistedAgentEvents
-      .filter(event => ['thinking', 'tool_start', 'permission_request', 'ask_user', 'answer', 'error', 'status'].includes(event.type))
+      .filter(event => ['thinking', 'tool_start', 'permission_request', 'ask_user', 'answer', 'error', 'status', 'plan_update'].includes(event.type))
       .map((event, index) => {
         const type = event.type;
         const label = type === 'tool_start'
@@ -1681,15 +1696,28 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                   ? 'Error'
                   : type === 'thinking'
                     ? 'Reasoning'
-                    : 'Status';
-        const detail = event.data?.thought || event.data?.description || event.data?.message || event.data?.answer || '';
+                    : type === 'plan_update'
+                      ? 'Plan updated'
+                      : 'Status';
+        const detail = type === 'plan_update'
+          ? (() => {
+              const plan = Array.isArray(event.data?.plan) ? event.data.plan : [];
+              const completed = plan.filter(i => i.status === 'completed').length;
+              const inProgress = plan.find(i => i.status === 'in_progress');
+              return inProgress
+                ? `${completed}/${plan.length} · ${inProgress.activeForm || inProgress.content}`
+                : `${completed}/${plan.length} done`;
+            })()
+          : event.data?.thought || event.data?.description || event.data?.message || event.data?.answer || '';
         const dot = type === 'error'
           ? 'bg-red-400'
           : type === 'answer'
             ? 'bg-emerald-400'
             : type === 'tool_start'
               ? 'bg-blue-400'
-              : 'bg-gray-300 dark:bg-gray-600';
+              : type === 'plan_update'
+                ? 'bg-indigo-400'
+                : 'bg-gray-300 dark:bg-gray-600';
         return { id: `${type}_${index}`, label, detail, dot };
       });
   }, [persistedAgentEvents]);
@@ -2450,6 +2478,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     events={persistedAgentEvents}
                     isRunning={agentRunning}
                     streamingText={agentStreamingText}
+                    runStartedAt={runStartedAtRef.current}
                     onPermissionDecision={handleAgentPermission}
                     onAskUserAnswer={handleAgentAskUser}
                     onRetryTool={handleRetryTool}
@@ -2470,6 +2499,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             </div>
 
             <div className="shrink-0">
+              {currentPlanEvent && (
+                <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 pt-3">
+                  <CurrentPlanPanel
+                    data={currentPlanEvent.data}
+                    isRunning={agentRunning}
+                  />
+                </div>
+              )}
               <MessageInputV2
                 onSubmit={handleAgentRun}
                 disabled={isProcessing || agentRunning}
@@ -2496,6 +2533,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onToggleAutoApprove={handleToggleAgentAutoApprove}
                 isRunning={agentRunning}
                 onStop={handleAgentStop}
+                runStartedAt={runStartedAtRef.current}
               />
             </div>
           </>

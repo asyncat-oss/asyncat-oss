@@ -32,6 +32,53 @@ const MUTATING_FILE_TOOLS = new Set([
   'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
 ]);
 const MUTATING_SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
+const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify|look at|review)\b/i;
+const AUTO_PLAN_IDS = new Set(['auto_plan_inspect', 'auto_plan_understand', 'auto_plan_apply', 'auto_plan_verify']);
+
+function stringifyToolArguments(value) {
+  if (!value) return '{}';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '{}';
+    try {
+      JSON.parse(trimmed);
+      return trimmed;
+    } catch {
+      return '{}';
+    }
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '{}';
+    }
+  }
+  return '{}';
+}
+
+function normalizeNativeToolCalls(toolCalls) {
+  if (!Array.isArray(toolCalls)) return null;
+  const normalized = toolCalls
+    .map(tc => {
+      const name = tc?.function?.name || tc?.name || '';
+      if (!name) return null;
+      return {
+        id: tc.id || `tc_${Math.random().toString(16).slice(2, 10)}`,
+        type: tc.type || 'function',
+        function: {
+          name,
+          arguments: stringifyToolArguments(tc.function?.arguments ?? tc.arguments),
+        },
+      };
+    })
+    .filter(Boolean);
+  return normalized.length ? normalized : null;
+}
+
+function isAutoPlan(plan) {
+  return Array.isArray(plan) && plan.length > 0 && plan.every(item => AUTO_PLAN_IDS.has(item.id));
+}
 
 /**
  * @typedef {Object} AgentEvent
@@ -224,6 +271,7 @@ export class AgentRuntime {
     };
 
     const knownTools = toolRegistry.names();
+    this._ensureAutoPlan(goal, 0);
 
     // ── ReAct Loop ──────────────────────────────────────────────────────────
     let answer = null;
@@ -231,9 +279,6 @@ export class AgentRuntime {
     const argumentRepairAttempts = new Map();
     let lastToolSig = null;
     let consecutiveDupCount = 0;
-    // Track how many times each tool has been called regardless of args — catches
-    // loops where the model varies args slightly to evade the consecutive-dup guard.
-    const toolCallCount = new Map();
 
     for (let round = 0; round < this.maxRounds; round++) {
       this._throwIfAborted();
@@ -264,7 +309,9 @@ export class AgentRuntime {
 
       try {
         const promptTokens = this._estimateTokens(systemPrompt) + this._estimateTokens(JSON.stringify(messages));
-        const result = await this._callLLM(systemPrompt, messages);
+        const result = await this._callLLM(systemPrompt, messages, {
+          forceToolName: this._shouldPrimePlan(goal, round) ? 'todo_write' : null,
+        });
         responseText = result.text;
         apiToolCalls = result.toolCalls;
         streamedReasoning = result.reasoning || '';
@@ -291,9 +338,7 @@ export class AgentRuntime {
 
       // Add assistant response to thread. Native tool-calling providers expect
       // the assistant tool_call message followed by role=tool result messages.
-      const nativeToolCallsForThread = Array.isArray(apiToolCalls) && apiToolCalls.length > 0
-        ? apiToolCalls
-        : null;
+      const nativeToolCallsForThread = normalizeNativeToolCalls(apiToolCalls);
       if (nativeToolCallsForThread) {
         messages.push({
           role: 'assistant',
@@ -318,6 +363,7 @@ export class AgentRuntime {
       // If model returned a final answer (no tool calls)
       if (finalAnswer && toolCalls.length === 0) {
         answer = finalAnswer;
+        this._completeAutoPlan(round);
         this.onEvent({ type: 'answer', data: { answer, round } });
         this._trackWorkflow(goal);
         break;
@@ -354,6 +400,7 @@ export class AgentRuntime {
           answer = cleanReasoningAnswer(finalAnswer || responseText);
           if (!answer) answer = responseText; // fallback if stripping removes everything
         }
+        this._completeAutoPlan(round);
         this.onEvent({ type: 'answer', data: { answer, round } });
         break;
       }
@@ -559,18 +606,8 @@ export class AgentRuntime {
             consecutiveDupCount = 0;
           }
 
-          // Also catch loops where the model varies args slightly — if the same tool
-          // name has been called 4+ times total, it's stuck regardless of arg differences.
-          const totalCalls = (toolCallCount.get(tc.tool_name) || 0) + 1;
-          toolCallCount.set(tc.tool_name, totalCalls);
-          const toolLimit = tc.tool_name === 'list_directory' || tc.tool_name === 'read_file' ? 4 : 6;
-          if (totalCalls > toolLimit) {
-            const stuckThought = `Tool \`${tc.tool_name}\` called ${totalCalls} times total — likely stuck. Stopping.`;
-            reasoningEvents.push({ thought: stuckThought, round, timestamp: new Date().toISOString() });
-            this.onEvent({ type: 'thinking', data: { thought: stuckThought, round } });
-            answer = this._formatRepeatedToolAnswer(tc, result);
-            this.onEvent({ type: 'answer', data: { answer, round } });
-            break;
+          if (tc.tool_name !== 'todo_write' && tc.tool_name !== 'list_plan') {
+            this._advanceAutoPlan(this._isMutatingTool(tc.tool_name, tc.arguments) ? 'mutated' : 'inspected', round);
           }
         }
         if (answer) break;
@@ -693,7 +730,7 @@ export class AgentRuntime {
 
     return { allowed: true, decision: 'local_auto' };
   }
-  async _callLLM(systemPrompt, messages) {
+  async _callLLM(systemPrompt, messages, options = {}) {
     this._throwIfAborted();
     const useNativeTools = this.supportsNativeTools;
 
@@ -707,13 +744,22 @@ export class AgentRuntime {
     // For cloud models with native tool support, pass tool definitions via API
     if (useNativeTools) {
       params.tools = toolRegistry.toOpenAIFormat();
-      params.tool_choice = 'auto';
+      params.tool_choice = options.forceToolName
+        ? { type: 'function', function: { name: options.forceToolName } }
+        : 'auto';
       params.max_completion_tokens = params.max_tokens;
       delete params.max_tokens;
     }
 
     const requestOptions = this.abortSignal ? { signal: this.abortSignal } : undefined;
-    const stream = await this.aiClient.client.chat.completions.create(params, requestOptions);
+    let stream;
+    try {
+      stream = await this.aiClient.client.chat.completions.create(params, requestOptions);
+    } catch (err) {
+      if (!options.forceToolName) throw err;
+      const fallbackParams = { ...params, tool_choice: 'auto' };
+      stream = await this.aiClient.client.chat.completions.create(fallbackParams, requestOptions);
+    }
     let fullText = '';
     let reasoningText = '';
     const toolCalls = {};
@@ -744,14 +790,18 @@ export class AgentRuntime {
           }
           if (tc.id) toolCalls[tc.index].id = tc.id;
           if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
-          if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+          if (tc.function?.arguments) {
+            toolCalls[tc.index].function.arguments += typeof tc.function.arguments === 'string'
+              ? tc.function.arguments
+              : stringifyToolArguments(tc.function.arguments);
+          }
         }
       }
     }
 
     this._throwIfAborted();
 
-    const apiToolCalls = Object.values(toolCalls).length > 0 ? Object.values(toolCalls) : null;
+    const apiToolCalls = normalizeNativeToolCalls(Object.values(toolCalls));
 
     return {
       text: fullText,
@@ -763,6 +813,87 @@ export class AgentRuntime {
 
   _isAbortError(err) {
     return err?.name === 'AbortError' || this.abortSignal?.aborted;
+  }
+
+  _ensureAutoPlan(goal, round = 0) {
+    if (!ACTION_GOAL_RE.test(String(goal || ''))) return;
+    if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return;
+
+    const plan = [
+      {
+        id: 'auto_plan_inspect',
+        content: 'Inspect current context',
+        activeForm: 'Inspecting current context',
+        status: 'in_progress',
+      },
+      {
+        id: 'auto_plan_understand',
+        content: 'Identify the cause',
+        activeForm: 'Identifying the cause',
+        status: 'pending',
+      },
+      {
+        id: 'auto_plan_apply',
+        content: 'Apply the needed change',
+        activeForm: 'Applying the needed change',
+        status: 'pending',
+      },
+      {
+        id: 'auto_plan_verify',
+        content: 'Verify the result',
+        activeForm: 'Verifying the result',
+        status: 'pending',
+      },
+    ];
+
+    this.session.plan = plan;
+    this.session.save();
+    this.onEvent({ type: 'plan_update', data: { plan, round, automatic: true } });
+  }
+
+  _advanceAutoPlan(phase, round = 0) {
+    if (!isAutoPlan(this.session?.plan)) return;
+
+    const current = this.session.plan.map(item => ({ ...item }));
+    const byId = new Map(current.map(item => [item.id, item]));
+    const inspect = byId.get('auto_plan_inspect');
+    const understand = byId.get('auto_plan_understand');
+    const apply = byId.get('auto_plan_apply');
+    const verify = byId.get('auto_plan_verify');
+
+    if (phase === 'inspected' && inspect?.status === 'in_progress') {
+      inspect.status = 'completed';
+      if (understand?.status === 'pending') understand.status = 'in_progress';
+    }
+
+    if (phase === 'mutated') {
+      if (inspect && inspect.status !== 'completed') inspect.status = 'completed';
+      if (understand && understand.status !== 'completed') understand.status = 'completed';
+      if (apply) apply.status = 'completed';
+      if (verify?.status === 'pending') verify.status = 'in_progress';
+    }
+
+    const changed = JSON.stringify(current) !== JSON.stringify(this.session.plan);
+    if (!changed) return;
+    this.session.plan = current;
+    this.session.save();
+    this.onEvent({ type: 'plan_update', data: { plan: current, round, automatic: true } });
+  }
+
+  _completeAutoPlan(round = 0) {
+    if (!isAutoPlan(this.session?.plan)) return;
+    const plan = this.session.plan.map(item => ({ ...item, status: 'completed' }));
+    this.session.plan = plan;
+    this.session.save();
+    this.onEvent({ type: 'plan_update', data: { plan, round, automatic: true } });
+  }
+
+  _shouldPrimePlan(goal, round) {
+    if (!this.supportsNativeTools) return false;
+    if (round !== 0) return false;
+    if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return false;
+    if (!toolRegistry.has('todo_write')) return false;
+    return ACTION_GOAL_RE.test(String(goal || ''));
   }
 
   _throwIfAborted() {

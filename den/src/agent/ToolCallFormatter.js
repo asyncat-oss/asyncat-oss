@@ -15,6 +15,18 @@
 
 import { randomUUID } from 'crypto';
 
+function parseArguments(value) {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return {};
+  try {
+    const parsed = JSON.parse(value || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Normalised internal tool call format.
  * @typedef {{ tool_name: string, arguments: object, call_id: string }} NormalizedToolCall
@@ -57,8 +69,7 @@ export class ToolCallFormatter {
     // 1. Native API tool calls (OpenAI, Ollama with tool support)
     if (apiToolCalls && apiToolCalls.length > 0) {
       return apiToolCalls.map(tc => {
-        let args = {};
-        try { args = JSON.parse(tc.function?.arguments || '{}'); } catch {}
+        const args = parseArguments(tc.function?.arguments);
         return {
           tool_name: tc.function?.name || 'unknown',
           arguments: args,

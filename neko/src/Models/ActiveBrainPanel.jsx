@@ -32,8 +32,10 @@ const ActiveBrainPanel = ({
     : serverStatus?.model
       ? serverStatus.model
       : 'No model selected';
+  const rawModel = activeConfig?.settings?.model_name || activeConfig?.model || '';
+  const displayModel = rawModel === 'openrouter/auto' ? 'Auto (OpenRouter picks best)' : rawModel;
   const primaryDetail = providerIsExternal
-    ? `${providerTone} · ${activeConfig.model}`
+    ? `${providerTone} · ${displayModel}`
     : serverStatus?.model
       ? `${isReady ? 'Running locally' : 'Loading locally'} · Built-in inference server`
       : 'Choose a local model or activate a provider below.';

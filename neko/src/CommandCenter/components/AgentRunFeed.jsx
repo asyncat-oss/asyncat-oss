@@ -126,6 +126,26 @@ function FeedFrame({ children, className = '' }) {
   );
 }
 
+function formatElapsed(ms) {
+  if (!ms || ms < 0) return '0s';
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+}
+
+function useElapsedTime(startMs) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startMs) { setElapsed(0); return; }
+    setElapsed(Date.now() - startMs);
+    const id = setInterval(() => setElapsed(Date.now() - startMs), 1000);
+    return () => clearInterval(id);
+  }, [startMs]);
+  return elapsed;
+}
+
 function ModeBadge({ toolsEnabled }) {
   if (typeof toolsEnabled !== 'boolean') return null;
   return (
@@ -841,7 +861,92 @@ function StreamingPreview({ text }) {
   );
 }
 
-function RunningIndicator() {
+export function CurrentPlanPanel({ data, isRunning, className = '' }) {
+  const plan = Array.isArray(data?.plan) ? data.plan : [];
+  if (!plan.length) return null;
+
+  const completed = plan.filter(i => i.status === 'completed').length;
+  const total = plan.length;
+  const hasActiveItem = plan.some(i => i.status === 'in_progress');
+  const isStaleActivePlan = hasActiveItem && !isRunning && completed < total;
+  const isDone = completed === total && total > 0;
+
+  if (isDone && !isRunning) {
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200/70 bg-emerald-50/80 px-3.5 py-2 text-xs shadow-sm shadow-emerald-950/5 backdrop-blur dark:border-emerald-800/40 dark:bg-emerald-950/25 midnight:border-emerald-800/40 midnight:bg-emerald-950/25">
+          <div className="flex min-w-0 items-center gap-2">
+            <svg className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 midnight:text-emerald-300">
+              Plan done
+            </span>
+          </div>
+          <span className="shrink-0 tabular-nums text-emerald-500 dark:text-emerald-400">
+            {completed}/{total}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={className}>
+      <div className="rounded-lg border border-indigo-200/60 bg-indigo-50/80 px-3.5 py-2.5 shadow-sm shadow-indigo-950/5 backdrop-blur dark:border-indigo-800/40 dark:bg-indigo-950/30 midnight:border-indigo-800/40 midnight:bg-indigo-950/30">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400">
+            Plan
+          </span>
+          <span className="text-[10px] tabular-nums text-indigo-400 dark:text-indigo-500 midnight:text-indigo-500">
+            {completed}/{total}
+          </span>
+          {completed === total && total > 0 && (
+            <span className="text-[10px] text-emerald-500 dark:text-emerald-400">Done</span>
+          )}
+          {isStaleActivePlan && (
+            <span className="text-[10px] text-amber-500 dark:text-amber-400">Stopped</span>
+          )}
+        </div>
+        <ul className="space-y-1">
+          {plan.map((item, i) => (
+            <li key={item.id || i} className="flex items-start gap-2 text-[12px] leading-snug">
+              <span className={`mt-0.5 shrink-0 ${
+                item.status === 'completed'
+                  ? 'text-emerald-500 dark:text-emerald-400'
+                  : item.status === 'in_progress'
+                    ? (isRunning ? 'text-indigo-500 dark:text-indigo-400' : 'text-amber-500 dark:text-amber-400')
+                    : 'text-gray-300 dark:text-gray-600 midnight:text-gray-600'
+              }`}>
+                {item.status === 'completed' ? (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                ) : item.status === 'in_progress' && isRunning ? (
+                  <span className="block w-3.5 h-3.5 rounded-full border-2 border-indigo-400 dark:border-indigo-500 border-t-transparent animate-spin" />
+                ) : item.status === 'in_progress' ? (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" d="M9 12h6" /></svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /></svg>
+                )}
+              </span>
+              <span className={`min-w-0 flex-1 ${
+                item.status === 'completed'
+                  ? 'line-through text-gray-400 dark:text-gray-500 midnight:text-gray-500'
+                  : item.status === 'in_progress'
+                    ? 'font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200'
+                    : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'
+              }`}>
+                {item.status === 'in_progress' && item.activeForm ? item.activeForm : item.content}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function RunningIndicator({ runStartedAt }) {
+  const elapsed = useElapsedTime(runStartedAt);
   return (
     <FeedFrame>
     <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-2">
@@ -851,6 +956,9 @@ function RunningIndicator() {
         <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
       </span>
       Agent is working…
+      {elapsed > 0 && (
+        <span className="tabular-nums text-gray-400 dark:text-gray-600">{formatElapsed(elapsed)}</span>
+      )}
     </div>
     </FeedFrame>
   );
@@ -858,7 +966,7 @@ function RunningIndicator() {
 
 // ── Main feed component ───────────────────────────────────────────────────────
 
-export default function AgentRunFeed({ events, isRunning, streamingText, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithTools }) {
+export default function AgentRunFeed({ events, isRunning, streamingText, runStartedAt, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithTools }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
@@ -921,6 +1029,8 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
       case 'skills_loaded':
         renderedEvents.push(<SkillsLoadedEvent key={i} data={ev.data} />);
         break;
+      case 'plan_update':
+        break;
       default:
         break;
     }
@@ -933,7 +1043,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, onPermi
       {renderedEvents}
 
       {isRunning && <StreamingPreview text={streamingText} />}
-      {isRunning && !streamingText && <RunningIndicator />}
+      {isRunning && !streamingText && <RunningIndicator runStartedAt={runStartedAt} />}
     </div>
   );
 }

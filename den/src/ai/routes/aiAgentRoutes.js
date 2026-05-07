@@ -352,6 +352,11 @@ function agentEventLabel(event) {
   if (event.type === 'agent_delegate_start') return `Delegating to @${data.profileHandle || 'agent'}`;
   if (event.type === 'agent_delegate_result') return data.success === false ? 'Delegated agent failed' : 'Delegated agent finished';
   if (event.type === 'usage_update') return 'Model usage updated';
+  if (event.type === 'plan_update') {
+    const plan = Array.isArray(data.plan) ? data.plan : [];
+    const completed = plan.filter(i => i.status === 'completed').length;
+    return `Plan: ${completed}/${plan.length} done`;
+  }
   if (event.type === 'answer') return 'Completed';
   if (event.type === 'error') return data.message || 'Agent error';
   return event.type || 'Updated';

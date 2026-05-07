@@ -4,12 +4,16 @@ import {
   AlertTriangle,
   CalendarClock,
   Database,
+  Eye,
+  FileText,
   Folder,
   HardDrive,
   Loader2,
   RefreshCw,
   Server,
+  Terminal,
   Trash2,
+  X,
 } from 'lucide-react';
 import { storageApi, apiUtils } from './settingApi';
 
@@ -218,6 +222,15 @@ export default function StorageSection() {
   const [clearingUploads, setClearingUploads] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
 
+  // Logs state
+  const [logsSummary, setLogsSummary] = useState(null);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState(null);
+  const [confirmClearLogs, setConfirmClearLogs] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
+  const [viewingLog, setViewingLog] = useState(null);
+  const [logContentLoading, setLogContentLoading] = useState(false);
+
   const loadSummary = useCallback(async ({ silent = false } = {}) => {
     if (silent) setRefreshing(true);
     else setLoading(true);
@@ -263,6 +276,71 @@ export default function StorageSection() {
       setClearingUploads(false);
     }
   }, [confirmClearUploads, loadSummary]);
+
+  // Logs handlers
+  const loadLogs = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLogsLoading(true);
+    setLogsError(null);
+    try {
+      const res = await storageApi.getLogsSummary();
+      setLogsSummary(res);
+    } catch (err) {
+      setLogsError(apiUtils.handleError(err, 'Failed to load logs summary'));
+    } finally {
+      setLogsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  const clearLogsAction = useCallback(async () => {
+    if (!confirmClearLogs) {
+      setActionMessage(null);
+      setConfirmClearLogs(true);
+      return;
+    }
+
+    setClearingLogs(true);
+    setActionMessage(null);
+    try {
+      const res = await storageApi.clearLogs();
+      setActionMessage({
+        type: 'success',
+        text: `Cleared ${res.deletedFormatted || formatBytes(res.deletedBytes)} across ${res.deletedFiles || 0} log files.`,
+      });
+      setConfirmClearLogs(false);
+      await loadLogs({ silent: true });
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: apiUtils.handleError(err, 'Failed to clear logs'),
+      });
+    } finally {
+      setClearingLogs(false);
+    }
+  }, [confirmClearLogs, loadLogs]);
+
+  const viewLog = useCallback(async (category, filename) => {
+    if (viewingLog?.category === category && viewingLog?.filename === filename) {
+      setViewingLog(null);
+      return;
+    }
+
+    setLogContentLoading(true);
+    try {
+      const res = await storageApi.readLogFile(category, filename);
+      setViewingLog({ category, filename, content: res.content });
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: apiUtils.handleError(err, 'Failed to read log file'),
+      });
+    } finally {
+      setLogContentLoading(false);
+    }
+  }, [viewingLog]);
 
   const { tables: topTables, maxRows } = useTopTables(summary?.database?.tables || []);
 
@@ -461,6 +539,160 @@ export default function StorageSection() {
             ) : null}
           </div>
         </div>
+      </div>
+
+      <div className={`${panelCls} p-4`}>
+        <div className="flex items-center gap-2 mb-3">
+          <Terminal className="w-4 h-4 text-gray-500" />
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+            Logs
+          </h4>
+          <button
+            onClick={() => loadLogs({ silent: true })}
+            disabled={logsLoading}
+            className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-800 midnight:border-gray-800 text-[11px] font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 disabled:opacity-50"
+          >
+            {logsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            Refresh
+          </button>
+        </div>
+
+        {logsLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-12 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 animate-pulse" />
+            ))}
+          </div>
+        ) : logsError ? (
+          <div className={`text-sm ${mutedText}`}>{logsError}</div>
+        ) : (
+          <>
+            <div className="space-y-1">
+              {(logsSummary?.categories || []).map(cat => (
+                <div key={cat.id} className="py-2 border-b last:border-b-0 border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+                          {cat.label}
+                        </span>
+                        {!cat.exists ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-500">
+                            missing
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className={`mt-0.5 text-xs ${mutedText}`}>
+                        {cat.files} files · {cat.formatted}
+                        {cat.latestModifiedAt ? ` · last ${formatDate(cat.latestModifiedAt)}` : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  {cat.recentFiles && cat.recentFiles.length > 0 && (
+                    <div className="mt-2 ml-6 space-y-1">
+                      {cat.recentFiles.map(file => (
+                        <div key={file.name} className="flex items-center justify-between gap-2 py-1">
+                          <span className="text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400 truncate">
+                            {file.name}
+                          </span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`text-xs ${mutedText}`}>{file.formatted}</span>
+                            <button
+                              onClick={() => viewLog(cat.id, file.name)}
+                              className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded border ${
+                                viewingLog?.category === cat.id && viewingLog?.filename === file.name
+                                  ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-gray-100 midnight:text-gray-900 border-transparent'
+                                  : 'border-gray-200 dark:border-gray-800 midnight:border-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                              }`}
+                            >
+                              {viewingLog?.category === cat.id && viewingLog?.filename === file.name ? (
+                                <>
+                                  <X className="w-3 h-3" /> Close
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="w-3 h-3" /> View
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {viewingLog && (
+              <div className="mt-3 border border-gray-200 dark:border-gray-800 midnight:border-gray-800 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 midnight:bg-gray-800 border-b border-gray-200 dark:border-gray-800 midnight:border-gray-800">
+                  <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
+                    {viewingLog.filename}
+                  </span>
+                  <button
+                    onClick={() => setViewingLog(null)}
+                    className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="p-3 bg-white dark:bg-gray-900 midnight:bg-gray-950">
+                  {logContentLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...
+                    </div>
+                  ) : (
+                    <pre className="text-[11px] font-mono text-gray-700 dark:text-gray-300 midnight:text-gray-300 whitespace-pre-wrap break-all max-h-96 overflow-y-auto">
+                      {viewingLog.content || 'No content'}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500" />
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+                      Log Maintenance
+                    </h4>
+                  </div>
+                  <p className={`mt-1 text-xs ${mutedText}`}>
+                    Delete all log files. Active processes may recreate logs immediately.
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                  <button
+                    onClick={clearLogsAction}
+                    disabled={clearingLogs}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-50 ${
+                      confirmClearLogs
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'border border-red-200 dark:border-red-900/60 midnight:border-red-900/60 text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 midnight:hover:bg-red-950/30'
+                    }`}
+                  >
+                    {clearingLogs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    {confirmClearLogs ? 'Confirm Clear' : 'Clear Logs'}
+                  </button>
+                  {confirmClearLogs ? (
+                    <button
+                      onClick={() => setConfirmClearLogs(false)}
+                      disabled={clearingLogs}
+                      className={`text-xs ${mutedText} hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 disabled:opacity-50`}
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className={`flex items-center gap-2 text-xs ${mutedText}`}>

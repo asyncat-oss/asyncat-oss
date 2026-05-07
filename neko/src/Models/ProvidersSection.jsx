@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Zap, Sparkles, TriangleAlert } from 'lucide-react';
+import { RefreshCw, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Zap, Sparkles, TriangleAlert, FileText, Image, Mic, Brain, Calendar, DollarSign, ChevronDown, Settings } from 'lucide-react';
 import { aiProviderApi } from '../Settings/settingApi.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 import { Badge, providerLabel } from './modelPageShared.jsx';
+
+const modelDisplayName = (profile, catalog = []) => {
+  const preset = catalog.find(item => item.providerId === profile?.provider_id || item.id === profile?.provider_id);
+  const rawModel = profile?.settings?.model_name || profile?.model || '';
+  if (!rawModel) return 'No model selected';
+  if (rawModel === 'openrouter/auto') return 'Auto (OpenRouter picks best)';
+  if (preset?.model === rawModel && !profile?.settings?.model_name) {
+    return `${rawModel} (default)`;
+  }
+  return rawModel;
+};
 
 const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, saving }) => {
   const seed = profile || preset || {};
@@ -16,11 +27,14 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
     settings: seed.settings || {},
   });
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(Boolean(profile));
 
   const selectedPreset = catalog.find(item => item.providerId === form.provider_id || item.id === form.provider_id);
   const isAzure = form.provider_id === 'azure';
   const isLocalManaged = form.provider_id === 'llamacpp-builtin';
   const requiresKey = selectedPreset?.requiresApiKey;
+  const isAddingFromPreset = !profile && preset;
+  const presetHasDefaults = Boolean(selectedPreset?.baseUrl && selectedPreset?.model);
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
   const updateSetting = (key, value) => setForm(prev => ({ ...prev, settings: { ...(prev.settings || {}), [key]: value } }));
@@ -44,7 +58,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
       <form onSubmit={submit} className="w-full max-w-2xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
           <div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{profile ? 'Edit Provider' : 'Connect Provider'}</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{profile ? 'Edit Provider' : `Connect ${selectedPreset?.name || 'Provider'}`}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedPreset?.description || 'Configure an OpenAI-compatible endpoint.'}</p>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
@@ -52,32 +66,38 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
           </button>
         </div>
 
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-            Provider
-            <select
-              value={form.provider_id}
-              onChange={(e) => {
-                const next = catalog.find(item => item.providerId === e.target.value || item.id === e.target.value);
-                setForm(prev => ({
-                  ...prev,
-                  provider_id: e.target.value,
-                  name: prev.name || next?.name || '',
-                  base_url: next?.baseUrl || prev.base_url,
-                  model: next?.model || prev.model,
-                  supports_tools: next?.supportsTools ?? prev.supports_tools,
-                  settings: next?.settings || prev.settings || {},
-                }));
-              }}
-              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-            >
-              {catalog.filter(item => !item.managed).map(item => (
-                <option key={item.id} value={item.providerId}>{item.name}</option>
-              ))}
-            </select>
+        <div className="p-5 space-y-4">
+          {/* Hero API Key input */}
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+            <span className="flex items-center gap-1.5">
+              <KeyRound className="w-3.5 h-3.5" />
+              API Key
+              {profile?.api_key_set && !apiKeyTouched ? <span className="text-gray-400 font-normal">(saved)</span> : null}
+            </span>
+            <input
+              value={form.api_key}
+              onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
+              type="password"
+              className="mt-1.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
+              placeholder={requiresKey ? 'Paste your API key here' : 'Optional'}
+              autoFocus
+            />
           </label>
 
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+          {/* Friendly default-model note when adding from a preset */}
+          {isAddingFromPreset && presetHasDefaults && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/30 dark:bg-blue-900/15 dark:text-blue-300">
+              <p className="font-medium">Default model: {selectedPreset.model}</p>
+              <p className="mt-0.5 text-xs opacity-90">
+                {form.provider_id === 'openrouter'
+                  ? 'OpenRouter will automatically route to the best available model. You can pick a specific model from the list after saving.'
+                  : 'The preset default model will be used. You can change it after saving via the Models button.'}
+              </p>
+            </div>
+          )}
+
+          {/* Name — always shown but compact when adding from preset */}
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
             Name
             <input
               value={form.name}
@@ -87,58 +107,88 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
             />
           </label>
 
-          <label className="md:col-span-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-            Base URL
-            <input
-              value={form.base_url}
-              onChange={(e) => update('base_url', e.target.value)}
-              disabled={isLocalManaged}
-              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none disabled:opacity-60"
-              placeholder={selectedPreset?.baseUrl || 'https://.../v1'}
-            />
-          </label>
-
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-            Model
-            <input
-              value={form.model}
-              onChange={(e) => update('model', e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-              placeholder={selectedPreset?.model || 'model-id'}
-            />
-          </label>
-
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-            API Key {profile?.api_key_set && !apiKeyTouched ? <span className="text-gray-400">(saved)</span> : null}
-            <input
-              value={form.api_key}
-              onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
-              type="password"
-              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-              placeholder={requiresKey ? 'Required' : 'Optional'}
-            />
-          </label>
-
-          {isAzure && (
-            <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-              API Version
-              <input
-                value={form.settings?.apiVersion || '2024-10-21'}
-                onChange={(e) => updateSetting('apiVersion', e.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-              />
-            </label>
+          {/* Advanced toggle */}
+          {isAddingFromPreset && (
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(v => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Advanced settings
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+            </button>
           )}
 
-          <label className="md:col-span-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <input
-              type="checkbox"
-              checked={Boolean(form.supports_tools)}
-              onChange={(e) => update('supports_tools', e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300"
-            />
-            Enable native tool calling for chat and agents
-          </label>
+          {showAdvanced && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                Provider
+                <select
+                  value={form.provider_id}
+                  onChange={(e) => {
+                    const next = catalog.find(item => item.providerId === e.target.value || item.id === e.target.value);
+                    setForm(prev => ({
+                      ...prev,
+                      provider_id: e.target.value,
+                      name: prev.name || next?.name || '',
+                      base_url: next?.baseUrl || prev.base_url,
+                      model: next?.model || prev.model,
+                      supports_tools: next?.supportsTools ?? prev.supports_tools,
+                      settings: next?.settings || prev.settings || {},
+                    }));
+                  }}
+                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                >
+                  {catalog.filter(item => !item.managed).map(item => (
+                    <option key={item.id} value={item.providerId}>{item.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="md:col-span-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                Base URL
+                <input
+                  value={form.base_url}
+                  onChange={(e) => update('base_url', e.target.value)}
+                  disabled={isLocalManaged}
+                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none disabled:opacity-60"
+                  placeholder={selectedPreset?.baseUrl || 'https://.../v1'}
+                />
+              </label>
+
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                Model
+                <input
+                  value={form.model}
+                  onChange={(e) => update('model', e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                  placeholder={selectedPreset?.model || 'model-id'}
+                />
+              </label>
+
+              {isAzure && (
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                  API Version
+                  <input
+                    value={form.settings?.apiVersion || '2024-10-21'}
+                    onChange={(e) => updateSetting('apiVersion', e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                  />
+                </label>
+              )}
+
+              <label className="md:col-span-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.supports_tools)}
+                  onChange={(e) => update('supports_tools', e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                Enable native tool calling for chat and agents
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
@@ -236,12 +286,34 @@ const RemoteModelPickerModal = ({
   const [query, setQuery] = useState('');
   const normalized = query.trim().toLowerCase();
   const filtered = normalized
-    ? models.filter(model => String(model.id || model.name || '').toLowerCase().includes(normalized))
+    ? models.filter(model => {
+        const haystack = [
+          model.id,
+          model.name,
+          model.description,
+          model.owned_by,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(normalized);
+      })
     : models;
+
+  const fmtPrice = (val) => {
+    if (!val) return null;
+    const n = parseFloat(val);
+    if (!Number.isFinite(n) || n === 0) return null;
+    return n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`;
+  };
+
+  const modalityIcon = (mod) => {
+    if (mod === 'image') return <Image className="w-3 h-3" />;
+    if (mod === 'audio') return <Mic className="w-3 h-3" />;
+    if (mod === 'text') return <FileText className="w-3 h-3" />;
+    return null;
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-3xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl">
+      <div className="w-full max-w-4xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
           <div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Choose Remote Model</h3>
@@ -252,14 +324,14 @@ const RemoteModelPickerModal = ({
           </button>
         </div>
 
-        <div className="p-5">
+        <div className="p-5 flex flex-col flex-1 min-h-0">
           <div className="flex flex-col sm:flex-row gap-3">
             <label className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search models..."
+                placeholder="Search by name, ID, description or provider..."
                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
                 autoFocus
               />
@@ -274,7 +346,7 @@ const RemoteModelPickerModal = ({
             </button>
           </div>
 
-          <div className="mt-4 max-h-[420px] overflow-y-auto rounded-2xl border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+          <div className="mt-4 flex-1 overflow-y-auto rounded-2xl border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
             {loading ? (
               <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Loading models...</div>
             ) : filtered.length === 0 ? (
@@ -284,15 +356,73 @@ const RemoteModelPickerModal = ({
                 {filtered.map(model => {
                   const modelId = model.id || model.name;
                   const isCurrent = profile?.model === modelId;
+                  const arch = model.architecture || {};
+                  const inputs = Array.isArray(arch.input_modalities) ? arch.input_modalities : [];
+                  const outputs = Array.isArray(arch.output_modalities) ? arch.output_modalities : [];
+                  const params = Array.isArray(model.supported_parameters) ? model.supported_parameters : [];
+                  const promptPrice = fmtPrice(model.pricing?.prompt);
+                  const completionPrice = fmtPrice(model.pricing?.completion);
+
                   return (
-                    <div key={modelId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{modelId}</p>
+                    <div key={modelId} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{model.name || modelId}</p>
                           {isCurrent && <Badge color="green">Current</Badge>}
                           {model.context_window && <Badge color="gray">{Number(model.context_window).toLocaleString()} ctx</Badge>}
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate">{modelId}</p>
+                        {model.description && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{model.description}</p>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {/* Modalities */}
+                          {inputs.map(mod => (
+                            <span key={mod} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30">
+                              {modalityIcon(mod)} {mod}
+                            </span>
+                          ))}
+                          {outputs.filter(m => !inputs.includes(m)).map(mod => (
+                            <span key={mod} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/30">
+                              {modalityIcon(mod)} {mod}
+                            </span>
+                          ))}
+                          {/* Parameter badges */}
+                          {params.includes('tools') && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/30">
+                              <Brain className="w-3 h-3" /> Tools
+                            </span>
+                          )}
+                          {params.includes('reasoning') && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30">
+                              <Brain className="w-3 h-3" /> Reasoning
+                            </span>
+                          )}
+                          {params.includes('web_search_options') && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800/30">
+                              <Search className="w-3 h-3" /> Web Search
+                            </span>
+                          )}
+                          {params.includes('structured_outputs') && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
+                              JSON
+                            </span>
+                          )}
+                          {/* Pricing */}
+                          {(promptPrice || completionPrice) && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30">
+                              <DollarSign className="w-3 h-3" />
+                              {promptPrice || 'Free'}{completionPrice ? ` / ${completionPrice}` : ''} per 1M
+                            </span>
+                          )}
+                          {/* Knowledge cutoff */}
+                          {model.knowledge_cutoff && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
+                              <Calendar className="w-3 h-3" /> {model.knowledge_cutoff}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                           {[model.owned_by, model.context_window_source].filter(Boolean).join(' · ')}
                         </p>
                       </div>
@@ -466,7 +596,7 @@ const ProvidersSection = ({
                         {isActive && <Badge color="green">Active</Badge>}
                         {profile.api_key_set && <Badge color="gray">Key saved</Badge>}
                       </div>
-                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{providerLabel(profile, catalog)} · {profile.model || 'No model selected'}</p>
+                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{providerLabel(profile, catalog)} · {modelDisplayName(profile, catalog)}</p>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 break-all">{profile.base_url}</p>
                       {profile.last_test_message && (
                         <p className={`mt-2 text-xs ${profile.last_test_status === 'ok' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{profile.last_test_message}</p>
@@ -584,17 +714,21 @@ const ProvidersSection = ({
           onRefresh={() => fetchModels(modelPickerProfile, true)}
           onSelect={async (model) => {
             const modelId = model.id || model.name;
-            const nextSettings = model.context_window
-              ? { ...(modelPickerProfile.settings || {}), context_window: model.context_window }
-              : (modelPickerProfile.settings || {});
+            const nextSettings = {
+              ...(modelPickerProfile.settings || {}),
+              ...(model.context_window ? { context_window: model.context_window } : {}),
+              ...(model.name && model.name !== modelId ? { model_name: model.name } : {}),
+            };
             await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
             setModelPickerProfile(prev => prev ? { ...prev, model: modelId, settings: nextSettings } : prev);
           }}
           onSelectAndActivate={async (model) => {
             const modelId = model.id || model.name;
-            const nextSettings = model.context_window
-              ? { ...(modelPickerProfile.settings || {}), context_window: model.context_window }
-              : (modelPickerProfile.settings || {});
+            const nextSettings = {
+              ...(modelPickerProfile.settings || {}),
+              ...(model.context_window ? { context_window: model.context_window } : {}),
+              ...(model.name && model.name !== modelId ? { model_name: model.name } : {}),
+            };
             await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
             const nextProfile = { ...modelPickerProfile, model: modelId, settings: nextSettings };
             setModelPickerProfile(null);

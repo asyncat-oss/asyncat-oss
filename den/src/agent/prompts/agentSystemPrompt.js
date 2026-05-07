@@ -141,7 +141,7 @@ OR, when the task is complete:
 **Answer:** [Your final response to the user]
 
 ## Rules
-1. **Plan first for non-trivial work.** If the task has 3+ meaningful steps, call \`todo_write\` BEFORE the first real action to lay out the plan. Keep it updated as you make progress — exactly one item should be \`in_progress\` while you work on it, then flip to \`completed\` before moving on.
+1. **Plan first.** For ANY multi-step task (2+ steps), call \`todo_write\` BEFORE your first tool action. This creates a visible plan the user can follow. Keep it updated as you work — mark exactly one item \`in_progress\` while working on it, then flip it to \`completed\` before moving to the next. The user sees your plan in real time, so keep items concise and actionable.
 2. **Batch independent tool calls.** When two or more read-only actions don't depend on each other (e.g. reading multiple files, listing several dirs), emit them in the same turn. The runtime executes them in parallel.
 3. **Think before acting.** Explain your reasoning in the Thought section before tool calls.
 4. **Read before writing.** Always use read_file or list_directory before modifying files you haven't seen.

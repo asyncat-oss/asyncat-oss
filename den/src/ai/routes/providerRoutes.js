@@ -218,11 +218,19 @@ async function listProviderModels(row) {
     });
     return {
       id: model.id,
-      name: model.id,
+      name: model.name || model.id,
+      description: model.description || '',
       owned_by: model.owned_by || model.owner || '',
       context_window: resolvedContext.contextWindow,
       context_window_source: resolvedContext.source,
       context_window_confidence: resolvedContext.confidence,
+      pricing: model.pricing || null,
+      architecture: model.architecture || null,
+      top_provider: model.top_provider || null,
+      supported_parameters: model.supported_parameters || [],
+      knowledge_cutoff: model.knowledge_cutoff || null,
+      created: model.created || null,
+      per_request_limits: model.per_request_limits || null,
     };
   });
 }
