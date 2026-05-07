@@ -72,6 +72,7 @@ export class AgentRuntime {
     this.soulOverride = opts.soul || null;
     this.providerInfo = opts.providerInfo || null;
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
+    this.abortSignal = opts.abortSignal || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Local models handle much smaller contexts than cloud models — compact sooner.
@@ -93,6 +94,8 @@ export class AgentRuntime {
     let conversationRoundStart = 0;
     let conversationToolStart = 0;
     const reasoningEvents = [];
+
+    this._throwIfAborted();
 
     // Load or create session
     if (this.continueSessionId) {
@@ -233,6 +236,7 @@ export class AgentRuntime {
     const toolCallCount = new Map();
 
     for (let round = 0; round < this.maxRounds; round++) {
+      this._throwIfAborted();
       this.session.nextRound();
 
       // Compact before the LLM call if we're over budget.
@@ -274,10 +278,16 @@ export class AgentRuntime {
           data: { ...this.usage, round, model: this.model, isLocal: this.isLocal },
         });
       } catch (err) {
+        if (this._isAbortError(err)) {
+          this.session.fail('Agent run stopped by user.');
+          throw err;
+        }
         this.onEvent({ type: 'error', data: { message: `LLM call failed: ${err.message}`, round } });
         this.session.fail(err.message);
         return { answer: `Error: ${err.message}`, session: this.session, toolCalls: this.session.toolHistory };
       }
+
+      this._throwIfAborted();
 
       // Add assistant response to thread. Native tool-calling providers expect
       // the assistant tool_call message followed by role=tool result messages.
@@ -442,6 +452,7 @@ export class AgentRuntime {
           actionDesc,
           round,
         });
+        this._throwIfAborted();
 
         if (!permResult.allowed) {
           const deniedResult = { success: false, error: `Permission denied: ${permResult.reason}` };
@@ -505,12 +516,14 @@ export class AgentRuntime {
 
       // Execute permitted tools in parallel — safe tools gain the most from this
       if (permitted.length > 0) {
+        this._throwIfAborted();
         const execResults = await Promise.all(
           permitted.map(({ toolCall }) =>
             toolRegistry.execute(toolCall.tool_name, toolCall.arguments, toolContext)
               .catch(err => ({ success: false, error: err.message || String(err) }))
           )
         );
+        this._throwIfAborted();
         for (let i = 0; i < permitted.length; i++) {
           const item = permitted[i];
           const tc = item.toolCall;
@@ -635,6 +648,8 @@ export class AgentRuntime {
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   async _checkPermission({ toolCall, permission, actionDesc, round }) {
+    this._throwIfAborted();
+
     if (permission === 'safe') {
       return { allowed: true, decision: 'auto_safe' };
     }
@@ -660,6 +675,7 @@ export class AgentRuntime {
       };
 
       const decision = await this.requestPermission(request);
+      this._throwIfAborted();
       const decisionName = decision?.decision || 'deny';
       const allowed = decisionName === 'allow'
         || decisionName === 'allow_session';
@@ -678,6 +694,7 @@ export class AgentRuntime {
     return { allowed: true, decision: 'local_auto' };
   }
   async _callLLM(systemPrompt, messages) {
+    this._throwIfAborted();
     const useNativeTools = this.supportsNativeTools;
 
     const params = {
@@ -695,13 +712,15 @@ export class AgentRuntime {
       delete params.max_tokens;
     }
 
-    const stream = await this.aiClient.client.chat.completions.create(params);
+    const requestOptions = this.abortSignal ? { signal: this.abortSignal } : undefined;
+    const stream = await this.aiClient.client.chat.completions.create(params, requestOptions);
     let fullText = '';
     let reasoningText = '';
     const toolCalls = {};
     let finishReason = null;
 
     for await (const chunk of stream) {
+      this._throwIfAborted();
       const delta = chunk.choices[0]?.delta;
       if (!delta) continue;
       
@@ -730,6 +749,8 @@ export class AgentRuntime {
       }
     }
 
+    this._throwIfAborted();
+
     const apiToolCalls = Object.values(toolCalls).length > 0 ? Object.values(toolCalls) : null;
 
     return {
@@ -738,6 +759,17 @@ export class AgentRuntime {
       toolCalls: apiToolCalls,
       finishReason: finishReason,
     };
+  }
+
+  _isAbortError(err) {
+    return err?.name === 'AbortError' || this.abortSignal?.aborted;
+  }
+
+  _throwIfAborted() {
+    if (!this.abortSignal?.aborted) return;
+    const error = new Error('Agent run stopped by user.');
+    error.name = 'AbortError';
+    throw error;
   }
 
   _buildPermissionDiff(toolName, args = {}) {

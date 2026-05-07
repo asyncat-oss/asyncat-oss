@@ -1277,6 +1277,12 @@ router.put('/soul', authenticate, (req, res) => {
 
 router.post('/run', authenticate, async (req, res) => {
   let heartbeatInterval = null;
+  const abortController = new AbortController();
+  let clientClosed = false;
+  res.on('close', () => {
+    clientClosed = true;
+    abortController.abort();
+  });
   try {
     const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMentions = [] } = req.body;
     const goal = (rawGoal || rawMessage || '').trim();
@@ -1297,7 +1303,10 @@ router.post('/run', authenticate, async (req, res) => {
       res.flushHeaders?.();
 
       const hbInterval = setInterval(() => writeAgentSseComment(res, 'ping'), 15000);
-      res.on('close', () => clearInterval(hbInterval));
+      res.on('close', () => {
+        clearInterval(hbInterval);
+        abortController.abort();
+      });
 
       try {
         const messages = [
@@ -1318,11 +1327,12 @@ router.post('/run', authenticate, async (req, res) => {
           messages: [{ role: 'system', content: systemPrompt }, ...messages],
           stream: true,
           max_tokens: maxTokens,
-        });
+        }, { signal: abortController.signal });
 
         let fullContent = '';
         let fullReasoning = '';
         for await (const chunk of stream) {
+          if (abortController.signal.aborted || res.destroyed || res.writableEnded) break;
           const delta = chunk.choices[0]?.delta;
           if (!delta) continue;
 
@@ -1343,12 +1353,16 @@ router.post('/run', authenticate, async (req, res) => {
           writeAgentSse(res, { type: 'thinking', data: { thought: thinking, round: 1 } });
         }
 
-        writeAgentSse(res, { type: 'done', data: { answer: cleanReasoningAnswer(parsed.answer || fullContent) } });
+        if (!abortController.signal.aborted) {
+          writeAgentSse(res, { type: 'done', data: { answer: cleanReasoningAnswer(parsed.answer || fullContent) } });
+        }
       } catch (err) {
-        writeAgentSse(res, { type: 'error', data: { message: err.message } });
+        if (err?.name !== 'AbortError' && !abortController.signal.aborted) {
+          writeAgentSse(res, { type: 'error', data: { message: err.message } });
+        }
       } finally {
         clearInterval(hbInterval);
-        res.end();
+        if (!res.destroyed && !res.writableEnded) res.end();
       }
       return;
     }
@@ -1418,6 +1432,7 @@ router.post('/run', authenticate, async (req, res) => {
       soul: resolvedSoul,
       providerInfo,
       mentionedAgents: mentionedAgentProfiles,
+      abortSignal: abortController.signal,
       onEvent: continuedTaskRun ? (event) => {
         updateTaskRun(continuedTaskRun.id, {
           ...(event?.type === 'session_start' ? { status: 'running' } : {}),
@@ -1449,6 +1464,10 @@ router.post('/run', authenticate, async (req, res) => {
     }
 
   } catch (error) {
+    if (error?.name === 'AbortError' || abortController.signal.aborted || clientClosed) {
+      if (!res.destroyed && !res.writableEnded) res.end();
+      return;
+    }
     console.error('Agent error:', error);
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: error.message });

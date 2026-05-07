@@ -2149,6 +2149,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onToggleTools={() => setToolsEnabled(!toolsEnabled)}
                 autoApprove={agentAutoApprove}
                 onToggleAutoApprove={handleToggleAgentAutoApprove}
+                isRunning={agentRunning}
+                onStop={handleAgentStop}
               />
             </div>
           </>

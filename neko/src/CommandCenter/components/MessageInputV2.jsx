@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { ChevronDown, Cloud, Cpu, Loader2, Send, Wrench, X, Zap } from "lucide-react";
+import { ChevronDown, Cloud, Cpu, Loader2, Send, Square, Wrench, X, Zap } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -56,6 +56,8 @@ export const MessageInputV2 = ({
   onToggleTools,
   autoApprove = false,
   onToggleAutoApprove,
+  isRunning = false,
+  onStop,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
@@ -236,7 +238,7 @@ export const MessageInputV2 = ({
     [handleSubmit, insertMention, isComposing, mentionSuggestions],
   );
 
-  const canSubmit = value.trim() && !disabled;
+  const canSubmit = value.trim() && !disabled && !isRunning;
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
   const modelLabel = activeBrain.isLoadingModel
     ? "Loading"
@@ -584,18 +586,30 @@ export const MessageInputV2 = ({
                 </div>
 
                 <div className="shrink-0">
-                  <button
-                    type="submit"
-                    disabled={!canSubmit}
-                    className={`px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
-                      canSubmit
-                        ? "bg-black hover:bg-gray-900 active:scale-95 text-white dark:bg-gray-800 dark:hover:bg-gray-700 midnight:bg-gray-900 midnight:hover:bg-gray-800 shadow-sm hover:shadow-md"
-                        : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-400 dark:text-gray-500 midnight:text-gray-500 cursor-not-allowed"
-                    }`}
-                    title={canSubmit ? "Send (Enter)" : "Type a message"}
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
+                  {isRunning ? (
+                    <button
+                      type="button"
+                      onClick={onStop}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-600 transition-all duration-200 hover:bg-red-100 active:scale-95 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50 midnight:bg-red-950/30 midnight:text-red-300"
+                      title="Stop generating"
+                    >
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                      Stop
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!canSubmit}
+                      className={`px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
+                        canSubmit
+                          ? "bg-black hover:bg-gray-900 active:scale-95 text-white dark:bg-gray-800 dark:hover:bg-gray-700 midnight:bg-gray-900 midnight:hover:bg-gray-800 shadow-sm hover:shadow-md"
+                          : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-400 dark:text-gray-500 midnight:text-gray-500 cursor-not-allowed"
+                      }`}
+                      title={canSubmit ? "Send (Enter)" : "Type a message"}
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
