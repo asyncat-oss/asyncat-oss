@@ -22,6 +22,7 @@ const ServerSection = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+  const [runtime, setRuntime] = useState({});
 
   const [editValues, setEditValues] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
@@ -35,7 +36,10 @@ const ServerSection = () => {
     setLoading(true);
     try {
       const cfg = await configApi.getConfig();
-      if (cfg.success) setConfig(cfg.config);
+      if (cfg.success) {
+        setConfig(cfg.config);
+        setRuntime(cfg.runtime || {});
+      }
     } catch (err) {
       flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to load config') });
     } finally {
@@ -69,6 +73,28 @@ const ServerSection = () => {
     }
   };
 
+  const saveConfigValue = async (key) => {
+    const value = editValues[key]?.trim();
+    if (!value) {
+      flash({ type: 'error', text: `${key} cannot be empty` });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await configApi.updateConfig(key, value, true);
+      if (!res.success) throw new Error(res.error);
+
+      setEditValues(prev => ({ ...prev, [key]: '' }));
+      await loadConfig();
+      flash({ type: 'success', text: res.message || `${key} updated` });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to save') });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleShow = (key) => {
     setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
   };
@@ -86,6 +112,15 @@ const ServerSection = () => {
     { key: 'LLAMA_SERVER_PORT', label: 'Local Model Port' },
     { key: 'MODELS_PATH', label: 'Models Path' },
     { key: 'STORAGE_PATH', label: 'Storage Path' },
+  ];
+
+  const editableConfig = [
+    {
+      key: 'ASYNCAT_WORKSPACE_ROOT',
+      label: 'Agent file workspace root',
+      placeholder: runtime.workspaceRoot || '/path/to/project',
+      help: 'Controls what @ file search and default agent tools can see. Restart the server after changing it.',
+    },
   ];
 
   if (loading) {
@@ -158,6 +193,57 @@ const ServerSection = () => {
                 >
                   {saving ? <Loader2 size={11} className="animate-spin" /> : null}
                   Save {label}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Agent Workspace Section */}
+      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Server size={18} className="text-gray-500 dark:text-gray-400" />
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
+            Agent Workspace
+          </h3>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Set the filesystem root used by @ file search and default agent tool runs.
+        </p>
+
+        <div className="space-y-4">
+          {editableConfig.map(({ key, label, placeholder, help }) => (
+            <div key={key}>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1.5">
+                {label}
+              </label>
+              <input
+                type="text"
+                value={editValues[key] ?? ''}
+                onChange={(e) => setEditValues(prev => ({ ...prev, [key]: e.target.value }))}
+                placeholder={config[key] || placeholder}
+                className={inputCls}
+              />
+              <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+                Current: {runtime.workspaceRoot || config[key] || '(auto-detected)'}
+              </p>
+              <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                {help}
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveConfigValue(key)}
+                  disabled={saving || !editValues[key]}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5
+                    bg-gray-900 hover:bg-gray-700 dark:bg-gray-100 dark:hover:bg-white
+                    midnight:bg-gray-100 midnight:hover:bg-white
+                    text-white dark:text-gray-900 midnight:text-gray-900
+                    disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? <Loader2 size={11} className="animate-spin" /> : null}
+                  Save Workspace Root
                 </button>
               </div>
             </div>

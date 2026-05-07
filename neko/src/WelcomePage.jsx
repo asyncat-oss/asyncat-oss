@@ -204,7 +204,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
           {step === 0 && (
             <PageWrapper 
               key="welcome"
-              title="Asyncat OS"
+              title="Asyncat OSS"
               subtitle="The local intelligence environment designed for privacy and speed."
             >
               <div className="flex flex-col items-center gap-12">

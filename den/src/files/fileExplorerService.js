@@ -1,10 +1,12 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const SKIP_NAMES = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dist', 'build', 'venv', '.venv']);
 const TEXT_PREVIEW_LIMIT = 5 * 1024 * 1024;
 const SEARCH_COLLECT_LIMIT = 2000;
+const SOURCE_WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 function existsDir(dir) {
   try {
@@ -18,10 +20,24 @@ function normalizeRootPath(rootPath) {
   return path.resolve(rootPath);
 }
 
+export function getWorkspaceRoot() {
+  const configuredRoot = process.env.ASYNCAT_WORKSPACE_ROOT || process.env.WORKSPACE_ROOT;
+  if (configuredRoot && existsDir(configuredRoot)) return normalizeRootPath(configuredRoot);
+
+  if (
+    existsDir(path.join(SOURCE_WORKSPACE_ROOT, 'den')) &&
+    existsDir(path.join(SOURCE_WORKSPACE_ROOT, 'neko'))
+  ) {
+    return normalizeRootPath(SOURCE_WORKSPACE_ROOT);
+  }
+
+  return normalizeRootPath(process.cwd());
+}
+
 export function getFileRoots() {
   const home = os.homedir();
   const candidates = [
-    { id: 'workspace', label: 'Workspace', path: process.cwd(), kind: 'workspace' },
+    { id: 'workspace', label: 'Workspace', path: getWorkspaceRoot(), kind: 'workspace' },
     { id: 'home', label: 'Home', path: home, kind: 'home' },
     { id: 'dev', label: 'Dev', path: path.join(home, 'Dev'), kind: 'dev' },
     { id: 'desktop', label: 'Desktop', path: path.join(home, 'Desktop'), kind: 'place' },

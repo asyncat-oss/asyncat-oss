@@ -14,7 +14,7 @@ import { getAiClientForScheduledProvider, getAiClientForUser } from '../controll
 import { getStatus as getLlamaStatus } from '../controllers/ai/llamaServerManager.js';
 import { resolveContextWindow } from '../controllers/ai/modelContextResolver.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
-import { loadEntry } from '../../files/fileExplorerService.js';
+import { getWorkspaceRoot, loadEntry } from '../../files/fileExplorerService.js';
 import { getProviderPreset, publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
@@ -115,7 +115,11 @@ function buildAnswerOnlyPrompt(goal, conversationHistory = []) {
   };
 }
 
-function buildToolPrompt(goal, conversationHistory = [], { workingDir = process.cwd(), soul = null, mentionedAgents = [], memories = [] } = {}) {
+function defaultAgentWorkingDir() {
+  return getWorkspaceRoot();
+}
+
+function buildToolPrompt(goal, conversationHistory = [], { workingDir = defaultAgentWorkingDir(), soul = null, mentionedAgents = [], memories = [] } = {}) {
   const toolDefs = toolRegistry.all();
   const toolDescriptions = ToolCallFormatter.formatToolsForPrompt(
     toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
@@ -530,7 +534,7 @@ router.post('/context', authenticate, async (req, res) => {
     }
     const prompt = enableTools
       ? buildToolPrompt(goal, conversationHistory, {
-          workingDir: profile?.working_dir || process.cwd(),
+          workingDir: profile?.working_dir || defaultAgentWorkingDir(),
           soul,
           mentionedAgents: mentionedAgentProfiles,
           memories,
@@ -654,7 +658,7 @@ initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId, provide
   const agent = new AgentRuntime({
     aiClient, model, isLocal, supportsNativeTools,
     userId, workspaceId,
-    workingDir: workingDir || profile?.working_dir || process.cwd(),
+    workingDir: workingDir || profile?.working_dir || defaultAgentWorkingDir(),
     maxRounds: profile?.max_rounds || 20,
     autoApprove: profile?.auto_approve || false,
     requestPermission: async ({ tool, permission }) => ({
@@ -702,7 +706,7 @@ async function runAgentTaskInBackground(runId) {
       supportsNativeTools,
       userId: run.user_id,
       workspaceId: run.workspace_id,
-      workingDir: profile?.working_dir || process.cwd(),
+      workingDir: profile?.working_dir || defaultAgentWorkingDir(),
       maxRounds: profile?.max_rounds || 25,
       autoApprove: profile?.auto_approve || false,
       requestPermission: async ({ tool, permission }) => ({
@@ -1435,7 +1439,7 @@ router.post('/run', authenticate, async (req, res) => {
       heartbeatInterval = null;
     });
 
-    const resolvedWorkingDir = workingDir || profile?.working_dir || process.cwd();
+    const resolvedWorkingDir = workingDir || profile?.working_dir || defaultAgentWorkingDir();
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
     const resolvedAutoApprove = autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false;
     const profileTools = Array.isArray(profile?.always_allowed_tools) ? profile.always_allowed_tools : [];
@@ -2453,7 +2457,7 @@ router.post('/multi', authenticate, async (req, res) => {
             aiClient, model, isLocal, supportsNativeTools,
             userId: req.user.id,
             workspaceId,
-            workingDir: task.workingDir || process.cwd(),
+            workingDir: task.workingDir || defaultAgentWorkingDir(),
             maxRounds: 15,
             providerInfo,
           });
