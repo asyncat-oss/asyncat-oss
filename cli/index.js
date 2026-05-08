@@ -238,7 +238,7 @@ async function autoStartServices(tui) {
   if (!fs.existsSync(path.join(ROOT, 'den/node_modules'))) return;
 
   const checkBe = () => fetch('http://localhost:8716/health', { signal: AbortSignal.timeout(700) }).then(r => r.ok).catch(() => false);
-  const checkFe = () => fetch('http://localhost:8717',        { signal: AbortSignal.timeout(700) }).then(() => true).catch(() => false);
+  const checkFe = () => fetch(_open.getFrontendUrl(),        { signal: AbortSignal.timeout(700) }).then(() => true).catch(() => false);
 
   let [beUp, feUp] = await Promise.all([checkBe(), checkFe()]);
 
@@ -493,7 +493,7 @@ async function startTui() {
         case 'open':
         case 'o':
           _open.run();
-          tui.printOk('Opening web UI → http://localhost:8717');
+          tui.printOk(`Opening web UI → ${_open.getFrontendUrl()}`);
           break;
         case 'db':
           await _db.run(args);
@@ -1017,7 +1017,7 @@ case 'tools': {
             '  /status             Running services status',
             '  /live-logs          Toggle live log sidebar',
             '  /theme              Switch color theme',
-            '  /open               Open web UI (localhost:8717)',
+            `  /open               Open web UI (${_open.getFrontendUrl().replace(/^https?:\/\//, '')})`,
             '  /new                Start fresh session',
             '  /help               Show this',
             '',
@@ -1542,7 +1542,7 @@ function showTuiHelp(tui) {
   tui.print('  /models    Select AI model');
   tui.print('  /provider  Configure AI provider');
   tui.print('  /theme     Switch color theme');
-  tui.print('  /open      Open web UI (localhost:8717)');
+  tui.print(`  /open      Open web UI (${_open.getFrontendUrl().replace(/^https?:\/\//, '')})`);
   tui.print('  /new      Start fresh session');
   tui.print('  /help     Show this');
   tui.print('');
@@ -1615,8 +1615,8 @@ async function runSingleCommand(argv) {
   if (first === '--help' || first === '-h') {
     banner();
     console.log('  Usage: asyncat [command] [args]');
-    console.log('  Run without arguments for interactive TUI.');
-    console.log('  Commands: agent, chat, run, models, provider, start, stop, status, ...');
+    console.log('  Run without arguments to start and open the Web UI.');
+    console.log('  Commands: start, open, tui, agent, chat, run, models, provider, stop, status, uninstall, ...');
     console.log('  Use asyncat help for full reference.');
     return;
   }
@@ -1629,17 +1629,29 @@ async function runSingleCommand(argv) {
     case 'run':   await _run.run(rest);   break;
     case 'models': await _models.run(rest); break;
     case 'provider': await _provider.run(rest); break;
-    case 'start': _start.run(rest); break;
+    case 'start': await _start.run(rest); break;
+    case 'restart':
+      _stop.run();
+      await _start.run(rest);
+      break;
+    case 'open': _open.run(); break;
+    case 'ui': await _start.run(rest); break;
+    case 'tui': await startTui(); break;
     case 'stop':  _stop.run(); break;
     case 'status': _status.run(); break;
     case 'logs': _logs.run(rest); break;
     case 'install': await _install.run(rest); break;
+    case 'uninstall': _uninstall.run(rest); break;
     case 'doctor': _doctor.run(); break;
     case 'version': _version.run(); break;
     case 'memory':
     case 'mem':
       await _memory.run(rest); break;
-    case 'help': banner(); console.log('  Run asyncat without arguments for interactive TUI.'); break;
+    case 'help':
+      banner();
+      console.log('  Run asyncat without arguments to start and open the Web UI.');
+      console.log('  Run asyncat tui for the interactive terminal UI.');
+      break;
     default:
       // Try to handle as goal text for agent
       if (!cmd.startsWith('-')) {
@@ -1656,5 +1668,5 @@ const argv = process.argv.slice(2);
 if (argv.length > 0) {
   await runSingleCommand(argv);
 } else {
-  await startTui();
+  await _start.run([]);
 }

@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from 'child_process';
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -6,7 +6,8 @@ import { info, ok, warn, col, log } from '../lib/colors.js';
 import { ROOT } from '../lib/env.js';
 import { stopAll } from '../lib/procs.js';
 
-export function run() {
+export function run(args = []) {
+  const purge = args.includes('--purge') || args.includes('--all');
   info('Stopping services...');
   stopAll();
 
@@ -16,9 +17,13 @@ export function run() {
   log('');
   info('Uninstalling asyncat...');
 
-  // Stop services
+  // Stop the installed app services without matching unrelated asyncat commands.
   try {
-    execSync('pkill -f "asyncat start" 2>/dev/null || true', { stdio: 'ignore' });
+    if (os.platform() === 'win32') {
+      execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr ":8716 :8717 :8765 :8766"\') do taskkill /F /PID %a', { stdio: 'ignore', shell: true });
+    } else {
+      execSync('for p in 8716 8717 8765 8766; do lsof -ti :$p 2>/dev/null | xargs kill 2>/dev/null || true; done', { stdio: 'ignore', shell: '/bin/bash' });
+    }
   } catch (_) {}
 
   // Remove CLI command
@@ -44,8 +49,15 @@ export function run() {
     try {
       const appDir = path.join(os.homedir(), 'Applications/Asyncat.app');
       if (fs.existsSync(appDir)) {
-        execSync(`rm -rf "${appDir}"`, { stdio: 'ignore' });
+        fs.rmSync(appDir, { recursive: true, force: true });
         ok('Removed ~/Applications/Asyncat.app');
+      }
+    } catch (_) {}
+    try {
+      const iconCache = path.join(os.homedir(), 'Library/Caches/asyncat-icons');
+      if (fs.existsSync(iconCache)) {
+        fs.rmSync(iconCache, { recursive: true, force: true });
+        ok('Removed icon cache');
       }
     } catch (_) {}
   }
@@ -62,14 +74,25 @@ export function run() {
     } catch (_) {}
 
     try {
-      const iconDir = path.join(os.homedir(), '.local/share/icons/hicolor/192x192/apps');
-      const iconFile = path.join(iconDir, 'asyncat.png');
-      if (fs.existsSync(iconFile)) {
-        fs.unlinkSync(iconFile);
-        ok('Removed icon');
+      const hicolorBase = path.join(os.homedir(), '.local/share/icons/hicolor');
+      for (const size of ['72x72', '96x96', '128x128', '144x144', '152x152', '192x192', '384x384', '512x512']) {
+        const iconFile = path.join(hicolorBase, size, 'apps/asyncat.png');
+        if (fs.existsSync(iconFile)) fs.unlinkSync(iconFile);
       }
+      for (const iconFile of [
+        path.join(os.homedir(), '.local/share/icons/asyncat.png'),
+        path.join(os.homedir(), '.local/share/icons/asyncat.svg'),
+      ]) {
+        if (fs.existsSync(iconFile)) fs.unlinkSync(iconFile);
+      }
+      ok('Removed icons');
+      execSync('gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true', { stdio: 'ignore' });
     } catch (_) {}
   }
+
+  try {
+    execSync('npm uninstall -g @asyncat/asyncat', { stdio: 'ignore' });
+  } catch (_) {}
 
   // Windows: Remove shortcuts (they're just .lnk files, manual cleanup needed)
   if (os.platform() === 'win32') {
@@ -77,11 +100,23 @@ export function run() {
     warn('Or use the uninstall.ps1 script for automatic cleanup');
   }
 
-  // Optional: Offer to remove installation directory
+  if (purge) {
+    try {
+      if (fs.existsSync(INSTALL_DIR)) {
+        fs.rmSync(INSTALL_DIR, { recursive: true, force: true });
+        ok(`Removed installation/data directory: ${INSTALL_DIR}`);
+      }
+    } catch (e) {
+      warn(`Could not remove ${INSTALL_DIR}: ${e.message}`);
+    }
+  }
+
   log('');
-  log(`  Installation directory: ${col('cyan', INSTALL_DIR)}`);
-  log(`  To completely remove it, run:`);
-  log(`    ${col('cyan', `rm -rf "${INSTALL_DIR}"`)}`);
+  if (!purge) {
+    log(`  Local data kept: ${col('cyan', INSTALL_DIR)}`);
+    log(`  To remove data, database, models, and the managed engine too, run:`);
+    log(`    ${col('cyan', 'asyncat uninstall --purge')}`);
+  }
 
   log('');
   log(col('cyan', '    /\\_____/\\'));
@@ -93,7 +128,7 @@ export function run() {
   log(col('cyan', '(__(__)___(__)__)'));
   log('');
   log('  asyncat has left the building. 🎬');
-  log('  run the rm command above if you want to clean up the installation dir.');
+  if (!purge) log('  your data is still there in case you come back.');
   log('');
 
   process.exit(0);

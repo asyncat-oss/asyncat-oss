@@ -1,14 +1,14 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # Asyncat installer — Linux & macOS
 # Usage: curl -fsSL https://asyncat.com/install.sh | sh
 #        or: bash install.sh  (from inside the cloned repo)
 set -e
 
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info() { echo -e "${CYAN}[asyncat]${NC} $*"; }
-ok()   { echo -e "${GREEN}[asyncat]${NC} ✓ $*"; }
-warn() { echo -e "${YELLOW}[asyncat]${NC} ⚠ $*"; }
-die()  { echo -e "${RED}[asyncat]${NC} ✗ $*" >&2; exit 1; }
+info() { printf "%b\n" "${CYAN}[asyncat]${NC} $*"; }
+ok()   { printf "%b\n" "${GREEN}[asyncat]${NC} ✓ $*"; }
+warn() { printf "%b\n" "${YELLOW}[asyncat]${NC} ⚠ $*"; }
+die()  { printf "%b\n" "${RED}[asyncat]${NC} ✗ $*" >&2; exit 1; }
 
 INSTALL_DIR="${ASYNCAT_INSTALL_DIR:-$HOME/.asyncat}"
 BIN_DIR="$HOME/.local/bin"
@@ -23,14 +23,14 @@ echo ""
 
 # ── 1. Node.js v20+ ───────────────────────────────────────────────────────────
 info "Checking Node.js..."
-command -v node &>/dev/null || die "Node.js not found. Install from https://nodejs.org (v20+ required)"
+command -v node >/dev/null 2>&1 || die "Node.js not found. Install from https://nodejs.org (v20+ required)"
 NODE_VER=$(node -e "process.stdout.write(process.version)")
 NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v\([0-9]*\).*/\1/')
 [ "$NODE_MAJOR" -ge 20 ] || die "Node.js v20+ required. You have $NODE_VER — upgrade at https://nodejs.org"
 ok "Node.js $NODE_VER"
 
 # ── 2. git ────────────────────────────────────────────────────────────────────
-command -v git &>/dev/null || die "git not found. Install git and try again."
+command -v git >/dev/null 2>&1 || die "git not found. Install git and try again."
 
 # ── 3. Clone or update ────────────────────────────────────────────────────────
 if [ -d "$INSTALL_DIR/.git" ]; then
@@ -38,7 +38,7 @@ if [ -d "$INSTALL_DIR/.git" ]; then
   git -C "$INSTALL_DIR" pull --ff-only || warn "Could not pull latest — continuing with existing version."
 else
   # If running from inside an already-cloned repo, install in-place
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || SCRIPT_DIR=""
+  SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || SCRIPT_DIR=""
   if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/package.json" ] && \
      grep -q '"asyncat-oss"' "$SCRIPT_DIR/package.json" 2>/dev/null; then
     info "Running from local repo — using $SCRIPT_DIR"
@@ -81,7 +81,7 @@ ok "Command ready: asyncat"
 
 # ── 8. Finish first-run setup automatically ──────────────────────────────────
 info "Finishing first-run setup..."
-(cd "$INSTALL_DIR" && node "$INSTALL_DIR/cat" install --skip-packages --skip-local-engine) \
+(cd "$INSTALL_DIR" && node "$INSTALL_DIR/cat" install --skip-packages --local-engine) \
   && ok "First-run setup complete"
 
 # ── 9. Add ~/.local/bin to PATH if needed ─────────────────────────────────────
@@ -95,7 +95,11 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
     SHELL_RC="$HOME/.bashrc"
   fi
 
-  if grep -q "fish_add_path" "$SHELL_RC" 2>/dev/null || [[ "$SHELL_RC" == *fish* ]]; then
+  case "$SHELL_RC" in
+    *fish*) IS_FISH_RC=1 ;;
+    *) IS_FISH_RC=0 ;;
+  esac
+  if grep -q "fish_add_path" "$SHELL_RC" 2>/dev/null || [ "$IS_FISH_RC" = "1" ]; then
     echo "fish_add_path $BIN_DIR" >> "$SHELL_RC"
   else
     printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$SHELL_RC"
@@ -111,20 +115,11 @@ info "Installing icons..."
 ICON_SRC_DIR="$INSTALL_DIR/neko/public"
 
 # All PWA icon sizes
-PWA_ICONS=(
-  "pwa-72x72.png"
-  "pwa-96x96.png"
-  "pwa-128x128.png"
-  "pwa-144x144.png"
-  "pwa-152x152.png"
-  "pwa-192x192.png"
-  "pwa-384x384.png"
-  "pwa-512x512.png"
-)
+PWA_ICONS="pwa-72x72.png pwa-96x96.png pwa-128x128.png pwa-144x144.png pwa-152x152.png pwa-192x192.png pwa-384x384.png pwa-512x512.png"
 
 # Linux icon directories (hicolor follows freedesktop spec)
 HICOLOR_BASE="$HOME/.local/share/icons/hicolor"
-for icon in "${PWA_ICONS[@]}"; do
+for icon in $PWA_ICONS; do
   size=$(echo "$icon" | sed 's/pwa-\([0-9]*\)x[0-9]*\.png/\1/')
   dest_dir="$HICOLOR_BASE/${size}x${size}/apps"
   mkdir -p "$dest_dir"
@@ -144,9 +139,10 @@ if [ -f "$ICON_SRC_DIR/cat.svg" ]; then
 fi
 
 # macOS: copy to system icon cache location
-if [[ "$OSTYPE" == "darwin"* ]]; then
+UNAME_S="$(uname -s 2>/dev/null || echo unknown)"
+if [ "$UNAME_S" = "Darwin" ]; then
   mkdir -p "$HOME/Library/Caches/asyncat-icons"
-  for icon in "${PWA_ICONS[@]}"; do
+  for icon in $PWA_ICONS; do
     if [ -f "$ICON_SRC_DIR/$icon" ]; then
       cp "$ICON_SRC_DIR/$icon" "$HOME/Library/Caches/asyncat-icons/$icon"
     fi
@@ -163,8 +159,12 @@ cat > "$LAUNCHER" <<'LAUNCHER_SCRIPT'
 #!/usr/bin/env bash
 # asyncat-ui — start services + open as native app window
 
-INSTALL_DIR="${ASYNCAT_INSTALL_DIR:-$HOME/.asyncat}"
-BIN_DIR="$HOME/.local/bin"
+CYAN='\\033[0;36m'; GREEN='\\033[0;32m'; YELLOW='\\033[1;33m'; NC='\\033[0m'
+info() { echo -e "\${CYAN}[asyncat]\${NC} \$*"; }
+ok()   { echo -e "\${GREEN}[asyncat]\${NC} ✓ \$*"; }
+warn() { echo -e "\${YELLOW}[asyncat]\${NC} ⚠ \$*"; }
+
+INSTALL_DIR="${ASYNCAT_INSTALL_DIR:-__ASYNCAT_INSTALL_DIR__}"
 NEKO_DIST="$INSTALL_DIR/neko/dist"
 DEN_PORT=8716
 NEKO_PORT=8717
@@ -183,12 +183,12 @@ fi
 # Check if frontend is already running
 if ! curl -s "http://localhost:$NEKO_PORT" &>/dev/null 2>&1; then
   info "Starting frontend..."
-  # Serve the built frontend using a simple static server
+  # Serve the built frontend with Vite preview when a production build exists.
   if [ -d "$NEKO_DIST" ]; then
-    (cd "$NEKO_DIST" && npx --yes serve -l $NEKO_PORT &>/dev/null) &
+    (cd "$INSTALL_DIR/neko" && npm run preview -- --host 127.0.0.1 --port $NEKO_PORT &>/dev/null) &
   else
     # Fallback: use neko's dev server
-    (cd "$INSTALL_DIR/neko" && npx vite --port $NEKO_PORT &>/dev/null) &
+    (cd "$INSTALL_DIR/neko" && npm run dev -- --host 127.0.0.1 --port $NEKO_PORT &>/dev/null) &
   fi
   # Wait for frontend to start
   for i in $(seq 1 30); do
@@ -219,10 +219,11 @@ else
   xdg-open "$URL"
 fi
 LAUNCHER_SCRIPT
+sed -i.bak "s#__ASYNCAT_INSTALL_DIR__#$INSTALL_DIR#g" "$LAUNCHER" && rm -f "$LAUNCHER.bak"
 chmod +x "$LAUNCHER"
 
 # macOS: create .app bundle with proper icon
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if [ "$UNAME_S" = "Darwin" ]; then
   APP_DIR="$HOME/Applications/Asyncat.app"
   MACOS_DIR="$APP_DIR/Contents/MacOS"
   RESOURCES_DIR="$APP_DIR/Contents/Resources"
@@ -233,7 +234,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   chmod +x "$MACOS_DIR/asyncat-launcher"
 
   # Copy all icons to Resources
-  for icon in "${PWA_ICONS[@]}"; do
+  for icon in $PWA_ICONS; do
     if [ -f "$ICON_SRC_DIR/$icon" ]; then
       cp "$ICON_SRC_DIR/$icon" "$RESOURCES_DIR/$icon"
     fi
@@ -286,7 +287,7 @@ PLIST
   fi
 
   ok "App created at ~/Applications/Asyncat.app — shows in Spotlight + Launchpad"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+elif [ "$UNAME_S" = "Linux" ]; then
   DESK_DIR="$HOME/.local/share/applications"
   mkdir -p "$DESK_DIR"
 
@@ -310,17 +311,18 @@ fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}  ✓  asyncat installed!${NC}"
+printf "%b\n" "${GREEN}  ✓  asyncat installed!${NC}"
 echo ""
 echo "  For humans (UI app):"
-echo -e "    Click ${CYAN}Asyncat${NC} in your app menu / Launchpad / launcher"
+printf "%b\n" "    Click ${CYAN}Asyncat${NC} in your app menu / Launchpad / launcher"
 echo ""
 echo "  For terminal users:"
-echo -e "    ${CYAN}asyncat${NC}              open the interactive CLI REPL"
-echo -e "    ${CYAN}asyncat start${NC}        start backend only"
-echo -e "    ${CYAN}asyncat-ui${NC}           launch the web app"
-echo -e "    ${CYAN}asyncat --help${NC}       see all commands"
+printf "%b\n" "    ${CYAN}asyncat${NC}              start and open the web app"
+printf "%b\n" "    ${CYAN}asyncat start${NC}        start and open the web app"
+printf "%b\n" "    ${CYAN}asyncat tui${NC}          open the interactive CLI REPL"
+printf "%b\n" "    ${CYAN}asyncat-ui${NC}           launch the web app window"
+printf "%b\n" "    ${CYAN}asyncat --help${NC}       see all commands"
 echo ""
-echo "  Optional local AI engine:"
-echo -e "    ${CYAN}asyncat install --local-engine${NC}"
+echo "  Uninstall:"
+printf "%b\n" "    ${CYAN}asyncat uninstall${NC}    remove launchers and show data cleanup"
 echo ""

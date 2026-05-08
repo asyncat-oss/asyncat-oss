@@ -710,6 +710,13 @@ export const updateApi = {
 
     return () => { stopped = true; };
   },
+
+  uninstall: async ({ purge = false, confirm }) => {
+    return apiCall(`${UPDATE_API_BASE}/uninstall`, {
+      method: 'POST',
+      body: JSON.stringify({ purge, confirm }),
+    });
+  },
 };
 
 // ===========================================

@@ -139,11 +139,11 @@ const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequ
           </p>
         </div>
         <p className="text-xs text-amber-700 dark:text-amber-400 leading-5">
-          MLX model support requires the <code className="font-mono text-[11px] bg-amber-100 dark:bg-amber-900/40 px-1 rounded">mlx-lm</code> Python package.
+          MLX model support requires Asyncat's managed <code className="font-mono text-[11px] bg-amber-100 dark:bg-amber-900/40 px-1 rounded">mlx-lm</code> runtime.
           Install it in your terminal:
         </p>
         <code className="block text-xs font-mono bg-gray-900 text-green-400 rounded-lg px-3 py-2">
-          pip install mlx-lm
+          asyncat install
         </code>
         <button
           onClick={refresh}

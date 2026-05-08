@@ -1,14 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { ROOT } from '../lib/env.js';
-import { err, info, warn, col } from '../lib/colors.js';
+import { err, info, col } from '../lib/colors.js';
 import { startProc } from '../lib/procs.js';
-import { run as runOnboard } from './onboard.js';
-
-function isFirstRun() {
-  const home = process.env.ASYNCAT_HOME || path.join(process.env.HOME || process.env.USERPROFILE, '.asyncat');
-  return !fs.existsSync(path.join(home, '.first-run'));
-}
+import { getFrontendUrl, openFrontend } from './open.js';
 
 function depsInstalled() {
   return fs.existsSync(path.join(ROOT, 'node_modules')) ||
@@ -16,12 +11,6 @@ function depsInstalled() {
 }
 
 export async function run(args = []) {
-  // Auto-trigger onboard on first run
-  if (isFirstRun()) {
-    warn('First run detected. Running onboard wizard...');
-    await runOnboard();
-  }
-
   if (!fs.existsSync(path.join(ROOT, 'den/.env'))) {
     err(`den/.env not found — run ${col('cyan', 'install')} first.`); return;
   }
@@ -31,6 +20,7 @@ export async function run(args = []) {
 
   const backendOnly  = args.includes('--backend-only')  || args.includes('-b');
   const frontendOnly = args.includes('--frontend-only') || args.includes('-f');
+  const shouldOpen = !backendOnly && !args.includes('--no-open');
 
   if (backendOnly && frontendOnly) {
     err('Cannot use --backend-only and --frontend-only together.'); return;
@@ -47,7 +37,16 @@ export async function run(args = []) {
   }
 
   if (!backendOnly) {
-    info('Starting frontend → ' + col('white', 'http://localhost:8717'));
-    startProc('frontend', 'neko', 'npm', ['run', 'dev'], 'magenta');
+    const hasFrontendBuild = fs.existsSync(path.join(ROOT, 'neko/dist'));
+    const frontendArgs = hasFrontendBuild && !args.includes('--dev')
+      ? ['run', 'preview', '--', '--host', '127.0.0.1']
+      : ['run', 'dev', '--', '--host', '127.0.0.1'];
+    info('Starting frontend → ' + col('white', getFrontendUrl()));
+    startProc('frontend', 'neko', 'npm', frontendArgs, 'magenta');
+  }
+
+  if (shouldOpen) {
+    info('Opening Web UI → ' + col('white', getFrontendUrl()));
+    setTimeout(() => openFrontend(), 1800).unref?.();
   }
 }

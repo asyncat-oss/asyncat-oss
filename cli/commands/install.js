@@ -140,6 +140,55 @@ async function installManagedEngine() {
 	}
 }
 
+function managedMlxPythonPath() {
+	const base = process.platform === "win32"
+		? path.join(process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local"), "Asyncat")
+		: path.join(process.env.HOME || process.env.USERPROFILE || "", ".asyncat");
+	return process.platform === "win32"
+		? path.join(base, "mlx", "python", "Scripts", "python.exe")
+		: path.join(base, "mlx", "python", "bin", "python");
+}
+
+async function checkMlx(python, args = []) {
+	if (!(process.platform === "darwin" && process.arch === "arm64")) return;
+	if (args.includes("--skip-mlx")) {
+		info("Skipped MLX setup.");
+		return;
+	}
+
+	const managedPython = managedMlxPythonPath();
+	const existing = process.env.MLX_PYTHON_PATH || readEnv("den/.env").MLX_PYTHON_PATH || managedPython;
+	try {
+		execFileSync(existing, ["-c", "import mlx_lm"], { stdio: "ignore", timeout: 8000 });
+		setKey("den/.env", "MLX_PYTHON_PATH", existing);
+		ok(`MLX runtime detected (${existing})`);
+		return;
+	} catch {}
+
+	if (!python) {
+		warn("Python not found — MLX model support can be added later from Model Studio.");
+		return;
+	}
+
+	const venvDir = path.dirname(path.dirname(managedPython));
+	const s = spinner("Installing Apple MLX runtime...");
+	try {
+		fs.mkdirSync(venvDir, { recursive: true });
+		if (!fs.existsSync(managedPython)) {
+			execFileSync(python, ["-m", "venv", venvDir], { cwd: ROOT, stdio: "ignore", timeout: 120000 });
+		}
+		execFileSync(managedPython, ["-m", "pip", "install", "--upgrade", "pip"], { cwd: ROOT, stdio: "ignore", timeout: 300000 });
+		execFileSync(managedPython, ["-m", "pip", "install", "mlx-lm"], { cwd: ROOT, stdio: "ignore", timeout: 1800000 });
+		setKey("den/.env", "MLX_PYTHON_PATH", managedPython);
+		s.stop("MLX runtime installed");
+		ok(`MLX_PYTHON_PATH=${managedPython}`);
+	} catch (e) {
+		s.fail("MLX runtime install failed");
+		warn(e.message);
+		info(`You can still use GGUF/llama.cpp, Ollama, LM Studio, or cloud providers.`);
+	}
+}
+
 function prompt(question) {
 	return new Promise((resolve) => {
 		const tmp = readline.createInterface({
@@ -454,9 +503,14 @@ export async function run(args = []) {
 	await checkLlama(python, args);
 
 	log("");
+	log(col("bold", "  Checking MLX (Apple Silicon)..."));
+	log("");
+	await checkMlx(python, args);
+
+	log("");
 	ok(
 		col("bold", "Setup complete!") +
-			`  Type ${col("cyan", "start")} to launch asyncat.`,
+			`  Type ${col("cyan", "asyncat start")} to launch the Web UI.`,
 	);
 	log("");
 }

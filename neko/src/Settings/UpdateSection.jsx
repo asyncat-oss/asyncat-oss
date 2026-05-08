@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal } from 'lucide-react';
+import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal, Trash2, AlertTriangle } from 'lucide-react';
 import { updateApi } from './settingApi';
 
 const soraFontBase = 'font-sora';
@@ -12,6 +12,11 @@ const UpdateSection = () => {
   const [updateDone, setUpdateDone] = useState(null); // 'success' | 'error'
   const [logs, setLogs] = useState([]);
   const [statusError, setStatusError] = useState(null);
+  const [purgeInstall, setPurgeInstall] = useState(false);
+  const [uninstallConfirm, setUninstallConfirm] = useState('');
+  const [uninstalling, setUninstalling] = useState(false);
+  const [uninstallError, setUninstallError] = useState(null);
+  const [uninstallDone, setUninstallDone] = useState(null);
   const logRef = useRef(null);
   const cleanupRef = useRef(null);
 
@@ -75,6 +80,25 @@ const UpdateSection = () => {
         setUpdateDone('error');
       }
     );
+  };
+
+  const requiredUninstallText = purgeInstall ? 'delete all asyncat data' : 'uninstall asyncat';
+  const canUninstall = uninstallConfirm.trim().toLowerCase() === requiredUninstallText && !uninstalling;
+
+  const handleUninstall = async () => {
+    setUninstalling(true);
+    setUninstallError(null);
+    setUninstallDone(null);
+    try {
+      const result = await updateApi.uninstall({
+        purge: purgeInstall,
+        confirm: uninstallConfirm.trim().toLowerCase(),
+      });
+      setUninstallDone(result.message || 'Uninstall started. Asyncat will shut down.');
+    } catch (e) {
+      setUninstallError(e.message || 'Uninstall failed');
+      setUninstalling(false);
+    }
   };
 
   const upToDate = checkResult && checkResult.behind === 0;
@@ -264,6 +288,90 @@ const UpdateSection = () => {
           )}
         </div>
       )}
+
+      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Trash2 size={18} className="text-red-500 dark:text-red-400" />
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
+            Uninstall
+          </h3>
+        </div>
+
+        <div className="rounded-lg border border-red-200/70 dark:border-red-900/50 midnight:border-red-900/50 bg-red-50/70 dark:bg-red-950/20 midnight:bg-red-950/20 p-4 space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-red-800 dark:text-red-300 midnight:text-red-300">
+                Remove Asyncat from this machine
+              </p>
+              <p className="text-xs text-red-700/80 dark:text-red-300/80 midnight:text-red-300/80 mt-1 leading-5">
+                This stops the local services and removes launchers, icons, and the global npm wrapper.
+                Local data is kept unless full cleanup is enabled.
+              </p>
+              {localInfo?.installDir && (
+                <p className="text-xs font-mono text-red-700/70 dark:text-red-300/70 midnight:text-red-300/70 mt-2 truncate">
+                  {localInfo.installDir}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <label className="flex items-start gap-3 text-sm text-red-800 dark:text-red-300 midnight:text-red-300">
+            <input
+              type="checkbox"
+              checked={purgeInstall}
+              onChange={(e) => {
+                setPurgeInstall(e.target.checked);
+                setUninstallConfirm('');
+                setUninstallError(null);
+              }}
+              disabled={uninstalling || Boolean(uninstallDone)}
+              className="mt-0.5 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500"
+            />
+            <span>
+              Also delete local data, database, downloaded models, managed engines, and sessions.
+            </span>
+          </label>
+
+          <div>
+            <label className="block text-xs font-medium text-red-800 dark:text-red-300 midnight:text-red-300 mb-1">
+              Type <span className="font-mono">{requiredUninstallText}</span>
+            </label>
+            <input
+              value={uninstallConfirm}
+              onChange={(e) => {
+                setUninstallConfirm(e.target.value);
+                setUninstallError(null);
+              }}
+              disabled={uninstalling || Boolean(uninstallDone)}
+              className="w-full rounded-lg border border-red-200 dark:border-red-900/60 midnight:border-red-900/60 bg-white dark:bg-gray-950 midnight:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+
+          {uninstallError && (
+            <div className="text-sm text-red-700 dark:text-red-300 midnight:text-red-300">
+              {uninstallError}
+            </div>
+          )}
+
+          {uninstallDone && (
+            <div className="text-sm text-green-700 dark:text-green-300 midnight:text-green-300">
+              {uninstallDone}
+            </div>
+          )}
+
+          <button
+            onClick={handleUninstall}
+            disabled={!canUninstall || Boolean(uninstallDone)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {uninstalling ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {uninstalling ? 'Uninstalling...' : purgeInstall ? 'Uninstall and delete data' : 'Uninstall Asyncat'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

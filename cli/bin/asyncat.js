@@ -22,7 +22,7 @@ if (isInsideRepo) {
 } else {
   if (!fs.existsSync(path.join(ASYNCAT_HOME, 'cat'))) {
     // ── First run: clone ────────────────────────────────────────────────
-    console.log('\n[asyncat] First run — installing asyncat to ' + ASYNCAT_HOME + '...\n');
+    console.log('\n[asyncat] First run — installing the Asyncat Web UI to ' + ASYNCAT_HOME + '...\n');
 
     if (!gitInstalled()) {
       console.error('[asyncat] git is required. Install it from https://git-scm.com');
@@ -31,16 +31,25 @@ if (isInsideRepo) {
 
     try {
       execSync(`git clone --depth=1 "${REPO_URL}" "${ASYNCAT_HOME}"`, { stdio: 'inherit' });
-      console.log('\n[asyncat] Installing dependencies (this may take a moment)...\n');
-      execSync('npm install --loglevel=error', { cwd: ASYNCAT_HOME, stdio: 'inherit' });
-      console.log('\n[asyncat] Finishing first-run setup...\n');
-      execFileSync(process.execPath, [
-        path.join(ASYNCAT_HOME, 'cat'),
-        'install',
-        '--skip-packages',
-        '--skip-local-engine',
-      ], { cwd: ASYNCAT_HOME, stdio: 'inherit' });
-      console.log('\n[asyncat] Installed and ready.\n');
+      console.log('\n[asyncat] Running the full Web UI installer...\n');
+      if (os.platform() === 'win32') {
+        console.log('\n[asyncat] Windows bootstrap: installing dependencies and local setup...\n');
+        execSync('npm install --loglevel=error', { cwd: ASYNCAT_HOME, stdio: 'inherit' });
+        execSync('npm run build -w neko', { cwd: ASYNCAT_HOME, stdio: 'inherit' });
+        execFileSync(process.execPath, [
+          path.join(ASYNCAT_HOME, 'cat'),
+          'install',
+          '--skip-packages',
+          '--local-engine',
+        ], { cwd: ASYNCAT_HOME, stdio: 'inherit' });
+      } else {
+        execFileSync('bash', [path.join(ASYNCAT_HOME, 'install.sh')], {
+          cwd: ASYNCAT_HOME,
+          stdio: 'inherit',
+          env: { ...process.env, ASYNCAT_INSTALL_DIR: ASYNCAT_HOME },
+        });
+      }
+      console.log('\n[asyncat] Installed. Starting the Web UI...\n');
     } catch (e) {
       console.error('\n[asyncat] Installation failed:', e.message);
       process.exit(1);
@@ -53,6 +62,7 @@ if (isInsideRepo) {
       const after = execSync('git -C "' + ASYNCAT_HOME + '" rev-parse HEAD', { stdio: 'pipe' }).toString().trim();
       if (before !== after) {
         execSync('npm install --silent', { cwd: ASYNCAT_HOME, stdio: 'ignore' });
+        execSync('npm run build -w neko --silent', { cwd: ASYNCAT_HOME, stdio: 'ignore' });
         console.log('[asyncat] ✓ Updated to latest version');
       }
     } catch {

@@ -4,6 +4,7 @@ import path from 'path';
 import { ROOT, readEnv } from '../lib/env.js';
 import { log, ok, err, warn, col } from '../lib/colors.js';
 import { procs } from '../lib/procs.js';
+import { getFrontendPort } from './open.js';
 import {
   detectGpu,
   findExistingLlamaServer,
@@ -130,9 +131,10 @@ export function run() {
   if (backendRunning) pass('Port 8716 in use (backend running)');
   else pass('Port 8716 free');
 
-  const frontendRunning = (procs.frontend !== null) || portRunning(8717);
-  if (frontendRunning) pass('Port 8717 in use (frontend running)');
-  else pass('Port 8717 free');
+  const frontendPort = parseInt(getFrontendPort(), 10) || 8717;
+  const frontendRunning = (procs.frontend !== null) || portRunning(frontendPort);
+  if (frontendRunning) pass(`Port ${frontendPort} in use (frontend running)`);
+  else pass(`Port ${frontendPort} free`);
 
   const llamaRunning = portRunning(8765);
   if (llamaRunning) pass('Port 8765 in use (llama-server running)');

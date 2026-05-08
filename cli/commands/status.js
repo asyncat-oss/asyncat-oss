@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import { procs } from '../lib/procs.js';
 import { log, ok, col } from '../lib/colors.js';
 import { readEnv } from '../lib/env.js';
+import { getFrontendPort } from './open.js';
 
 function portRunning(port) {
   try {
@@ -20,11 +21,12 @@ function parsePort(value, fallback) {
 export function run() {
   const denEnv = readEnv('den/.env');
   const builtInLlamaPort = parsePort(denEnv.LLAMA_SERVER_PORT, 8765);
+  const frontendPort = parsePort(getFrontendPort(), 8717);
 
   log('');
   const checks = [
     { name: 'Backend  (den)',     port: 8716,              key: 'backend'  },
-    { name: 'Frontend (neko)',    port: 8717,              key: 'frontend' },
+    { name: 'Frontend (neko)',    port: frontendPort,      key: 'frontend' },
     { name: 'llama-server',       port: builtInLlamaPort,  key: null       },
   ];
 

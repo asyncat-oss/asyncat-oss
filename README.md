@@ -53,8 +53,8 @@ Asyncat gives your local model:
 **Zero config. Works out of the box.**
 
 ```
-npm i -g @asyncat/asyncat
-asyncat start
+curl -fsSL https://asyncat.com/install.sh | sh
+asyncat
 ```
 
 Default login email: `admin@local`. The generated password is in `den/.env` as `LOCAL_PASSWORD`.
@@ -79,11 +79,18 @@ We just have code, a lot of GGUF files, a few pending lab reports, and a cat tha
 
 - **Node.js 20+**
 - **git**
-- **A local model** (GGUF in `den/data/models/`) **or** an API key
-- **Local GGUF models:** Asyncat can install a managed user-local `llama-server` binary with `asyncat install --local-engine`
-- **Python is optional:** only needed if you explicitly choose the Asyncat-owned venv fallback
+- **A local model** (GGUF in `den/data/models/`), MLX model on Apple Silicon, Ollama/LM Studio, or an API key
+- **Local GGUF models:** Asyncat installs a managed user-local `llama-server` binary during setup when possible
+- **Apple Silicon MLX:** Asyncat installs `mlx-lm` into an Asyncat-owned venv when Python is available
+- **Python is optional:** only needed for MLX or the optional llama-cpp-python fallback
 
 ### Install
+
+```bash
+curl -fsSL https://asyncat.com/install.sh | sh
+```
+
+or:
 
 ```bash
 npm i -g @asyncat/asyncat
@@ -92,6 +99,8 @@ npm i -g @asyncat/asyncat
 ### Run
 
 ```bash
+asyncat
+# or
 asyncat start
 ```
 
@@ -110,12 +119,15 @@ Done. The AI has keys to your kingdom.
 
 ```bash
 asyncat start        # fire it up
+asyncat open         # open the Web UI
+asyncat tui          # terminal UI
 asyncat stop         # kill it
 asyncat status       # what's running
 asyncat restart      # bounce
 asyncat logs         # tail logs
 asyncat doctor       # health check
 asyncat config       # mess with env
+asyncat uninstall    # remove launchers/global wrapper, keep local data
 ```
 
 ---
@@ -142,6 +154,22 @@ Managed install locations:
 Asyncat writes `LLAMA_BINARY_PATH` into `den/.env` after a managed install. This avoids global Python package installs, including Linux `externally-managed-environment` / PEP 668 failures.
 
 The managed install is intentionally CPU-safe by default. Asyncat's Models page can inspect the current machine, recommend a better local engine when one fits the hardware, switch to already-installed runtimes, or trigger a managed install from the UI for supported engine profiles.
+
+On Apple Silicon, `asyncat install` also tries to create `~/.asyncat/mlx/python` and install `mlx-lm` there. The backend uses `MLX_PYTHON_PATH` from `den/.env`, so Asyncat does not need to modify system Python.
+
+### Uninstall
+
+```bash
+asyncat uninstall
+```
+
+This stops local services and removes the command shim, desktop launcher, app bundle, icons, and the npm global wrapper. It keeps `~/.asyncat` so your database, config, models, managed engines, and sessions are not deleted accidentally.
+
+For a full wipe:
+
+```bash
+asyncat uninstall --purge
+```
 
 ```env
 LLAMA_SERVER_PORT=8765

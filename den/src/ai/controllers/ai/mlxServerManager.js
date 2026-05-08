@@ -23,6 +23,18 @@ const MLX_HOST = '127.0.0.1';
 const LOAD_TIMEOUT_MS = 120_000; // 2 min — first MLX load can be slow
 const POLL_INTERVAL_MS = 800;
 
+function asyncatHome() {
+  return path.join(os.homedir(), '.asyncat');
+}
+
+function mlxPythonPath() {
+  return process.env.MLX_PYTHON_PATH || path.join(asyncatHome(), 'mlx', 'python', 'bin', 'python');
+}
+
+function mlxPythonCandidates() {
+  return [...new Set([mlxPythonPath(), 'python3'].filter(Boolean))];
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let serverProcess = null;
 let serverState = {
@@ -355,23 +367,21 @@ export function listMlxModels() {
 // ── mlx_lm availability check ─────────────────────────────────────────────────
 
 let _mlxAvailableCache = null; // null = unchecked, true/false = result
+let _mlxPythonCommand = null;
 
 export async function isMlxAvailable() {
   if (!IS_APPLE_SILICON) return false;
   if (_mlxAvailableCache !== null) return _mlxAvailableCache;
 
-  try {
-    await execAsync('python3 -m mlx_lm.server --help 2>/dev/null', { timeout: 5000 });
-    _mlxAvailableCache = true;
-  } catch {
-    // mlx_lm might still be installed; --help exits with code 1 on some versions
+  for (const python of mlxPythonCandidates()) {
     try {
-      await execAsync('python3 -c "import mlx_lm" 2>/dev/null', { timeout: 5000 });
+      await execAsync(`"${python}" -c "import mlx_lm" 2>/dev/null`, { timeout: 5000 });
       _mlxAvailableCache = true;
-    } catch {
-      _mlxAvailableCache = false;
-    }
+      _mlxPythonCommand = python;
+      return _mlxAvailableCache;
+    } catch {}
   }
+  _mlxAvailableCache = false;
   return _mlxAvailableCache;
 }
 
@@ -416,7 +426,7 @@ export async function startServer(modelPath) {
 
   console.info('[mlxServer] Starting server for:', modelName);
 
-  const proc = spawn('python3', [
+  const proc = spawn(_mlxPythonCommand || mlxPythonPath(), [
     '-m', 'mlx_lm.server',
     '--model', realPath,
     '--port', String(MLX_PORT),

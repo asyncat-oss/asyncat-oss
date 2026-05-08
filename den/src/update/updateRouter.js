@@ -1,8 +1,8 @@
 import express from 'express';
-import { execSync, spawn } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { auth } from '../users/middleware/auth.js';
 
 const router = express.Router();
@@ -10,12 +10,29 @@ router.use(auth);
 
 // den/src/update/updateRouter.js → root is 3 levels up
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
+const UNINSTALL_SCRIPT = join(ROOT, 'uninstall.sh');
 
 function getLocalInfo() {
-  const currentHash = execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim();
-  const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: ROOT }).toString().trim();
+  const currentHash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim();
+  const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: ROOT }).toString().trim();
+  const upstream = (() => {
+    try {
+      return execFileSync('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd: ROOT }).toString().trim();
+    } catch {
+      return null;
+    }
+  })();
+  const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: ROOT }).toString().trim().length > 0;
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  return { currentHash, branch, version: pkg.version };
+  return {
+    currentHash,
+    branch,
+    upstream,
+    dirty,
+    version: pkg.version,
+    installDir: ROOT,
+    canUninstall: existsSync(UNINSTALL_SCRIPT),
+  };
 }
 
 // GET /api/update/status — fast local git info, no network
@@ -30,13 +47,14 @@ router.get('/status', (req, res) => {
 // POST /api/update/check — git fetch + count commits behind upstream
 router.post('/check', async (req, res) => {
   try {
-    execSync('git fetch --quiet origin', { cwd: ROOT, timeout: 15000 });
-    // Use FETCH_HEAD to compare against whatever the default branch is
+    const upstream = execFileSync('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd: ROOT }).toString().trim();
+    const remote = upstream.split('/')[0];
+    execFileSync('git', ['fetch', '--quiet', remote], { cwd: ROOT, timeout: 30000 });
     const behind = parseInt(
-      execSync('git rev-list HEAD..FETCH_HEAD --count', { cwd: ROOT }).toString().trim()
+      execFileSync('git', ['rev-list', `HEAD..${upstream}`, '--count'], { cwd: ROOT }).toString().trim()
     ) || 0;
-    const latestHash = execSync('git rev-parse --short FETCH_HEAD', { cwd: ROOT }).toString().trim();
-    res.json({ success: true, behind, latestHash });
+    const latestHash = execFileSync('git', ['rev-parse', '--short', upstream], { cwd: ROOT }).toString().trim();
+    res.json({ success: true, behind, latestHash, upstream });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -51,12 +69,15 @@ router.post('/apply', (req, res) => {
 
   const send = (type, text) => res.write(`data: ${JSON.stringify({ type, text })}\n\n`);
 
-  const runStep = (cmd, args, cwd = ROOT) => new Promise((resolve, reject) => {
+  const runStep = (cmd, args, cwd = ROOT, options = {}) => new Promise((resolve, reject) => {
     const proc = spawn(cmd, args, { cwd, stdio: 'pipe' });
     let out = '';
     proc.stdout.on('data', d => { out += d; send('log', d.toString()); });
     proc.stderr.on('data', d => { out += d; send('log', d.toString()); });
-    proc.on('close', code => code === 0 ? resolve(out) : reject(new Error(`"${cmd} ${args.join(' ')}" exited with code ${code}`)));
+    proc.on('close', code => {
+      if (code === 0 || options.allowCodes?.includes(code)) return resolve(out);
+      reject(new Error(`"${cmd} ${args.join(' ')}" exited with code ${code}`));
+    });
     proc.on('error', reject);
   });
 
@@ -64,48 +85,86 @@ router.post('/apply', (req, res) => {
 
   (async () => {
     try {
-      const status = execSync('git status --porcelain', { cwd: ROOT }).toString().trim();
+      const status = execFileSync('git', ['status', '--porcelain'], { cwd: ROOT }).toString().trim();
       if (status) {
         send('log', 'Stashing local changes...\n');
-        await runStep('git', ['stash']);
+        await runStep('git', ['stash', 'push', '-u', '-m', 'asyncat-ui-update']);
         hasStash = true;
       }
 
       send('log', 'Pulling latest changes from remote...\n');
-      const pullOut = await runStep('git', ['pull']);
+      const pullOut = await runStep('git', ['pull', '--ff-only']);
 
       if (pullOut.includes('Already up to date') || pullOut.includes('Already up-to-date')) {
         if (hasStash) {
-          try { await runStep('git', ['stash', 'pop']); } catch (_) {}
+          send('log', 'Restoring local changes...\n');
+          await runStep('git', ['stash', 'pop']);
         }
         send('done', 'Already up to date.');
         res.end();
         return;
       }
 
-      send('log', '\nInstalling root dependencies...\n');
+      send('log', '\nInstalling workspace dependencies...\n');
       await runStep('npm', ['install'], ROOT);
 
-      send('log', '\nInstalling backend dependencies...\n');
-      await runStep('npm', ['install'], join(ROOT, 'den'));
-
-      send('log', '\nInstalling frontend dependencies...\n');
-      await runStep('npm', ['install'], join(ROOT, 'neko'));
+      send('log', '\nRebuilding Web UI...\n');
+      await runStep('npm', ['run', 'build', '-w', 'neko'], ROOT);
 
       if (hasStash) {
         send('log', '\nRestoring local changes...\n');
-        try { await runStep('git', ['stash', 'pop']); } catch (_) {}
+        await runStep('git', ['stash', 'pop']);
       }
 
-      send('done', 'Update complete! Restart Asyncat to apply changes.');
+      send('done', 'Update complete. Restart Asyncat to load the new backend code.');
     } catch (e) {
       if (hasStash) {
-        try { execSync('git stash pop', { cwd: ROOT }); } catch (_) {}
+        try { execFileSync('git', ['stash', 'pop'], { cwd: ROOT, stdio: 'ignore' }); }
+        catch (_) { send('log', '\nLocal changes are still stashed. Run git stash pop from the install directory to restore them.\n'); }
       }
       send('error', e.message);
     }
     res.end();
   })();
+});
+
+// POST /api/update/uninstall — schedule local uninstall after responding.
+router.post('/uninstall', (req, res) => {
+  const purge = Boolean(req.body?.purge);
+  const confirm = String(req.body?.confirm || '').trim().toLowerCase();
+  const required = purge ? 'delete all asyncat data' : 'uninstall asyncat';
+
+  if (confirm !== required) {
+    return res.status(400).json({
+      success: false,
+      error: `Type "${required}" to confirm.`,
+    });
+  }
+
+  if (!existsSync(UNINSTALL_SCRIPT)) {
+    return res.status(404).json({ success: false, error: 'uninstall.sh not found in this installation.' });
+  }
+
+  const args = [UNINSTALL_SCRIPT, ...(purge ? ['--purge'] : [])];
+  try {
+    const child = spawn('sh', args, {
+      cwd: ROOT,
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, ASYNCAT_INSTALL_DIR: ROOT },
+    });
+    child.unref();
+    res.json({
+      success: true,
+      message: purge
+        ? 'Full uninstall started. Asyncat will shut down and remove local data.'
+        : 'Uninstall started. Asyncat will shut down and keep local data.',
+      installDir: ROOT,
+      purge,
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 export default router;
