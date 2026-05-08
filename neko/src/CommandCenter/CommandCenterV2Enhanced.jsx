@@ -459,13 +459,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [editGoalText, setEditGoalText] = useState('');
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const [draftGoal, setDraftGoal] = useState('');
-  const [draftFileAttachments, setDraftFileAttachments] = useState([]);
-  const [contextInfo, setContextInfo] = useState(null);
-  const [contextLoading, setContextLoading] = useState(false);
-  const [contextError, setContextError] = useState(false);
-  const [isCompactingContext, setIsCompactingContext] = useState(false);
-  const autoCompactRef = useRef(null);
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
   const agentRunning = Boolean(currentRun.running);
@@ -546,59 +539,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       cancelled = true;
     };
   }, [agentSessionId, currentRunKey, setConversationTitle, updateChatRun]);
-
-  const conversationTokens = useMemo(() => {
-    if (contextInfo?.inputTokens) {
-      const currentInputTokens = Math.ceil((draftGoal || '').length / 4);
-      return Math.max(0, contextInfo.inputTokens - currentInputTokens);
-    }
-    const sliced = toolsEnabled
-      ? (conversationHistory || []).slice(-4)
-      : (conversationHistory || []).slice(-6);
-    const historyChars = sliced.reduce(
-      (sum, m) => sum + (m.content?.length || 0),
-      0,
-    );
-    const systemOverhead = toolsEnabled ? 4000 : 1500;
-    return Math.round(historyChars / 4) + systemOverhead;
-  }, [conversationHistory, toolsEnabled, contextInfo, draftGoal]);
-
-  const contextHistoryForMeter = agentConversationHistory.length > 0
-    ? agentConversationHistory
-    : conversationHistory;
-
-  useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      try {
-        setContextLoading(true);
-        setContextError(false);
-        const result = await agentApi.getContext({
-          goal: draftGoal,
-          conversationHistory: contextHistoryForMeter,
-          enableTools: toolsEnabled,
-          profileId: selectedProfileId,
-          fileAttachments: draftFileAttachments,
-        });
-        if (!cancelled) {
-          setContextInfo(result?.context || null);
-          setContextError(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setContextInfo(null);
-          setContextError(true);
-        }
-      } finally {
-        if (!cancelled) setContextLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [contextHistoryForMeter, draftGoal, selectedProfileId, toolsEnabled]);
 
   const scrollToBottom = useCallback((force = false) => {
     let shouldScroll = force;
@@ -1211,83 +1151,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     handleAgentRun({ content: goal }, { enableTools: true });
   }, [agentRunning, handleAgentRun, setToolsEnabled]);
 
-  const handleCompactContext = useCallback(async (reason = 'manual') => {
-    const history = agentConversationHistory.length > 0 ? agentConversationHistory : conversationHistory;
-    if (isCompactingContext || agentRunning || history.length < 4) return;
-
-    setIsCompactingContext(true);
-    try {
-      const result = await agentApi.compactConversation({
-        conversationHistory: history,
-        visibleMessages: messages,
-      });
-      if (!result?.success || !Array.isArray(result.conversationHistory)) {
-        throw new Error(result?.error || 'Compaction failed');
-      }
-      updateChatRun(currentRunKey, prev => ({
-        ...prev,
-        conversationHistory: result.conversationHistory,
-        events: [
-          ...(prev.events || []),
-          {
-            type: 'status',
-            data: {
-              message: reason === 'auto'
-                ? 'Context was automatically compacted so the conversation can continue.'
-                : 'Context compacted. Older turns stay visible, and future prompts use a continuation summary.',
-            },
-          },
-        ],
-      }));
-      if (currentConversationId === currentConversationIdRef.current) {
-        setConversationHistory(result.conversationHistory);
-      }
-      if (!isGhostMode && currentConversationId) {
-        saveCurrentConversation({
-          messages,
-          conversationId: currentConversationId,
-          metadata: { compactedConversationHistory: result.conversationHistory },
-        }).catch(() => {});
-      }
-      setContextInfo(null);
-    } catch (err) {
-      updateChatRun(currentRunKey, prev => ({
-        ...prev,
-        events: [...(prev.events || []), { type: 'error', data: { message: err.message || 'Failed to compact context.' } }],
-      }));
-    } finally {
-      setIsCompactingContext(false);
-    }
-  }, [
-    agentConversationHistory,
-    agentRunning,
-    conversationHistory,
-    currentConversationId,
-    currentRunKey,
-    isCompactingContext,
-    isGhostMode,
-    messages,
-    saveCurrentConversation,
-    setConversationHistory,
-    updateChatRun,
-  ]);
-
-  useEffect(() => {
-    const key = `${currentRunKey}:${contextInfo?.inputTokens || 0}`;
-    if (
-      !contextInfo ||
-      contextInfo.percent < 90 ||
-      autoCompactRef.current === key ||
-      agentRunning ||
-      isCompactingContext ||
-      contextHistoryForMeter.length < 6
-    ) {
-      return;
-    }
-    autoCompactRef.current = key;
-    handleCompactContext('auto');
-  }, [agentRunning, contextHistoryForMeter.length, contextInfo, currentRunKey, handleCompactContext, isCompactingContext]);
-
   const handleAgentStop = useCallback(() => {
     const controller = agentAbortControllersRef.current.get(currentRunKey);
     if (!controller) return;
@@ -1697,14 +1560,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                   : "Ask anything, or create tasks, events, notes..."
               }
               hasMessages={hasConversationContent}
-              conversationTokens={conversationTokens}
-              contextInfo={contextInfo}
-              contextLoading={contextLoading}
-              contextError={contextError}
-              onCompactContext={handleCompactContext}
-              isCompacting={isCompactingContext}
-              onDraftChange={setDraftGoal}
-              onFileAttachmentsChange={setDraftFileAttachments}
               toolsEnabled={toolsEnabled}
               onToggleTools={() => setToolsEnabled(!toolsEnabled)}
               autoApprove={agentAutoApprove}
@@ -2037,14 +1892,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     : "Ask anything..."
                 }
                 hasMessages={hasConversationContent}
-                conversationTokens={conversationTokens}
-                contextInfo={contextInfo}
-                contextLoading={contextLoading}
-                contextError={contextError}
-                onCompactContext={handleCompactContext}
-                isCompacting={isCompactingContext}
-                onDraftChange={setDraftGoal}
-                onFileAttachmentsChange={setDraftFileAttachments}
                 toolsEnabled={toolsEnabled}
                 onToggleTools={() => setToolsEnabled(!toolsEnabled)}
                 autoApprove={agentAutoApprove}

@@ -84,19 +84,9 @@ export const MessageInputV2 = ({
   onSubmit,
   disabled,
   autoFocus,
-  onReset,
   placeholder = "Ask anything...",
   maxLength = 50000,
   hasMessages = false,
-  conversationTooLong = false,
-  conversationTokens = 0,
-  contextInfo = null,
-  contextLoading = false,
-  contextError = false,
-  onCompactContext,
-  isCompacting = false,
-  onDraftChange,
-  onFileAttachmentsChange,
   prefillValue,
   toolsEnabled = true,
   onToggleTools,
@@ -169,18 +159,7 @@ export const MessageInputV2 = ({
     [agentProfiles, value],
   );
 
-  const inputTokens = Math.ceil(value.length / 4);
-  const totalTokens = conversationTokens + inputTokens;
   const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || (activeBrain.isLocal ? 8192 : 128000);
-  const estimatedContextPercent = Math.min(
-    100,
-    Math.round((totalTokens / ctxSize) * 100),
-  );
-  const displayTokens = contextInfo?.inputTokens ?? totalTokens;
-  const displayCtxSize = contextInfo?.ctxLimit ?? ctxSize;
-  const contextPercent = contextInfo?.percent ?? estimatedContextPercent;
-  const contextExact = Boolean(contextInfo?.exact);
-  const contextLabel = contextInfo?.label || 'estimated tokens';
 
   useEffect(() => {
     if (!isRunning || !runStartedAt) { setRunElapsed(0); return; }
@@ -199,9 +178,8 @@ export const MessageInputV2 = ({
   useEffect(() => {
     if (!prefillValue) return;
     setValue(prefillValue);
-    onDraftChange?.(prefillValue);
     requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [onDraftChange, prefillValue]);
+  }, [prefillValue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -299,7 +277,6 @@ export const MessageInputV2 = ({
     const newValue = e.target.value;
     setValue(newValue);
     setDismissedTrigger(null);
-    onDraftChange?.(newValue);
     setCursorPosition(e.target.selectionStart || newValue.length);
 
     const textarea = textareaRef.current;
@@ -307,7 +284,7 @@ export const MessageInputV2 = ({
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
-  }, [onDraftChange]);
+  }, []);
 
   const handleCursorChange = useCallback(() => {
     const textarea = textareaRef.current;
@@ -320,7 +297,6 @@ export const MessageInputV2 = ({
     const nextValue = `${value.slice(0, agentTrigger.start)}${mention} ${value.slice(agentTrigger.end)}`;
     const nextCursor = agentTrigger.start + mention.length + 1;
     setValue(nextValue);
-    onDraftChange?.(nextValue);
     setCursorPosition(nextCursor);
     requestAnimationFrame(() => {
       if (!textareaRef.current) return;
@@ -328,7 +304,7 @@ export const MessageInputV2 = ({
       textareaRef.current.selectionStart = nextCursor;
       textareaRef.current.selectionEnd = nextCursor;
     });
-  }, [agentTrigger, onDraftChange, value]);
+  }, [agentTrigger, value]);
 
   const attachFile = useCallback((file) => {
     if (!fileTrigger) return;
@@ -337,7 +313,6 @@ export const MessageInputV2 = ({
       const nextValue = `${value.slice(0, fileTrigger.start)}${nextMention}${value.slice(fileTrigger.end)}`;
       const nextCursor = fileTrigger.start + nextMention.length;
       setValue(nextValue);
-      onDraftChange?.(nextValue);
       setCursorPosition(nextCursor);
       requestAnimationFrame(() => {
         if (!textareaRef.current) return;
@@ -350,13 +325,10 @@ export const MessageInputV2 = ({
 
     const nextValue = value.slice(0, fileTrigger.start) + value.slice(fileTrigger.end);
     setValue(nextValue);
-    onDraftChange?.(nextValue);
     setCursorPosition(fileTrigger.start);
     setFileAttachments(prev => {
       if (prev.some(f => f.path === file.path)) return prev;
-      const next = [...prev, { path: file.path, name: file.name, ext: file.ext }];
-      onFileAttachmentsChange?.(next);
-      return next;
+      return [...prev, { path: file.path, name: file.name, ext: file.ext }];
     });
     requestAnimationFrame(() => {
       if (!textareaRef.current) return;
@@ -364,15 +336,11 @@ export const MessageInputV2 = ({
       textareaRef.current.selectionStart = fileTrigger.start;
       textareaRef.current.selectionEnd = fileTrigger.start;
     });
-  }, [fileTrigger, onDraftChange, value, onFileAttachmentsChange]);
+  }, [fileTrigger, value]);
 
   const removeFileAttachment = useCallback((path) => {
-    setFileAttachments(prev => {
-      const next = prev.filter(f => f.path !== path);
-      onFileAttachmentsChange?.(next);
-      return next;
-    });
-  }, [onFileAttachmentsChange]);
+    setFileAttachments(prev => prev.filter(f => f.path !== path));
+  }, []);
 
   const handleSubmit = useCallback(
     async (e) => {
@@ -389,8 +357,6 @@ export const MessageInputV2 = ({
         await onSubmit(messageToSend, []);
         setValue("");
         setFileAttachments([]);
-        onFileAttachmentsChange?.([]);
-        onDraftChange?.("");
         setError(null);
         if (textareaRef.current) textareaRef.current.style.height = "auto";
       } catch (err) {
@@ -398,7 +364,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, onSubmit, detectedAgentMentions, fileAttachments, onDraftChange, onFileAttachmentsChange],
+    [value, disabled, onSubmit, detectedAgentMentions, fileAttachments],
   );
 
   const handleKeyDown = useCallback(
@@ -543,58 +509,7 @@ export const MessageInputV2 = ({
   return (
     <div className="bg-transparent">
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
-        {contextInfo && contextPercent > 90 && (
-          <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border-l-4 border-red-500 rounded-lg">
-            <div className="flex items-start gap-2">
-              <svg
-                className="w-5 h-5 text-red-500 shrink-0 mt-0.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                  Context window is {contextPercent}% full
-                </h3>
-                <p className="text-xs text-red-700 dark:text-red-300 mb-2">
-                  The model may stop responding or produce incomplete answers.
-                  Start a new conversation for best results.
-                </p>
-                <button
-                  onClick={onReset}
-                  className="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                >
-                  Start New Chat
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {conversationTooLong ? (
-          <div className="p-6 bg-orange-50 dark:bg-orange-900/20 midnight:bg-orange-900/30 border border-orange-200 dark:border-orange-800 midnight:border-orange-700 rounded-lg text-center">
-            <h3 className="text-lg font-medium text-orange-900 dark:text-orange-100 mb-2">
-              Conversation Too Long
-            </h3>
-            <p className="text-sm text-orange-700 dark:text-orange-300 mb-4">
-              Start a new conversation for better performance.
-            </p>
-            <button
-              onClick={onReset}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors font-medium"
-            >
-              Start New Conversation
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit}>
             <div
               className={`p-4 bg-white dark:bg-gray-800 midnight:bg-gray-900 border-2 rounded-lg transition-colors ${getBorderColor()}`}
             >
@@ -751,34 +666,6 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              {(localModel.isReady || activeBrain.isReady || contextInfo) && (
-                <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
-                  <span className="min-w-0 truncate text-gray-400 dark:text-gray-500">
-                    {contextLoading ? 'Checking context...' : contextError ? (
-                      <span className="text-amber-500 dark:text-amber-400">Context unavailable</span>
-                    ) : (
-                      <>
-                        {contextExact ? '' : '~'}
-                        {displayTokens.toLocaleString()} / {displayCtxSize.toLocaleString()}{" "}
-                        {contextLabel} ({contextPercent}%)
-                        {contextInfo?.contextWindowSource ? ` · ${contextInfo.contextWindowSource}` : ''}
-                      </>
-                    )}
-                  </span>
-                  {onCompactContext && contextPercent >= 50 && (
-                    <button
-                      type="button"
-                      onClick={onCompactContext}
-                      disabled={disabled || isCompacting}
-                      className="shrink-0 rounded-md border border-amber-200 px-2 py-1 text-[10px] font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-60 dark:border-amber-800/70 dark:text-amber-300 dark:hover:bg-amber-950/20"
-                      title="Summarize older context while keeping this chat visible"
-                    >
-                      {isCompacting ? 'Compacting...' : 'Compact'}
-                    </button>
-                  )}
-                </div>
-              )}
-
               <div className="mt-2 flex items-center gap-0.5">
                 <div ref={toolbarRef} className="flex items-center gap-0.5 min-w-0 flex-1">
                   <div className="relative">
@@ -906,7 +793,6 @@ export const MessageInputV2 = ({
               </div>
             </div>
           </form>
-        )}
 
         {fileRoot?.path && (
           <div className="mt-2 flex justify-center">

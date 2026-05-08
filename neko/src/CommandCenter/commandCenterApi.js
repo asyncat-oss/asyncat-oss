@@ -796,20 +796,6 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/health?limit=${encodeURIComponent(String(limit))}`);
   },
 
-  getContext: async ({ goal = '', conversationHistory = [], enableTools = true, profileId = null, agentMentions = [], fileAttachments = [] } = {}) => {
-    return await apiRequest(`${API_BASE_URL}/agent/context`, {
-      method: 'POST',
-      body: JSON.stringify({ goal, conversationHistory, enableTools, profileId, agentMentions, fileAttachments }),
-    });
-  },
-
-  compactConversation: async ({ conversationHistory = [], visibleMessages = [] } = {}) => {
-    return await apiRequest(`${API_BASE_URL}/agent/compact`, {
-      method: 'POST',
-      body: JSON.stringify({ conversationHistory, visibleMessages }),
-    });
-  },
-
   revertSession: async (sessionId) => {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/revert`, {
       method: 'POST',
