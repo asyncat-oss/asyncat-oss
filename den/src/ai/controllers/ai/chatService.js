@@ -419,7 +419,8 @@ class ChatService {
           project_ids, metadata, messages, folder_id
         `)
         .eq('id', conversationId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .is('deleted_at', null);
 
       // Only filter by workspace if explicitly provided
       if (workspaceId) {

@@ -131,6 +131,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   });
   const [conversationListRefresh, setConversationListRefresh] = useState(null);
   const savingConversationIdsRef = useRef(new Set());
+  const loadConversationRequestRef = useRef(0);
 
   const handleSetToolsEnabled = useCallback((val) => {
     setToolsEnabled(val);
@@ -248,10 +249,13 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   }, [state.justLoadedConversation]);
 
   const handleNewConversation = useCallback(async () => {
+    loadConversationRequestRef.current += 1;
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
   }, []);
 
   const loadConversation = useCallback(async (conversationId) => {
+    const requestId = loadConversationRequestRef.current + 1;
+    loadConversationRequestRef.current = requestId;
     try {
       dispatch({ type: ActionTypes.SET_CONVERSATION_LOADING, payload: true });
       dispatch({ type: ActionTypes.SET_JUST_LOADED });
@@ -261,6 +265,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         commandCenterApi.chat.loadConversation(conversationId),
         new Promise(resolve => setTimeout(resolve, 150))
       ]);
+
+      if (requestId !== loadConversationRequestRef.current) return;
 
       dispatch({ type: ActionTypes.SET_JUST_LOADED });
 
@@ -289,14 +295,19 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         : null;
       dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: compactedHistory || apiHistory.slice(-8) });
     } catch (error) {
+      if (requestId !== loadConversationRequestRef.current) return;
       console.error('Load conversation error:', error);
+      dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
       dispatch({ type: ActionTypes.SET_ERROR, payload: 'Failed to load conversation' });
     } finally {
-      dispatch({ type: ActionTypes.SET_CONVERSATION_LOADING, payload: false });
+      if (requestId === loadConversationRequestRef.current) {
+        dispatch({ type: ActionTypes.SET_CONVERSATION_LOADING, payload: false });
+      }
     }
   }, [currentWorkspace?.id]);
 
   const handleClearConversation = useCallback(() => {
+    loadConversationRequestRef.current += 1;
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
   }, []);
 

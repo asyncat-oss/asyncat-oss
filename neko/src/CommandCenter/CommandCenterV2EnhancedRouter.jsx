@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useCommandCenter } from './CommandCenterContextEnhanced';
 import CommandCenterV2EnhancedOriginal from "./CommandCenterV2Enhanced.jsx";
@@ -7,14 +7,31 @@ const CommandCenterV2Enhanced = () => {
   const { conversationId, sessionId } = useParams();
   const location = useLocation();
   const { loadConversation, currentConversationId } = useCommandCenter();
+  const loadedRouteConversationRef = useRef(null);
 
   const isAgentRoute = location.pathname.startsWith('/agents');
   const initialMode = isAgentRoute ? 'agent' : 'chat';
 
   useEffect(() => {
-    if (conversationId && conversationId !== currentConversationId) {
-      loadConversation(conversationId);
+    if (!conversationId) {
+      loadedRouteConversationRef.current = null;
+      return;
     }
+
+    if (conversationId === currentConversationId) {
+      loadedRouteConversationRef.current = conversationId;
+      return;
+    }
+
+    if (
+      currentConversationId === null &&
+      loadedRouteConversationRef.current === conversationId
+    ) {
+      return;
+    }
+
+    loadedRouteConversationRef.current = conversationId;
+    loadConversation(conversationId);
   }, [conversationId, currentConversationId, loadConversation]);
 
   return (

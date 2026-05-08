@@ -871,6 +871,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     try {
       await chatApi.deleteConversation(currentConversationId);
       handleClearConversation();
+      navigate('/home', { replace: true });
       triggerConversationRefresh();
     } catch (error) {
       console.error("Failed to delete conversation:", error);
@@ -879,6 +880,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [
     currentConversationId,
     handleClearConversation,
+    navigate,
     triggerConversationRefresh,
   ]);
 
