@@ -21,6 +21,7 @@ import {
 
 import UniversalSearch from "./UniversalSearch";
 import { useWorkspace } from "../contexts/WorkspaceContext";
+import { useCommandCenter } from "../CommandCenter/CommandCenterContextEnhanced";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import eventBus from "../utils/eventBus.js";
 
@@ -131,6 +132,22 @@ const DynamicSidebar = ({
   });
 
   const { currentWorkspace } = useWorkspace();
+  const {
+    currentConversationId,
+    conversationTitle,
+    hasActiveRuns,
+    chatRunPreviews = [],
+  } = useCommandCenter();
+
+  const latestChatRun = chatRunPreviews[0];
+  const commandCenterTarget = currentConversationId
+    ? `/conversations/${currentConversationId}`
+    : latestChatRun?.conversationId
+      ? `/conversations/${latestChatRun.conversationId}`
+      : '/home';
+  const openCommandCenter = useCallback(() => {
+    navigate(commandCenterTarget);
+  }, [commandCenterTarget, navigate]);
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -241,7 +258,7 @@ const DynamicSidebar = ({
         case 'openSearch': onSearchOpen(true); break;
         case 'openSettings': navigate("/settings/profile"); break;
         case 'newChat': onNewChat(); break;
-        case 'navHome': onNewChat(); break;
+        case 'navHome': openCommandCenter(); break;
         case 'navChat': navigate("/all-chats"); break;
         case 'navWorkspace': navigate("/workspace"); break;
         case 'navCalendar': navigate("/calendar"); break;
@@ -266,7 +283,7 @@ const DynamicSidebar = ({
       document.removeEventListener("keydown", handler);
       window.removeEventListener('keyboard-shortcuts-changed', handleShortcutsChange);
     };
-  }, [onNewChat]);
+  }, [onNewChat, openCommandCenter, navigate, onSearchOpen]);
 
   // Active states
   const isOnHome = basePage === "home";
@@ -315,9 +332,19 @@ const DynamicSidebar = ({
           }
         }}
       >
-        {/* Logo — new chat */}
-        <DockItem label="New Chat  ⌘N" onClick={onNewChat} isActive={isOnHome}>
+        {/* Logo — command center */}
+        <DockItem
+          label={conversationTitle ? `Command Center · ${conversationTitle}` : "Command Center"}
+          onClick={openCommandCenter}
+          isActive={isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")}
+        >
           <img src="/cat.svg" alt="Asyncat" className="w-5 h-5" />
+          {hasActiveRuns && (
+            <span
+              className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-gray-950 animate-pulse"
+              title="A chat is generating"
+            />
+          )}
         </DockItem>
 
         <DockSep />

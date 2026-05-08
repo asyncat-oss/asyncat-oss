@@ -2,7 +2,7 @@
 // Manages conversation metadata, message state, ghost mode, and tools toggle.
 // Streaming is handled directly in CommandCenterV2Enhanced via agentApi.runStream.
 
-import { createContext, useState, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
+import { createContext, useState, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import commandCenterApi from './commandCenterApi';
@@ -130,8 +130,73 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     try { return localStorage.getItem('asyncat_tools_enabled') !== 'false'; } catch { return true; }
   });
   const [conversationListRefresh, setConversationListRefresh] = useState(null);
+  const [chatRuns, setChatRuns] = useState({});
   const savingConversationIdsRef = useRef(new Set());
   const loadConversationRequestRef = useRef(0);
+  const agentAbortControllersRef = useRef(new Map());
+  const runStartedAtRef = useRef(null);
+  const chatRunsRef = useRef(chatRuns);
+  const currentConversationIdRef = useRef(state.currentConversationId);
+
+  useEffect(() => {
+    chatRunsRef.current = chatRuns;
+  }, [chatRuns]);
+
+  useEffect(() => {
+    currentConversationIdRef.current = state.currentConversationId;
+  }, [state.currentConversationId]);
+
+  const updateChatRun = useCallback((runKey, updater) => {
+    setChatRuns(prev => {
+      const existing = prev[runKey] || {};
+      const next = typeof updater === 'function' ? updater(existing) : { ...existing, ...updater };
+      return { ...prev, [runKey]: next };
+    });
+  }, []);
+
+  const activeConversationIds = useMemo(
+    () => new Set(
+      Object.entries(chatRuns)
+        .filter(([key, run]) => key !== '__draft__' && run?.running)
+        .map(([key]) => key)
+    ),
+    [chatRuns],
+  );
+
+  const hasActiveRuns = useMemo(
+    () => Object.values(chatRuns).some(run => run?.running),
+    [chatRuns],
+  );
+
+  const chatRunPreviews = useMemo(() => {
+    const getRunTitle = (run, key) => {
+      const goal = run?.goal || [...(run?.events || [])].reverse().find(ev => ev?.type === 'user_goal')?.data?.goal || '';
+      const firstLine = String(goal).split('\n').find(Boolean)?.trim();
+      if (firstLine) return firstLine;
+      return key === '__draft__' ? 'New conversation' : 'Untitled conversation';
+    };
+
+    return Object.entries(chatRuns)
+      .map(([key, run]) => {
+        const events = Array.isArray(run?.events) ? run.events : [];
+        const lastEvent = [...events].reverse().find(ev => ev?.arrivedAt || ev?.data?.timestamp);
+        const updatedAtMs = lastEvent?.arrivedAt || Date.parse(lastEvent?.data?.timestamp || '') || 0;
+        return {
+          key,
+          conversationId: key === '__draft__' ? null : key,
+          title: getRunTitle(run, key),
+          preview: run?.running ? 'Generating' : (run?.streamingText || run?.session?.summary || ''),
+          running: Boolean(run?.running),
+          sessionId: run?.sessionId || null,
+          updatedAtMs,
+        };
+      })
+      .filter(item => item.running || item.conversationId)
+      .sort((a, b) => {
+        if (a.running !== b.running) return a.running ? -1 : 1;
+        return (b.updatedAtMs || 0) - (a.updatedAtMs || 0);
+      });
+  }, [chatRuns]);
 
   const handleSetToolsEnabled = useCallback((val) => {
     setToolsEnabled(val);
@@ -184,7 +249,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     if (!shouldSaveConversations() || state.isGhostMode) return null;
     const messagesToSave = options.messages || state.messages;
     const targetConversationId = options.conversationId !== undefined ? options.conversationId : state.currentConversationId;
-    const savingCurrentConversation = targetConversationId === state.currentConversationId;
+    const currentConversationIdNow = currentConversationIdRef.current;
+    const savingCurrentConversation = targetConversationId === currentConversationIdNow;
     const savingKey = targetConversationId || '__new__';
     if (savingConversationIdsRef.current.has(savingKey) || messagesToSave.length === 0 || !currentWorkspace?.id) return null;
     if (targetConversationId && messagesToSave.length < 2) return null;
@@ -202,7 +268,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       });
 
       if (result.success) {
-        if (savingCurrentConversation && !state.currentConversationId && result.conversationId) {
+        if (savingCurrentConversation && !currentConversationIdNow && result.conversationId) {
           dispatch({ type: ActionTypes.SET_CURRENT_CONVERSATION_ID, payload: result.conversationId });
           if (result.title && result.title !== state.conversationTitle) {
             dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: result.title });
@@ -365,6 +431,16 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     toggleGhostMode,
     setGhostMode,
     setToolsEnabled: handleSetToolsEnabled,
+    chatRuns,
+    setChatRuns,
+    chatRunsRef,
+    updateChatRun,
+    activeConversationIds,
+    hasActiveRuns,
+    chatRunPreviews,
+    agentAbortControllersRef,
+    runStartedAtRef,
+    currentConversationIdRef,
     onProjectsChange,
   };
 

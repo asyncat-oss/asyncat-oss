@@ -33,7 +33,11 @@ const cleanTaskAgentTitle = (task, run) => {
 const ChatsPage = () => {
   const navigate = useNavigate();
   const { currentWorkspace } = useWorkspace();
-  const { handleNewConversation } = useCommandCenter();
+  const {
+    handleNewConversation,
+    activeConversationIds = new Set(),
+    chatRunPreviews = [],
+  } = useCommandCenter();
 
   const handleNewChat = useCallback(async () => {
     if (handleNewConversation) await handleNewConversation();
@@ -191,6 +195,20 @@ const ChatsPage = () => {
       (run.profile?.name || '').toLowerCase().includes(q)
     );
 
+  const activeChatRuns = chatRunPreviews
+    .filter(run => run.running)
+    .filter(run => !run.conversationId || !filteredConversations.some(c => c.id === run.conversationId))
+    .filter(run => !q || (run.title || '').toLowerCase().includes(q) || (run.preview || '').toLowerCase().includes(q))
+    .map(run => ({
+      id: run.conversationId || run.key,
+      type: 'active-run',
+      runKey: run.key,
+      conversationId: run.conversationId,
+      title: run.title || 'New conversation',
+      preview: run.preview || 'Generating',
+      updated_at: run.updatedAtMs ? new Date(run.updatedAtMs).toISOString() : new Date().toISOString(),
+    }));
+
   const folderMap = {};
   folders.forEach(f => { folderMap[f.id] = []; });
   const unfiledConversations = [];
@@ -244,16 +262,18 @@ const ChatsPage = () => {
 
   const renderChatItem = (chat) => {
     const isTaskAgent = chat.type === 'task-agent';
+    const isActiveRun = chat.type === 'active-run';
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
     const lastAssistant = [...messages].reverse().find(msg => msg.type === 'assistant');
-    const toolsUsed = isTaskAgent || messages.some(msg => msg.toolsEnabled === true || msg.agentSessionId);
+    const running = isActiveRun || activeConversationIds.has(chat.id) || activeConversationIds.has(String(chat.id));
+    const toolsUsed = isTaskAgent || running || messages.some(msg => msg.toolsEnabled === true || msg.agentSessionId);
     const updatedAt = chat.updated_at || chat.updatedAt;
     const itemTitle = chat.title || (isTaskAgent ? 'Task agent run' : 'Untitled conversation');
     const selectionItem = { id: chat.id, type: chat.type, title: itemTitle };
     const isSelected = Boolean(selectedItems[getSelectionKey(selectionItem)]);
     const hasSelection = selectedCount > 0;
-    const canSelect = !isTaskAgent;
-    const canOpen = !isTaskAgent || chat.sessionId;
+    const canSelect = !isTaskAgent && !isActiveRun;
+    const canOpen = isActiveRun || !isTaskAgent || chat.sessionId;
 
     return (
       <div
@@ -263,7 +283,9 @@ const ChatsPage = () => {
           if (hasSelection && canSelect) {
             toggleSelection(e, selectionItem);
           } else {
-            navigate(isTaskAgent ? `/agents/${chat.sessionId}` : `/conversations/${chat.id}`);
+            navigate(isActiveRun
+              ? (chat.conversationId ? `/conversations/${chat.conversationId}` : '/home')
+              : isTaskAgent ? `/agents/${chat.sessionId}` : `/conversations/${chat.id}`);
           }
         }}
         className={`flex items-center gap-3 p-4 bg-white dark:bg-gray-800 midnight:bg-gray-800 border rounded-lg transition-colors group ${
@@ -287,11 +309,17 @@ const ChatsPage = () => {
           {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
         </button>
         )}
-        <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 flex items-center justify-center flex-shrink-0">
+        <div className="relative w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 flex items-center justify-center flex-shrink-0">
           {isTaskAgent
             ? <Bot className="w-5 h-5 text-gray-400 dark:text-gray-500" />
             : <MessageSquare className="w-5 h-5 text-gray-400 dark:text-gray-500" />
           }
+          {running && (
+            <span
+              className="absolute h-2 w-2 translate-x-4 -translate-y-4 rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.18)] animate-pulse"
+              title="Generating"
+            />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 truncate">
@@ -305,7 +333,7 @@ const ChatsPage = () => {
                 <span>•</span>
                 <span className="inline-flex items-center gap-0.5 text-gray-500 dark:text-gray-400 flex-shrink-0">
                   {isTaskAgent ? <Bot className="w-3 h-3" /> : <Wrench className="w-3 h-3" />}
-                  {isTaskAgent ? (chat.profile?.name || 'Agent') : 'Tools'}
+                  {running ? 'Generating' : isTaskAgent ? (chat.profile?.name || 'Agent') : 'Tools'}
                 </span>
               </>
             )}
@@ -325,7 +353,7 @@ const ChatsPage = () => {
             )}
           </div>
         </div>
-        {!isTaskAgent && (
+        {!isTaskAgent && !isActiveRun && (
         <div className={`flex items-center gap-0.5 transition-opacity flex-shrink-0 ${hasSelection ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'}`}>
           <button
             onClick={e => openActionModal(e, { id: chat.id, type: chat.type, title: itemTitle })}
@@ -427,13 +455,19 @@ const ChatsPage = () => {
             </div>
           ) : error ? (
             <div className="text-red-500 text-center py-10 font-medium">{error}</div>
-          ) : filteredConversations.length === 0 && filteredTaskAgentRuns.length === 0 ? (
+          ) : filteredConversations.length === 0 && filteredTaskAgentRuns.length === 0 && activeChatRuns.length === 0 ? (
             <div className="text-center py-20">
               <MessageSquare className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4 opacity-50" />
               <p className="text-gray-500 dark:text-gray-400 font-medium">No conversations found</p>
             </div>
           ) : (
             <div className="space-y-4 text-left">
+              {activeChatRuns.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300 mb-3 px-1">Active</h3>
+                  {renderChatList(activeChatRuns)}
+                </div>
+              )}
               {folders.map(folder => {
                 const folderChats = folderMap[folder.id];
                 if (!folderChats || folderChats.length === 0) return null;

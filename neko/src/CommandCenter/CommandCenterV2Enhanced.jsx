@@ -386,6 +386,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const commandCenterContext = useCommandCenter();
   const navigate = useNavigate();
   const { userName } = useUser();
+  const fallbackAgentAbortControllersRef = useRef(new Map());
+  const fallbackRunStartedAtRef = useRef(null);
+  const fallbackCurrentConversationIdRef = useRef(null);
 
   const {
     messages = [],
@@ -409,6 +412,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     generateAndSetTitle,
     setCurrentConversationId,
     onProjectsChange,
+    chatRuns = {},
+    setChatRuns = () => {},
+    updateChatRun = () => {},
+    activeConversationIds = new Set(),
+    hasActiveRuns = false,
+    agentAbortControllersRef = fallbackAgentAbortControllersRef,
+    runStartedAtRef = fallbackRunStartedAtRef,
+    currentConversationIdRef = fallbackCurrentConversationIdRef,
   } = commandCenterContext || {};
 
   const messagesEndRef = useRef(null);
@@ -430,7 +441,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
   });
   const [showSourcesMediaSidebar, setShowSourcesMediaSidebar] = useState(false);
-  const [chatRuns, setChatRuns] = useState({});
   const [agentAutoApprove, setAgentAutoApprove] = useState(() => {
     try {
       return localStorage.getItem('asyncat_agent_auto_approve') === 'true';
@@ -456,14 +466,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [contextError, setContextError] = useState(false);
   const [isCompactingContext, setIsCompactingContext] = useState(false);
   const autoCompactRef = useRef(null);
-  const agentAbortControllersRef = useRef(new Map());
-  const chatRunsRef = useRef(chatRuns);
-  const runStartedAtRef = useRef(null);
-
-  useEffect(() => {
-    chatRunsRef.current = chatRuns;
-  }, [chatRuns]);
-
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
   const agentRunning = Boolean(currentRun.running);
@@ -475,32 +477,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const agentTaskRunStatus = getTaskRunDisplayStatus(agentTaskRun);
   const agentConversationHistory = currentRun.conversationHistory || [];
   const agentStreamingText = currentRun.streamingText || '';
-  const activeConversationIds = useMemo(
-    () => new Set(
-      Object.entries(chatRuns)
-        .filter(([key, run]) => key !== '__draft__' && run?.running)
-        .map(([key]) => key)
-    ),
-    [chatRuns],
-  );
-  const hasActiveRuns = useMemo(
-    () => Object.values(chatRuns).some(run => run?.running),
-    [chatRuns],
-  );
-  const currentConversationIdRef = useRef(currentConversationId);
-
-  useEffect(() => {
-    currentConversationIdRef.current = currentConversationId;
-  }, [currentConversationId]);
-
-  const updateChatRun = useCallback((runKey, updater) => {
-    setChatRuns(prev => {
-      const existing = prev[runKey] || {};
-      const next = typeof updater === 'function' ? updater(existing) : { ...existing, ...updater };
-      return { ...prev, [runKey]: next };
-    });
-  }, []);
-
   const setCurrentChatRun = useCallback((updater) => {
     updateChatRun(currentRunKey, updater);
   }, [currentRunKey, updateChatRun]);

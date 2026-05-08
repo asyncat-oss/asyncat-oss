@@ -172,7 +172,17 @@ const AppLayout = ({ session, onSignOut }) => {
   };
 
   // Use CommandCenter context to get new chat functionality
-  const { handleNewConversation } = useCommandCenter();
+  const {
+    handleNewConversation,
+    currentConversationId,
+    chatRunPreviews = [],
+  } = useCommandCenter();
+  const latestChatRun = chatRunPreviews[0];
+  const commandCenterTarget = currentConversationId
+    ? `/conversations/${currentConversationId}`
+    : latestChatRun?.conversationId
+      ? `/conversations/${latestChatRun.conversationId}`
+      : '/home';
 
   // Use the 401 error handler
   const { trigger401Error } = useUnauthorizedError();
@@ -226,13 +236,9 @@ const AppLayout = ({ session, onSignOut }) => {
       return;
     }
 
-    // Handle home navigation - ALWAYS create new conversation
+    // Handle home navigation - return to the current/recent Command Center session
     if (page === 'home') {
-      navigate('/home');
-      // Always create a new conversation when navigating to home
-      if (handleNewConversation) {
-        await handleNewConversation();
-      }
+      navigate(commandCenterTarget);
       return;
     }
 
@@ -244,7 +250,7 @@ const AppLayout = ({ session, onSignOut }) => {
 
     // Standard navigation
     navigate(`/${page}`);
-  }, [navigate, handleNewConversation, selectedProject]);
+  }, [navigate, commandCenterTarget, selectedProject]);
 
   // Helper function to open settings with a specific tab
   const handleOpenSettings = (tab = 'general') => {
