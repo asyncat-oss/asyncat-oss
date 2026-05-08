@@ -10,7 +10,7 @@ const soraFontBase = "font-sora";
 const DEFAULT_EMAIL = 'admin@local';
 const DEFAULT_PASSWORD = '';
 
-const SignIn = ({ initialEmail = DEFAULT_EMAIL }) => {
+const SignIn = ({ initialEmail = DEFAULT_EMAIL, backendOnline = true }) => {
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
@@ -38,8 +38,8 @@ const SignIn = ({ initialEmail = DEFAULT_EMAIL }) => {
         errorMessage = 'Invalid email or password.';
       } else if (err.message?.includes('Too many requests')) {
         errorMessage = 'Too many attempts. Try again in a few minutes.';
-      } else if (err.message?.includes('fetch') || err.message?.includes('network')) {
-        errorMessage = 'Network error. Check your connection.';
+      } else if (!backendOnline || err.message?.includes('fetch') || err.message?.includes('network') || err.message?.includes('Failed to fetch')) {
+        errorMessage = 'Backend offline. Start the local Asyncat services, then try again.';
       }
       setError(errorMessage);
     } finally {
@@ -62,7 +62,7 @@ const SignIn = ({ initialEmail = DEFAULT_EMAIL }) => {
         onChange={(e) => setEmail(e.target.value)}
         placeholder="user@local"
         required
-        disabled={isLoading}
+        disabled={isLoading || !backendOnline}
       />
 
       <FormInput
@@ -72,12 +72,12 @@ const SignIn = ({ initialEmail = DEFAULT_EMAIL }) => {
         onChange={(e) => setPassword(e.target.value)}
         placeholder="••••••••"
         required
-        disabled={isLoading}
+        disabled={isLoading || !backendOnline}
       />
 
       <button
         type="submit"
-        disabled={isLoading}
+        disabled={isLoading || !backendOnline}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all duration-200
           bg-[#e8e8ec] hover:bg-[#d0d0d8] dark:bg-[#e8e8ec] dark:hover:bg-[#d0d0d8] midnight:bg-[#dcdce4] midnight:hover:bg-[#c8c8d4]
           text-[#0d0d0f] dark:text-[#0d0d0f] midnight:text-[#08080a]
@@ -91,6 +91,8 @@ const SignIn = ({ initialEmail = DEFAULT_EMAIL }) => {
             <div className="w-3.5 h-3.5 rounded-full border-2 border-[#0d0d0f]/30 border-t-[#0d0d0f] dark:border-[#0d0d0f]/30 dark:border-t-[#0d0d0f] midnight:border-[#08080a]/30 midnight:border-t-[#08080a] animate-spin" />
             <span>Authenticating...</span>
           </div>
+        ) : !backendOnline ? (
+          <span>Backend offline</span>
         ) : (
           <div className="flex items-center gap-2">
             <span>Unlock</span>

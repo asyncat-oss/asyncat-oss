@@ -5,6 +5,7 @@ import SignIn from './SignIn';
 import SignUp from './SignUp';
 import { initializeTheme, setupThemeListener } from './utils';
 import authService from '../services/authService';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 const soraFontBase = "font-sora";
 
@@ -29,6 +30,7 @@ const tips = [
 const AuthContainer = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const network = useNetworkStatus({ pollMs: 6000 });
   const [localEmail, setLocalEmail] = useState('admin@local');
   const [tip] = useState(() => {
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
@@ -90,10 +92,15 @@ const AuthContainer = () => {
 
           {/* Auth Form */}
           <div className="bg-white dark:bg-[#131316] midnight:bg-[#0e0e12] border border-gray-200 dark:border-[#222228] midnight:border-[#1a1a20] rounded-2xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.5)] midnight:shadow-[0_8px_40px_rgba(0,0,0,0.7)]">
+            {!network.backendOnline && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200 midnight:border-amber-900/60 midnight:bg-amber-950/30 midnight:text-amber-200">
+                Backend offline. The cached frontend is loaded, but local Asyncat services are not reachable.
+              </div>
+            )}
             {currentPage === 'signup' ? (
               <SignUp navigateToSignIn={() => navigate('/auth')} />
             ) : (
-              <SignIn initialEmail={localEmail} />
+              <SignIn initialEmail={localEmail} backendOnline={network.backendOnline} />
             )}
           </div>
 
