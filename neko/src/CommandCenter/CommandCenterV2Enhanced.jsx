@@ -382,6 +382,255 @@ function buildConversationSourceCatalog(messages = [], events = []) {
   };
 }
 
+const escapeExportHtml = (value = '') => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const stringifyExportValue = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const sanitizeExportFilename = (title = 'conversation') => {
+  const cleaned = String(title || 'conversation')
+    .trim()
+    .replace(/[^a-z0-9]+/gi, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+  return cleaned || 'conversation';
+};
+
+const formatExportTime = (timestamp) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const triggerExportDownload = (content, mimeType, filename) => {
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const getEventExportTimestamp = (event) => {
+  if (event?.data?.timestamp) return event.data.timestamp;
+  if (event?.arrivedAt) return event.arrivedAt;
+  if (event?.completedAt) return event.completedAt;
+  return null;
+};
+
+const eventToExportEntry = (event) => {
+  const type = event?.type;
+  const data = event?.data || {};
+
+  if (type === 'user_goal') {
+    return {
+      role: 'You',
+      kind: 'message',
+      timestamp: getEventExportTimestamp(event),
+      content: data.goal || '',
+    };
+  }
+
+  if (type === 'answer') {
+    return {
+      role: 'The Cat',
+      kind: 'message',
+      timestamp: getEventExportTimestamp(event),
+      content: data.answer || '',
+    };
+  }
+
+  if (type === 'thinking') {
+    return {
+      role: 'Agent',
+      kind: 'thinking',
+      timestamp: getEventExportTimestamp(event),
+      content: data.thought || '',
+    };
+  }
+
+  if (type === 'tool_start') {
+    const parts = [`Tool: ${data.tool || 'tool'}`];
+    const args = stringifyExportValue(data.args);
+    const result = stringifyExportValue(event.result);
+    if (args) parts.push(`Args:\n${args}`);
+    if (result) parts.push(`Result:\n${result}`);
+    return {
+      role: 'Agent',
+      kind: 'tool',
+      timestamp: getEventExportTimestamp(event),
+      content: parts.join('\n\n'),
+    };
+  }
+
+  if (type === 'permission_request') {
+    return {
+      role: 'Agent',
+      kind: 'permission',
+      timestamp: getEventExportTimestamp(event),
+      content: [
+        `Permission requested for ${data.tool || 'tool'}`,
+        data.permission ? `Level: ${data.permission}` : '',
+        data.resolved ? `Decision: ${data.decision || 'resolved'}` : 'Decision: pending',
+        stringifyExportValue(data.args),
+      ].filter(Boolean).join('\n'),
+    };
+  }
+
+  if (type === 'ask_user') {
+    return {
+      role: 'Agent',
+      kind: 'question',
+      timestamp: getEventExportTimestamp(event),
+      content: data.question || '',
+    };
+  }
+
+  if (type === 'plan_update') {
+    const plan = Array.isArray(data.plan) ? data.plan : [];
+    return {
+      role: 'Agent',
+      kind: 'plan',
+      timestamp: getEventExportTimestamp(event),
+      content: plan.map(item => `- [${item.status || 'pending'}] ${item.step || item.title || ''}`).join('\n'),
+    };
+  }
+
+  if (type === 'agent_delegate_start' || type === 'agent_delegate_result') {
+    return {
+      role: 'Agent',
+      kind: 'delegate',
+      timestamp: getEventExportTimestamp(event),
+      content: stringifyExportValue(data),
+    };
+  }
+
+  if (type === 'error') {
+    return {
+      role: 'Agent',
+      kind: 'error',
+      timestamp: getEventExportTimestamp(event),
+      content: data.message || data.error || 'Agent error',
+    };
+  }
+
+  if (type === 'status' || type === 'skills_loaded' || type === 'run_start') {
+    return {
+      role: 'Agent',
+      kind: type,
+      timestamp: getEventExportTimestamp(event),
+      content: data.message || stringifyExportValue(data),
+    };
+  }
+
+  return null;
+};
+
+const buildConversationExportEntries = (messages = [], events = [], streamingText = '') => {
+  const entries = [];
+
+  if (messages.length > 0) {
+    messages.forEach(msg => {
+      entries.push({
+        role: msg.type === 'user' || msg.role === 'user' ? 'You' : 'The Cat',
+        kind: 'message',
+        timestamp: msg.timestamp,
+        content: msg.content || '',
+        projectIds: msg.projectIds || [],
+      });
+    });
+
+    events
+      .filter(event => event?.type && !['user_goal', 'answer', 'delta', 'done', 'session_start'].includes(event.type))
+      .map(eventToExportEntry)
+      .filter(Boolean)
+      .forEach(entry => entries.push(entry));
+  } else {
+    events
+      .map(eventToExportEntry)
+      .filter(Boolean)
+      .forEach(entry => entries.push(entry));
+  }
+
+  if (streamingText?.trim()) {
+    entries.push({
+      role: 'The Cat',
+      kind: 'draft',
+      timestamp: new Date().toISOString(),
+      content: streamingText,
+    });
+  }
+
+  return entries.filter(entry => String(entry.content || '').trim());
+};
+
+const buildExportHtmlDocument = (title, date, entries) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeExportHtml(title)}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 860px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.6; }
+    h1 { color: #111; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+    .meta { color: #666; font-size: 14px; margin-bottom: 30px; }
+    .entry { margin: 24px 0; padding: 18px; border-radius: 8px; page-break-inside: avoid; }
+    .you { background: #f0f0f0; }
+    .the-cat { background: #f9f9f9; border-left: 3px solid #4a9eff; }
+    .agent { background: #fffaf0; border-left: 3px solid #f59e0b; }
+    .error { background: #fff1f2; border-left: 3px solid #e11d48; }
+    .speaker { font-weight: 600; margin-bottom: 10px; color: #111; }
+    .kind { color: #777; font-size: 12px; font-weight: 500; margin-left: 6px; text-transform: uppercase; }
+    .time { color: #999; font-size: 13px; margin-left: 8px; }
+    .content { white-space: pre-wrap; overflow-wrap: anywhere; }
+    @media print { body { margin: 20px auto; } .entry { border: 1px solid #eee; } }
+  </style>
+</head>
+<body>
+  <h1>${escapeExportHtml(title)}</h1>
+  <div class="meta">Exported from Asyncat - ${escapeExportHtml(date)}</div>
+  ${entries.map(entry => {
+    const roleClass = entry.kind === 'error'
+      ? 'error'
+      : entry.role === 'You'
+        ? 'you'
+        : entry.role === 'The Cat'
+          ? 'the-cat'
+          : 'agent';
+    const time = formatExportTime(entry.timestamp);
+    return `
+      <section class="entry ${roleClass}">
+        <div class="speaker">${escapeExportHtml(entry.role)}<span class="kind">${escapeExportHtml(entry.kind)}</span>${time ? `<span class="time">${escapeExportHtml(time)}</span>` : ''}</div>
+        <div class="content">${escapeExportHtml(entry.content || '')}</div>
+      </section>
+    `;
+  }).join('')}
+</body>
+</html>`;
+
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
   const navigate = useNavigate();
@@ -425,11 +674,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const conversationMenuRef = useRef(null);
+  const exportMenuRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showConversationMenu, setShowConversationMenu] = useState(false);
+  const [messageInputResetKey, setMessageInputResetKey] = useState(0);
   const [recentConversations, setRecentConversations] = useState([]);
   const [recentConversationsLoading, setRecentConversationsLoading] = useState(false);
   const [recentConversationsError, setRecentConversationsError] = useState(null);
@@ -571,8 +822,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   useEffect(() => {
     if (!showExportMenu) return;
     const handler = (e) => {
-      const btn = e.target.closest("button");
-      if (!btn || btn.title !== "Export conversation") {
+      if (!exportMenuRef.current?.contains(e.target)) {
         setShowExportMenu(false);
       }
     };
@@ -613,7 +863,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const handleStartNewConversation = useCallback(async () => {
     setShowConversationMenu(false);
-    setDraftFileAttachments([]);
+    setMessageInputResetKey(prev => prev + 1);
     navigate('/home');
     await handleNewConversation();
   }, [handleNewConversation, navigate]);
@@ -621,7 +871,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const handleOpenConversation = useCallback((conversationId) => {
     if (!conversationId) return;
     setShowConversationMenu(false);
-    setDraftFileAttachments([]);
+    setMessageInputResetKey(prev => prev + 1);
     navigate(`/conversations/${conversationId}`);
   }, [navigate]);
 
@@ -1344,9 +1594,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [persistedAgentEvents]);
 
   // Export handlers
+  const exportEntries = useMemo(
+    () => buildConversationExportEntries(messages, persistedAgentEvents, agentStreamingText),
+    [messages, persistedAgentEvents, agentStreamingText],
+  );
+
+  const exportTitle = conversationTitle || agentCurrentGoal || 'Conversation';
+  const exportFilename = sanitizeExportFilename(exportTitle);
+
   const handleExportMarkdown = useCallback(() => {
-    if (!messages.length) return;
-    const title = conversationTitle || "Conversation";
+    if (!exportEntries.length) return;
     const date = new Date().toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
@@ -1354,133 +1611,82 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     });
 
     const lines = [
-      `# ${title}`,
-      `*Exported from Asyncat — ${date}*`,
+      `# ${exportTitle}`,
+      `*Exported from Asyncat - ${date}*`,
       "",
       "---",
       "",
     ];
 
-    messages.forEach((msg) => {
-      const speaker = msg.type === "user" ? "**You**" : "**The Cat**";
-      const time = msg.timestamp
-        ? new Date(msg.timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "";
-      lines.push(`### ${speaker}${time ? ` · ${time}` : ""}`);
+    exportEntries.forEach((entry) => {
+      const time = formatExportTime(entry.timestamp);
+      const kind = entry.kind && entry.kind !== 'message' ? ` (${entry.kind})` : '';
+      lines.push(`### **${entry.role}**${kind}${time ? ` - ${time}` : ""}`);
       lines.push("");
-      lines.push(msg.content || "");
+      lines.push(entry.content || "");
       lines.push("");
       lines.push("---");
       lines.push("");
     });
 
-    const markdown = lines.join("\n");
-    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [messages, conversationTitle]);
+    triggerExportDownload(lines.join("\n"), "text/markdown", `${exportFilename}.md`);
+  }, [exportEntries, exportFilename, exportTitle]);
 
   const handleExportHTML = useCallback(() => {
-    if (!messages.length) return;
-    const title = conversationTitle || "Conversation";
+    if (!exportEntries.length) return;
     const date = new Date().toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
     });
 
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.6; }
-    h1 { color: #111; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-    .meta { color: #666; font-size: 14px; margin-bottom: 30px; }
-    .message { margin: 30px 0; padding: 20px; border-radius: 8px; }
-    .user { background: #f0f0f0; }
-    .assistant { background: #f9f9f9; border-left: 3px solid #4a9eff; }
-    .speaker { font-weight: 600; margin-bottom: 10px; color: #111; }
-    .time { color: #999; font-size: 13px; margin-left: 8px; }
-    .content { white-space: pre-wrap; }
-    pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
-  </style>
-</head>
-<body>
-  <h1>${title}</h1>
-  <div class="meta">Exported from Asyncat · ${date}</div>
-  ${messages
-    .map((msg) => {
-      const speaker = msg.type === "user" ? "You" : "The Cat";
-      const time = msg.timestamp
-        ? new Date(msg.timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "";
-      return `
-      <div class="message ${msg.type}">
-        <div class="speaker">${speaker}${time ? `<span class="time">${time}</span>` : ""}</div>
-        <div class="content">${msg.content || ""}</div>
-      </div>
-    `;
-    })
-    .join("")}
-</body>
-</html>`;
-
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [messages, conversationTitle]);
+    const html = buildExportHtmlDocument(exportTitle, date, exportEntries);
+    triggerExportDownload(html, "text/html", `${exportFilename}.html`);
+  }, [exportEntries, exportFilename, exportTitle]);
 
   const handleExportJSON = useCallback(() => {
-    if (!messages.length) return;
-    const title = conversationTitle || "Conversation";
+    if (!exportEntries.length) return;
     const exportData = {
-      title,
+      title: exportTitle,
       exportDate: new Date().toISOString(),
-      messages: messages.map((msg) => ({
-        type: msg.type,
+      entries: exportEntries,
+      messages: messages.map(msg => ({
+        type: msg.type || msg.role,
         content: msg.content,
         timestamp: msg.timestamp,
         projectIds: msg.projectIds || [],
       })),
+      agentEvents: persistedAgentEvents,
     };
 
     const json = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [messages, conversationTitle]);
+    triggerExportDownload(json, "application/json", `${exportFilename}.json`);
+  }, [exportEntries, exportFilename, exportTitle, messages, persistedAgentEvents]);
 
   const handleExportPDF = useCallback(() => {
-    if (!messages.length) return;
-    window.print();
-  }, [messages]);
+    if (!exportEntries.length) return;
+    const date = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const html = buildExportHtmlDocument(exportTitle, date, exportEntries);
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onafterprint = () => {
+      printWindow.close();
+    };
+    printWindow.setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  }, [exportEntries, exportTitle]);
 
   const TopBar = isGhostMode ? (
     <div className="flex items-center justify-end px-4 py-2">
@@ -1551,6 +1757,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             )}
 
             <MessageInputV2
+              key={`welcome-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
               onSubmit={handleAgentRun}
               disabled={isProcessing || agentRunning}
               autoFocus={true}
@@ -1670,7 +1877,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     )}
 
                     {hasConversationContent && (
-                      <div className="relative">
+                      <div ref={exportMenuRef} className="relative">
                         <button
                           onClick={() => setShowExportMenu((v) => !v)}
                           className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 rounded transition-colors"
@@ -1880,6 +2087,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 </div>
               )}
               <MessageInputV2
+                key={`conversation-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
                 onSubmit={handleAgentRun}
                 disabled={isProcessing || agentRunning}
                 autoFocus={!isProcessing && !agentRunning}
