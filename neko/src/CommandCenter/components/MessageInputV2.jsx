@@ -779,32 +779,34 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
-                <div ref={toolbarRef} className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+              <div className="mt-2 flex items-center gap-0.5">
+                <div ref={toolbarRef} className="flex items-center gap-0.5 min-w-0 flex-1">
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
                       disabled={disabled || activeBrain.loading || isSwitchingModel}
                       title={`${activeBrain.label}${activeBrain.supportsTools ? " · native tools enabled" : ""}`}
-                      className={`inline-flex items-center gap-1.5 min-w-0 max-w-full sm:max-w-[16rem] px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         activeBrain.isLoadingModel
-                          ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60"
+                          ? "text-amber-500 dark:text-amber-400"
                           : activeBrain.isReady
-                            ? "bg-emerald-50/80 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60 hover:bg-emerald-50"
-                            : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                            ? activeBrain.isLocal
+                              ? "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                              : "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                            : "text-gray-400 dark:text-gray-500"
                       } disabled:cursor-not-allowed`}
                     >
                       {activeBrain.isLoadingModel || activeBrain.loading || isSwitchingModel ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        <BrainIcon className="w-3.5 h-3.5 shrink-0" />
+                        <BrainIcon className="w-3.5 h-3.5" />
                       )}
-                      <span className="truncate">{modelLabel}</span>
-                      <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                      <span className="truncate max-w-[8rem] sm:max-w-[10rem]">{modelLabel}</span>
+                      <ChevronDown className="w-3 h-3 opacity-40" />
                     </button>
                     {openMenu === "model" && (
-                      <div className="absolute left-0 top-full z-30 mt-1.5 w-72 max-w-[calc(100vw-3rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+                      <div className="absolute left-0 bottom-full z-30 mb-1.5 w-72 max-w-[calc(100vw-3rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
                         <div className="max-h-60 overflow-y-auto p-1">
                           {modelOptions.map((option) => (
                             <button
@@ -841,14 +843,14 @@ export const MessageInputV2 = ({
                       onClick={onToggleTools}
                       disabled={disabled}
                       title={toolsEnabled ? "Tools enabled — click to disable" : "Tools disabled — click to enable"}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         toolsEnabled
-                          ? "bg-blue-50 dark:bg-blue-950/30 midnight:bg-blue-950/30 text-blue-700 dark:text-blue-300 midnight:text-blue-300 border border-blue-300 dark:border-blue-700"
-                          : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-500 dark:text-gray-400 midnight:text-gray-400 border border-transparent hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
+                          ? "text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                       }`}
                     >
                       <Wrench className="w-3.5 h-3.5" />
-                      {toolsEnabled ? 'Tools ON' : 'Tools OFF'}
+                      <span className="hidden sm:inline">{toolsEnabled ? 'Tools' : 'No tools'}</span>
                     </button>
                   )}
 
@@ -858,52 +860,49 @@ export const MessageInputV2 = ({
                       onClick={onToggleAutoApprove}
                       disabled={disabled}
                       title={autoApprove ? "Auto-approve enabled — click to ask before risky tools" : "Ask before risky tools — click to auto-approve"}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         autoApprove
-                          ? "bg-amber-50 dark:bg-amber-950/30 midnight:bg-amber-950/30 text-amber-700 dark:text-amber-300 midnight:text-amber-300 border border-amber-300 dark:border-amber-700"
-                          : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-500 dark:text-gray-400 midnight:text-gray-400 border border-transparent hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-600"
+                          ? "text-amber-500 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
+                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                       }`}
                     >
                       <Zap className="w-3.5 h-3.5" />
-                      {autoApprove ? 'Auto ON' : 'Ask'}
+                      <span className="hidden sm:inline">{autoApprove ? 'Auto' : 'Ask'}</span>
                     </button>
                   )}
-
                 </div>
 
-                <div className="shrink-0">
-                  {isRunning ? (
-                    <div className="inline-flex items-center gap-2">
-                      {runElapsed > 0 && (
-                        <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
-                          {formatElapsed(runElapsed)}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={onStop}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-600 transition-all duration-200 hover:bg-red-100 active:scale-95 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50 midnight:bg-red-950/30 midnight:text-red-300"
-                        title="Stop generating"
-                      >
-                        <Square className="h-3.5 w-3.5 fill-current" />
-                        Stop
-                      </button>
-                    </div>
-                  ) : (
+                {isRunning ? (
+                  <div className="inline-flex items-center gap-1.5">
+                    {runElapsed > 0 && (
+                      <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
+                        {formatElapsed(runElapsed)}
+                      </span>
+                    )}
                     <button
-                      type="submit"
-                      disabled={!canSubmit}
-                      className={`px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
-                        canSubmit
-                          ? "bg-black hover:bg-gray-900 active:scale-95 text-white dark:bg-gray-800 dark:hover:bg-gray-700 midnight:bg-gray-900 midnight:hover:bg-gray-800 shadow-sm hover:shadow-md"
-                          : "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-400 dark:text-gray-500 midnight:text-gray-500 cursor-not-allowed"
-                      }`}
-                      title={canSubmit ? "Send (Enter)" : "Type a message"}
+                      type="button"
+                      onClick={onStop}
+                      className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-all duration-200"
+                      title="Stop generating"
                     >
-                      <Send className="w-4 h-4" />
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                      <span className="hidden sm:inline">Stop</span>
                     </button>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className={`inline-flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${
+                      canSubmit
+                        ? "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 active:scale-95"
+                        : "text-gray-300 dark:text-gray-600 midnight:text-gray-600 cursor-not-allowed"
+                    }`}
+                    title={canSubmit ? "Send (Enter)" : "Type a message"}
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           </form>
