@@ -210,14 +210,23 @@ const InlineLink = ({ href, label, variant = 'inline' }) => {
     );
   }
 
+  const domain = getUrlDomain(href);
+
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-blue-600 dark:text-blue-400 midnight:text-blue-300 underline underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1 mx-0.5 px-1.5 py-[1px] rounded border border-blue-200/60 bg-blue-50/50 text-blue-700 hover:bg-blue-100/70 hover:border-blue-300 dark:border-blue-800/40 dark:bg-blue-900/10 dark:text-blue-300 dark:hover:bg-blue-900/30 midnight:border-blue-800/40 midnight:bg-blue-900/10 midnight:text-blue-300 midnight:hover:bg-blue-900/30 transition-colors cursor-pointer font-medium text-[0.95em]"
       >
-        {label}
+        <img
+          src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
+          alt=""
+          className="h-3.5 w-3.5 flex-shrink-0 rounded-sm object-contain"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+        <span className="truncate">{label}</span>
+        <ExternalLink className="w-3 h-3 opacity-60" />
       </button>
       {open && <InlineLinkModal href={href} label={label} onClose={() => setOpen(false)} />}
     </>
