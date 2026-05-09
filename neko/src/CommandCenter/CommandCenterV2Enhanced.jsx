@@ -686,9 +686,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [recentConversationsError, setRecentConversationsError] = useState(null);
   const [showActivitySidebar, setShowActivitySidebar] = useState(() => {
     try {
-      return localStorage.getItem('asyncat_show_command_side_panel') !== 'false';
+      return localStorage.getItem('asyncat_show_command_side_panel') === 'true';
     } catch {
-      return true;
+      return false;
     }
   });
   const [sidePanelTab, setSidePanelTab] = useState('steps');

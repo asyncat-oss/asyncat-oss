@@ -419,24 +419,19 @@ function CompactPermissionEvent({ data, onDecision }) {
           <pre className={`mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-white/70 bg-white/75 p-2.5 font-mono text-xs leading-relaxed dark:border-white/10 dark:bg-gray-950/30 ${dangerous ? 'text-rose-800 dark:text-rose-100' : 'text-amber-900 dark:text-amber-100'}`}>
             {intent.value}
           </pre>
-          {(data?.args || data?.diff || data?.workingDir) && (
+          {(data?.diff || data?.workingDir) && (
             <button
               type="button"
               onClick={() => setShowDetails(v => !v)}
               className={`mt-1.5 inline-flex items-center gap-1 text-[10px] hover:underline ${dangerous ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}
             >
               {showDetails ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              Technical details
+              {data?.diff ? 'View changes' : 'Technical details'}
             </button>
           )}
           {showDetails && (
             <div className="mt-1 space-y-1">
-              {data?.workingDir && <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">{data.workingDir}</p>}
-              {data?.args && (
-                <pre className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded bg-white/60 p-1.5 font-mono text-[10px] text-gray-500 dark:bg-gray-950/30 dark:text-gray-500">
-                  {JSON.stringify(data.args, null, 2)}
-                </pre>
-              )}
+              {data?.workingDir && <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">Working directory: {data.workingDir}</p>}
               {data?.diff && (
                 <pre className="max-h-40 overflow-y-auto whitespace-pre rounded bg-gray-950 p-2 font-mono text-[10px] leading-relaxed text-gray-200">
                   {data.diff}
