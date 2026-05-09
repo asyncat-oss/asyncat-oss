@@ -2,6 +2,7 @@
 // ─── Shell Execution Tools ───────────────────────────────────────────────────
 // Execute commands, Python scripts, and Node.js code in a sandboxed process.
 // All dangerous — always require user permission.
+// Supports streaming output via tool_progress events.
 
 import { spawn } from 'child_process';
 import fs from 'fs';
@@ -12,14 +13,18 @@ import { PermissionLevel } from './toolRegistry.js';
 const IS_WIN = os.platform() === 'win32';
 const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '30000', 10); // 30s
 const MAX_OUTPUT = 16000; // chars
+const STREAM_INTERVAL_MS = 250; // how often to flush streaming progress
 
-/** Run a command and capture output — cross-platform. */
+/** Run a command and capture output — cross-platform, with optional streaming. */
 function runProcess(cmd, args, options = {}) {
   return new Promise((resolve) => {
     const timeout = options.timeout || DEFAULT_TIMEOUT;
+    const emitEvent = options.emitEvent || null;
     let stdout = '';
     let stderr = '';
     let killed = false;
+    let lastStreamedLength = 0;
+    let streamTimer = null;
 
     const proc = spawn(cmd, args, {
       cwd: options.cwd || process.cwd(),
@@ -28,21 +33,62 @@ function runProcess(cmd, args, options = {}) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    const timer = setTimeout(() => {
+    const killTimer = setTimeout(() => {
       killed = true;
       proc.kill('SIGKILL');
     }, timeout);
+
+    // Stream progress to the frontend in real-time
+    const flushProgress = () => {
+      if (!emitEvent) return;
+      const currentOutput = stdout + (stderr ? `\n[stderr] ${stderr.slice(-500)}` : '');
+      if (currentOutput.length > lastStreamedLength) {
+        const newContent = currentOutput.slice(lastStreamedLength, lastStreamedLength + 2000);
+        lastStreamedLength = Math.min(currentOutput.length, lastStreamedLength + 2000);
+        emitEvent({
+          type: 'tool_progress',
+          data: {
+            tool: options.toolName || 'run_command',
+            chunk: newContent,
+            totalLength: currentOutput.length,
+          },
+        });
+      }
+    };
+
+    // Set up periodic streaming
+    if (emitEvent) {
+      streamTimer = setInterval(flushProgress, STREAM_INTERVAL_MS);
+    }
 
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });
 
     proc.on('error', err => {
-      clearTimeout(timer);
+      clearTimeout(killTimer);
+      if (streamTimer) clearInterval(streamTimer);
       resolve({ success: false, exit_code: -1, stdout: '', stderr: err.message, killed: false, error: err.message });
     });
 
     proc.on('close', code => {
-      clearTimeout(timer);
+      clearTimeout(killTimer);
+      if (streamTimer) clearInterval(streamTimer);
+
+      // Final flush
+      if (emitEvent) {
+        flushProgress();
+        emitEvent({
+          type: 'tool_progress',
+          data: {
+            tool: options.toolName || 'run_command',
+            chunk: null,
+            done: true,
+            exitCode: code,
+            totalLength: stdout.length + stderr.length,
+          },
+        });
+      }
+
       // Truncate output
       if (stdout.length > MAX_OUTPUT) stdout = stdout.slice(0, MAX_OUTPUT) + '\n... [output truncated]';
       if (stderr.length > MAX_OUTPUT) stderr = stderr.slice(0, MAX_OUTPUT) + '\n... [output truncated]';
@@ -80,7 +126,12 @@ export const runCommandTool = {
     }
     const timeout = (args.timeout || 30) * 1000;
     const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
-    return await runProcess(sh, [flag, args.command], { cwd, timeout });
+    return await runProcess(sh, [flag, args.command], {
+      cwd,
+      timeout,
+      toolName: 'run_command',
+      emitEvent: context.emitEvent || null,
+    });
   },
 };
 
@@ -105,7 +156,12 @@ export const runPythonTool = {
       fs.writeFileSync(tmpFile, args.code, 'utf8');
       const timeout = (args.timeout || 30) * 1000;
       const python = IS_WIN ? 'python' : 'python3';
-      const result = await runProcess(python, [tmpFile], { cwd: context.workingDir, timeout });
+      const result = await runProcess(python, [tmpFile], {
+        cwd: context.workingDir,
+        timeout,
+        toolName: 'run_python',
+        emitEvent: context.emitEvent || null,
+      });
       return result;
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -133,7 +189,12 @@ export const runNodeTool = {
     try {
       fs.writeFileSync(tmpFile, args.code, 'utf8');
       const timeout = (args.timeout || 30) * 1000;
-      const result = await runProcess('node', [tmpFile], { cwd: context.workingDir, timeout });
+      const result = await runProcess('node', [tmpFile], {
+        cwd: context.workingDir,
+        timeout,
+        toolName: 'run_node',
+        emitEvent: context.emitEvent || null,
+      });
       return result;
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 import { extractReasoningFromText } from '../reasoningParser.js';
+import ArtifactCard from './ArtifactRenderer';
 
 // ── Tool icon / label map ─────────────────────────────────────────────────────
 const TOOL_META = {
@@ -46,6 +47,13 @@ const TOOL_META = {
   list_notes:        { icon: FileText,    label: 'List notes' },
   create_event:      { icon: Calendar,    label: 'Create event' },
   list_events:       { icon: Calendar,    label: 'List events' },
+  // Artifact tools
+  create_artifact:   { icon: FilePlus,    label: 'Create artifact' },
+  create_markdown:   { icon: FileText,    label: 'Create document' },
+  create_diagram:    { icon: Zap,         label: 'Create diagram' },
+  create_csv:        { icon: List,        label: 'Create CSV' },
+  create_html_page:  { icon: Globe,       label: 'Create HTML page' },
+  list_artifacts:    { icon: FolderOpen,  label: 'List artifacts' },
 };
 
 function getToolMeta(toolName) {
@@ -231,7 +239,7 @@ function ThinkingEvent({ data }) {
   );
 }
 
-function ToolEvent({ data, result, onRetryTool, framed = true }) {
+function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) {
   const [expanded, setExpanded] = useState(false);
   const { icon: Icon, label } = getToolMeta(data?.tool);
   const status = getToolStatus(result, data);
@@ -291,6 +299,16 @@ function ToolEvent({ data, result, onRetryTool, framed = true }) {
             </p>
           )}
 
+          {/* Streaming progress output (shown while running) */}
+          {isPending && progress && (
+            <div className="ml-5 mt-1">
+              <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-gray-900 p-2 font-mono text-[10px] leading-relaxed text-green-400/80 scrollbar-thin">
+                {progress.slice(-2000)}
+                <span className="animate-pulse">▊</span>
+              </pre>
+            </div>
+          )}
+
           {expanded && (
             <div className="ml-5 mt-1 border-l border-gray-100 pl-2 dark:border-gray-800">
               {data?.args && (
@@ -311,6 +329,18 @@ function ToolEvent({ data, result, onRetryTool, framed = true }) {
   );
 
   return framed ? <FeedFrame className="mb-1.5">{content}</FeedFrame> : content;
+}
+
+// ── Artifact tool result inline card ────────────────────────────────────────
+const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page']);
+
+function ArtifactResultCard({ result }) {
+  if (!result?.artifact) return null;
+  return (
+    <div className="mt-1 mb-2">
+      <ArtifactCard artifact={result.artifact} />
+    </div>
+  );
 }
 
 function CompactPermissionEvent({ data, onDecision }) {
@@ -455,16 +485,18 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
   return (
     <FeedFrame className="mb-4">
       <div className="overflow-hidden rounded-lg border border-gray-100 bg-white/70 shadow-sm shadow-gray-100/60 dark:border-gray-800 dark:bg-gray-950/20 dark:shadow-none">
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setExpanded(v => !v)}
-          className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40"
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setExpanded(v => !v)}
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left cursor-pointer select-none transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40"
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
           <Terminal className="h-3.5 w-3.5 text-gray-400" />
           <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Tools</span>
           {summary && <span className="truncate text-[11px] text-gray-400 dark:text-gray-500">{summary}</span>}
-        </button>
+        </div>
         {expanded && (
           <div className="space-y-1 border-t border-gray-100 p-2 dark:border-gray-800">
             {events.map((ev, i) => {
@@ -472,7 +504,14 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
                 return <CompactPermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
               }
               if (ev.type === 'tool_start') {
-                return <ToolEvent key={i} data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} />;
+                const isArtifact = ARTIFACT_TOOLS.has(ev.data?.tool);
+                const hasResult = isArtifact && ev.result?.success && ev.result?.artifact;
+                return (
+                  <div key={i}>
+                    <ToolEvent data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} progress={ev.progress} />
+                    {hasResult && <ArtifactResultCard result={ev.result} />}
+                  </div>
+                );
               }
               return null;
             })}

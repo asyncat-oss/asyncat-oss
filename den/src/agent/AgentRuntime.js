@@ -20,6 +20,8 @@ import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
 import { listMemories, searchMemories } from './tools/memoryTools.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
+import db from '../db/client.js';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -33,7 +35,28 @@ const MUTATING_FILE_TOOLS = new Set([
 ]);
 const MUTATING_SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
 const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify|look at|review)\b/i;
+const MULTI_STEP_GOAL_RE = /\b(and then|after that|also|then|next|finally|step[\s-]?\d|multiple|several|both|all of)\b/i;
 const AUTO_PLAN_IDS = new Set(['auto_plan_inspect', 'auto_plan_understand', 'auto_plan_apply', 'auto_plan_verify']);
+const RETRYABLE_TOOLS = new Set(['run_command', 'run_python', 'run_node', 'browse_website', 'web_search']);
+
+/**
+ * Normalize tool call signature for loop detection.
+ * Trims strings, sorts object keys, canonicalizes paths.
+ */
+function normalizeToolSig(toolName, args) {
+  const normalized = {};
+  for (const [k, v] of Object.entries(args || {})) {
+    if (typeof v === 'string') {
+      normalized[k] = v.trim().replace(/\/+$/, '');
+    } else {
+      normalized[k] = v;
+    }
+  }
+  const sortedKeys = Object.keys(normalized).sort();
+  const sorted = {};
+  for (const k of sortedKeys) sorted[k] = normalized[k];
+  return `${toolName}:${JSON.stringify(sorted)}`;
+}
 
 function stringifyToolArguments(value) {
   if (!value) return '{}';
@@ -249,7 +272,7 @@ export class AgentRuntime {
 
     // Build conversation thread (filter out UI system messages)
     const validHistory = conversationHistory.filter(m => m.role === 'user' || m.role === 'assistant');
-    const historyPrefix = validHistory.slice(-4).map(m => ({ role: m.role, content: m.content }));
+    const historyPrefix = validHistory.slice(-8).map(m => ({ role: m.role, content: m.content }));
     const messages = [
       ...historyPrefix,
       { role: 'user', content: goal },
@@ -277,8 +300,11 @@ export class AgentRuntime {
     let answer = null;
     let formatRepairAttempts = 0;
     const argumentRepairAttempts = new Map();
-    let lastToolSig = null;
-    let consecutiveDupCount = 0;
+    // Smart loop detection: sliding window of recent tool signatures
+    const recentToolSigs = []; // sliding window of last 8 normalized sigs
+    const LOOP_WINDOW_SIZE = 8;
+    const MAX_CONSECUTIVE_DUPS = 3;
+    const MAX_CYCLE_REPEATS = 2;
 
     for (let round = 0; round < this.maxRounds; round++) {
       this._throwIfAborted();
@@ -302,37 +328,54 @@ export class AgentRuntime {
         }
       }
 
-      // Call the LLM
+      // Call the LLM (with retry + exponential backoff)
       let responseText = '';
       let apiToolCalls = null;
       let streamedReasoning = '';
+      const LLM_MAX_RETRIES = 3;
+      const LLM_BASE_DELAY_MS = 1000;
 
-      try {
-        const promptTokens = this._estimateTokens(systemPrompt) + this._estimateTokens(JSON.stringify(messages));
-        const result = await this._callLLM(systemPrompt, messages, {
-          forceToolName: this._shouldPrimePlan(goal, round) ? 'todo_write' : null,
-        });
-        responseText = result.text;
-        apiToolCalls = result.toolCalls;
-        streamedReasoning = result.reasoning || '';
-        const inputTokens = result.usage?.prompt_tokens || promptTokens;
-        const outputTokens = result.usage?.completion_tokens || this._estimateTokens(responseText);
-        this.usage.inputTokens += inputTokens;
-        this.usage.outputTokens += outputTokens;
-        this.usage.totalTokens = this.usage.inputTokens + this.usage.outputTokens;
-        this.onEvent({
-          type: 'usage_update',
-          data: { ...this.usage, round, model: this.model, isLocal: this.isLocal },
-        });
-      } catch (err) {
-        if (this._isAbortError(err)) {
-          this.session.fail('Agent run stopped by user.');
-          throw err;
+      let llmSuccess = false;
+      for (let attempt = 0; attempt <= LLM_MAX_RETRIES; attempt++) {
+        try {
+          this._throwIfAborted();
+          const promptTokens = this._estimateTokens(systemPrompt) + this._estimateTokens(JSON.stringify(messages));
+          const result = await this._callLLM(systemPrompt, messages, {
+            forceToolName: this._shouldPrimePlan(goal, round) ? 'todo_write' : null,
+          });
+          responseText = result.text;
+          apiToolCalls = result.toolCalls;
+          streamedReasoning = result.reasoning || '';
+          const inputTokens = result.usage?.prompt_tokens || promptTokens;
+          const outputTokens = result.usage?.completion_tokens || this._estimateTokens(responseText);
+          this.usage.inputTokens += inputTokens;
+          this.usage.outputTokens += outputTokens;
+          this.usage.totalTokens = this.usage.inputTokens + this.usage.outputTokens;
+          this.onEvent({
+            type: 'usage_update',
+            data: { ...this.usage, round, model: this.model, isLocal: this.isLocal },
+          });
+          llmSuccess = true;
+          break;
+        } catch (err) {
+          if (this._isAbortError(err)) {
+            this.session.fail('Agent run stopped by user.');
+            throw err;
+          }
+          const isRetryable = this._isRetryableError(err);
+          if (!isRetryable || attempt >= LLM_MAX_RETRIES) {
+            this.onEvent({ type: 'error', data: { message: `LLM call failed: ${err.message}`, round } });
+            this.session.fail(err.message);
+            this._trackFailure(goal, err.message);
+            return { answer: `Error: ${err.message}`, session: this.session, toolCalls: this.session.toolHistory };
+          }
+          // Exponential backoff before retry
+          const delay = LLM_BASE_DELAY_MS * Math.pow(2, attempt);
+          this.onEvent({ type: 'thinking', data: { thought: `LLM call failed (${err.message}), retrying in ${delay / 1000}s… (attempt ${attempt + 1}/${LLM_MAX_RETRIES})`, round } });
+          await new Promise(r => setTimeout(r, delay));
         }
-        this.onEvent({ type: 'error', data: { message: `LLM call failed: ${err.message}`, round } });
-        this.session.fail(err.message);
-        return { answer: `Error: ${err.message}`, session: this.session, toolCalls: this.session.toolHistory };
       }
+      if (!llmSuccess) continue; // shouldn't reach here, but safety net
 
       this._throwIfAborted();
 
@@ -589,28 +632,89 @@ export class AgentRuntime {
             Boolean(nativeToolCallsForThread),
           ));
 
-          // Detect infinite loops: same tool + same args called 3 times consecutively.
-          const sig = `${tc.tool_name}:${JSON.stringify(tc.arguments)}`;
-          if (sig === lastToolSig) {
-            consecutiveDupCount++;
-            if (consecutiveDupCount >= 2) {
-              const repeatedToolThought = `Detected repeated tool call (${tc.tool_name}) — stopping loop.`;
-              reasoningEvents.push({ thought: repeatedToolThought, round, timestamp: new Date().toISOString() });
-              this.onEvent({ type: 'thinking', data: { thought: repeatedToolThought, round } });
-              answer = this._formatRepeatedToolAnswer(tc, result);
-              this.onEvent({ type: 'answer', data: { answer, round } });
-              break;
+          // ── Smart loop detection ─────────────────────────────────────────
+          const sig = normalizeToolSig(tc.tool_name, tc.arguments);
+          recentToolSigs.push(sig);
+          if (recentToolSigs.length > LOOP_WINDOW_SIZE) recentToolSigs.shift();
+
+          // Check consecutive duplicates (allow retryable tools more slack)
+          const maxDups = RETRYABLE_TOOLS.has(tc.tool_name) ? MAX_CONSECUTIVE_DUPS + 1 : MAX_CONSECUTIVE_DUPS;
+          let consecutiveCount = 0;
+          for (let j = recentToolSigs.length - 1; j >= 0; j--) {
+            if (recentToolSigs[j] === sig) consecutiveCount++;
+            else break;
+          }
+          if (consecutiveCount >= maxDups) {
+            const repeatedToolThought = `Detected repeated tool call (${tc.tool_name}) — stopping loop.`;
+            reasoningEvents.push({ thought: repeatedToolThought, round, timestamp: new Date().toISOString() });
+            this.onEvent({ type: 'thinking', data: { thought: repeatedToolThought, round } });
+            answer = this._formatRepeatedToolAnswer(tc, result);
+            this.onEvent({ type: 'answer', data: { answer, round } });
+            break;
+          }
+
+          // Detect cycles of length 2-3 (A→B→A→B or A→B→C→A→B→C)
+          if (recentToolSigs.length >= 4) {
+            for (let cycleLen = 2; cycleLen <= 3; cycleLen++) {
+              if (recentToolSigs.length >= cycleLen * MAX_CYCLE_REPEATS) {
+                const tail = recentToolSigs.slice(-cycleLen * MAX_CYCLE_REPEATS);
+                const pattern = tail.slice(0, cycleLen).join('|');
+                let isRepeating = true;
+                for (let c = 1; c < MAX_CYCLE_REPEATS; c++) {
+                  if (tail.slice(c * cycleLen, (c + 1) * cycleLen).join('|') !== pattern) {
+                    isRepeating = false;
+                    break;
+                  }
+                }
+                if (isRepeating) {
+                  const cycleTools = tail.slice(0, cycleLen).map(s => s.split(':')[0]).join(' → ');
+                  const loopThought = `Detected cycling pattern (${cycleTools}) repeating ${MAX_CYCLE_REPEATS}x — stopping loop.`;
+                  reasoningEvents.push({ thought: loopThought, round, timestamp: new Date().toISOString() });
+                  this.onEvent({ type: 'thinking', data: { thought: loopThought, round } });
+                  answer = `I stopped because I detected a repeating cycle: ${cycleTools}. This usually means I'm stuck. Here's the latest result:\n\n${JSON.stringify(result).slice(0, 2000)}`;
+                  this.onEvent({ type: 'answer', data: { answer, round } });
+                  break;
+                }
+              }
             }
-          } else {
-            lastToolSig = sig;
-            consecutiveDupCount = 0;
+            if (answer) break;
           }
 
           if (tc.tool_name !== 'todo_write' && tc.tool_name !== 'list_plan') {
             this._advanceAutoPlan(this._isMutatingTool(tc.tool_name, tc.arguments) ? 'mutated' : 'inspected', round);
           }
+
+          // ── Self-verification after file mutations (3.2) ─────────────────
+          if (this._isMutatingTool(tc.tool_name, tc.arguments)) {
+            const mutatedFile = tc.arguments?.path || tc.arguments?.file || tc.arguments?.filename || null;
+            if (mutatedFile) {
+              const absPath = path.isAbsolute(mutatedFile) ? mutatedFile : path.resolve(this.workingDir, mutatedFile);
+              const verifyResult = await this._autoVerify([absPath], toolContext);
+              if (verifyResult?.hasErrors) {
+                // Inject verification errors into context so the agent can self-correct
+                messages.push({
+                  role: 'user',
+                  content: `[Auto-verification detected issues after your edit]\n${verifyResult.summary}\n\nPlease review and fix these issues.`,
+                });
+              }
+            }
+          }
         }
         if (answer) break;
+      }
+
+      // ── Periodic self-reflection (3.3) ─────────────────────────────────
+      if (!answer) {
+        const reflection = await this._selfReflect(goal, messages, round, this.session.toolHistory);
+        if (reflection?.abort) {
+          answer = `I've been reflecting on my progress and determined I'm stuck: ${reflection.reason}\n\nHere's what I accomplished:\n` +
+            this.session.toolHistory.slice(-5).map(t => `- ${t.tool}: ${t.result?.message || (t.result?.success ? 'success' : 'failed')}`).join('\n');
+          this.onEvent({ type: 'answer', data: { answer, round } });
+          break;
+        }
+        if (reflection?.guidance) {
+          messages.push({ role: 'user', content: reflection.guidance });
+        }
       }
 
       // Save session periodically
@@ -643,6 +747,11 @@ export class AgentRuntime {
     this.session.complete();
 
     this._trackWorkflow(goal);
+
+    // Post-run memory extraction — proactively save durable facts from the conversation
+    this._extractMemories(goal, answer, messages).catch(err =>
+      console.error('[agent] Post-run memory extraction failed:', err.message)
+    );
 
     return { answer, session: this.session, toolCalls: this.session.toolHistory };
   }
@@ -893,7 +1002,13 @@ export class AgentRuntime {
     if (round !== 0) return false;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return false;
     if (!toolRegistry.has('todo_write')) return false;
-    return ACTION_GOAL_RE.test(String(goal || ''));
+    // Only force plan for goals that look multi-step
+    const goalStr = String(goal || '');
+    if (!ACTION_GOAL_RE.test(goalStr)) return false;
+    // Skip plan priming for short/simple goals (less than 15 words or no multi-step indicators)
+    const wordCount = goalStr.split(/\s+/).filter(Boolean).length;
+    if (wordCount < 15 && !MULTI_STEP_GOAL_RE.test(goalStr)) return false;
+    return true;
   }
 
   _throwIfAborted() {
@@ -1207,6 +1322,298 @@ export class AgentRuntime {
         tools,
         success: true,
       }).catch(err => console.error('[basal-ganglia] Track error:', err.message));
+    }
+  }
+
+  _trackFailure(goal, error) {
+    if (this.session?.toolHistory?.length > 0) {
+      const tools = this.session.toolHistory.map(t => t.tool);
+      basalGanglia.trackWorkflow({
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        goal,
+        tools,
+        success: false,
+      }).catch(err => console.error('[basal-ganglia] Track failure error:', err.message));
+    }
+  }
+
+  /**
+   * Post-run memory extraction — uses a lightweight LLM call to extract
+   * durable facts from the conversation that should be remembered.
+   */
+  async _extractMemories(goal, answer, messages) {
+    if (!this.aiClient?.messages?.create && !this.aiClient?.client?.chat?.completions?.create) return;
+    if (!answer || answer.length < 50) return;
+    // Don't extract for trivial sessions (< 2 tool calls)
+    if ((this.session?.toolHistory?.length || 0) < 2) return;
+
+    try {
+      // Build a concise summary of what happened
+      const toolSummary = (this.session.toolHistory || []).slice(-10).map(t =>
+        `${t.tool}(${Object.keys(t.args || {}).join(', ')}) → ${t.result?.success === false ? 'FAILED' : 'ok'}`
+      ).join('\n');
+
+      const extractionPrompt = [
+        'You extract durable facts from an agent conversation that should be saved to long-term memory.',
+        'Only extract STABLE facts that will be useful in future sessions. Skip one-off details.',
+        'Return JSON: {"memories": [{"kind": "user|feedback|project|reference|preference|context", "key": "short_key", "content": "what to remember", "importance": 0.5}]}',
+        'Return {"memories": []} if nothing is worth saving.',
+        'Limit to at most 3 memories. Be selective.',
+      ].join(' ');
+
+      const conversationSummary = `Goal: ${goal.slice(0, 200)}\nTools used:\n${toolSummary}\nFinal answer (excerpt): ${answer.slice(0, 500)}`;
+
+      let raw = '';
+      if (this.aiClient?.messages?.create) {
+        const response = await this.aiClient.messages.create({
+          model: this.model,
+          max_completion_tokens: 400,
+          system: extractionPrompt,
+          messages: [{ role: 'user', content: conversationSummary }],
+        });
+        raw = response.content?.[0]?.text || '';
+      } else if (this.aiClient?.client?.chat?.completions?.create) {
+        const response = await this.aiClient.client.chat.completions.create({
+          model: this.model,
+          max_tokens: 400,
+          messages: [
+            { role: 'system', content: extractionPrompt },
+            { role: 'user', content: conversationSummary },
+          ],
+        });
+        raw = response.choices?.[0]?.message?.content || '';
+      }
+
+      // Parse and save memories
+      const cleaned = raw.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      let parsed;
+      try { parsed = JSON.parse(cleaned); } catch {
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) try { parsed = JSON.parse(match[0]); } catch { return; }
+        else return;
+      }
+
+      const memories = Array.isArray(parsed?.memories) ? parsed.memories : [];
+      for (const mem of memories.slice(0, 3)) {
+        if (!mem.content || mem.content.length < 5) continue;
+        const kind = ['user', 'feedback', 'project', 'reference', 'preference', 'context'].includes(mem.kind) ? mem.kind : 'fact';
+        const key = mem.key || `auto_${kind}_${randomUUID().slice(0, 8)}`;
+        const importance = Math.max(0, Math.min(1, Number(mem.importance || 0.5)));
+
+        // Check if a similar memory already exists
+        const existing = db.prepare(
+          'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
+        ).get(this.userId, this.workspaceId, key);
+
+        if (existing) {
+          db.prepare(
+            "UPDATE agent_memory SET content = ?, importance = ?, updated_at = datetime('now') WHERE id = ?"
+          ).run(mem.content, importance, existing.id);
+        } else {
+          db.prepare(
+            'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+          ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance);
+        }
+      }
+
+      if (memories.length > 0) {
+        console.log(`[agent] Auto-extracted ${memories.length} memories from run`);
+      }
+    } catch (err) {
+      console.warn('[agent] Memory extraction error:', err.message);
+    }
+  }
+
+  // ── Error classification for retry logic ─────────────────────────────────
+
+  _isRetryableError(err) {
+    if (!err) return false;
+    const msg = (err.message || '').toLowerCase();
+    const status = err.status || err.statusCode || 0;
+    // Rate limits
+    if (status === 429) return true;
+    // Server errors
+    if (status >= 500 && status < 600) return true;
+    // Network errors
+    if (msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout')) return true;
+    if (msg.includes('network') || msg.includes('fetch failed') || msg.includes('socket hang up')) return true;
+    // Overloaded
+    if (msg.includes('overloaded') || msg.includes('capacity') || msg.includes('rate limit')) return true;
+    // Timeout
+    if (msg.includes('timeout') && !msg.includes('context')) return true;
+    return false;
+  }
+
+  // ── Reflection / Self-Critique (3.3) ─────────────────────────────────────
+  // Runs every REFLECTION_INTERVAL rounds to check if the agent is making
+  // progress or stuck. Returns a guidance string to inject into context.
+
+  async _selfReflect(goal, messages, round, toolHistory) {
+    const REFLECTION_INTERVAL = 5;
+    if (round < REFLECTION_INTERVAL || round % REFLECTION_INTERVAL !== 0) return null;
+    if (!this.aiClient?.client?.chat?.completions?.create) return null;
+
+    try {
+      const recentTools = (toolHistory || []).slice(-8).map(t => {
+        const status = t.result?.success === false ? 'FAILED' : 'ok';
+        return `  ${t.tool}(${Object.keys(t.args || {}).join(', ')}) → ${status}`;
+      }).join('\n');
+
+      const reflectionPrompt = [
+        'You are evaluating an AI agent\'s progress on a task.',
+        'Analyze the recent tool calls and determine:',
+        '1. Is the agent making meaningful progress toward the goal?',
+        '2. Is it going in circles or repeating similar actions?',
+        '3. Should it change its approach?',
+        '',
+        'Return JSON: {"progress": "good|slow|stuck", "suggestion": "brief guidance or null", "should_continue": true/false}',
+        'Be concise. Return null suggestion if progress is good.',
+      ].join('\n');
+
+      const context = `Goal: ${String(goal).slice(0, 300)}\nRound: ${round}\nRecent tools (last 8):\n${recentTools}`;
+
+      const response = await this.aiClient.client.chat.completions.create({
+        model: this.model,
+        max_tokens: 200,
+        messages: [
+          { role: 'system', content: reflectionPrompt },
+          { role: 'user', content: context },
+        ],
+      });
+
+      const raw = response.choices?.[0]?.message?.content || '';
+      const cleaned = raw.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      let parsed;
+      try { parsed = JSON.parse(cleaned); } catch {
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) try { parsed = JSON.parse(match[0]); } catch { return null; }
+        else return null;
+      }
+
+      if (!parsed) return null;
+
+      const progress = parsed.progress || 'good';
+      const suggestion = parsed.suggestion || null;
+
+      this.onEvent({
+        type: 'thinking',
+        data: { thought: `Self-reflection (round ${round}): progress=${progress}${suggestion ? ` — ${suggestion}` : ''}`, round },
+      });
+
+      if (progress === 'stuck' && parsed.should_continue === false) {
+        return { abort: true, reason: suggestion || 'Agent determined it is stuck and should stop.' };
+      }
+
+      if (suggestion && progress !== 'good') {
+        return { guidance: `[Self-reflection at round ${round}]: ${suggestion}` };
+      }
+
+      return null;
+    } catch (err) {
+      console.warn('[agent] Self-reflection error:', err.message);
+      return null;
+    }
+  }
+
+  // ── Self-Verification After Edits (3.2) ──────────────────────────────────
+  // After file mutations, detect the project type and run quick verification
+  // (lint, type check, test). Returns verification results to inject into context.
+
+  async _autoVerify(mutatedFiles, toolContext) {
+    if (!mutatedFiles || mutatedFiles.length === 0) return null;
+
+    // Only verify code files
+    const CODE_EXTS = new Set(['.js', '.jsx', '.ts', '.tsx', '.py', '.rb', '.go', '.rs', '.java', '.css', '.scss']);
+    const codeFiles = mutatedFiles.filter(f => CODE_EXTS.has(path.extname(f).toLowerCase()));
+    if (codeFiles.length === 0) return null;
+
+    const checks = [];
+    const workDir = this.workingDir;
+
+    try {
+      // Detect project type and available checks
+      const hasPkgJson = fs.existsSync(path.join(workDir, 'package.json'));
+      const hasPyproject = fs.existsSync(path.join(workDir, 'pyproject.toml'));
+
+      if (hasPkgJson) {
+        const pkg = JSON.parse(fs.readFileSync(path.join(workDir, 'package.json'), 'utf8'));
+        const scripts = pkg.scripts || {};
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+        // Quick lint check (only on changed files)
+        const jsFiles = codeFiles.filter(f => /\.[jt]sx?$/.test(f));
+        if (jsFiles.length > 0 && (deps.eslint || scripts.lint)) {
+          try {
+            const fileArgs = jsFiles.slice(0, 5).map(f => path.relative(workDir, f)).join(' ');
+            const cmd = deps.eslint
+              ? `npx eslint --no-error-on-unmatched-pattern --max-warnings=50 ${fileArgs}`
+              : 'npm run lint -- --max-warnings=50 2>&1 || true';
+            const result = execSync(cmd, { cwd: workDir, timeout: 15000, stdio: 'pipe', encoding: 'utf8' });
+            const output = result.trim();
+            if (output && output.length > 10) {
+              checks.push({ check: 'lint', status: 'warnings', output: output.slice(0, 1000) });
+            } else {
+              checks.push({ check: 'lint', status: 'clean' });
+            }
+          } catch (err) {
+            const stderr = err.stderr?.toString() || err.stdout?.toString() || err.message;
+            checks.push({ check: 'lint', status: 'errors', output: stderr.slice(0, 1000) });
+          }
+        }
+
+        // TypeScript check (if tsconfig exists)
+        if (fs.existsSync(path.join(workDir, 'tsconfig.json')) && jsFiles.some(f => /\.tsx?$/.test(f))) {
+          try {
+            const result = execSync('npx tsc --noEmit --pretty false 2>&1 | head -20', {
+              cwd: workDir, timeout: 20000, stdio: 'pipe', encoding: 'utf8',
+            });
+            const output = result.trim();
+            if (output && output.includes('error TS')) {
+              checks.push({ check: 'typecheck', status: 'errors', output: output.slice(0, 800) });
+            } else {
+              checks.push({ check: 'typecheck', status: 'clean' });
+            }
+          } catch (err) {
+            const stderr = err.stderr?.toString() || err.stdout?.toString() || '';
+            if (stderr.includes('error TS')) {
+              checks.push({ check: 'typecheck', status: 'errors', output: stderr.slice(0, 800) });
+            }
+          }
+        }
+      }
+
+      // Python: quick syntax check
+      if (hasPyproject || codeFiles.some(f => f.endsWith('.py'))) {
+        const pyFiles = codeFiles.filter(f => f.endsWith('.py')).slice(0, 5);
+        for (const pf of pyFiles) {
+          try {
+            execSync(`python3 -c "import py_compile; py_compile.compile('${pf}', doraise=True)"`, {
+              cwd: workDir, timeout: 5000, stdio: 'pipe',
+            });
+          } catch (err) {
+            checks.push({ check: 'python_syntax', status: 'error', file: path.basename(pf), output: (err.stderr?.toString() || err.message).slice(0, 500) });
+          }
+        }
+      }
+
+      if (checks.length === 0) return null;
+
+      const hasErrors = checks.some(c => c.status === 'errors' || c.status === 'error');
+      const summary = checks.map(c => {
+        if (c.status === 'clean') return `✓ ${c.check}: clean`;
+        return `✗ ${c.check}: ${c.output?.split('\n').slice(0, 3).join(' | ') || c.status}`;
+      }).join('\n');
+
+      this.onEvent({
+        type: 'thinking',
+        data: { thought: `Auto-verification: ${hasErrors ? 'issues found' : 'all clean'}\n${summary}`, round: this.session?.totalRounds || 0 },
+      });
+
+      return { checks, hasErrors, summary };
+    } catch (err) {
+      console.warn('[agent] Auto-verify error:', err.message);
+      return null;
     }
   }
 }

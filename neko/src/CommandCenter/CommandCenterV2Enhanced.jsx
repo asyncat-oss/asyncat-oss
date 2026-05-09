@@ -138,7 +138,7 @@ function buildEventsFromMessages(messages = []) {
 
 function getPersistableAgentEvents(events = []) {
   return events
-    .filter(ev => ev?.type && !['user_goal', 'answer', 'delta', 'done', 'session_start', 'tool_result'].includes(ev.type))
+    .filter(ev => ev?.type && !['user_goal', 'answer', 'delta', 'done', 'session_start', 'tool_result', 'tool_progress'].includes(ev.type))
     .map(ev => ({
       type: ev.type,
       data: ev.data,
@@ -1197,6 +1197,24 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     break;
                   }
                 }
+                return { ...prev, events: updated };
+              }
+            }
+            return prev;
+          });
+          continue;
+        }
+        // Handle streaming tool progress (real-time command output)
+        if (event.type === 'tool_progress') {
+          updateChatRun(runKey, prev => {
+            const updated = [...(prev.events || [])];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].type === 'tool_start' && updated[i].data?.tool === event.data?.tool && updated[i].result === undefined) {
+                updated[i] = {
+                  ...updated[i],
+                  progress: (updated[i].progress || '') + (event.data?.chunk || ''),
+                  progressDone: event.data?.done || false,
+                };
                 return { ...prev, events: updated };
               }
             }

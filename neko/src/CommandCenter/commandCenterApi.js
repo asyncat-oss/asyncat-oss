@@ -873,6 +873,26 @@ export const agentApi = {
       method: 'DELETE',
     });
   },
+
+  // ── Artifact Methods ──────────────────────────────────────────────────────
+
+  listArtifacts: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/artifacts`);
+  },
+
+  getArtifact: async (filename) => {
+    return await apiRequest(`${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}`);
+  },
+
+  getArtifactDownloadUrl: (filename) => {
+    return `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}?download=1`;
+  },
+
+  deleteArtifact: async (filename) => {
+    return await apiRequest(`${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 export const agentTaskRunsApi = {

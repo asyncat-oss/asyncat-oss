@@ -87,42 +87,36 @@ export class AgentSession {
     this._persist();
   }
 
-  /** Persist session to database. */
+  /** Persist session to database (atomic UPSERT). */
   _persist() {
     try {
-      const existing = db.prepare('SELECT id FROM agent_sessions WHERE id = ?').get(this.id);
-
-      if (existing) {
-        db.prepare(`
-          UPDATE agent_sessions SET
-            status = ?, goal = ?, plan = ?, scratchpad = ?,
-            tool_history = ?, total_rounds = ?, feedback_rating = ?,
-            feedback_comment = ?, was_helpful = ?, corrections = ?, updated_at = ?
-          WHERE id = ?
-        `).run(
-          this.status, this.goal, JSON.stringify(this.plan),
-          JSON.stringify(this.scratchpad), JSON.stringify(this.toolHistory),
-          this.totalRounds, this.feedbackRating, this.feedbackComment,
-          this.wasHelpful, JSON.stringify(this.corrections || []),
-          this.updatedAt, this.id
-        );
-      } else {
-        db.prepare(`
-          INSERT INTO agent_sessions (
-            id, user_id, workspace_id, status, goal, plan, scratchpad,
-            tool_history, total_rounds, feedback_rating, feedback_comment,
-            was_helpful, corrections, created_at, updated_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          this.id, this.userId, this.workspaceId, this.status,
-          this.goal, JSON.stringify(this.plan), JSON.stringify(this.scratchpad),
-          JSON.stringify(this.toolHistory), this.totalRounds,
-          this.feedbackRating, this.feedbackComment, this.wasHelpful,
-          JSON.stringify(this.corrections || []),
-          this.createdAt, this.updatedAt
-        );
-      }
+      db.prepare(`
+        INSERT INTO agent_sessions (
+          id, user_id, workspace_id, status, goal, plan, scratchpad,
+          tool_history, total_rounds, feedback_rating, feedback_comment,
+          was_helpful, corrections, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          status = excluded.status,
+          goal = excluded.goal,
+          plan = excluded.plan,
+          scratchpad = excluded.scratchpad,
+          tool_history = excluded.tool_history,
+          total_rounds = excluded.total_rounds,
+          feedback_rating = excluded.feedback_rating,
+          feedback_comment = excluded.feedback_comment,
+          was_helpful = excluded.was_helpful,
+          corrections = excluded.corrections,
+          updated_at = excluded.updated_at
+      `).run(
+        this.id, this.userId, this.workspaceId, this.status,
+        this.goal, JSON.stringify(this.plan), JSON.stringify(this.scratchpad),
+        JSON.stringify(this.toolHistory), this.totalRounds,
+        this.feedbackRating, this.feedbackComment, this.wasHelpful,
+        JSON.stringify(this.corrections || []),
+        this.createdAt, this.updatedAt
+      );
     } catch (err) {
       console.error('Failed to persist agent session:', err.message);
     }

@@ -2403,4 +2403,108 @@ function gradeHealth({ invalidToolArgs, repeatedLoops, failedTools, totalTools }
   return 'good';
 }
 
+// ─── Artifact Routes ────────────────────────────────────────────────────────
+
+const ARTIFACTS_DIR_NAME = '.asyncat-artifacts';
+
+/** List all artifacts in the workspace. */
+router.get('/agent/artifacts', jwtVerify, (req, res) => {
+  try {
+    const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
+    const artifactsDir = path.join(workingDir, ARTIFACTS_DIR_NAME);
+
+    if (!fs.existsSync(artifactsDir)) {
+      return res.json({ success: true, count: 0, artifacts: [] });
+    }
+
+    const files = fs.readdirSync(artifactsDir).filter(f => !f.startsWith('.'));
+    const artifacts = files.map(f => {
+      const filePath = path.join(artifactsDir, f);
+      const stat = fs.statSync(filePath);
+      const ext = path.extname(f).toLowerCase();
+      const typeMap = {
+        '.md': 'markdown', '.markdown': 'markdown',
+        '.html': 'html', '.htm': 'html',
+        '.svg': 'svg', '.csv': 'csv', '.json': 'json', '.txt': 'text',
+        '.js': 'code', '.ts': 'code', '.py': 'code', '.jsx': 'code', '.tsx': 'code',
+      };
+      return {
+        filename: f,
+        path: path.relative(workingDir, filePath),
+        type: typeMap[ext] || 'text',
+        size: stat.size,
+        modified: stat.mtime.toISOString(),
+      };
+    }).sort((a, b) => b.modified.localeCompare(a.modified));
+
+    res.json({ success: true, count: artifacts.length, artifacts });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** Get artifact content. */
+router.get('/agent/artifacts/:filename', jwtVerify, (req, res) => {
+  try {
+    const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
+    const artifactsDir = path.join(workingDir, ARTIFACTS_DIR_NAME);
+    const filename = path.basename(req.params.filename); // sanitize
+    const filePath = path.join(artifactsDir, filename);
+
+    if (!filePath.startsWith(artifactsDir) || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, error: 'Artifact not found' });
+    }
+
+    const ext = path.extname(filename).toLowerCase();
+    const mimeMap = {
+      '.md': 'text/markdown', '.html': 'text/html', '.htm': 'text/html',
+      '.svg': 'image/svg+xml', '.csv': 'text/csv', '.json': 'application/json',
+      '.txt': 'text/plain', '.js': 'text/javascript', '.ts': 'text/plain',
+      '.py': 'text/plain', '.css': 'text/css',
+    };
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+
+    // If ?raw=1 or ?download=1, return raw file
+    if (req.query.download === '1') {
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', contentType);
+      return res.sendFile(filePath);
+    }
+
+    // Otherwise return content in JSON
+    const content = fs.readFileSync(filePath, 'utf8');
+    const stat = fs.statSync(filePath);
+    res.json({
+      success: true,
+      filename,
+      type: contentType,
+      size: stat.size,
+      modified: stat.mtime.toISOString(),
+      content,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** Delete an artifact. */
+router.delete('/agent/artifacts/:filename', jwtVerify, (req, res) => {
+  try {
+    const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
+    const artifactsDir = path.join(workingDir, ARTIFACTS_DIR_NAME);
+    const filename = path.basename(req.params.filename);
+    const filePath = path.join(artifactsDir, filename);
+
+    if (!filePath.startsWith(artifactsDir) || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, error: 'Artifact not found' });
+    }
+
+    fs.unlinkSync(filePath);
+    res.json({ success: true, deleted: filename });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;
+
