@@ -673,13 +673,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
-  const conversationMenuRef = useRef(null);
+
   const exportMenuRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [showConversationMenu, setShowConversationMenu] = useState(false);
+
   const [messageInputResetKey, setMessageInputResetKey] = useState(0);
   const [recentConversations, setRecentConversations] = useState([]);
   const [recentConversationsLoading, setRecentConversationsLoading] = useState(false);
@@ -851,22 +851,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, []);
 
   useEffect(() => {
-    if (showConversationMenu) loadRecentConversations();
-  }, [showConversationMenu, loadRecentConversations]);
+    if (showActivitySidebar && sidePanelTab === 'history') loadRecentConversations();
+  }, [showActivitySidebar, sidePanelTab, loadRecentConversations]);
 
-  useEffect(() => {
-    if (!showConversationMenu) return;
-    const handler = (e) => {
-      if (!conversationMenuRef.current?.contains(e.target)) {
-        setShowConversationMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showConversationMenu]);
+
 
   const handleStartNewConversation = useCallback(async () => {
-    setShowConversationMenu(false);
+
     setMessageInputResetKey(prev => prev + 1);
     navigate('/home');
     await handleNewConversation();
@@ -874,7 +865,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const handleOpenConversation = useCallback((conversationId) => {
     if (!conversationId) return;
-    setShowConversationMenu(false);
+
     setMessageInputResetKey(prev => prev + 1);
     navigate(`/conversations/${conversationId}`);
   }, [navigate]);
@@ -922,117 +913,30 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, []);
 
   const ConversationSwitcher = useCallback(({ compact = false } = {}) => (
-    <div className="relative" ref={conversationMenuRef}>
-      <button
-        type="button"
-        onClick={() => setShowConversationMenu((v) => !v)}
-        className={`relative ${compact ? 'p-2' : 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium'} text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors`}
-        title="Recent conversations"
-      >
-        <History className={compact ? "w-5 h-5" : "w-4 h-4"} />
-        {!compact && <span>History</span>}
-        {hasActiveRuns && (
-          <span
-            className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-900 animate-pulse"
-            title="A chat is generating"
-          />
-        )}
-      </button>
-
-      {showConversationMenu && (
-        <div className="absolute right-0 top-full mt-2 z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-3 py-2.5">
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">
-                Recent
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                Jump back without leaving the chat
-              </p>
-            </div>
-          </div>
-
-          <div className="max-h-80 overflow-y-auto py-1.5">
-            {recentConversationsLoading ? (
-              <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-gray-500 dark:text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading recent chats
-              </div>
-            ) : recentConversationsError ? (
-              <div className="px-4 py-8 text-center text-sm text-red-500">
-                {recentConversationsError}
-              </div>
-            ) : recentConversations.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <MessageSquare className="mx-auto mb-2 h-7 w-7 text-gray-300 dark:text-gray-600" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">No saved conversations yet</p>
-              </div>
-            ) : (
-              recentConversations.map((conversation) => {
-                const active = conversation.id === currentConversationId;
-                const running = activeConversationIds.has(conversation.id);
-                return (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => handleOpenConversation(conversation.id)}
-                    className={`w-full px-3 py-2.5 text-left transition-colors ${
-                      active
-                        ? 'bg-indigo-50 dark:bg-indigo-950/30 midnight:bg-indigo-950/30'
-                        : 'hover:bg-gray-50 dark:hover:bg-gray-800/70 midnight:hover:bg-slate-800/70'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex items-center gap-2">
-                        {running && (
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.15)] animate-pulse"
-                            title="Generating"
-                          />
-                        )}
-                        <span className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
-                          {conversation.title || 'Untitled conversation'}
-                        </span>
-                      </div>
-                      <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
-                        {running ? 'Generating' : getRelativeConversationTime(conversation.updated_at)}
-                      </span>
-                    </div>
-                    {(conversation.preview || conversation.messages?.[0]?.content) && (
-                      <p className="mt-0.5 line-clamp-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                        {conversation.preview || conversation.messages?.[0]?.content}
-                      </p>
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowConversationMenu(false);
-              navigate('/all-chats');
-            }}
-            className="flex w-full items-center justify-center gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 transition-colors"
-          >
-            View all history
-          </button>
-        </div>
+    <button
+      type="button"
+      onClick={() => toggleSidePanelTab('history')}
+      className={`relative ${compact ? 'p-2' : 'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium'} transition-colors ${
+        showActivitySidebar && sidePanelTab === 'history' && !compact
+          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+      }`}
+      title="Recent conversations"
+    >
+      <History className={compact ? "w-5 h-5" : "w-4 h-4"} />
+      {!compact && <span>History</span>}
+      {hasActiveRuns && (
+        <span
+          className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-900 animate-pulse"
+          title="A chat is generating"
+        />
       )}
-    </div>
+    </button>
   ), [
-    activeConversationIds,
-    currentConversationId,
     hasActiveRuns,
-    handleStartNewConversation,
-    handleOpenConversation,
-    navigate,
-    recentConversations,
-    recentConversationsError,
-    recentConversationsLoading,
-    showConversationMenu,
+    showActivitySidebar,
+    sidePanelTab,
+    toggleSidePanelTab,
   ]);
 
   const handleStartRename = useCallback(() => {
@@ -2201,7 +2105,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside className="hidden xl:block w-96 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700">
           <CommandCenterSidePanel
             activeTab={sidePanelTab}
@@ -2215,11 +2119,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             onGitRefresh={refreshGitState}
             onGitChanged={handleGitChanged}
             onAttachGitFile={handleAttachGitFile}
+            recentConversations={recentConversations}
+            recentConversationsLoading={recentConversationsLoading}
+            recentConversationsError={recentConversationsError}
+            activeConversationIds={activeConversationIds}
+            currentConversationId={currentConversationId}
+            onOpenConversation={handleOpenConversation}
+            navigate={navigate}
           />
         </aside>
       )}
 
-      {showActivitySidebar && (gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"
@@ -2241,6 +2152,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onGitRefresh={refreshGitState}
               onGitChanged={handleGitChanged}
               onAttachGitFile={handleAttachGitFile}
+              recentConversations={recentConversations}
+              recentConversationsLoading={recentConversationsLoading}
+              recentConversationsError={recentConversationsError}
+              activeConversationIds={activeConversationIds}
+              currentConversationId={currentConversationId}
+              onOpenConversation={handleOpenConversation}
+              navigate={navigate}
             />
           </div>
         </div>

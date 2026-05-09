@@ -1,13 +1,15 @@
 /* eslint-disable react/prop-types */
-import { Activity, GitBranch, Image, X } from 'lucide-react';
+import { Activity, GitBranch, Image, X, History } from 'lucide-react';
 import AgentActivitySidebar from './AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import GitPanel from './GitPanel';
+import HistoryPanel from './HistoryPanel';
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
   git: { label: 'Git', icon: GitBranch },
   media: { label: 'Media', icon: Image },
+  history: { label: 'History', icon: History },
 };
 
 export default function CommandCenterSidePanel({
@@ -23,6 +25,13 @@ export default function CommandCenterSidePanel({
   onGitRefresh,
   onGitChanged,
   onAttachGitFile,
+  recentConversations = [],
+  recentConversationsLoading = false,
+  recentConversationsError = null,
+  activeConversationIds = new Set(),
+  currentConversationId = null,
+  onOpenConversation,
+  navigate,
 }) {
   const currentTab = activeTab || 'steps';
   const meta = panelMeta[currentTab] || panelMeta.steps;
@@ -63,6 +72,17 @@ export default function CommandCenterSidePanel({
         )}
         {currentTab === 'media' && sourceCatalog && (
           <ChatSourcesMediaSidebar catalog={sourceCatalog} />
+        )}
+        {currentTab === 'history' && (
+          <HistoryPanel
+            recentConversations={recentConversations}
+            recentConversationsLoading={recentConversationsLoading}
+            recentConversationsError={recentConversationsError}
+            activeConversationIds={activeConversationIds}
+            currentConversationId={currentConversationId}
+            handleOpenConversation={onOpenConversation}
+            navigate={navigate}
+          />
         )}
       </div>
     </div>
