@@ -104,7 +104,13 @@ asyncat
 asyncat start
 ```
 
-Opens at `http://localhost:8717`.
+Starts the backend and Web UI, then opens the browser. The default Web UI port is `8717`, unless `neko/vite.config.js` sets a different port.
+
+To start services without opening a browser:
+
+```bash
+asyncat start --no-open
+```
 
 ### Log in
 
@@ -118,16 +124,20 @@ Done. The AI has keys to your kingdom.
 ## The CLI
 
 ```bash
-asyncat start        # fire it up
-asyncat open         # open the Web UI
-asyncat tui          # terminal UI
-asyncat stop         # kill it
-asyncat status       # what's running
-asyncat restart      # bounce
-asyncat logs         # tail logs
-asyncat doctor       # health check
-asyncat config       # mess with env
-asyncat uninstall    # remove launchers/global wrapper, keep local data
+asyncat start            # start backend + Web UI and open browser
+asyncat start --no-open  # start services without opening browser
+asyncat start --dev      # force Vite dev server instead of built preview
+asyncat start --live-logs  # also stream service output in this terminal
+asyncat open             # open the Web UI
+asyncat tui              # terminal UI
+asyncat stop             # stop local services
+asyncat status           # show running services
+asyncat restart          # stop, then start
+asyncat logs             # show recent logs
+asyncat logs clear       # clear saved logs
+asyncat doctor           # health check
+asyncat config           # manage env settings
+asyncat uninstall        # remove launchers/global wrapper, keep local data
 ```
 
 ---
@@ -345,14 +355,51 @@ Good luck. Have fun. Don't blame us if your quantized baby model deletes your ho
 # 1. Install dependencies
 npm install
 
-# 2. Start the CLI (interactive terminal UI)
-node cat               # Windows
-./cat                  # Mac/Linux
-npm run cli            # Cross-platform alternative
+# 2. Start the local Web UI
+./cat                  # Mac/Linux: start services and open browser
+node cat               # Windows/cross-platform equivalent
+npm run cli            # npm wrapper around node cat
+
+# Start without opening the browser
+./cat start --no-open
+node cat start --no-open
+
+# Force frontend dev mode instead of previewing neko/dist
+./cat start --dev --no-open
+
+# Interactive terminal UI
+./cat tui
 
 # 3. Or run components separately
 npm run dev:backend    # den/ server only (port 8716)
-npm run dev:frontend   # neko/ UI only (port 8717)
+npm run dev:frontend   # neko/ UI only (port from neko/vite.config.js)
+```
+
+The source launcher is `./cat`; the installed command is `asyncat`. If you run `asyncat` while developing, it may point at the installed copy in `~/.asyncat` instead of your current checkout.
+
+### Logs
+
+Startup stays quiet by default. Detailed service and CLI logs are written under `logs/`:
+
+```text
+logs/cli/
+logs/backend/app/
+logs/backend/http/
+logs/backend/error/
+logs/backend/process/
+logs/frontend.log
+```
+
+Useful log commands:
+
+```bash
+./cat logs              # recent CLI, backend, and frontend logs
+./cat logs backend      # backend logs only
+./cat logs frontend     # frontend log only
+./cat logs cli          # CLI log summary
+./cat logs cli-view ui  # one CLI log category
+./cat logs clear        # clear all saved logs
+./cat logs clear backend
 ```
 
 ### Project Architecture
@@ -395,7 +442,7 @@ asyncat-oss/
 |-----------|---------|------|
 | `cli/` | Terminal interface | N/A |
 | `den/` | Backend API | 8716 |
-| `neko/` | Web UI | 8717 |
+| `neko/` | Web UI | `neko/vite.config.js` |
 
 ### npm Scripts
 

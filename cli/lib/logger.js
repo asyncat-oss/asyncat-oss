@@ -62,6 +62,10 @@ function writeToFile(filepath, line) {
   } catch (_) {}
 }
 
+function shouldMirrorToStdout() {
+  return /^(1|true|yes|on)$/i.test(process.env.ASYNCAT_LOG_STDOUT || '');
+}
+
 function createLogLine(level, category, message) {
   const ts = formatTimestamp();
   const levelStr = formatLevelName(level).padEnd(5, ' ');
@@ -87,21 +91,22 @@ class Logger {
     if (level < this.level) return;
 
     const line = createLogLine(level, this.category, message);
-    const color = formatColor(level);
-    const displayLine = `${col(color, line)}`;
-
-    if (process.stdout && !process.stdout.isTTY) {
-      process.stdout.write(line + '\n');
-    } else {
-      console.log(displayLine);
-    }
-
     const filepath = getLogFile(this.category);
     writeToFile(filepath, line);
 
     if (level >= LOG_LEVELS.ERROR && this.category !== 'error') {
       const errorPath = getLogFile('error');
       writeToFile(errorPath, line);
+    }
+
+    if (shouldMirrorToStdout()) {
+      const color = formatColor(level);
+      const displayLine = `${col(color, line)}`;
+      if (process.stdout && !process.stdout.isTTY) {
+        process.stdout.write(line + '\n');
+      } else {
+        console.log(displayLine);
+      }
     }
   }
 

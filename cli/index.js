@@ -1616,7 +1616,7 @@ async function runSingleCommand(argv) {
     banner();
     console.log('  Usage: asyncat [command] [args]');
     console.log('  Run without arguments to start and open the Web UI.');
-    console.log('  Commands: start, open, tui, agent, chat, run, models, provider, stop, status, uninstall, ...');
+    console.log('  Commands: start, start --no-open, open, tui, logs, logs clear, stop, status, ...');
     console.log('  Use asyncat help for full reference.');
     return;
   }
@@ -1650,6 +1650,7 @@ async function runSingleCommand(argv) {
     case 'help':
       banner();
       console.log('  Run asyncat without arguments to start and open the Web UI.');
+      console.log('  Run asyncat start --no-open to keep the browser closed.');
       console.log('  Run asyncat tui for the interactive terminal UI.');
       break;
     default:

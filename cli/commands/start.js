@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ROOT } from '../lib/env.js';
-import { err, info, col } from '../lib/colors.js';
+import { err, info, col, setLiveLogsEnabled } from '../lib/colors.js';
 import { startProc } from '../lib/procs.js';
 import { getFrontendUrl, openFrontend } from './open.js';
 
@@ -11,6 +11,12 @@ function depsInstalled() {
 }
 
 export async function run(args = []) {
+  if (args.includes('--help') || args.includes('-h')) {
+    info('Usage: start [--no-open] [--dev] [--live-logs] [--backend-only|--frontend-only]');
+    info('--no-open keeps the browser closed; logs are written to logs/.');
+    return;
+  }
+
   if (!fs.existsSync(path.join(ROOT, 'den/.env'))) {
     err(`den/.env not found — run ${col('cyan', 'install')} first.`); return;
   }
@@ -21,6 +27,10 @@ export async function run(args = []) {
   const backendOnly  = args.includes('--backend-only')  || args.includes('-b');
   const frontendOnly = args.includes('--frontend-only') || args.includes('-f');
   const shouldOpen = !backendOnly && !args.includes('--no-open');
+  const liveLogs = args.includes('--live-logs');
+  const logsHint = !args.includes('--quiet');
+
+  if (liveLogs) setLiveLogsEnabled(true);
 
   if (backendOnly && frontendOnly) {
     err('Cannot use --backend-only and --frontend-only together.'); return;
@@ -43,6 +53,11 @@ export async function run(args = []) {
       : ['run', 'dev', '--', '--host', '127.0.0.1'];
     info('Starting frontend → ' + col('white', getFrontendUrl()));
     startProc('frontend', 'neko', 'npm', frontendArgs, 'magenta');
+  }
+
+  if (logsHint) {
+    info((liveLogs ? 'Live logs enabled. Full logs are saved in ' : 'Logs are saved in ') +
+      col('white', 'logs/') + ' — view with the ' + col('cyan', 'logs') + ' command');
   }
 
   if (shouldOpen) {

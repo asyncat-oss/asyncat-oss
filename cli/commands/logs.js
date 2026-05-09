@@ -9,6 +9,47 @@ const LOGS_DIR = path.join(ROOT, 'logs');
 const CLI_LOG_TYPES = ['ui', 'commands', 'agent', 'error', 'startup'];
 const BACKEND_LOG_TYPES = ['app', 'http', 'error', 'process'];
 
+function clearLogFiles(target) {
+  if (!fs.existsSync(target)) return 0;
+  const stat = fs.statSync(target);
+  if (stat.isFile()) {
+    fs.truncateSync(target, 0);
+    return 1;
+  }
+  if (!stat.isDirectory()) return 0;
+  let count = 0;
+  for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+    count += clearLogFiles(path.join(target, entry.name));
+  }
+  return count;
+}
+
+function clearTarget(target) {
+  const full = path.resolve(LOGS_DIR, target);
+  if (full !== LOGS_DIR && !full.startsWith(LOGS_DIR + path.sep)) return 0;
+  return clearLogFiles(full);
+}
+
+function clearLogs(scope = 'all') {
+  const targets = {
+    all: ['cli', 'backend', 'frontend.log'],
+    cli: ['cli'],
+    backend: ['backend'],
+    frontend: ['frontend.log'],
+  };
+
+  if (!targets[scope]) {
+    warn(`Unknown logs clear scope: ${col('white', scope)}`);
+    log(`  Usage: ${col('cyan', 'logs clear')} ${col('dim', '[all|cli|backend|frontend]')}`);
+    return;
+  }
+
+  let removed = 0;
+  for (const target of targets[scope]) removed += clearTarget(target);
+  fs.mkdirSync(LOGS_DIR, { recursive: true });
+  info(`Cleared ${removed} log file${removed === 1 ? '' : 's'} (${scope}).`);
+}
+
 function tailFile(file, label, color, options = {}) {
   if (!fs.existsSync(file)) {
     if (options.optional) {
@@ -58,6 +99,11 @@ export function run(args) {
 
   if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
 
+  if (sub === 'clear') {
+    clearLogs(args[1] || 'all');
+    return;
+  }
+
   if (sub === 'cli' || sub === 'all') {
     log('');
     log(`  ${col('magenta', col('bold', '─ CLI Logs ─'))}`);
@@ -95,13 +141,14 @@ export function run(args) {
 
   if (sub !== 'backend' && sub !== 'frontend' && sub !== 'all' && sub !== 'cli') {
     warn(`Unknown logs subcommand: ${col('white', sub)}`);
-    log(`  Usage: ${col('cyan', 'logs')} ${col('dim', '[backend|frontend|cli|cli-view|all]')}`);
+    log(`  Usage: ${col('cyan', 'logs')} ${col('dim', '[backend|frontend|cli|cli-view|clear|all]')}`);
     log(`  ${col('dim', 'cli-view options:')} ${col('white', CLI_LOG_TYPES.join(' | '))}`);
+    log(`  ${col('dim', 'clear scopes:')} ${col('white', 'all | cli | backend | frontend')}`);
     return;
   }
 
-  if (showBackend  && procs.backend)  info('Backend is running — output is streaming live in this terminal.');
-  if (showFrontend && procs.frontend) info('Frontend is running — output is streaming live in this terminal.');
+  if (showBackend  && procs.backend)  info('Backend is running — output is being written to logs/backend/.');
+  if (showFrontend && procs.frontend) info('Frontend is running — output is being written to logs/frontend.log.');
 
   if (showBackend)  tailBackendLogs();
   if (showFrontend) tailFile(path.join(LOGS_DIR, 'frontend.log'), 'frontend', 'magenta');
