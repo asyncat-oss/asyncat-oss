@@ -928,6 +928,11 @@ export const gitApi = {
     return await apiRequest(`${API_BASE_URL}/agent/git/state`);
   },
 
+  log: async ({ limit = 100, skip = 0 } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit), skip: String(skip) });
+    return await apiRequest(`${API_BASE_URL}/agent/git/log?${params}`);
+  },
+
   getDiff: async ({ file = null, staged = false } = {}) => {
     const params = new URLSearchParams({ staged: String(Boolean(staged)) });
     if (file) params.set('file', file);
@@ -969,10 +974,10 @@ export const gitApi = {
     });
   },
 
-  stash: async ({ action = 'list', message = null } = {}) => {
+  stash: async ({ action = 'list', message = null, index = null } = {}) => {
     return await apiRequest(`${API_BASE_URL}/agent/git/stash`, {
       method: 'POST',
-      body: JSON.stringify({ action, message }),
+      body: JSON.stringify({ action, message, index }),
     });
   },
 

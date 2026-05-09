@@ -18,7 +18,7 @@ import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/to
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from '../../agent/reasoningParser.js';
-import { branchGit, commitGit, getGitDiff, getGitState, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
+import { branchGit, commitGit, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -1058,6 +1058,16 @@ router.get('/git/state', authenticate, (req, res) => {
   }
 });
 
+router.get('/git/log', authenticate, (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 100;
+    const skip = parseInt(req.query.skip, 10) || 0;
+    res.json(getGitLog(gitWorkingDir(req), { limit, skip }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/git/diff', authenticate, (req, res) => {
   try {
     res.json(getGitDiff(gitWorkingDir(req), {
@@ -1128,6 +1138,7 @@ router.post('/git/stash', authenticate, (req, res) => {
     res.json(stashGit(gitWorkingDir(req), {
       action: req.body?.action || 'list',
       message: req.body?.message || null,
+      index: req.body?.index !== undefined ? req.body.index : null,
     }));
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

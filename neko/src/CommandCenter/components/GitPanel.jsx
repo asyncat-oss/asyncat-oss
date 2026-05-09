@@ -8,6 +8,8 @@ import {
 import { gitApi } from '../commandCenterApi';
 import Portal from '../../components/Portal';
 import { basename, fileIconMeta } from '../../files/fileUtils.js';
+import GitGraph from './GitGraph';
+import StashManager from './StashManager';
 
 const COMMIT_ACTIONS = new Set([
   'commit',
@@ -290,6 +292,9 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [stagedExpanded, setStagedExpanded] = useState(true);
+  const [changesExpanded, setChangesExpanded] = useState(true);
+  const [activeTab, setActiveTab] = useState('working'); // 'working', 'history', 'stashes'
   const files = useMemo(() => state?.changes?.all || [], [state?.changes?.all]);
   const stagedFiles = useMemo(() => state?.changes?.staged || [], [state?.changes?.staged]);
   const workingFiles = useMemo(() => files.filter(file => !file.staged || file.unstaged), [files]);
@@ -309,21 +314,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
     ];
   }, [files.length, hasCommitMessage, stagedFiles.length]);
 
-  const openAction = useCallback((nextAction, nextPayload = {}) => {
-    setCommitMenuOpen(false);
-    setAction(nextAction);
-    setPayload(nextPayload);
-    setActionError(null);
-  }, []);
-
-  const closeAction = useCallback(() => {
-    if (busy) return;
-    setAction(null);
-    setPayload({});
-    setActionError(null);
-  }, [busy]);
-
-  const runConfirmedAction = useCallback(async () => {
+  const executeAction = useCallback(async (targetAction, targetPayload) => {
     setBusy(true);
     setActionError(null);
     try {
@@ -334,51 +325,74 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
         }
         return result;
       };
-      if (action === 'stage') res = await gitApi.stage(payload.files || []);
-      if (action === 'unstage') res = await gitApi.unstage(payload.files || []);
-      if (action === 'commit') res = await gitApi.commit({ message: payload.message, files: payload.files || [] });
-      if (action === 'commit-push') {
-        res = assertSuccess(await gitApi.commit({ message: payload.message, files: payload.files || [] }), 'Commit');
+      if (targetAction === 'stage') res = await gitApi.stage(targetPayload.files || []);
+      if (targetAction === 'unstage') res = await gitApi.unstage(targetPayload.files || []);
+      if (targetAction === 'commit') res = await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [] });
+      if (targetAction === 'commit-push') {
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [] }), 'Commit');
         res = await gitApi.push();
       }
-      if (action === 'commit-sync') {
-        res = assertSuccess(await gitApi.commit({ message: payload.message, files: payload.files || [] }), 'Commit');
+      if (targetAction === 'commit-sync') {
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [] }), 'Commit');
         res = assertSuccess(await gitApi.pull(), 'Pull');
         res = await gitApi.push();
       }
-      if (action === 'amend') {
-        res = await gitApi.commit({ message: payload.message || '', files: payload.files || [], amend: true });
+      if (targetAction === 'amend') {
+        res = await gitApi.commit({ message: targetPayload.message || '', files: targetPayload.files || [], amend: true });
       }
-      if (action === 'amend-push') {
-        res = assertSuccess(await gitApi.commit({ message: payload.message || '', files: payload.files || [], amend: true }), 'Amend');
+      if (targetAction === 'amend-push') {
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message || '', files: targetPayload.files || [], amend: true }), 'Amend');
         res = await gitApi.push();
       }
-      if (action === 'stage-commit') {
+      if (targetAction === 'stage-commit') {
         res = assertSuccess(await gitApi.stage([]), 'Stage all');
-        res = await gitApi.commit({ message: payload.message, files: [] });
+        res = await gitApi.commit({ message: targetPayload.message, files: [] });
       }
-      if (action === 'stage-commit-push') {
+      if (targetAction === 'stage-commit-push') {
         res = assertSuccess(await gitApi.stage([]), 'Stage all');
-        res = assertSuccess(await gitApi.commit({ message: payload.message, files: [] }), 'Commit');
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [] }), 'Commit');
         res = await gitApi.push();
       }
-      if (action === 'pull') res = await gitApi.pull();
-      if (action === 'push') res = await gitApi.push();
-      if (action === 'stash-save') res = await gitApi.stash({ action: 'save', message: payload.message || 'Asyncat visual stash' });
-      if (action === 'stash-pop') res = await gitApi.stash({ action: 'pop' });
-      if (action === 'branch-create') res = await gitApi.branch({ action: 'create', name: payload.name });
-      if (action === 'branch-switch') res = await gitApi.branch({ action: 'switch', name: payload.name });
+      if (targetAction === 'pull') res = await gitApi.pull();
+      if (targetAction === 'push') res = await gitApi.push();
+      if (targetAction === 'stash-save') res = await gitApi.stash({ action: 'save', message: targetPayload.message || 'Asyncat visual stash' });
+      if (targetAction === 'stash-pop') res = await gitApi.stash({ action: 'pop' });
+      if (targetAction === 'branch-create') res = await gitApi.branch({ action: 'create', name: targetPayload.name });
+      if (targetAction === 'branch-switch') res = await gitApi.branch({ action: 'switch', name: targetPayload.name });
       if (!res?.success) throw new Error(res?.error || res?.stderr || 'Git action failed');
+      
       setAction(null);
       setPayload({});
-      if (COMMIT_ACTIONS.has(action)) setCommitMessage('');
+      if (COMMIT_ACTIONS.has(targetAction)) setCommitMessage('');
       onChanged?.(res);
     } catch (err) {
       setActionError(err.message || 'Git action failed');
     } finally {
       setBusy(false);
     }
-  }, [action, payload, onChanged]);
+  }, [onChanged]);
+
+  const openAction = useCallback((nextAction, nextPayload = {}) => {
+    setCommitMenuOpen(false);
+    if (nextAction === 'stage' || nextAction === 'unstage') {
+      executeAction(nextAction, nextPayload);
+      return;
+    }
+    setAction(nextAction);
+    setPayload(nextPayload);
+    setActionError(null);
+  }, [executeAction]);
+
+  const closeAction = useCallback(() => {
+    if (busy) return;
+    setAction(null);
+    setPayload({});
+    setActionError(null);
+  }, [busy]);
+
+  const runConfirmedAction = useCallback(() => {
+    executeAction(action, payload);
+  }, [action, payload, executeAction]);
 
   const attachFile = useCallback((file) => {
     const name = basename(file.path || '');
@@ -440,6 +454,17 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
         </div>
       </div>
 
+      {actionError && !action && (
+        <div className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{actionError}</span>
+            <button type="button" onClick={() => setActionError(null)} className="rounded-md p-0.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
       <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-slate-800 midnight:border-slate-800">
         <textarea
           value={commitMessage}
@@ -508,50 +533,102 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
           </IconButton>
         </div>
       </div>
+      
+      {/* Tabs */}
+      <div className="flex border-b border-gray-100 px-2 dark:border-slate-800 midnight:border-slate-800 shrink-0">
+        <button
+          onClick={() => setActiveTab('working')}
+          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'working' ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300'}`}
+        >
+          Working Tree
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'history' ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300'}`}
+        >
+          History
+        </button>
+        <button
+          onClick={() => setActiveTab('stashes')}
+          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'stashes' ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300'}`}
+        >
+          Stashes
+        </button>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {files.length === 0 ? (
-          <div className="py-8 text-center text-sm text-gray-400">Working tree clean.</div>
-        ) : (
-          <div className="space-y-3">
-            {stagedFiles.length > 0 && (
-              <section>
-                <div className="mb-1 flex items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-500">
-                  <ChevronDown className="h-3.5 w-3.5" />
-                  Staged
-                  <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stagedFiles.length}</span>
-                </div>
-                <div className="space-y-px">
-                  {stagedFiles.map(file => (
-                    <ChangeRow
-                      key={`staged-${file.code}-${file.path}-${file.oldPath || ''}`}
-                      file={file}
-                      onAttach={attachFile}
-                      onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
-                    />
-                  ))}
-                </div>
-              </section>
+        {activeTab === 'working' && (
+          <>
+            {files.length === 0 && (
+              <div className="py-8 text-center text-sm text-gray-400">Working tree clean.</div>
             )}
-            {workingFiles.length > 0 && (
-              <section>
-                <div className="mb-1 flex items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-500">
-                  <ChevronDown className="h-3.5 w-3.5" />
-                  Changes
-                  <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{workingFiles.length}</span>
-                </div>
-                <div className="space-y-px">
-                  {workingFiles.map(file => (
-                    <ChangeRow
-                      key={`working-${file.code}-${file.path}-${file.oldPath || ''}`}
-                      file={file}
-                      onAttach={attachFile}
-                      onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
-                    />
-                  ))}
-                </div>
-              </section>
+            
+            {files.length > 0 && (
+              <div className="space-y-3 mb-4">
+                {stagedFiles.length > 0 && (
+                  <section>
+                    <button
+                      type="button"
+                      onClick={() => setStagedExpanded(v => !v)}
+                      className="mb-1 flex w-full items-center gap-2 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                    >
+                      {stagedExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      Staged
+                      <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stagedFiles.length}</span>
+                    </button>
+                    {stagedExpanded && (
+                      <div className="space-y-px">
+                        {stagedFiles.map(file => (
+                          <ChangeRow
+                            key={`staged-${file.code}-${file.path}-${file.oldPath || ''}`}
+                            file={file}
+                            onAttach={attachFile}
+                            onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+                {workingFiles.length > 0 && (
+                  <section>
+                    <button
+                      type="button"
+                      onClick={() => setChangesExpanded(v => !v)}
+                      className="mb-1 flex w-full items-center gap-2 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                    >
+                      {changesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      Changes
+                      <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{workingFiles.length}</span>
+                    </button>
+                    {changesExpanded && (
+                      <div className="space-y-px">
+                        {workingFiles.map(file => (
+                          <ChangeRow
+                            key={`working-${file.code}-${file.path}-${file.oldPath || ''}`}
+                            file={file}
+                            onAttach={attachFile}
+                            onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+              </div>
             )}
+          </>
+        )}
+        
+        {activeTab === 'history' && (
+          <div className="h-full flex flex-col pt-1">
+             <GitGraph />
+          </div>
+        )}
+        
+        {activeTab === 'stashes' && (
+          <div className="h-full flex flex-col pt-1">
+             <StashManager onRefresh={onRefresh} />
           </div>
         )}
       </div>

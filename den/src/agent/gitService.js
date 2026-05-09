@@ -166,7 +166,7 @@ export function getGitState(cwd) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return { success: true, detected: false, reason: repo.error };
 
-  const status = runGit(['status', '--porcelain=v1', '-b'], repo.root, 10000);
+  const status = runGit(['status', '--porcelain=v1', '-b', '-uall'], repo.root, 10000);
   const remotes = runGit(['remote', '-v'], repo.root, 5000);
   const parsed = parseStatus(status.output || '');
   const groups = groupFiles(parsed.files);
@@ -186,6 +186,37 @@ export function getGitState(cwd) {
     stashCount: stashCount(repo.root),
     changes: groups,
   };
+}
+
+export function getGitLog(cwd, { limit = 100, skip = 0 } = {}) {
+  const repo = ensureRepo(cwd);
+  if (!repo.success) return repo;
+  
+  const args = [
+    'log',
+    '--all',
+    '--date-order',
+    '--pretty=format:%H%x00%P%x00%D%x00%s%x00%an%x00%ar',
+    '-n', String(limit)
+  ];
+  if (skip > 0) args.push('--skip', String(skip));
+
+  const result = runGit(args, repo.root, 10000);
+  if (!result.success) return result;
+
+  const commits = (result.output || '').split('\n').filter(Boolean).map(line => {
+    const [hash, parentsRaw, refsRaw, subject, author, date] = line.split('\x00');
+    return {
+      hash,
+      parents: parentsRaw ? parentsRaw.split(' ') : [],
+      refs: refsRaw ? refsRaw.split(', ').filter(Boolean) : [],
+      subject,
+      author,
+      date
+    };
+  });
+
+  return { success: true, detected: true, root: repo.root, commits };
 }
 
 export function getGitDiff(cwd, { file = null, staged = false } = {}) {
@@ -277,18 +308,30 @@ export function pushGit(cwd, { remote = 'origin', branch = null, setUpstream = f
   return { ...result, command: `git ${args.join(' ')}` };
 }
 
-export function stashGit(cwd, { action = 'list', message = null } = {}) {
+export function stashGit(cwd, { action = 'list', message = null, index = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
-  if (!['save', 'pop', 'list'].includes(action)) {
-    return { success: false, error: 'Only save, pop, and list stash actions are available here.' };
+  if (!['save', 'pop', 'drop', 'list'].includes(action)) {
+    return { success: false, error: 'Only save, pop, drop, and list stash actions are available here.' };
   }
   const args = action === 'save'
     ? ['stash', 'push', '-u', ...(message ? ['-m', message] : [])]
     : action === 'pop'
-      ? ['stash', 'pop']
-      : ['stash', 'list'];
+      ? ['stash', 'pop', ...(index !== null ? [`stash@{${index}}`] : [])]
+      : action === 'drop'
+        ? ['stash', 'drop', ...(index !== null ? [`stash@{${index}}`] : [])]
+        : ['stash', 'list'];
   const result = runGit(args, repo.root, 60000);
+  
+  if (action === 'list' && result.success) {
+    const stashes = (result.output || '').split('\n').filter(Boolean).map(line => {
+      const match = line.match(/^stash@\{(\d+)\}:\s*(.*)$/);
+      if (!match) return { raw: line };
+      return { index: parseInt(match[1], 10), message: match[2], raw: line };
+    });
+    return { ...result, command: `git ${args.join(' ')}`, stashes };
+  }
+
   return { ...result, command: `git ${args.join(' ')}` };
 }
 
