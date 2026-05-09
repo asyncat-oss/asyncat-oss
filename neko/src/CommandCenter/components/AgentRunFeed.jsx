@@ -289,13 +289,13 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
 
         <div className="min-w-0 flex-1">
           <button
-            onClick={() => (result || data?.args) && setExpanded(v => !v)}
-            className="flex w-full items-center gap-2 text-left"
+            onClick={() => isError && setExpanded(v => !v)}
+            className={`flex w-full items-center gap-2 text-left ${isError ? 'cursor-pointer' : 'cursor-default'}`}
           >
             <Icon className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />
             <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{label}</span>
             <span className={`ml-auto flex-shrink-0 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
-            {(result || data?.args) && (
+            {isError && (
               expanded
                 ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400" />
                 : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -306,20 +306,10 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             {intent.value}
           </p>
 
-          {summary && !expanded && (
+          {summary && (!expanded || !isError) && (
             <p className={`mt-0.5 truncate pl-5 font-mono text-[10px] ${isError ? 'text-red-400' : 'text-gray-400 dark:text-gray-600'}`}>
               {summary}
             </p>
-          )}
-
-          {isMalformed && (
-            <button
-              onClick={() => onRetryTool?.({ tool: data?.tool, args: data?.args, result, repairPrompt: data?.repairPrompt })}
-              className="ml-5 mt-1 inline-flex items-center gap-1 rounded border border-red-200 px-1.5 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Retry from here
-            </button>
           )}
 
           {data?.permissionDecision && (
@@ -339,16 +329,11 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             </div>
           )}
 
-          {expanded && (
+          {expanded && isError && (
             <div className="ml-5 mt-1 border-l border-gray-100 pl-2 dark:border-gray-800">
-              {data?.args && (
-                <pre className="max-h-28 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono text-[10px] leading-relaxed text-gray-500 dark:bg-gray-900/60 dark:text-gray-500">
-                  {JSON.stringify(data.args, null, 2)}
-                </pre>
-              )}
               {result && (
-                <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono text-[10px] leading-relaxed text-gray-500 dark:bg-gray-900/60 dark:text-gray-500">
-                  {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono text-[10px] leading-relaxed text-gray-500 dark:bg-gray-900/60 dark:text-gray-500">
+                  {typeof result === 'string' ? result : (result.output || result.content || result.error || JSON.stringify(result, null, 2))}
                 </pre>
               )}
             </div>
