@@ -1,84 +1,30 @@
 ---
-name: safe-refactoring
-description: Refactor without breaking things
-brain_region: prefrontal
-weight: 1.0
-tags: [refactoring, cleanup, code-quality]
+name: refactoring
+description: Safe behavior-preserving code improvement
+brain_region: cerebellum
+weight: 0.9
+tags: [refactoring, cleanup, code-quality, coding]
 when_to_use: |
-  When improving existing code, reducing technical debt,
-  or updating legacy patterns.
+  When improving existing code structure, reducing duplication,
+  simplifying logic, or paying down technical debt.
 ---
-# Safe Refactoring
+# Refactoring
 
-## Golden Rules
-1. Tests first
-2. Small commits
-3. Verify at each step
+## Rules
+- Preserve behavior unless the user explicitly asks for behavior changes.
+- Inspect current tests and call sites before moving shared logic.
+- Keep refactors small enough to review.
+- Do not mix unrelated cleanup with feature work.
 
-## Before You Start
-- Run existing tests
-- Understand the code
-- Identify boundaries
+## Workflow
+1. Establish current behavior and verification commands.
+2. Identify the smallest useful structural improvement.
+3. Make the change in local style.
+4. Run focused tests/build/lint when available.
+5. Summarize behavior preserved and verification completed.
 
-## Step-by-Step
-
-### 1. Isolate
-Find the smallest unit to refactor:
-- Single function
-- Single module
-- Single component
-
-### 2. Test
-Write/verify tests for current behavior:
-```js
-// Preserve existing behavior
-expect(currentFunction(input)).toBe(expectedOutput)
-```
-
-### 3. Refactor
-Make changes incrementally:
-```js
-// Before
-function oldWay() { ... }
-
-// After (keep old working)
-function newWay() { ... }
-```
-
-### 4. Verify
-Run tests after each change.
-
-## Common Patterns
-
-### Extract Function
-```js
-// Before
-doSomething(a, b, c)
-
-// After
-function doSomething(a, b, c) {
-  const partA = extractPartA(a)
-  const partB = extractPartB(b)
-  return combine(partA, partB, c)
-}
-```
-
-### Rename
-- Rename in one commit
-- Update all references
-- Run tests
-
-### Simplify Conditionals
-```js
-// Before
-if (x === true) { ... }
-
-// After
-if (x) { ... }
-```
-
-## Warning Signs
-- No tests
-- Giant functions
-- Tight coupling
-- Hidden side effects
+## Good Targets
+- Remove meaningful duplication.
+- Clarify confusing conditionals.
+- Extract helpers only when they reduce real complexity.
+- Move code to a shared module when multiple callers need the same behavior.

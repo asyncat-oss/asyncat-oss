@@ -114,6 +114,44 @@ function extractJsonObject(text = '') {
   }
 }
 
+function deterministicSkillNames(goal = '') {
+  const text = String(goal || '').toLowerCase();
+  const names = [];
+  const add = (name) => { if (!names.includes(name)) names.push(name); };
+
+  if (/\b(code|coding|implement|fix|bug|refactor|test|lint|build|review|diff|commit|repo|repository|file|component|route|api)\b/.test(text)) {
+    add('agentic-coding');
+  }
+  if (/\b(git|commit|branch|push|pull|stash|diff|merge|rebase|checkout)\b/.test(text)) {
+    add('git-workflow');
+  }
+  if (/\b(test|tests|testing|coverage|spec|failing test)\b/.test(text)) {
+    add('effective-testing');
+  }
+  if (/\b(debug|bug|error|fails|failure|broken|regression|stack trace|exception)\b/.test(text)) {
+    add('systematic-debugging');
+  }
+  if (/\b(review|pr|pull request|diff|patch)\b/.test(text)) {
+    add('code-review');
+  }
+  if (/\b(refactor|cleanup|simplify|technical debt|deduplicate)\b/.test(text)) {
+    add('refactoring');
+  }
+
+  return names;
+}
+
+function skillsByNames(names = [], limit = 5) {
+  const byName = new Map(loadedSkills.map(skill => [skill.name, skill]));
+  const selected = [];
+  for (const name of names) {
+    const skill = byName.get(name);
+    if (skill && !selected.some(item => item.name === skill.name)) selected.push(skill);
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
 export async function selectRelevantSkillsWithLlm({
   aiClient,
   model,
@@ -122,7 +160,8 @@ export async function selectRelevantSkillsWithLlm({
   limit = 5,
 } = {}) {
   if (!goal || loadedSkills.length === 0 || !aiClient?.messages?.create) {
-    return { skills: [], method: 'llm-unavailable' };
+    const fallback = skillsByNames(deterministicSkillNames(goal), limit);
+    return { skills: fallback, method: fallback.length ? 'deterministic' : 'llm-unavailable' };
   }
 
   const catalog = loadedSkills.map(skill => ({
@@ -163,27 +202,21 @@ export async function selectRelevantSkillsWithLlm({
     const raw = response.content?.[0]?.text || '';
     const parsed = extractJsonObject(raw);
     const requested = Array.isArray(parsed?.skills) ? parsed.skills : [];
-    const byName = new Map(loadedSkills.map(skill => [skill.name, skill]));
-    const selected = [];
-
-    for (const name of requested) {
-      const skill = byName.get(String(name || '').trim());
-      if (skill && !selected.some(s => s.name === skill.name)) {
-        selected.push(skill);
-      }
-      if (selected.length >= limit) break;
-    }
 
     return {
-      skills: selected,
+      skills: skillsByNames([
+        ...requested.map(name => String(name || '').trim()),
+        ...deterministicSkillNames(goal),
+      ], limit),
       method: 'llm',
       reason: typeof parsed?.reason === 'string' ? parsed.reason.slice(0, 240) : '',
     };
   } catch (err) {
     console.warn('[agent] LLM skill selection failed; no skills will be injected:', err.message);
+    const fallback = skillsByNames(deterministicSkillNames(goal), limit);
     return {
-      skills: [],
-      method: 'llm-failed',
+      skills: fallback,
+      method: fallback.length ? 'deterministic-fallback' : 'llm-failed',
       reason: err.message,
     };
   }

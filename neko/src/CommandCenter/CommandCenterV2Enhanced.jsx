@@ -248,12 +248,11 @@ import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel } from './components/AgentRunFeed';
 import AgentChangesPanel from './components/AgentChangesPanel';
-import AgentActivitySidebar from './components/AgentActivitySidebar';
-import ChatSourcesMediaSidebar from './components/ChatSourcesMediaSidebar';
+import CommandCenterSidePanel from './components/CommandCenterSidePanel';
 import ConversationLoadingSkeleton from './components/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import { useCommandCenter } from "./CommandCenterContextEnhanced";
-import { chatApi, agentApi } from "./commandCenterApi";
+import { chatApi, agentApi, gitApi } from "./commandCenterApi";
 import { cleanReasoningAnswer } from "./reasoningParser.js";
 import { useUser } from "../contexts/UserContext";
 import {
@@ -272,6 +271,7 @@ import {
   MessageSquare,
   PanelRightOpen,
   Image,
+  GitBranch,
 } from "lucide-react";
 
 const getRelativeConversationTime = (dateString) => {
@@ -686,12 +686,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [recentConversationsError, setRecentConversationsError] = useState(null);
   const [showActivitySidebar, setShowActivitySidebar] = useState(() => {
     try {
-      return localStorage.getItem('asyncat_show_steps_sidebar') !== 'false';
+      return localStorage.getItem('asyncat_show_command_side_panel') !== 'false';
     } catch {
       return true;
     }
   });
-  const [showSourcesMediaSidebar, setShowSourcesMediaSidebar] = useState(false);
+  const [sidePanelTab, setSidePanelTab] = useState('steps');
+  const [gitState, setGitState] = useState(null);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [gitError, setGitError] = useState(null);
+  const [externalFileAttachment, setExternalFileAttachment] = useState(null);
   const [agentAutoApprove, setAgentAutoApprove] = useState(() => {
     try {
       return localStorage.getItem('asyncat_agent_auto_approve') === 'true';
@@ -875,12 +879,46 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     navigate(`/conversations/${conversationId}`);
   }, [navigate]);
 
-  const toggleActivitySidebar = useCallback(() => {
+  const refreshGitState = useCallback(async () => {
+    setGitLoading(true);
+    setGitError(null);
+    try {
+      const res = await gitApi.getState();
+      setGitState(res);
+    } catch (error) {
+      setGitError(error.message || 'Could not load Git state');
+      setGitState(null);
+    } finally {
+      setGitLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshGitState();
+  }, [refreshGitState]);
+
+  useEffect(() => {
+    const handler = () => refreshGitState();
+    window.addEventListener('agent-run-complete', handler);
+    return () => window.removeEventListener('agent-run-complete', handler);
+  }, [refreshGitState]);
+
+  const toggleSidePanelTab = useCallback((tab) => {
     setShowActivitySidebar(prev => {
-      const next = !prev;
-      try { localStorage.setItem('asyncat_show_steps_sidebar', String(next)); } catch {}
+      const shouldClose = prev && sidePanelTab === tab;
+      const next = !shouldClose;
+      if (next) setSidePanelTab(tab);
+      try { localStorage.setItem('asyncat_show_command_side_panel', String(next)); } catch { /* localStorage may be unavailable */ }
       return next;
     });
+  }, [sidePanelTab]);
+
+  const handleGitChanged = useCallback(() => {
+    refreshGitState();
+  }, [refreshGitState]);
+
+  const handleAttachGitFile = useCallback((file) => {
+    setExternalFileAttachment({ ...file, nonce: Date.now() });
   }, []);
 
   const ConversationSwitcher = useCallback(({ compact = false } = {}) => (
@@ -1185,6 +1223,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         }
         if (event.type === 'tool_result') {
           const completedAt = Date.now();
+          const resultTool = event.data?.tool || '';
+          if (
+            resultTool.startsWith('git_') ||
+            ['write_file', 'create_file', 'edit_file', 'create_directory', 'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file', 'run_command', 'run_python', 'run_node'].includes(resultTool)
+          ) {
+            refreshGitState();
+          }
           runEvents.push(event);
           updateChatRun(runKey, prev => {
             const updated = [...(prev.events || [])];
@@ -1395,6 +1440,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setConversationTitle,
     triggerConversationRefresh,
     updateChatRun,
+    refreshGitState,
   ]);
 
   const handleRetryTool = useCallback((failure) => {
@@ -1444,7 +1490,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         setAlwaysAllowedTools(prev => {
           const next = new Set(prev);
           next.add(toolName);
-          try { localStorage.setItem('asyncat_always_allow_tools', JSON.stringify([...next])); } catch {}
+          try { localStorage.setItem('asyncat_always_allow_tools', JSON.stringify([...next])); } catch { /* localStorage may be unavailable */ }
           return next;
         });
       }
@@ -1497,7 +1543,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const handleToggleAgentAutoApprove = useCallback(() => {
     setAgentAutoApprove(prev => {
       const next = !prev;
-      try { localStorage.setItem('asyncat_agent_auto_approve', String(next)); } catch {}
+      try { localStorage.setItem('asyncat_agent_auto_approve', String(next)); } catch { /* localStorage may be unavailable */ }
       return next;
     });
   }, []);
@@ -1789,6 +1835,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onToggleTools={() => setToolsEnabled(!toolsEnabled)}
               autoApprove={agentAutoApprove}
               onToggleAutoApprove={handleToggleAgentAutoApprove}
+              externalFileAttachment={externalFileAttachment}
             />
 
 
@@ -1859,12 +1906,32 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       </>
                     )}
 
+                    {gitState?.detected && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('git')}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'git'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Show Git changes"
+                      >
+                        <GitBranch className="h-4 w-4" />
+                        Git
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {gitState.changedCount || 0}
+                          {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
+                        </span>
+                      </button>
+                    )}
+
                     {sourceCatalog.totalCount > 0 && (
                       <button
                         type="button"
-                        onClick={() => setShowSourcesMediaSidebar(prev => !prev)}
+                        onClick={() => toggleSidePanelTab('media')}
                         className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                          showSourcesMediaSidebar
+                          showActivitySidebar && sidePanelTab === 'media'
                             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
                         }`}
@@ -1881,9 +1948,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
                       <button
                         type="button"
-                        onClick={toggleActivitySidebar}
+                        onClick={() => {
+                          toggleSidePanelTab('steps');
+                        }}
                         className={`hidden xl:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                          showActivitySidebar
+                          showActivitySidebar && sidePanelTab === 'steps'
                             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
                         }`}
@@ -2125,26 +2194,56 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 isRunning={agentRunning}
                 onStop={handleAgentStop}
                 runStartedAt={runStartedAtRef.current}
+                externalFileAttachment={externalFileAttachment}
               />
             </div>
           </>
         )}
       </div>
 
-      {sourceCatalog.totalCount > 0 && showSourcesMediaSidebar && (
-        <aside className="hidden xl:block w-80 shrink-0 border-l border-gray-200 bg-gray-50/30 dark:border-gray-700 dark:bg-gray-900/30 midnight:border-slate-700 midnight:bg-slate-950/30">
-          <ChatSourcesMediaSidebar catalog={sourceCatalog} />
+      {showActivitySidebar && (gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+        <aside className="hidden xl:block w-96 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700">
+          <CommandCenterSidePanel
+            activeTab={sidePanelTab}
+            stepsItems={agentActivityItems}
+            stepsLoading={agentLoadingSession}
+            isRunning={agentRunning}
+            sourceCatalog={sourceCatalog}
+            gitState={gitState}
+            gitLoading={gitLoading}
+            gitError={gitError}
+            onGitRefresh={refreshGitState}
+            onGitChanged={handleGitChanged}
+            onAttachGitFile={handleAttachGitFile}
+          />
         </aside>
       )}
 
-      {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && showActivitySidebar && (
-        <aside className="hidden xl:block w-60 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50/30 dark:bg-gray-900/30 midnight:bg-slate-950/30">
-          <AgentActivitySidebar
-            items={agentActivityItems}
-            isLoading={agentLoadingSession}
-            isRunning={agentRunning}
+      {showActivitySidebar && (gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+        <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
+          <button
+            type="button"
+            className="flex-1"
+            onClick={() => setShowActivitySidebar(false)}
+            aria-label="Close side panel"
           />
-        </aside>
+          <div className="h-full w-[min(24rem,92vw)] border-l border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950">
+            <CommandCenterSidePanel
+              activeTab={sidePanelTab}
+              onClose={() => setShowActivitySidebar(false)}
+              stepsItems={agentActivityItems}
+              stepsLoading={agentLoadingSession}
+              isRunning={agentRunning}
+              sourceCatalog={sourceCatalog}
+              gitState={gitState}
+              gitLoading={gitLoading}
+              gitError={gitError}
+              onGitRefresh={refreshGitState}
+              onGitChanged={handleGitChanged}
+              onAttachGitFile={handleAttachGitFile}
+            />
+          </div>
+        </div>
       )}
 
       <DeleteConfirmationModal

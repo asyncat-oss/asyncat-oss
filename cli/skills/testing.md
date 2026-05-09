@@ -1,63 +1,29 @@
 ---
 name: effective-testing
-description: Writing tests that actually help
+description: Focused tests for coding changes, bug fixes, and regressions
 brain_region: cerebellum
 weight: 1.0
-tags: [testing, tdd, unit-tests, coverage]
+tags: [testing, tdd, unit-tests, coverage, coding]
 when_to_use: |
-  When writing new tests, debugging test failures,
-  or improving test coverage.
+  When writing tests, fixing bugs, improving coverage, verifying changes,
+  or diagnosing failing tests.
 ---
 # Effective Testing
 
-## Test Naming
-Use descriptive names:
-```js
-test('should return empty array for invalid input')
-```
+## Principles
+- Test behavior, not implementation details.
+- Add the smallest test that would fail without the fix.
+- Cover the happy path, the regression path, and the most likely edge case.
+- Keep tests deterministic: avoid time, network, and shared-state flakiness.
 
-## Test Structure
-Arrange, Act, Assert:
-```js
-// Arrange
-const input = { name: 'test' }
+## Workflow
+1. Inspect existing test style and commands.
+2. Add or update focused tests near related coverage.
+3. Run the narrowest relevant test command first.
+4. Broaden verification when the change affects shared behavior.
+5. Report exact commands and outcomes.
 
-// Act
-const result = process(input)
-
-// Assert
-expect(result).toEqual({ name: 'test' })
-```
-
-## What to Test
-
-### Happy Path
-- Core functionality works
-
-### Edge Cases
-- Empty input
-- Null/undefined
-- Max values
-- Special characters
-
-### Error Cases
-- Invalid input
-- Network failures
-- Permission errors
-
-## What NOT to Test
-- Third-party libs
-- Configuration
-- Too much mocking
-- Implementation details
-
-## Test Coverage
-- Focus on critical paths
-- Don't chase 100%
-- Quality > quantity
-
-## Flaky Tests
-- Avoid time-based tests
-- Use test databases
-- Clean up after yourself
-- No shared state
+## What Not To Do
+- Do not chase 100% coverage for unrelated code.
+- Do not over-mock the code under test.
+- Do not silently skip tests that fail for relevant reasons.

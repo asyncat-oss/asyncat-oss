@@ -137,7 +137,7 @@ export const packageManagerTool = {
   name: 'package_manager',
   description: 'Detect and run package manager commands. Auto-detects npm, pnpm, yarn, pip, poetry, or cargo.',
   category: 'dev',
-  permission: PermissionLevel.SAFE,
+  permission: PermissionLevel.MODERATE,
   parameters: {
     type: 'object',
     properties: {

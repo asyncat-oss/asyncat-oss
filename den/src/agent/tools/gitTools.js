@@ -5,8 +5,8 @@
 import { execSync } from 'child_process';
 import { spawn } from 'child_process';
 import path from 'path';
-import fs from 'fs';
 import { PermissionLevel } from './toolRegistry.js';
+import { branchGit, commitGit, getGitDiff, getGitState, pullGit, pushGit, stashGit } from '../gitService.js';
 
 const IS_WIN = process.platform === 'win32';
 
@@ -39,7 +39,7 @@ export const gitCloneTool = {
   name: 'git_clone',
   description: 'Clone a git repository into the working directory.',
   category: 'git',
-  permission: PermissionLevel.SAFE,
+  permission: PermissionLevel.MODERATE,
   parameters: {
     type: 'object',
     properties: {
@@ -66,7 +66,7 @@ export const gitPullTool = {
   name: 'git_pull',
   description: 'Pull latest changes from the remote repository.',
   category: 'git',
-  permission: PermissionLevel.SAFE,
+  permission: PermissionLevel.MODERATE,
   parameters: {
     type: 'object',
     properties: {
@@ -77,15 +77,7 @@ export const gitPullTool = {
     required: [],
   },
   execute: async (args, context) => {
-    const cwd = args.path || context.workingDir;
-    const remote = args.remote || 'origin';
-    const branch = args.branch || '';
-    const cmd = branch ? `git pull ${remote} ${branch}` : `git pull ${remote}`;
-    const result = runGit(cmd, cwd);
-    if (!result.success && result.error.includes('not a git')) {
-      return { success: false, error: `Not a git repository: ${cwd}` };
-    }
-    return result;
+    return pullGit(args.path || context.workingDir, { remote: args.remote || null, branch: args.branch || null });
   },
 };
 
@@ -103,13 +95,14 @@ export const gitStatusTool = {
     required: [],
   },
   execute: async (args, context) => {
-    const cwd = args.path || context.workingDir;
-    const cmd = args.short ? 'git status -s' : 'git status';
-    const result = runGit(cmd, cwd);
-    if (!result.success && result.error.includes('not a git')) {
-      return { success: false, error: `Not a git repository: ${cwd}` };
-    }
-    return { ...result, path: cwd };
+    const state = getGitState(args.path || context.workingDir);
+    if (!state.detected) return { success: false, error: state.reason || 'Not a git repository.' };
+    return {
+      ...state,
+      output: args.short
+        ? state.changes.all.map(file => `${file.code} ${file.path}`).join('\n')
+        : `${state.branch || 'detached'}${state.clean ? ' clean' : ` ${state.changedCount} changed file(s)`}`,
+    };
   },
 };
 
@@ -129,20 +122,16 @@ export const gitDiffTool = {
     required: [],
   },
   execute: async (args, context) => {
-    const cwd = args.path || context.workingDir;
-    let cmd = 'git diff --no-color';
-    if (args.staged) cmd += ' --cached';
-    if (args.file) cmd += ` -- "${args.file}"`;
-    else if (args.compare) cmd += ` ${args.compare}`;
-    else cmd += ' HEAD';
-    const result = runGit(cmd, cwd);
-    if (!result.success && result.error.includes('not a git')) {
-      return { success: false, error: `Not a git repository: ${cwd}` };
+    if (args.compare) {
+      const cwd = args.path || context.workingDir;
+      const result = runGit(`git diff --no-color ${args.compare}${args.file ? ` -- "${args.file}"` : ''}`, cwd);
+      const output = result.output || '';
+      const added = (output.match(/^\+[^+]/gm) || []).length;
+      const removed = (output.match(/^-[^-]/gm) || []).length;
+      return { ...result, additions: added, deletions: removed };
     }
-    const output = result.output || '';
-    const added = (output.match(/^\+[^+]/g) || []).length;
-    const removed = (output.match(/^-[^-]/g) || []).length;
-    return { ...result, additions: added, deletions: removed };
+    const result = getGitDiff(args.path || context.workingDir, { file: args.file || null, staged: args.staged === true });
+    return { ...result, output: result.diff, additions: result.additions, deletions: result.deletions };
   },
 };
 
@@ -182,7 +171,7 @@ export const gitBranchTool = {
   name: 'git_branch',
   description: 'List, create, or delete branches.',
   category: 'git',
-  permission: PermissionLevel.SAFE,
+  permission: PermissionLevel.MODERATE,
   parameters: {
     type: 'object',
     properties: {
@@ -202,23 +191,17 @@ export const gitBranchTool = {
       return { success: true, current_branch: result.output };
     }
     if (args.create) {
-      const result = runGit(`git branch "${args.create}"`, cwd);
-      return { ...result, created: args.create };
+      return branchGit(cwd, { action: 'create', name: args.create });
     }
     if (args.delete) {
       const result = runGit(`git branch -d "${args.delete}"`, cwd);
       return { ...result, deleted: args.delete };
     }
     if (args.switch) {
-      const result = runGit(`git checkout "${args.switch}"`, cwd);
-      return { ...result, switched_to: args.switch };
+      return branchGit(cwd, { action: 'switch', name: args.switch });
     }
-    const result = runGit('git branch -a --format="%(HEAD) %(refname:short) -> %(upstream:short)"', cwd);
-    if (!result.success && result.error.includes('not a git')) {
-      return { success: false, error: `Not a git repository: ${cwd}` };
-    }
-    const branches = (result.output || '').split('\n').filter(Boolean);
-    return { ...result, count: branches.length, branches: branches.join('\n') };
+    const result = branchGit(cwd, { action: 'list' });
+    return { ...result, count: result.branches?.length || 0, branches: (result.branches || []).join('\n') };
   },
 };
 
@@ -239,25 +222,12 @@ export const gitCommitTool = {
     required: ['message'],
   },
   execute: async (args, context) => {
-    const cwd = args.path || context.workingDir;
-    try {
-      if (args.all) {
-        runGit('git add -A', cwd);
-      } else if (args.files) {
-        const files = args.files === '.' ? 'git add -A' : `git add "${args.files}"`;
-        runGit(files, cwd);
-      }
-      let cmd = `git commit ${args.amend ? '--amend --no-edit' : `-m "${args.message}"`}`;
-      const result = runGit(cmd, cwd);
-      if (!result.success) {
-        if (result.error.includes('nothing to commit')) return { success: true, message: 'Nothing to commit', changes: 0 };
-        return result;
-      }
-      const hashResult = runGit('git log -1 --format="%H" --no-merges', cwd);
-      return { ...result, commit: hashResult.output };
-    } catch (err) {
-      return { success: false, error: err.message };
+    if (args.amend) {
+      const cwd = args.path || context.workingDir;
+      return runGit('git commit --amend --no-edit', cwd);
     }
+    const files = args.all || args.files === '.' ? [] : args.files ? [args.files] : [];
+    return commitGit(args.path || context.workingDir, { message: args.message, files });
   },
 };
 
@@ -278,20 +248,12 @@ export const gitPushTool = {
     required: [],
   },
   execute: async (args, context) => {
-    const cwd = args.path || context.workingDir;
-    const remote = args.remote || 'origin';
-    const branch = args.branch || '';
-    let cmd = 'git push';
-    if (args.force) cmd += ' --force';
-    if (args.set_upstream || branch) cmd += ` -u ${remote} ${branch || 'HEAD'}`;
-    else cmd += ` ${remote}`;
-    const result = await runGitStream(cmd, cwd, 60000);
-    if (!result.success) {
-      if (result.error.includes('nothing to push')) return { success: true, message: 'Nothing to push — already up to date' };
-      if (result.error.includes('rejected')) return { success: false, error: `Push rejected — remote has commits you don't have. Try git pull first.`, details: result.stderr };
-      return { success: false, error: result.error, stderr: result.stderr };
-    }
-    return { success: true, pushed: `${remote}/${branch || '(current branch)'}` };
+    if (args.force) return { success: false, error: 'Force push is not available through this tool.' };
+    return pushGit(args.path || context.workingDir, {
+      remote: args.remote || 'origin',
+      branch: args.branch || null,
+      setUpstream: args.set_upstream === true,
+    });
   },
 };
 
@@ -311,16 +273,9 @@ export const gitStashTool = {
   },
   execute: async (args, context) => {
     const cwd = args.path || context.workingDir;
-    let cmd;
-    switch (args.action) {
-      case 'save': cmd = args.message ? `git stash push -m "${args.message}"` : 'git stash push'; break;
-      case 'pop': cmd = 'git stash pop'; break;
-      case 'list': cmd = 'git stash list'; break;
-      case 'drop': cmd = 'git stash drop'; break;
-      case 'clear': cmd = 'git stash clear'; break;
-      default: return { success: false, error: `Unknown action: ${args.action}. Use: save, pop, list, drop, clear` };
-    }
-    const result = runGit(cmd, cwd);
+    if (args.action === 'drop') return runGit('git stash drop', cwd);
+    if (args.action === 'clear') return { success: false, error: 'Stash clear is destructive and not available through this tool.' };
+    const result = stashGit(cwd, { action: args.action, message: args.message || null });
     if (args.action === 'list') {
       const lines = (result.output || '').split('\n').filter(Boolean);
       return { ...result, count: lines.length, stashes: lines.join('\n') };
@@ -333,7 +288,7 @@ export const gitRemoteTool = {
   name: 'git_remote',
   description: 'List, add, or remove git remote repositories.',
   category: 'git',
-  permission: PermissionLevel.SAFE,
+  permission: PermissionLevel.MODERATE,
   parameters: {
     type: 'object',
     properties: {

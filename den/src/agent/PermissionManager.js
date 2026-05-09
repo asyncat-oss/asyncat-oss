@@ -119,6 +119,14 @@ export class PermissionManager {
       delete_task: () => `Delete task: ${args.task_id}`,
       delete_event: () => `Delete event: ${args.event_id}`,
       delete_note: () => `Delete note: ${args.note_id}`,
+      git_clone: () => `Clone repository: ${args.url}`,
+      git_pull: () => `Pull remote changes${args.remote ? ` from ${args.remote}` : ''}${args.branch ? ` ${args.branch}` : ''}`,
+      git_branch: () => args.create ? `Create branch: ${args.create}` : args.switch ? `Switch branch: ${args.switch}` : args.delete ? `Delete branch: ${args.delete}` : 'List branches',
+      git_commit: () => `Commit changes: ${args.message || '(no message)'}`,
+      git_push: () => `Push commits${args.force ? ' with force' : ''}`,
+      git_stash: () => `Git stash action: ${args.action}`,
+      git_remote: () => `Git remote action: ${args.action}`,
+      package_manager: () => `Run package manager command: ${args.command}`,
     };
 
     const fn = descriptions[toolName];

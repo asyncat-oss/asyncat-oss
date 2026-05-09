@@ -19,6 +19,7 @@ import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
 import { listMemories, searchMemories } from './tools/memoryTools.js';
+import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import db from '../db/client.js';
 import { randomUUID } from 'crypto';
@@ -1078,6 +1079,16 @@ export class AgentRuntime {
   _effectivePermission(toolName, args = {}, fallbackPermission = 'dangerous') {
     if (toolName === 'run_command' && this._looksReadOnlyShellCommand(args.command || '')) {
       return 'safe';
+    }
+    if (toolName?.startsWith('git_')) {
+      if (isGitDangerousAction(toolName, args)) return 'dangerous';
+      if (isGitReadOnlyAction(toolName, args)) return 'safe';
+      return 'moderate';
+    }
+    if (toolName === 'package_manager') {
+      const command = String(args.command || '').trim().toLowerCase();
+      if (/^(audit|outdated|freeze|list|show|info|why|version|--version)\b/.test(command)) return 'safe';
+      return 'moderate';
     }
     return fallbackPermission;
   }

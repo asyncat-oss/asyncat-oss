@@ -1,55 +1,29 @@
 ---
 name: code-review
-description: Effective pull request reviews
+description: High-signal code review focused on bugs, regressions, tests, and maintainability
 brain_region: prefrontal
 weight: 1.0
-tags: [review, pr, collaboration, quality]
+tags: [review, pr, collaboration, quality, coding]
 when_to_use: |
-  When reviewing or requesting reviews on pull requests,
-  code changes, or patches.
+  When reviewing code changes, diffs, pull requests, commits, or patches.
 ---
 # Code Review
 
-## Before You Review
-- Read the description
-- Understand the goal
-- Check linked issues
+## Review Order
+1. Understand the goal and changed files.
+2. Inspect the diff and the surrounding code that defines behavior.
+3. Lead with concrete findings: bugs, regressions, data loss, security risks, missing tests.
+4. Include file/line references when possible.
+5. Keep style suggestions secondary unless they affect correctness or maintainability.
 
-## Review Checklist
+## Checklist
+- Correctness: edge cases, state transitions, async/race behavior, error paths.
+- Tests: missing regression coverage, brittle assertions, unverified behavior.
+- Security: auth, path safety, secrets, injection, unsafe shell/file operations.
+- Maintainability: consistency with local patterns, unnecessary abstraction, dead code.
+- UX: loading, empty, error, mobile, and permission states.
 
-### Correctness
-- Does it work as intended?
-- Are edge cases handled?
-- Are there race conditions?
-
-### Design
-- Does it fit the codebase style?
-- Is it DRY enough?
-- Is it over-engineered?
-
-### Tests
-- Are there tests?
-- Do tests cover edge cases?
-- Are tests readable?
-
-### Security
-- Any sensitive data exposure?
-- Input validation?
-- Authentication checks?
-
-### Performance
-- Unnecessary loops?
-- N+1 queries?
-- Memory issues?
-
-## Giving Feedback
-- Be specific
-- Suggest fixes
-- Ask questions
-- compliment good patterns
-
-## Receiving Feedback
-- Don't take it personally
-- Ask clarifying questions
-- Explain your reasoning
-- Accept warranted criticism
+## Output Style
+- Findings first, ordered by severity.
+- If no issues, say so clearly and mention any remaining test gap.
+- Avoid vague feedback; name the concrete risk and a practical fix.

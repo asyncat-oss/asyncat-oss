@@ -18,6 +18,7 @@ import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/to
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from '../../agent/reasoningParser.js';
+import { branchGit, commitGit, getGitDiff, getGitState, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -1040,6 +1041,107 @@ router.put('/soul', authenticate, (req, res) => {
   } catch (err) {
     res.status(err.message.includes('not found') ? 404 : 500)
       .json({ success: false, error: err.message });
+  }
+});
+
+// ── Visual Git workflow ──────────────────────────────────────────────────────
+
+function gitWorkingDir(req) {
+  return req.body?.path || req.query?.path || defaultAgentWorkingDir();
+}
+
+router.get('/git/state', authenticate, (req, res) => {
+  try {
+    res.json(getGitState(gitWorkingDir(req)));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/git/diff', authenticate, (req, res) => {
+  try {
+    res.json(getGitDiff(gitWorkingDir(req), {
+      file: req.query?.file || null,
+      staged: req.query?.staged === 'true',
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/stage', authenticate, (req, res) => {
+  try {
+    res.json(stageGitFiles(gitWorkingDir(req), req.body?.files || []));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/unstage', authenticate, (req, res) => {
+  try {
+    res.json(unstageGitFiles(gitWorkingDir(req), req.body?.files || []));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/commit', authenticate, (req, res) => {
+  try {
+    res.json(commitGit(gitWorkingDir(req), {
+      message: req.body?.message,
+      files: req.body?.files || [],
+      amend: req.body?.amend === true,
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/pull', authenticate, (req, res) => {
+  try {
+    res.json(pullGit(gitWorkingDir(req), {
+      remote: req.body?.remote || null,
+      branch: req.body?.branch || null,
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/push', authenticate, (req, res) => {
+  try {
+    if (req.body?.force) {
+      return res.status(400).json({ success: false, error: 'Force push is not available in the visual Git workflow.' });
+    }
+    res.json(pushGit(gitWorkingDir(req), {
+      remote: req.body?.remote || 'origin',
+      branch: req.body?.branch || null,
+      setUpstream: req.body?.setUpstream === true,
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/stash', authenticate, (req, res) => {
+  try {
+    res.json(stashGit(gitWorkingDir(req), {
+      action: req.body?.action || 'list',
+      message: req.body?.message || null,
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/branch', authenticate, (req, res) => {
+  try {
+    res.json(branchGit(gitWorkingDir(req), {
+      action: req.body?.action || 'list',
+      name: req.body?.name || null,
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
@@ -2261,6 +2363,21 @@ const FILE_CREATE_TOOLS = new Set(['create_directory']);
 const FILE_COPY_TOOLS = new Set(['file_copy', 'copy_file']);
 const FILE_MOVE_TOOLS = new Set(['file_move', 'move_file']);
 const SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
+const GIT_TOOLS = new Set(['git_clone', 'git_pull', 'git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit', 'git_push', 'git_stash', 'git_remote']);
+
+function gitCommandLabel(tool, args = {}) {
+  if (tool === 'git_commit') return `git commit -m "${args.message || ''}"`;
+  if (tool === 'git_pull') return `git pull ${[args.remote, args.branch].filter(Boolean).join(' ')}`.trim();
+  if (tool === 'git_push') return `git push ${[args.remote, args.branch].filter(Boolean).join(' ')}`.trim();
+  if (tool === 'git_branch') return args.create ? `git branch ${args.create}` : args.switch ? `git switch ${args.switch}` : args.delete ? `git branch -d ${args.delete}` : 'git branch';
+  if (tool === 'git_stash') return `git stash ${args.action || 'list'}`;
+  if (tool === 'git_diff') return `git diff${args.file ? ` -- ${args.file}` : ''}`;
+  if (tool === 'git_status') return 'git status';
+  if (tool === 'git_log') return 'git log';
+  if (tool === 'git_remote') return `git remote ${args.action || 'list'}`;
+  if (tool === 'git_clone') return `git clone ${args.url || ''}`.trim();
+  return tool;
+}
 
 function deriveAgentChanges(rows = []) {
   const files = new Map();
@@ -2298,6 +2415,13 @@ function deriveAgentChanges(rows = []) {
         type: 'command',
         command: args.command || args.code || '',
         output: result.output || result.stdout || '',
+      });
+    } else if (GIT_TOOLS.has(tool)) {
+      commands.push({
+        ...base,
+        type: 'command',
+        command: gitCommandLabel(tool, args),
+        output: result.output || result.stdout || result.message || '',
       });
     }
   }
@@ -2507,4 +2631,3 @@ router.delete('/agent/artifacts/:filename', jwtVerify, (req, res) => {
 });
 
 export default router;
-

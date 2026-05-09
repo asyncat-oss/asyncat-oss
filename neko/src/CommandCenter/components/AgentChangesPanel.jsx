@@ -14,6 +14,21 @@ const FILE_CREATE_TOOLS = new Set(['create_directory']);
 const FILE_COPY_TOOLS   = new Set(['file_copy', 'copy_file']);
 const FILE_MOVE_TOOLS   = new Set(['file_move', 'move_file']);
 const SHELL_TOOLS       = new Set(['run_command', 'run_python', 'run_node']);
+const GIT_TOOLS         = new Set(['git_clone', 'git_pull', 'git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit', 'git_push', 'git_stash', 'git_remote']);
+
+function gitCommandLabel(tool, args = {}) {
+  if (tool === 'git_commit') return `git commit -m "${args.message || ''}"`;
+  if (tool === 'git_pull') return `git pull ${[args.remote, args.branch].filter(Boolean).join(' ')}`.trim();
+  if (tool === 'git_push') return `git push ${[args.remote, args.branch].filter(Boolean).join(' ')}`.trim();
+  if (tool === 'git_branch') return args.create ? `git branch ${args.create}` : args.switch ? `git switch ${args.switch}` : args.delete ? `git branch -d ${args.delete}` : 'git branch';
+  if (tool === 'git_stash') return `git stash ${args.action || 'list'}`;
+  if (tool === 'git_diff') return `git diff${args.file ? ` -- ${args.file}` : ''}`;
+  if (tool === 'git_status') return 'git status';
+  if (tool === 'git_log') return 'git log';
+  if (tool === 'git_remote') return `git remote ${args.action || 'list'}`;
+  if (tool === 'git_clone') return `git clone ${args.url || ''}`.trim();
+  return tool;
+}
 
 const TYPE_META = {
   written:   { label: 'Written',    icon: Pencil,     dot: 'bg-blue-400',    text: 'text-blue-600 dark:text-blue-400' },
@@ -71,6 +86,14 @@ function extractChanges(events) {
         command: args.command || args.code || '',
         tool,
         output: ev.result?.output || ev.result?.stdout || '',
+      });
+    } else if (GIT_TOOLS.has(tool)) {
+      commands.push({
+        ...base,
+        type: 'command',
+        command: gitCommandLabel(tool, args),
+        tool,
+        output: ev.result?.output || ev.result?.stdout || ev.result?.message || '',
       });
     }
   }

@@ -62,13 +62,6 @@ function splitFileQuery(query = "") {
   return { dirPath: dirname(trimmed), filter: trimmed.split("/").pop() || "" };
 }
 
-function fileSubtitle(file) {
-  if (!file?.path) return "";
-  if (file.type === "dir") return file.path === "." ? "Folder" : file.path;
-  const dir = dirname(file.path);
-  return dir === "." ? file.ext?.toUpperCase() || "File" : dir;
-}
-
 function formatRootLabel(rootPath = "") {
   const parts = String(rootPath || "").split(/[\\/]/).filter(Boolean);
   if (parts.length === 0) return "Workspace";
@@ -95,6 +88,7 @@ export const MessageInputV2 = ({
   isRunning = false,
   onStop,
   runStartedAt = null,
+  externalFileAttachment = null,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
@@ -180,6 +174,19 @@ export const MessageInputV2 = ({
     setValue(prefillValue);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [prefillValue]);
+
+  useEffect(() => {
+    if (!externalFileAttachment?.path) return;
+    setFileAttachments(prev => {
+      if (prev.some(file => file.path === externalFileAttachment.path)) return prev;
+      return [...prev, {
+        path: externalFileAttachment.path,
+        name: externalFileAttachment.name || basename(externalFileAttachment.path),
+        ext: externalFileAttachment.ext || basename(externalFileAttachment.path).split('.').pop(),
+      }];
+    });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [externalFileAttachment?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false;

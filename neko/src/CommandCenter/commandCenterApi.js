@@ -923,6 +923,67 @@ export const agentTaskRunsApi = {
   },
 };
 
+export const gitApi = {
+  getState: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/state`);
+  },
+
+  getDiff: async ({ file = null, staged = false } = {}) => {
+    const params = new URLSearchParams({ staged: String(Boolean(staged)) });
+    if (file) params.set('file', file);
+    return await apiRequest(`${API_BASE_URL}/agent/git/diff?${params}`);
+  },
+
+  stage: async (files = []) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/stage`, {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    });
+  },
+
+  unstage: async (files = []) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/unstage`, {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    });
+  },
+
+  commit: async ({ message, files = [], amend = false }) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/commit`, {
+      method: 'POST',
+      body: JSON.stringify({ message, files, amend }),
+    });
+  },
+
+  pull: async ({ remote = null, branch = null } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/pull`, {
+      method: 'POST',
+      body: JSON.stringify({ remote, branch }),
+    });
+  },
+
+  push: async ({ remote = 'origin', branch = null, setUpstream = false } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/push`, {
+      method: 'POST',
+      body: JSON.stringify({ remote, branch, setUpstream }),
+    });
+  },
+
+  stash: async ({ action = 'list', message = null } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/stash`, {
+      method: 'POST',
+      body: JSON.stringify({ action, message }),
+    });
+  },
+
+  branch: async ({ action = 'list', name = null } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/branch`, {
+      method: 'POST',
+      body: JSON.stringify({ action, name }),
+    });
+  },
+};
+
 export const profilesApi = {
   listProfiles: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/profiles`);
@@ -1080,6 +1141,7 @@ export default {
   projectFolders: projectFoldersApi,
   trash: trashApi,
   agent: agentApi,
+  git: gitApi,
 
   // Utilities
   utils: apiUtils,

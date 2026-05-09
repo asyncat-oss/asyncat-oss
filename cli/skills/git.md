@@ -1,63 +1,35 @@
 ---
 name: git-workflow
-description: Standard branch, commit, PR workflow
+description: Safe Git workflow for inspecting, staging, committing, branching, pulling, and pushing
 brain_region: cerebellum
-weight: 0.9
-tags: [git, version-control, workflow]
+weight: 1.0
+tags: [git, version-control, workflow, coding]
 when_to_use: |
-  When asked to commit, create a branch, or manage git workflow.
+  When asked to inspect Git state, review diffs, create/switch branches,
+  commit changes, pull, push, stash, or prepare work for review.
 ---
 # Git Workflow
 
-## When to Use
-- "commit these changes"
-- "create a new branch"
-- "make a PR"
-- Any git operation
+## Default Order
+1. Inspect: `git status --short --branch` and `git diff --stat`.
+2. Review: inspect the actual diff before staging or committing.
+3. Stage intentionally: stage only files related to the requested work.
+4. Commit only with a clear message and only after verification when practical.
+5. Push only when asked or when the workflow clearly requires publishing.
 
-## Standard Workflow
-
-### 1. Check status
-```bash
-git status
-git log --oneline -5
-```
-
-### 2. Create branch (for new work)
-```bash
-git checkout -b feature/my-new-feature
-# or
-git checkout -b fix/the-bug
-```
-
-### 3. Make changes + commit
-```bash
-git add -A
-git commit -m "description: what and why"
-```
-
-### 4. Push
-```bash
-git push -u origin branch-name
-```
+## Safety Rules
+- Do not run destructive commands such as `git reset --hard`, `git clean`, force push, or hard checkout unless the user explicitly asks.
+- Before `git pull`, check for local changes and mention conflict risk if dirty.
+- Before committing, check for secrets, unrelated files, generated noise, and missing tests.
+- Never hide failed verification behind a commit.
 
 ## Commit Messages
-
-Format: `type: description`
-
-- `feat:` new feature
+Use concise conventional prefixes when they fit:
+- `feat:` new user-facing behavior
 - `fix:` bug fix
-- `docs:` documentation
-- `style:` formatting
-- `refactor:` code improvement
-- `test:` adding tests
-- `chore:` maintenance
-
-## Pitfalls
-- Don't commit sensitive stuff
-- Don't force push to shared branches
-- Don't commit without a message
+- `test:` tests
+- `refactor:` behavior-preserving code change
+- `chore:` tooling or maintenance
 
 ## Verification
-- Changes are committed
-- Branch is pushed (if needed)
+- Final answer should include branch, staged/committed files, commit hash if created, and verification commands run.

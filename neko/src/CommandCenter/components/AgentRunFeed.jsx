@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
-  FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send,
+  FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
@@ -34,6 +34,16 @@ const TOOL_META = {
   run_node:          { icon: Terminal,    label: 'Run Node' },
   run_shell_command: { icon: Terminal,    label: 'Run command' },
   execute_shell:     { icon: Terminal,    label: 'Run command' },
+  git_clone:         { icon: GitBranch,   label: 'Clone repo' },
+  git_pull:          { icon: GitBranch,   label: 'Git pull' },
+  git_status:        { icon: GitBranch,   label: 'Git status' },
+  git_diff:          { icon: GitBranch,   label: 'Git diff' },
+  git_log:           { icon: GitBranch,   label: 'Git log' },
+  git_branch:        { icon: GitBranch,   label: 'Git branch' },
+  git_commit:        { icon: GitBranch,   label: 'Git commit' },
+  git_push:          { icon: GitBranch,   label: 'Git push' },
+  git_stash:         { icon: GitBranch,   label: 'Git stash' },
+  git_remote:        { icon: GitBranch,   label: 'Git remote' },
   delegate_to_profile:{ icon: Brain,       label: 'Delegate to agent' },
   delegate_task:      { icon: Brain,       label: 'Delegate task' },
   web_search:        { icon: Globe,       label: 'Web search' },
