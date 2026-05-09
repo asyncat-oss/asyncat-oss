@@ -74,7 +74,7 @@ const AuthContainer = () => {
   const currentPage = getCurrentPage();
 
   return (
-    <div className={`min-h-screen w-full bg-white dark:bg-[#0d0d0f] midnight:bg-[#08080a] flex flex-col ${soraFontBase}`}>
+    <div className={`min-h-screen w-full bg-slate-50 dark:bg-gray-900 midnight:bg-slate-950 flex flex-col ${soraFontBase}`}>
 
       {/* ── OS Login Card ── */}
       <div className="flex-1 flex items-center justify-center px-4">
@@ -82,18 +82,18 @@ const AuthContainer = () => {
 
           {/* Header */}
           <div className="text-center mb-8">
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-[#e8e8ec] midnight:text-[#dcdce4] mb-1">
+            <h1 className="text-xl font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100 mb-1">
               asyncat
             </h1>
-            <p className="text-sm text-gray-500 dark:text-[#6b6b78] midnight:text-[#52525e]">
+            <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
               {localEmail}
             </p>
           </div>
 
           {/* Auth Form */}
-          <div className="bg-white dark:bg-[#131316] midnight:bg-[#0e0e12] border border-gray-200 dark:border-[#222228] midnight:border-[#1a1a20] rounded-2xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.5)] midnight:shadow-[0_8px_40px_rgba(0,0,0,0.7)]">
+          <div className="bg-white/95 dark:bg-gray-800/70 midnight:bg-slate-900/80 border border-gray-200/80 dark:border-gray-700/60 midnight:border-slate-700/60 rounded-2xl p-6 shadow-[0_16px_50px_rgba(15,23,42,0.10)] dark:shadow-[0_18px_60px_rgba(2,6,23,0.42)] midnight:shadow-[0_18px_60px_rgba(2,6,23,0.62)] backdrop-blur-sm">
             {!network.backendOnline && (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200 midnight:border-amber-900/60 midnight:bg-amber-950/30 midnight:text-amber-200">
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-200 midnight:border-amber-800/50 midnight:bg-amber-950/30 midnight:text-amber-200">
                 Backend offline. The cached frontend is loaded, but local Asyncat services are not reachable.
               </div>
             )}
@@ -106,7 +106,7 @@ const AuthContainer = () => {
 
           {/* Local account hint */}
           {currentPage === 'signin' && (
-            <p className="text-center text-xs text-gray-400 dark:text-[#44444e] midnight:text-[#33333c] mt-4">
+            <p className="text-center text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-4">
               Local account. You can change the name, email, and password during setup.
             </p>
           )}
@@ -115,8 +115,8 @@ const AuthContainer = () => {
 
       {/* ── Tip of the day ── */}
       <div className="px-6 pb-8 text-center">
-        <p className="text-xs text-gray-400 dark:text-[#3a3a48] midnight:text-[#2a2a36]">
-          <span className="text-gray-500 dark:text-[#55555e] midnight:text-[#40404c]">tip of the day — </span>
+        <p className="text-xs text-gray-400 dark:text-gray-600 midnight:text-slate-600">
+          <span className="text-gray-500 dark:text-gray-500 midnight:text-slate-500">tip of the day — </span>
           {tip}
         </p>
       </div>

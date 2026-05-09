@@ -1,10 +1,9 @@
 // auth/SignUp.jsx
 import { useState } from 'react';
+import PropTypes from 'prop-types';
 import FormInput from './FormInput';
 import PasswordRequirements from './PasswordRequirements';
 import useAuth from '../hooks/useAuth';
-
-const soraFontBase = "font-sora";
 
 const SignUp = ({ navigateToSignIn }) => {
   const { signUp } = useAuth();
@@ -104,7 +103,7 @@ const SignUp = ({ navigateToSignIn }) => {
   return (
     <form onSubmit={handleSignUp} className="space-y-4">
       {error && (
-        <div className="p-3 text-sm text-red-400 dark:text-red-400 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800/40 midnight:border-red-800/40">
+        <div className="p-3 text-sm text-red-700 dark:text-red-300 midnight:text-red-300 bg-red-50 dark:bg-red-950/25 midnight:bg-red-950/25 rounded-xl border border-red-200 dark:border-red-800/40 midnight:border-red-800/40">
           {error}
         </div>
       )}
@@ -159,16 +158,17 @@ const SignUp = ({ navigateToSignIn }) => {
         type="submit"
         disabled={isLoading || !isFormValid}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all duration-200
-          bg-[#e8e8ec] hover:bg-[#d0d0d8] dark:bg-white dark:hover:bg-gray-100 midnight:bg-[#dcdce4] midnight:hover:bg-[#c8c8d4]
-          text-[#0d0d0f] dark:text-gray-900 midnight:text-[#08080a]
+          bg-gray-900 hover:bg-gray-800 dark:bg-slate-700/80 dark:hover:bg-slate-700 midnight:bg-slate-800/90 midnight:hover:bg-slate-800
+          border border-transparent dark:border-slate-600/70 midnight:border-slate-700
+          text-white dark:text-slate-100 midnight:text-slate-100
           disabled:opacity-40 disabled:cursor-not-allowed
           focus:outline-none focus:ring-2 focus:ring-offset-2
-          focus:ring-offset-white dark:focus:ring-offset-[#131316] midnight:focus:ring-offset-[#0e0e12]
-          focus:ring-[#a0a0b0]"
+          focus:ring-offset-white dark:focus:ring-offset-gray-800 midnight:focus:ring-offset-slate-900
+          focus:ring-slate-400 dark:focus:ring-slate-500 midnight:focus:ring-slate-500"
       >
         {isLoading ? (
           <div className="flex items-center gap-2">
-            <div className="w-3.5 h-3.5 rounded-full border-2 border-[#0d0d0f]/30 border-t-[#0d0d0f] dark:border-[#0d0d0f]/30 dark:border-t-[#0d0d0f] midnight:border-[#08080a]/30 midnight:border-t-[#08080a] animate-spin" />
+            <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
             <span>Creating account...</span>
           </div>
         ) : (
@@ -176,18 +176,22 @@ const SignUp = ({ navigateToSignIn }) => {
         )}
       </button>
 
-      <p className="text-center text-xs text-gray-500 dark:text-[#55555e] midnight:text-[#40404c]">
+      <p className="text-center text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
         Already have an account?{' '}
         <button
           type="button"
           onClick={navigateToSignIn}
-          className="text-gray-600 dark:text-[#8888a0] midnight:text-[#707090] hover:text-gray-900 dark:hover:text-[#aaaabc] midnight:hover:text-[#9090a8] transition-colors"
+          className="text-indigo-600 dark:text-indigo-300 midnight:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-200 midnight:hover:text-indigo-200 transition-colors"
         >
           Sign in
         </button>
       </p>
     </form>
   );
+};
+
+SignUp.propTypes = {
+  navigateToSignIn: PropTypes.func.isRequired,
 };
 
 export default SignUp;

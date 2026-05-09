@@ -503,7 +503,7 @@ export const MessageInputV2 = ({
   );
 
   const getBorderColor = () => {
-    return "border-gray-200 dark:border-gray-700 midnight:border-gray-700";
+    return "border-gray-200 dark:border-gray-800 midnight:border-gray-800 focus-within:border-gray-300 dark:focus-within:border-gray-700";
   };
 
   return (
@@ -511,7 +511,7 @@ export const MessageInputV2 = ({
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
         <form onSubmit={handleSubmit}>
             <div
-              className={`p-4 bg-white dark:bg-gray-800 midnight:bg-gray-900 border-2 rounded-lg transition-colors ${getBorderColor()}`}
+              className={`p-4 bg-transparent border rounded-xl transition-colors ${getBorderColor()}`}
             >
               {(error || modelSwitchError) && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">

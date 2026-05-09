@@ -1,11 +1,10 @@
 // auth/SignIn.jsx
 import { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import FormInput from './FormInput';
 import useAuth from '../hooks/useAuth';
-
-const soraFontBase = "font-sora";
 
 const DEFAULT_EMAIL = 'admin@local';
 const DEFAULT_PASSWORD = '';
@@ -50,7 +49,7 @@ const SignIn = ({ initialEmail = DEFAULT_EMAIL, backendOnline = true }) => {
   return (
     <form onSubmit={handleSignIn} className="space-y-4">
       {error && (
-        <div className="p-3 text-sm text-red-400 dark:text-red-400 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800/40 midnight:border-red-800/40">
+        <div className="p-3 text-sm text-red-700 dark:text-red-300 midnight:text-red-300 bg-red-50 dark:bg-red-950/25 midnight:bg-red-950/25 rounded-xl border border-red-200 dark:border-red-800/40 midnight:border-red-800/40">
           {error}
         </div>
       )}
@@ -79,16 +78,17 @@ const SignIn = ({ initialEmail = DEFAULT_EMAIL, backendOnline = true }) => {
         type="submit"
         disabled={isLoading || !backendOnline}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all duration-200
-          bg-[#e8e8ec] hover:bg-[#d0d0d8] dark:bg-[#e8e8ec] dark:hover:bg-[#d0d0d8] midnight:bg-[#dcdce4] midnight:hover:bg-[#c8c8d4]
-          text-[#0d0d0f] dark:text-[#0d0d0f] midnight:text-[#08080a]
+          bg-gray-900 hover:bg-gray-800 dark:bg-slate-700/80 dark:hover:bg-slate-700 midnight:bg-slate-800/90 midnight:hover:bg-slate-800
+          border border-transparent dark:border-slate-600/70 midnight:border-slate-700
+          text-white dark:text-slate-100 midnight:text-slate-100
           disabled:opacity-50 disabled:cursor-not-allowed
           focus:outline-none focus:ring-2 focus:ring-offset-2
-          focus:ring-offset-white dark:focus:ring-offset-[#131316] midnight:focus:ring-offset-[#0e0e12]
-          focus:ring-[#a0a0b0]"
+          focus:ring-offset-white dark:focus:ring-offset-gray-800 midnight:focus:ring-offset-slate-900
+          focus:ring-slate-400 dark:focus:ring-slate-500 midnight:focus:ring-slate-500"
       >
         {isLoading ? (
           <div className="flex items-center gap-2">
-            <div className="w-3.5 h-3.5 rounded-full border-2 border-[#0d0d0f]/30 border-t-[#0d0d0f] dark:border-[#0d0d0f]/30 dark:border-t-[#0d0d0f] midnight:border-[#08080a]/30 midnight:border-t-[#08080a] animate-spin" />
+            <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
             <span>Authenticating...</span>
           </div>
         ) : !backendOnline ? (
@@ -102,6 +102,11 @@ const SignIn = ({ initialEmail = DEFAULT_EMAIL, backendOnline = true }) => {
       </button>
     </form>
   );
+};
+
+SignIn.propTypes = {
+  initialEmail: PropTypes.string,
+  backendOnline: PropTypes.bool,
 };
 
 export default SignIn;
