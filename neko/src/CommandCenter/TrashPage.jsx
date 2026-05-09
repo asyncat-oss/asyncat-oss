@@ -55,7 +55,7 @@ const TrashPage = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900 midnight:bg-gray-950">
+    <div className="h-full flex flex-col bg-transparent">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-6 py-4">
         <div className="flex items-center justify-between">
@@ -102,7 +102,7 @@ const TrashPage = () => {
               {trashItems.map((conv) => (
                 <div
                   key={conv.id}
-                  className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 midnight:bg-gray-800 border border-gray-100 dark:border-gray-700 midnight:border-gray-700 rounded-lg hover:border-gray-200 dark:hover:border-gray-600 transition-colors group"
+                  className="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group"
                 >
                   <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 flex items-center justify-center flex-shrink-0">
                     <MessageSquare className="w-5 h-5 text-gray-400 dark:text-gray-500" />

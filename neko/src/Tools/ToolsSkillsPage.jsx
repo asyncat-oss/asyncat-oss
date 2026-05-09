@@ -150,7 +150,7 @@ function SoulPreview({ content }) {
   const blocks = useMemo(() => parseSoulMarkdown(content), [content]);
 
   return (
-    <article className="min-h-[52vh] bg-white px-7 py-8 text-sm leading-7 text-gray-700 dark:bg-gray-900 dark:text-gray-300 midnight:bg-slate-950 midnight:text-slate-300 sm:px-10">
+    <article className="min-h-[52vh] px-7 py-8 text-sm leading-7 text-gray-700 dark:text-gray-300 midnight:text-slate-300 sm:px-10">
       {blocks.map((block, idx) => {
         if (block.type === 'heading') {
           const HeadingTag = block.depth === 1 ? 'h1' : block.depth === 2 ? 'h2' : 'h3';
@@ -360,12 +360,12 @@ function ToolSection({ category, catTools, selectedToolName, onSelectTool }) {
   const sortedTools = useMemo(() => [...catTools].sort((a, b) => a.name.localeCompare(b.name)), [catTools]);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-2.5 dark:border-gray-800 dark:bg-gray-800/35 midnight:border-slate-800 midnight:bg-slate-900/35">
+    <section className="mb-6">
+      <div className="flex items-center justify-between gap-3 px-2 py-2">
         <div className="min-w-0">
           <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{formatLabel(category)}</h2>
         </div>
-        <span className="rounded bg-white px-2 py-0.5 font-mono text-[10px] text-gray-500 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">{catTools.length}</span>
+        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50">{catTools.length}</span>
       </div>
       <div>
         {sortedTools.map((tool, idx) => (
@@ -394,13 +394,13 @@ function SkillSection({ region, regionSkills, selectedSkillName, onSelectSkill }
   const sortedSkills = useMemo(() => [...regionSkills].sort((a, b) => a.name.localeCompare(b.name)), [regionSkills]);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-2.5 dark:border-gray-800 dark:bg-gray-800/35 midnight:border-slate-800 midnight:bg-slate-900/35">
+    <section className="mb-6">
+      <div className="flex items-center justify-between gap-3 px-2 py-2">
         <div className="min-w-0">
           <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{meta.label}</h2>
           <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{meta.desc}</p>
         </div>
-        <span className="rounded bg-white px-2 py-0.5 font-mono text-[10px] text-gray-500 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">{regionSkills.length}</span>
+        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50">{regionSkills.length}</span>
       </div>
       <div>
         {sortedSkills.map((skill, idx) => (
@@ -769,14 +769,14 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
 
   function tabClass(isActive) {
     return isActive
-      ? 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-gray-700 midnight:bg-slate-700 text-gray-900 dark:text-white midnight:text-slate-100 shadow-sm'
+      ? 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium bg-gray-200 dark:bg-gray-800 midnight:bg-slate-800 text-gray-900 dark:text-white midnight:text-slate-100'
       : 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300';
   }
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
+    <div className="flex flex-col h-full bg-transparent">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Bot className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -791,8 +791,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       </div>
 
       {/* Tabs */}
-      <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-slate-950/50">
-        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 rounded-lg w-fit">
+      <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+        <div className="flex gap-1 p-1 bg-gray-100/50 dark:bg-gray-800/50 midnight:bg-slate-800/50 rounded-lg w-fit">
           <button onClick={() => setActiveTab('tools')} className={tabClass(toolsTabActive)}>
             <Wrench className="w-3.5 h-3.5" />
             Tools
@@ -815,8 +815,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {toolsTabActive && (
-          <div className="grid h-full overflow-hidden bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
-            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+          <div className="grid h-full overflow-hidden lg:grid-cols-[260px_minmax(0,1fr)]">
+            <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
@@ -892,7 +892,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                   </div>
                 </section>
 
-                <aside className="min-h-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+                <aside className="min-h-0 overflow-hidden border-l border-gray-100 dark:border-gray-800 midnight:border-slate-800">
                   <ToolInspector tool={selectedTool} />
                 </aside>
               </div>
@@ -901,8 +901,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
         )}
 
         {skillsTabActive && (
-          <div className="grid h-full overflow-hidden bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950 lg:grid-cols-[260px_minmax(0,1fr)]">
-            <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+          <div className="grid h-full overflow-hidden lg:grid-cols-[260px_minmax(0,1fr)]">
+            <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
@@ -999,7 +999,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                   </div>
                 </section>
 
-                <aside className="min-h-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+                <aside className="min-h-0 overflow-hidden border-l border-gray-100 dark:border-gray-800 midnight:border-slate-800">
                   <SkillInspector skill={selectedSkill} />
                 </aside>
               </div>
@@ -1008,8 +1008,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
         )}
 
         {soulTabActive && (
-          <div className="flex h-full flex-col bg-gray-50/40 dark:bg-gray-950/20 midnight:bg-slate-950">
-            <div className="flex flex-col gap-3 border-b border-gray-100 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 md:flex-row md:items-center md:justify-between">
+          <div className="flex h-full flex-col">
+            <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 dark:border-gray-800 midnight:border-slate-800 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">default.md</span>
@@ -1087,7 +1087,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
 
             {!loadingSoul && !errorSoul && (
               <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[240px_minmax(0,1fr)]">
-                <aside className="border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 lg:border-b-0 lg:border-r">
+                <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:border-b-0 lg:border-r">
                   <div className="space-y-5">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this controls</p>
@@ -1132,8 +1132,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                 </aside>
 
                 <main className="min-h-0 overflow-y-auto p-4 sm:p-6">
-                  <div className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/70 px-4 py-2 dark:border-gray-800 dark:bg-gray-800/40 midnight:border-slate-800 midnight:bg-slate-900/40">
+                  <div className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800 midnight:border-slate-800">
+                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-4 py-2 dark:border-gray-800 dark:bg-gray-900/50 midnight:border-slate-800 midnight:bg-slate-900/50">
                       <span className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">souls/default.md</span>
                       <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
                         {editingSoul ? 'Edit mode' : 'Preview'}
@@ -1148,7 +1148,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                       <textarea
                         value={soulEdited}
                         onChange={e => setSoulEdited(e.target.value)}
-                        className="h-[60vh] w-full resize-none bg-white p-5 font-mono text-xs leading-6 text-gray-800 outline-none focus:ring-2 focus:ring-inset focus:ring-gray-300 dark:bg-gray-900 dark:text-gray-100 dark:focus:ring-gray-700 midnight:bg-slate-950 midnight:text-slate-100 sm:p-6"
+                        className="h-[60vh] w-full resize-none bg-transparent p-5 font-mono text-xs leading-6 text-gray-800 outline-none focus:ring-2 focus:ring-inset focus:ring-gray-300 dark:text-gray-100 dark:focus:ring-gray-700 midnight:text-slate-100 sm:p-6"
                         spellCheck={false}
                       />
                     )}
@@ -1168,7 +1168,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
         {memoryTabActive && (
           <div className="flex flex-col h-full">
             {/* Search + filter bar */}
-            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex gap-2 items-center">
+            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 flex gap-2 items-center">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input

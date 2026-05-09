@@ -177,7 +177,7 @@ export default function AgentSkillsView() {
   }, [filteredSkills]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-transparent">
       {/* Search */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
         <div className="relative">

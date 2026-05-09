@@ -288,12 +288,12 @@ const ChatsPage = () => {
               : isTaskAgent ? `/agents/${chat.sessionId}` : `/conversations/${chat.id}`);
           }
         }}
-        className={`flex items-center gap-3 p-4 bg-white dark:bg-gray-800 midnight:bg-gray-800 border rounded-lg transition-colors group ${
+        className={`flex items-center gap-3 p-4 border-b transition-colors group ${
           canOpen ? 'cursor-pointer' : 'cursor-default'
         } ${
           isSelected
-            ? 'border-gray-400 dark:border-gray-400 midnight:border-slate-400 ring-1 ring-gray-300 dark:ring-gray-600'
-            : 'border-gray-100 dark:border-gray-700 midnight:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'
+            ? 'bg-gray-100/50 dark:bg-gray-800/50 border-gray-400 dark:border-gray-500'
+            : 'border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'
         }`}
       >
         {canSelect && (
@@ -378,7 +378,7 @@ const ChatsPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950 overflow-hidden">
+    <div className="flex flex-col h-full bg-transparent overflow-hidden">
       <div className="max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col h-full relative z-20">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 flex-shrink-0">
@@ -413,12 +413,12 @@ const ChatsPage = () => {
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-xl text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400/50 transition-all"
+            className="w-full pl-10 pr-4 py-2.5 bg-transparent border border-gray-200 dark:border-gray-800 midnight:border-slate-800 rounded-xl text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 transition-all"
           />
         </div>
 
         {selectedCount > 0 && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50 dark:bg-gray-800 midnight:bg-slate-900 px-3 py-2 flex-shrink-0">
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-800 midnight:border-slate-800 bg-gray-100/50 dark:bg-gray-800/50 px-3 py-2 flex-shrink-0">
             <div className="text-sm font-medium text-gray-700 dark:text-gray-200">
               {selectedCount} selected
             </div>
@@ -447,7 +447,7 @@ const ChatsPage = () => {
           {loading ? (
             <div className="space-y-4">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="animate-pulse flex flex-col p-4 border border-gray-100 dark:border-gray-800/50 rounded-xl">
+                <div key={i} className="animate-pulse flex flex-col p-4 border-b border-gray-100 dark:border-gray-800/50">
                   <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-2" />
                   <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
                 </div>
