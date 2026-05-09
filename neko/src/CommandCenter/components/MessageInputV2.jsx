@@ -6,7 +6,7 @@ import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi } from "../../Settings/settingApi.js";
 import { profilesApi, filesApi } from "../commandCenterApi.js";
-import { dirname, fileIconMeta } from "../../files/fileUtils.js";
+import { dirname, basename, fileIconMeta } from "../../files/fileUtils.js";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -76,9 +76,9 @@ function formatRootLabel(rootPath = "") {
 }
 
 const suggestionPanelClass =
-  "absolute bottom-full left-0 right-0 z-30 mb-1 overflow-hidden rounded-lg border border-gray-200/80 bg-white/95 backdrop-blur-sm dark:border-gray-700/80 dark:bg-gray-800/95 midnight:border-slate-700/80 midnight:bg-gray-900/95";
-const suggestionActiveClass = "bg-gray-100/80 dark:bg-gray-700/70 midnight:bg-slate-800/75";
-const suggestionIdleClass = "hover:bg-gray-50/90 dark:hover:bg-gray-700/60 midnight:hover:bg-slate-800/65";
+  "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1a1a1a] midnight:border-[#2a2a2a] midnight:bg-[#1a1a1a]";
+const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
+const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:hover:bg-[#242424]";
 
 export const MessageInputV2 = ({
   onSubmit,
@@ -562,20 +562,20 @@ export const MessageInputV2 = ({
                             type="button"
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => insertAgentMention(profile)}
-                            className={`flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors ${
+                            className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
                               index === activeAgentIndex
                                 ? suggestionActiveClass
                                 : suggestionIdleClass
                             }`}
                           >
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 text-sm dark:bg-gray-800 midnight:bg-slate-800">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gray-100 text-sm dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]">
                               {profile.icon || "🤖"}
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">
+                              <span className="block truncate text-[13px] font-medium text-gray-800 dark:text-gray-100 midnight:text-gray-100">
                                 {profile.name}
                               </span>
-                              <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                              <span className="block truncate text-[11px] text-gray-400 dark:text-[#666666] midnight:text-[#666666]">
                                 #{profile.handle}{profile.description ? ` · ${profile.description}` : ''}
                               </span>
                             </span>
@@ -607,26 +607,27 @@ export const MessageInputV2 = ({
                               type="button"
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => attachFile(file)}
-                              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors ${
+                              className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
                                 index === activeFileIndex
                                   ? suggestionActiveClass
                                   : suggestionIdleClass
                               }`}
                             >
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100/80 dark:bg-gray-700/80 midnight:bg-slate-800/80">
-                                <Icon className={`h-4 w-4 ${color}`} />
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                                <Icon className={`h-5 w-5 ${color}`} />
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex min-w-0 items-baseline gap-2">
-                                  <span className="truncate text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">
-                                    {file.name}
+                                  <span className="truncate text-[13px] font-medium text-gray-800 dark:text-gray-100 midnight:text-gray-100">
+                                    {file.path === '.' || file.type === 'dir' ? file.name : (
+                                      <>
+                                        {dirname(file.path) !== '.' && (
+                                          <span className="text-gray-400 dark:text-[#666666] font-normal">{dirname(file.path)}/</span>
+                                        )}
+                                        <span className="text-gray-900 dark:text-gray-100">{basename(file.path)}</span>
+                                      </>
+                                    )}
                                   </span>
-                                  {file.type === "dir" && (
-                                    <span className="shrink-0 text-[10px] font-medium text-amber-500">folder</span>
-                                  )}
-                                </span>
-                                <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                                  {fileSubtitle(file)}
                                 </span>
                               </span>
                             </button>

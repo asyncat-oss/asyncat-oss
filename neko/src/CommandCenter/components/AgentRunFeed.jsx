@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send,
-  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink,
+  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 import { extractReasoningFromText } from '../reasoningParser.js';
 import ArtifactCard from './ArtifactRenderer';
+import { fileIconMeta } from '../../files/fileUtils.js';
 
 // ── Tool icon / label map ─────────────────────────────────────────────────────
 const TOOL_META = {
@@ -171,14 +172,29 @@ function ModeBadge({ toolsEnabled }) {
 
 function UserGoalEvent({ data }) {
   const goal = data?.goal || data?.content || '';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(goal);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [goal]);
+
   if (!goal.trim()) return null;
 
   return (
     <div className="group mb-6">
       <div className="max-w-4xl mx-auto flex justify-end">
         <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
-          <div className="mb-1 flex justify-end">
+          <div className="mb-1 flex justify-end gap-2 items-center">
             <ModeBadge toolsEnabled={data?.toolsEnabled} />
+            <button 
+              onClick={handleCopy} 
+              className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors" 
+              title="Copy message"
+            >
+              {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
           </div>
           <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
             {goal}
@@ -195,12 +211,16 @@ function UserGoalEvent({ data }) {
           )}
           {Array.isArray(data?.fileAttachments) && data.fileAttachments.length > 0 && (
             <div className="mt-2 flex flex-wrap justify-end gap-1">
-              {data.fileAttachments.map(file => (
-                <span key={file.path || file.name} className="inline-flex max-w-full items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
-                  <File className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{file.path || file.name}</span>
-                </span>
-              ))}
+              {data.fileAttachments.map(file => {
+                const ext = file.ext || (file.name || file.path).split('.').pop();
+                const { Icon, color } = fileIconMeta(ext, 'file');
+                return (
+                  <span key={file.path || file.name} className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+                    <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
+                    <span className="truncate">{file.path || file.name}</span>
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>

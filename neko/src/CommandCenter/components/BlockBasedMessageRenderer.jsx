@@ -2,6 +2,7 @@
 import { useMemo, useState, useCallback, memo, useEffect } from 'react';
 import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2 } from 'lucide-react';
 import { tokenTracker } from './LocalModelStats';
+import { fileIconMeta } from '../../files/fileUtils.js';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 // mhchem extension — enables \ce{H2O}, \ce{CO2}, chemical equations in KaTeX
@@ -815,16 +816,21 @@ const CodeBlock = ({ content, language = 'text' }) => {
     }
   };
 
+  const { Icon, color } = fileIconMeta(language, 'file');
+
   return (
     <div className="mb-6 relative group">
-      <div className="bg-gray-50 dark:bg-gray-900 midnight:bg-slate-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 midnight:border-slate-700 shadow-sm">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
-          <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 midnight:text-slate-300 uppercase tracking-wide">
-            {language}
-          </span>
+      <div className="bg-gray-50 dark:bg-[#1e1e1e] midnight:bg-[#1e1e1e] rounded-xl overflow-hidden shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <div className="flex items-center gap-2">
+            <Icon className={`w-4 h-4 ${color}`} />
+            <span className="text-[11px] font-medium text-gray-500 dark:text-[#888888] midnight:text-[#888888] tracking-wide uppercase">
+              {language}
+            </span>
+          </div>
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-300 midnight:hover:text-slate-100 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-slate-600 rounded transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-[#888888] dark:hover:text-[#dddddd] midnight:text-[#888888] midnight:hover:text-[#dddddd] hover:bg-gray-200 dark:hover:bg-[#2a2a2a] midnight:hover:bg-[#2a2a2a] rounded transition-colors"
           >
             {copyStatus === 'copied' ? (
               <>
@@ -840,9 +846,9 @@ const CodeBlock = ({ content, language = 'text' }) => {
           </button>
         </div>
 
-        <pre className="p-5 overflow-x-auto bg-gray-50 dark:bg-gray-900 midnight:bg-slate-900">
+        <pre className="p-5 overflow-x-auto bg-gray-50 dark:bg-[#1e1e1e] midnight:bg-[#1e1e1e]">
           <code
-            className="text-sm font-mono leading-7 hljs"
+            className="text-[13px] font-mono leading-relaxed hljs"
             dangerouslySetInnerHTML={{ __html: highlighted }}
           />
         </pre>
