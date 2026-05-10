@@ -1702,14 +1702,30 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     !hasConversationContent ? (
       <div className="flex flex-col min-h-full relative">
         {!isGhostMode && (
-          <div className="absolute right-4 top-4 z-10">
+          <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
             <ConversationSwitcher compact />
+            <button
+              type="button"
+              onClick={() => toggleSidePanelTab('git')}
+              className={`relative p-2 rounded-lg transition-colors ${
+                showActivitySidebar && sidePanelTab === 'git'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+              }`}
+              title="Git status"
+            >
+              <GitBranch className="w-5 h-5" />
+              {gitState && gitState.staged?.length > 0 && (
+                <span className="absolute top-1 right-1 inline-flex items-center justify-center bg-blue-500 text-white text-[9px] font-bold px-1 rounded-full min-w-[14px] h-3.5 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-900">
+                  {gitState.staged.length}
+                </span>
+              )}
+            </button>
           </div>
         )}
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
           <div className="max-w-3xl w-full">
             <div className="flex flex-col items-center gap-3 mb-6 text-center">
-              <img src="/cat.svg" alt="The Cat" className="w-10 h-10" />
               <h1 className="text-xl font-medium text-gray-900 dark:text-white midnight:text-slate-100">
                 {getGreeting()}
               </h1>
