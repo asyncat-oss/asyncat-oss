@@ -83,7 +83,15 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
     const status = isBuiltin ? (localStatus?.status || "idle") : "ready";
     const rawModel = isBuiltin ? (localStatus?.model || config?.model) : config?.model;
     const model = shortModelName(rawModel);
-    const mode = isLocal ? "Local" : config?.provider_type === "cloud" ? "Cloud" : "Custom";
+    const mode = providerId === "openai-codex"
+      ? "Codex"
+      : providerId === "codex-cli"
+        ? "Runtime"
+        : isLocal
+          ? "Local"
+          : config?.provider_type === "cloud"
+            ? "Cloud"
+            : "Custom";
     const supportsReasoning = !isBuiltin && (
       REASONING_PROVIDER_IDS.has(providerId)
       || /\b(gpt-5|o[134]|grok|deepseek-r1|qwq)\b|thinking/i.test(String(rawModel || ""))

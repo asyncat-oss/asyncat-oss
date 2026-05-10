@@ -15,6 +15,24 @@ const modelDisplayName = (profile, catalog = []) => {
   return rawModel;
 };
 
+const providerTypeBadge = (item) => {
+  if (item.id === 'openai-codex' || item.providerId === 'openai-codex') {
+    return { label: 'Codex login', color: 'amber' };
+  }
+  if (item.id === 'codex-cli' || item.providerId === 'codex-cli') {
+    return { label: 'Runtime', color: 'gray' };
+  }
+  return item.local
+    ? { label: 'Local', color: 'gray' }
+    : { label: 'Cloud API', color: 'blue' };
+};
+
+const providerAuthIcon = (item) => (
+  item.requiresApiKey || item.id === 'openai-codex' || item.providerId === 'openai-codex'
+    ? <KeyRound className="w-4 h-4 text-gray-400" />
+    : <Link2 className="w-4 h-4 text-gray-400" />
+);
+
 const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, saving }) => {
   const seed = profile || preset || {};
   const [form, setForm] = useState({
@@ -240,32 +258,51 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
   );
 };
 
-const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, providerAction }) => {
+const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, providerAction, experimental = false }) => {
   const hasModels = models && models.length > 0;
   return (
-    <div className="rounded-3xl border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/10 p-5 shadow-sm">
+    <div className={`rounded-3xl border p-5 shadow-sm ${
+      experimental
+        ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/15 midnight:bg-amber-900/10'
+        : 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20 midnight:bg-green-900/10'
+    }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400">
+          <div className={`p-2 rounded-xl ${
+            experimental
+              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+              : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'
+          }`}>
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base font-semibold text-green-900 dark:text-green-100">{name} Detected</h3>
+              <h3 className={`text-base font-semibold ${experimental ? 'text-amber-900 dark:text-amber-100' : 'text-green-900 dark:text-green-100'}`}>
+                {name} Detected
+              </h3>
               {running && <Badge color="green">Running</Badge>}
+              {experimental && <Badge color="amber">Experimental</Badge>}
             </div>
-            <p className="mt-1 text-xs text-green-700 dark:text-green-300 break-all">{baseUrl}</p>
+            <p className={`mt-1 text-xs break-all ${experimental ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`}>{baseUrl}</p>
             {hasModels && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {models.slice(0, 5).map(m => (
-                  <span key={m} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200">{m}</span>
+                  <span key={m} className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
+                    experimental
+                      ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100'
+                      : 'bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200'
+                  }`}>{m}</span>
                 ))}
-                {models.length > 5 && <span className="text-xs text-green-600 dark:text-green-400">+{models.length - 5} more</span>}
+                {models.length > 5 && <span className={`text-xs ${experimental ? 'text-amber-600 dark:text-amber-300' : 'text-green-600 dark:text-green-400'}`}>+{models.length - 5} more</span>}
               </div>
             )}
           </div>
         </div>
-        <button onClick={onDismiss} className="p-1 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-800 rounded-lg">
+        <button onClick={onDismiss} className={`p-1 rounded-lg ${
+          experimental
+            ? 'text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30'
+            : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-800'
+        }`}>
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -273,13 +310,15 @@ const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, p
         <button
           onClick={onUse}
           disabled={Boolean(providerAction)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+          className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-white disabled:opacity-50 ${
+            experimental ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
+          }`}
         >
           <Sparkles className="w-4 h-4" />
           Use {name}
         </button>
         {hasModels && (
-          <span className="flex items-center text-xs text-green-700 dark:text-green-300 py-2">
+          <span className={`flex items-center text-xs py-2 ${experimental ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`}>
             {models.length} model{models.length !== 1 ? 's' : ''} available
           </span>
         )}
@@ -542,7 +581,7 @@ const ProvidersSection = ({
   }, []);
 
   const activeProfileId = activeConfig?.profile_id;
-  const cloudPresets = catalog.filter(item => !item.managed);
+  const cloudPresets = catalog.filter(item => !item.managed && item.id !== 'openai-codex' && item.providerId !== 'openai-codex');
   const localServerRunning = serverStatus?.status === 'ready' || serverStatus?.status === 'loading';
   const configuredProviderIds = new Set((profiles || []).map(profile => profile.provider_id).filter(Boolean));
   const showOllamaDetected = Boolean(ollamaInfo?.found && !configuredProviderIds.has('ollama'));
@@ -573,7 +612,7 @@ const ProvidersSection = ({
     await onSave(null, {
       name: preset.name,
       provider_id: providerId,
-      provider_type: 'local',
+      provider_type: preset.providerType || (providerId === 'codex-cli' ? 'local' : 'cloud'),
       base_url: preset.baseUrl,
       model: preset.model,
       supports_tools: false,
@@ -718,7 +757,7 @@ const ProvidersSection = ({
             )}
             {showOpenAiCodexDetected && (
               <LocalProviderCard
-                name="OpenAI Codex"
+                name="OpenAI Codex Direct"
                 found
                 running
                 baseUrl="https://chatgpt.com/backend-api/codex"
@@ -726,6 +765,7 @@ const ProvidersSection = ({
                 onUse={() => handleUseRuntimeProvider('openai-codex')}
                 onDismiss={() => setRuntimeInfo(prev => ({ ...(prev || {}), codexCredentials: false }))}
                 providerAction={providerAction}
+                experimental
               />
             )}
             {showCodexCliDetected && (
@@ -756,25 +796,28 @@ const ProvidersSection = ({
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {cloudPresets.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setModalState({ preset: item })}
-              className="text-left rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-4 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{item.name}</div>
-                {item.requiresApiKey ? <KeyRound className="w-4 h-4 text-gray-400" /> : <Link2 className="w-4 h-4 text-gray-400" />}
-              </div>
-              <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge color={item.local ? 'gray' : 'blue'}>{item.local ? 'Local' : 'Cloud'}</Badge>
-                {item.supportsTools && <Badge color="green">Tools</Badge>}
-                {item.supportsModelList && <Badge color="gray">Model list</Badge>}
-                {item.apiKeyEnv && <Badge color="gray">{item.apiKeyEnv}</Badge>}
-              </div>
-            </button>
-          ))}
+          {cloudPresets.map(item => {
+            const typeBadge = providerTypeBadge(item);
+            return (
+              <button
+                key={item.id}
+                onClick={() => setModalState({ preset: item })}
+                className="text-left rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-4 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{item.name}</div>
+                  {providerAuthIcon(item)}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge color={typeBadge.color}>{typeBadge.label}</Badge>
+                  {item.supportsTools && <Badge color="green">Tools</Badge>}
+                  {item.supportsModelList && <Badge color="gray">Model list</Badge>}
+                  {item.apiKeyEnv && <Badge color="gray">{item.apiKeyEnv}</Badge>}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -53,11 +53,11 @@ export const PROVIDER_CATALOG = [
     managed: false,
     directCodex: true,
     setup: [
-      'Uses Codex/ChatGPT OAuth against the Codex Responses backend.',
+      'Uses a local Codex/ChatGPT login against the Codex Responses backend.',
       'Asyncat keeps its own token bundle after connection; it should not live-share refresh tokens with Codex CLI.',
       'If you already ran codex login, Asyncat can import that token once to bootstrap its own session.'
     ],
-    description: 'Use Codex subscription auth directly from Asyncat.',
+    description: 'Use your Codex login from Asyncat. Experimental; not a normal OpenAI API key.',
   },
   {
     id: 'codex-cli',
