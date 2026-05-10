@@ -703,6 +703,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return false;
     }
   });
+  const [reasoningEffort, setReasoningEffort] = useState(() => {
+    try {
+      return localStorage.getItem('asyncat_reasoning_effort') || 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
   const [alwaysAllowedTools, setAlwaysAllowedTools] = useState(() => {
     try {
       const stored = localStorage.getItem('asyncat_always_allow_tools');
@@ -1010,6 +1017,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const submittedGoal = goal.trim();
     const agentMentions = Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : [];
     const fileAttachments = Array.isArray(messageObj?.fileAttachments) ? messageObj.fileAttachments : [];
+    const selectedReasoningEffort = runOptions.reasoningEffort || messageObj?.reasoningEffort || reasoningEffort || 'auto';
     const leadingProfileMention = getLeadingProfileMention(submittedGoal, agentMentions);
     const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
     const runKey = currentRunKey;
@@ -1039,7 +1047,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         fileAttachments,
         events: [
           ...baseEvents,
-          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, fileAttachments, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
+          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
         ],
       };
     });
@@ -1053,7 +1061,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
     const runEvents = [
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMentions, fileAttachments, profileId: effectiveProfileId || null } },
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null } },
     ];
 
     try {
@@ -1064,6 +1072,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         agentMentions,
         fileAttachments,
         enableTools: effectiveToolsEnabled,
+        reasoningEffort: selectedReasoningEffort,
       })) {
         if (controller.signal.aborted) break;
         if (event.type === 'session_start') {
@@ -1206,8 +1215,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       if (capturedFinalAnswer) {
         const nextHistory = [
           ...activeConversationHistory,
-          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMentions, fileAttachments },
-          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentSessionId: runSessionId },
+          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments },
+          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId },
         ];
         const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
         updateChatRun(runKey, { conversationHistory: nextHistory });
@@ -1221,6 +1230,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           type: 'user',
           timestamp: new Date().toISOString(),
           toolsEnabled: effectiveToolsEnabled,
+          reasoningEffort: selectedReasoningEffort,
           agentMentions,
           fileAttachments,
         };
@@ -1248,6 +1258,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           timestamp: new Date().toISOString(),
           agentSessionId: runSessionId,
           toolsEnabled: effectiveToolsEnabled,
+          reasoningEffort: selectedReasoningEffort,
           agentEvents: getPersistableAgentEvents(runEventsForMsg),
           searchEvent,
         };
@@ -1329,6 +1340,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     conversationHistory,
     agentCurrentSessionId,
     agentAutoApprove,
+    reasoningEffort,
     alwaysAllowedTools,
     selectedProfileId,
     toolsEnabled,
@@ -1450,6 +1462,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       try { localStorage.setItem('asyncat_agent_auto_approve', String(next)); } catch { /* localStorage may be unavailable */ }
       return next;
     });
+  }, []);
+  const handleReasoningEffortChange = useCallback((next) => {
+    const value = ['auto', 'low', 'medium', 'high', 'xhigh'].includes(next) ? next : 'auto';
+    setReasoningEffort(value);
+    try { localStorage.setItem('asyncat_reasoning_effort', value); } catch { /* localStorage may be unavailable */ }
   }, []);
 
   const handleAgentRename = useCallback(async () => {
@@ -1755,6 +1772,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onToggleTools={() => setToolsEnabled(!toolsEnabled)}
               autoApprove={agentAutoApprove}
               onToggleAutoApprove={handleToggleAgentAutoApprove}
+              reasoningEffort={reasoningEffort}
+              onReasoningEffortChange={handleReasoningEffortChange}
               externalFileAttachment={externalFileAttachment}
             />
 
@@ -2091,6 +2110,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onToggleTools={() => setToolsEnabled(!toolsEnabled)}
                 autoApprove={agentAutoApprove}
                 onToggleAutoApprove={handleToggleAgentAutoApprove}
+                reasoningEffort={reasoningEffort}
+                onReasoningEffortChange={handleReasoningEffortChange}
                 isRunning={agentRunning}
                 onStop={handleAgentStop}
                 runStartedAt={runStartedAtRef.current}

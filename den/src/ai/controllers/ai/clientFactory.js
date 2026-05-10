@@ -40,12 +40,25 @@ function assertLocalModelReady() {
 
 // Global fallback client (built-in llama server)
 import OpenAIClient from './openAIClient.js';
+import LocalRuntimeClient from './localRuntimeClient.js';
+import CodexDirectClient from './codexDirectClient.js';
 
 const globalClient = new OpenAIClient({
   endpoint:     GLOBAL_AI_BASE_URL,
   apiKey:       GLOBAL_AI_API_KEY,
   defaultModel: GLOBAL_AI_MODEL,
 });
+
+function persistCodexTokens(userId, profileId, tokenBundle) {
+  if (!userId) return;
+  const now = new Date().toISOString();
+  db.prepare('UPDATE ai_provider_config SET api_key = ?, updated_at = ? WHERE user_id = ?')
+    .run(tokenBundle, now, userId);
+  if (profileId) {
+    db.prepare('UPDATE ai_provider_profiles SET api_key = ?, updated_at = ? WHERE user_id = ? AND id = ?')
+      .run(tokenBundle, now, userId, profileId);
+  }
+}
 
 /**
  * Resolve the AI client and model for a specific user.
@@ -59,7 +72,7 @@ const globalClient = new OpenAIClient({
 export function getAiClientForUser(userId) {
   try {
     const row = db
-      .prepare('SELECT profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools FROM ai_provider_config WHERE user_id = ?')
+      .prepare('SELECT user_id, profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools FROM ai_provider_config WHERE user_id = ?')
       .get(userId);
 
     if (!row) {
@@ -83,6 +96,57 @@ export function getAiClientForUser(userId) {
     const supportsNativeTools = providerSupportsTools(row);
     const localStatus = requiresLocalServer ? assertLocalModelReady() : null;
     const apiKey = isLocal ? (row.api_key || 'local') : (row.api_key || GLOBAL_AI_API_KEY);
+
+    if (row.provider_id === 'openai-codex') {
+      const userClient = new CodexDirectClient({
+        apiKey: row.api_key,
+        defaultModel: row.model,
+        baseURL: baseUrl,
+        onTokens: tokenBundle => persistCodexTokens(userId, row.profile_id, tokenBundle),
+      });
+      return {
+        client: userClient,
+        model: row.model,
+        isLocal: false,
+        requiresLocalServer: false,
+        supportsNativeTools: false,
+        provider_type: row.provider_type,
+        providerInfo: {
+          type: row.provider_type,
+          providerId: row.provider_id,
+          baseUrl: row.base_url,
+          model: row.model,
+          profileId: row.profile_id,
+          supportsNativeTools: false,
+          settings,
+        },
+      };
+    }
+
+    if (row.provider_id === 'codex-cli') {
+      const userClient = new LocalRuntimeClient({
+        runtime: row.provider_id,
+        defaultModel: row.model,
+        settings,
+      });
+      return {
+        client: userClient,
+        model: row.model,
+        isLocal: true,
+        requiresLocalServer: false,
+        supportsNativeTools: false,
+        provider_type: row.provider_type,
+        providerInfo: {
+          type: row.provider_type,
+          providerId: row.provider_id,
+          baseUrl: row.base_url,
+          model: row.model,
+          profileId: row.profile_id,
+          supportsNativeTools: false,
+          settings,
+        },
+      };
+    }
 
     const userClient = new OpenAIClient({
       endpoint:     baseUrl,
@@ -130,6 +194,59 @@ function clientFromProviderRow(row, { allowGlobalApiKeyFallback = true } = {}) {
     throw new Error(`Local model mismatch: scheduled job expects ${row.model}, but ${localStatus.model} is loaded.`);
   }
   const apiKey = isLocal ? (row.api_key || 'local') : (row.api_key || (allowGlobalApiKeyFallback ? GLOBAL_AI_API_KEY : ''));
+
+  if (row.provider_id === 'openai-codex') {
+    const client = new CodexDirectClient({
+      apiKey: row.api_key,
+      defaultModel: localStatus?.model || row.model,
+      baseURL: baseUrl,
+      onTokens: tokenBundle => persistCodexTokens(row.user_id, row.profile_id || row.id || null, tokenBundle),
+    });
+    return {
+      client,
+      model: localStatus?.model || row.model,
+      isLocal: false,
+      requiresLocalServer,
+      supportsNativeTools: false,
+      provider_type: row.provider_type,
+      providerInfo: {
+        type: row.provider_type,
+        providerId: row.provider_id,
+        baseUrl: row.base_url,
+        model: row.model,
+        profileId: row.profile_id || row.id || null,
+        supportsNativeTools: false,
+        name: row.name || null,
+        settings,
+      },
+    };
+  }
+
+  if (row.provider_id === 'codex-cli') {
+    const client = new LocalRuntimeClient({
+      runtime: row.provider_id,
+      defaultModel: localStatus?.model || row.model,
+      settings,
+    });
+    return {
+      client,
+      model: localStatus?.model || row.model,
+      isLocal: true,
+      requiresLocalServer,
+      supportsNativeTools: false,
+      provider_type: row.provider_type,
+      providerInfo: {
+        type: row.provider_type,
+        providerId: row.provider_id,
+        baseUrl: row.base_url,
+        model: row.model,
+        profileId: row.profile_id || row.id || null,
+        supportsNativeTools: false,
+        name: row.name || null,
+        settings,
+      },
+    };
+  }
 
   if (!isLocal && !apiKey) {
     throw new Error(`Provider ${row.name || row.provider_id || 'profile'} is missing an API key.`);

@@ -9,6 +9,8 @@ import { randomUUID } from 'crypto';
 import { verifyUser } from '../../auth/authMiddleware.js';
 import { getProviderStats } from '../controllers/ai/providerManager.js';
 import OpenAIClient from '../controllers/ai/openAIClient.js';
+import LocalRuntimeClient from '../controllers/ai/localRuntimeClient.js';
+import CodexDirectClient, { CODEX_MODEL_CATALOG, makeCodexTokenBundle } from '../controllers/ai/codexDirectClient.js';
 import {
   listModels,
   deleteModel,
@@ -59,9 +61,14 @@ import {
   clearCache as clearMlxCache,
 } from '../controllers/ai/mlxServerManager.js';
 import db from '../../db/client.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import os from 'os';
+import path from 'path';
 
 const router = express.Router();
 const providerStatusClients = new Map();
+const execFileAsync = promisify(execFile);
 
 function activeProviderSnapshot(userId) {
   const active = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools, updated_at FROM ai_provider_config WHERE user_id = ?').get(userId);
@@ -134,6 +141,34 @@ function providerHeaders(providerId) {
   return undefined;
 }
 
+function readCodexCliTokens() {
+  const codexHome = String(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'));
+  const authPath = path.join(codexHome, 'auth.json');
+  try {
+    const payload = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+    const tokens = payload?.tokens;
+    if (!tokens?.access_token || !tokens?.refresh_token) return null;
+    return {
+      access_token: String(tokens.access_token),
+      refresh_token: String(tokens.refresh_token),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistCodexTokensForRow(userId, row, tokenBundle) {
+  if (row?.id) {
+    db.prepare('UPDATE ai_provider_profiles SET api_key = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+      .run(tokenBundle, new Date().toISOString(), row.id, userId);
+  }
+  const active = db.prepare('SELECT profile_id FROM ai_provider_config WHERE user_id = ?').get(userId);
+  if (active?.profile_id && row?.id && active.profile_id === row.id) {
+    db.prepare('UPDATE ai_provider_config SET api_key = ?, updated_at = ? WHERE user_id = ?')
+      .run(tokenBundle, new Date().toISOString(), userId);
+  }
+}
+
 function normalizeProfilePayload(body = {}, existing = null) {
   const providerId = String(body.provider_id || body.providerId || existing?.provider_id || 'custom').trim();
   const preset = getProviderPreset(providerId) || getProviderPreset('custom');
@@ -173,6 +208,21 @@ function rowByProfileId(userId, profileId) {
 
 function clientForProvider(row) {
   const settings = parseSettings(row.settings);
+  if (row.provider_id === 'openai-codex') {
+    return new CodexDirectClient({
+      apiKey: row.api_key,
+      defaultModel: row.model,
+      baseURL: normalizeBaseUrl(row.base_url, row.provider_id),
+      onTokens: tokenBundle => persistCodexTokensForRow(row.user_id, row, tokenBundle),
+    });
+  }
+  if (row.provider_id === 'codex-cli') {
+    return new LocalRuntimeClient({
+      runtime: row.provider_id,
+      defaultModel: row.model,
+      settings,
+    });
+  }
   return new OpenAIClient({
     endpoint: normalizeBaseUrl(row.base_url, row.provider_id),
     apiKey: row.provider_type === 'local' ? (row.api_key || 'local') : (row.api_key || process.env.AI_API_KEY || 'not-configured'),
@@ -201,6 +251,18 @@ async function listProviderModels(row) {
       id: model.filename,
       name: model.name || model.filename,
       owned_by: 'local',
+    }));
+  }
+  if (row.provider_id === 'openai-codex' || row.provider_id === 'codex-cli') {
+    const preset = getProviderPreset(row.provider_id);
+    return CODEX_MODEL_CATALOG.map(model => ({
+      id: model.id,
+      name: model.name,
+      owned_by: row.provider_id,
+      context_window: model.context_window || preset?.contextWindow || null,
+      context_window_source: 'provider-preset',
+      context_window_confidence: 'provider-default',
+      supported_parameters: row.provider_id === 'openai-codex' ? ['reasoning'] : [],
     }));
   }
   const client = clientForProvider(row);
@@ -242,6 +304,23 @@ async function testProvider(row) {
       throw new Error(`Built-in llama.cpp is ${snap.status}; load a model first.`);
     }
     return `Built-in llama.cpp is ready with ${snap.model || row.model}.`;
+  }
+  if (row.provider_id === 'codex-cli') {
+    try {
+      const { stdout } = await execFileAsync('codex', ['--version'], { timeout: 5000 });
+      return `Codex CLI detected${stdout?.trim() ? `: ${stdout.trim()}` : '.'}`;
+    } catch (err) {
+      throw new Error(`Codex CLI was not found or did not run: ${err.message}`);
+    }
+  }
+  if (row.provider_id === 'openai-codex') {
+    if (!row.api_key) throw new Error('OpenAI Codex is not connected. Import Codex CLI credentials or reconnect Codex.');
+    const client = clientForProvider(row);
+    await withTimeout(client.client.chat.completions.create({
+      model: row.model || 'gpt-5.5',
+      messages: [{ role: 'user', content: 'Reply with exactly: ok' }],
+    }), 30000, 'Codex test');
+    return 'OpenAI Codex connected.';
   }
 
   const preset = getProviderPreset(row.provider_id);
@@ -340,6 +419,22 @@ router.get('/check-lm-studio', async (_req, res) => {
   res.json({ success: true, ...result });
 });
 
+// ── GET /check-local-runtimes — detect local CLI runtimes without reading tokens ─
+router.get('/check-local-runtimes', async (_req, res) => {
+  const detect = async (command, args = ['--version']) => {
+    try {
+      const { stdout } = await execFileAsync(command, args, { timeout: 5000 });
+      return { found: true, version: stdout?.trim() || null };
+    } catch {
+      return { found: false, version: null };
+    }
+  };
+  const [codex] = await Promise.all([
+    detect('codex'),
+  ]);
+  res.json({ success: true, codex, codexCredentials: Boolean(readCodexCliTokens()) });
+});
+
 // ── GET /catalog — built-in provider presets ────────────────────────────────
 router.get('/catalog', verifyUser, (_req, res) => {
   res.json({ success: true, providers: PROVIDER_CATALOG });
@@ -431,6 +526,16 @@ router.get('/profiles', verifyUser, (req, res) => {
 router.post('/profiles', verifyUser, (req, res) => {
   try {
     const profile = normalizeProfilePayload(req.body || {});
+    if (profile.provider_id === 'openai-codex' && !profile.api_key) {
+      const tokens = readCodexCliTokens();
+      if (!tokens) {
+        return res.status(400).json({
+          success: false,
+          error: 'Codex CLI credentials were not found. Run `codex login` first, or use Codex CLI Runtime instead.',
+        });
+      }
+      profile.api_key = makeCodexTokenBundle(tokens);
+    }
     if (!profile.base_url && profile.provider_id !== LLAMA_PROVIDER_ID) {
       return res.status(400).json({ success: false, error: 'base_url is required' });
     }

@@ -713,6 +713,7 @@ export const agentApi = {
         agentMentions: opts.agentMentions || [],
         fileAttachments: opts.fileAttachments || [],
         enableTools: opts.enableTools !== false,
+        reasoningEffort: opts.reasoningEffort || 'auto',
       })
     });
 

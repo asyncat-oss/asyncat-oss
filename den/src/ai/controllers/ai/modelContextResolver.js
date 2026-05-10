@@ -17,6 +17,16 @@ const MODEL_CONTEXT_RULES = [
   { providerId: /^openai$/i, model: /gpt-4\.1|gpt-4o|o3|o4/i, contextWindow: 128000 },
   { providerId: /^openai$/i, model: /gpt-5/i, contextWindow: 400000 },
 
+  { providerId: /^xai$/i, model: /grok-4/i, contextWindow: 256000 },
+  { providerId: /^mistral$/i, model: /mistral-large/i, contextWindow: 128000 },
+  { providerId: /^deepseek$/i, model: /deepseek/i, contextWindow: 64000 },
+  { providerId: /^together$/i, model: /llama-3\.3-70b/i, contextWindow: 131072 },
+  { providerId: /^perplexity$/i, model: /sonar/i, contextWindow: 200000 },
+  { providerId: /^cohere$/i, model: /command-a/i, contextWindow: 256000 },
+  { providerId: /^fireworks$/i, model: /llama-v3p1|deepseek/i, contextWindow: 131072 },
+  { providerId: /^cerebras$/i, model: /gpt-oss/i, contextWindow: 131072 },
+  { providerId: /^deepinfra$/i, model: /llama-3\.3-70b/i, contextWindow: 131072 },
+
   { providerId: /^groq$/i, model: /llama-3\.3-70b-versatile/i, contextWindow: 131072 },
   { providerId: /^groq$/i, model: /llama-3\.1-8b-instant/i, contextWindow: 131072 },
 ];

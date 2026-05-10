@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { ChevronDown, Cloud, Cpu, HardDrive, Loader2, Send, Square, Wrench, X, Zap } from "lucide-react";
+import { Brain, ChevronDown, Cloud, Cpu, HardDrive, Loader2, Send, Square, Wrench, X, Zap } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -72,6 +72,13 @@ const suggestionPanelClass =
   "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1a1a1a] midnight:border-[#2a2a2a] midnight:bg-[#1a1a1a]";
 const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
 const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:hover:bg-[#242424]";
+const reasoningOptions = [
+  { value: "auto", label: "Auto", short: "Think auto", description: "Let the provider choose." },
+  { value: "low", label: "Low", short: "Think low", description: "Faster, lighter reasoning." },
+  { value: "medium", label: "Medium", short: "Think med", description: "Balanced reasoning." },
+  { value: "high", label: "High", short: "Think high", description: "More careful reasoning." },
+  { value: "xhigh", label: "Extra high", short: "Think xhigh", description: "Maximum effort where supported." },
+];
 
 export const MessageInputV2 = ({
   onSubmit,
@@ -89,6 +96,8 @@ export const MessageInputV2 = ({
   onStop,
   runStartedAt = null,
   externalFileAttachment = null,
+  reasoningEffort = "auto",
+  onReasoningEffortChange,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
@@ -359,6 +368,7 @@ export const MessageInputV2 = ({
           content: value.trim(),
           agentMentions: detectedAgentMentions,
           fileAttachments: fileAttachments.length > 0 ? fileAttachments : undefined,
+          reasoningEffort: activeBrain.supportsReasoning ? reasoningEffort : "auto",
         };
 
         await onSubmit(messageToSend, []);
@@ -371,7 +381,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, onSubmit, detectedAgentMentions, fileAttachments],
+    [value, disabled, onSubmit, detectedAgentMentions, fileAttachments, activeBrain.supportsReasoning, reasoningEffort],
   );
 
   const handleKeyDown = useCallback(
@@ -438,6 +448,7 @@ export const MessageInputV2 = ({
 
   const canSubmit = value.trim() && !disabled && !isRunning;
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
+  const currentReasoningOption = reasoningOptions.find(option => option.value === reasoningEffort) || reasoningOptions[0];
   const modelLabel = activeBrain.isLoadingModel
     ? "Loading"
     : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
@@ -731,6 +742,50 @@ export const MessageInputV2 = ({
                       </div>
                     )}
                   </div>
+
+                  {onReasoningEffortChange && activeBrain.supportsReasoning && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOpenMenu((current) => (current === "reasoning" ? null : "reasoning"))}
+                        disabled={disabled}
+                        title={`Reasoning effort: ${currentReasoningOption.label}`}
+                        className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
+                          reasoningEffort === "auto"
+                            ? "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                            : "text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300"
+                        }`}
+                      >
+                        <Brain className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">{currentReasoningOption.short}</span>
+                        <ChevronDown className="w-3 h-3 opacity-40" />
+                      </button>
+                      {openMenu === "reasoning" && (
+                        <div className="absolute left-0 bottom-full z-30 mb-1.5 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+                          <div className="p-1">
+                            {reasoningOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => {
+                                  onReasoningEffortChange(option.value);
+                                  setOpenMenu(null);
+                                }}
+                                className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                                  option.value === reasoningEffort
+                                    ? "bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300"
+                                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                }`}
+                              >
+                                <span className="block font-medium">{option.label}</span>
+                                <span className="block text-[11px] text-gray-400 dark:text-gray-500">{option.description}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   
                   {onToggleTools && (
                     <button

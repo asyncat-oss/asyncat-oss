@@ -170,6 +170,10 @@ export const aiProviderApi = {
     return apiCall(`${AI_API_BASE}/check-lm-studio`);
   },
 
+  checkLocalRuntimes: async () => {
+    return apiCall(`${AI_API_BASE}/check-local-runtimes`);
+  },
+
   listProfiles: async () => {
     return apiCall(`${AI_API_BASE}/profiles`);
   },

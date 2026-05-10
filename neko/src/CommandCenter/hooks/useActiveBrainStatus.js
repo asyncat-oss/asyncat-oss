@@ -12,9 +12,19 @@ const PROVIDER_NAMES = {
   "minimax-cn": "MiniMax CN",
   groq: "Groq",
   openrouter: "OpenRouter",
+  "openai-codex": "OpenAI Codex",
+  "codex-cli": "Codex CLI",
+  xai: "xAI",
   azure: "Azure",
   custom: "Custom",
 };
+
+const REASONING_PROVIDER_IDS = new Set([
+  "openai",
+  "openai-codex",
+  "openrouter",
+  "xai",
+]);
 
 const shortModelName = (model) => {
   if (!model) return "";
@@ -71,8 +81,13 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
     const isLocal = config?.provider_type === "local";
     const isBuiltin = providerId === "llamacpp-builtin";
     const status = isBuiltin ? (localStatus?.status || "idle") : "ready";
-    const model = shortModelName(isBuiltin ? (localStatus?.model || config?.model) : config?.model);
+    const rawModel = isBuiltin ? (localStatus?.model || config?.model) : config?.model;
+    const model = shortModelName(rawModel);
     const mode = isLocal ? "Local" : config?.provider_type === "cloud" ? "Cloud" : "Custom";
+    const supportsReasoning = !isBuiltin && (
+      REASONING_PROVIDER_IDS.has(providerId)
+      || /\b(gpt-5|o[134]|grok|deepseek-r1|qwq)\b|thinking/i.test(String(rawModel || ""))
+    );
 
     return {
       loading,
@@ -86,6 +101,7 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
       isLoadingModel: isBuiltin && status === "loading",
       isReady: isBuiltin ? status === "ready" : Boolean(config?.model),
       supportsTools: Boolean(config?.supports_tools),
+      supportsReasoning,
       label: model ? `${mode} · ${providerName} · ${model}` : `${mode} · ${providerName}`,
     };
   }, [config, localStatus, loading]);

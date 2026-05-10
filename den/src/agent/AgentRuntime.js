@@ -39,6 +39,29 @@ const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|writ
 const MULTI_STEP_GOAL_RE = /\b(and then|after that|also|then|next|finally|step[\s-]?\d|multiple|several|both|all of)\b/i;
 const AUTO_PLAN_IDS = new Set(['auto_plan_inspect', 'auto_plan_understand', 'auto_plan_apply', 'auto_plan_verify']);
 const RETRYABLE_TOOLS = new Set(['run_command', 'run_python', 'run_node', 'browse_website', 'web_search']);
+const REASONING_PROVIDER_IDS = new Set(['openai', 'openai-codex', 'openrouter', 'xai']);
+
+function normalizeReasoningEffort(value) {
+  const effort = String(value || '').trim().toLowerCase();
+  if (!effort || effort === 'auto' || effort === 'off' || effort === 'none') return null;
+  if (effort === 'xhigh' || effort === 'extra_high' || effort === 'extra-high') return 'high';
+  if (effort === 'minimal') return 'low';
+  return ['low', 'medium', 'high'].includes(effort) ? effort : null;
+}
+
+function providerSupportsReasoning(providerInfo, model) {
+  const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
+  return REASONING_PROVIDER_IDS.has(providerId)
+    || /\b(gpt-5|o[134]|grok|deepseek-r1|qwq)\b|thinking/i.test(String(model || ''));
+}
+
+function applyReasoningEffort(params, effort, providerInfo, model) {
+  const normalized = normalizeReasoningEffort(effort);
+  if (!normalized || !providerSupportsReasoning(providerInfo, model)) return params;
+  const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
+  if (providerId === 'openrouter') return { ...params, reasoning: { effort: normalized } };
+  return { ...params, reasoning_effort: normalized };
+}
 
 /**
  * Normalize tool call signature for loop detection.
@@ -142,6 +165,7 @@ export class AgentRuntime {
     this.continueSessionId = opts.continueSessionId || null;
     this.soulOverride = opts.soul || null;
     this.providerInfo = opts.providerInfo || null;
+    this.reasoningEffort = opts.reasoningEffort || 'auto';
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
     this.abortSignal = opts.abortSignal || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -844,7 +868,7 @@ export class AgentRuntime {
     this._throwIfAborted();
     const useNativeTools = this.supportsNativeTools;
 
-    const params = {
+    let params = {
       model: this.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       max_tokens: this.isLocal ? 2048 : 4096,
@@ -860,6 +884,8 @@ export class AgentRuntime {
       params.max_completion_tokens = params.max_tokens;
       delete params.max_tokens;
     }
+
+    params = applyReasoningEffort(params, options.reasoningEffort || this.reasoningEffort, this.providerInfo, this.model);
 
     const requestOptions = this.abortSignal ? { signal: this.abortSignal } : undefined;
     let stream;

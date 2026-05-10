@@ -35,6 +35,9 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
   const requiresKey = selectedPreset?.requiresApiKey;
   const isAddingFromPreset = !profile && preset;
   const presetHasDefaults = Boolean(selectedPreset?.baseUrl && selectedPreset?.model);
+  const setupItems = Array.isArray(selectedPreset?.setup) ? selectedPreset.setup : [];
+  const docsUrl = selectedPreset?.docsUrl || '';
+  const apiKeyEnv = selectedPreset?.apiKeyEnv || '';
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
   const updateSetting = (key, value) => setForm(prev => ({ ...prev, settings: { ...(prev.settings || {}), [key]: value } }));
@@ -79,22 +82,44 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
               onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
               type="password"
               className="mt-1.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
-              placeholder={requiresKey ? 'Paste your API key here' : 'Optional'}
+              placeholder={requiresKey ? `Paste API key${apiKeyEnv ? ` (${apiKeyEnv})` : ''}` : 'Optional'}
               autoFocus
             />
           </label>
 
-          {/* Friendly default-model note when adding from a preset */}
-          {isAddingFromPreset && presetHasDefaults && (
+          {(isAddingFromPreset && presetHasDefaults) || setupItems.length > 0 || selectedPreset?.compatibility || docsUrl ? (
             <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/30 dark:bg-blue-900/15 dark:text-blue-300">
-              <p className="font-medium">Default model: {selectedPreset.model}</p>
-              <p className="mt-0.5 text-xs opacity-90">
-                {form.provider_id === 'openrouter'
-                  ? 'OpenRouter will automatically route to the best available model. You can pick a specific model from the list after saving.'
-                  : 'The preset default model will be used. You can change it after saving via the Models button.'}
-              </p>
+              {isAddingFromPreset && presetHasDefaults && (
+                <>
+                  <p className="font-medium">Default model: {selectedPreset.model}</p>
+                  <p className="mt-0.5 text-xs opacity-90">
+                    {form.provider_id === 'openrouter'
+                      ? 'OpenRouter can route automatically with openrouter/auto. Pick a concrete model later when you need predictable behavior.'
+                      : 'The preset default model is a starting point. Use Models after saving to choose a model returned by the provider.'}
+                  </p>
+                </>
+              )}
+              {selectedPreset?.compatibility && (
+                <p className="mt-2 text-xs leading-5 opacity-95">{selectedPreset.compatibility}</p>
+              )}
+              {setupItems.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs leading-5">
+                  {setupItems.map(item => <li key={item}>- {item}</li>)}
+                </ul>
+              )}
+              {docsUrl && (
+                <a
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium underline underline-offset-2"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  Provider docs
+                </a>
+              )}
             </div>
-          )}
+          ) : null}
 
           {/* Name — always shown but compact when adding from preset */}
           <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
@@ -115,7 +140,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
               className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             >
               <Settings className="w-3.5 h-3.5" />
-              Advanced settings
+              Endpoint and model
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
             </button>
           )}
@@ -174,6 +199,18 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                     value={form.settings?.apiVersion || '2024-10-21'}
                     onChange={(e) => updateSetting('apiVersion', e.target.value)}
                     className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                  />
+                </label>
+              )}
+
+              {isAzure && (
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                  Deployment
+                  <input
+                    value={form.settings?.deployment || ''}
+                    onChange={(e) => updateSetting('deployment', e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                    placeholder="Defaults to Model if blank"
                   />
                 </label>
               )}
@@ -473,6 +510,7 @@ const ProvidersSection = ({
   const [pendingActivate, setPendingActivate] = useState(null);
   const [ollamaInfo, setOllamaInfo] = useState(null); // { found, running, models, baseUrl }
   const [lmStudioInfo, setLmStudioInfo] = useState(null); // { found, running, models, baseUrl }
+  const [runtimeInfo, setRuntimeInfo] = useState(null);
   const [checkingLocal, setCheckingLocal] = useState(false);
   const [modelLists, setModelLists] = useState({});
   const [modelLoading, setModelLoading] = useState(null);
@@ -486,13 +524,17 @@ const ProvidersSection = ({
     Promise.all([
       aiProviderApi.checkOllama(),
       aiProviderApi.checkLMStudio(),
+      aiProviderApi.checkLocalRuntimes(),
     ])
-      .then(([ollamaRes, lmStudioRes]) => {
+      .then(([ollamaRes, lmStudioRes, runtimeRes]) => {
         if (ollamaRes.success && ollamaRes.found && ollamaRes.running) {
           setOllamaInfo({ found: true, running: true, models: ollamaRes.models || [], baseUrl: ollamaRes.baseUrl });
         }
         if (lmStudioRes.success && lmStudioRes.found && lmStudioRes.running) {
           setLmStudioInfo({ found: true, running: true, models: lmStudioRes.models || [], baseUrl: lmStudioRes.baseUrl });
+        }
+        if (runtimeRes.success) {
+          setRuntimeInfo(runtimeRes);
         }
       })
       .catch(() => {})
@@ -502,6 +544,11 @@ const ProvidersSection = ({
   const activeProfileId = activeConfig?.profile_id;
   const cloudPresets = catalog.filter(item => !item.managed);
   const localServerRunning = serverStatus?.status === 'ready' || serverStatus?.status === 'loading';
+  const configuredProviderIds = new Set((profiles || []).map(profile => profile.provider_id).filter(Boolean));
+  const showOllamaDetected = Boolean(ollamaInfo?.found && !configuredProviderIds.has('ollama'));
+  const showLmStudioDetected = Boolean(lmStudioInfo?.found && !configuredProviderIds.has('lmstudio'));
+  const showOpenAiCodexDetected = Boolean(runtimeInfo?.codexCredentials && !configuredProviderIds.has('openai-codex'));
+  const showCodexCliDetected = Boolean(runtimeInfo?.codex?.found && !runtimeInfo?.codexCredentials && !configuredProviderIds.has('codex-cli'));
 
   const handleUseLocalProvider = async (providerId, info) => {
     if (!info?.found) return;
@@ -518,6 +565,20 @@ const ProvidersSection = ({
     await onSave(null, payload);
     if (providerId === 'ollama') setOllamaInfo(null);
     else setLmStudioInfo(null);
+  };
+
+  const handleUseRuntimeProvider = async (providerId) => {
+    const preset = catalog.find(item => item.id === providerId || item.providerId === providerId);
+    if (!preset) return;
+    await onSave(null, {
+      name: preset.name,
+      provider_id: providerId,
+      provider_type: 'local',
+      base_url: preset.baseUrl,
+      model: preset.model,
+      supports_tools: false,
+      settings: {},
+    });
   };
 
   const activate = (profile) => {
@@ -625,13 +686,13 @@ const ProvidersSection = ({
       </div>
 
       {/* Detected Local Providers - Ollama & LM Studio */}
-      {(ollamaInfo?.found || lmStudioInfo?.found) && (
+      {(showOllamaDetected || showLmStudioDetected || showOpenAiCodexDetected || showCodexCliDetected) && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Detected Local Providers</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {ollamaInfo?.found && (
+            {showOllamaDetected && (
               <LocalProviderCard
                 name="Ollama"
                 found
@@ -643,7 +704,7 @@ const ProvidersSection = ({
                 providerAction={providerAction}
               />
             )}
-            {lmStudioInfo?.found && (
+            {showLmStudioDetected && (
               <LocalProviderCard
                 name="LM Studio"
                 found
@@ -652,6 +713,30 @@ const ProvidersSection = ({
                 models={lmStudioInfo.models}
                 onUse={() => handleUseLocalProvider('lmstudio', lmStudioInfo)}
                 onDismiss={() => setLmStudioInfo(null)}
+                providerAction={providerAction}
+              />
+            )}
+            {showOpenAiCodexDetected && (
+              <LocalProviderCard
+                name="OpenAI Codex"
+                found
+                running
+                baseUrl="https://chatgpt.com/backend-api/codex"
+                models={['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2']}
+                onUse={() => handleUseRuntimeProvider('openai-codex')}
+                onDismiss={() => setRuntimeInfo(prev => ({ ...(prev || {}), codexCredentials: false }))}
+                providerAction={providerAction}
+              />
+            )}
+            {showCodexCliDetected && (
+              <LocalProviderCard
+                name="Codex CLI Runtime"
+                found
+                running
+                baseUrl="runtime://codex-cli"
+                models={[runtimeInfo.codex.version || 'codex']}
+                onUse={() => handleUseRuntimeProvider('codex-cli')}
+                onDismiss={() => setRuntimeInfo(prev => ({ ...(prev || {}), codex: { found: false } }))}
                 providerAction={providerAction}
               />
             )}
@@ -685,6 +770,8 @@ const ProvidersSection = ({
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge color={item.local ? 'gray' : 'blue'}>{item.local ? 'Local' : 'Cloud'}</Badge>
                 {item.supportsTools && <Badge color="green">Tools</Badge>}
+                {item.supportsModelList && <Badge color="gray">Model list</Badge>}
+                {item.apiKeyEnv && <Badge color="gray">{item.apiKeyEnv}</Badge>}
               </div>
             </button>
           ))}

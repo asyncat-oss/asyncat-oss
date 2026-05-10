@@ -29,6 +29,7 @@ const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
 const cancelledTaskRuns = new Set();
 const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
+const REASONING_PROVIDER_IDS = new Set(['openai', 'openai-codex', 'openrouter', 'xai']);
 
 function normalizeConversationHistory(history = []) {
   return (Array.isArray(history) ? history : [])
@@ -38,6 +39,28 @@ function normalizeConversationHistory(history = []) {
 
 function defaultAgentWorkingDir() {
   return getWorkspaceRoot();
+}
+
+function normalizeReasoningEffort(value) {
+  const effort = String(value || '').trim().toLowerCase();
+  if (!effort || effort === 'auto' || effort === 'off' || effort === 'none') return null;
+  if (effort === 'xhigh' || effort === 'extra_high' || effort === 'extra-high') return 'high';
+  if (effort === 'minimal') return 'low';
+  return ['low', 'medium', 'high'].includes(effort) ? effort : null;
+}
+
+function providerSupportsReasoning(providerInfo, model) {
+  const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
+  return REASONING_PROVIDER_IDS.has(providerId)
+    || /\b(gpt-5|o[134]|grok|deepseek-r1|qwq)\b|thinking/i.test(String(model || ''));
+}
+
+function applyReasoningEffort(params, effort, providerInfo, model) {
+  const normalized = normalizeReasoningEffort(effort);
+  if (!normalized || !providerSupportsReasoning(providerInfo, model)) return params;
+  const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
+  if (providerId === 'openrouter') return { ...params, reasoning: { effort: normalized } };
+  return { ...params, reasoning_effort: normalized };
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -1167,7 +1190,7 @@ router.post('/run', authenticate, async (req, res) => {
     abortController.abort();
   });
   try {
-    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMentions = [], fileAttachments = [] } = req.body;
+    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto' } = req.body;
     const resolvedFiles = resolveFileAttachments(fileAttachments);
     const goal = injectFileAttachments((rawGoal || rawMessage || '').trim(), resolvedFiles);
 
@@ -1176,7 +1199,7 @@ router.post('/run', authenticate, async (req, res) => {
     }
 
     if (!enableTools) {
-      const { client: aiClient, model, isLocal } = getAiClientForUser(req.user.id);
+      const { client: aiClient, model, isLocal, providerInfo } = getAiClientForUser(req.user.id);
       const maxTokens = isLocal ? 1024 : 4000;
 
       res.setHeader('Content-Type', 'text/event-stream');
@@ -1206,12 +1229,13 @@ router.post('/run', authenticate, async (req, res) => {
           'Respond clearly and concisely.',
         ].join(' ');
 
-        const stream = await aiClient.client.chat.completions.create({
+        const params = applyReasoningEffort({
           model,
           messages: [{ role: 'system', content: systemPrompt }, ...messages],
           stream: true,
           max_tokens: maxTokens,
-        }, { signal: abortController.signal });
+        }, reasoningEffort, providerInfo, model);
+        const stream = await aiClient.client.chat.completions.create(params, { signal: abortController.signal });
 
         let fullContent = '';
         let fullReasoning = '';
@@ -1315,6 +1339,7 @@ router.post('/run', authenticate, async (req, res) => {
       continueSessionId,
       soul: resolvedSoul,
       providerInfo,
+      reasoningEffort,
       mentionedAgents: mentionedAgentProfiles,
       abortSignal: abortController.signal,
       onEvent: continuedTaskRun ? (event) => {
