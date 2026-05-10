@@ -306,19 +306,6 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             {intent.value}
           </p>
 
-          {summary && (!expanded || !isError) && (
-            <p className={`mt-0.5 truncate pl-5 font-mono text-[10px] ${isError ? 'text-red-400' : 'text-gray-400 dark:text-gray-600'}`}>
-              {summary}
-            </p>
-          )}
-
-          {data?.permissionDecision && (
-            <p className="mt-0.5 pl-5 text-[10px] text-gray-400 dark:text-gray-600">
-              Permission: {data.permissionDecision}
-              {data.workingDir ? ` · ${data.workingDir}` : ''}
-            </p>
-          )}
-
           {/* Streaming progress output (shown while running) */}
           {isPending && progress && (
             <div className="ml-5 mt-1">
@@ -493,22 +480,20 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
   ].filter(Boolean).join(' · ');
 
   return (
-    <FeedFrame className="mb-4">
-      <div className="overflow-hidden rounded-lg border border-gray-100 bg-white/70 shadow-sm shadow-gray-100/60 dark:border-gray-800 dark:bg-gray-950/20 dark:shadow-none">
-        <div
-          role="button"
-          tabIndex={0}
+    <FeedFrame className="mb-2">
+      <div className="overflow-hidden">
+        <button
           onClick={() => setExpanded(v => !v)}
-          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setExpanded(v => !v)}
-          className="flex w-full items-center gap-2 px-3 py-2.5 text-left cursor-pointer select-none transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40"
+          className="flex w-full items-center gap-1.5 py-1 rounded-md text-left transition-colors hover:text-gray-500 dark:hover:text-gray-400"
         >
-          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
-          <Terminal className="h-3.5 w-3.5 text-gray-400" />
-          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Tools</span>
-          {summary && <span className="truncate text-[11px] text-gray-400 dark:text-gray-500">{summary}</span>}
-        </div>
+          {expanded ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" /> : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />}
+          <Terminal className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 tracking-wide select-none">
+            Tools {summary && `· ${summary}`}
+          </span>
+        </button>
         {expanded && (
-          <div className="space-y-1 border-t border-gray-100 p-2 dark:border-gray-800">
+          <div className="mt-1 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
             {events.map((ev, i) => {
               if (ev.type === 'permission_request') {
                 return <CompactPermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
