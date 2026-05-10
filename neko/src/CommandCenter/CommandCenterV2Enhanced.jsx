@@ -1766,9 +1766,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" />
 
                     <div className="flex items-center gap-2">
-                      {currentConversationId &&
-                      conversationTitle &&
-                      !isEditingTitle ? (
+                      {isEditingTitle ? (
+                        <input
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          onBlur={handleSaveRename}
+                          className="text-sm bg-gray-50 dark:bg-gray-900 midnight:bg-slate-900 border border-gray-300 dark:border-gray-700 midnight:border-slate-700 rounded-md px-2 py-0.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-w-[160px] max-w-[280px] text-gray-900 dark:text-gray-100 midnight:text-slate-100"
+                          autoFocus
+                        />
+                      ) : currentConversationId && conversationTitle ? (
                         <button
                           onClick={handleStartRename}
                           className="group flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors cursor-text text-left"
@@ -1800,7 +1808,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         <button
                           type="button"
                           onClick={handleStartNewConversation}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
                           title="Start new conversation"
                         >
                           <Plus className="h-4 w-4" />
@@ -1932,41 +1940,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     {currentConversationId &&
                       conversationTitle && (
                         <div className="flex items-center gap-1">
-                          {isEditingTitle ? (
-                            <>
-                              <input
-                                type="text"
-                                value={editTitle}
-                                onChange={(e) => setEditTitle(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                onBlur={handleSaveRename}
-                                className="text-sm bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-300 dark:border-gray-600 midnight:border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-55 max-w-[320px]"
-                                autoFocus
-                              />
-                              <button
-                                onClick={handleSaveRename}
-                                className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                                title="Save (Enter)"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={handleCancelRename}
-                                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors"
-                                title="Cancel (Esc)"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => setShowDeleteConfirm(true)}
-                              className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors"
-                              title="Delete conversation"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => setShowDeleteConfirm(true)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors"
+                            title="Delete conversation"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       )}
                   </div>

@@ -87,8 +87,8 @@ const TrashPage = () => {
             </div>
           ) : trashItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 flex items-center justify-center mb-4">
-                <Trash2 className="w-8 h-8 text-gray-400 dark:text-gray-600" />
+              <div className="w-16 h-16 rounded-full border border-gray-200/60 dark:border-gray-800/60 midnight:border-slate-800/60 bg-gradient-to-b from-gray-50/50 to-gray-100/50 dark:from-gray-800/30 dark:to-gray-800/10 midnight:from-slate-800/30 midnight:to-slate-800/10 shadow-sm flex items-center justify-center mb-4">
+                <Trash2 className="w-7 h-7 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
               </div>
               <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-2">
                 Trash is empty
@@ -104,8 +104,8 @@ const TrashPage = () => {
                   key={conv.id}
                   className="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                    <MessageSquare className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                  <div className="w-10 h-10 rounded-xl border border-gray-200/60 dark:border-gray-800/60 midnight:border-slate-800/60 bg-gradient-to-b from-gray-50/50 to-gray-100/50 dark:from-gray-800/30 dark:to-gray-800/10 midnight:from-slate-800/30 midnight:to-slate-800/10 shadow-sm flex items-center justify-center flex-shrink-0">
+                    <MessageSquare className="w-4 h-4 text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 truncate">
