@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getModelCapabilities, normalizeReasoningEffort } from './modelCapabilities.js';
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const CODEX_TOKEN_URL = 'https://auth.openai.com/oauth/token';
@@ -12,14 +13,6 @@ export const CODEX_MODEL_CATALOG = [
   { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', context_window: 272000 },
   { id: 'gpt-5.2', name: 'GPT-5.2', context_window: 272000 },
 ];
-
-function normalizeReasoningEffort(value) {
-  const effort = String(value || '').trim().toLowerCase();
-  if (!effort || effort === 'auto' || effort === 'off' || effort === 'none') return null;
-  if (effort === 'xhigh' || effort === 'extra_high' || effort === 'extra-high') return 'high';
-  if (effort === 'minimal') return 'low';
-  return ['low', 'medium', 'high'].includes(effort) ? effort : null;
-}
 
 function parseTokenBundle(value) {
   if (!value) return {};
@@ -263,7 +256,10 @@ export class CodexDirectClient {
     await this.ensureAccessToken();
     const model = options.model || this.defaultModel;
     const { instructions, input } = splitMessages(options.messages || []);
-    const reasoningEffort = normalizeReasoningEffort(options.reasoning_effort || options.reasoningEffort);
+    
+    const capabilities = getModelCapabilities('openai-codex', model);
+    const reasoningEffort = normalizeReasoningEffort(options.reasoning_effort || options.reasoningEffort, capabilities);
+    
     const payload = {
       model,
       input,

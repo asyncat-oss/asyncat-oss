@@ -72,13 +72,6 @@ const suggestionPanelClass =
   "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1a1a1a] midnight:border-[#2a2a2a] midnight:bg-[#1a1a1a]";
 const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
 const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:hover:bg-[#242424]";
-const reasoningOptions = [
-  { value: "auto", label: "Auto", short: "Think auto", description: "Let the provider choose." },
-  { value: "low", label: "Low", short: "Think low", description: "Faster, lighter reasoning." },
-  { value: "medium", label: "Medium", short: "Think med", description: "Balanced reasoning." },
-  { value: "high", label: "High", short: "Think high", description: "More careful reasoning." },
-  { value: "xhigh", label: "Extra high", short: "Think xhigh", description: "Maximum effort where supported." },
-];
 
 export const MessageInputV2 = ({
   onSubmit,
@@ -161,6 +154,26 @@ export const MessageInputV2 = ({
     () => extractAgentMentions(value, agentProfiles),
     [agentProfiles, value],
   );
+  
+  const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
+  const currentReasoningOptions = useMemo(() => {
+    if (!supportsReasoningControl) return [];
+    const tiers = activeBrain.capabilities?.reasoningTiers || ["low", "medium", "high"];
+    const baseOptions = [
+      { value: "auto", label: "Auto", short: "Think auto", description: "Let the provider choose." }
+    ];
+    const tierMap = {
+      minimal: { value: "minimal", label: "Minimal", short: "Think min", description: "Fastest reasoning." },
+      low: { value: "low", label: "Low", short: "Think low", description: "Faster, lighter reasoning." },
+      medium: { value: "medium", label: "Medium", short: "Think med", description: "Balanced reasoning." },
+      high: { value: "high", label: "High", short: "Think high", description: "More careful reasoning." },
+      xhigh: { value: "xhigh", label: "Extra high", short: "Think xhigh", description: "Maximum effort where supported." },
+    };
+    for (const t of tiers) {
+      if (tierMap[t]) baseOptions.push(tierMap[t]);
+    }
+    return baseOptions;
+  }, [activeBrain.capabilities, supportsReasoningControl]);
 
   const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || (activeBrain.isLocal ? 8192 : 128000);
 
@@ -448,7 +461,7 @@ export const MessageInputV2 = ({
 
   const canSubmit = value.trim() && !disabled && !isRunning;
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
-  const currentReasoningOption = reasoningOptions.find(option => option.value === reasoningEffort) || reasoningOptions[0];
+  const currentReasoningOption = currentReasoningOptions.find(option => option.value === reasoningEffort) || currentReasoningOptions[0] || { label: "Auto", short: "Think auto" };
   const modelLabel = activeBrain.isLoadingModel
     ? "Loading"
     : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
@@ -743,7 +756,7 @@ export const MessageInputV2 = ({
                     )}
                   </div>
 
-                  {onReasoningEffortChange && activeBrain.supportsReasoning && (
+                  {onReasoningEffortChange && supportsReasoningControl && (
                     <div className="relative">
                       <button
                         type="button"
@@ -763,7 +776,7 @@ export const MessageInputV2 = ({
                       {openMenu === "reasoning" && (
                         <div className="absolute left-0 bottom-full z-30 mb-1.5 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
                           <div className="p-1">
-                            {reasoningOptions.map((option) => (
+                            {currentReasoningOptions.map((option) => (
                               <button
                                 key={option.value}
                                 type="button"

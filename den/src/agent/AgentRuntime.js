@@ -20,6 +20,7 @@ import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
 import { listMemories, searchMemories } from './tools/memoryTools.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
+import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import db from '../db/client.js';
 import { randomUUID } from 'crypto';
@@ -39,26 +40,14 @@ const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|writ
 const MULTI_STEP_GOAL_RE = /\b(and then|after that|also|then|next|finally|step[\s-]?\d|multiple|several|both|all of)\b/i;
 const AUTO_PLAN_IDS = new Set(['auto_plan_inspect', 'auto_plan_understand', 'auto_plan_apply', 'auto_plan_verify']);
 const RETRYABLE_TOOLS = new Set(['run_command', 'run_python', 'run_node', 'browse_website', 'web_search']);
-const REASONING_PROVIDER_IDS = new Set(['openai', 'openai-codex', 'openrouter', 'xai']);
-
-function normalizeReasoningEffort(value) {
-  const effort = String(value || '').trim().toLowerCase();
-  if (!effort || effort === 'auto' || effort === 'off' || effort === 'none') return null;
-  if (effort === 'xhigh' || effort === 'extra_high' || effort === 'extra-high') return 'high';
-  if (effort === 'minimal') return 'low';
-  return ['low', 'medium', 'high'].includes(effort) ? effort : null;
-}
-
-function providerSupportsReasoning(providerInfo, model) {
-  const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
-  return REASONING_PROVIDER_IDS.has(providerId)
-    || /\b(gpt-5|o[134]|grok|deepseek-r1|qwq)\b|thinking/i.test(String(model || ''));
-}
 
 function applyReasoningEffort(params, effort, providerInfo, model) {
-  const normalized = normalizeReasoningEffort(effort);
-  if (!normalized || !providerSupportsReasoning(providerInfo, model)) return params;
   const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
+  const capabilities = getModelCapabilities(providerId, model);
+  const normalized = normalizeReasoningEffort(effort, capabilities);
+  
+  if (!normalized) return params; // either not supported, no effort provided, or native_tags
+  
   if (providerId === 'openrouter') return { ...params, reasoning: { effort: normalized } };
   return { ...params, reasoning_effort: normalized };
 }

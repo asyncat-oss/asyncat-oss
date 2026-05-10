@@ -19,13 +19,6 @@ const PROVIDER_NAMES = {
   custom: "Custom",
 };
 
-const REASONING_PROVIDER_IDS = new Set([
-  "openai",
-  "openai-codex",
-  "openrouter",
-  "xai",
-]);
-
 const shortModelName = (model) => {
   if (!model) return "";
   return String(model).replace(/\.(gguf|bin)$/i, "").replace(/[-_]?Q\d+[_-]?[A-Z0-9]*$/i, "");
@@ -92,10 +85,9 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
           : config?.provider_type === "cloud"
             ? "Cloud"
             : "Custom";
-    const supportsReasoning = !isBuiltin && (
-      REASONING_PROVIDER_IDS.has(providerId)
-      || /\b(gpt-5|o[134]|grok|deepseek-r1|qwq)\b|thinking/i.test(String(rawModel || ""))
-    );
+            
+    const capabilities = config?.capabilities || null;
+    const supportsReasoning = capabilities?.supportsReasoning || false;
 
     return {
       loading,
@@ -110,6 +102,7 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
       isReady: isBuiltin ? status === "ready" : Boolean(config?.model),
       supportsTools: Boolean(config?.supports_tools),
       supportsReasoning,
+      capabilities,
       label: model ? `${mode} · ${providerName} · ${model}` : `${mode} · ${providerName}`,
     };
   }, [config, localStatus, loading]);

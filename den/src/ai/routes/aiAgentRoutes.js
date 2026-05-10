@@ -17,6 +17,7 @@ import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
+import { getModelCapabilities, normalizeReasoningEffort } from '../controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from '../../agent/reasoningParser.js';
 import { branchGit, commitGit, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
@@ -29,7 +30,6 @@ const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
 const cancelledTaskRuns = new Set();
 const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
-const REASONING_PROVIDER_IDS = new Set(['openai', 'openai-codex', 'openrouter', 'xai']);
 
 function normalizeConversationHistory(history = []) {
   return (Array.isArray(history) ? history : [])
@@ -41,24 +41,13 @@ function defaultAgentWorkingDir() {
   return getWorkspaceRoot();
 }
 
-function normalizeReasoningEffort(value) {
-  const effort = String(value || '').trim().toLowerCase();
-  if (!effort || effort === 'auto' || effort === 'off' || effort === 'none') return null;
-  if (effort === 'xhigh' || effort === 'extra_high' || effort === 'extra-high') return 'high';
-  if (effort === 'minimal') return 'low';
-  return ['low', 'medium', 'high'].includes(effort) ? effort : null;
-}
-
-function providerSupportsReasoning(providerInfo, model) {
-  const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
-  return REASONING_PROVIDER_IDS.has(providerId)
-    || /\b(gpt-5|o[134]|grok|deepseek-r1|qwq)\b|thinking/i.test(String(model || ''));
-}
-
 function applyReasoningEffort(params, effort, providerInfo, model) {
-  const normalized = normalizeReasoningEffort(effort);
-  if (!normalized || !providerSupportsReasoning(providerInfo, model)) return params;
   const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
+  const capabilities = getModelCapabilities(providerId, model);
+  const normalized = normalizeReasoningEffort(effort, capabilities);
+  
+  if (!normalized) return params; // either not supported, no effort provided, or native_tags
+  
   if (providerId === 'openrouter') return { ...params, reasoning: { effort: normalized } };
   return { ...params, reasoning_effort: normalized };
 }

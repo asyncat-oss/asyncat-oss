@@ -51,6 +51,7 @@ import {
   publicProvider,
 } from '../controllers/ai/providerCatalog.js';
 import { resolveContextWindow } from '../controllers/ai/modelContextResolver.js';
+import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
 import {
   listMlxModels,
   isMlxAvailable,
@@ -72,9 +73,15 @@ const execFileAsync = promisify(execFile);
 
 function activeProviderSnapshot(userId) {
   const active = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools, updated_at FROM ai_provider_config WHERE user_id = ?').get(userId);
+  const localStatus = getLlamaStatus();
+  
+  const providerId = active?.provider_id || LLAMA_PROVIDER_ID;
+  const model = providerId === LLAMA_PROVIDER_ID ? localStatus?.model : active?.model;
+  const capabilities = getModelCapabilities(providerId, model);
+
   return {
-    config: active ? { ...active, settings: parseSettings(active.settings), supports_tools: Boolean(active.supports_tools) } : null,
-    localStatus: getLlamaStatus(),
+    config: active ? { ...active, settings: parseSettings(active.settings), supports_tools: Boolean(active.supports_tools), capabilities } : { capabilities },
+    localStatus,
   };
 }
 
