@@ -67,23 +67,6 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS project_members (
-  project_id         TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role               TEXT NOT NULL DEFAULT 'member'
-                       CHECK (role IN ('owner','admin','member','viewer')),
-  status             TEXT NOT NULL DEFAULT 'active'
-                       CHECK (status IN ('pending','active','rejected')),
-  view_preferences   TEXT,   -- JSON
-  widget_preferences TEXT,   -- JSON
-  accessible_views   TEXT,   -- JSON
-  view_permissions   TEXT,   -- JSON
-  starred            INTEGER NOT NULL DEFAULT 0,
-  created_at         TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (project_id, user_id)
-);
-
 CREATE TABLE IF NOT EXISTS project_folders (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -139,35 +122,6 @@ CREATE TABLE IF NOT EXISTS notes (
   isarchived  INTEGER NOT NULL DEFAULT 0,
   isstarred   INTEGER NOT NULL DEFAULT 0,
   metadata    TEXT NOT NULL DEFAULT '{}'    -- JSON (block data etc.)
-);
-
-CREATE TABLE IF NOT EXISTS note_versions (
-  id                TEXT PRIMARY KEY,
-  note_id           TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-  version_number    INTEGER NOT NULL,
-  title             TEXT NOT NULL,
-  content           TEXT,
-  blocks            TEXT NOT NULL DEFAULT '[]',  -- JSON
-  created_by        TEXT NOT NULL REFERENCES users(id),
-  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
-  metadata          TEXT NOT NULL DEFAULT '{}',
-  is_major_version  INTEGER NOT NULL DEFAULT 0,
-  parent_version_id TEXT REFERENCES note_versions(id),
-  size_bytes        INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS note_operations (
-  id             TEXT PRIMARY KEY,
-  note_id        TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-  version_id     TEXT REFERENCES note_versions(id),
-  operation_type TEXT NOT NULL,
-  block_id       TEXT,
-  position       INTEGER,
-  content        TEXT,
-  old_content    TEXT,
-  user_id        TEXT NOT NULL REFERENCES users(id),
-  timestamp      TEXT NOT NULL DEFAULT (datetime('now')),
-  metadata       TEXT NOT NULL DEFAULT '{}'
 );
 
 -- ─── Kanban ───────────────────────────────────────────────────────────────────
@@ -261,10 +215,7 @@ CREATE TABLE IF NOT EXISTS conversations (
 
 CREATE INDEX IF NOT EXISTS idx_projects_team_id         ON projects(team_id);
 CREATE INDEX IF NOT EXISTS idx_projects_owner_id        ON projects(owner_id);
-CREATE INDEX IF NOT EXISTS idx_project_members_user_id  ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_notes_projectid          ON notes(projectid);
-CREATE INDEX IF NOT EXISTS idx_note_versions_note_id    ON note_versions(note_id);
-CREATE INDEX IF NOT EXISTS idx_note_operations_note_id  ON note_operations(note_id);
 CREATE INDEX IF NOT EXISTS idx_events_createdBy         ON Events(createdBy);
 CREATE INDEX IF NOT EXISTS idx_Columns_projectId        ON Columns(projectId);
 CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);
@@ -308,35 +259,6 @@ CREATE TABLE IF NOT EXISTS ai_provider_profiles (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_provider_profiles_user ON ai_provider_profiles(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_ai_provider_profiles_provider ON ai_provider_profiles(user_id, provider_id);
-
--- ─── MCP OAuth (was mcp schema in Supabase) ──────────────────────────────────
--- Stores short-lived auth codes and long-lived access tokens for MCP clients.
-
-CREATE TABLE IF NOT EXISTS mcp_auth_codes (
-  id                    TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  code                  TEXT NOT NULL UNIQUE,
-  user_id               TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  client_id             TEXT NOT NULL,
-  redirect_uri          TEXT NOT NULL,
-  code_challenge        TEXT,
-  code_challenge_method TEXT,
-  workspace_id          TEXT,
-  expires_at            TEXT NOT NULL,
-  created_at            TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS mcp_access_tokens (
-  id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  token_hash   TEXT NOT NULL UNIQUE,
-  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  client_id    TEXT NOT NULL,
-  workspace_id TEXT,
-  expires_at   TEXT,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_mcp_auth_codes_code       ON mcp_auth_codes(code);
-CREATE INDEX IF NOT EXISTS idx_mcp_access_tokens_hash    ON mcp_access_tokens(token_hash);
 
 -- ─── Agent Memory & Sessions ─────────────────────────────────────────────────
 

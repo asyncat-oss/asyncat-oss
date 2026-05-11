@@ -173,12 +173,9 @@ function loadTaskCard(cardId, workspaceId, userId) {
     JOIN projects p ON p.id = col.projectId
     WHERE c.id = ?
       AND p.team_id = ?
-      AND (p.owner_id = ? OR p.created_by = ? OR EXISTS (
-        SELECT 1 FROM project_members pm
-        WHERE pm.project_id = p.id AND pm.user_id = ? AND pm.status = 'active'
-      ))
+      AND (p.owner_id = ? OR p.created_by = ?)
     LIMIT 1
-  `).get(cardId, workspaceId, userId, userId, userId);
+  `).get(cardId, workspaceId, userId, userId);
 }
 
 function formatTaskCard(row) {
@@ -1411,12 +1408,9 @@ router.get('/task-runs', authenticate, (req, res) => {
       WHERE p.team_id = ?
         AND (? IS NULL OR p.id = ?)
         AND (? IS NULL OR c.id = ?)
-        AND (p.owner_id = ? OR p.created_by = ? OR EXISTS (
-          SELECT 1 FROM project_members pm
-          WHERE pm.project_id = p.id AND pm.user_id = ? AND pm.status = 'active'
-        ))
+        AND (p.owner_id = ? OR p.created_by = ?)
       ORDER BY c.updatedAt DESC
-    `).all(req.user.id, workspaceId, workspaceId, projectId, projectId, cardId, cardId, req.user.id, req.user.id, req.user.id);
+    `).all(req.user.id, workspaceId, workspaceId, projectId, projectId, cardId, cardId, req.user.id, req.user.id);
 
     let runsByCard = new Map();
     if (cardId) {

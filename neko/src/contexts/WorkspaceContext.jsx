@@ -283,33 +283,6 @@ export const WorkspaceProvider = ({ children }) => {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  // Listen for workspace invite acceptance events
-  useEffect(() => {
-    const handleWorkspaceInviteAccepted = (_event) => {
-      // Refresh workspaces when a team invite is accepted
-      // Add a small delay to ensure the backend has processed the invite
-      setTimeout(() => {
-        refreshWorkspaces();
-      }, 500);
-    };
-
-    const handleProjectInviteAccepted = (_event) => {
-      // Invalidate projects cache when a project invite is accepted
-      // Add a small delay to ensure the backend has processed the invite
-      setTimeout(() => {
-        invalidateProjectsCache();
-      }, 500);
-    };
-
-    const unsubWorkspace = eventBus.on('workspaceInviteAccepted', handleWorkspaceInviteAccepted);
-    const unsubProject = eventBus.on('projectInviteAccepted', handleProjectInviteAccepted);
-
-    return () => {
-      unsubWorkspace();
-      unsubProject();
-    };
-  }, [refreshWorkspaces, invalidateProjectsCache]);
-
   // Context value
   const value = {
     // State

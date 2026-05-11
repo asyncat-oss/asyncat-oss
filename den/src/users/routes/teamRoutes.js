@@ -106,8 +106,6 @@ router.delete('/:teamId', auth, (req, res) => {
     if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
 
     db.transaction(() => {
-      db.prepare('DELETE FROM mcp_auth_codes WHERE workspace_id = ?').run(teamId);
-      db.prepare('DELETE FROM mcp_access_tokens WHERE workspace_id = ?').run(teamId);
       db.prepare('DELETE FROM agent_patterns WHERE workspace_id = ?').run(teamId);
 
       // Projects and workspace-owned rows are deleted automatically via ON DELETE CASCADE.
@@ -119,17 +117,6 @@ router.delete('/:teamId', auth, (req, res) => {
     console.error('[teams] DELETE error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to delete workspace' });
   }
-});
-
-// ── POST /api/teams/:teamId/leave ──────────────────────────────────────────────
-// Local account build: the current user is always the owner, so leaving is not allowed.
-router.post('/:teamId/leave', auth, (req, res) => {
-  const ws = db.prepare('SELECT owner_id FROM workspaces WHERE id = ?').get(req.params.teamId);
-  if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
-  if (ws.owner_id === req.user.id) {
-    return res.status(400).json({ success: false, error: 'You are the owner — delete the workspace instead.' });
-  }
-  res.json({ success: true, message: 'Left workspace' });
 });
 
 // ── GET /api/teams/:teamId/members ─────────────────────────────────────────────

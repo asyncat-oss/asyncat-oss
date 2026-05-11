@@ -355,13 +355,6 @@ export const userAPI = {
 	getCurrentUser: async () => {
 		return apiRequest(`${MAIN_API_URL}/users/me`);
 	},
-
-	/**
-	 * Get project members
-	 */
-	getProjectMembers: async (projectId) => {
-		return apiRequest(`${MAIN_API_URL}/projects/${projectId}/members`);
-	},
 };
 
 // =============================================================================

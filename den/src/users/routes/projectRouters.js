@@ -10,7 +10,6 @@ import {
   createProject,
   updateProject,
   deleteProject,
-  transferOwnership,
 } from '../controllers/project/projectController.js';
 
 import {
@@ -31,7 +30,6 @@ router.get('/teams/:teamId/projects', auth, getTeamProjects);
 router.post('/', auth, createProject);
 router.patch('/:id/update', auth, updateProject);
 router.delete('/:id/delete', auth, deleteProject);
-router.post('/:id/transfer-ownership', auth, transferOwnership);
 
 // ─── User view preferences ────────────────────────────────────────────────────
 
@@ -62,23 +60,6 @@ router.get('/:id/user/view-preferences', auth, async (req, res) => {
 router.patch('/:id/user/view-preferences', auth, updateUserViewPreferences);
 router.delete('/:id/user/view-preferences', auth, resetUserViewPreferences);
 router.patch('/:id/user/starred', auth, toggleProjectStarred);
-
-// ─── Member routes (stubs — single-user mode) ─────────────────────────────────
-
-const memberNotAvailable = (_req, res) =>
-  res.status(400).json({ success: false, error: 'Member management is not available in single-user mode' });
-
-router.get('/:id/members', auth, memberNotAvailable);
-router.patch('/:id/members/:memberId/role', auth, memberNotAvailable);
-router.post('/:id/members/invite', auth, memberNotAvailable);
-router.patch('/:id/members/:memberId/accessible-views', auth, memberNotAvailable);
-router.delete('/:id/members/:memberId', auth, memberNotAvailable);
-router.post('/:id/leave', auth, memberNotAvailable);
-router.get('/teams/:teamId/members', auth, memberNotAvailable);
-router.put('/:id/members', auth, memberNotAvailable);
-router.get('/members/batch', auth, memberNotAvailable);
-router.get('/invites', auth, memberNotAvailable);
-router.post('/:id/respond', auth, memberNotAvailable);
 
 // ─── Project folders ──────────────────────────────────────────────────────────
 

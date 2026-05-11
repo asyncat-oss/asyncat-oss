@@ -372,22 +372,10 @@ async function deleteProject(req, res) {
 	}
 }
 
-/**
- * POST /api/projects/:id/transfer-ownership
- * Not applicable in single-user mode — kept as stub.
- */
-async function transferOwnership(req, res) {
-	return res.status(400).json({
-		success: false,
-		error: "Ownership transfer is not available in single-user mode",
-	});
-}
-
 export {
-	getProjects,
-	getTeamProjects,
-	createProject,
-	updateProject,
-	deleteProject,
-	transferOwnership,
+  getProjects,
+  getTeamProjects,
+  createProject,
+  updateProject,
+  deleteProject,
 };

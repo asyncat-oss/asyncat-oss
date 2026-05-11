@@ -186,6 +186,17 @@ function ensureAgentMemorySchema() {
   `);
 }
 
+function cleanupDeadTables() {
+  db.exec(`
+    DROP TABLE IF EXISTS project_members;
+    DROP TABLE IF EXISTS note_versions;
+    DROP TABLE IF EXISTS note_operations;
+    DROP TABLE IF EXISTS mcp_auth_codes;
+    DROP TABLE IF EXISTS mcp_access_tokens;
+  `);
+}
+
+cleanupDeadTables();
 ensureCalendarSchema();
 ensureAgentMemorySchema();
 

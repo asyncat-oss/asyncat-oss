@@ -479,36 +479,6 @@ body {
   animation: slideInUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* Invite notification animations */
-.animate-subtle-bounce {
-  animation: subtle-bounce 2s infinite;
-}
-
-.animate-pulse-subtle {
-  animation: pulse-subtle 2.5s infinite;
-}
-
-@keyframes subtle-bounce {
-  0%, 20%, 50%, 80%, 100% {
-    transform: translateY(0);
-  }
-  40% {
-    transform: translateY(-3px);
-  }
-  60% {
-    transform: translateY(-2px);
-  }
-}
-
-@keyframes pulse-subtle {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
 /* Smooth page transitions for modern UX */
 @keyframes fadeInContent {
   from {
