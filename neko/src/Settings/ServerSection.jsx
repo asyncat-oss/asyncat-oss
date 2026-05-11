@@ -109,9 +109,13 @@ const ServerSection = () => {
     { key: 'FRONTEND_URL', label: 'Frontend URL' },
     { key: 'LOCAL_EMAIL', label: 'Seed Email' },
     { key: 'DB_PATH', label: 'Database Path' },
-    { key: 'LLAMA_SERVER_PORT', label: 'Local Model Port' },
+    { key: 'LLAMA_SERVER_PORT', label: 'LLM Server Port' },
     { key: 'MODELS_PATH', label: 'Models Path' },
     { key: 'STORAGE_PATH', label: 'Storage Path' },
+    { key: 'WHISPER_SERVER_PORT', label: 'Whisper STT Port' },
+    { key: 'WHISPER_BINARY_PATH', label: 'Whisper Binary Path' },
+    { key: 'TTS_SERVER_PORT', label: 'Piper TTS Port' },
+    { key: 'PIPER_BINARY_PATH', label: 'Piper Binary Path' },
   ];
 
   const editableConfig = [

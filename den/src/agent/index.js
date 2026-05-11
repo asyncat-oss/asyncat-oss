@@ -21,6 +21,7 @@ import { planTools } from './tools/planTools.js';
 import { askUserTools } from './tools/askUserTool.js';
 import { skillTools } from './tools/skillTools.js';
 import { artifactTools } from './tools/artifactTools.js';
+import { audioTools } from './tools/audioTools.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -62,6 +63,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(askUserTools);
   toolRegistry.registerAll(skillTools);
   toolRegistry.registerAll(artifactTools);
+  toolRegistry.registerAll(audioTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

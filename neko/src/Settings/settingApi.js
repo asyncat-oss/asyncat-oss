@@ -275,10 +275,10 @@ export const localModelsApi = {
   },
 
   // Start downloading a model
-  startDownload: async (url, filename) => {
+  startDownload: async (url, filename, subDir) => {
     return apiCall(`${AI_API_BASE}/local-models/download`, {
       method: 'POST',
-      body: JSON.stringify({ url, filename }),
+      body: JSON.stringify({ url, filename, subDir }),
     });
   },
 
@@ -747,3 +747,125 @@ export const apiUtils = {
 		);
 	},
 };
+
+// ===========================================
+// AUDIO MODEL API
+// ===========================================
+
+export const audioApi = {
+  // List all audio models (whisper + tts)
+  listModels: async () => {
+    return apiCall(`${AI_API_BASE}/audio/models`);
+  },
+
+  // Add a custom audio model path
+  addCustomPath: async (name, path, type) => {
+    return apiCall(`${AI_API_BASE}/audio/models/custom-paths`, {
+      method: 'POST',
+      body: JSON.stringify({ name, path, type }),
+    });
+  },
+
+  // Delete an audio model
+  deleteModel: async (id, type) => {
+    const suffix = type ? `?type=${encodeURIComponent(type)}` : '';
+    return apiCall(`${AI_API_BASE}/audio/models/${encodeURIComponent(id)}${suffix}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // ── Whisper (STT) ──────────────────────────────────────
+  whisper: {
+    getStatus: async () => {
+      return apiCall(`${AI_API_BASE}/audio/whisper/status`);
+    },
+    checkBinary: async () => {
+      return apiCall(`${AI_API_BASE}/audio/whisper/check`);
+    },
+    start: async (modelPath) => {
+      return apiCall(`${AI_API_BASE}/audio/whisper/start`, {
+        method: 'POST',
+        body: JSON.stringify({ modelPath }),
+      });
+    },
+    stop: async () => {
+      return apiCall(`${AI_API_BASE}/audio/whisper/stop`, { method: 'POST' });
+    },
+    pollStatus: (onUpdate, onReady, onError) => {
+      let stopped = false;
+      let timerId = null;
+      const poll = async () => {
+        if (stopped) return;
+        try {
+          const snap = await apiCall(`${AI_API_BASE}/audio/whisper/status`);
+          if (stopped) return;
+          onUpdate?.(snap);
+          if (snap.status === 'ready') { stopped = true; onReady?.(snap); return; }
+          if (snap.status === 'error') { stopped = true; onError?.(snap); return; }
+        } catch (err) {
+          if (!stopped) { stopped = true; onError?.({ status: 'error', error: err.message }); return; }
+        }
+        if (!stopped) timerId = setTimeout(poll, 1000);
+      };
+      poll();
+      return () => { stopped = true; clearTimeout(timerId); };
+    },
+    transcribe: async (audioBlob, language) => {
+      const token = (await import('../services/authService.js')).default.getAccessToken();
+      const url = new URL(`${AI_API_BASE}/audio/transcribe`, window.location.origin);
+      if (language) url.searchParams.append('language', language);
+      const res = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: audioBlob,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Transcription failed');
+      }
+      return res.json();
+    },
+  },
+
+  // ── TTS (Piper) ────────────────────────────────────────
+  tts: {
+    getStatus: async () => {
+      return apiCall(`${AI_API_BASE}/audio/tts/status`);
+    },
+    checkBinary: async () => {
+      return apiCall(`${AI_API_BASE}/audio/tts/check`);
+    },
+    start: async (modelPath) => {
+      return apiCall(`${AI_API_BASE}/audio/tts/start`, {
+        method: 'POST',
+        body: JSON.stringify({ modelPath }),
+      });
+    },
+    stop: async () => {
+      return apiCall(`${AI_API_BASE}/audio/tts/stop`, { method: 'POST' });
+    },
+    // Generate speech — returns audio blob URL
+    speak: async (text, options = {}) => {
+      const token = (await import('../services/authService.js')).default.getAccessToken();
+      const res = await fetch(`${AI_API_BASE}/audio/speak`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ text, ...options }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Speech generation failed');
+      }
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    },
+  },
+};
+

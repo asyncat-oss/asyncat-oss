@@ -1,10 +1,10 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, ChevronDown, Cloud, Cpu, HardDrive, Loader2, Send, Square, Wrench, X, Zap } from "lucide-react";
+import { Brain, ChevronDown, Cloud, Cpu, HardDrive, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
-import { localModelsApi, llamaServerApi } from "../../Settings/settingApi.js";
+import { localModelsApi, llamaServerApi, audioApi } from "../../Settings/settingApi.js";
 import { profilesApi, filesApi } from "../api";
 import { dirname, basename, fileIconMeta } from "../../files/fileUtils.js";
 
@@ -92,8 +92,13 @@ export const MessageInputV2 = ({
   reasoningEffort = "auto",
   onReasoningEffortChange,
   tokenUsage = null,
+  sttReady = false,
 }) => {
   const [value, setValue] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const recordingTimerRef = useRef(null);
   const [error, setError] = useState(null);
   const [isComposing, setIsComposing] = useState(false);
   const [localModels, setLocalModels] = useState([]);
@@ -534,6 +539,59 @@ export const MessageInputV2 = ({
     [ctxSize, isSwitchingModel, localModel.model],
   );
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        setIsRecording(false);
+        clearInterval(recordingTimerRef.current);
+        setRecordingDuration(0);
+        try {
+          const res = await audioApi.whisper.transcribe(audioBlob);
+          if (res.text) {
+            setValue(prev => {
+              const base = prev.trim();
+              return base ? `${base} ${res.text.trim()}` : res.text.trim();
+            });
+          }
+        } catch (err) {
+          setError('Failed to transcribe audio: ' + err.message);
+        }
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      
+      let startMs = Date.now();
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(Date.now() - startMs);
+      }, 1000);
+    } catch (err) {
+      setError('Could not access microphone: ' + err.message);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
+
   const getBorderColor = () => {
     return "border-gray-200 dark:border-gray-800 midnight:border-gray-800 focus-within:border-gray-300 dark:focus-within:border-gray-700";
   };
@@ -800,7 +858,27 @@ export const MessageInputV2 = ({
                       )}
                     </div>
                   )}
-                  
+                  {sttReady && (
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      disabled={disabled && !isRecording}
+                      title={isRecording ? "Stop recording" : "Record voice input"}
+                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
+                        isRecording
+                          ? "text-red-500 bg-red-50 dark:text-red-400 dark:bg-red-900/20 midnight:bg-red-900/20"
+                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                      }`}
+                    >
+                      {isRecording ? (
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                      ) : (
+                        <Mic className="w-3.5 h-3.5" />
+                      )}
+                      {isRecording && <span className="hidden sm:inline tabular-nums">{formatElapsed(recordingDuration)}</span>}
+                    </button>
+                  )}
+
                   {onToggleTools && (
                     <button
                       type="button"

@@ -317,14 +317,18 @@ export function deleteModel(filename) {
  * Returns a downloadId that can be used to track progress.
  * Progress is streamed via SSE from the route handler.
  */
-export async function startDownload(url, filename, onProgress) {
+export async function startDownload(url, filename, subDir = '') {
   // Sanitize filename
   const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
-  if (!safeFilename.endsWith('.gguf') && !safeFilename.endsWith('.bin')) {
-    throw new Error('Only .gguf and .bin model files are supported');
+  if (!safeFilename.endsWith('.gguf') && !safeFilename.endsWith('.bin') && !safeFilename.endsWith('.onnx') && !safeFilename.endsWith('.json')) {
+    throw new Error('Only .gguf, .bin, .onnx, and .json model files are supported');
   }
 
-  const destPath = path.join(MODELS_DIR, safeFilename);
+  const baseDir = subDir ? path.join(MODELS_DIR, subDir) : MODELS_DIR;
+  if (!fs.existsSync(baseDir)) {
+    fs.mkdirSync(baseDir, { recursive: true });
+  }
+  const destPath = path.join(baseDir, safeFilename);
   const downloadId = `dl_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
   const abortController = new AbortController();
@@ -375,16 +379,7 @@ export async function startDownload(url, filename, onProgress) {
         const now = Date.now();
         if (now - lastProgressReport > 500) {
           lastProgressReport = now;
-          onProgress?.({
-            downloadId,
-            filename: safeFilename,
-            downloaded,
-            total,
-            progress: total > 0 ? Math.round((downloaded / total) * 100) : 0,
-            downloadedFormatted: formatBytes(downloaded),
-            totalFormatted: total > 0 ? formatBytes(total) : 'unknown',
-            status: 'downloading',
-          });
+
         }
       }
 
@@ -401,14 +396,7 @@ export async function startDownload(url, filename, onProgress) {
         clearCache();
       }
 
-      onProgress?.({
-        downloadId,
-        filename: safeFilename,
-        downloaded,
-        total,
-        progress: 100,
-        status: 'complete',
-      });
+
 
     } catch (err) {
       // Clean up partial file
@@ -417,14 +405,10 @@ export async function startDownload(url, filename, onProgress) {
       }
 
       const dl = activeDownloads.get(downloadId);
-      if (dl) dl.status = err.name === 'AbortError' ? 'cancelled' : 'error';
-
-      onProgress?.({
-        downloadId,
-        filename: safeFilename,
-        status: err.name === 'AbortError' ? 'cancelled' : 'error',
-        error: err.message,
-      });
+      if (dl) {
+        dl.status = err.name === 'AbortError' ? 'cancelled' : 'error';
+        dl.error = err.message;
+      }
     } finally {
       // Keep in map for 30s so client can read final status, then clean up
       setTimeout(() => activeDownloads.delete(downloadId), 30000);

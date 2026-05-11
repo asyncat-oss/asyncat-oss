@@ -4,8 +4,9 @@ import {
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
-  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy
+  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner
 } from 'lucide-react';
+import { audioApi } from '../../Settings/settingApi.js';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 import { extractReasoningFromText } from '../utils/reasoningParser.js';
 import ArtifactCard from './ArtifactRenderer';
@@ -705,11 +706,14 @@ function SourcesPanel({ searchEvent }) {
 }
 
 // Clean chat-like agent response — no "Agent response" header bar
-function AnswerEvent({ data, suppressThinkFallback = false }) {
+function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) {
   const raw = data?.answer || '';
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
 
   const displayAnswer = answer;
+  const [speakState, setSpeakState] = useState('idle');
+  const audioRef = useRef(null);
+
   if (!displayAnswer && !thinkFallback) return null;
 
   let blocks = [];
@@ -730,6 +734,62 @@ function AnswerEvent({ data, suppressThinkFallback = false }) {
               ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
               : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
           </div>
+
+          {/* Read Aloud Action */}
+          {ttsReady && displayAnswer && (
+            <div className="mt-3 flex items-center justify-start">
+              <button
+                onClick={async () => {
+                  if (speakState === 'playing') {
+                    if (audioRef.current) {
+                      audioRef.current.pause();
+                      audioRef.current.currentTime = 0;
+                      URL.revokeObjectURL(audioRef.current.src);
+                      audioRef.current = null;
+                    }
+                    setSpeakState('idle');
+                    return;
+                  }
+                  setSpeakState('loading');
+                  try {
+                    const blobUrl = await audioApi.tts.speak(displayAnswer);
+                    const audio = new Audio(blobUrl);
+                    audioRef.current = audio;
+                    audio.onended = () => {
+                      setSpeakState('idle');
+                      URL.revokeObjectURL(blobUrl);
+                      audioRef.current = null;
+                    };
+                    audio.onerror = () => {
+                      setSpeakState('idle');
+                      URL.revokeObjectURL(blobUrl);
+                      audioRef.current = null;
+                    };
+                    await audio.play();
+                    setSpeakState('playing');
+                  } catch {
+                    setSpeakState('idle');
+                  }
+                }}
+                disabled={speakState === 'loading'}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  speakState === 'playing'
+                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+                } disabled:opacity-50`}
+                title="Read aloud"
+              >
+                {speakState === 'loading' ? (
+                  <><Spinner className="w-3.5 h-3.5 animate-spin" />Reading…</>
+                ) : speakState === 'playing' ? (
+                  <><Square className="w-3.5 h-3.5 fill-current" />Stop</>
+                ) : (
+                  <><Volume2 className="w-3.5 h-3.5" />Read aloud</>
+                )}
+              </button>
+            </div>
+          )}
+
           <SourcesPanel searchEvent={data?.searchEvent} />
           {data?.round > 1 && (
             <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
@@ -1124,7 +1184,7 @@ function RunningIndicator({ runStartedAt }) {
 
 // ── Main feed component ───────────────────────────────────────────────────────
 
-export default function AgentRunFeed({ events, isRunning, streamingText, runStartedAt, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithTools }) {
+export default function AgentRunFeed({ events, isRunning, streamingText, runStartedAt, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithTools, ttsReady = false }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
@@ -1167,7 +1227,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, runStar
         renderedEvents.push(<AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />);
         break;
       case 'answer':
-        renderedEvents.push(<AnswerEvent key={i} data={ev.data} suppressThinkFallback={hasThinkingSinceLastGoal} />);
+        renderedEvents.push(<AnswerEvent key={i} data={ev.data} suppressThinkFallback={hasThinkingSinceLastGoal} ttsReady={ttsReady} />);
         break;
       case 'error':
         renderedEvents.push(<ErrorEvent key={i} data={ev.data} />);

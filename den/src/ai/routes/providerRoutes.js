@@ -61,6 +61,30 @@ import {
   IS_APPLE_SILICON,
   clearCache as clearMlxCache,
 } from '../controllers/ai/mlxServerManager.js';
+import {
+  listAllAudioModels,
+  listWhisperModels,
+  listTtsModels,
+  deleteAudioModel,
+  deleteCustomAudioPath,
+  clearCache as clearAudioCache,
+  WHISPER_DIR,
+  TTS_DIR,
+} from '../controllers/ai/audioModelManager.js';
+import {
+  checkBinary as checkWhisperBinary,
+  getStatus as getWhisperStatus,
+  startWhisper,
+  stopWhisper,
+  transcribe as whisperTranscribe,
+} from '../controllers/ai/whisperServerManager.js';
+import {
+  checkBinary as checkPiperBinary,
+  getStatus as getTtsStatus,
+  startTts,
+  stopTts,
+  synthesize as ttsSynthesize,
+} from '../controllers/ai/ttsServerManager.js';
 import db from '../../db/client.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -839,7 +863,7 @@ router.delete('/local-models/custom-paths/:id', verifyUser, (req, res) => {
 // ── POST /local-models/download — start a model download ─────────────────────
 router.post('/local-models/download', verifyUser, async (req, res) => {
   try {
-    const { url, filename } = req.body;
+    const { url, filename, subDir } = req.body;
 
     if (!url || !filename) {
       return res.status(400).json({ success: false, error: 'url and filename are required' });
@@ -849,7 +873,7 @@ router.post('/local-models/download', verifyUser, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid URL' });
     }
 
-    const downloadId = await startDownload(url, filename);
+    const downloadId = await startDownload(url, filename, subDir);
     res.json({ success: true, downloadId, message: 'Download started' });
   } catch (err) {
     console.error('Start download error:', err);
@@ -1191,6 +1215,194 @@ function formatBytes(bytes) {
   const kb = bytes / 1024;
   return `${kb.toFixed(0)} KB`;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUDIO MODEL ROUTES — /api/ai/providers/audio/*
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /audio/models — list all audio models (whisper + tts) ─────────────────
+router.get('/audio/models', verifyUser, (req, res) => {
+  try {
+    const models = listAllAudioModels();
+    res.json({ success: true, ...models });
+  } catch (err) {
+    console.error('List audio models error:', err);
+    res.status(500).json({ success: false, error: 'Failed to list audio models' });
+  }
+});
+
+// ── POST /audio/models/custom-paths — add a custom audio model path ───────────
+router.post('/audio/models/custom-paths', verifyUser, (req, res) => {
+  let { name, path: modelPath, type } = req.body;
+  if (!name || !modelPath) {
+    return res.status(400).json({ success: false, error: 'Name and path are required' });
+  }
+  modelPath = modelPath.trim();
+
+  // Auto-detect type if not provided
+  if (!type || type === 'auto') {
+    const p = modelPath.toLowerCase();
+    if (p.endsWith('.onnx')) {
+      type = 'tts';
+    } else {
+      type = 'whisper';
+    }
+  }
+
+  if (type !== 'whisper' && type !== 'tts') {
+    return res.status(400).json({ success: false, error: 'Type must be "whisper" or "tts"' });
+  }
+
+  try {
+    const result = db.prepare('INSERT INTO custom_model_paths (name, path, type) VALUES (?, ?, ?)').run(name, modelPath, type);
+    clearAudioCache(type);
+    res.json({ success: true, id: result.lastInsertRowid, type });
+  } catch (err) {
+    if (err.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).json({ success: false, error: 'This path is already in your library' });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── DELETE /audio/models/:id — delete an audio model file ─────────────────────
+router.delete('/audio/models/:id', verifyUser, (req, res) => {
+  const { id } = req.params;
+  const { type } = req.query;
+  try {
+    if (type) {
+      deleteAudioModel(id, type);
+    } else {
+      // Try to delete from custom paths
+      deleteCustomAudioPath(id);
+    }
+    res.json({ success: true, message: 'Audio model removed' });
+  } catch (err) {
+    if (err.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: err.message });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /audio/whisper/status — get whisper server status ─────────────────────
+router.get('/audio/whisper/status', verifyUser, (req, res) => {
+  try {
+    res.json({ success: true, ...getWhisperStatus() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /audio/whisper/check — check if whisper binary exists ─────────────────
+router.get('/audio/whisper/check', verifyUser, async (req, res) => {
+  try {
+    const result = await checkWhisperBinary();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /audio/whisper/start — start whisper with a model ────────────────────
+router.post('/audio/whisper/start', verifyUser, async (req, res) => {
+  const { modelPath } = req.body;
+  if (!modelPath) {
+    return res.status(400).json({ success: false, error: 'modelPath is required' });
+  }
+  try {
+    const result = await startWhisper(modelPath);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /audio/whisper/stop — stop whisper server ────────────────────────────
+router.post('/audio/whisper/stop', verifyUser, async (req, res) => {
+  try {
+    await stopWhisper();
+    res.json({ success: true, status: 'idle' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /audio/transcribe — transcribe an audio file ─────────────────────────
+router.post('/audio/transcribe', verifyUser, express.raw({ type: '*/*', limit: '50mb' }), async (req, res) => {
+  try {
+    const audioBuffer = req.body;
+    if (!audioBuffer || audioBuffer.length === 0) {
+      return res.status(400).json({ success: false, error: 'No audio data provided' });
+    }
+    const result = await whisperTranscribe(audioBuffer, {
+      language: req.query.language || undefined,
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /audio/tts/status — get TTS server status ─────────────────────────────
+router.get('/audio/tts/status', verifyUser, (req, res) => {
+  try {
+    res.json({ success: true, ...getTtsStatus() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /audio/tts/check — check if piper binary exists ───────────────────────
+router.get('/audio/tts/check', verifyUser, async (req, res) => {
+  try {
+    const result = await checkPiperBinary();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /audio/tts/start — load a TTS voice model ────────────────────────────
+router.post('/audio/tts/start', verifyUser, async (req, res) => {
+  const { modelPath } = req.body;
+  if (!modelPath) {
+    return res.status(400).json({ success: false, error: 'modelPath is required' });
+  }
+  try {
+    const result = await startTts(modelPath);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /audio/tts/stop — unload TTS voice model ────────────────────────────
+router.post('/audio/tts/stop', verifyUser, async (req, res) => {
+  try {
+    await stopTts();
+    res.json({ success: true, status: 'idle' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /audio/speak — generate speech from text ─────────────────────────────
+router.post('/audio/speak', verifyUser, async (req, res) => {
+  const { text, speakerId, lengthScale, noiseScale } = req.body;
+  if (!text) {
+    return res.status(400).json({ success: false, error: 'text is required' });
+  }
+  try {
+    const audioBuffer = await ttsSynthesize(text, { speakerId, lengthScale, noiseScale });
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Content-Length', audioBuffer.length);
+    res.setHeader('Content-Disposition', `inline; filename="speech_${Date.now()}.wav"`);
+    res.send(audioBuffer);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BUILT-IN LLAMA.CPP SERVER ROUTES — /api/ai/providers/server/*

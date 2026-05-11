@@ -23,6 +23,7 @@ import AgentChangesPanel from './components/AgentChangesPanel';
 import CommandCenterSidePanel from './components/CommandCenterSidePanel';
 import ConversationLoadingSkeleton from './components/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
+import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
 import { chatApi, agentApi, gitApi } from "./api";
 import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
@@ -141,6 +142,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return 'auto';
     }
   });
+  const { ttsReady, sttReady } = useAudioStatus();
   const [alwaysAllowedTools, setAlwaysAllowedTools] = useState(() => {
     try {
       const stored = localStorage.getItem('asyncat_always_allow_tools');
@@ -1198,6 +1200,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             <MessageInputV2
               key={`welcome-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
               onSubmit={handleAgentRun}
+              sttReady={sttReady}
               disabled={isProcessing || agentRunning}
               autoFocus={true}
               placeholder={
@@ -1506,6 +1509,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     onAskUserAnswer={handleAgentAskUser}
                     onRetryTool={handleRetryTool}
                     onRunWithTools={handleRunWithTools}
+                    ttsReady={ttsReady}
                   />
                   {!agentRunning && (
                     <>
@@ -1533,6 +1537,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               <MessageInputV2
                 key={`conversation-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
                 onSubmit={handleAgentRun}
+                sttReady={sttReady}
                 disabled={isProcessing || agentRunning}
                 autoFocus={!isProcessing && !agentRunning}
                 onReset={handleClearConversation}

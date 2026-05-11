@@ -188,9 +188,42 @@ seed().then(async () => {
     process.exit(1);
   });
 
-  const shutdown = (signal) => {
+  const shutdown = async (signal) => {
     logger.info(`${signal} - shutting down`);
+    process.removeAllListeners('SIGTERM');
+    process.removeAllListeners('SIGINT');
+
+    // Give graceful shutdown 5s, then force-exit
+    const forceExit = setTimeout(() => {
+      logger.warn('Force exit: graceful shutdown timed out');
+      process.exit(1);
+    }, 5000);
+
+    try {
+      // Stop child processes (whisper, llama, mlx, tts)
+      const { stopWhisper } = await import('./ai/controllers/ai/whisperServerManager.js');
+      const { stopTts } = await import('./ai/controllers/ai/ttsServerManager.js');
+      const { stopServer: stopLlama } = await import('./ai/controllers/ai/llamaServerManager.js');
+      const { stopServer: stopMlx } = await import('./ai/controllers/ai/mlxServerManager.js');
+      await Promise.all([
+        stopWhisper().catch(e => logger.warn('Whisper stop error:', e.message)),
+        stopTts().catch(e => logger.warn('TTS stop error:', e.message)),
+        stopLlama().catch(e => logger.warn('Llama stop error:', e.message)),
+        stopMlx().catch(e => logger.warn('MLX stop error:', e.message)),
+      ]);
+    } catch (err) {
+      logger.warn('Error stopping child processes:', err.message);
+    }
+
+    try {
+      // Close SQLite database
+      db.close();
+    } catch {
+      // ignore if already closed
+    }
+
     server.close(async () => {
+      clearTimeout(forceExit);
       await flushLogs();
       process.exit(0);
     });

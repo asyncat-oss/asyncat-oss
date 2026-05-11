@@ -196,9 +196,36 @@ function cleanupDeadTables() {
   `);
 }
 
+function ensureAudioModelPathsSchema() {
+  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'custom_model_paths'").get();
+  if (!table) return;
+
+  const createSql = table.sql || '';
+  // Check if the table already supports audio types
+  if (createSql.includes("'whisper'") && createSql.includes("'tts'")) return;
+
+  // Recreate table with expanded CHECK constraint
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_model_paths_next (
+      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      name        TEXT NOT NULL,
+      path        TEXT NOT NULL UNIQUE,
+      type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx', 'whisper', 'tts')),
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    INSERT OR IGNORE INTO custom_model_paths_next (id, name, path, type, created_at)
+    SELECT id, name, path, type, created_at FROM custom_model_paths;
+
+    DROP TABLE custom_model_paths;
+    ALTER TABLE custom_model_paths_next RENAME TO custom_model_paths;
+  `);
+}
+
 cleanupDeadTables();
 ensureCalendarSchema();
 ensureAgentMemorySchema();
+ensureAudioModelPathsSchema();
 
 logger.info(`Database: SQLite at ${DB_PATH}`);
 

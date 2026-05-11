@@ -447,6 +447,6 @@ CREATE TABLE IF NOT EXISTS custom_model_paths (
   id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   name        TEXT NOT NULL,
   path        TEXT NOT NULL UNIQUE,
-  type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx')),
+  type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx', 'whisper', 'tts')),
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
