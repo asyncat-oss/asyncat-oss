@@ -736,8 +736,6 @@ const ModernBlockEditor = forwardRef(
       onOutlineChange,
       enableDeltaTracking = true,
       autoSaveDelay = 2000,
-      collaborationTracking = null,
-      collaborators = [],
       blockLocks = {},
       noteId, // Add noteId for persistent history storage
     },
@@ -5580,13 +5578,8 @@ const ModernBlockEditor = forwardRef(
           blockElement.addEventListener("cut", handleInput);
           blockElement.addEventListener("keydown", handleKeyDown);
         }
-
-        if (collaborationTracking?.trackActiveBlock) {
-          collaborationTracking.trackActiveBlock(blockId);
-        }
       },
       [
-        collaborationTracking,
         initializeBlockHistory,
         addBlockState,
         updateActiveBlockId,
@@ -8450,29 +8443,7 @@ const ModernBlockEditor = forwardRef(
                             showSelectionOverlay ? "relative z-20" : "relative"
                           }
                         >
-                          {collaborationTracking ? (
-                            <Block
-                              ref={(el) => (blockRefs.current[block.id] = el)}
-                              block={block}
-                              collaborationTracking={collaborationTracking}
-                              onChange={handleBlockChange}
-                              onKeyDown={handleKeyDown}
-                              onFocus={handleBlockFocus}
-                              onAction={handleBlockAction}
-                              onCopy={handleCopyBlock}
-                              onTypeChange={handleBlockTypeChange}
-                              isActive={activeBlockId === block.id}
-                              allBlocks={blocks}
-                              rapidDeleteMode={rapidDeleteModeRef.current}
-                              isAllBlocksSelected={isAllBlocksSelected}
-                              isSelected={isDragSelected}
-                              dragListeners={blockDragData[block.id]?.listeners}
-                              dragAttributes={
-                                blockDragData[block.id]?.attributes
-                              }
-                            />
-                          ) : (
-                            <Block
+                          <Block
                               ref={(el) => (blockRefs.current[block.id] = el)}
                               block={block}
                               onChange={handleBlockChange}
@@ -8491,7 +8462,6 @@ const ModernBlockEditor = forwardRef(
                                 blockDragData[block.id]?.attributes
                               }
                             />
-                          )}
                         </div>
                       </div>
                     </DraggableBlockWrapper>
@@ -8540,13 +8510,6 @@ const ModernBlockEditor = forwardRef(
                       </kbd>{" "}
                       in the last block
                     </div>
-                    {collaborators.length > 1 && (
-                      <div className="text-xs text-blue-600 dark:text-blue-400 midnight:text-blue-300">
-                        {collaborators.length}{" "}
-                        {collaborators.length === 1 ? "person" : "people"}{" "}
-                        collaborating
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -8564,22 +8527,6 @@ const ModernBlockEditor = forwardRef(
                     data-block-id={draggedBlock.id}
                     className="group relative"
                   >
-                    {collaborationTracking ? (
-                      <Block
-                        block={draggedBlock}
-                        collaborationTracking={collaborationTracking}
-                        onChange={() => {}}
-                        onKeyDown={() => {}}
-                        onFocus={() => {}}
-                        onAction={() => {}}
-                        onCopy={() => {}}
-                        onTypeChange={() => {}}
-                        isActive={false}
-                        allBlocks={blocks}
-                        rapidDeleteMode={false}
-                        isAllBlocksSelected={false}
-                      />
-                    ) : (
                       <Block
                         block={draggedBlock}
                         onChange={() => {}}
@@ -8593,7 +8540,6 @@ const ModernBlockEditor = forwardRef(
                         rapidDeleteMode={false}
                         isAllBlocksSelected={false}
                       />
-                    )}
                   </div>
                 </div>
               )}
