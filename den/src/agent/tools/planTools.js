@@ -43,12 +43,18 @@ function ensureSession(context) {
 }
 
 function planSnapshot(session) {
+  const items = Array.isArray(session.plan) ? session.plan : [];
+  const total = items.length;
+  const pending = items.filter(i => i.status === 'pending').length;
+  const in_progress = items.filter(i => i.status === 'in_progress').length;
+  const completed = items.filter(i => i.status === 'completed').length;
   return {
-    items: Array.isArray(session.plan) ? session.plan : [],
-    total: (session.plan || []).length,
-    pending: (session.plan || []).filter(i => i.status === 'pending').length,
-    in_progress: (session.plan || []).filter(i => i.status === 'in_progress').length,
-    completed: (session.plan || []).filter(i => i.status === 'completed').length,
+    items,
+    total,
+    pending,
+    in_progress,
+    completed,
+    completionPercentage: total > 0 ? Math.round((completed / total) * 100) : 100,
   };
 }
 
@@ -108,12 +114,36 @@ export const todoWriteTool = {
     session.plan = next;
     session.save();
 
+    const snap = planSnapshot(session);
+
     // Emit plan_update event so TUIs / SSE consumers can render it.
     if (typeof context?.emitEvent === 'function') {
       context.emitEvent({ type: 'plan_update', data: { plan: next, round: session.totalRounds } });
+
+      // Emit plan_progress for real-time tracking
+      context.emitEvent({
+        type: 'plan_progress',
+        data: {
+          completed: snap.completed,
+          total: snap.total,
+          percentage: snap.completionPercentage,
+          round: session.totalRounds,
+        },
+      });
+
+      // Emit plan_complete when all items are done
+      if (snap.total > 0 && snap.completionPercentage === 100) {
+        context.emitEvent({
+          type: 'plan_complete',
+          data: {
+            total: snap.total,
+            round: session.totalRounds,
+          },
+        });
+      }
     }
 
-    return { success: true, ...planSnapshot(session) };
+    return { success: true, ...snap };
   },
 };
 

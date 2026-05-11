@@ -80,7 +80,17 @@ function stringifyToolArguments(value) {
       JSON.parse(trimmed);
       return trimmed;
     } catch {
-      return '{}';
+      // Attempt JSON repair: trailing commas, single quotes, unquoted keys
+      try {
+        const repaired = trimmed
+          .replace(/,\s*([\]}])/g, '$1')           // trailing commas
+          .replace(/'/g, '"')                       // single → double quotes
+          .replace(/(\w+)\s*:/g, '"$1":');          // unquoted keys
+        JSON.parse(repaired);
+        return repaired;
+      } catch {
+        return '{}';
+      }
     }
   }
   if (typeof value === 'object') {
@@ -319,6 +329,13 @@ export class AgentRuntime {
     const LOOP_WINDOW_SIZE = 8;
     const MAX_CONSECUTIVE_DUPS = 3;
     const MAX_CYCLE_REPEATS = 2;
+    // Consecutive failure escalation
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 5;
+    const FAILURE_STRATEGY_THRESHOLD = 3;
+    // Plan-driven continuation: limits how many times we nudge the agent
+    let planContinuationNudges = 0;
+    const MAX_PLAN_NUDGES = 3;
 
     for (let round = 0; round < this.maxRounds; round++) {
       this._throwIfAborted();
@@ -419,6 +436,31 @@ export class AgentRuntime {
 
       // If model returned a final answer (no tool calls)
       if (finalAnswer && toolCalls.length === 0) {
+        // Plan-driven continuation: if the agent's own plan has uncompleted items,
+        // nudge it to keep working instead of stopping early.
+        if (!this.session.isPlanComplete() && planContinuationNudges < MAX_PLAN_NUDGES) {
+          planContinuationNudges++;
+          const remaining = this.session.plan.filter(i => i.status !== 'completed');
+          const progress = this.session.getPlanProgress();
+          messages.push({
+            role: 'user',
+            content: [
+              `You provided an answer, but your plan still has ${remaining.length} uncompleted item(s) (${progress.percentage}% done):`,
+              ...remaining.map(i => `- [ ] ${i.content}`),
+              '',
+              'Please continue working on the remaining items. Update each item to in_progress/completed using todo_write as you go.',
+              'When ALL items are completed, provide your final Answer.',
+            ].join('\n'),
+          });
+          this.onEvent({
+            type: 'thinking',
+            data: {
+              thought: `Plan has ${remaining.length} uncompleted items (${progress.percentage}% done). Nudging agent to continue (${planContinuationNudges}/${MAX_PLAN_NUDGES}).`,
+              round,
+            },
+          });
+          continue; // don't break, keep looping
+        }
         answer = finalAnswer;
         this._completeAutoPlan(round);
         this.onEvent({ type: 'answer', data: { answer, round } });
@@ -456,6 +498,17 @@ export class AgentRuntime {
         if (!answer) {
           answer = cleanReasoningAnswer(finalAnswer || responseText);
           if (!answer) answer = responseText; // fallback if stripping removes everything
+        }
+        // Same plan-driven continuation check for implicit answers
+        if (!this.session.isPlanComplete() && planContinuationNudges < MAX_PLAN_NUDGES) {
+          planContinuationNudges++;
+          const remaining = this.session.plan.filter(i => i.status !== 'completed');
+          messages.push({
+            role: 'user',
+            content: `Your plan still has uncompleted items. Continue working:\n${remaining.map(i => `- [ ] ${i.content}`).join('\n')}`,
+          });
+          answer = null; // reset so we don't break
+          continue;
         }
         this._completeAutoPlan(round);
         this.onEvent({ type: 'answer', data: { answer, round } });
@@ -496,6 +549,13 @@ export class AgentRuntime {
           continue;
         }
 
+        // Auto-repair common argument aliases before validation
+        // (e.g. model sends {file: 'x.js'} instead of {path: 'x.js'} for read_file)
+        const toolDef = toolRegistry.get(tc.tool_name);
+        if (toolDef?.parameters) {
+          tc.arguments = ToolCallFormatter.repairArguments(tc.tool_name, tc.arguments, toolDef.parameters);
+        }
+
         const validation = toolRegistry.validateArgs(tc.tool_name, tc.arguments);
         if (!validation.valid) {
           const invalidResult = {
@@ -532,10 +592,10 @@ export class AgentRuntime {
 
           const repairKey = `${tc.tool_name}:${JSON.stringify(validation.missing)}:${JSON.stringify(validation.invalid)}`;
           const repairs = argumentRepairAttempts.get(repairKey) || 0;
-          if (repairs < 2) {
+          if (repairs < 3) {
             argumentRepairAttempts.set(repairKey, repairs + 1);
             messages.push({ role: 'user', content: repairPrompt });
-            const thought = `The ${tc.tool_name} tool call had invalid arguments. Asking the model to emit corrected arguments.`;
+            const thought = `The ${tc.tool_name} tool call had invalid arguments. Asking the model to emit corrected arguments (attempt ${repairs + 1}/3).`;
             reasoningEvents.push({ thought, round, timestamp: new Date().toISOString() });
             this.onEvent({ type: 'thinking', data: { thought, round } });
             repairRequested = true;
@@ -645,6 +705,43 @@ export class AgentRuntime {
             this._compactToolResultForContext(tc.tool_name, result),
             Boolean(nativeToolCallsForThread),
           ));
+
+          // ── Consecutive failure tracking ────────────────────────────────
+          if (result?.success === false || result?.error) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+              const failThought = `${consecutiveFailures} consecutive tool failures — stopping to prevent runaway.`;
+              reasoningEvents.push({ thought: failThought, round, timestamp: new Date().toISOString() });
+              this.onEvent({ type: 'thinking', data: { thought: failThought, round } });
+              const completedItems = (this.session.plan || []).filter(i => i.status === 'completed');
+              answer = `I stopped after ${consecutiveFailures} consecutive tool failures. Here's what I accomplished:\n\n` +
+                (completedItems.length > 0
+                  ? completedItems.map(i => `✓ ${i.content}`).join('\n')
+                  : this.session.toolHistory.slice(-5).map(t => `- ${t.tool}: ${t.result?.error || (t.result?.success ? 'success' : 'failed')}`).join('\n'));
+              this.onEvent({ type: 'answer', data: { answer, round } });
+              break;
+            }
+            if (consecutiveFailures >= FAILURE_STRATEGY_THRESHOLD) {
+              messages.push({
+                role: 'user',
+                content: 'You have had several consecutive tool failures. Step back, reconsider your approach, and try a completely different strategy. Do not repeat the same failing calls.',
+              });
+            }
+          } else {
+            consecutiveFailures = 0; // reset on success
+          }
+
+          // ── Plan progress emission ──────────────────────────────────────
+          if (tc.tool_name !== 'todo_write' && tc.tool_name !== 'list_plan') {
+            const plan = this.session?.plan;
+            if (Array.isArray(plan) && plan.length > 0) {
+              const progress = this.session.getPlanProgress();
+              this.onEvent({
+                type: 'plan_progress',
+                data: { ...progress, round },
+              });
+            }
+          }
 
           // ── Smart loop detection ─────────────────────────────────────────
           const sig = normalizeToolSig(tc.tool_name, tc.arguments);
@@ -1278,17 +1375,35 @@ export class AgentRuntime {
       ? `Invalid argument(s): ${validation.invalid.map(item => `\`${item.key}\` was ${item.actual}, expected ${item.expected}`).join('; ')}.`
       : '';
 
+    // Build a concrete example with placeholder values for required fields
+    const exampleArgs = {};
+    for (const req of required) {
+      const prop = schema[req];
+      if (prop?.type === 'string') exampleArgs[req] = `<${req}_value>`;
+      else if (prop?.type === 'number' || prop?.type === 'integer') exampleArgs[req] = 0;
+      else if (prop?.type === 'boolean') exampleArgs[req] = true;
+      else if (prop?.type === 'array') exampleArgs[req] = [];
+      else exampleArgs[req] = `<${req}_value>`;
+    }
+
+    // Show what the model actually sent vs what was expected
+    const sentArgs = Object.keys(toolCall.arguments || {}).length > 0
+      ? `You sent: ${JSON.stringify(toolCall.arguments).slice(0, 800)}`
+      : 'You sent an empty arguments object.';
+
     return [
-      `You called \`${toolCall.tool_name}\` with invalid arguments, so Asyncat did not execute it.`,
+      `You called \`${toolCall.tool_name}\` with invalid arguments, so it was NOT executed.`,
       missing,
       invalid,
-      required.length ? `Required fields: ${required.map(k => `\`${k}\``).join(', ')}.` : '',
-      `Relevant schema: ${JSON.stringify(schema).slice(0, 1800)}`,
       '',
-      'Emit exactly one corrected machine-readable tool call for the same next step, with no extra prose.',
+      sentArgs,
+      '',
+      `Here is the EXACT format required. Replace placeholder values with real values:`,
       '<tool_call>',
-      `{"name": "${toolCall.tool_name}", "arguments": {}}`,
+      JSON.stringify({ name: toolCall.tool_name, arguments: exampleArgs }, null, 2),
       '</tool_call>',
+      '',
+      `Required fields: ${required.map(k => `\`${k}\``).join(', ')}. Do NOT use alternative names like \`file\`, \`filename\`, or \`cmd\`.`,
     ].filter(Boolean).join('\n');
   }
 
@@ -1486,18 +1601,26 @@ export class AgentRuntime {
         return `  ${t.tool}(${Object.keys(t.args || {}).join(', ')}) → ${status}`;
       }).join('\n');
 
+      // Plan-aware context: include plan progress so the reflector can
+      // distinguish "making progress on the plan" from "stuck"
+      const planProgress = this.session?.getPlanProgress?.() || { completed: 0, total: 0, percentage: 100 };
+      const planContext = planProgress.total > 0
+        ? `\nPlan progress: ${planProgress.completed}/${planProgress.total} items completed (${planProgress.percentage}%)`
+        : '';
+
       const reflectionPrompt = [
         'You are evaluating an AI agent\'s progress on a task.',
         'Analyze the recent tool calls and determine:',
         '1. Is the agent making meaningful progress toward the goal?',
         '2. Is it going in circles or repeating similar actions?',
         '3. Should it change its approach?',
+        '4. If there is a plan with items being completed, that indicates progress even if tool calls look similar.',
         '',
         'Return JSON: {"progress": "good|slow|stuck", "suggestion": "brief guidance or null", "should_continue": true/false}',
         'Be concise. Return null suggestion if progress is good.',
       ].join('\n');
 
-      const context = `Goal: ${String(goal).slice(0, 300)}\nRound: ${round}\nRecent tools (last 8):\n${recentTools}`;
+      const context = `Goal: ${String(goal).slice(0, 300)}\nRound: ${round}${planContext}\nRecent tools (last 8):\n${recentTools}`;
 
       const response = await this.aiClient.client.chat.completions.create({
         model: this.model,

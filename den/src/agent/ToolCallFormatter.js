@@ -349,6 +349,79 @@ export class ToolCallFormatter {
 
     return calls;
   }
+
+  // ── Argument auto-repair ──────────────────────────────────────────────────
+  // Models frequently use wrong parameter names (e.g. "file" instead of "path").
+  // This maps common aliases to the canonical parameter name before validation,
+  // preventing unnecessary repair loops and tool failures.
+
+  static COMMON_ARG_ALIASES = {
+    file: 'path',
+    filename: 'path',
+    filepath: 'path',
+    file_path: 'path',
+    target: 'path',
+    source: 'path',
+    dir: 'path',
+    directory: 'path',
+    folder: 'path',
+    cmd: 'command',
+    shell_command: 'command',
+    exec: 'command',
+    text: 'content',
+    body: 'content',
+    data: 'content',
+    q: 'query',
+    search: 'query',
+    search_query: 'query',
+    replacement: 'replace',
+    new_content: 'replace',
+    old_content: 'find',
+    pattern: 'find',
+    search_term: 'find',
+    name: 'path',  // only applied when 'path' is required and 'name' isn't a schema field
+  };
+
+  /**
+   * Attempt to repair common argument mistakes before validation.
+   * Maps known aliases to canonical parameter names, only filling in
+   * required fields that are missing.
+   *
+   * @param {string} toolName
+   * @param {object} args
+   * @param {object} toolSchema - The tool's parameters schema ({ properties, required })
+   * @returns {object} Repaired arguments (shallow copy)
+   */
+  static repairArguments(toolName, args, toolSchema) {
+    if (!args || typeof args !== 'object' || Array.isArray(args)) return args;
+    if (!toolSchema?.required?.length) return args;
+
+    const repaired = { ...args };
+    const required = new Set(toolSchema.required);
+    const schemaProps = new Set(Object.keys(toolSchema.properties || {}));
+
+    for (const req of required) {
+      // Skip if already present and non-empty
+      if (repaired[req] !== undefined && repaired[req] !== null && repaired[req] !== '') continue;
+
+      // Look for a matching alias
+      for (const [alias, canonical] of Object.entries(ToolCallFormatter.COMMON_ARG_ALIASES)) {
+        if (canonical !== req) continue;
+        // Don't steal 'name' if it's an actual schema property (e.g. create_directory might use 'name')
+        if (alias === 'name' && schemaProps.has('name')) continue;
+        if (repaired[alias] !== undefined && repaired[alias] !== null && repaired[alias] !== '') {
+          repaired[req] = repaired[alias];
+          // Only delete the alias if it's not also a valid schema property
+          if (!schemaProps.has(alias)) {
+            delete repaired[alias];
+          }
+          break;
+        }
+      }
+    }
+
+    return repaired;
+  }
 }
 
 export default ToolCallFormatter;

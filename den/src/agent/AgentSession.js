@@ -231,6 +231,37 @@ export class AgentSession {
       return [];
     }
   }
+
+  // ── Plan completion helpers ─────────────────────────────────────────────────
+  static _AUTO_PLAN_IDS = new Set([
+    'auto_plan_inspect', 'auto_plan_understand', 'auto_plan_apply', 'auto_plan_verify',
+  ]);
+
+  /**
+   * Check if the agent-authored plan is fully completed.
+   * Returns true if there is no plan, if the plan is only auto-generated,
+   * or if all items have status === 'completed'.
+   */
+  isPlanComplete() {
+    if (!Array.isArray(this.plan) || this.plan.length === 0) return true;
+    // Ignore auto-generated plans — they don't represent real task decomposition
+    if (this.plan.every(item => AgentSession._AUTO_PLAN_IDS.has(item.id))) return true;
+    return this.plan.every(item => item.status === 'completed');
+  }
+
+  /** Get plan completion stats. */
+  getPlanProgress() {
+    if (!Array.isArray(this.plan) || this.plan.length === 0) {
+      return { completed: 0, total: 0, percentage: 100 };
+    }
+    const completed = this.plan.filter(i => i.status === 'completed').length;
+    return {
+      completed,
+      total: this.plan.length,
+      percentage: Math.round((completed / this.plan.length) * 100),
+    };
+  }
 }
 
 export default AgentSession;
+

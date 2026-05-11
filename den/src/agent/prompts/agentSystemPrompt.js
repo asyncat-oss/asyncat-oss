@@ -205,6 +205,30 @@ For shell commands, prefer:
 </tool_call>
 \`\`\`
 
+## Common Tool Call Mistakes to Avoid
+- \`read_file\` requires \`path\` — NOT \`file\`, \`filename\`, \`filepath\`, or \`name\`
+- \`write_file\` requires \`path\` and \`content\` — NOT \`file\` and \`text\`
+- \`edit_file\` requires \`path\`, \`find\`, and \`replace\` — NOT \`file\`, \`old_content\`, \`new_content\`
+- \`run_command\` requires \`command\` — NOT \`cmd\`, \`exec\`, or \`shell_command\`
+- \`list_directory\` requires \`path\` — NOT \`dir\`, \`directory\`, or \`folder\`
+- Always include ALL required parameters — missing one will cause the tool call to fail
+- Parameter values must be the correct type (strings for paths, objects for structured data)
+
+Example tool calls for the most common tools:
+\`\`\`
+<tool_call>
+{"name": "read_file", "arguments": {"path": "src/index.js"}}
+</tool_call>
+
+<tool_call>
+{"name": "run_command", "arguments": {"command": "ls -la src/"}}
+</tool_call>
+
+<tool_call>
+{"name": "list_directory", "arguments": {"path": "."}}
+</tool_call>
+\`\`\`
+
 ## Artifact Generation
 When you create documents, reports, diagrams, data exports, or other structured output, use the appropriate artifact tool:
 - \`create_artifact\` — for any rich document the user can preview and download (markdown, HTML, code, diagrams, data)
