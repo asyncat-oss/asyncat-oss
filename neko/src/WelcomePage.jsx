@@ -208,20 +208,6 @@ const WelcomePage = ({ session, onTeamCreated }) => {
               subtitle="The local intelligence environment designed for privacy and speed."
             >
               <div className="flex flex-col items-center gap-12">
-                <motion.div 
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 1 }}
-                  className="w-24 h-24 flex items-center justify-center relative"
-                >
-                  <img src="/cat.svg" alt="Asyncat" className="w-12 h-12 relative z-10" />
-                  <motion.div 
-                    animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.1, 0.2] }}
-                    transition={{ duration: 4, repeat: Infinity }}
-                    className="absolute inset-0 bg-blue-500 dark:bg-blue-500/70 midnight:bg-blue-400/60 rounded-full blur-3xl"
-                  />
-                </motion.div>
-
                 <button
                   onClick={handleNext}
                   className="group flex items-center gap-2 px-8 py-3 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:hover:bg-slate-200 text-white dark:text-gray-900 midnight:text-slate-950 rounded-full text-[13px] font-bold transition-all active:scale-[0.97] shadow-sm"
