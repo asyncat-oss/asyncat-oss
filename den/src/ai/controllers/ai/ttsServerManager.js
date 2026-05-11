@@ -12,6 +12,54 @@ import os from 'os';
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
 
+// ── TTS text normalization ───────────────────────────────────────────────────
+// Piper reads text literally, so we normalize it to avoid spoken emojis,
+// markdown symbols, URLs, and other non-speech content.
+
+function normalizeTtsText(text) {
+  if (!text || typeof text !== 'string') return '';
+
+  let t = text;
+
+  // 1. Remove emojis and other pictographic symbols
+  // Matches most emoji ranges including skin-tone modifiers and ZWJ sequences
+  t = t.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B55}\u{2934}\u{2935}\u{200D}\u{FE0F}\u{20E3}]/gu, '');
+
+  // 2. Replace URLs with "link"
+  t = t.replace(/https?:\/\/[^\s]+/gi, 'link');
+
+  // 3. Remove markdown formatting
+  t = t.replace(/(\*\*|\*|__|_|`|~|~~|\[|\]|\(|\)|#|\||>|!)/g, '');
+
+  // 4. Normalize ellipsis to a comma pause
+  t = t.replace(/\.{3,}/g, ',');
+
+  // 5. Replace common code/math symbols that get read oddly
+  t = t.replace(/\b(\d+)\s*x\s*(\d+)\b/g, '$1 by $2');      // 1920x1080 → 1920 by 1080
+  t = t.replace(/&/g, ' and ');
+  t = t.replace(/@/g, ' at ');
+  t = t.replace(/%/g, ' percent ');
+  t = t.replace(/\$/g, ' dollar ');
+  t = t.replace(/€/g, ' euro ');
+  t = t.replace(/£/g, ' pound ');
+  t = t.replace(/°/g, ' degrees ');
+  t = t.replace(/±/g, ' plus or minus ');
+  t = t.replace(/≠/g, ' not equal to ');
+  t = t.replace(/≤/g, ' less than or equal to ');
+  t = t.replace(/≥/g, ' greater than or equal to ');
+  t = t.replace(/→/g, ' to ');
+  t = t.replace(/←/g, ' from ');
+  t = t.replace(/⇒/g, ' implies ');
+
+  // 6. Remove stray asterisks and dashes that might remain
+  t = t.replace(/[*#|`~]/g, '');
+
+  // 7. Collapse multiple spaces and trim
+  t = t.replace(/\s+/g, ' ').trim();
+
+  return t;
+}
+
 const TTS_PORT = parseInt(process.env.TTS_SERVER_PORT ?? '8768', 10);
 const TTS_HOST = '127.0.0.1';
 
@@ -190,8 +238,11 @@ export async function synthesize(text, options = {}) {
       reject(new Error(`Piper process error: ${err.message}`));
     });
 
+    // Normalize text before sending to Piper
+    const normalizedText = normalizeTtsText(text);
+
     // Write text to stdin and close
-    proc.stdin.write(text);
+    proc.stdin.write(normalizedText || text);
     proc.stdin.end();
   });
 }

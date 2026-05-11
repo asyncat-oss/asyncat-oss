@@ -61,6 +61,19 @@ export const filesApi = {
     return `${API_BASE_URL}/files/raw?${params}`;
   },
 
+  // Fetch raw file content with auth and return a blob URL (for <audio>, <img>, etc.)
+  fetchRawBlob: async (rootId, filePath) => {
+    const token = await authService.getSession();
+    const params = new URLSearchParams({ rootId, path: filePath });
+    const res = await fetch(`${API_BASE_URL}/files/raw?${params}`, {
+      headers: token?.access_token ? { Authorization: `Bearer ${token.access_token}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
+
   upload: async (rootId, filePath, file) => {
     const formData = new FormData();
     formData.append('file', file);

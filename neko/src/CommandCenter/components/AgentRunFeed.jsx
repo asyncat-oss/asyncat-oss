@@ -4,9 +4,10 @@ import {
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
-  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner
+  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward
 } from 'lucide-react';
 import { audioApi } from '../../Settings/settingApi.js';
+import { filesApi } from '../api';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
 import { extractReasoningFromText } from '../utils/reasoningParser.js';
 import ArtifactCard from './ArtifactRenderer';
@@ -66,6 +67,9 @@ const TOOL_META = {
   create_csv:        { icon: List,        label: 'Create CSV' },
   create_html_page:  { icon: Globe,       label: 'Create HTML page' },
   list_artifacts:    { icon: FolderOpen,  label: 'List artifacts' },
+  // Audio tools
+  speak_text:        { icon: Volume2,     label: 'Generated speech' },
+  transcribe_audio:  { icon: Mic,         label: 'Transcribed audio' },
 };
 
 function getToolMeta(toolName) {
@@ -89,10 +93,18 @@ function formatCountdown(ms) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function getResultSummary(result) {
+function getResultSummary(result, toolName) {
   if (!result) return null;
   if (typeof result === 'string') return result.length > 80 ? result.slice(0, 80) + '…' : result;
   if (result.error) return `Error: ${result.error}`;
+  // Audio tool summaries
+  if (toolName === 'speak_text' && result.success) {
+    return `${result.audio_size || 'Audio'} · ${result.voice || 'Piper'}`;
+  }
+  if (toolName === 'transcribe_audio' && result.success) {
+    const text = result.text || '';
+    return text.length > 100 ? text.slice(0, 100) + '…' : (text || 'Transcription complete');
+  }
   if (result.output !== undefined) { const s = String(result.output); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
   if (result.content) { const s = String(result.content); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
   try { const s = JSON.stringify(result); return s.length > 100 ? s.slice(0, 100) + '…' : s; } catch { return null; }
@@ -278,7 +290,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
   const isPending = status.label === 'Running';
   const isError = status.label === 'Failed';
   const isMalformed = result?.code === 'invalid_tool_arguments';
-  const summary = getResultSummary(result);
+  const summary = getResultSummary(result, data?.tool);
   const intent = getToolIntent(data);
 
   const content = (
@@ -342,6 +354,234 @@ function ArtifactResultCard({ result }) {
   return (
     <div className="mt-1 mb-2">
       <ArtifactCard artifact={result.artifact} />
+    </div>
+  );
+}
+
+// ── Reusable inline audio player ─────────────────────────────────────────────
+function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, infoContent }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const audioRef = useRef(null);
+  const animationRef = useRef(null);
+
+  const formatTime = (t) => {
+    if (!Number.isFinite(t) || t < 0) return '0:00';
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const cleanupAudio = () => {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+  };
+
+  const updateProgress = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+      setDuration(audioRef.current.duration || 0);
+    }
+    animationRef.current = requestAnimationFrame(updateProgress);
+  };
+
+  const handlePlay = async () => {
+    if (!audioRef.current) {
+      let audioSrc = src;
+      if (!audioSrc && loadSrc) {
+        setIsLoading(true);
+        try { audioSrc = await loadSrc(); } catch { setIsLoading(false); return; }
+        setIsLoading(false);
+      }
+      if (!audioSrc) return;
+      const audio = new Audio(audioSrc);
+      audioRef.current = audio;
+      audio.preload = 'metadata';
+      audio.onended = () => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      };
+      audio.onerror = () => {
+        setIsPlaying(false);
+        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      };
+      audio.onloadedmetadata = () => setDuration(audio.duration || 0);
+    }
+    audioRef.current.play().catch(() => setIsPlaying(false));
+    setIsPlaying(true);
+    animationRef.current = requestAnimationFrame(updateProgress);
+  };
+
+  const handlePause = () => {
+    if (audioRef.current) audioRef.current.pause();
+    setIsPlaying(false);
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+  };
+
+  const handleStop = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+  };
+
+  const handleSeek = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const newTime = pct * (duration || 0);
+    if (audioRef.current && Number.isFinite(newTime)) {
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  const skip = (seconds) => {
+    if (audioRef.current && Number.isFinite(audioRef.current.duration)) {
+      const newTime = Math.max(0, Math.min(audioRef.current.duration, audioRef.current.currentTime + seconds));
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  useEffect(() => cleanupAudio, [src]);
+
+  const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div className="flex items-center gap-2">
+      {/* Play / Pause */}
+      <button
+        onClick={isPlaying ? handlePause : handlePlay}
+        disabled={isLoading}
+        className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50 ${
+          isPlaying
+            ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+            : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+        }`}
+        title={isPlaying ? 'Pause' : isLoading ? 'Loading…' : 'Play'}
+      >
+        {isLoading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : isPlaying ? (
+          <Square className="h-3 w-3 fill-current" />
+        ) : (
+          <Volume2 className="h-3.5 w-3.5" />
+        )}
+      </button>
+
+      {/* Skip back */}
+      <button
+        onClick={() => skip(-5)}
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        title="Skip back 5s"
+      >
+        <SkipBack className="h-3 w-3" />
+      </button>
+
+      {/* Skip forward */}
+      <button
+        onClick={() => skip(5)}
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        title="Skip forward 5s"
+      >
+        <SkipForward className="h-3 w-3" />
+      </button>
+
+      {/* Stop */}
+      <button
+        onClick={handleStop}
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        title="Stop"
+      >
+        <Square className="h-3 w-3 fill-current" />
+      </button>
+
+      {/* Progress + time */}
+      <div className="min-w-0 flex-1 mx-1">
+        <div
+          onClick={handleSeek}
+          className="group relative h-1.5 w-full cursor-pointer rounded-full bg-gray-100 dark:bg-gray-800"
+        >
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-[width] duration-75"
+            style={{ width: `${progressPct}%` }}
+          />
+          <div
+            className="absolute top-1/2 h-2.5 w-2.5 rounded-full bg-emerald-500 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+            style={{ left: `${progressPct}%`, transform: 'translate(-50%, -50%)' }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
+        </div>
+      </div>
+
+      {/* Download */}
+      {(downloadUrl || src) && (
+        <a
+          href={downloadUrl || src}
+          download={downloadName || 'audio.wav'}
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          title="Download"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </a>
+      )}
+
+      {/* Extra info slot */}
+      {showInfo && infoContent}
+    </div>
+  );
+}
+
+// ── Audio tool result inline card (uses reusable player) ──────────────────────
+function AudioResultCard({ result }) {
+  if (!result?.success || !result.path) return null;
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [fetchError, setFetchError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    filesApi.fetchRawBlob('workspace', result.path)
+      .then(url => { if (!cancelled) setBlobUrl(url); })
+      .catch(err => { if (!cancelled) setFetchError(err.message); });
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [result.path]);
+
+  return (
+    <div className="mt-1.5 mb-2 ml-7">
+      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50">
+        {fetchError ? (
+          <p className="text-xs text-red-500">Failed to load audio: {fetchError}</p>
+        ) : (
+          <InlineAudioPlayer
+            src={blobUrl}
+            downloadName={result.path?.split('/').pop() || 'speech.wav'}
+          />
+        )}
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <p className="truncate text-[11px] font-medium text-gray-600 dark:text-gray-300">
+            {result.path?.split('/').pop() || 'Generated speech'}
+          </p>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500">
+            · {result.audio_size || `${(result.audio_bytes / 1024).toFixed(1)} KB`} · {result.voice || 'Piper'} · {result.format || 'WAV'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -501,11 +741,13 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
               }
               if (ev.type === 'tool_start') {
                 const isArtifact = ARTIFACT_TOOLS.has(ev.data?.tool);
-                const hasResult = isArtifact && ev.result?.success && ev.result?.artifact;
+                const hasArtifactResult = isArtifact && ev.result?.success && ev.result?.artifact;
+                const hasAudioResult = ev.data?.tool === 'speak_text' && ev.result?.success && ev.result?.path;
                 return (
                   <div key={i}>
                     <ToolEvent data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} progress={ev.progress} />
-                    {hasResult && <ArtifactResultCard result={ev.result} />}
+                    {hasArtifactResult && <ArtifactResultCard result={ev.result} />}
+                    {hasAudioResult && <AudioResultCard result={ev.result} />}
                   </div>
                 );
               }
@@ -711,8 +953,6 @@ function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) 
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
 
   const displayAnswer = answer;
-  const [speakState, setSpeakState] = useState('idle');
-  const audioRef = useRef(null);
 
   if (!displayAnswer && !thinkFallback) return null;
 
@@ -737,56 +977,14 @@ function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) 
 
           {/* Read Aloud Action */}
           {ttsReady && displayAnswer && (
-            <div className="mt-3 flex items-center justify-start">
-              <button
-                onClick={async () => {
-                  if (speakState === 'playing') {
-                    if (audioRef.current) {
-                      audioRef.current.pause();
-                      audioRef.current.currentTime = 0;
-                      URL.revokeObjectURL(audioRef.current.src);
-                      audioRef.current = null;
-                    }
-                    setSpeakState('idle');
-                    return;
-                  }
-                  setSpeakState('loading');
-                  try {
-                    const blobUrl = await audioApi.tts.speak(displayAnswer);
-                    const audio = new Audio(blobUrl);
-                    audioRef.current = audio;
-                    audio.onended = () => {
-                      setSpeakState('idle');
-                      URL.revokeObjectURL(blobUrl);
-                      audioRef.current = null;
-                    };
-                    audio.onerror = () => {
-                      setSpeakState('idle');
-                      URL.revokeObjectURL(blobUrl);
-                      audioRef.current = null;
-                    };
-                    await audio.play();
-                    setSpeakState('playing');
-                  } catch {
-                    setSpeakState('idle');
-                  }
-                }}
-                disabled={speakState === 'loading'}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  speakState === 'playing'
-                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
-                } disabled:opacity-50`}
-                title="Read aloud"
-              >
-                {speakState === 'loading' ? (
-                  <><Spinner className="w-3.5 h-3.5 animate-spin" />Reading…</>
-                ) : speakState === 'playing' ? (
-                  <><Square className="w-3.5 h-3.5 fill-current" />Stop</>
-                ) : (
-                  <><Volume2 className="w-3.5 h-3.5" />Read aloud</>
-                )}
-              </button>
+            <div className="mt-3 max-w-xl">
+              <InlineAudioPlayer
+                loadSrc={() => audioApi.tts.speak(displayAnswer)}
+                showInfo={true}
+                infoContent={
+                  <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500">Read aloud</span>
+                }
+              />
             </div>
           )}
 

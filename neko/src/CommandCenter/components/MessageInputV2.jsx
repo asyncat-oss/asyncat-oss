@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, ChevronDown, Cloud, Cpu, HardDrive, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
+import { Brain, ChevronDown, Cloud, Cpu, HardDrive, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -93,6 +93,11 @@ export const MessageInputV2 = ({
   onReasoningEffortChange,
   tokenUsage = null,
   sttReady = false,
+  ttsReady = false,
+  voiceMode = false,
+  onToggleVoiceMode,
+  autoRecordPrompt = false,
+  voiceTtsState = 'idle',
 }) => {
   const [value, setValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -378,13 +383,14 @@ export const MessageInputV2 = ({
   }, []);
 
   const handleSubmit = useCallback(
-    async (e) => {
+    async (e, overrideText = null) => {
       if (e) e.preventDefault();
-      if (!value.trim() || disabled) return;
+      const textToSend = overrideText || value;
+      if (!textToSend?.trim() || disabled) return;
 
       try {
         const messageToSend = {
-          content: value.trim(),
+          content: textToSend.trim(),
           agentMentions: detectedAgentMentions,
           fileAttachments: fileAttachments.length > 0 ? fileAttachments : undefined,
           reasoningEffort: activeBrain.supportsReasoning ? reasoningEffort : "auto",
@@ -553,10 +559,17 @@ export const MessageInputV2 = ({
         try {
           const res = await audioApi.whisper.transcribe(audioBlob);
           if (res.text) {
+            const transcribed = res.text.trim();
             setValue(prev => {
               const base = prev.trim();
-              return base ? `${base} ${res.text.trim()}` : res.text.trim();
+              return base ? `${base} ${transcribed}` : transcribed;
             });
+            // Voice Mode: auto-submit after a brief delay so the user sees what was transcribed
+            if (voiceMode && transcribed) {
+              setTimeout(() => {
+                handleSubmit(null, transcribed);
+              }, 400);
+            }
           }
         } catch (err) {
           setError('Failed to transcribe audio: ' + err.message);
@@ -618,6 +631,29 @@ export const MessageInputV2 = ({
                   >
                     <X className="w-4 h-4" />
                   </button>
+                </div>
+              )}
+
+              {voiceMode && (
+                <div className="mb-2 flex items-center gap-2">
+                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                    voiceTtsState === 'playing'
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
+                      : voiceTtsState === 'loading'
+                        ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
+                        : autoRecordPrompt
+                          ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400 animate-pulse'
+                          : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                  }`}>
+                    <Headphones className="w-3 h-3" />
+                    {voiceTtsState === 'playing'
+                      ? 'Agent is speaking…'
+                      : voiceTtsState === 'loading'
+                        ? 'Agent is preparing speech…'
+                        : autoRecordPrompt
+                          ? 'Your turn — click the mic'
+                          : 'Voice mode active'}
+                  </div>
                 </div>
               )}
 
@@ -863,11 +899,15 @@ export const MessageInputV2 = ({
                       type="button"
                       onClick={isRecording ? stopRecording : startRecording}
                       disabled={disabled && !isRecording}
-                      title={isRecording ? "Stop recording" : "Record voice input"}
+                      title={isRecording ? "Stop recording" : voiceMode ? "Voice mode — click to speak" : "Record voice input"}
                       className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         isRecording
                           ? "text-red-500 bg-red-50 dark:text-red-400 dark:bg-red-900/20 midnight:bg-red-900/20"
-                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                          : autoRecordPrompt
+                            ? "text-violet-600 bg-violet-100 dark:text-violet-300 dark:bg-violet-900/30 animate-bounce ring-2 ring-violet-300 dark:ring-violet-700"
+                            : voiceMode
+                              ? "text-violet-500 bg-violet-50 dark:text-violet-400 dark:bg-violet-900/20"
+                              : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                       }`}
                     >
                       {isRecording ? (
@@ -876,6 +916,23 @@ export const MessageInputV2 = ({
                         <Mic className="w-3.5 h-3.5" />
                       )}
                       {isRecording && <span className="hidden sm:inline tabular-nums">{formatElapsed(recordingDuration)}</span>}
+                      {!isRecording && autoRecordPrompt && <span className="hidden sm:inline font-medium">Speak</span>}
+                    </button>
+                  )}
+                  {sttReady && ttsReady && onToggleVoiceMode && (
+                    <button
+                      type="button"
+                      onClick={onToggleVoiceMode}
+                      disabled={disabled}
+                      title={voiceMode ? "Voice mode ON — click to disable" : "Voice mode — hands-free conversation"}
+                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
+                        voiceMode
+                          ? "text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-900/20"
+                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                      }`}
+                    >
+                      <Headphones className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">{voiceMode ? 'Voice' : 'Voice'}</span>
                     </button>
                   )}
 

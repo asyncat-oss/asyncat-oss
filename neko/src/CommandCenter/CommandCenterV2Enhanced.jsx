@@ -26,6 +26,7 @@ import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
 import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
 import { chatApi, agentApi, gitApi } from "./api";
+import { audioApi } from "../Settings/settingApi.js";
 import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
 import { useUser } from "../contexts/UserContext";
 import {
@@ -45,6 +46,7 @@ import {
   PanelRightOpen,
   Image,
   GitBranch,
+  Headphones,
 } from "lucide-react";
 
 import {
@@ -143,6 +145,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
   });
   const { ttsReady, sttReady } = useAudioStatus();
+  const [voiceMode, setVoiceMode] = useState(() => {
+    try { return localStorage.getItem('asyncat_voice_mode') === 'true'; }
+    catch { return false; }
+  });
+  const voiceAudioRef = useRef(null);
+  const [voiceModeTtsState, setVoiceModeTtsState] = useState('idle'); // idle | loading | playing
+  const [autoRecordAfterTts, setAutoRecordAfterTts] = useState(false);
   const [alwaysAllowedTools, setAlwaysAllowedTools] = useState(() => {
     try {
       const stored = localStorage.getItem('asyncat_always_allow_tools');
@@ -834,6 +843,61 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }));
   }, [currentRunKey, setCurrentChatRun]);
 
+  const handleToggleVoiceMode = useCallback(() => {
+    setVoiceMode(prev => {
+      const next = !prev;
+      try { localStorage.setItem('asyncat_voice_mode', String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Voice Mode: auto-speak agent answers via TTS
+  const lastSpokenAnswerRef = useRef('');
+  useEffect(() => {
+    if (!voiceMode || !ttsReady || agentRunning) return;
+    // Find the most recent answer event
+    for (let i = agentEvents.length - 1; i >= 0; i--) {
+      const ev = agentEvents[i];
+      if (ev.type === 'answer' && ev.data?.answer) {
+        const answerText = ev.data.answer.trim();
+        if (answerText && answerText !== lastSpokenAnswerRef.current) {
+          lastSpokenAnswerRef.current = answerText;
+          setVoiceModeTtsState('loading');
+          audioApi.tts.speak(answerText).then(blobUrl => {
+            if (voiceAudioRef.current) {
+              voiceAudioRef.current.pause();
+              URL.revokeObjectURL(voiceAudioRef.current.src);
+            }
+            const audio = new Audio(blobUrl);
+            voiceAudioRef.current = audio;
+            audio.onended = () => {
+              setVoiceModeTtsState('idle');
+              URL.revokeObjectURL(blobUrl);
+              voiceAudioRef.current = null;
+              // Signal that we should start listening again
+              setAutoRecordAfterTts(true);
+              setTimeout(() => setAutoRecordAfterTts(false), 3000);
+            };
+            audio.onerror = () => {
+              setVoiceModeTtsState('idle');
+              URL.revokeObjectURL(blobUrl);
+              voiceAudioRef.current = null;
+            };
+            audio.play().catch(() => {
+              setVoiceModeTtsState('idle');
+              URL.revokeObjectURL(blobUrl);
+              voiceAudioRef.current = null;
+            });
+            setVoiceModeTtsState('playing');
+          }).catch(() => {
+            setVoiceModeTtsState('idle');
+          });
+        }
+        break;
+      }
+    }
+  }, [voiceMode, ttsReady, agentRunning, agentEvents]);
+
   const handleAgentPermission = useCallback(async (requestId, decision) => {
     if (!requestId) return;
 
@@ -1201,12 +1265,19 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               key={`welcome-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
               onSubmit={handleAgentRun}
               sttReady={sttReady}
+              ttsReady={ttsReady}
+              voiceMode={voiceMode}
+              onToggleVoiceMode={handleToggleVoiceMode}
+              autoRecordPrompt={autoRecordAfterTts}
+              voiceTtsState={voiceModeTtsState}
               disabled={isProcessing || agentRunning}
               autoFocus={true}
               placeholder={
                 isGhostMode
                   ? "👻 Ghost Mode — messages won't be saved..."
-                  : "Ask anything, or create tasks, events, notes..."
+                  : voiceMode
+                    ? "Voice mode active — click the mic to speak..."
+                    : "Ask anything, or create tasks, events, notes..."
               }
               hasMessages={hasConversationContent}
               toolsEnabled={toolsEnabled}
@@ -1538,6 +1609,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 key={`conversation-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
                 onSubmit={handleAgentRun}
                 sttReady={sttReady}
+                ttsReady={ttsReady}
+                voiceMode={voiceMode}
+                onToggleVoiceMode={handleToggleVoiceMode}
+                autoRecordPrompt={autoRecordAfterTts}
+                voiceTtsState={voiceModeTtsState}
                 disabled={isProcessing || agentRunning}
                 autoFocus={!isProcessing && !agentRunning}
                 onReset={handleClearConversation}
@@ -1546,7 +1622,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     ? `Reply to the task agent about "${agentTaskRun.cardTitle || 'this task'}"...`
                     : isGhostMode
                     ? "👻 Ghost Mode - Messages won't be saved..."
-                    : "Ask anything..."
+                    : voiceMode
+                      ? "Voice mode active — click the mic to speak..."
+                      : "Ask anything..."
                 }
                 hasMessages={hasConversationContent}
                 toolsEnabled={toolsEnabled}
