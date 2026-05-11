@@ -222,6 +222,10 @@ seed().then(async () => {
       // ignore if already closed
     }
 
+    // Forcibly close all active HTTP connections so the port is released
+    // immediately instead of waiting for browser keep-alive sockets.
+    try { server.closeAllConnections(); } catch { /* ignore if unsupported */ }
+
     server.close(async () => {
       clearTimeout(forceExit);
       await flushLogs();
