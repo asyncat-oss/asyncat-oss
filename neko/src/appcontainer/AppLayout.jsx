@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
 import eventBus from '../utils/eventBus.js';
-import { useCommandCenter } from '../CommandCenter/CommandCenterContextEnhanced.jsx';
+import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import { useUnauthorizedError } from '../error/ErrorBoundary.jsx';
 import { initializeTheme, setupThemeListener } from '../auth/utils.js';
 import { loadKeyboardShortcuts } from '../utils/keyboardShortcutsUtils.js';

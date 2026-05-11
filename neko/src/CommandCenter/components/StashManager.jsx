@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, Save, Inbox, Trash2, ArrowUpFromLine } from 'lucide-react';
-import { gitApi } from '../commandCenterApi';
+import { gitApi } from '../api';
 
 export default function StashManager({ onRefresh }) {
   const [stashes, setStashes] = useState([]);

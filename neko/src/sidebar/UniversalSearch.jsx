@@ -10,7 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Search, X, FolderOpen, MessageSquare } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { chatApi } from '../CommandCenter/commandCenterApi';
+import { chatApi } from '../CommandCenter/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

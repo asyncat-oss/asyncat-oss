@@ -19,7 +19,7 @@ import cpp from 'highlight.js/lib/languages/cpp';
 import go from 'highlight.js/lib/languages/go';
 import rust from 'highlight.js/lib/languages/rust';
 import 'highlight.js/styles/github-dark-dimmed.css';
-import { filesApi } from '../CommandCenter/commandCenterApi';
+import { filesApi } from '../CommandCenter/api';
 import {
   BINARY_EXTS,
   basename,

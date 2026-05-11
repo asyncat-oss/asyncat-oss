@@ -8,7 +8,7 @@ import {
   Calendar, RefreshCw, CheckCircle2, XCircle, ChevronDown,
   ChevronRight, Zap, Timer, Repeat, Layers, Cloud, RotateCcw,
 } from 'lucide-react';
-import { schedulerApi, profilesApi } from '../CommandCenter/commandCenterApi';
+import { schedulerApi, profilesApi } from '../CommandCenter/api';
 import { aiProviderApi } from '../Settings/settingApi.js';
 
 // ── Schedule type helpers ─────────────────────────────────────────────────────

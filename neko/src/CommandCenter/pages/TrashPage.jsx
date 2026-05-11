@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { trashApi } from "./commandCenterApi";
-import eventBus from "../utils/eventBus.js";
+import { trashApi } from "../api";
+import eventBus from "../../utils/eventBus.js";
 import { Trash2, RotateCcw, MessageSquare, AlertTriangle } from "lucide-react";
 
 const TrashPage = () => {

@@ -4,8 +4,8 @@
 
 import { createContext, useState, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useWorkspace } from '../contexts/WorkspaceContext';
-import commandCenterApi from './commandCenterApi';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import commandCenterApi from '../api';
 
 const ActionTypes = {
   SET_MESSAGES: 'SET_MESSAGES',

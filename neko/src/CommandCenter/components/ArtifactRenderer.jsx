@@ -10,7 +10,7 @@ import {
   X, Maximize2, Copy, Check, FileDown,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from './BlockBasedMessageRenderer';
-import { agentApi } from '../../CommandCenter/commandCenterApi';
+import { agentApi } from '../api';
 
 // ── Type config ─────────────────────────────────────────────────────────────
 const TYPE_META = {

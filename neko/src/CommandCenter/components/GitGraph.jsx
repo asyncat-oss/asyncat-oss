@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
-import { gitApi } from '../commandCenterApi';
+import { gitApi } from '../api';
 
 const COL_WIDTH = 14;
 const ROW_HEIGHT = 32;

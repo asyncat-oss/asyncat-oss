@@ -1,34 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWorkspace } from '../contexts/WorkspaceContext';
-import eventBus from '../utils/eventBus.js';
-import { agentTaskRunsApi, chatApi, chatFoldersApi } from './commandCenterApi';
-import { useCommandCenter } from './CommandCenterContextEnhanced';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import eventBus from '../../utils/eventBus.js';
+import { agentTaskRunsApi, chatApi, chatFoldersApi } from '../api';
+import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
 import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X } from 'lucide-react';
 
-const getRelativeTime = (dateString) => {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '';
-  const now = new Date();
-  const diffH = Math.floor((now - date) / 3_600_000);
-  if (diffH < 1) return 'Just now';
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
-const cleanTaskAgentTitle = (task, run) => {
-  const taskTitle = String(task?.title || '').trim();
-  if (taskTitle) return taskTitle;
-
-  const firstLine = String(run?.goal || '').split('\n').find(Boolean) || '';
-  return firstLine
-    .replace(/^Work on task card\s+/i, '')
-    .replace(/\s+\([^)]+\)\.?$/, '')
-    .replace(/^"|"$/g, '')
-    .trim();
-};
+import { getRelativeTime, cleanTaskAgentTitle } from '../utils/conversationUtils.js';
 
 const ChatsPage = () => {
   const navigate = useNavigate();

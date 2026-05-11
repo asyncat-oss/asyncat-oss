@@ -7,7 +7,7 @@ import {
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
-import { extractReasoningFromText } from '../reasoningParser.js';
+import { extractReasoningFromText } from '../utils/reasoningParser.js';
 import ArtifactCard from './ArtifactRenderer';
 import { fileIconMeta } from '../../files/fileUtils.js';
 

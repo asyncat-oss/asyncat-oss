@@ -6,7 +6,7 @@ import {
   BookOpen, Cpu, ShieldAlert,
   Bot, Save, Edit2, X, Check, BookMarked, Trash2,
 } from 'lucide-react';
-import { agentApi } from '../CommandCenter/commandCenterApi';
+import { agentApi } from '../CommandCenter/api';
 
 const PERM_META = {
   safe:      { label: 'Safe',      dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' },

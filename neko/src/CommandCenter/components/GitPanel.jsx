@@ -5,7 +5,7 @@ import {
   GitCommitHorizontal, GitPullRequestArrow, GitPullRequestDraft, Loader2,
   Paperclip, Plus, RefreshCw, Save, Upload, X,
 } from 'lucide-react';
-import { gitApi } from '../commandCenterApi';
+import { gitApi } from '../api';
 import Portal from '../../components/Portal';
 import { basename, fileIconMeta } from '../../files/fileUtils.js';
 import GitGraph from './GitGraph';

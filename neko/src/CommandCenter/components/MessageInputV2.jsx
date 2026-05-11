@@ -5,7 +5,7 @@ import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi } from "../../Settings/settingApi.js";
-import { profilesApi, filesApi } from "../commandCenterApi.js";
+import { profilesApi, filesApi } from "../api";
 import { dirname, basename, fileIconMeta } from "../../files/fileUtils.js";
 
 function getAgentTrigger(value, cursor) {

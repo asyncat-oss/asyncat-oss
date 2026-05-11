@@ -30,7 +30,7 @@ import {
 import { useCardActions } from "../../hooks/useCardActions";
 import { useColumnContext } from "../../context/viewContexts";
 import { useCardContext } from "../../context/viewContexts";
-import { agentTaskRunsApi, profilesApi } from "../../../CommandCenter/commandCenterApi";
+import { agentTaskRunsApi, profilesApi } from "../../../CommandCenter/api";
 
 // Import needed components
 import CardSubtasksSection from "../subtask/CardSubtasksSection";

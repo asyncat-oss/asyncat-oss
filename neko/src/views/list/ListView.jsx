@@ -5,7 +5,7 @@ import { useCardContext } from "../../views/context/viewContexts";
 import ListViewFilters from "./ListViewFilters";
 import ListViewTable from "./ListViewTable";
 import AddCardModal from "../kanban/features/cards/AddCardModal";
-import { agentTaskRunsApi, profilesApi } from "../../CommandCenter/commandCenterApi";
+import { agentTaskRunsApi, profilesApi } from "../../CommandCenter/api";
 
 const ListView = ({ selectedProject }) => {
 	const navigate = useNavigate();

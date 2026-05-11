@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ProjectGrid from "./views/ProjectGrid";
 import { useWorkspace } from "../contexts/WorkspaceContext";
-import { projectFoldersApi } from "../CommandCenter/commandCenterApi";
+import { projectFoldersApi } from "../CommandCenter/api";
 import eventBus from "../utils/eventBus.js";
 
 const soraFontBase = "font-sora";

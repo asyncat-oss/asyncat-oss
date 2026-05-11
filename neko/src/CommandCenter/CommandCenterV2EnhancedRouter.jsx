@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
-import { useCommandCenter } from './CommandCenterContextEnhanced';
+import { useCommandCenter } from './context/CommandCenterContextEnhanced';
 import CommandCenterV2EnhancedOriginal from "./CommandCenterV2Enhanced.jsx";
 
 const CommandCenterV2Enhanced = () => {

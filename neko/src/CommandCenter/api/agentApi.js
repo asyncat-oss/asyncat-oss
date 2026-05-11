@@ -1,0 +1,269 @@
+import { API_BASE_URL, apiRequest, handleResponse } from './client.js';
+import authService from '../../services/authService.js';
+import eventBus from '../../utils/eventBus.js';
+
+export const agentApi = {
+  runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null, continueSessionId = null, opts = {}) {
+    const workspaceId = (() => {
+      try {
+        const savedWorkspace = sessionStorage.getItem('currentWorkspace');
+        if (savedWorkspace) {
+          const workspace = JSON.parse(savedWorkspace);
+          return workspace?.id || null;
+        }
+        return window.__CURRENT_WORKSPACE_ID__ || null;
+      } catch { return null; }
+    })();
+    const token = await authService.getSession();
+
+    const response = await fetch(`${API_BASE_URL}/agent/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token?.access_token}`
+      },
+      signal,
+      body: JSON.stringify({
+        goal, conversationHistory, workingDir, maxRounds, workspaceId, continueSessionId,
+        autoApprove: opts.autoApprove || false,
+        preApprovedTools: opts.preApprovedTools || [],
+        profileId: opts.profileId || null,
+        agentMentions: opts.agentMentions || [],
+        fileAttachments: opts.fileAttachments || [],
+        enableTools: opts.enableTools !== false,
+        reasoningEffort: opts.reasoningEffort || 'auto',
+      })
+    });
+
+    if (!response.ok) {
+      try {
+        const errData = await response.json();
+        const err = new Error(errData.message || errData.error || `Agent failed: ${response.statusText}`);
+        throw err;
+      } catch (parseErr) {
+        if (parseErr.message && !parseErr.message.startsWith('Agent failed')) throw parseErr;
+        throw new Error(`Agent failed: ${response.statusText}`);
+      }
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const parsed = JSON.parse(line.slice(6));
+              if (parsed.type === 'done') { yield parsed; return; }
+              yield parsed;
+            } catch (e) {
+              console.warn('Failed to parse agent SSE:', e);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
+  getSessions: async (limit = 30) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions?limit=${limit}`);
+  },
+
+  getSession: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}`);
+  },
+
+  deleteSession: async (sessionId) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token?.access_token}` },
+    });
+    return res.json();
+  },
+
+  renameSession: async (sessionId, goal) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token?.access_token}` },
+      body: JSON.stringify({ goal }),
+    });
+    return res.json();
+  },
+
+  getSessionAudit: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/audit`);
+  },
+
+  getSessionChangesState: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/changes/state`);
+  },
+
+  getHealth: async (limit = 80) => {
+    return await apiRequest(`${API_BASE_URL}/agent/health?limit=${encodeURIComponent(String(limit))}`);
+  },
+
+  revertSession: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/revert`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  respondPermission: async (requestId, decision, reason = null) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/permissions/${requestId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token?.access_token}`
+      },
+      body: JSON.stringify({ decision, reason })
+    });
+    return await handleResponse(res);
+  },
+
+  respondAskUser: async (requestId, answer) => {
+    const token = await authService.getSession();
+    const res = await fetch(`${API_BASE_URL}/agent/ask/${requestId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token?.access_token}`
+      },
+      body: JSON.stringify({ answer })
+    });
+    return await handleResponse(res);
+  },
+
+  loadEntry: async (entryPath = '.') => {
+    const params = new URLSearchParams({ rootId: 'workspace', path: entryPath });
+    return await apiRequest(`${API_BASE_URL}/files/entry?${params}`);
+  },
+
+  getTools: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/tools`);
+  },
+
+  getSkills: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills`);
+  },
+
+  getSkill: async (name) => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills/${encodeURIComponent(name)}`);
+  },
+
+  getSoul: async (name = 'default') => {
+    return await apiRequest(`${API_BASE_URL}/agent/soul?name=${encodeURIComponent(name)}`);
+  },
+
+  updateSoul: async (content, name = 'default') => {
+    return await apiRequest(`${API_BASE_URL}/agent/soul`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content }),
+    });
+  },
+
+  listSouls: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/souls`);
+  },
+
+  getMemories: async ({ q = '', kind = 'all', limit = 50 } = {}) => {
+    const params = new URLSearchParams({ kind, limit: String(limit) });
+    if (q) params.set('q', q);
+    return await apiRequest(`${API_BASE_URL}/agent/memory?${params}`);
+  },
+
+  deleteMemory: async (key) => {
+    return await apiRequest(`${API_BASE_URL}/agent/memory/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  listArtifacts: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/artifacts`);
+  },
+
+  getArtifact: async (filename) => {
+    return await apiRequest(`${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}`);
+  },
+
+  getArtifactDownloadUrl: (filename) => {
+    return `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}?download=1`;
+  },
+
+  deleteArtifact: async (filename) => {
+    return await apiRequest(`${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+export const agentTaskRunsApi = {
+  list: async ({ projectId = null, cardId = null } = {}) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set('projectId', projectId);
+    if (cardId) params.set('cardId', cardId);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs${suffix}`);
+  },
+
+  create: async ({ cardId, profileId = null, goal = null }) => {
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs`, {
+      method: 'POST',
+      body: JSON.stringify({ cardId, profileId, goal }),
+    });
+  },
+
+  get: async (runId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs/${encodeURIComponent(runId)}`);
+  },
+
+  cancel: async (runId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/task-runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+};
+
+export const profilesApi = {
+  listProfiles: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles`);
+  },
+
+  createProfile: async (data) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateProfile: async (id, data) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteProfile: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+};

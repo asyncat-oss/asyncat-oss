@@ -9,7 +9,7 @@ import {
   Zap, RefreshCw, Search, ShieldCheck, ShieldAlert, Wrench,
   FolderOpen, Sparkles, SlidersHorizontal,
 } from 'lucide-react';
-import { profilesApi, agentApi } from '../CommandCenter/commandCenterApi';
+import { profilesApi, agentApi } from '../CommandCenter/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

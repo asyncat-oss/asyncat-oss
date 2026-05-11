@@ -21,7 +21,7 @@ import {
 
 import UniversalSearch from "./UniversalSearch";
 import { useWorkspace } from "../contexts/WorkspaceContext";
-import { useCommandCenter } from "../CommandCenter/CommandCenterContextEnhanced";
+import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import eventBus from "../utils/eventBus.js";
 

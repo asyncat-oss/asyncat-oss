@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronRight, X, Loader2, AlertCircle,
   RefreshCw, RotateCcw, CheckCircle2, ShieldAlert,
 } from 'lucide-react';
-import { agentApi } from '../../CommandCenter/commandCenterApi';
+import { agentApi } from '../api';
 import Portal from '../../components/Portal';
 
 const FILE_WRITE_TOOLS  = new Set(['write_file', 'create_file']);
