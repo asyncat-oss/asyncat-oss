@@ -868,6 +868,101 @@ function SkillsLoadedEvent({ data }) {
   );
 }
 
+// Token usage meter — compact inline indicator
+function TokenUsageEvent({ data }) {
+  if (!data?.totalTokens) return null;
+  const total = data.totalTokens;
+  const input = data.inputTokens || 0;
+  const output = data.outputTokens || 0;
+  const maxTokens = data.contextWindow || (data.isLocal ? 8000 : 128000);
+  const pct = Math.min(100, Math.round((total / maxTokens) * 100));
+  const isHigh = pct > 70;
+  const isCritical = pct > 90;
+  const speed = data.tokensPerSecond;
+  const isEstimated = data.estimated;
+
+  return (
+    <FeedFrame className="mb-1">
+      <div className="flex items-center gap-2 py-0.5">
+        <Zap className={`w-3 h-3 flex-shrink-0 ${isCritical ? 'text-red-400' : isHigh ? 'text-amber-400' : 'text-gray-400 dark:text-gray-600'}`} />
+        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+          <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-600">
+            {isEstimated ? '~' : ''}{(total / 1000).toFixed(1)}k tokens ({(input / 1000).toFixed(1)}k in / {(output / 1000).toFixed(1)}k out)
+          </span>
+          {speed > 0 && (
+            <span className="text-[10px] tabular-nums text-indigo-400 dark:text-indigo-500">
+              {speed} tok/s
+            </span>
+          )}
+          <div className="flex-1 h-1 max-w-[80px] bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${isCritical ? 'bg-red-400' : isHigh ? 'bg-amber-400' : 'bg-indigo-400'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="text-[9px] tabular-nums text-gray-300 dark:text-gray-700">{pct}%</span>
+          {isEstimated && (
+            <span className="text-[9px] text-gray-300 dark:text-gray-700 italic">est.</span>
+          )}
+        </div>
+      </div>
+    </FeedFrame>
+  );
+}
+
+// Compaction notification — shown when context window was compressed
+function CompactionEvent({ data }) {
+  const dropped = data?.droppedMessages || 0;
+  const before = data?.tokensBefore ? (data.tokensBefore / 1000).toFixed(1) : '?';
+  const after = data?.tokensAfter ? (data.tokensAfter / 1000).toFixed(1) : '?';
+
+  return (
+    <FeedFrame className="mb-2">
+      <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/30 dark:border-amber-800/20">
+        <RotateCcw className="w-3 h-3 text-amber-500 dark:text-amber-400 flex-shrink-0" />
+        <span className="text-[11px] text-amber-600 dark:text-amber-400">
+          Context compacted: {dropped} messages summarized ({before}k → {after}k tokens)
+        </span>
+      </div>
+    </FeedFrame>
+  );
+}
+
+// Correction learned notification
+function CorrectionLearnedEvent({ data }) {
+  return (
+    <FeedFrame className="mb-2">
+      <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-violet-50/50 dark:bg-violet-900/10 border border-violet-200/30 dark:border-violet-800/20">
+        <Brain className="w-3 h-3 text-violet-500 dark:text-violet-400 flex-shrink-0" />
+        <span className="text-[11px] text-violet-600 dark:text-violet-400">
+          Correction stored — will remember for future tasks
+        </span>
+      </div>
+    </FeedFrame>
+  );
+}
+
+// Skill auto-discovery notification
+function SkillSuggestedEvent({ data }) {
+  return (
+    <FeedFrame className="mb-2">
+      <div className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/20">
+        <Zap className="w-3 h-3 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
+        <div className="min-w-0 flex-1">
+          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+            Skill auto-learned: {data?.skillName || 'unnamed'}
+          </span>
+          {data?.summary && (
+            <p className="text-[10px] text-emerald-500/70 dark:text-emerald-500/50 truncate mt-0.5">
+              Pattern: {data.summary}
+            </p>
+          )}
+        </div>
+      </div>
+    </FeedFrame>
+  );
+}
+
 // Live streaming preview — shown while LLM is generating
 function StreamingPreview({ text }) {
   if (!text?.trim()) return null;
@@ -951,7 +1046,26 @@ export function CurrentPlanPanel({ data, isRunning, className = '' }) {
           {isStaleActivePlan && (
             <span className="text-[10px] text-amber-500 dark:text-amber-400">Stopped</span>
           )}
+          {total > 0 && (
+            <span className="ml-auto text-[10px] tabular-nums font-medium text-indigo-500 dark:text-indigo-400">
+              {Math.round((completed / total) * 100)}%
+            </span>
+          )}
         </div>
+        {/* Progress bar */}
+        {total > 0 && (
+          <div className="mb-2.5 h-1.5 w-full overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-900/40 midnight:bg-indigo-900/40">
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{
+                width: `${Math.round((completed / total) * 100)}%`,
+                background: completed === total
+                  ? 'linear-gradient(90deg, #10b981, #34d399)'
+                  : 'linear-gradient(90deg, #6366f1, #818cf8)',
+              }}
+            />
+          </div>
+        )}
         <ul className="space-y-1">
           {plan.map((item, i) => (
             <li key={item.id || i} className="flex items-start gap-2 text-[12px] leading-snug">
@@ -1074,6 +1188,18 @@ export default function AgentRunFeed({ events, isRunning, streamingText, runStar
         renderedEvents.push(<SkillsLoadedEvent key={i} data={ev.data} />);
         break;
       case 'plan_update':
+        break;
+      case 'usage_update':
+        // Token usage is shown in the input toolbar — don't duplicate in the feed
+        break;
+      case 'compaction':
+        renderedEvents.push(<CompactionEvent key={i} data={ev.data} />);
+        break;
+      case 'correction_learned':
+        renderedEvents.push(<CorrectionLearnedEvent key={i} data={ev.data} />);
+        break;
+      case 'skill_suggested':
+        renderedEvents.push(<SkillSuggestedEvent key={i} data={ev.data} />);
         break;
       default:
         break;

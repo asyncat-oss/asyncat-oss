@@ -22,6 +22,7 @@ import { listMemories, searchMemories } from './tools/memoryTools.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
+import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
 import db from '../db/client.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
@@ -169,8 +170,22 @@ export class AgentRuntime {
     this.abortSignal = opts.abortSignal || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-    // Local models handle much smaller contexts than cloud models — compact sooner.
-    const defaultBudget = this.isLocal ? 6000 : 24000;
+    // Wire BasalGanglia events (skill auto-discovery) to the runtime event stream
+    basalGanglia.onEvent = (event) => this.onEvent(event);
+
+    // ── Compaction budget ──────────────────────────────────────────────────
+    // Use the model's real context window from the existing resolver system.
+    // Priority: user settings > model metadata > model registry > provider preset > fallback
+    const resolvedCtx = this._resolveContextWindow();
+    const modelContextWindow = resolvedCtx.contextWindow;
+    const defaultBudget = this.isLocal
+      ? Math.min(modelContextWindow * 0.75, opts.tokenBudget ?? 6000)  // local: 75% or user-set
+      : Math.floor(modelContextWindow * 0.5);  // cloud: 50% of context
+
+    this.modelContextWindow = modelContextWindow; // expose for usage events
+    this.contextWindowSource = resolvedCtx.source;
+    this.contextWindowConfidence = resolvedCtx.confidence;
+
     this.compactor = opts.compactor || new Compactor({
       tokenBudget: opts.tokenBudget ?? defaultBudget,
       keepLastMessages: opts.keepLastMessages ?? (this.isLocal ? 6 : 10),
@@ -294,6 +309,11 @@ export class AgentRuntime {
       soul,
     });
 
+    // Auto-detect and store corrections from user's latest message in continued conversations
+    if (conversationHistory.length > 0) {
+      this._extractCorrections(goal, conversationHistory);
+    }
+
     // Build conversation thread (filter out UI system messages)
     const validHistory = conversationHistory.filter(m => m.role === 'user' || m.role === 'assistant');
     const historyPrefix = validHistory.slice(-8).map(m => ({ role: m.role, content: m.content }));
@@ -371,20 +391,35 @@ export class AgentRuntime {
         try {
           this._throwIfAborted();
           const promptTokens = this._estimateTokens(systemPrompt) + this._estimateTokens(JSON.stringify(messages));
+          const llmCallStart = Date.now();
           const result = await this._callLLM(systemPrompt, messages, {
             forceToolName: this._shouldPrimePlan(goal, round) ? 'todo_write' : null,
           });
+          const llmCallDurationMs = Date.now() - llmCallStart;
           responseText = result.text;
           apiToolCalls = result.toolCalls;
           streamedReasoning = result.reasoning || '';
+          const hasRealUsage = Boolean(result.usage?.prompt_tokens || result.usage?.completion_tokens);
           const inputTokens = result.usage?.prompt_tokens || promptTokens;
           const outputTokens = result.usage?.completion_tokens || this._estimateTokens(responseText);
           this.usage.inputTokens += inputTokens;
           this.usage.outputTokens += outputTokens;
           this.usage.totalTokens = this.usage.inputTokens + this.usage.outputTokens;
+          // Token generation speed (tokens/sec)
+          const tokensPerSecond = llmCallDurationMs > 0 ? Math.round((outputTokens / llmCallDurationMs) * 1000) : null;
           this.onEvent({
             type: 'usage_update',
-            data: { ...this.usage, round, model: this.model, isLocal: this.isLocal },
+            data: {
+              ...this.usage,
+              round,
+              model: this.model,
+              isLocal: this.isLocal,
+              estimated: !hasRealUsage,
+              tokensPerSecond,
+              contextWindow: this.modelContextWindow,
+              contextWindowSource: this.contextWindowSource,
+              contextWindowConfidence: this.contextWindowConfidence,
+            },
           });
           llmSuccess = true;
           break;
@@ -1184,6 +1219,25 @@ export class AgentRuntime {
     return diff.length > 12000 ? `${diff.slice(0, 12000)}\n... [diff truncated]` : diff;
   }
 
+  /**
+   * Resolve the model's context window using the existing modelContextResolver.
+   * Uses providerInfo (already passed from clientFactory) for accurate lookup.
+   */
+  _resolveContextWindow() {
+    try {
+      const providerId = this.providerInfo?.providerId || '';
+      const settings = this.providerInfo?.settings || {};
+      return resolveContextWindow({
+        providerId,
+        model: this.model,
+        settings,
+        fallback: this.isLocal ? 8192 : 128000,
+      });
+    } catch {
+      return { contextWindow: this.isLocal ? 8192 : 128000, source: 'fallback', confidence: 'conservative' };
+    }
+  }
+
   _estimateTokens(value) {
     return Math.ceil(String(value || '').length / 4);
   }
@@ -1429,6 +1483,85 @@ export class AgentRuntime {
 
     lines.push('This is a loop guard, not a user stop.');
     return lines.join('\n\n');
+  }
+
+  /**
+   * Detect and store corrections from the user's latest message.
+   * Looks for patterns like "no", "wrong", "actually", "instead", "don't".
+   * Stores as high-importance feedback memory for self-improvement.
+   */
+  _extractCorrections(goal, conversationHistory) {
+    try {
+      const userMessages = conversationHistory.filter(m => m.role === 'user');
+      if (userMessages.length === 0) return;
+
+      const latest = userMessages[userMessages.length - 1];
+      const text = String(latest.content || '').trim();
+      if (text.length < 10) return;
+
+      // Correction patterns — only match if they appear at the start of the message
+      // or as clear correction indicators
+      const correctionPatterns = [
+        /^no[,.\s!]/i,
+        /^wrong/i,
+        /^that'?s (?:not|wrong|incorrect)/i,
+        /^actually[,\s]/i,
+        /\bdon'?t (?:use|do|make)\b/i,
+        /\binstead (?:of|use)\b/i,
+        /\bnot [\w]+ (?:but|use|try)\b/i,
+        /\bwrong (?:approach|way|method)\b/i,
+        /\bshould(?:n'?t| not) (?:use|do|be)\b/i,
+        /\bplease (?:fix|change|update|correct)\b/i,
+        /\bI (?:said|meant|want(?:ed)?)\b/i,
+      ];
+
+      const isCorrection = correctionPatterns.some(p => p.test(text));
+      if (!isCorrection) return;
+
+      // Get the last assistant message for context
+      const assistantMessages = conversationHistory.filter(m => m.role === 'assistant');
+      const lastAssistant = assistantMessages.length > 0
+        ? String(assistantMessages[assistantMessages.length - 1].content || '').slice(0, 200)
+        : '';
+
+      const correctionContent = [
+        `User correction: ${text.slice(0, 500)}`,
+        lastAssistant ? `Context (agent said): ${lastAssistant}` : '',
+        `Goal was: ${goal.slice(0, 100)}`,
+      ].filter(Boolean).join('\n');
+
+      const key = `correction_${Date.now().toString(36)}`;
+
+      // Check we haven't saved too many corrections recently
+      const recentCorrections = db.prepare(
+        "SELECT COUNT(*) as cnt FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND memory_type = 'feedback' AND created_at > datetime('now', '-1 hour')"
+      ).get(this.userId, this.workspaceId);
+
+      if ((recentCorrections?.cnt || 0) >= 10) return; // Rate limit
+
+      db.prepare(
+        'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(
+        randomUUID(),
+        this.userId,
+        this.workspaceId,
+        'feedback',
+        key,
+        correctionContent,
+        JSON.stringify(['correction', 'auto-extracted']),
+        0.9 // High importance so it surfaces in future runs
+      );
+
+      this.onEvent({
+        type: 'correction_learned',
+        data: { key, preview: text.slice(0, 100) },
+      });
+
+      console.log(`[agent] Auto-extracted correction: ${key}`);
+    } catch (err) {
+      // Non-critical — silently ignore errors
+      console.warn('[agent] Correction extraction failed:', err.message);
+    }
   }
 
   _loadMemories(goal) {

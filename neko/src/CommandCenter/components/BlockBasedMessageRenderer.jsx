@@ -1,5 +1,5 @@
 // BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
-import { useMemo, useState, useCallback, memo, useEffect } from 'react';
+import { useMemo, useState, useCallback, memo, useEffect, useRef } from 'react';
 import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2 } from 'lucide-react';
 import { tokenTracker } from './LocalModelStats';
 import { fileIconMeta } from '../../files/fileUtils.js';
@@ -7,6 +7,8 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 // mhchem extension — enables \ce{H2O}, \ce{CO2}, chemical equations in KaTeX
 import 'katex/contrib/mhchem/mhchem.js';
+import mermaid from 'mermaid';
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
 import typescript from 'highlight.js/lib/languages/typescript';
@@ -675,6 +677,22 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       );
 
     case 'code':
+      // Mermaid diagrams — render as interactive SVG
+      if (block.properties?.language?.toLowerCase() === 'mermaid') {
+        return <MermaidBlock content={block.content} />;
+      }
+      // Diff blocks — render with colored +/- lines
+      if (block.properties?.language?.toLowerCase() === 'diff') {
+        return <DiffBlock content={block.content} />;
+      }
+      // Chart blocks — render as interactive Recharts
+      if (block.properties?.language?.toLowerCase() === 'chart') {
+        return <ChartBlock content={block.content} />;
+      }
+      // HTML blocks — render as live sandboxed preview
+      if (block.properties?.language?.toLowerCase() === 'html') {
+        return <HtmlPreviewBlock content={block.content} />;
+      }
       return (
         <CodeBlock content={block.content} language={block.properties?.language} />
       );
@@ -730,6 +748,15 @@ export const BlockRenderer = ({ block, onTermClick }) => {
             {renderContent(block.content)}
           </div>
         </div>
+      );
+
+    case 'details':
+      return (
+        <CollapsibleBlock
+          summary={block.properties?.summary || 'Details'}
+          content={block.content}
+          onTermClick={onTermClick}
+        />
       );
 
     case 'text':
@@ -866,6 +893,395 @@ const CodeBlock = ({ content, language = 'text' }) => {
   );
 };
 
+// ─── Mermaid diagram block ──────────────────────────────────────────────────
+let mermaidInitialized = false;
+
+const MermaidBlock = ({ content }) => {
+  const containerRef = useRef(null);
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState(null);
+  const [showSource, setShowSource] = useState(false);
+  const idRef = useRef(`mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
+  useEffect(() => {
+    if (!content?.trim()) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        if (!mermaidInitialized) {
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+            securityLevel: 'loose',
+            fontFamily: 'inherit',
+          });
+          mermaidInitialized = true;
+        }
+        const { svg: rendered } = await mermaid.render(idRef.current, content.trim());
+        if (!cancelled) setSvg(rendered);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || 'Failed to render diagram');
+          setShowSource(true);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [content]);
+
+  if (error && showSource) {
+    return <CodeBlock content={content} language="mermaid" />;
+  }
+
+  return (
+    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
+        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 tracking-wide uppercase">
+          Diagram
+        </span>
+        <button
+          onClick={() => setShowSource(v => !v)}
+          className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        >
+          {showSource ? 'Show diagram' : 'View source'}
+        </button>
+      </div>
+      {showSource ? (
+        <pre className="p-5 overflow-x-auto bg-gray-50 dark:bg-gray-950 midnight:bg-slate-950 text-[13px] font-mono leading-relaxed text-gray-700 dark:text-gray-300">
+          {content}
+        </pre>
+      ) : svg ? (
+        <div
+          ref={containerRef}
+          className="p-4 bg-white dark:bg-gray-950 midnight:bg-slate-950 overflow-x-auto flex justify-center"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      ) : (
+        <div className="p-8 flex items-center justify-center text-xs text-gray-400">
+          <span className="flex gap-0.5">
+            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </span>
+          <span className="ml-2">Rendering diagram…</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Diff block with colored +/- lines ──────────────────────────────────────
+const DiffBlock = ({ content }) => {
+  const [copyStatus, setCopyStatus] = useState(null);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopyStatus('copied');
+      setTimeout(() => setCopyStatus(null), 2000);
+    } catch {
+      setCopyStatus('failed');
+      setTimeout(() => setCopyStatus(null), 2000);
+    }
+  };
+
+  const lines = (content || '').split('\n');
+
+  return (
+    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
+        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">Diff</span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800 rounded transition-colors"
+        >
+          {copyStatus === 'copied' ? (
+            <><Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" /><span className="text-green-600 dark:text-green-500">Copied!</span></>
+          ) : (
+            <><Copy className="w-3.5 h-3.5" /> Copy</>
+          )}
+        </button>
+      </div>
+      <pre className="p-5 overflow-x-auto bg-gray-50 dark:bg-gray-950 midnight:bg-slate-950 text-[13px] font-mono leading-relaxed">
+        {lines.map((line, i) => {
+          let className = 'text-gray-700 dark:text-gray-300';
+          let bgClass = '';
+          if (line.startsWith('+') && !line.startsWith('+++')) {
+            className = 'text-emerald-700 dark:text-emerald-300';
+            bgClass = 'bg-emerald-50 dark:bg-emerald-900/20';
+          } else if (line.startsWith('-') && !line.startsWith('---')) {
+            className = 'text-red-700 dark:text-red-300';
+            bgClass = 'bg-red-50 dark:bg-red-900/20';
+          } else if (line.startsWith('@@')) {
+            className = 'text-sky-600 dark:text-sky-300 font-medium';
+            bgClass = 'bg-sky-50/50 dark:bg-sky-900/10';
+          } else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) {
+            className = 'text-gray-500 dark:text-gray-500 italic';
+          }
+          return (
+            <div key={i} className={`px-1 -mx-1 ${bgClass}`}>
+              <span className={className}>{line || ' '}</span>
+            </div>
+          );
+        })}
+      </pre>
+    </div>
+  );
+};
+
+// ─── Interactive chart block (Recharts) ─────────────────────────────────────
+const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#d946ef', '#0ea5e9'];
+
+const ChartBlock = ({ content }) => {
+  const [showData, setShowData] = useState(false);
+
+  const config = useMemo(() => {
+    try {
+      const parsed = JSON.parse(content);
+      if (!parsed?.data || !Array.isArray(parsed.data)) return null;
+      return {
+        type: parsed.type || 'bar',
+        data: parsed.data,
+        xKey: parsed.xKey || parsed.x || Object.keys(parsed.data[0] || {})[0] || 'name',
+        yKeys: parsed.yKeys || parsed.y || Object.keys(parsed.data[0] || {}).filter(k => k !== (parsed.xKey || parsed.x || Object.keys(parsed.data[0] || {})[0])),
+        title: parsed.title || '',
+      };
+    } catch {
+      return null;
+    }
+  }, [content]);
+
+  if (!config) {
+    return <CodeBlock content={content} language="json" />;
+  }
+
+  const renderChart = () => {
+    const { type, data, xKey, yKeys } = config;
+
+    const commonProps = {
+      data,
+      margin: { top: 5, right: 20, left: 0, bottom: 5 },
+    };
+
+    const axes = (
+      <>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+        <XAxis dataKey={xKey} tick={{ fontSize: 11 }} stroke="#9ca3af" />
+        <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: 'rgba(17, 24, 39, 0.95)',
+            border: '1px solid #374151',
+            borderRadius: '8px',
+            fontSize: '12px',
+            color: '#f3f4f6',
+          }}
+        />
+        {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px' }} />}
+      </>
+    );
+
+    if (type === 'line') {
+      return (
+        <LineChart {...commonProps}>
+          {axes}
+          {yKeys.map((key, i) => (
+            <Line key={key} type="monotone" dataKey={key} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+          ))}
+        </LineChart>
+      );
+    }
+
+    if (type === 'area') {
+      return (
+        <AreaChart {...commonProps}>
+          {axes}
+          {yKeys.map((key, i) => (
+            <Area key={key} type="monotone" dataKey={key} stroke={CHART_COLORS[i % CHART_COLORS.length]} fill={CHART_COLORS[i % CHART_COLORS.length]} fillOpacity={0.15} strokeWidth={2} />
+          ))}
+        </AreaChart>
+      );
+    }
+
+    if (type === 'pie') {
+      const valueKey = yKeys[0] || 'value';
+      return (
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey={valueKey}
+            nameKey={xKey}
+            cx="50%" cy="50%"
+            outerRadius={80}
+            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            labelLine={{ stroke: '#9ca3af' }}
+          >
+            {data.map((_, i) => (
+              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip
+            contentStyle={{
+              backgroundColor: 'rgba(17, 24, 39, 0.95)',
+              border: '1px solid #374151',
+              borderRadius: '8px',
+              fontSize: '12px',
+              color: '#f3f4f6',
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: '11px' }} />
+        </PieChart>
+      );
+    }
+
+    // Default: bar chart
+    return (
+      <BarChart {...commonProps}>
+        {axes}
+        {yKeys.map((key, i) => (
+          <Bar key={key} dataKey={key} fill={CHART_COLORS[i % CHART_COLORS.length]} radius={[4, 4, 0, 0]} />
+        ))}
+      </BarChart>
+    );
+  };
+
+  return (
+    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">
+            {config.type === 'pie' ? 'Pie Chart' : config.type === 'line' ? 'Line Chart' : config.type === 'area' ? 'Area Chart' : 'Bar Chart'}
+          </span>
+          {config.title && (
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">— {config.title}</span>
+          )}
+        </div>
+        <button
+          onClick={() => setShowData(v => !v)}
+          className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        >
+          {showData ? 'Show chart' : 'View data'}
+        </button>
+      </div>
+      {showData ? (
+        <pre className="p-4 overflow-x-auto bg-gray-50 dark:bg-gray-950 text-[12px] font-mono text-gray-600 dark:text-gray-400">
+          {JSON.stringify(config.data, null, 2)}
+        </pre>
+      ) : (
+        <div className="p-4 bg-white dark:bg-gray-950 midnight:bg-slate-950">
+          <ResponsiveContainer width="100%" height={280}>
+            {renderChart()}
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Collapsible details block ──────────────────────────────────────────────
+const CollapsibleBlock = ({ summary, content, onTermClick }) => {
+  const [open, setOpen] = useState(false);
+
+  // Parse the inner content as blocks so formatting is preserved
+  const innerBlocks = useMemo(() => {
+    if (!content?.trim()) return [];
+    // Lazy import: parseAIResponseToBlocks is defined below, but hoisted
+    try { return parseAIResponseToBlocks(content); } catch { return []; }
+  }, [content]);
+
+  return (
+    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 w-full px-4 py-3 text-left bg-gray-50 dark:bg-gray-900 midnight:bg-slate-900 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 transition-colors"
+      >
+        <svg
+          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">
+          {summary}
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-950">
+          <div className="space-y-1">
+            {innerBlocks.map((block, i) => (
+              <BlockRenderer key={`details-${i}`} block={block} onTermClick={onTermClick} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── HTML Preview block (sandboxed iframe) ──────────────────────────────────
+const HtmlPreviewBlock = ({ content }) => {
+  const [showCode, setShowCode] = useState(false);
+  const [copyStatus, setCopyStatus] = useState(null);
+
+  const blobUrl = useMemo(() => {
+    if (!content) return null;
+    return URL.createObjectURL(new Blob([content], { type: 'text/html' }));
+  }, [content]);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopyStatus('copied');
+      setTimeout(() => setCopyStatus(null), 2000);
+    } catch {
+      setCopyStatus('failed');
+      setTimeout(() => setCopyStatus(null), 2000);
+    }
+  };
+
+  return (
+    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
+        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">
+          HTML Preview
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          >
+            {copyStatus === 'copied' ? (
+              <><Check className="w-3 h-3 text-green-500" /> Copied</>
+            ) : (
+              <><Copy className="w-3 h-3" /> Copy</>
+            )}
+          </button>
+          <button
+            onClick={() => setShowCode(v => !v)}
+            className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          >
+            {showCode ? 'Show preview' : 'View code'}
+          </button>
+        </div>
+      </div>
+      {showCode ? (
+        <CodeBlock content={content} language="html" />
+      ) : (
+        <div className="bg-white dark:bg-gray-950 midnight:bg-slate-950">
+          <iframe
+            src={blobUrl}
+            title="HTML Preview"
+            className="w-full h-64 border-0"
+            sandbox="allow-scripts"
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Block types from the notes system
 const BlockType = {
   TEXT: 'text',
@@ -879,6 +1295,8 @@ const BlockType = {
   TABLE: 'table',
   CODE: 'code',
   MATH: 'math',
+  CHART: 'chart',
+  DETAILS: 'details',
   DIVIDER: 'divider',
   VIDEO: 'video',
   AUDIO: 'audio',
@@ -921,6 +1339,9 @@ export const parseAIResponseToBlocks = (content) => {
   let tableRows = [];
   let inMathBlock = false;
   let mathContent = [];
+  let inDetailsBlock = false;
+  let detailsSummary = '';
+  let detailsContent = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -972,6 +1393,36 @@ export const parseAIResponseToBlocks = (content) => {
         content: trimmed.slice(2, -2).trim(),
         properties: {}
       });
+      continue;
+    }
+    // Handle <details> blocks
+    if (!inCodeBlock && !inMathBlock && /^<details\b/i.test(trimmed)) {
+      if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
+      inDetailsBlock = true;
+      detailsContent = [];
+      const summaryMatch = trimmed.match(/<summary>(.*?)<\/summary>/i);
+      detailsSummary = summaryMatch ? summaryMatch[1].trim() : 'Details';
+      continue;
+    }
+    if (inDetailsBlock && !inCodeBlock) {
+      if (/^<summary>(.*?)<\/summary>/i.test(trimmed)) {
+        const m = trimmed.match(/<summary>(.*?)<\/summary>/i);
+        detailsSummary = m ? m[1].trim() : 'Details';
+        continue;
+      }
+      if (/^<\/details>/i.test(trimmed)) {
+        blocks.push({
+          id: createId(),
+          type: BlockType.DETAILS,
+          content: detailsContent.join('\n').trim(),
+          properties: { summary: detailsSummary }
+        });
+        inDetailsBlock = false;
+        detailsSummary = '';
+        detailsContent = [];
+        continue;
+      }
+      detailsContent.push(line);
       continue;
     }
 

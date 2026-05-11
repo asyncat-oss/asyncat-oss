@@ -732,6 +732,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const agentTaskRunStatus = getTaskRunDisplayStatus(agentTaskRun);
   const agentConversationHistory = currentRun.conversationHistory || [];
   const agentStreamingText = currentRun.streamingText || '';
+  // Extract latest token usage for the input toolbar
+  const latestTokenUsage = useMemo(() => {
+    for (let i = agentEvents.length - 1; i >= 0; i--) {
+      if (agentEvents[i]?.type === 'usage_update') return agentEvents[i].data;
+    }
+    return null;
+  }, [agentEvents]);
   const setCurrentChatRun = useCallback((updater) => {
     updateChatRun(currentRunKey, updater);
   }, [currentRunKey, updateChatRun]);
@@ -2116,6 +2123,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onStop={handleAgentStop}
                 runStartedAt={runStartedAtRef.current}
                 externalFileAttachment={externalFileAttachment}
+                tokenUsage={latestTokenUsage}
               />
             </div>
           </>

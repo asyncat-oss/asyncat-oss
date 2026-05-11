@@ -80,6 +80,43 @@ export function loadSkills() {
   return loadedSkills;
 }
 
+// ── Skill selection cache ─────────────────────────────────────────────────
+// Avoids redundant LLM calls when the same goal is re-run or continued.
+const _skillCache = new Map();
+const SKILL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const SKILL_CACHE_MAX = 50;
+
+function _goalHash(goal) {
+  // Simple hash of normalized goal text
+  const text = String(goal || '').toLowerCase().trim().slice(0, 500);
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return `skill_${hash}`;
+}
+
+function _getCachedSkills(goal) {
+  const key = _goalHash(goal);
+  const entry = _skillCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > SKILL_CACHE_TTL_MS) {
+    _skillCache.delete(key);
+    return null;
+  }
+  return entry.result;
+}
+
+function _setCachedSkills(goal, result) {
+  const key = _goalHash(goal);
+  // Evict oldest entries if over limit
+  if (_skillCache.size >= SKILL_CACHE_MAX) {
+    const oldest = _skillCache.keys().next().value;
+    _skillCache.delete(oldest);
+  }
+  _skillCache.set(key, { result, timestamp: Date.now() });
+}
+
 export function listSkills() {
   return loadedSkills;
 }
@@ -159,9 +196,17 @@ export async function selectRelevantSkillsWithLlm({
   conversationHistory = [],
   limit = 5,
 } = {}) {
+  // Check cache first — avoids redundant LLM calls for the same/similar goals
+  const cached = _getCachedSkills(goal);
+  if (cached) {
+    return { ...cached, method: `${cached.method}-cached` };
+  }
+
   if (!goal || loadedSkills.length === 0 || !aiClient?.messages?.create) {
     const fallback = skillsByNames(deterministicSkillNames(goal), limit);
-    return { skills: fallback, method: fallback.length ? 'deterministic' : 'llm-unavailable' };
+    const result = { skills: fallback, method: fallback.length ? 'deterministic' : 'llm-unavailable' };
+    _setCachedSkills(goal, result);
+    return result;
   }
 
   const catalog = loadedSkills.map(skill => ({
@@ -203,7 +248,7 @@ export async function selectRelevantSkillsWithLlm({
     const parsed = extractJsonObject(raw);
     const requested = Array.isArray(parsed?.skills) ? parsed.skills : [];
 
-    return {
+    const result = {
       skills: skillsByNames([
         ...requested.map(name => String(name || '').trim()),
         ...deterministicSkillNames(goal),
@@ -211,6 +256,8 @@ export async function selectRelevantSkillsWithLlm({
       method: 'llm',
       reason: typeof parsed?.reason === 'string' ? parsed.reason.slice(0, 240) : '',
     };
+    _setCachedSkills(goal, result);
+    return result;
   } catch (err) {
     console.warn('[agent] LLM skill selection failed; no skills will be injected:', err.message);
     const fallback = skillsByNames(deterministicSkillNames(goal), limit);

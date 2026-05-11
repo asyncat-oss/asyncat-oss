@@ -91,6 +91,7 @@ export const MessageInputV2 = ({
   externalFileAttachment = null,
   reasoningEffort = "auto",
   onReasoningEffortChange,
+  tokenUsage = null,
 }) => {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
@@ -842,6 +843,28 @@ export const MessageInputV2 = ({
                         {formatElapsed(runElapsed)}
                       </span>
                     )}
+                    {tokenUsage?.totalTokens > 0 && (
+                      <>
+                        <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
+                        <span className={`text-[10px] tabular-nums ${
+                          tokenUsage.totalTokens > (tokenUsage.contextWindow || 128000) * 0.9
+                            ? 'text-red-400'
+                            : tokenUsage.totalTokens > (tokenUsage.contextWindow || 128000) * 0.7
+                            ? 'text-amber-400'
+                            : 'text-gray-400 dark:text-gray-500'
+                        }`}>
+                          {tokenUsage.estimated ? '~' : ''}{(tokenUsage.totalTokens / 1000).toFixed(1)}k
+                        </span>
+                        {tokenUsage.tokensPerSecond > 0 && (
+                          <>
+                            <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
+                            <span className="text-[10px] tabular-nums text-indigo-400 dark:text-indigo-500">
+                              {tokenUsage.tokensPerSecond} tok/s
+                            </span>
+                          </>
+                        )}
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={onStop}
@@ -853,18 +876,25 @@ export const MessageInputV2 = ({
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="submit"
-                    disabled={!canSubmit}
-                    className={`inline-flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${
-                      canSubmit
-                        ? "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 active:scale-95"
-                        : "text-gray-300 dark:text-gray-600 midnight:text-gray-600 cursor-not-allowed"
-                    }`}
-                    title={canSubmit ? "Send (Enter)" : "Type a message"}
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
+                  <div className="inline-flex items-center gap-1.5">
+                    {tokenUsage?.totalTokens > 0 && (
+                      <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500" title={`${tokenUsage.estimated ? 'Estimated ' : ''}${(tokenUsage.inputTokens / 1000).toFixed(1)}k in + ${(tokenUsage.outputTokens / 1000).toFixed(1)}k out · Context: ${(tokenUsage.contextWindow / 1000).toFixed(0)}k (${tokenUsage.contextWindowSource || 'unknown'})`}>
+                        {tokenUsage.estimated ? '~' : ''}{(tokenUsage.totalTokens / 1000).toFixed(1)}k tokens
+                      </span>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={!canSubmit}
+                      className={`inline-flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${
+                        canSubmit
+                          ? "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 active:scale-95"
+                          : "text-gray-300 dark:text-gray-600 midnight:text-gray-600 cursor-not-allowed"
+                      }`}
+                      title={canSubmit ? "Send (Enter)" : "Type a message"}
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

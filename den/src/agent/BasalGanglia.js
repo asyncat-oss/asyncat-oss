@@ -14,6 +14,7 @@ const PATTERN_WINDOW_HOURS = 72;
 class BasalGanglia {
   constructor() {
     this.initialized = false;
+    this.onEvent = null; // Callback for emitting events to the UI
   }
 
   async initialize() {
@@ -192,6 +193,18 @@ ${skillBody}
       `).run(userId, patternHash);
 
       console.log(`[basal-ganglia] Created skill: ${skillName}`);
+
+      // Emit event so the UI can notify the user
+      if (typeof this.onEvent === 'function') {
+        this.onEvent({
+          type: 'skill_suggested',
+          data: {
+            skillName,
+            summary: patternSummary,
+            tools: tools.slice(0, 5),
+          },
+        });
+      }
     } catch (err) {
       console.error('[basal-ganglia] Failed to create skill:', err.message);
     }
