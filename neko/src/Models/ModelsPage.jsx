@@ -1,8 +1,7 @@
-// ModelsPage.jsx — Redesigned with tabbed navigation + unified search
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  RefreshCw, Cpu, TriangleAlert, X, Search,
-  Brain, Globe, Mic, SlidersHorizontal, ChevronDown
+  RefreshCw, TriangleAlert, X, Search, ChevronDown,
+  Mic, Cpu, Box, Globe
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import EngineRuntimeSection from './EngineRuntimeSection.jsx';
@@ -10,18 +9,14 @@ import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
 import AudioModelsSection from './AudioModelsSection.jsx';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
-import { Badge, STATUS_META, conciseHardwareSummary, providerLabel } from './modelPageShared.jsx';
+import {
+  Badge, STATUS_META, conciseHardwareSummary,
+  providerLabel, capabilityBadgeColor
+} from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
+import { audioApi } from '../Settings/settingApi.js';
 
-// ── Tab definitions ────────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'library',   label: 'Library',   icon: Brain,           desc: 'Local GGUF & MLX models' },
-  { id: 'providers', label: 'Providers', icon: Globe,           desc: 'Cloud & custom endpoints' },
-  { id: 'audio',     label: 'Audio',     icon: Mic,             desc: 'Whisper STT · Piper TTS' },
-  { id: 'runtime',   label: 'Runtime',   icon: SlidersHorizontal, desc: 'Engine & hardware setup' },
-];
-
-// ── Compact status dot ─────────────────────────────────────────────────────────
+// ── Status dot ────────────────────────────────────────────────────────────────
 const StatusDot = ({ status }) => {
   const cls = {
     ready:   'bg-green-500',
@@ -32,35 +27,84 @@ const StatusDot = ({ status }) => {
   return <span className={`inline-block h-2 w-2 rounded-full flex-shrink-0 ${cls}`} />;
 };
 
-// ── Tab button ─────────────────────────────────────────────────────────────────
-const TabButton = ({ tab, active, onClick, badge }) => {
-  const Icon = tab.icon;
-  return (
+// ── Collapsible section wrapper ───────────────────────────────────────────────
+const CollapsibleSection = ({
+  icon: Icon, title, subtitle, badge, expanded, onToggle,
+  actions, children, className = ''
+}) => (
+  <div className={`rounded-2xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 overflow-hidden transition-all duration-200 ${expanded ? 'shadow-sm' : ''} ${className}`}>
     <button
-      onClick={() => onClick(tab.id)}
-      className={`relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all whitespace-nowrap
-        ${active
-          ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900 shadow-sm'
-          : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800 midnight:text-slate-500 midnight:hover:text-slate-200 midnight:hover:bg-slate-800'
-        }`}
+      onClick={onToggle}
+      className="w-full flex items-center justify-between gap-4 px-6 py-5 hover:bg-gray-50/30 dark:hover:bg-gray-800/30 midnight:hover:bg-slate-800/30 transition-colors text-left"
     >
-      <Icon className="w-4 h-4 flex-shrink-0" />
-      <span>{tab.label}</span>
-      {badge && (
-        <span className={`ml-0.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold
-          ${active ? 'bg-white/20 text-white dark:bg-black/20 dark:text-black' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
-          {badge}
-        </span>
-      )}
+      <div className="flex items-center gap-3.5 min-w-0">
+        {Icon && (
+          <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border transition-colors ${
+            expanded
+              ? 'border-gray-200 bg-gray-900 text-white dark:border-gray-600 dark:bg-gray-100 dark:text-gray-900 midnight:border-slate-600 midnight:bg-slate-100 midnight:text-slate-900'
+              : 'border-gray-100 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-500'
+          }`}>
+            <Icon className="w-4 h-4" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">{title}</h3>
+          {subtitle && !expanded && (
+            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2">{subtitle}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        {actions}
+        {badge}
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+      </div>
     </button>
-  );
+    {expanded && (
+      <div className="border-t border-gray-50 dark:border-gray-800/50 midnight:border-slate-800/50 px-6 pb-6">
+        {children}
+      </div>
+    )}
+  </div>
+);
+
+// ── Voice compact subtitle ────────────────────────────────────────────────────
+const VoiceSubtitle = ({ sttStatus, sttModel, ttsStatus, ttsModel, loaded }) => {
+  if (!loaded) return 'Checking...';
+  const parts = [];
+  if (sttStatus === 'ready') parts.push(`STT: ${sttModel || 'active'}`);
+  else if (sttStatus === 'loading') parts.push('STT: loading...');
+  else parts.push('STT: idle');
+  if (ttsStatus === 'ready') parts.push(`TTS: ${ttsModel || 'active'}`);
+  else if (ttsStatus === 'loading') parts.push('TTS: loading...');
+  else parts.push('TTS: idle');
+  return parts.join(' · ');
 };
 
-// ── Main page ──────────────────────────────────────────────────────────────────
-const ModelsPage = () => {
-  const [activeTab, setActiveTab] = useState('library');
-  const [searchQuery, setSearchQuery] = useState('');
+const VoiceCompactBadge = ({ sttStatus, ttsStatus }) => (
+  <div className="flex items-center gap-2">
+    <span className="flex items-center gap-1">
+      <StatusDot status={sttStatus} />
+      <span className="text-[10px] text-gray-500 dark:text-gray-400">STT</span>
+    </span>
+    <span className="flex items-center gap-1">
+      <StatusDot status={ttsStatus} />
+      <span className="text-[10px] text-gray-500 dark:text-gray-400">TTS</span>
+    </span>
+  </div>
+);
 
+// ── Engine compact subtitle ───────────────────────────────────────────────────
+const EngineSubtitle = ({ engineData }) => {
+  if (!engineData?.current) return 'Not detected';
+  const hw = conciseHardwareSummary(engineData.hardware);
+  const label = engineData.current.capabilityLabel || 'Unknown';
+  const managed = engineData.current.managed ? ' · Managed' : '';
+  return `${label} · ${hw}${managed}`;
+};
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+const ModelsPage = () => {
   const {
     modelContextConfig, serverStatus, setServerStatus,
     models, engineData, engineCatalog, installJob, setInstallJob,
@@ -83,6 +127,7 @@ const ModelsPage = () => {
     handleAddPath, handleEngineSwitch, handleManagedInstall, handleBuildGpuRuntime,
   } = useModelsPageController();
 
+  // ── Derived state ──────────────────────────────────────────────────────────
   const status = serverStatus?.status ?? 'idle';
   const { label: statusLabel, color: statusColor } = STATUS_META[status] || STATUS_META.idle;
   const isRunning = status === 'ready' || status === 'loading';
@@ -96,24 +141,59 @@ const ModelsPage = () => {
 
   const hardwareBadgeLabel = engineData?.hardware ? conciseHardwareSummary(engineData.hardware) : '';
   const currentCapabilityLabel = engineData?.current?.capabilityLabel || '';
-  const showHardwareBadge = Boolean(hardwareBadgeLabel && hardwareBadgeLabel.toLowerCase() !== currentCapabilityLabel.toLowerCase());
+  const showHardwareBadge = Boolean(
+    hardwareBadgeLabel &&
+    hardwareBadgeLabel.toLowerCase() !== currentCapabilityLabel.toLowerCase()
+  );
   const activeProviderName = providerConfig?.provider_id === 'llamacpp-builtin'
     ? 'Built-in llama.cpp'
-    : providerLabel({ provider_id: providerConfig?.provider_id, name: providerConfig?.name }, providerCatalog);
-  const providerIsExternal = Boolean(providerConfig?.model && providerConfig?.provider_id && providerConfig.provider_id !== 'llamacpp-builtin');
+    : providerLabel(
+        { provider_id: providerConfig?.provider_id, name: providerConfig?.name },
+        providerCatalog
+      );
 
   const isLoading = loadingStatus || loadingModels || loadingEngines || loadingCatalog || loadingProviders;
   const isBusy = Boolean(switchingEngine) || Boolean(installingEngine);
 
-  // Tab badges
-  const tabBadges = {
-    library:   models.length > 0 ? models.length : null,
-    providers: providerProfiles.length > 0 ? providerProfiles.length : null,
-    audio:     null,
-    runtime:   null,
-  };
+  // ── Voice summary state ────────────────────────────────────────────────────
+  const [voiceState, setVoiceState] = useState({
+    sttStatus: 'idle', sttModel: null,
+    ttsStatus: 'idle', ttsModel: null,
+    loaded: false,
+  });
 
-  // Filter models by search query (used in library tab only — HF search is inline)
+  useEffect(() => {
+    Promise.all([
+      audioApi.whisper.getStatus().catch(() => ({ status: 'idle' })),
+      audioApi.tts.getStatus().catch(() => ({ status: 'idle' })),
+    ]).then(([w, t]) => {
+      setVoiceState({
+        sttStatus: w.status || 'idle',
+        sttModel: w.model || null,
+        ttsStatus: t.status || 'idle',
+        ttsModel: t.model || null,
+        loaded: true,
+      });
+    });
+  }, []);
+
+  // ── Collapsible section state ──────────────────────────────────────────────
+  const [expandedVoice, setExpandedVoice] = useState(false);
+  const [expandedEngine, setExpandedEngine] = useState(false);
+  const [expandedLibrary, setExpandedLibrary] = useState(models.length > 0);
+  const [expandedProviders, setExpandedProviders] = useState(providerProfiles.length > 0);
+
+  const [libraryEverExpanded, setLibraryEverExpanded] = useState(false);
+  useEffect(() => {
+    if (!libraryEverExpanded && models.length > 0) {
+      setExpandedLibrary(true);
+      setLibraryEverExpanded(true);
+    }
+  }, [models.length, libraryEverExpanded]);
+
+  // ── Unified search ─────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+
   const filteredModels = useMemo(() => {
     if (!searchQuery.trim()) return models;
     const q = searchQuery.toLowerCase();
@@ -123,6 +203,17 @@ const ModelsPage = () => {
     );
   }, [models, searchQuery]);
 
+  const filteredProviders = useMemo(() => {
+    if (!searchQuery.trim()) return providerProfiles;
+    const q = searchQuery.toLowerCase();
+    return providerProfiles.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.provider_id || '').toLowerCase().includes(q) ||
+      (p.model || '').toLowerCase().includes(q)
+    );
+  }, [providerProfiles, searchQuery]);
+
+  // ── Refresh handler ────────────────────────────────────────────────────────
   const handleRefresh = () => {
     clearEngineActionMessages();
     setInstallJob(null);
@@ -133,6 +224,7 @@ const ModelsPage = () => {
     loadProviderData();
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full w-full flex-col bg-white text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100 font-sans">
       <ConfirmDeleteDialog
@@ -141,77 +233,65 @@ const ModelsPage = () => {
         onCancel={() => setDeleteConfirm(null)}
       />
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* ── Header bar ────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 border-b border-gray-200/80 bg-white dark:border-gray-800/80 dark:bg-gray-900 midnight:border-slate-800/80 midnight:bg-slate-950">
         <div className="mx-auto w-full max-w-[1200px] px-6 lg:px-8">
-
-          {/* Title row */}
           <div className="flex items-center justify-between gap-4 pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
                 <Cpu className="w-4 h-4 text-gray-600 dark:text-gray-300" />
               </div>
-              <div>
-                <h1 className="text-lg font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100 leading-none">Models</h1>
-                <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-                  {providerIsExternal ? activeProviderName : isReady ? serverStatus?.model || 'Ready' : 'No model loaded'}
-                  {' · '}
+              <div className="min-w-0">
+                <h1 className="text-lg font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100 leading-none">
+                  Models
+                </h1>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
                   <StatusDot status={status} />
-                  <span className="ml-1">{statusLabel}</span>
-                </p>
+                  <span>{statusLabel}</span>
+                  {serverStatus?.model && (
+                    <>
+                      <span className="text-gray-300 dark:text-gray-700">·</span>
+                      <span className="text-gray-500 dark:text-gray-400 truncate max-w-[200px]">{serverStatus.model}</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* Unified search */}
             <div className="flex items-center gap-2">
-              {/* Unified search — visible in library + audio tabs */}
-              {(activeTab === 'library' || activeTab === 'audio') && (
-                <div className="relative hidden sm:block">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder={activeTab === 'library' ? 'Filter local models…' : 'Filter audio models…'}
-                    className="w-48 pl-8 pr-8 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-gray-600 dark:focus:border-gray-600 midnight:border-slate-700 midnight:bg-slate-800/60 transition-all"
-                  />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              )}
+              <div className="relative hidden sm:block">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search models, providers..."
+                  className="w-56 pl-9 pr-8 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-gray-600 dark:focus:border-gray-600 midnight:border-slate-700 midnight:bg-slate-800/60 transition-all"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
 
               <button
                 onClick={handleRefresh}
                 disabled={isLoading || isBusy}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-400 midnight:hover:bg-slate-800 transition-colors"
+                className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-400 midnight:hover:bg-slate-800 transition-colors"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
             </div>
           </div>
-
-          {/* Tabs row */}
-          <div className="flex items-center gap-1 pb-0 -mb-px overflow-x-auto scrollbar-none">
-            {TABS.map(tab => (
-              <TabButton
-                key={tab.id}
-                tab={tab}
-                active={activeTab === tab.id}
-                onClick={setActiveTab}
-                badge={tabBadges[tab.id]}
-              />
-            ))}
-          </div>
         </div>
       </div>
 
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
+      {/* ── Body ──────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-
-        {/* Error banner */}
+        {/* Delete error banner */}
         {deleteError && (
           <div className="mx-auto max-w-[1200px] px-6 lg:px-8 mt-4">
             <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
@@ -224,9 +304,9 @@ const ModelsPage = () => {
           </div>
         )}
 
-        <div className="mx-auto w-full max-w-[1200px] px-6 lg:px-8 py-6">
+        <div className="mx-auto w-full max-w-[1200px] px-6 lg:px-8 py-6 space-y-4">
 
-          {/* Active brain — always visible at top */}
+          {/* ── Brain ─────────────────────────────────────────────────────── */}
           <ActiveBrainPanel
             activeConfig={providerConfig}
             activeProviderName={activeProviderName}
@@ -247,11 +327,72 @@ const ModelsPage = () => {
             onDeactivateProvider={handleProviderDeactivate}
           />
 
-          {/* ── Tab panels ─────────────────────────────────────────────────── */}
-          <div className="mt-6">
+          {/* ── Voice ─────────────────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={Mic}
+            title="Voice"
+            subtitle={VoiceSubtitle(voiceState)}
+            badge={<VoiceCompactBadge sttStatus={voiceState.sttStatus} ttsStatus={voiceState.ttsStatus} />}
+            expanded={expandedVoice}
+            onToggle={() => setExpandedVoice(v => !v)}
+          >
+            <div className="pt-5">
+              <AudioModelsSection searchQuery="" />
+            </div>
+          </CollapsibleSection>
 
-            {/* Library tab */}
-            {activeTab === 'library' && (
+          {/* ── Engine ────────────────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={Cpu}
+            title="Engine"
+            subtitle={EngineSubtitle({ engineData })}
+            badge={engineData?.current ? (
+              <Badge color={capabilityBadgeColor(engineData.current.capabilityHint)}>
+                {engineData.current.capabilityLabel}
+              </Badge>
+            ) : null}
+            expanded={expandedEngine}
+            onToggle={() => setExpandedEngine(v => !v)}
+          >
+            <div className="pt-5">
+              <EngineRuntimeSection
+                engineData={engineData}
+                engineCatalog={engineCatalog}
+                loadingCatalog={loadingCatalog}
+                installJob={installJob}
+                loading={loadingEngines}
+                switchingKey={switchingEngine}
+                installingKey={installingEngine}
+                switchError={switchError}
+                switchSuccess={switchSuccess}
+                installError={installError}
+                installSuccess={installSuccess}
+                revertSelection={revertSelection}
+                retryModel={serverStatus?.model || null}
+                pythonInstallJob={pythonInstallJob}
+                pythonBuildError={pythonBuildError}
+                pythonBuildSuccess={pythonBuildSuccess}
+                onRescan={loadEngineData}
+                onSwitch={handleEngineSwitch}
+                onInstall={handleManagedInstall}
+                onBuildGpuRuntime={handleBuildGpuRuntime}
+                onRefreshCatalog={loadEngineCatalog}
+              />
+            </div>
+          </CollapsibleSection>
+
+          {/* ── Model Library ─────────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={Box}
+            title="Model Library"
+            subtitle={models.length > 0
+              ? `${models.length} model${models.length !== 1 ? 's' : ''} — GGUF & MLX`
+              : 'No local models yet'}
+            badge={models.length > 0 ? <Badge color="gray">{models.length}</Badge> : null}
+            expanded={expandedLibrary}
+            onToggle={() => setExpandedLibrary(v => !v)}
+          >
+            <div className="pt-5">
               <LocalModelsPane
                 models={filteredModels}
                 loadingModels={loadingModels}
@@ -283,13 +424,24 @@ const ModelsPage = () => {
                 handleStart={handleStart}
                 handleDelete={handleDelete}
               />
-            )}
+            </div>
+          </CollapsibleSection>
 
-            {/* Providers tab */}
-            {activeTab === 'providers' && (
+          {/* ── Providers ─────────────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={Globe}
+            title="Providers"
+            subtitle={providerProfiles.length > 0
+              ? `${providerProfiles.length} profile${providerProfiles.length !== 1 ? 's' : ''}${activeProviderName ? ` · ${activeProviderName} active` : ''}`
+              : 'Connect cloud APIs or local endpoints'}
+            badge={providerProfiles.length > 0 ? <Badge color="gray">{providerProfiles.length}</Badge> : null}
+            expanded={expandedProviders}
+            onToggle={() => setExpandedProviders(v => !v)}
+          >
+            <div className="pt-5">
               <ProvidersSection
                 catalog={providerCatalog}
-                profiles={providerProfiles}
+                profiles={filteredProviders}
                 activeConfig={providerConfig}
                 serverStatus={serverStatus}
                 loading={loadingProviders}
@@ -302,43 +454,9 @@ const ModelsPage = () => {
                 onActivate={handleProviderActivate}
                 onLoadModels={handleLoadProviderModels}
               />
-            )}
+            </div>
+          </CollapsibleSection>
 
-            {/* Audio tab */}
-            {activeTab === 'audio' && (
-              <AudioModelsSection searchQuery={searchQuery} />
-            )}
-
-            {/* Runtime tab */}
-            {activeTab === 'runtime' && (
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 p-5">
-                <EngineRuntimeSection
-                  engineData={engineData}
-                  engineCatalog={engineCatalog}
-                  loadingCatalog={loadingCatalog}
-                  installJob={installJob}
-                  loading={loadingEngines}
-                  switchingKey={switchingEngine}
-                  installingKey={installingEngine}
-                  switchError={switchError}
-                  switchSuccess={switchSuccess}
-                  installError={installError}
-                  installSuccess={installSuccess}
-                  revertSelection={revertSelection}
-                  retryModel={serverStatus?.model || null}
-                  pythonInstallJob={pythonInstallJob}
-                  pythonBuildError={pythonBuildError}
-                  pythonBuildSuccess={pythonBuildSuccess}
-                  onRescan={loadEngineData}
-                  onSwitch={handleEngineSwitch}
-                  onInstall={handleManagedInstall}
-                  onBuildGpuRuntime={handleBuildGpuRuntime}
-                  onRefreshCatalog={loadEngineCatalog}
-                />
-              </div>
-            )}
-
-          </div>
         </div>
       </div>
     </div>

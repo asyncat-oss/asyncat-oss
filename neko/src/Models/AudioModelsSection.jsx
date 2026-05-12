@@ -15,76 +15,80 @@ const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }
   const icon = type === 'whisper' ? <Mic className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />;
 
   return (
-    <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white transition-all duration-200 hover:shadow-sm dark:bg-gray-900 midnight:bg-slate-900
-      ${isLoaded ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-600 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 hover:border-gray-300 dark:hover:border-gray-600'}`}
+    <div className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
+      ${isLoaded
+        ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
+        : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}`}
     >
-      <div className="p-4 flex-1">
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? 'bg-gray-800 text-white dark:bg-gray-700 midnight:bg-slate-800' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800/50 midnight:text-slate-400'}`}>
-              {model.isExternal ? <FolderOpen className="w-5 h-5" /> : icon}
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate capitalize" title={model.name}>
+      <div className="px-5 pt-5 pb-4 flex-1">
+        <div className="flex items-start gap-3">
+          <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
+            isLoaded
+              ? 'bg-gray-900 text-white dark:bg-gray-600 midnight:bg-slate-700'
+              : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400'
+          }`}>
+            {model.isExternal ? <FolderOpen className="w-5 h-5" /> : icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate" title={model.name}>
                 {model.name || model.filename}
               </h3>
-              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                <Badge color="gray">{typeLabel}</Badge>
-                {model.isExternal && <Badge color="gray">External</Badge>}
-                {model.isMissing && <Badge color="red">Missing</Badge>}
-                {model.missingConfig && <Badge color="amber">No .json config</Badge>}
-                {model.sizeFormatted && (
-                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                    {model.sizeFormatted}
-                  </span>
-                )}
-              </div>
+              {isLoaded && (
+                <span className="flex h-2.5 w-2.5 relative flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+                </span>
+              )}
+            </div>
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">{typeLabel}</span>
+              {model.isExternal && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">External</span>}
+              {model.isMissing && <span className="text-[10px] font-medium text-red-500">Missing</span>}
+              {model.missingConfig && <span className="text-[10px] font-medium text-amber-500">No config</span>}
+              {model.sizeFormatted && (
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{model.sizeFormatted}</span>
+              )}
             </div>
           </div>
-          {isLoaded && (
-            <span className="flex h-2.5 w-2.5 relative flex-shrink-0 mt-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-            </span>
-          )}
         </div>
 
-        {type === 'whisper' && model.quality && (
-          <div className="mt-2 flex gap-2 flex-wrap">
-            <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-medium">{model.quality}</span>
-            {model.language && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium capitalize">{model.language}</span>}
+        {(type === 'whisper' && (model.quality || model.language)) && (
+          <div className="mt-3 flex gap-1.5 flex-wrap">
+            {model.quality && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.quality}</span>}
+            {model.language && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 font-medium capitalize">{model.language}</span>}
           </div>
         )}
-        {type === 'tts' && (
-          <div className="mt-2 flex gap-2 flex-wrap">
-            {model.qualityLabel && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-medium">{model.qualityLabel}</span>}
-            {model.languageName && model.languageName !== 'unknown' && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.languageName}</span>}
+        {type === 'tts' && (model.qualityLabel || (model.languageName && model.languageName !== 'unknown')) && (
+          <div className="mt-3 flex gap-1.5 flex-wrap">
+            {model.qualityLabel && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.qualityLabel}</span>}
+            {model.languageName && model.languageName !== 'unknown' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.languageName}</span>}
           </div>
         )}
         {model.missingConfig && (
-          <p className="mt-2 text-[11px] text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-950 rounded-lg px-2.5 py-1.5 border border-gray-200 dark:border-gray-700">
-            <AlertTriangle className="w-3 h-3 inline mr-1 -mt-0.5 text-amber-500" />
-            Requires a matching <code className="text-[10px] bg-gray-100 dark:bg-gray-900 px-1 py-0.5 rounded font-mono">.onnx.json</code> config file to work.
+          <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 rounded-lg px-2.5 py-1.5">
+            <AlertTriangle className="w-3 h-3 inline mr-1 -mt-0.5" />
+            Needs matching <code className="text-[10px] bg-amber-100 dark:bg-amber-900/30 px-1 py-0.5 rounded font-mono">.onnx.json</code> config
           </p>
         )}
       </div>
 
-      <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950/50 midnight:bg-slate-950/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
+      <div className="px-5 py-3 border-t border-gray-50 dark:border-gray-800 midnight:border-slate-800 flex items-center gap-2">
         <button
           onClick={() => onStart(model)}
           disabled={isStarting || isLoaded || model.isMissing || model.missingConfig}
-          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all active:scale-95 disabled:opacity-50
+          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl transition-all disabled:opacity-40
             ${isLoaded
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-900 hover:bg-gray-800 text-white dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-900'}`}
+              ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
+              : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200'}`}
         >
-          {isStarting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : isLoaded ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-          {isStarting ? 'Loading…' : isLoaded ? 'Active' : 'Load'}
+          {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : isLoaded ? <CheckCircle2 className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          {isStarting ? 'Loading...' : isLoaded ? 'Active' : 'Load'}
         </button>
         <button
           onClick={() => onDelete(model)}
           disabled={isLoaded}
-          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors disabled:opacity-50"
+          className="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-30"
           title="Remove"
         >
           <Trash2 className="w-4 h-4" />

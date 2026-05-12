@@ -671,35 +671,77 @@ const ProvidersSection = ({
             {profiles.map(profile => {
               const isActive = activeProfileId === profile.id;
               const busy = providerAction === profile.id;
+              const isLocal = profile.provider_type === 'local';
               return (
-                <div key={profile.id} className={`rounded-xl border bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm ${isActive ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-500' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800'}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{profile.name}</h3>
-                        {isActive && <Badge color="green">Active</Badge>}
-                        {profile.api_key_set && <Badge color="gray">Key saved</Badge>}
+                <div key={profile.id} className={`group relative flex flex-col rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
+                  ${isActive
+                    ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
+                    : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}`}
+                >
+                  <div className="px-5 pt-5 pb-4 flex-1">
+                    <div className="flex items-start gap-3">
+                      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
+                        isActive
+                          ? 'bg-gray-900 text-white dark:bg-gray-600 midnight:bg-slate-700'
+                          : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400'
+                      }`}>
+                        {isLocal ? <Zap className="w-5 h-5" /> : <Cloud className="w-5 h-5" />}
                       </div>
-                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{providerLabel(profile, catalog)} · {modelDisplayName(profile, catalog)}</p>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 break-all">{profile.base_url}</p>
-                      {profile.last_test_message && (
-                        <p className={`mt-2 text-xs ${profile.last_test_status === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{profile.last_test_message}</p>
-                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate">{profile.name}</h3>
+                          {isActive && (
+                            <span className="flex h-2.5 w-2.5 relative flex-shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                            {providerLabel(profile, catalog)}
+                          </span>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">·</span>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 truncate">
+                            {modelDisplayName(profile, catalog)}
+                          </span>
+                          {profile.api_key_set && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">Key saved</span>}
+                        </div>
+                        <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 font-mono break-all line-clamp-1">
+                          {profile.base_url}
+                        </p>
+                        {profile.last_test_message && (
+                          <p className={`mt-2 text-[11px] ${profile.last_test_status === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                            {profile.last_test_message}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {isActive ? <div className="flex-shrink-0 w-5 h-5 rounded-full border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 flex items-center justify-center"><CheckCircle2 className="w-3 h-3 text-green-500" /></div> : <Cloud className="w-5 h-5 text-gray-400 flex-shrink-0" />}
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button onClick={() => activate(profile)} disabled={busy || isActive} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
+                  <div className="px-5 py-3 border-t border-gray-50 dark:border-gray-800 midnight:border-slate-800 flex items-center gap-1.5">
+                    <button onClick={() => activate(profile)} disabled={busy || isActive}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl transition-all disabled:opacity-40
+                        ${isActive
+                          ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
+                          : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200'}`}
+                    >
                       {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                      Activate
+                      {isActive ? 'Active' : 'Activate'}
                     </button>
-                    <button onClick={() => onTest(profile.id)} disabled={busy} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">Test</button>
-                    <button onClick={() => openModelPicker(profile)} disabled={modelLoading === profile.id} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
-                      {modelLoading === profile.id ? 'Loading...' : 'Models'}
-                    </button>
-                    <button onClick={() => setModalState({ profile })} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">Edit</button>
-                    <button onClick={() => onDelete(profile.id)} disabled={busy} className="px-3 py-1.5 text-xs font-medium rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/10 disabled:opacity-50">Delete</button>
+                    <button onClick={() => onTest(profile.id)} disabled={busy}
+                      className="px-2.5 py-2 text-xs font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+                    >Test</button>
+                    <button onClick={() => openModelPicker(profile)} disabled={modelLoading === profile.id}
+                      className="px-2.5 py-2 text-xs font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+                    >{modelLoading === profile.id ? '...' : 'Models'}</button>
+                    <button onClick={() => setModalState({ profile })}
+                      className="px-2.5 py-2 text-xs font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 transition-colors"
+                    >Edit</button>
+                    <button onClick={() => onDelete(profile.id)} disabled={busy}
+                      className="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-30"
+                      title="Delete"
+                    ><X className="w-4 h-4" /></button>
                   </div>
                 </div>
               );

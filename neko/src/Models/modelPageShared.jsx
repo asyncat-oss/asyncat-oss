@@ -14,7 +14,7 @@ export const Badge = ({ children, color = 'gray' }) => {
 };
 
 export const Panel = ({ children, className = '' }) => (
-  <section className={`rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 ${className}`}>
+  <section className={`rounded-2xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 ${className}`}>
     {children}
   </section>
 );

@@ -570,7 +570,7 @@ const EngineRuntimeSection = ({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 rounded-2xl p-5 shadow-sm">
+    <div>
       <div className="flex items-center gap-2 mb-4">
         <Wrench className="w-4 h-4 text-gray-500 dark:text-gray-400" />
         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">Engine Advisor</h3>
