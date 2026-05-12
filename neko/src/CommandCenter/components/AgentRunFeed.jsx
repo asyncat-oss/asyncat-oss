@@ -609,44 +609,50 @@ function CompactPermissionEvent({ data, onDecision }) {
     return () => clearInterval(id);
   }, [expiresAt, resolved]);
 
+  const accent = dangerous ? 'rose' : 'amber';
+
   return (
-    <div className={`overflow-hidden rounded-lg border ${dangerous ? 'border-rose-200 bg-rose-50/80 dark:border-rose-900/50 dark:bg-rose-950/10' : 'border-amber-200 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/10'}`}>
-      <div className="flex items-start gap-2.5 px-3 py-3">
-        <div className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${dangerous ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+    <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm">
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border ${dangerous ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400' : 'border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400'}`}>
           <ShieldAlert className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Icon className={`h-3 w-3 ${dangerous ? 'text-rose-600 dark:text-rose-300' : 'text-amber-600 dark:text-amber-300'}`} />
-            <span className={`text-xs font-semibold ${dangerous ? 'text-rose-950 dark:text-rose-100' : 'text-amber-950 dark:text-amber-100'}`}>Permission needed</span>
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${dangerous ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>{label}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Permission needed</span>
+            <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+              <Icon className="h-3 w-3" />
+              {label}
+            </span>
             {!resolved && remainingMs !== null && (
-              <span className={`ml-auto text-[10px] font-medium ${expired ? 'text-red-600 dark:text-red-300' : dangerous ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>
+              <span className={`ml-auto text-[10px] font-medium tabular-nums ${expired ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                 {expired ? 'Expired' : `Auto-deny in ${formatCountdown(remainingMs)}`}
               </span>
             )}
           </div>
-          <p className={`mt-1 text-sm font-medium ${dangerous ? 'text-rose-950 dark:text-rose-100' : 'text-amber-950 dark:text-amber-100'}`}>
-            The agent wants to {intent.label.toLowerCase()}.
+          <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
+            The agent wants to <span className="font-medium">{intent.label.toLowerCase()}</span>.
           </p>
-          <pre className={`mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-white/70 bg-white/75 p-2.5 font-mono text-xs leading-relaxed dark:border-white/10 dark:bg-gray-950/30 ${dangerous ? 'text-rose-800 dark:text-rose-100' : 'text-amber-900 dark:text-amber-100'}`}>
-            {intent.value}
-          </pre>
+          <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50 dark:bg-gray-950 midnight:bg-slate-950 px-3 py-2">
+            <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-700 dark:text-gray-300">
+              {intent.value}
+            </code>
+          </div>
           {(data?.diff || data?.workingDir) && (
             <button
               type="button"
               onClick={() => setShowDetails(v => !v)}
-              className={`mt-1.5 inline-flex items-center gap-1 text-[10px] hover:underline ${dangerous ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}
+              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
             >
               {showDetails ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               {data?.diff ? 'View changes' : 'Technical details'}
             </button>
           )}
           {showDetails && (
-            <div className="mt-1 space-y-1">
-              {data?.workingDir && <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">Working directory: {data.workingDir}</p>}
+            <div className="mt-2 space-y-1.5">
+              {data?.workingDir && <p className="truncate text-[11px] text-gray-400 dark:text-gray-500">Working directory: {data.workingDir}</p>}
               {data?.diff && (
-                <pre className="max-h-40 overflow-y-auto whitespace-pre rounded bg-gray-950 p-2 font-mono text-[10px] leading-relaxed text-gray-200">
+                <pre className="max-h-40 overflow-y-auto whitespace-pre rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-950 p-3 font-mono text-[11px] leading-relaxed text-gray-300">
                   {data.diff}
                 </pre>
               )}
@@ -654,9 +660,10 @@ function CompactPermissionEvent({ data, onDecision }) {
           )}
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/70 px-3 py-2 dark:border-white/10">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-4 py-2.5">
         {showDecision ? (
-          <span className={`flex items-center gap-1 text-xs font-medium ${isAllowed ? 'text-green-700 dark:text-green-300' : isDenied || expired ? 'text-red-700 dark:text-red-300' : dangerous ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>
+          <span className={`flex items-center gap-1.5 text-xs font-medium ${isAllowed ? 'text-emerald-600 dark:text-emerald-400' : isDenied || expired ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${isAllowed ? 'bg-emerald-500' : isDenied || expired ? 'bg-red-500' : 'bg-gray-400'}`} />
             {isAllowed ? 'Approved' : isDenied ? 'Denied' : expired ? 'Expired, denied' : 'Resolved'}
             {decision === 'allow_always' && <span className="text-[10px] opacity-70">(always)</span>}
             {decision === 'allow_session' && <span className="text-[10px] opacity-70">(this run)</span>}
@@ -666,14 +673,14 @@ function CompactPermissionEvent({ data, onDecision }) {
             <button
               onClick={() => onDecision?.(data?.requestId, 'deny')}
               disabled={data?.resolving || expired}
-              className="rounded border border-gray-200 px-2.5 py-1 text-xs text-gray-600 transition-colors hover:bg-white disabled:opacity-60 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               Deny
             </button>
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow')}
               disabled={data?.resolving || expired}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs text-white transition-colors disabled:opacity-60 ${dangerous ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'}`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50 shadow-sm ${dangerous ? 'bg-rose-600 hover:bg-rose-700' : 'bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'}`}
             >
               {data?.resolving && <Loader2 className="h-3 w-3 animate-spin" />}
               Approve once
@@ -681,7 +688,7 @@ function CompactPermissionEvent({ data, onDecision }) {
             <button
               onClick={() => onDecision?.(data?.requestId, 'allow_session')}
               disabled={data?.resolving || expired}
-              className="rounded bg-gray-800 px-2.5 py-1 text-xs text-white transition-colors hover:bg-gray-900 disabled:opacity-60 dark:bg-gray-600 dark:hover:bg-gray-500"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               Trust this run
             </button>
@@ -689,7 +696,7 @@ function CompactPermissionEvent({ data, onDecision }) {
               onClick={() => onDecision?.(data?.requestId, 'allow_always')}
               disabled={data?.resolving || expired}
               title={`Always allow ${data?.tool} without asking`}
-              className="flex items-center gap-1 rounded border border-red-300 px-2.5 py-1 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/20"
             >
               <ShieldOff className="h-3 w-3" />
               Always allow
@@ -776,64 +783,64 @@ function AskUserEvent({ data, onAnswer }) {
 
   return (
     <FeedFrame className="mb-4">
-    <div className="rounded-lg border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-900/10 overflow-hidden">
-      <div className="px-3 py-3 flex items-start gap-2.5">
-        <div className="flex-shrink-0 w-6 h-6 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 flex items-center justify-center">
-          <MessageCircle className="w-3.5 h-3.5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-xs font-semibold text-blue-900 dark:text-blue-100">Agent question</span>
-          <p className="text-sm text-blue-800 dark:text-blue-200 mt-1 leading-relaxed">{data?.question}</p>
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="px-4 py-3.5 flex items-start gap-3">
+          <div className="flex-shrink-0 w-7 h-7 rounded-full border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+            <MessageCircle className="w-3.5 h-3.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Agent question</span>
+            <p className="text-sm text-gray-800 dark:text-gray-100 mt-1 leading-relaxed">{data?.question}</p>
 
-          {answered ? (
-            <p className="mt-2 text-xs text-blue-600 dark:text-blue-400 italic">You replied: "{chosenAnswer}"</p>
-          ) : (
-            <>
-              {data?.choices?.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {data.choices.map((choice, i) => (
-                    <button
-                      key={i}
-                      onClick={() => submit(choice)}
-                      className="px-2.5 py-1 text-xs rounded-full border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                    >
-                      {choice}
-                    </button>
-                  ))}
+            {answered ? (
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">You replied: "{chosenAnswer}"</p>
+            ) : (
+              <>
+                {data?.choices?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {data.choices.map((choice, i) => (
+                      <button
+                        key={i}
+                        onClick={() => submit(choice)}
+                        className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={e => setInputValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                    placeholder={data?.default ? `Default: ${data.default}` : 'Type your answer…'}
+                    className="flex-1 text-xs bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => submit()}
+                    disabled={!inputValue.trim() && !data?.default}
+                    className="px-2.5 py-1.5 text-xs rounded-lg bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 text-white flex items-center gap-1 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600"
+                  >
+                    <Send className="w-3 h-3" />
+                  </button>
                 </div>
-              )}
-              <div className="mt-2 flex gap-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={e => setInputValue(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') submit(); }}
-                  placeholder={data?.default ? `Default: ${data.default}` : 'Type your answer…'}
-                  className="flex-1 text-xs bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  autoFocus
-                />
-                <button
-                  onClick={() => submit()}
-                  disabled={!inputValue.trim() && !data?.default}
-                  className="px-2.5 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white flex items-center gap-1 transition-colors"
-                >
-                  <Send className="w-3 h-3" />
-                </button>
-              </div>
-              {data?.default && (
-                <button
-                  onClick={() => submit(data.default)}
-                  className="mt-1 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Use default: "{data.default}"
-                </button>
-              )}
-            </>
-          )}
+                {data?.default && (
+                  <button
+                    onClick={() => submit(data.default)}
+                    className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                  >
+                    Use default: "{data.default}"
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
     </FeedFrame>
   );
 }
@@ -1001,10 +1008,12 @@ function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) 
 function ErrorEvent({ data }) {
   return (
     <FeedFrame className="mb-3">
-    <div className="rounded border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10 p-2.5 flex items-start gap-2">
-      <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-      <p className="text-xs text-red-700 dark:text-red-300">{data?.message || 'Agent encountered an error.'}</p>
-    </div>
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm px-4 py-3 flex items-start gap-3">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center mt-0.5">
+          <XCircle className="w-3 h-3 text-red-500" />
+        </div>
+        <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{data?.message || 'Agent encountered an error.'}</p>
+      </div>
     </FeedFrame>
   );
 }
@@ -1039,9 +1048,9 @@ function AgentDelegateEvent({ data, result, pending = false }) {
 
   return (
     <FeedFrame className="mb-2">
-      <div className="flex items-start gap-2.5 text-xs">
-        <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${isError ? 'bg-red-50 dark:bg-red-950/30' : 'bg-blue-50 dark:bg-blue-950/30'}`}>
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" /> : <span className="text-sm">{icon}</span>}
+      <div className="flex items-start gap-3 text-xs">
+        <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${isError ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}>
+          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-500 dark:text-gray-400" /> : <span className="text-sm">{icon}</span>}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1267,20 +1276,21 @@ export function CurrentPlanPanel({ data, isRunning, className = '' }) {
   const hasActiveItem = plan.some(i => i.status === 'in_progress');
   const isStaleActivePlan = hasActiveItem && !isRunning && completed < total;
   const isDone = completed === total && total > 0;
+  const pct = Math.round((completed / total) * 100);
 
   if (isDone && !isRunning) {
     return (
       <div className={className}>
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200/70 bg-emerald-50/80 px-3.5 py-2 text-xs shadow-sm shadow-emerald-950/5 backdrop-blur dark:border-emerald-800/40 dark:bg-emerald-950/25 midnight:border-emerald-800/40 midnight:bg-emerald-950/25">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 px-4 py-2.5 text-xs shadow-sm">
           <div className="flex min-w-0 items-center gap-2">
-            <svg className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <svg className="h-3.5 w-3.5 shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            <span className="font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 midnight:text-emerald-300">
+            <span className="font-medium text-gray-700 dark:text-gray-200">
               Plan done
             </span>
           </div>
-          <span className="shrink-0 tabular-nums text-emerald-500 dark:text-emerald-400">
+          <span className="shrink-0 tabular-nums text-gray-400 dark:text-gray-500">
             {completed}/{total}
           </span>
         </div>
@@ -1290,65 +1300,60 @@ export function CurrentPlanPanel({ data, isRunning, className = '' }) {
 
   return (
     <div className={className}>
-      <div className="rounded-lg border border-indigo-200/60 bg-indigo-50/80 px-3.5 py-2.5 shadow-sm shadow-indigo-950/5 backdrop-blur dark:border-indigo-800/40 dark:bg-indigo-950/30 midnight:border-indigo-800/40 midnight:bg-indigo-950/30">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2 mb-2.5">
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
             Plan
           </span>
-          <span className="text-[10px] tabular-nums text-indigo-400 dark:text-indigo-500 midnight:text-indigo-500">
+          <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
             {completed}/{total}
           </span>
           {completed === total && total > 0 && (
-            <span className="text-[10px] text-emerald-500 dark:text-emerald-400">Done</span>
+            <span className="text-[10px] font-medium text-emerald-500">Done</span>
           )}
           {isStaleActivePlan && (
-            <span className="text-[10px] text-amber-500 dark:text-amber-400">Stopped</span>
+            <span className="text-[10px] font-medium text-amber-500">Stopped</span>
           )}
           {total > 0 && (
-            <span className="ml-auto text-[10px] tabular-nums font-medium text-indigo-500 dark:text-indigo-400">
-              {Math.round((completed / total) * 100)}%
+            <span className="ml-auto text-[10px] tabular-nums font-medium text-gray-400 dark:text-gray-500">
+              {pct}%
             </span>
           )}
         </div>
         {/* Progress bar */}
         {total > 0 && (
-          <div className="mb-2.5 h-1.5 w-full overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-900/40 midnight:bg-indigo-900/40">
+          <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800">
             <div
-              className="h-full rounded-full transition-all duration-700 ease-out"
-              style={{
-                width: `${Math.round((completed / total) * 100)}%`,
-                background: completed === total
-                  ? 'linear-gradient(90deg, #10b981, #34d399)'
-                  : 'linear-gradient(90deg, #6366f1, #818cf8)',
-              }}
+              className={`h-full rounded-full transition-all duration-700 ease-out ${completed === total ? 'bg-emerald-500' : 'bg-gray-800 dark:bg-gray-200'}`}
+              style={{ width: `${pct}%` }}
             />
           </div>
         )}
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {plan.map((item, i) => (
-            <li key={item.id || i} className="flex items-start gap-2 text-[12px] leading-snug">
+            <li key={item.id || i} className="flex items-start gap-2.5 text-[12px] leading-snug">
               <span className={`mt-0.5 shrink-0 ${
                 item.status === 'completed'
                   ? 'text-emerald-500 dark:text-emerald-400'
                   : item.status === 'in_progress'
-                    ? (isRunning ? 'text-indigo-500 dark:text-indigo-400' : 'text-amber-500 dark:text-amber-400')
+                    ? (isRunning ? 'text-gray-700 dark:text-gray-200' : 'text-amber-500 dark:text-amber-400')
                     : 'text-gray-300 dark:text-gray-600 midnight:text-gray-600'
               }`}>
                 {item.status === 'completed' ? (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                 ) : item.status === 'in_progress' && isRunning ? (
-                  <span className="block w-3.5 h-3.5 rounded-full border-2 border-indigo-400 dark:border-indigo-500 border-t-transparent animate-spin" />
+                  <span className="block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                 ) : item.status === 'in_progress' ? (
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" d="M9 12h6" /></svg>
                 ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /></svg>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /></svg>
                 )}
               </span>
               <span className={`min-w-0 flex-1 ${
                 item.status === 'completed'
-                  ? 'line-through text-gray-400 dark:text-gray-500 midnight:text-gray-500'
+                  ? 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
                   : item.status === 'in_progress'
-                    ? 'font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200'
+                    ? 'font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100'
                     : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'
               }`}>
                 {item.status === 'in_progress' && item.activeForm ? item.activeForm : item.content}

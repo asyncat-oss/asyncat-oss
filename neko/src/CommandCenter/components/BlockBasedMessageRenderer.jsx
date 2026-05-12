@@ -1,8 +1,9 @@
 // BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
 import { useMemo, useState, useCallback, memo, useEffect, useRef } from 'react';
 import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2 } from 'lucide-react';
-import { tokenTracker } from './LocalModelStats';
 import { fileIconMeta } from '../../files/fileUtils.js';
+import { tokenTracker } from './LocalModelStats';
+
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 // mhchem extension — enables \ce{H2O}, \ce{CO2}, chemical equations in KaTeX
@@ -669,8 +670,8 @@ export const BlockRenderer = ({ block, onTermClick }) => {
 
     case 'quote':
       return (
-        <blockquote className="border-l-4 border-blue-500 dark:border-blue-400 midnight:border-blue-400 pl-5 py-3 mb-6 italic bg-blue-50/50 dark:bg-blue-900/10 midnight:bg-blue-900/20 rounded-r-lg">
-          <div className={`${baseStyles} opacity-90`}>
+        <blockquote className="border-l-2 border-gray-300 dark:border-gray-600 midnight:border-slate-600 pl-4 py-2 mb-6 italic">
+          <div className={`${baseStyles} opacity-80`}>
             {renderContent(block.content)}
           </div>
         </blockquote>
@@ -743,9 +744,12 @@ export const BlockRenderer = ({ block, onTermClick }) => {
 
     case 'callout':
       return (
-        <div className="mb-6 p-5 rounded-lg border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/30 shadow-sm">
-          <div className={`${baseStyles} font-medium`}>
-            {renderContent(block.content)}
+        <div className="mb-6 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm overflow-hidden">
+          <div className="flex items-start gap-3 px-4 py-3.5">
+            <span className="mt-0.5 text-sm">ℹ️</span>
+            <div className={`${baseStyles} text-sm leading-relaxed`}>
+              {renderContent(block.content)}
+            </div>
           </div>
         </div>
       );
@@ -822,17 +826,65 @@ const MathBlock = ({ latex }) => {
 const CodeBlock = ({ content, language = 'text' }) => {
   const [copyStatus, setCopyStatus] = useState(null);
 
-  // Apply syntax highlighting
+  // Inject explicit hljs palettes once
+  useEffect(() => {
+    if (document.getElementById('hljs-palette')) return;
+    const style = document.createElement('style');
+    style.id = 'hljs-palette';
+    style.textContent = `
+      .hljs { background: transparent !important; }
+      /* ── Light mode (GitHub-ish) ── */
+      .hljs { color: #24292e; }
+      .hljs-keyword { color: #cf222e; }
+      .hljs-string { color: #0a3069; }
+      .hljs-number { color: #0550ae; }
+      .hljs-function .hljs-title,
+      .hljs-title.function_ { color: #8250df; }
+      .hljs-comment { color: #6e7781; font-style: italic; }
+      .hljs-class .hljs-title,
+      .hljs-title.class_ { color: #953800; }
+      .hljs-variable { color: #953800; }
+      .hljs-operator { color: #cf222e; }
+      .hljs-punctuation { color: #24292e; }
+      .hljs-params { color: #24292e; }
+      .hljs-built_in { color: #953800; }
+      .hljs-meta { color: #0550ae; }
+      .hljs-literal { color: #0550ae; }
+      .hljs-attr { color: #0550ae; }
+      .hljs-property { color: #0550ae; }
+      .hljs-tag { color: #116329; }
+      /* ── Dark / Midnight mode (GitHub Dark Dimmed-ish) ── */
+      .dark .hljs, .midnight .hljs { color: #c9d1d9; }
+      .dark .hljs-keyword, .midnight .hljs-keyword { color: #ff7b72; }
+      .dark .hljs-string, .midnight .hljs-string { color: #a5d6ff; }
+      .dark .hljs-number, .midnight .hljs-number { color: #79c0ff; }
+      .dark .hljs-function .hljs-title, .midnight .hljs-function .hljs-title,
+      .dark .hljs-title.function_, .midnight .hljs-title.function_ { color: #d2a8ff; }
+      .dark .hljs-comment, .midnight .hljs-comment { color: #8b949e; font-style: italic; }
+      .dark .hljs-class .hljs-title, .midnight .hljs-class .hljs-title,
+      .dark .hljs-title.class_, .midnight .hljs-title.class_ { color: #ffa657; }
+      .dark .hljs-variable, .midnight .hljs-variable { color: #ffa657; }
+      .dark .hljs-operator, .midnight .hljs-operator { color: #ff7b72; }
+      .dark .hljs-punctuation, .midnight .hljs-punctuation { color: #c9d1d9; }
+      .dark .hljs-params, .midnight .hljs-params { color: #c9d1d9; }
+      .dark .hljs-built_in, .midnight .hljs-built_in { color: #ffa657; }
+      .dark .hljs-meta, .midnight .hljs-meta { color: #79c0ff; }
+      .dark .hljs-literal, .midnight .hljs-literal { color: #79c0ff; }
+      .dark .hljs-attr, .midnight .hljs-attr { color: #79c0ff; }
+      .dark .hljs-property, .midnight .hljs-property { color: #79c0ff; }
+      .dark .hljs-tag, .midnight .hljs-tag { color: #7ee787; }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
   const highlighted = useMemo(() => {
     const lang = (language || 'text').toLowerCase();
     try {
       if (hljs.getLanguage(lang)) {
         return hljs.highlight(content, { language: lang }).value;
       }
-      // Auto-detect if language not registered
       return hljs.highlightAuto(content).value;
     } catch {
-      // Fallback: escape HTML and return plain
       return content
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -855,40 +907,38 @@ const CodeBlock = ({ content, language = 'text' }) => {
   const { Icon, color } = fileIconMeta(language, 'file');
 
   return (
-    <div className="mb-6 relative group">
-      <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
-        <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-          <div className="flex items-center gap-2">
-            <Icon className={`w-4 h-4 ${color}`} />
-            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 tracking-wide uppercase">
-              {language}
-            </span>
-          </div>
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200 hover:bg-gray-200 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded transition-colors"
-          >
-            {copyStatus === 'copied' ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" />
-                <span className="text-green-600 dark:text-green-500">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                Copy
-              </>
-            )}
-          </button>
+    <div className="mb-6 rounded-xl bg-[#f6f8fa] dark:bg-[#0d1117] midnight:bg-[#0d1117]">
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <div className="flex items-center gap-1.5">
+          <Icon className={`w-3.5 h-3.5 ${color} opacity-70`} />
+          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 select-none">
+            {language}
+          </span>
         </div>
-
-        <pre className="p-5 overflow-x-auto bg-gray-50 dark:bg-gray-950 midnight:bg-slate-950">
-          <code
-            className="text-[13px] font-mono leading-relaxed hljs"
-            dangerouslySetInnerHTML={{ __html: highlighted }}
-          />
-        </pre>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors select-none"
+        >
+          {copyStatus === 'copied' ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" />
+              <span className="text-green-600 dark:text-green-500">Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3.5 h-3.5" />
+              Copy
+            </>
+          )}
+        </button>
       </div>
+
+      <pre className="px-4 pb-4 overflow-x-auto">
+        <code
+          className="text-[13px] font-mono leading-relaxed hljs"
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
+      </pre>
     </div>
   );
 };
