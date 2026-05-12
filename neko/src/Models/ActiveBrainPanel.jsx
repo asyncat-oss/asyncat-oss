@@ -60,7 +60,7 @@ const ActiveBrainPanel = ({
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Current brain</p>
+                  <p className="text-xs font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">Current brain</p>
                   {providerIsExternal ? (
                     <Badge color={activeProviderType === 'local' ? 'green' : 'blue'}>{providerTone}</Badge>
                   ) : (
@@ -110,29 +110,29 @@ const ActiveBrainPanel = ({
           </div>
         </div>
 
-        <div className="border-t border-gray-100 bg-gray-50/80 p-5 dark:border-gray-800 dark:bg-gray-900/60 midnight:border-slate-800 midnight:bg-slate-900/40 xl:border-l xl:border-t-0">
-          <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-3">
+        <div className="border-t border-gray-100 p-5 dark:border-gray-800 midnight:border-slate-800 xl:border-l xl:border-t-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-4">
             <div className="flex items-start gap-3">
               <Gauge className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Runtime</p>
-                <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{runtimeLabel}</p>
+                <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">Runtime</p>
+                <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{runtimeLabel}</p>
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate">{engineSource}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Server className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Local server</p>
-                <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{localServerNote}</p>
+                <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">Local server</p>
+                <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{localServerNote}</p>
                 {serverStatus?.ctxSize && <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{serverStatus.ctxSize.toLocaleString()} ctx</p>}
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Cpu className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Machine</p>
-                <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">Machine</p>
+                <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                   {showHardwareBadge ? hardwareBadgeLabel : 'Matches runtime'}
                 </p>
                 {engineData?.current && (

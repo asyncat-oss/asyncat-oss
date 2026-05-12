@@ -149,16 +149,20 @@ const LocalModelsPane = ({
                     </div>
                     
                     {switchError && (
-                      <div className="mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 flex items-center gap-2 text-xs text-red-700 dark:text-red-300">
-                        <TriangleAlert className="w-4 h-4 flex-shrink-0" />
-                        {switchError}
+                      <div className="mt-3 flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-xs shadow-sm">
+                        <div className="flex-shrink-0 w-5 h-5 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
+                          <TriangleAlert className="w-3 h-3 text-red-500" />
+                        </div>
+                        <span className="flex-1 text-gray-700 dark:text-gray-200">{switchError}</span>
                       </div>
                     )}
-                    
+
                     {switchSuccess && (
-                      <div className="mt-3 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
-                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                        {switchSuccess}
+                      <div className="mt-3 flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-xs shadow-sm">
+                        <div className="flex-shrink-0 w-5 h-5 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        </div>
+                        <span className="flex-1 text-gray-700 dark:text-gray-200">{switchSuccess}</span>
                       </div>
                     )}
                     
@@ -199,14 +203,13 @@ const LocalModelsPane = ({
                         return (
                           <div
                             key={m.filename}
-                            className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white transition-all duration-200 hover:shadow-md dark:bg-gray-800 midnight:bg-slate-900
-                              ${isLoaded ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-600 ring-1 ring-gray-400/30 dark:ring-gray-500/30 midnight:ring-slate-500/20 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 hover:border-gray-300 dark:hover:border-gray-600 midnight:hover:border-slate-700'}`}
+                            className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white transition-all duration-200 hover:shadow-sm dark:bg-gray-900 midnight:bg-slate-900
+                              ${isLoaded ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-600 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 hover:border-gray-300 dark:hover:border-gray-600 midnight:hover:border-slate-700'}`}
                           >
-                            <div className={`absolute inset-x-0 top-0 h-1 ${isLoaded ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
                             <div className="p-5 flex-1">
                               <div className="flex items-start justify-between gap-3 mb-3">
                                 <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? 'bg-gray-700 text-white dark:bg-gray-600 midnight:bg-slate-800' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800/50 midnight:text-slate-400'}`}>
+                                  <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? 'bg-gray-800 text-white dark:bg-gray-700 midnight:bg-slate-800' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800/50 midnight:text-slate-400'}`}>
                                     {m.isExternal ? <FolderOpen className="w-5 h-5" /> : <Cpu className="w-5 h-5" />}
                                   </div>
                                   <div className="min-w-0">
@@ -218,11 +221,11 @@ const LocalModelsPane = ({
                                       {m.engineType === 'mlx' && <Badge color="amber">MLX</Badge>}
                                       {m.isExternal && <Badge color="gray">External</Badge>}
                                       {m.isMissing && <Badge color="red">Missing Path</Badge>}
-                                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 bg-gray-100 dark:bg-gray-900/50 midnight:bg-slate-800/50 px-2 py-0.5 rounded">
+                                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                                         {m.sizeFormatted}
                                       </span>
                                       {m.architecture && (
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 bg-gray-100 dark:bg-gray-900/50 midnight:bg-slate-800/50 px-2 py-0.5 rounded">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                                           {m.architecture}
                                         </span>
                                       )}
@@ -237,15 +240,15 @@ const LocalModelsPane = ({
                                 )}
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-                                <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Model context</div>
-                                  <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-100">
+                                <div>
+                                  <div className="text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Model context</div>
+                                  <div className="mt-0.5 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-100">
                                     {m.contextLength ? `${Number(m.contextLength).toLocaleString()} ctx` : 'Unknown'}
                                   </div>
                                 </div>
-                                <label className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-                                  <span className="block text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Load context</span>
-                                  <div className="mt-1 flex items-center gap-1">
+                                <label>
+                                  <span className="block text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Load context</span>
+                                  <div className="mt-0.5 flex items-center gap-1">
                                     <input
                                       type="number"
                                       min="512"
@@ -280,9 +283,9 @@ const LocalModelsPane = ({
                                     </div>
                                   </div>
                                 </label>
-                                <div className="rounded-xl bg-gray-50 dark:bg-gray-900/60 midnight:bg-slate-950/60 px-3 py-2 border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-                                  <div className="text-[11px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Status</div>
-                                  <div className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-100">
+                                <div>
+                                  <div className="text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Status</div>
+                                  <div className="mt-0.5 text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-100">
                                     {isLoaded ? 'Loaded now' : 'Ready to load'}
                                   </div>
                                 </div>
@@ -294,7 +297,7 @@ const LocalModelsPane = ({
                               )}
                             </div>
 
-                            <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 border-t border-gray-100 dark:border-gray-700/50 midnight:border-slate-800/50 flex items-center justify-between gap-2">
+                            <div className="px-5 py-3 bg-gray-50 dark:bg-gray-950/50 midnight:bg-slate-950/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
                               <button
                                 onClick={() => {
                                   if (m.engineType === 'mlx') {
@@ -316,10 +319,10 @@ const LocalModelsPane = ({
                                   }
                                 }}
                                 disabled={isStarting || isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}
-                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50
+                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all active:scale-95 disabled:opacity-50
                                   ${isLoaded 
-                                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-200 dark:shadow-none' 
-                                    : 'bg-gray-800 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-900 midnight:bg-slate-100 midnight:hover:bg-slate-200 midnight:text-slate-900'}`}
+                                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                                    : 'bg-gray-900 hover:bg-gray-800 text-white dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-900 midnight:bg-slate-100 midnight:hover:bg-slate-200 midnight:text-slate-900'}`}
                               >
                                 {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : isLoaded ? <CheckCircle2 className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
                                 {isStarting ? 'Loading...' : isLoaded ? 'Active' : 'Load Model'}
@@ -328,7 +331,7 @@ const LocalModelsPane = ({
                               <button
                                 onClick={() => handleDelete(m)}
                                 disabled={isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}
-                                className="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
+                                className="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
                                 title={m.isExternal ? "Remove from library" : "Delete model"}
                               >
                                 {isDeleting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}

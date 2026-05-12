@@ -15,14 +15,13 @@ const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }
   const icon = type === 'whisper' ? <Mic className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />;
 
   return (
-    <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white transition-all duration-200 hover:shadow-md dark:bg-gray-800 midnight:bg-slate-900
-      ${isLoaded ? 'border-indigo-400 dark:border-indigo-500 midnight:border-indigo-600 ring-1 ring-indigo-400/30 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 hover:border-gray-300 dark:hover:border-gray-600'}`}
+    <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white transition-all duration-200 hover:shadow-sm dark:bg-gray-900 midnight:bg-slate-900
+      ${isLoaded ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-600 shadow-sm' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800/80 hover:border-gray-300 dark:hover:border-gray-600'}`}
     >
-      <div className={`absolute inset-x-0 top-0 h-1 ${isLoaded ? (type === 'whisper' ? 'bg-violet-500' : 'bg-emerald-500') : 'bg-gray-200 dark:bg-gray-700'}`} />
       <div className="p-4 flex-1">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? (type === 'whisper' ? 'bg-violet-600 text-white' : 'bg-emerald-600 text-white') : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800/50 midnight:text-slate-400'}`}>
+            <div className={`p-2 rounded-lg flex-shrink-0 transition-colors ${isLoaded ? 'bg-gray-800 text-white dark:bg-gray-700 midnight:bg-slate-800' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800/50 midnight:text-slate-400'}`}>
               {model.isExternal ? <FolderOpen className="w-5 h-5" /> : icon}
             </div>
             <div className="min-w-0">
@@ -30,12 +29,12 @@ const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }
                 {model.name || model.filename}
               </h3>
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                <Badge color={type === 'whisper' ? 'blue' : 'green'}>{typeLabel}</Badge>
+                <Badge color="gray">{typeLabel}</Badge>
                 {model.isExternal && <Badge color="gray">External</Badge>}
                 {model.isMissing && <Badge color="red">Missing</Badge>}
                 {model.missingConfig && <Badge color="amber">No .json config</Badge>}
                 {model.sizeFormatted && (
-                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900/50 px-1.5 py-0.5 rounded">
+                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
                     {model.sizeFormatted}
                   </span>
                 )}
@@ -52,34 +51,32 @@ const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }
 
         {type === 'whisper' && model.quality && (
           <div className="mt-2 flex gap-2 flex-wrap">
-            <span className="text-[11px] px-2 py-0.5 rounded-md bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400 font-medium">{model.quality}</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-medium">{model.quality}</span>
             {model.language && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium capitalize">{model.language}</span>}
           </div>
         )}
         {type === 'tts' && (
           <div className="mt-2 flex gap-2 flex-wrap">
-            {model.qualityLabel && <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 font-medium">{model.qualityLabel}</span>}
+            {model.qualityLabel && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-medium">{model.qualityLabel}</span>}
             {model.languageName && model.languageName !== 'unknown' && <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.languageName}</span>}
           </div>
         )}
         {model.missingConfig && (
-          <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/10 rounded-lg px-2.5 py-1.5">
-            <AlertTriangle className="w-3 h-3 inline mr-1 -mt-0.5" />
-            Requires a matching <code className="text-[10px] bg-amber-100 dark:bg-amber-900/30 px-1 py-0.5 rounded font-mono">.onnx.json</code> config file to work.
+          <p className="mt-2 text-[11px] text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-950 rounded-lg px-2.5 py-1.5 border border-gray-200 dark:border-gray-700">
+            <AlertTriangle className="w-3 h-3 inline mr-1 -mt-0.5 text-amber-500" />
+            Requires a matching <code className="text-[10px] bg-gray-100 dark:bg-gray-900 px-1 py-0.5 rounded font-mono">.onnx.json</code> config file to work.
           </p>
         )}
       </div>
 
-      <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 border-t border-gray-100 dark:border-gray-700/50 flex items-center justify-between gap-2">
+      <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-950/50 midnight:bg-slate-950/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
         <button
           onClick={() => onStart(model)}
           disabled={isStarting || isLoaded || model.isMissing || model.missingConfig}
           className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all active:scale-95 disabled:opacity-50
             ${isLoaded
               ? 'bg-green-600 text-white'
-              : type === 'whisper'
-                ? 'bg-violet-600 hover:bg-violet-700 text-white'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+              : 'bg-gray-900 hover:bg-gray-800 text-white dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-900'}`}
         >
           {isStarting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : isLoaded ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
           {isStarting ? 'Loading…' : isLoaded ? 'Active' : 'Load'}
@@ -87,7 +84,7 @@ const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }
         <button
           onClick={() => onDelete(model)}
           disabled={isLoaded}
-          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors disabled:opacity-50"
           title="Remove"
         >
           <Trash2 className="w-4 h-4" />
@@ -103,17 +100,19 @@ const EngineStatusBanner = ({ type, status, binaryFound, onCheck }) => {
 
   if (binaryFound === false) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/80 dark:border-amber-800/30 dark:bg-amber-900/10 px-4 py-3 text-sm">
-        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+      <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
+          <AlertTriangle className="w-3 h-3 text-amber-500" />
+        </div>
         <div className="flex-1">
-          <span className="font-medium text-amber-800 dark:text-amber-300">{label} not found.</span>
-          <span className="text-amber-700 dark:text-amber-400 ml-1">
+          <span className="font-medium text-gray-700 dark:text-gray-200">{label} not found.</span>
+          <span className="text-gray-500 dark:text-gray-400 ml-1">
             {type === 'whisper'
               ? 'Install whisper.cpp or set WHISPER_BINARY_PATH in den/.env'
               : 'Install piper-tts or set PIPER_BINARY_PATH in den/.env'}
           </span>
         </div>
-        <button onClick={onCheck} className="text-xs font-medium text-amber-700 dark:text-amber-400 hover:underline flex-shrink-0">Re-check</button>
+        <button onClick={onCheck} className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex-shrink-0">Re-check</button>
       </div>
     );
   }
@@ -498,10 +497,12 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
       </Panel>
 
       {error && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/30 dark:bg-red-900/20 dark:text-red-400">
-          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="flex-1">{error}</span>
-          <button onClick={() => setError('')} className="hover:opacity-70 text-xs font-medium">✕</button>
+        <div className="mt-3 flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-xs shadow-sm">
+          <div className="flex-shrink-0 w-5 h-5 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
+            <AlertTriangle className="w-3 h-3 text-red-500" />
+          </div>
+          <span className="flex-1 text-gray-700 dark:text-gray-200">{error}</span>
+          <button onClick={() => setError('')} className="hover:opacity-70 text-xs font-medium text-gray-400">✕</button>
         </div>
       )}
 
@@ -510,7 +511,7 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
         <Panel className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 midnight:bg-violet-900/20 midnight:text-violet-400">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
                 <Mic className="w-4 h-4" />
               </div>
               <div>
@@ -519,7 +520,7 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
               </div>
             </div>
             {whisperReady && (
-              <button onClick={handleWhisperStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors">
+              <button onClick={handleWhisperStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors">
                 <Square className="w-3 h-3 fill-current" /> Stop
               </button>
             )}
@@ -561,7 +562,7 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
         <Panel className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/20 midnight:text-emerald-400">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
                 <Volume2 className="w-4 h-4" />
               </div>
               <div>
@@ -570,7 +571,7 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
               </div>
             </div>
             {ttsReady && (
-              <button onClick={handleTtsStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors">
+              <button onClick={handleTtsStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors">
                 <Square className="w-3 h-3 fill-current" /> Stop
               </button>
             )}
@@ -610,20 +611,22 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
       </div>
 
       {/* Info banner */}
-      <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-gray-200/80 bg-gray-50/50 dark:border-gray-800/50 dark:bg-gray-900/30 midnight:border-slate-800/50 midnight:bg-slate-950/30 px-4 py-3">
-        <Info className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+      <div className="mt-4 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm px-4 py-3">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center mt-0.5">
+          <Info className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+        </div>
         <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed space-y-1.5">
           <div>
-            <span className="font-medium text-gray-600 dark:text-gray-300">Agent tools:</span>{' '}
+            <span className="font-medium text-gray-700 dark:text-gray-200">Agent tools:</span>{' '}
             When models are loaded, your agent can use <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">transcribe_audio</code> and{' '}
             <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">speak_text</code> tools automatically.
           </div>
           <div>
-            <span className="font-medium text-gray-600 dark:text-gray-300">Whisper STT:</span>{' '}
+            <span className="font-medium text-gray-700 dark:text-gray-200">Whisper STT:</span>{' '}
             Needs a single <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.bin</code> file (e.g. <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">ggml-base.en.bin</code>).
           </div>
           <div>
-            <span className="font-medium text-gray-600 dark:text-gray-300">Piper TTS:</span>{' '}
+            <span className="font-medium text-gray-700 dark:text-gray-200">Piper TTS:</span>{' '}
             Needs <strong>two files</strong> — the <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx</code> voice model <strong>and</strong> its matching <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx.json</code> config. Download both to the same folder.
           </div>
         </div>

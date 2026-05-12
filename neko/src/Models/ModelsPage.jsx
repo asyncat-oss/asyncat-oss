@@ -214,10 +214,12 @@ const ModelsPage = () => {
         {/* Error banner */}
         {deleteError && (
           <div className="mx-auto max-w-[1200px] px-6 lg:px-8 mt-4">
-            <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800/30 dark:bg-red-900/20 dark:text-red-400">
-              <TriangleAlert size={14} className="flex-shrink-0" />
-              <span className="flex-1">{deleteError}</span>
-              <button onClick={() => setDeleteError('')} className="hover:opacity-70"><X size={13} /></button>
+            <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
+                <TriangleAlert size={14} className="text-red-500" />
+              </div>
+              <span className="flex-1 text-gray-700 dark:text-gray-200">{deleteError}</span>
+              <button onClick={() => setDeleteError('')} className="hover:opacity-70 text-gray-400"><X size={13} /></button>
             </div>
           </div>
         )}

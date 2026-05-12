@@ -1027,7 +1027,7 @@ function StatusEvent({ data, onRunWithTools }) {
           <button
             type="button"
             onClick={() => onRunWithTools?.(data.goal)}
-            className="inline-flex items-center gap-1 rounded border border-blue-200 px-2 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
           >
             <Zap className="w-3 h-3" />
             Run with Tools ON

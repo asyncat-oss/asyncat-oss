@@ -106,11 +106,11 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
           </label>
 
           {(isAddingFromPreset && presetHasDefaults) || setupItems.length > 0 || selectedPreset?.compatibility || docsUrl ? (
-            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/30 dark:bg-blue-900/15 dark:text-blue-300">
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
               {isAddingFromPreset && presetHasDefaults && (
                 <>
-                  <p className="font-medium">Default model: {selectedPreset.model}</p>
-                  <p className="mt-0.5 text-xs opacity-90">
+                  <p className="font-medium text-gray-800 dark:text-gray-200">Default model: {selectedPreset.model}</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                     {form.provider_id === 'openrouter'
                       ? 'OpenRouter can route automatically with openrouter/auto. Pick a concrete model later when you need predictable behavior.'
                       : 'The preset default model is a starting point. Use Models after saving to choose a model returned by the provider.'}
@@ -118,10 +118,10 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                 </>
               )}
               {selectedPreset?.compatibility && (
-                <p className="mt-2 text-xs leading-5 opacity-95">{selectedPreset.compatibility}</p>
+                <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{selectedPreset.compatibility}</p>
               )}
               {setupItems.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs leading-5">
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
                   {setupItems.map(item => <li key={item}>- {item}</li>)}
                 </ul>
               )}
@@ -130,7 +130,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                   href={docsUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium underline underline-offset-2"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
                 >
                   <Link2 className="h-3.5 w-3.5" />
                   Provider docs
@@ -261,48 +261,32 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
 const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, providerAction, experimental = false }) => {
   const hasModels = models && models.length > 0;
   return (
-    <div className={`rounded-3xl border p-5 shadow-sm ${
-      experimental
-        ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/15 midnight:bg-amber-900/10'
-        : 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20 midnight:bg-green-900/10'
-    }`}>
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className={`p-2 rounded-xl ${
-            experimental
-              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-              : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'
-          }`}>
+          <div className={`p-2 rounded-xl border ${experimental ? 'border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400' : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={`text-base font-semibold ${experimental ? 'text-amber-900 dark:text-amber-100' : 'text-green-900 dark:text-green-100'}`}>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
                 {name} Detected
               </h3>
               {running && <Badge color="green">Running</Badge>}
               {experimental && <Badge color="amber">Experimental</Badge>}
             </div>
-            <p className={`mt-1 text-xs break-all ${experimental ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`}>{baseUrl}</p>
+            <p className="mt-1 text-xs break-all text-gray-500 dark:text-gray-400">{baseUrl}</p>
             {hasModels && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {models.slice(0, 5).map(m => (
-                  <span key={m} className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
-                    experimental
-                      ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100'
-                      : 'bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200'
-                  }`}>{m}</span>
+                  <span key={m} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">{m}</span>
                 ))}
-                {models.length > 5 && <span className={`text-xs ${experimental ? 'text-amber-600 dark:text-amber-300' : 'text-green-600 dark:text-green-400'}`}>+{models.length - 5} more</span>}
+                {models.length > 5 && <span className="text-xs text-gray-400 dark:text-gray-500">+{models.length - 5} more</span>}
               </div>
             )}
           </div>
         </div>
-        <button onClick={onDismiss} className={`p-1 rounded-lg ${
-          experimental
-            ? 'text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30'
-            : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-800'
-        }`}>
+        <button onClick={onDismiss} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -310,15 +294,13 @@ const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, p
         <button
           onClick={onUse}
           disabled={Boolean(providerAction)}
-          className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-white disabled:opacity-50 ${
-            experimental ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'
-          }`}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
         >
           <Sparkles className="w-4 h-4" />
           Use {name}
         </button>
         {hasModels && (
-          <span className={`flex items-center text-xs py-2 ${experimental ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`}>
+          <span className="flex items-center text-xs py-2 text-gray-500 dark:text-gray-400">
             {models.length} model{models.length !== 1 ? 's' : ''} available
           </span>
         )}
@@ -650,9 +632,11 @@ const ProvidersSection = ({
   return (
     <div className="space-y-6">
       {providerError && (
-        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
-          <TriangleAlert className="w-4 h-4 flex-shrink-0" />
-          {providerError}
+        <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
+          <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
+            <TriangleAlert className="w-3 h-3 text-red-500" />
+          </div>
+          <span className="flex-1 text-gray-700 dark:text-gray-200">{providerError}</span>
         </div>
       )}
 
@@ -688,7 +672,7 @@ const ProvidersSection = ({
               const isActive = activeProfileId === profile.id;
               const busy = providerAction === profile.id;
               return (
-                <div key={profile.id} className={`rounded-3xl border bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm ${isActive ? 'border-green-400 dark:border-green-500' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800'}`}>
+                <div key={profile.id} className={`rounded-xl border bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm ${isActive ? 'border-gray-400 dark:border-gray-500 midnight:border-slate-500' : 'border-gray-200 dark:border-gray-700 midnight:border-slate-800'}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -699,10 +683,10 @@ const ProvidersSection = ({
                       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{providerLabel(profile, catalog)} · {modelDisplayName(profile, catalog)}</p>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 break-all">{profile.base_url}</p>
                       {profile.last_test_message && (
-                        <p className={`mt-2 text-xs ${profile.last_test_status === 'ok' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{profile.last_test_message}</p>
+                        <p className={`mt-2 text-xs ${profile.last_test_status === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{profile.last_test_message}</p>
                       )}
                     </div>
-                    {isActive ? <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" /> : <Cloud className="w-5 h-5 text-gray-400 flex-shrink-0" />}
+                    {isActive ? <div className="flex-shrink-0 w-5 h-5 rounded-full border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 flex items-center justify-center"><CheckCircle2 className="w-3 h-3 text-green-500" /></div> : <Cloud className="w-5 h-5 text-gray-400 flex-shrink-0" />}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
