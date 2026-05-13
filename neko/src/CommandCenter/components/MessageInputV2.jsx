@@ -1,6 +1,7 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, HardDrive, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
+import ConfirmModal from "./ConfirmModal.jsx";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -180,7 +181,6 @@ export const MessageInputV2 = ({
   onToggleAutoApprove,
   isRunning = false,
   onStop,
-  runStartedAt = null,
   externalFileAttachment = null,
   workingContext = null,
   onWorkingContextChange,
@@ -210,7 +210,6 @@ export const MessageInputV2 = ({
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [dismissedTrigger, setDismissedTrigger] = useState(null);
-  const [runElapsed, setRunElapsed] = useState(0);
   const voiceCapabilityMode = sttReady && ttsReady ? 'full' : sttReady ? 'stt' : ttsReady ? 'tts' : 'none';
   const voiceConversationAvailable = voiceCapabilityMode === 'full';
   const voiceConversationActive = voiceMode && voiceConversationAvailable;
@@ -229,6 +228,7 @@ export const MessageInputV2 = ({
   const [contextBrowseLoading, setContextBrowseLoading] = useState(false);
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [pendingContextSwitch, setPendingContextSwitch] = useState(null);
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
@@ -342,13 +342,6 @@ export const MessageInputV2 = ({
     activeBrain.status,
     activeBrain.model,
   ]);
-
-  useEffect(() => {
-    if (!isRunning || !runStartedAt) { setRunElapsed(0); return; }
-    setRunElapsed(Date.now() - runStartedAt);
-    const id = setInterval(() => setRunElapsed(Date.now() - runStartedAt), 1000);
-    return () => clearInterval(id);
-  }, [isRunning, runStartedAt]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -739,14 +732,23 @@ export const MessageInputV2 = ({
     const currentKey = `${activeWorkingContext?.rootId || ""}:${activeWorkingContext?.relativePath || "."}`;
     const nextKey = `${nextContext.rootId}:${nextContext.relativePath}`;
     if (hasMessages && currentKey !== nextKey) {
-      const ok = window.confirm(
-        "Switch this chat to a different working folder?\n\nFuture file search, Git, shell tools, and edits will use the new folder. Earlier messages and edits stay as history."
-      );
-      if (!ok) return;
+      setPendingContextSwitch(nextContext);
+      return;
     }
     onWorkingContextChange(nextContext);
     setOpenMenu(null);
   }, [activeRoot, activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileRoots, hasMessages, onWorkingContextChange]);
+
+  const confirmContextSwitch = useCallback(() => {
+    if (!pendingContextSwitch) return;
+    onWorkingContextChange(pendingContextSwitch);
+    setPendingContextSwitch(null);
+    setOpenMenu(null);
+  }, [pendingContextSwitch, onWorkingContextChange]);
+
+  const cancelContextSwitch = useCallback(() => {
+    setPendingContextSwitch(null);
+  }, []);
 
   const applyManualContextPath = useCallback(() => {
     const context = contextFromAbsolutePath(manualContextPath, fileRoots);
@@ -1399,11 +1401,6 @@ export const MessageInputV2 = ({
 
                 {isRunning ? (
                   <div className="inline-flex items-center gap-1.5">
-                    {runElapsed > 0 && (
-                      <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
-                        {formatElapsed(runElapsed)}
-                      </span>
-                    )}
                     {tokenUsage?.totalTokens > 0 && (
                       <>
                         <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
@@ -1486,6 +1483,16 @@ export const MessageInputV2 = ({
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={!!pendingContextSwitch}
+        onClose={cancelContextSwitch}
+        onConfirm={confirmContextSwitch}
+        title="Switch working folder?"
+        message="Future file search, Git, shell tools, and edits will use the new folder. Earlier messages and edits stay as history."
+        confirmLabel="Switch folder"
+        cancelLabel="Keep current"
+      />
     </div>
   );
 };
