@@ -118,6 +118,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     agentAbortControllersRef = fallbackAgentAbortControllersRef,
     runStartedAtRef = fallbackRunStartedAtRef,
     currentConversationIdRef = fallbackCurrentConversationIdRef,
+    workingContext = null,
+    setWorkingContext = () => {},
   } = commandCenterContext || {};
 
   const messagesEndRef = useRef(null);
@@ -347,7 +349,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setGitLoading(true);
     setGitError(null);
     try {
-      const res = await gitApi.getState();
+      const res = await gitApi.getState({ path: workingContext?.workingDir || null });
       setGitState(res);
     } catch (error) {
       setGitError(error.message || 'Could not load Git state');
@@ -355,7 +357,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     } finally {
       setGitLoading(false);
     }
-  }, []);
+  }, [workingContext?.workingDir]);
 
   useEffect(() => {
     refreshGitState();
@@ -382,8 +384,19 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [refreshGitState]);
 
   const handleAttachGitFile = useCallback((file) => {
-    setExternalFileAttachment({ ...file, nonce: Date.now() });
-  }, []);
+    const basePath = workingContext?.relativePath && workingContext.relativePath !== '.'
+      ? workingContext.relativePath.replace(/\/+$/, '')
+      : '';
+    const scopedPath = basePath && file?.path && !String(file.path).startsWith(`${basePath}/`)
+      ? `${basePath}/${file.path}`
+      : file?.path;
+    setExternalFileAttachment({
+      ...file,
+      rootId: workingContext?.rootId || 'workspace',
+      path: scopedPath,
+      nonce: Date.now(),
+    });
+  }, [workingContext?.relativePath, workingContext?.rootId]);
 
   const ConversationSwitcher = useCallback(({ compact = false } = {}) => (
     <button
@@ -491,6 +504,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const runMessages = messages;
     const effectiveAgentMode = runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
     const effectiveToolsEnabled = effectiveAgentMode === 'action';
+    const activeWorkingContext = workingContext || null;
     const activeConversationHistory = agentConversationHistory.length > 0
       ? agentConversationHistory
       : conversationHistory;
@@ -514,7 +528,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         fileAttachments,
         events: [
           ...baseEvents,
-          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
+          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext }, arrivedAt: Date.now() },
         ],
       };
     });
@@ -528,16 +542,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
     const runEvents = [
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null } },
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext } },
     ];
 
     try {
-      for await (const event of agentApi.runStream(submittedGoal, activeConversationHistory, null, 25, controller.signal, agentCurrentSessionId, {
+      for await (const event of agentApi.runStream(submittedGoal, activeConversationHistory, activeWorkingContext?.workingDir || null, 25, controller.signal, agentCurrentSessionId, {
         autoApprove: effectiveAgentMode === 'action' ? agentAutoApprove : false,
         preApprovedTools: effectiveAgentMode === 'action' ? [...alwaysAllowedTools] : [],
         profileId: effectiveProfileId,
         agentMentions,
         fileAttachments,
+        workingContext: activeWorkingContext,
         enableTools: effectiveToolsEnabled,
         agentMode: effectiveAgentMode,
         reasoningEffort: selectedReasoningEffort,
@@ -684,7 +699,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       if (capturedFinalAnswer) {
         const nextHistory = [
           ...activeConversationHistory,
-          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments },
+          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, workingContext: activeWorkingContext },
           { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId },
         ];
         const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
@@ -703,6 +718,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           reasoningEffort: selectedReasoningEffort,
           agentMentions,
           fileAttachments,
+          workingContext: activeWorkingContext,
         };
         const runEventsForMsg = runEvents;
         const searchEvent = buildSearchEvent(runEventsForMsg);
@@ -828,6 +844,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     triggerConversationRefresh,
     updateChatRun,
     refreshGitState,
+    workingContext,
   ]);
 
   const handleRetryTool = useCallback((failure) => {
@@ -1366,6 +1383,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               reasoningEffort={reasoningEffort}
               onReasoningEffortChange={handleReasoningEffortChange}
               externalFileAttachment={externalFileAttachment}
+              workingContext={workingContext}
+              onWorkingContextChange={setWorkingContext}
             />
 
 
@@ -1715,6 +1734,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onStop={handleAgentStop}
                 runStartedAt={runStartedAtRef.current}
                 externalFileAttachment={externalFileAttachment}
+                workingContext={workingContext}
+                onWorkingContextChange={setWorkingContext}
                 tokenUsage={latestTokenUsage}
               />
             </div>
@@ -1736,6 +1757,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             onGitRefresh={refreshGitState}
             onGitChanged={handleGitChanged}
             onAttachGitFile={handleAttachGitFile}
+            workingDir={workingContext?.workingDir || null}
             recentConversations={recentConversations}
             recentConversationsLoading={recentConversationsLoading}
             recentConversationsError={recentConversationsError}
@@ -1769,6 +1791,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onGitRefresh={refreshGitState}
               onGitChanged={handleGitChanged}
               onAttachGitFile={handleAttachGitFile}
+              workingDir={workingContext?.workingDir || null}
               recentConversations={recentConversations}
               recentConversationsLoading={recentConversationsLoading}
               recentConversationsError={recentConversationsError}

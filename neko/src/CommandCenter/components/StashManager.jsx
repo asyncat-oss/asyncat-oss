@@ -1,18 +1,19 @@
-import { useState, useEffect } from 'react';
-import { Loader2, AlertCircle, Save, Inbox, Trash2, ArrowUpFromLine } from 'lucide-react';
+/* eslint-disable react/prop-types */
+import { useCallback, useState, useEffect } from 'react';
+import { Loader2, AlertCircle, Inbox, Trash2, ArrowUpFromLine } from 'lucide-react';
 import { gitApi } from '../api';
 
-export default function StashManager({ onRefresh }) {
+export default function StashManager({ onRefresh, workingDir = null }) {
   const [stashes, setStashes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyIndex, setBusyIndex] = useState(null);
 
-  const fetchStashes = async () => {
+  const fetchStashes = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await gitApi.stash({ action: 'list' });
+      const res = await gitApi.stash({ action: 'list', path: workingDir });
       if (res.success) {
         setStashes(res.stashes || []);
       } else {
@@ -23,16 +24,16 @@ export default function StashManager({ onRefresh }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workingDir]);
 
   useEffect(() => {
     fetchStashes();
-  }, []);
+  }, [fetchStashes]);
 
   const handleAction = async (action, index) => {
     try {
       setBusyIndex(index);
-      const res = await gitApi.stash({ action, index });
+      const res = await gitApi.stash({ action, index, path: workingDir });
       if (!res.success) {
         setError(res.error || `Failed to ${action} stash`);
       }

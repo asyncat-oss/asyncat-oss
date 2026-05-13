@@ -182,6 +182,10 @@ class ChatService {
         baseMessage.fileAttachments = msg.fileAttachments;
       }
 
+      if (msg.workingContext && typeof msg.workingContext === 'object') {
+        baseMessage.workingContext = msg.workingContext;
+      }
+
       // Preserve web search event (images + sources) so they survive navigation
       if (msg.searchEvent && typeof msg.searchEvent === 'object') {
         baseMessage.searchEvent = msg.searchEvent;
@@ -275,6 +279,10 @@ class ChatService {
       // Restore file attachments
       if (Array.isArray(msg.fileAttachments) && msg.fileAttachments.length > 0) {
         baseMessage.fileAttachments = msg.fileAttachments;
+      }
+
+      if (msg.workingContext && typeof msg.workingContext === 'object') {
+        baseMessage.workingContext = msg.workingContext;
       }
 
       // Restore web search event (images + sources)

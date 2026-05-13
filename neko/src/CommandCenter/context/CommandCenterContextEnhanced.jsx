@@ -25,6 +25,8 @@ const ActionTypes = {
   SET_CURRENT_WORKSPACE: 'SET_CURRENT_WORKSPACE',
   SET_GHOST_MODE: 'SET_GHOST_MODE',
   SET_CONVERSATION_SUMMARIES: 'SET_CONVERSATION_SUMMARIES',
+  SET_WORKING_CONTEXT: 'SET_WORKING_CONTEXT',
+  SET_CONVERSATION_METADATA: 'SET_CONVERSATION_METADATA',
 };
 
 const initialState = {
@@ -40,7 +42,20 @@ const initialState = {
   currentWorkspace: null,
   isGhostMode: false,
   conversationSummaries: [],
+  workingContext: null,
+  conversationMetadata: {},
 };
+
+function normalizeWorkingContext(context) {
+  if (!context || typeof context !== 'object') return null;
+  const rootId = context.rootId || context.root?.id || 'workspace';
+  const relativePath = context.relativePath || context.path || '.';
+  return {
+    ...context,
+    rootId,
+    relativePath: relativePath || '.',
+  };
+}
 
 function commandCenterReducer(state, action) {
   switch (action.type) {
@@ -98,6 +113,10 @@ function commandCenterReducer(state, action) {
       return { ...state, isGhostMode: false, messages: [], conversationHistory: [], currentConversationId: null, conversationTitle: null };
     case ActionTypes.SET_CONVERSATION_SUMMARIES:
       return { ...state, conversationSummaries: action.payload };
+    case ActionTypes.SET_WORKING_CONTEXT:
+      return { ...state, workingContext: normalizeWorkingContext(action.payload) };
+    case ActionTypes.SET_CONVERSATION_METADATA:
+      return { ...state, conversationMetadata: action.payload && typeof action.payload === 'object' ? action.payload : {} };
     default:
       return state;
   }
@@ -272,7 +291,12 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         mode: options.mode || 'chat',
         projectIds: state.selectedProjects,
         conversationId: targetConversationId,
-        metadata: { workspaceId: currentWorkspace?.id, ...(options.metadata || {}) },
+        metadata: {
+          ...(state.conversationMetadata || {}),
+          workspaceId: currentWorkspace?.id,
+          ...(state.workingContext ? { workingContext: state.workingContext } : {}),
+          ...(options.metadata || {}),
+        },
       });
 
       if (result.success) {
@@ -297,7 +321,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     } finally {
       savingConversationIdsRef.current.delete(savingKey);
     }
-  }, [state.messages, state.selectedProjects, state.currentConversationId, state.conversationTitle, state.isGhostMode, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations]);
+  }, [state.messages, state.selectedProjects, state.currentConversationId, state.conversationTitle, state.isGhostMode, state.workingContext, state.conversationMetadata, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations]);
 
   // Helper for V2Enhanced to set conversation id and title after a new save
   const setCurrentConversationId = useCallback((id) => {
@@ -348,6 +372,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       dispatch({ type: ActionTypes.SET_SELECTED_PROJECTS, payload: conversation.project_ids || [] });
       dispatch({ type: ActionTypes.SET_CURRENT_CONVERSATION_ID, payload: conversationId });
       dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: conversation.title });
+      dispatch({ type: ActionTypes.SET_CONVERSATION_METADATA, payload: conversation.metadata || {} });
+      dispatch({ type: ActionTypes.SET_WORKING_CONTEXT, payload: conversation.metadata?.workingContext || null });
 
       if (conversation.metadata?.conversationSummaries) {
         dispatch({ type: ActionTypes.SET_CONVERSATION_SUMMARIES, payload: conversation.metadata.conversationSummaries });
@@ -389,6 +415,23 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     dispatch({ type: ActionTypes.SET_SELECTED_PROJECTS, payload: projectIds || [] });
   }, []);
 
+  const setWorkingContext = useCallback((context) => {
+    const normalized = normalizeWorkingContext(context);
+    dispatch({ type: ActionTypes.SET_WORKING_CONTEXT, payload: normalized });
+
+    if (!state.currentConversationId || state.isGhostMode || !currentWorkspace?.id) return;
+    const nextMetadata = {
+      ...(state.conversationMetadata || {}),
+      workspaceId: currentWorkspace.id,
+      workingContext: normalized,
+    };
+    if (!normalized) delete nextMetadata.workingContext;
+    dispatch({ type: ActionTypes.SET_CONVERSATION_METADATA, payload: nextMetadata });
+    commandCenterApi.chat.updateConversation(state.currentConversationId, { metadata: nextMetadata })
+      .then(() => triggerConversationRefresh())
+      .catch((error) => console.error('Failed to persist working context:', error));
+  }, [currentWorkspace?.id, state.conversationMetadata, state.currentConversationId, state.isGhostMode, triggerConversationRefresh]);
+
   const toggleGhostMode = useCallback(() => {
     dispatch({ type: ActionTypes.SET_GHOST_MODE, payload: !state.isGhostMode });
   }, [state.isGhostMode]);
@@ -410,6 +453,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     currentWorkspace: state.currentWorkspace,
     isGhostMode: state.isGhostMode,
     conversationSummaries: state.conversationSummaries,
+    workingContext: state.workingContext,
+    conversationMetadata: state.conversationMetadata,
     justLoadedConversation: state.justLoadedConversation,
     toolsEnabled,
 
@@ -431,6 +476,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     handleClearConversation,
     handleNewConversation,
     setSelectedProjects,
+    setWorkingContext,
     clearError: () => dispatch({ type: ActionTypes.CLEAR_ERROR }),
     loadConversation,
     saveCurrentConversation,

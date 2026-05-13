@@ -140,6 +140,29 @@ export function resolveExplorerPath(rootId = 'workspace', relativePath = '.') {
   };
 }
 
+export function resolveWorkingDirectoryContext(context = {}) {
+  const rootId = context?.rootId || 'workspace';
+  const relativePath = context?.relativePath || context?.path || '.';
+  const resolved = resolveExplorerPath(rootId, relativePath);
+
+  if (!fs.existsSync(resolved.absolutePath)) {
+    throw createRouteError('Working directory not found', 404, 'NOT_FOUND');
+  }
+  if (!fs.statSync(resolved.absolutePath).isDirectory()) {
+    throw createRouteError('Working context must be a directory', 400, 'NOT_DIRECTORY');
+  }
+
+  return {
+    root: publicRoot(resolved.root),
+    rootId: resolved.root.id,
+    rootLabel: resolved.root.label,
+    rootKind: resolved.root.kind,
+    rootPath: resolved.rootPath,
+    relativePath: resolved.relativePath,
+    workingDir: resolved.absolutePath,
+  };
+}
+
 function fileExt(name) {
   return path.extname(name).slice(1).toLowerCase();
 }

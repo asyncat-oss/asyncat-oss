@@ -6,6 +6,22 @@
 import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 
+function columnExists(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some(row => row.name === column);
+}
+
+function tableExists(table) {
+  return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
+}
+
+if (tableExists('agent_sessions') && !columnExists('agent_sessions', 'working_dir')) {
+  try {
+    db.prepare('ALTER TABLE agent_sessions ADD COLUMN working_dir TEXT').run();
+  } catch (err) {
+    console.warn('Failed to add agent_sessions.working_dir:', err.message);
+  }
+}
+
 function toJson(value, fallback = '{}') {
   try { return JSON.stringify(value ?? JSON.parse(fallback)); }
   catch { return fallback; }
@@ -93,16 +109,17 @@ export class AgentSession {
       db.prepare(`
         INSERT INTO agent_sessions (
           id, user_id, workspace_id, status, goal, plan, scratchpad,
-          tool_history, total_rounds, feedback_rating, feedback_comment,
+          tool_history, working_dir, total_rounds, feedback_rating, feedback_comment,
           was_helpful, corrections, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           status = excluded.status,
           goal = excluded.goal,
           plan = excluded.plan,
           scratchpad = excluded.scratchpad,
           tool_history = excluded.tool_history,
+          working_dir = excluded.working_dir,
           total_rounds = excluded.total_rounds,
           feedback_rating = excluded.feedback_rating,
           feedback_comment = excluded.feedback_comment,
@@ -112,7 +129,7 @@ export class AgentSession {
       `).run(
         this.id, this.userId, this.workspaceId, this.status,
         this.goal, JSON.stringify(this.plan), JSON.stringify(this.scratchpad),
-        JSON.stringify(this.toolHistory), this.totalRounds,
+        JSON.stringify(this.toolHistory), this.workingDir, this.totalRounds,
         this.feedbackRating, this.feedbackComment, this.wasHelpful,
         JSON.stringify(this.corrections || []),
         this.createdAt, this.updatedAt
@@ -190,6 +207,7 @@ export class AgentSession {
         userId: row.user_id,
         workspaceId: row.workspace_id,
         goal: row.goal,
+        workingDir: row.working_dir || undefined,
       });
       session.status = row.status;
       session.plan = JSON.parse(row.plan || '[]');
@@ -213,7 +231,7 @@ export class AgentSession {
   static listRecent(userId, limit = 20, workspaceId = null) {
     try {
       return db.prepare(`
-        SELECT s.id, s.goal, s.status, s.total_rounds, s.created_at, s.updated_at,
+        SELECT s.id, s.goal, s.status, s.working_dir, s.total_rounds, s.created_at, s.updated_at,
                atr.id AS task_run_id, atr.status AS task_run_status,
                atr.last_event_label AS task_run_activity, atr.summary AS task_run_summary,
                c.id AS task_card_id, c.title AS task_card_title,
@@ -264,4 +282,3 @@ export class AgentSession {
 }
 
 export default AgentSession;
-

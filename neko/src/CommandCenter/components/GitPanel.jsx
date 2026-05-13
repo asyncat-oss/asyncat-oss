@@ -218,7 +218,7 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
   );
 }
 
-function DiffViewer({ file, staged }) {
+function DiffViewer({ file, staged, workingDir = null }) {
   const [diff, setDiff] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -228,7 +228,7 @@ function DiffViewer({ file, staged }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    gitApi.getDiff({ file: file.path, staged })
+    gitApi.getDiff({ file: file.path, staged, path: workingDir })
       .then(res => {
         if (!cancelled) setDiff(res);
       })
@@ -239,7 +239,7 @@ function DiffViewer({ file, staged }) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [file, staged]);
+  }, [file, staged, workingDir]);
 
   if (!file) return null;
   return (
@@ -280,7 +280,7 @@ function DiffViewer({ file, staged }) {
   );
 }
 
-function ChangeRow({ file, onAction, onAttach }) {
+function ChangeRow({ file, onAction, onAttach, workingDir = null }) {
   const [open, setOpen] = useState(false);
   const { name, dir } = splitPath(file.path || '');
   const ext = name.split('.').pop();
@@ -311,14 +311,14 @@ function ChangeRow({ file, onAction, onAttach }) {
       </div>
       {open && (
         <div className="mx-2 mb-2 overflow-hidden rounded-md border border-gray-200 dark:border-slate-800">
-          <DiffViewer file={file} staged={file.staged && !file.unstaged} />
+          <DiffViewer file={file} staged={file.staged && !file.unstaged} workingDir={workingDir} />
         </div>
       )}
     </div>
   );
 }
 
-export default function GitPanel({ state, loading, error, onRefresh, onChanged, onAttachFile }) {
+export default function GitPanel({ state, loading, error, onRefresh, onChanged, onAttachFile, workingDir = null }) {
   const [action, setAction] = useState(null);
   const [payload, setPayload] = useState({});
   const [commitMessage, setCommitMessage] = useState('');
@@ -377,50 +377,50 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
         }
         return result;
       };
-      if (targetAction === 'stage') res = await gitApi.stage(targetPayload.files || []);
-      if (targetAction === 'unstage') res = await gitApi.unstage(targetPayload.files || []);
-      if (targetAction === 'commit') res = await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [] });
+      if (targetAction === 'stage') res = await gitApi.stage(targetPayload.files || [], workingDir);
+      if (targetAction === 'unstage') res = await gitApi.unstage(targetPayload.files || [], workingDir);
+      if (targetAction === 'commit') res = await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [], path: workingDir });
       if (targetAction === 'commit-push') {
-        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [] }), 'Commit');
-        res = await gitApi.push();
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [], path: workingDir }), 'Commit');
+        res = await gitApi.push({ path: workingDir });
       }
       if (targetAction === 'commit-sync') {
-        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [] }), 'Commit');
-        res = assertSuccess(await gitApi.pull(), 'Pull');
-        res = await gitApi.push();
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [], path: workingDir }), 'Commit');
+        res = assertSuccess(await gitApi.pull({ path: workingDir }), 'Pull');
+        res = await gitApi.push({ path: workingDir });
       }
       if (targetAction === 'amend') {
-        res = await gitApi.commit({ message: targetPayload.message || '', files: targetPayload.files || [], amend: true });
+        res = await gitApi.commit({ message: targetPayload.message || '', files: targetPayload.files || [], amend: true, path: workingDir });
       }
       if (targetAction === 'amend-push') {
-        res = assertSuccess(await gitApi.commit({ message: targetPayload.message || '', files: targetPayload.files || [], amend: true }), 'Amend');
-        res = await gitApi.push();
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message || '', files: targetPayload.files || [], amend: true, path: workingDir }), 'Amend');
+        res = await gitApi.push({ path: workingDir });
       }
       if (targetAction === 'stage-commit') {
-        res = assertSuccess(await gitApi.stage([]), 'Stage all');
-        res = await gitApi.commit({ message: targetPayload.message, files: [] });
+        res = assertSuccess(await gitApi.stage([], workingDir), 'Stage all');
+        res = await gitApi.commit({ message: targetPayload.message, files: [], path: workingDir });
       }
       if (targetAction === 'stage-commit-push') {
-        res = assertSuccess(await gitApi.stage([]), 'Stage all');
-        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [] }), 'Commit');
-        res = await gitApi.push();
+        res = assertSuccess(await gitApi.stage([], workingDir), 'Stage all');
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [], path: workingDir }), 'Commit');
+        res = await gitApi.push({ path: workingDir });
       }
       if (targetAction === 'stage-commit-sync') {
-        res = assertSuccess(await gitApi.stage([]), 'Stage all');
-        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [] }), 'Commit');
-        res = assertSuccess(await gitApi.pull(), 'Pull');
-        res = await gitApi.push();
+        res = assertSuccess(await gitApi.stage([], workingDir), 'Stage all');
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [], path: workingDir }), 'Commit');
+        res = assertSuccess(await gitApi.pull({ path: workingDir }), 'Pull');
+        res = await gitApi.push({ path: workingDir });
       }
       if (targetAction === 'sync') {
-        res = assertSuccess(await gitApi.pull(), 'Pull');
-        res = await gitApi.push();
+        res = assertSuccess(await gitApi.pull({ path: workingDir }), 'Pull');
+        res = await gitApi.push({ path: workingDir });
       }
-      if (targetAction === 'pull') res = await gitApi.pull();
-      if (targetAction === 'push') res = await gitApi.push();
-      if (targetAction === 'stash-save') res = await gitApi.stash({ action: 'save', message: targetPayload.message || 'Asyncat visual stash' });
-      if (targetAction === 'stash-pop') res = await gitApi.stash({ action: 'pop' });
-      if (targetAction === 'branch-create') res = await gitApi.branch({ action: 'create', name: targetPayload.name });
-      if (targetAction === 'branch-switch') res = await gitApi.branch({ action: 'switch', name: targetPayload.name });
+      if (targetAction === 'pull') res = await gitApi.pull({ path: workingDir });
+      if (targetAction === 'push') res = await gitApi.push({ path: workingDir });
+      if (targetAction === 'stash-save') res = await gitApi.stash({ action: 'save', message: targetPayload.message || 'Asyncat visual stash', path: workingDir });
+      if (targetAction === 'stash-pop') res = await gitApi.stash({ action: 'pop', path: workingDir });
+      if (targetAction === 'branch-create') res = await gitApi.branch({ action: 'create', name: targetPayload.name, path: workingDir });
+      if (targetAction === 'branch-switch') res = await gitApi.branch({ action: 'switch', name: targetPayload.name, path: workingDir });
       if (!res?.success) throw new Error(res?.error || res?.stderr || 'Git action failed');
       
       setAction(null);
@@ -432,7 +432,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
     } finally {
       setBusy(false);
     }
-  }, [onChanged]);
+  }, [onChanged, workingDir]);
 
   const openAction = useCallback((nextAction, nextPayload = {}) => {
     setCommitMenuOpen(false);
@@ -461,7 +461,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
     setGeneratingCommitMessage(true);
     setActionError(null);
     try {
-      const result = await gitApi.generateCommitMessage({ scope: 'auto' });
+      const result = await gitApi.generateCommitMessage({ scope: 'auto', path: workingDir });
       if (!result?.success || !result?.message) {
         throw new Error(result?.error || 'Could not generate a commit message');
       }
@@ -475,7 +475,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
     } finally {
       setGeneratingCommitMessage(false);
     }
-  }, [files.length]);
+  }, [files.length, workingDir]);
 
   const handleCommitMessageChange = useCallback((event) => {
     setCommitMessage(event.target.value);
@@ -693,6 +693,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                           <ChangeRow
                             key={`staged-${file.code}-${file.path}-${file.oldPath || ''}`}
                             file={file}
+                            workingDir={workingDir}
                             onAttach={attachFile}
                             onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
                           />
@@ -729,6 +730,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                           <ChangeRow
                             key={`working-${file.code}-${file.path}-${file.oldPath || ''}`}
                             file={file}
+                            workingDir={workingDir}
                             onAttach={attachFile}
                             onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
                           />
@@ -744,13 +746,13 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
         
         {activeTab === 'history' && (
           <div className="h-full flex flex-col pt-1">
-             <GitGraph />
+            <GitGraph workingDir={workingDir} />
           </div>
         )}
         
         {activeTab === 'stashes' && (
           <div className="h-full flex flex-col pt-1">
-             <StashManager onRefresh={onRefresh} />
+            <StashManager onRefresh={onRefresh} workingDir={workingDir} />
           </div>
         )}
       </div>

@@ -25,6 +25,7 @@ export default function CommandCenterSidePanel({
   onGitRefresh,
   onGitChanged,
   onAttachGitFile,
+  workingDir = null,
   recentConversations = [],
   recentConversationsLoading = false,
   recentConversationsError = null,
@@ -68,6 +69,7 @@ export default function CommandCenterSidePanel({
             onRefresh={onGitRefresh}
             onChanged={onGitChanged}
             onAttachFile={onAttachGitFile}
+            workingDir={workingDir}
           />
         )}
         {currentTab === 'media' && sourceCatalog && (

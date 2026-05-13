@@ -289,6 +289,7 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   plan             TEXT NOT NULL DEFAULT '[]',
   scratchpad       TEXT NOT NULL DEFAULT '{}',
   tool_history     TEXT NOT NULL DEFAULT '[]',
+  working_dir      TEXT,
   total_rounds     INTEGER NOT NULL DEFAULT 0,
   feedback_rating  INTEGER,
   feedback_comment TEXT,

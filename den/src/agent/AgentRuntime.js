@@ -226,6 +226,7 @@ export class AgentRuntime {
       if (this.session && this.session.userId === this.userId) {
         // Reuse existing session — update goal and reset to active
         this.session.goal = goal;
+        this.session.workingDir = this.workingDir;
         this.session.status = 'active';
         this.session.updatedAt = new Date().toISOString();
         // Track conversation rounds for UI reconstruction after refresh
@@ -271,6 +272,7 @@ export class AgentRuntime {
         sessionId: this.session.id,
         goal,
         status: this.session.status,
+        workingDir: this.workingDir,
         continued: Boolean(this.continueSessionId),
         agentMode: this.agentMode,
       },

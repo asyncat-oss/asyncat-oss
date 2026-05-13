@@ -1,12 +1,12 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, ChevronDown, ClipboardPen, Cloud, Cpu, HardDrive, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
+import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, HardDrive, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi, audioApi } from "../../Settings/settingApi.js";
 import { profilesApi, filesApi } from "../api";
-import { dirname, basename, fileIconMeta } from "../../files/fileUtils.js";
+import { dirname, basename, fileIconMeta, rootIcon } from "../../files/fileUtils.js";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -68,6 +68,33 @@ function formatRootLabel(rootPath = "") {
   return parts.slice(-2).join("/");
 }
 
+function joinRelativePath(parent = ".", child = "") {
+  const cleanChild = String(child || "").replace(/^\/+/, "");
+  if (!cleanChild) return parent || ".";
+  if (!parent || parent === ".") return cleanChild;
+  return `${String(parent).replace(/\/+$/, "")}/${cleanChild}`;
+}
+
+function absoluteFromRoot(rootPath = "", relativePath = ".") {
+  if (!rootPath) return "";
+  if (!relativePath || relativePath === ".") return rootPath;
+  return `${String(rootPath).replace(/[\\/]+$/, "")}/${String(relativePath).replace(/^\/+/, "")}`;
+}
+
+function labelForWorkingContext(context, root) {
+  if (context?.relativePath && context.relativePath !== ".") return basename(context.relativePath);
+  if (root?.path) return formatRootLabel(root.path);
+  return "Workspace";
+}
+
+function relativeToContext(entryPath, contextPath = ".") {
+  if (!contextPath || contextPath === ".") return entryPath;
+  const prefix = `${contextPath.replace(/\/+$/, "")}/`;
+  return String(entryPath || "").startsWith(prefix)
+    ? String(entryPath).slice(prefix.length)
+    : entryPath;
+}
+
 const suggestionPanelClass =
   "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1a1a1a] midnight:border-[#2a2a2a] midnight:bg-[#1a1a1a]";
 const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
@@ -117,6 +144,8 @@ export const MessageInputV2 = ({
   onStop,
   runStartedAt = null,
   externalFileAttachment = null,
+  workingContext = null,
+  onWorkingContextChange,
   reasoningEffort = "auto",
   onReasoningEffortChange,
   tokenUsage = null,
@@ -153,6 +182,11 @@ export const MessageInputV2 = ({
   const [fileSearchLoading, setFileSearchLoading] = useState(false);
   const [fileSearchLoaded, setFileSearchLoaded] = useState(false);
   const [fileRoot, setFileRoot] = useState(null);
+  const [fileRoots, setFileRoots] = useState([]);
+  const [contextBrowseRootId, setContextBrowseRootId] = useState("workspace");
+  const [contextBrowsePath, setContextBrowsePath] = useState(".");
+  const [contextBrowseEntries, setContextBrowseEntries] = useState([]);
+  const [contextBrowseLoading, setContextBrowseLoading] = useState(false);
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
 
@@ -195,6 +229,34 @@ export const MessageInputV2 = ({
     () => extractAgentMentions(value, agentProfiles),
     [agentProfiles, value],
   );
+  const activeRoot = useMemo(() => {
+    const rootId = workingContext?.rootId || "workspace";
+    return fileRoots.find(root => root.id === rootId) || fileRoot || fileRoots[0] || null;
+  }, [fileRoot, fileRoots, workingContext?.rootId]);
+  const activeWorkingContext = useMemo(() => {
+    if (!activeRoot) return null;
+    const relativePath = workingContext?.relativePath || ".";
+    return {
+      rootId: activeRoot.id,
+      rootLabel: activeRoot.label,
+      rootKind: activeRoot.kind,
+      rootPath: activeRoot.path,
+      relativePath,
+      workingDir: workingContext?.workingDir || absoluteFromRoot(activeRoot.path, relativePath),
+    };
+  }, [activeRoot, workingContext?.relativePath, workingContext?.workingDir]);
+  const activeContextLabel = labelForWorkingContext(activeWorkingContext, activeRoot);
+  const contextBrowseRoot = useMemo(
+    () => fileRoots.find(root => root.id === contextBrowseRootId) || activeRoot,
+    [activeRoot, contextBrowseRootId, fileRoots],
+  );
+  const contextBrowseWorkingDir = useMemo(
+    () => contextBrowseRoot ? absoluteFromRoot(contextBrowseRoot.path, contextBrowsePath || ".") : "",
+    [contextBrowsePath, contextBrowseRoot],
+  );
+  const contextBrowseLabel = contextBrowsePath === "."
+    ? (contextBrowseRoot?.label || "Root")
+    : basename(contextBrowsePath);
   
   const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {
@@ -260,8 +322,10 @@ export const MessageInputV2 = ({
   useEffect(() => {
     if (!externalFileAttachment?.path) return;
     setFileAttachments(prev => {
-      if (prev.some(file => file.path === externalFileAttachment.path)) return prev;
+      const rootId = externalFileAttachment.rootId || activeWorkingContext?.rootId || "workspace";
+      if (prev.some(file => file.path === externalFileAttachment.path && (file.rootId || "workspace") === rootId)) return prev;
       return [...prev, {
+        rootId,
         path: externalFileAttachment.path,
         name: externalFileAttachment.name || basename(externalFileAttachment.path),
         ext: externalFileAttachment.ext || basename(externalFileAttachment.path).split('.').pop(),
@@ -296,7 +360,9 @@ export const MessageInputV2 = ({
       .then((res) => {
         if (cancelled) return;
         const workspaceRoot = (res.roots || []).find(root => root.id === "workspace") || res.roots?.[0] || null;
+        setFileRoots(res.roots || []);
         setFileRoot(workspaceRoot);
+        setContextBrowseRootId(workspaceRoot?.id || "workspace");
       })
       .catch(() => {
         if (!cancelled) setFileRoot(null);
@@ -320,16 +386,18 @@ export const MessageInputV2 = ({
         setFileSearchLoading(true);
         const query = fileTrigger.query;
         const { dirPath, filter } = splitFileQuery(query);
+        const rootId = activeWorkingContext?.rootId || "workspace";
+        const basePath = activeWorkingContext?.relativePath || ".";
         let res;
         if (!query || query.includes("/")) {
-          res = await filesApi.listDirectory("workspace", dirPath, false);
+          res = await filesApi.listDirectory(rootId, joinRelativePath(basePath, dirPath), false);
           const needle = filter.toLowerCase();
           res = {
             ...res,
             entries: (res.entries || []).filter((entry) => !needle || entry.name.toLowerCase().includes(needle)),
           };
         } else {
-          res = await filesApi.search("workspace", ".", query, false, 160);
+          res = await filesApi.search(rootId, basePath, query, false, 160);
         }
         if (!cancelled) {
           setFileSearchResults((res.entries || []).slice(0, 24));
@@ -348,7 +416,7 @@ export const MessageInputV2 = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [fileTrigger]);
+  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileTrigger]);
 
   useEffect(() => {
     setActiveAgentIndex(0);
@@ -398,7 +466,8 @@ export const MessageInputV2 = ({
   const attachFile = useCallback((file) => {
     if (!fileTrigger) return;
     if (file?.type === "dir") {
-      const nextMention = `@${file.path.replace(/\/?$/, "/")}`;
+      const scopedPath = relativeToContext(file.path, activeWorkingContext?.relativePath || ".");
+      const nextMention = `@${scopedPath.replace(/\/?$/, "/")}`;
       const nextValue = `${value.slice(0, fileTrigger.start)}${nextMention}${value.slice(fileTrigger.end)}`;
       const nextCursor = fileTrigger.start + nextMention.length;
       setValue(nextValue);
@@ -416,8 +485,9 @@ export const MessageInputV2 = ({
     setValue(nextValue);
     setCursorPosition(fileTrigger.start);
     setFileAttachments(prev => {
-      if (prev.some(f => f.path === file.path)) return prev;
-      return [...prev, { path: file.path, name: file.name, ext: file.ext }];
+      const rootId = activeWorkingContext?.rootId || "workspace";
+      if (prev.some(f => f.path === file.path && (f.rootId || "workspace") === rootId)) return prev;
+      return [...prev, { rootId, path: file.path, name: file.name, ext: file.ext }];
     });
     requestAnimationFrame(() => {
       if (!textareaRef.current) return;
@@ -425,10 +495,10 @@ export const MessageInputV2 = ({
       textareaRef.current.selectionStart = fileTrigger.start;
       textareaRef.current.selectionEnd = fileTrigger.start;
     });
-  }, [fileTrigger, value]);
+  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileTrigger, value]);
 
-  const removeFileAttachment = useCallback((path) => {
-    setFileAttachments(prev => prev.filter(f => f.path !== path));
+  const removeFileAttachment = useCallback((path, rootId = "workspace") => {
+    setFileAttachments(prev => prev.filter(f => !(f.path === path && (f.rootId || "workspace") === rootId)));
   }, []);
 
   const handleSubmit = useCallback(
@@ -597,6 +667,53 @@ export const MessageInputV2 = ({
     },
     [ctxSize, isSwitchingModel, localModel.model],
   );
+
+  const openWorkingContextMenu = useCallback(() => {
+    setOpenMenu((current) => {
+      const next = current === "context" ? null : "context";
+      if (next === "context") {
+        setContextBrowseRootId(activeWorkingContext?.rootId || "workspace");
+        setContextBrowsePath(activeWorkingContext?.relativePath || ".");
+      }
+      return next;
+    });
+  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId]);
+
+  const selectWorkingContext = useCallback((rootId, relativePath = ".") => {
+    const root = fileRoots.find(item => item.id === rootId) || activeRoot;
+    if (!root || !onWorkingContextChange) return;
+    const nextContext = {
+      rootId: root.id,
+      rootLabel: root.label,
+      rootKind: root.kind,
+      rootPath: root.path,
+      relativePath: relativePath || ".",
+      workingDir: absoluteFromRoot(root.path, relativePath || "."),
+    };
+    onWorkingContextChange(nextContext);
+    setOpenMenu(null);
+  }, [activeRoot, fileRoots, onWorkingContextChange]);
+
+  useEffect(() => {
+    if (openMenu !== "context") return;
+    let cancelled = false;
+    setContextBrowseLoading(true);
+    filesApi
+      .listDirectory(contextBrowseRootId, contextBrowsePath || ".", false, { limit: 240 })
+      .then((res) => {
+        if (cancelled) return;
+        setContextBrowseEntries((res.entries || []).filter(entry => entry.type === "dir"));
+      })
+      .catch(() => {
+        if (!cancelled) setContextBrowseEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setContextBrowseLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contextBrowsePath, contextBrowseRootId, openMenu]);
 
   const startRecording = async () => {
     try {
@@ -834,14 +951,14 @@ export const MessageInputV2 = ({
                     const { Icon, color } = fileIconMeta(file.ext, "file");
                     return (
                       <span
-                        key={file.path}
+                        key={`${file.rootId || "workspace"}:${file.path}`}
                         className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 midnight:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-700 dark:text-slate-300"
                       >
                         <Icon className={`h-3.5 w-3.5 ${color}`} />
                         <span className="truncate max-w-[12rem]">{file.name}</span>
                         <button
                           type="button"
-                          onClick={() => removeFileAttachment(file.path)}
+                          onClick={() => removeFileAttachment(file.path, file.rootId || "workspace")}
                           className="ml-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                         >
                           <X className="w-3 h-3" />
@@ -854,6 +971,120 @@ export const MessageInputV2 = ({
 
               <div ref={toolbarRef} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  {activeWorkingContext && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={openWorkingContextMenu}
+                        disabled={disabled || !onWorkingContextChange}
+                        title={`Agent working directory: ${activeWorkingContext.workingDir}`}
+                        className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-gray-500 transition-all duration-200 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                      >
+                        {(() => {
+                          const RootIcon = rootIcon(activeRoot?.kind);
+                          return <RootIcon className="h-3.5 w-3.5 shrink-0" />;
+                        })()}
+                        <span className="hidden shrink-0 text-gray-400 dark:text-gray-500 sm:inline">Working in</span>
+                        <span className="min-w-0 truncate font-medium">{activeContextLabel}</span>
+                        <ChevronDown className="h-3 w-3 shrink-0 opacity-40" />
+                      </button>
+
+	                      {openMenu === "context" && (
+	                        <div className="absolute left-0 bottom-full z-30 mb-1.5 w-[24rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+	                          <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
+	                            <div className="flex items-start justify-between gap-3">
+	                              <div className="min-w-0">
+	                                <div className="truncate text-xs font-medium text-gray-800 dark:text-gray-100">
+	                                  {contextBrowseWorkingDir}
+	                                </div>
+	                                <div className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+	                                  Browsing folders. The selected folder becomes the agent workspace.
+	                                </div>
+	                              </div>
+	                              <button
+	                                type="button"
+	                                onClick={() => selectWorkingContext(contextBrowseRootId, contextBrowsePath)}
+	                                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+	                                title={`Use ${contextBrowseWorkingDir} as the working directory`}
+	                              >
+	                                <Check className="h-3.5 w-3.5" />
+	                                Use this folder
+	                              </button>
+	                            </div>
+	                          </div>
+
+                          <div className="grid grid-cols-[8rem_1fr] divide-x divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
+                            <div className="max-h-72 overflow-y-auto p-1">
+                              {fileRoots.map((root) => {
+                                const RootIcon = rootIcon(root.kind);
+                                const active = root.id === contextBrowseRootId;
+                                return (
+                                  <button
+                                    key={root.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setContextBrowseRootId(root.id);
+                                      setContextBrowsePath(".");
+                                    }}
+                                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+                                      active
+                                        ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800"
+                                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                    }`}
+                                  >
+                                    <RootIcon className="h-3.5 w-3.5 shrink-0" />
+                                    <span className="truncate">{root.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+	                            <div className="min-w-0">
+	                              <div className="flex items-center gap-1 border-b border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
+	                                <div className="min-w-0 flex-1 px-2 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+	                                  <span className="block truncate">{contextBrowseLabel}</span>
+	                                </div>
+	                                {contextBrowsePath !== "." && (
+	                                  <button
+	                                    type="button"
+                                    onClick={() => setContextBrowsePath(dirname(contextBrowsePath))}
+                                    className="rounded-md px-2 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                                  >
+                                    Up
+                                  </button>
+                                )}
+                              </div>
+                              <div className="max-h-60 overflow-y-auto p-1">
+                                {contextBrowseLoading ? (
+                                  <div className="flex items-center gap-2 px-2 py-2 text-xs text-gray-400 dark:text-gray-500">
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Loading folders...
+                                  </div>
+                                ) : contextBrowseEntries.length > 0 ? (
+                                  contextBrowseEntries.map((entry) => (
+                                    <button
+                                      key={entry.path}
+                                      type="button"
+                                      onClick={() => setContextBrowsePath(entry.path)}
+                                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                    >
+                                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                                      <span className="truncate">{entry.name}</span>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="px-2 py-2 text-xs text-gray-400 dark:text-gray-500">
+                                    No folders here.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="relative">
                     <button
                       type="button"
@@ -1101,16 +1332,19 @@ export const MessageInputV2 = ({
           </div>
           </form>
 
-        {fileRoot?.path && (
+        {activeWorkingContext?.workingDir && (
           <div className="mt-2 flex justify-center">
-            <div
-              title={`@ file search is scoped to ${fileRoot.path}`}
-              className="inline-flex max-w-full items-center gap-1.5 px-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+            <button
+              type="button"
+              onClick={openWorkingContextMenu}
+              disabled={disabled || !onWorkingContextChange}
+              title={`@ file search and agent tools are scoped to ${activeWorkingContext.workingDir}`}
+              className="inline-flex max-w-full items-center gap-1.5 px-1 text-[10px] font-medium text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-default disabled:hover:text-gray-400 dark:text-gray-500 dark:hover:text-gray-300 midnight:text-slate-500"
             >
               <HardDrive className="h-3 w-3 shrink-0" />
               <span className="shrink-0">@ files search</span>
-              <span className="min-w-0 truncate">{formatRootLabel(fileRoot.path)}</span>
-            </div>
+              <span className="min-w-0 truncate">{activeContextLabel}</span>
+            </button>
           </div>
         )}
 

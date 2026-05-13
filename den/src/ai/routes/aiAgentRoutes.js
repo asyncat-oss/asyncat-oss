@@ -12,7 +12,7 @@ import { loadSkills, listSkills, normalizeTags } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
-import { getWorkspaceRoot, loadEntry } from '../../files/fileExplorerService.js';
+import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
@@ -37,6 +37,23 @@ function normalizeConversationHistory(history = []) {
 
 function defaultAgentWorkingDir() {
   return getWorkspaceRoot();
+}
+
+function resolveAgentWorkingContext({ workingContext = null, workingDir = null, profile = null } = {}) {
+  if (workingContext && typeof workingContext === 'object') {
+    return resolveWorkingDirectoryContext(workingContext);
+  }
+
+  const resolvedWorkingDir = workingDir || profile?.working_dir || defaultAgentWorkingDir();
+  return {
+    root: null,
+    rootId: null,
+    rootLabel: null,
+    rootKind: null,
+    rootPath: null,
+    relativePath: '.',
+    workingDir: path.resolve(resolvedWorkingDir),
+  };
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -303,16 +320,19 @@ function resolveAgentMentions(rawMentions = [], userId) {
   return profiles;
 }
 
-function resolveFileAttachments(fileAttachments = []) {
+function resolveFileAttachments(fileAttachments = [], workingContext = null) {
   if (!Array.isArray(fileAttachments)) return [];
   const results = [];
   for (const attachment of fileAttachments.slice(0, 10)) {
     const filePath = typeof attachment === 'string' ? attachment : attachment?.path;
     if (!filePath) continue;
+    const rootId = typeof attachment === 'object' && attachment?.rootId
+      ? attachment.rootId
+      : workingContext?.rootId || 'workspace';
     try {
-      const entry = loadEntry({ rootId: 'workspace', relativePath: filePath });
+      const entry = loadEntry({ rootId, relativePath: filePath });
       if (entry.success && entry.type === 'file' && entry.content) {
-        results.push({ path: filePath, name: entry.name, content: entry.content });
+        results.push({ path: filePath, rootId, name: entry.name, content: entry.content });
       }
     } catch (err) {
       console.warn(`[agent] Failed to load attached file ${filePath}:`, err.message);
@@ -1043,6 +1063,9 @@ router.put('/soul', authenticate, (req, res) => {
 // ── Visual Git workflow ──────────────────────────────────────────────────────
 
 function gitWorkingDir(req) {
+  if (req.body?.workingContext && typeof req.body.workingContext === 'object') {
+    return resolveAgentWorkingContext({ workingContext: req.body.workingContext }).workingDir;
+  }
   return req.body?.path || req.query?.path || defaultAgentWorkingDir();
 }
 
@@ -1281,12 +1304,11 @@ router.post('/run', authenticate, async (req, res) => {
     abortController.abort();
   });
   try {
-    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMode, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto' } = req.body;
-    const resolvedFiles = resolveFileAttachments(fileAttachments);
-    const goal = injectFileAttachments((rawGoal || rawMessage || '').trim(), resolvedFiles);
+    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, workingContext, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMode, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto' } = req.body;
     const resolvedAgentMode = agentMode === 'plan' || enableTools === false ? 'plan' : 'action';
+    const baseGoal = (rawGoal || rawMessage || '').trim();
 
-    if (!goal) {
+    if (!baseGoal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
     }
 
@@ -1322,7 +1344,10 @@ router.post('/run', authenticate, async (req, res) => {
       heartbeatInterval = null;
     });
 
-    const resolvedWorkingDir = workingDir || profile?.working_dir || defaultAgentWorkingDir();
+    const resolvedWorkingContext = resolveAgentWorkingContext({ workingContext, workingDir, profile });
+    const resolvedWorkingDir = resolvedWorkingContext.workingDir;
+    const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext);
+    const goal = injectFileAttachments(baseGoal, resolvedFiles);
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
     const resolvedAutoApprove = resolvedAgentMode === 'action'
       ? (autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false)

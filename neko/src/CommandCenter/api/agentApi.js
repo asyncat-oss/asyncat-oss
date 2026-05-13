@@ -24,7 +24,7 @@ export const agentApi = {
       },
       signal,
       body: JSON.stringify({
-        goal, conversationHistory, workingDir, maxRounds, workspaceId, continueSessionId,
+        goal, conversationHistory, workingDir, workingContext: opts.workingContext || null, maxRounds, workspaceId, continueSessionId,
         autoApprove: opts.autoApprove || false,
         preApprovedTools: opts.preApprovedTools || [],
         profileId: opts.profileId || null,

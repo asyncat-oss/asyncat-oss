@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
+/* eslint-disable react/prop-types */
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { gitApi } from '../api';
 
@@ -24,17 +25,17 @@ function Path({ x1, y1, x2, y2, color }) {
   return <path d={d} fill="none" stroke={color} strokeWidth="2" />;
 }
 
-export default function GitGraph() {
+export default function GitGraph({ workingDir = null }) {
   const [commits, setCommits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchCommits = async (skip = 0) => {
+  const fetchCommits = useCallback(async (skip = 0) => {
     try {
       setLoading(true);
-      const res = await gitApi.log({ limit: 50, skip });
+      const res = await gitApi.log({ limit: 50, skip, path: workingDir });
       if (res.success) {
         if (skip === 0) setCommits(res.commits);
         else setCommits(prev => [...prev, ...res.commits]);
@@ -47,11 +48,12 @@ export default function GitGraph() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workingDir]);
 
   useEffect(() => {
+    setPage(0);
     fetchCommits(0);
-  }, []);
+  }, [fetchCommits]);
 
   const loadMore = () => {
     const nextPage = page + 1;
