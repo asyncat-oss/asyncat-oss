@@ -377,7 +377,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
                   key={m.id}
                   model={m}
                   type="whisper"
-                  isLoaded={whisperReady && whisperStatus?.model === m.filename?.replace(/\.(bin|gguf)$/i, '')}
+                  isLoaded={whisperReady && (whisperStatus?.model === m.filename || whisperStatus?.model?.replace(/\.(bin|gguf)$/i, '') === m.filename?.replace(/\.(bin|gguf)$/i, ''))}
                   isStarting={startingModel === (m.path || m.filename)}
                   highlighted={highlightedItem?.type === 'whisper' && String(highlightedItem.id) === String(m.id || m.filename)}
                   onStart={handleWhisperStart}

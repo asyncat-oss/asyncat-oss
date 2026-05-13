@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, ChevronDown, Cloud, Cpu, HardDrive, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
+import { Brain, ChevronDown, ClipboardPen, Cloud, Cpu, HardDrive, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
@@ -951,7 +951,7 @@ export const MessageInputV2 = ({
                           : "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                       }`}
                     >
-                      {isActionMode ? <Wrench className="w-3.5 h-3.5" /> : <Brain className="w-3.5 h-3.5" />}
+                      {isActionMode ? <Wrench className="w-3.5 h-3.5" /> : <ClipboardPen className="w-3.5 h-3.5" />}
                       <span className="hidden sm:inline">{isActionMode ? 'Action' : 'Plan'}</span>
                     </button>
                   )}
