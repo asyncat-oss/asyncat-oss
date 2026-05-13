@@ -14,9 +14,10 @@ export const gitApi = {
     return await apiRequest(`${API_BASE_URL}/agent/git/log?${params}`);
   },
 
-  getDiff: async ({ file = null, staged = false, path = null } = {}) => {
+  getDiff: async ({ file = null, staged = false, compare = null, path = null } = {}) => {
     const params = new URLSearchParams({ staged: String(Boolean(staged)) });
     if (file) params.set('file', file);
+    if (compare) params.set('compare', compare);
     if (path) params.set('path', path);
     return await apiRequest(`${API_BASE_URL}/agent/git/diff?${params}`);
   },

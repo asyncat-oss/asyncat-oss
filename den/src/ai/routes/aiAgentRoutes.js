@@ -1157,6 +1157,7 @@ router.get('/git/diff', authenticate, (req, res) => {
     res.json(getGitDiff(gitWorkingDir(req), {
       file: req.query?.file || null,
       staged: req.query?.staged === 'true',
+      compare: req.query?.compare || null,
     }));
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

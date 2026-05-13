@@ -11,6 +11,7 @@ import { basename, fileIconMeta } from '../../files/fileUtils.js';
 import GitGraph from './GitGraph';
 import StashManager from './StashManager';
 import BranchManager from './BranchManager';
+import DiffModal from './DiffModal';
 
 const COMMIT_ACTIONS = new Set([
   'commit',
@@ -226,91 +227,13 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
   );
 }
 
-function DiffPanel({ file, staged, workingDir = null, onClose }) {
-  const [diff, setDiff] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (!file) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    gitApi.getDiff({ file: file.path, staged, path: workingDir })
-      .then(res => {
-        if (!cancelled) setDiff(res);
-      })
-      .catch(err => {
-        if (!cancelled) setError(err.message || 'Could not load diff');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [file, staged, workingDir]);
-
-  if (!file) return null;
-  return (
-    <div className="flex h-full flex-col border-t border-gray-200 bg-white dark:border-slate-800 dark:bg-gray-950">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-slate-800">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate text-[11px] font-medium text-gray-700 dark:text-gray-300">{file.path}</span>
-          {diff && (
-            <span className="shrink-0 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
-              +{diff.additions || 0} -{diff.deletions || 0}
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-          title="Close diff"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        {loading && (
-          <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-500 dark:text-gray-400">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Loading diff
-          </div>
-        )}
-        {error && <div className="px-3 py-3 text-xs text-red-600 dark:text-red-300">{error}</div>}
-        {!loading && !error && (
-          <pre className="px-3 pb-3 text-[10px] leading-relaxed text-gray-700 dark:text-gray-300">
-            {(diff?.diff || 'No diff for this file.').split('\n').map((line, index) => (
-              <div
-                key={`${index}-${line.slice(0, 12)}`}
-                className={
-                  line.startsWith('+') && !line.startsWith('+++') ? 'text-emerald-700 dark:text-emerald-300'
-                    : line.startsWith('-') && !line.startsWith('---') ? 'text-red-700 dark:text-red-300'
-                      : line.startsWith('@@') ? 'text-sky-700 dark:text-sky-300'
-                        : ''
-                }
-              >
-                {line || ' '}
-              </div>
-            ))}
-          </pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ChangeRow({ file, selected, checked, onToggleCheck, onSelect, onAction, onAttach, onDiscard }) {
+function ChangeRow({ file, checked, onToggleCheck, onSelect, onAction, onAttach, onDiscard }) {
   const { name, dir } = splitPath(file.path || '');
   const ext = name.split('.').pop();
   const { Icon, color } = fileIconMeta(ext, 'file');
   const meta = statusMeta(file);
   return (
-    <div
-      className={`group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors ${
-        selected ? 'bg-sky-50 dark:bg-sky-500/10' : 'hover:bg-gray-100/80 dark:hover:bg-slate-800/70'
-      }`}
-    >
+    <div className="group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-100/80 dark:hover:bg-slate-800/70">
       <button
         type="button"
         onClick={onToggleCheck}
@@ -799,7 +722,6 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                               key={`staged-${file.code}-${file.path}-${file.oldPath || ''}`}
                               file={file}
                               workingDir={workingDir}
-                              selected={diffFile?.file?.path === file.path && diffFile?.staged}
                               checked={checkedStaged.has(file.path)}
                               onToggleCheck={() => toggleStagedCheck(file.path)}
                               onSelect={() => setDiffFile({ file, staged: true })}
@@ -876,7 +798,6 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                               key={`working-${file.code}-${file.path}-${file.oldPath || ''}`}
                               file={file}
                               workingDir={workingDir}
-                              selected={diffFile?.file?.path === file.path && !diffFile?.staged}
                               checked={checkedChanges.has(file.path)}
                               onToggleCheck={() => toggleChangesCheck(file.path)}
                               onSelect={() => setDiffFile({ file, staged: false })}
@@ -892,16 +813,6 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                 </div>
               )}
             </div>
-            {diffFile && (
-              <div className="h-56 shrink-0">
-                <DiffPanel
-                  file={diffFile.file}
-                  staged={diffFile.staged}
-                  workingDir={workingDir}
-                  onClose={() => setDiffFile(null)}
-                />
-              </div>
-            )}
           </div>
         )}
         
@@ -917,6 +828,15 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
           </div>
         )}
       </div>
+
+      {diffFile && (
+        <DiffModal
+          file={diffFile.file}
+          staged={diffFile.staged}
+          workingDir={workingDir}
+          onClose={() => setDiffFile(null)}
+        />
+      )}
 
       <ConfirmModal
         action={action}

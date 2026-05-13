@@ -264,18 +264,23 @@ export function getGitLog(cwd, { limit = 100, skip = 0 } = {}) {
   return { success: true, detected: true, root: repo.root, commits };
 }
 
-export function getGitDiff(cwd, { file = null, staged = false } = {}) {
+export function getGitDiff(cwd, { file = null, staged = false, compare = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   const safeFile = file ? normalizeGitPath(repo.root, file) : null;
-  const args = staged
-    ? ['diff', '--cached', '--no-color']
-    : ['diff', '--no-color', 'HEAD'];
+  let args;
+  if (compare) {
+    args = ['diff', '--no-color', `${compare}^..${compare}`];
+  } else if (staged) {
+    args = ['diff', '--cached', '--no-color'];
+  } else {
+    args = ['diff', '--no-color', 'HEAD'];
+  }
   if (safeFile) args.push('--', safeFile);
   const result = runGit(args, repo.root, 10000);
   let output = result.output || '';
 
-  if (!staged && safeFile && !output) {
+  if (!compare && !staged && safeFile && !output) {
     const tracked = runGit(['ls-files', '--error-unmatch', '--', safeFile], repo.root, 5000);
     const abs = path.join(repo.root, safeFile);
     if (!tracked.success && fs.existsSync(abs) && fs.statSync(abs).isFile()) {
@@ -286,7 +291,7 @@ export function getGitDiff(cwd, { file = null, staged = false } = {}) {
 
   const additions = (output.match(/^\+[^+]/gm) || []).length;
   const deletions = (output.match(/^-[^-]/gm) || []).length;
-  return { success: result.success || Boolean(output), detected: true, root: repo.root, file: safeFile, staged: Boolean(staged), diff: output, additions, deletions };
+  return { success: result.success || Boolean(output), detected: true, root: repo.root, file: safeFile, staged: Boolean(staged), compare: compare || null, diff: output, additions, deletions };
 }
 
 export function getGitCommitMessageContext(cwd, { scope = 'auto', maxDiffChars = DEFAULT_COMMIT_MESSAGE_DIFF_CHARS } = {}) {

@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState, useMemo } from 'react';
-import { Loader2, AlertCircle, X, Copy, Check, GitCommit, User, Clock, FileCode } from 'lucide-react';
+import { Loader2, AlertCircle, X, Copy, Check, GitCommit, User, Clock, FileCode, Search, Eye } from 'lucide-react';
 import { gitApi } from '../api';
 import Portal from '../../components/Portal';
+import DiffModal from './DiffModal';
 
 const COL_WIDTH = 14;
 const ROW_HEIGHT = 32;
@@ -26,7 +27,7 @@ function Path({ x1, y1, x2, y2, color }) {
   return <path d={d} fill="none" stroke={color} strokeWidth="2" />;
 }
 
-function CommitDetailModal({ hash, workingDir, onClose }) {
+function CommitDetailModal({ hash, workingDir, onClose, onViewDiff }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -166,14 +167,16 @@ function CommitDetailModal({ hash, workingDir, onClose }) {
                           <span className="min-w-0 truncate font-medium text-gray-700 dark:text-gray-300" title={f.path}>
                             {f.path}
                           </span>
-                          <div className="ml-2 flex shrink-0 items-center gap-1.5">
+                          <div className="ml-2 flex shrink-0 items-center gap-2">
                             <span className="text-[10px] tabular-nums text-gray-500 dark:text-gray-400">{f.changes}</span>
-                            <div className="flex h-1 w-8 overflow-hidden rounded-full bg-gray-200 dark:bg-slate-700">
-                              <div
-                                className="bg-emerald-500"
-                                style={{ width: `${Math.max(10, Math.min(100, (f.diff.replace(/-/g, '').length / Math.max(1, f.diff.length)) * 100))}%` }}
-                              />
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => onViewDiff({ path: f.path }, hash)}
+                              className="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                              title="View diff"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -196,6 +199,9 @@ export default function GitGraph({ workingDir = null }) {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [selectedHash, setSelectedHash] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [diffFile, setDiffFile] = useState(null);
+  const [diffCompare, setDiffCompare] = useState(null);
 
   const fetchCommits = useCallback(async (skip = 0) => {
     try {
@@ -217,6 +223,7 @@ export default function GitGraph({ workingDir = null }) {
 
   useEffect(() => {
     setPage(0);
+    setSearchQuery('');
     fetchCommits(0);
   }, [fetchCommits]);
 
@@ -285,6 +292,21 @@ export default function GitGraph({ workingDir = null }) {
     return rows;
   }, [commits]);
 
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return graphRows;
+    return graphRows.filter(row =>
+      row.commit.subject.toLowerCase().includes(q) ||
+      row.commit.author.toLowerCase().includes(q) ||
+      row.commit.hash.toLowerCase().startsWith(q)
+    );
+  }, [graphRows, searchQuery]);
+
+  const handleViewDiff = (file, hash) => {
+    setDiffFile(file);
+    setDiffCompare(hash);
+  };
+
   if (loading && commits.length === 0) {
     return (
       <div className="flex h-32 items-center justify-center text-sm text-gray-500">
@@ -303,9 +325,22 @@ export default function GitGraph({ workingDir = null }) {
 
   return (
     <div className="flex flex-col">
+      {/* Search */}
+      <div className="px-2 pb-2 pt-1">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Filter commits..."
+            className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-xs text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700"
+          />
+        </div>
+      </div>
+
       <div className="flex-1 px-1 py-1 text-sm text-slate-300">
         <div className="relative pb-2">
-          {graphRows.map((row) => {
+          {filteredRows.map((row) => {
             const maxW = Math.max(row.incoming.length, row.outgoing.length);
             const svgWidth = (maxW + 1) * COL_WIDTH;
             return (
@@ -398,6 +433,16 @@ export default function GitGraph({ workingDir = null }) {
           hash={selectedHash}
           workingDir={workingDir}
           onClose={() => setSelectedHash(null)}
+          onViewDiff={handleViewDiff}
+        />
+      )}
+
+      {diffFile && (
+        <DiffModal
+          file={diffFile}
+          compare={diffCompare}
+          workingDir={workingDir}
+          onClose={() => { setDiffFile(null); setDiffCompare(null); }}
         />
       )}
     </div>
