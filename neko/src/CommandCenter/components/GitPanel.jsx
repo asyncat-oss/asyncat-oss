@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, CheckCircle2, ChevronDown, ChevronRight, GitBranch,
   GitCommitHorizontal, GitPullRequestArrow, GitPullRequestDraft, Loader2,
-  Paperclip, Plus, RefreshCw, Save, Upload, X,
+  Paperclip, Plus, RefreshCw, Save, Sparkles, Upload, X,
 } from 'lucide-react';
 import { gitApi } from '../api';
 import Portal from '../../components/Portal';
@@ -19,6 +19,7 @@ const COMMIT_ACTIONS = new Set([
   'amend-push',
   'stage-commit',
   'stage-commit-push',
+  'stage-commit-sync',
 ]);
 
 const REQUIRED_MESSAGE_ACTIONS = new Set([
@@ -27,6 +28,7 @@ const REQUIRED_MESSAGE_ACTIONS = new Set([
   'commit-sync',
   'stage-commit',
   'stage-commit-push',
+  'stage-commit-sync',
   'stash-save',
 ]);
 
@@ -49,6 +51,17 @@ function statusMeta(file = {}) {
   if (file.deleted) return { label: 'D', text: 'text-red-500 dark:text-red-300', title: 'Deleted' };
   if (file.staged && !file.unstaged) return { label: 'S', text: 'text-emerald-600 dark:text-emerald-300', title: 'Staged' };
   return { label: 'M', text: 'text-amber-600 dark:text-amber-300', title: 'Modified' };
+}
+
+function normalizeGeneratedCommitMessage(value = '') {
+  return String(value || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '\n')
+    .replace(/<analysis>[\s\S]*?<\/analysis>/gi, '\n')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '\n')
+    .replace(/<think>[\s\S]*$/i, '')
+    .replace(/<analysis>[\s\S]*$/i, '')
+    .replace(/<reasoning>[\s\S]*$/i, '')
+    .trim();
 }
 
 function IconButton({ title, onClick, disabled, children }) {
@@ -76,6 +89,7 @@ function commandForAction(action, payload = {}) {
     case 'amend-push': return `${payload.message?.trim() ? 'git commit --amend -m <message>' : 'git commit --amend --no-edit'} && git push origin`;
     case 'stage-commit': return 'git add -A && git commit -m <message>';
     case 'stage-commit-push': return 'git add -A && git commit -m <message> && git push origin';
+    case 'stage-commit-sync': return 'git add -A && git commit -m <message> && git pull && git push origin';
     case 'pull': return 'git pull';
     case 'push': return 'git push origin';
     case 'stash-save': return 'git stash push -u -m <message>';
@@ -95,6 +109,7 @@ function actionCopy(action) {
   if (action === 'amend-push') return 'This amends the latest local commit, then pushes. It does not force push.';
   if (action === 'stage-commit') return 'This stages every current change, then creates a local commit.';
   if (action === 'stage-commit-push') return 'This stages every change, commits, then pushes the new commit.';
+  if (action === 'stage-commit-sync') return 'This stages every change, commits, pulls remote changes, then pushes. Pull may merge or conflict.';
   if (action === 'stash-pop') return 'Stash pop reapplies saved changes and may create conflicts.';
   if (action?.startsWith('branch')) return 'Branch operations change the active repository context.';
   if (action === 'commit') return 'Commit records staged changes in local history.';
@@ -116,6 +131,7 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
     'amend-push': 'Amend and push?',
     'stage-commit': 'Stage all and commit?',
     'stage-commit-push': 'Stage all, commit, and push?',
+    'stage-commit-sync': 'Stage all, commit, and sync?',
     pull: 'Pull from remote?',
     push: 'Push to remote?',
     'stash-save': 'Stash changes?',
@@ -290,6 +306,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const [payload, setPayload] = useState({});
   const [commitMessage, setCommitMessage] = useState('');
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
+  const [generatingCommitMessage, setGeneratingCommitMessage] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [stagedExpanded, setStagedExpanded] = useState(true);
@@ -299,18 +316,23 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const stagedFiles = useMemo(() => state?.changes?.staged || [], [state?.changes?.staged]);
   const workingFiles = useMemo(() => files.filter(file => !file.staged || file.unstaged), [files]);
   const hasCommitMessage = commitMessage.trim().length > 0;
+  const canGenerateCommitMessage = files.length > 0 && !generatingCommitMessage && !busy;
+  const mainCommitAction = stagedFiles.length > 0 ? 'commit' : 'stage-commit';
+  const canMainCommit = hasCommitMessage && (stagedFiles.length > 0 || files.length > 0);
   const commitMenuItems = useMemo(() => {
-    const canCommit = stagedFiles.length > 0 && hasCommitMessage;
+    const hasStagedFiles = stagedFiles.length > 0;
+    const canCommit = (hasStagedFiles || files.length > 0) && hasCommitMessage;
     const canAmend = stagedFiles.length > 0 || hasCommitMessage;
     const canStageCommit = files.length > 0 && hasCommitMessage;
     return [
-      { action: 'commit', label: 'Commit', disabled: !canCommit },
-      { action: 'commit-push', label: 'Commit and push', disabled: !canCommit },
-      { action: 'commit-sync', label: 'Commit and sync', disabled: !canCommit },
+      { action: hasStagedFiles ? 'commit' : 'stage-commit', label: 'Commit', disabled: !canCommit },
+      { action: hasStagedFiles ? 'commit-push' : 'stage-commit-push', label: 'Commit and push', disabled: !canCommit },
+      { action: hasStagedFiles ? 'commit-sync' : 'stage-commit-sync', label: 'Commit and sync', disabled: !canCommit },
       { action: 'amend', label: 'Commit (amend)', disabled: !canAmend },
       { action: 'amend-push', label: 'Amend and push', disabled: !canAmend },
       { action: 'stage-commit', label: 'Stage all and commit', disabled: !canStageCommit },
       { action: 'stage-commit-push', label: 'Stage all, commit, and push', disabled: !canStageCommit },
+      { action: 'stage-commit-sync', label: 'Stage all, commit, and sync', disabled: !canStageCommit },
     ];
   }, [files.length, hasCommitMessage, stagedFiles.length]);
 
@@ -353,6 +375,12 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
         res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [] }), 'Commit');
         res = await gitApi.push();
       }
+      if (targetAction === 'stage-commit-sync') {
+        res = assertSuccess(await gitApi.stage([]), 'Stage all');
+        res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [] }), 'Commit');
+        res = assertSuccess(await gitApi.pull(), 'Pull');
+        res = await gitApi.push();
+      }
       if (targetAction === 'pull') res = await gitApi.pull();
       if (targetAction === 'push') res = await gitApi.push();
       if (targetAction === 'stash-save') res = await gitApi.stash({ action: 'save', message: targetPayload.message || 'Asyncat visual stash' });
@@ -393,6 +421,27 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const runConfirmedAction = useCallback(() => {
     executeAction(action, payload);
   }, [action, payload, executeAction]);
+
+  const generateCommitMessage = useCallback(async () => {
+    if (!files.length) return;
+    setGeneratingCommitMessage(true);
+    setActionError(null);
+    try {
+      const result = await gitApi.generateCommitMessage({ scope: 'auto' });
+      if (!result?.success || !result?.message) {
+        throw new Error(result?.error || 'Could not generate a commit message');
+      }
+      const message = normalizeGeneratedCommitMessage(result.message);
+      if (!message || /<\/?(think|analysis|reasoning)>/i.test(message)) {
+        throw new Error('The AI provider returned reasoning instead of a commit message');
+      }
+      setCommitMessage(message);
+    } catch (err) {
+      setActionError(err.message || 'Could not generate a commit message');
+    } finally {
+      setGeneratingCommitMessage(false);
+    }
+  }, [files.length]);
 
   const attachFile = useCallback((file) => {
     const name = basename(file.path || '');
@@ -466,20 +515,32 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
         </div>
       )}
       <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-slate-800 midnight:border-slate-800">
-        <textarea
-          value={commitMessage}
-          onChange={event => setCommitMessage(event.target.value)}
-          rows={2}
-          placeholder={`Message${state.branch ? ` for ${state.branch}` : ''}`}
-          className="w-full resize-none rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700 dark:focus:bg-[#0b1220]"
-        />
+        <div className="relative">
+          <textarea
+            value={commitMessage}
+            onChange={event => setCommitMessage(event.target.value)}
+            rows={2}
+            placeholder={`Message${state.branch ? ` for ${state.branch}` : ''}`}
+            className="w-full resize-none rounded-md border border-gray-200 bg-gray-50 py-2 pl-3 pr-10 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700 dark:focus:bg-[#0b1220]"
+          />
+          <button
+            type="button"
+            onClick={generateCommitMessage}
+            disabled={!canGenerateCommitMessage}
+            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-200/70 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            title={stagedFiles.length ? 'Generate commit message from staged changes' : 'Generate commit message from changes'}
+          >
+            {generatingCommitMessage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+          </button>
+        </div>
         <div className="mt-2 flex items-center gap-1.5">
           <div className="relative flex flex-1">
             <button
               type="button"
-              onClick={() => openAction('commit', { files: [], message: commitMessage })}
-              disabled={!stagedFiles.length || !hasCommitMessage}
+              onClick={() => openAction(mainCommitAction, { files: [], message: commitMessage })}
+              disabled={!canMainCommit}
               className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-l-md bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+              title={stagedFiles.length ? 'Commit staged changes' : 'Stage all changes and commit'}
             >
               <GitCommitHorizontal className="h-4 w-4" />
               Commit
@@ -498,7 +559,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
               <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-950">
                 {commitMenuItems.map(item => (
                   <button
-                    key={item.action}
+                    key={`${item.action}-${item.label}`}
                     type="button"
                     disabled={item.disabled}
                     onClick={() => openAction(item.action, { files: [], message: commitMessage })}

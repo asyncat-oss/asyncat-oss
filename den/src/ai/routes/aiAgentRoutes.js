@@ -17,7 +17,7 @@ import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
-import { branchGit, commitGit, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
+import { branchGit, commitGit, getGitCommitMessageContext, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -1046,6 +1046,71 @@ function gitWorkingDir(req) {
   return req.body?.path || req.query?.path || defaultAgentWorkingDir();
 }
 
+function cleanGeneratedCommitMessage(value = '') {
+  let message = String(value || '').replace(/\r\n/g, '\n').trim();
+  message = message
+    .replace(/<think>[\s\S]*?<\/think>/gi, '\n')
+    .replace(/<analysis>[\s\S]*?<\/analysis>/gi, '\n')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '\n')
+    .replace(/<think>[\s\S]*$/i, '')
+    .replace(/<analysis>[\s\S]*$/i, '')
+    .replace(/<reasoning>[\s\S]*$/i, '')
+    .replace(/^```(?:\w+)?\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  message = message.replace(/^git\s+commit\s+-m\s+/i, '').trim();
+  message = message.replace(/^(commit\s+message|message|subject)\s*:\s*/i, '').trim();
+  message = message.replace(/^["'`]|["'`]$/g, '').trim();
+  message = message
+    .split('\n')
+    .map(line => line.trim().replace(/^[-*]\s+/, '').replace(/^\d+[.)]\s+/, ''))
+    .filter(Boolean)
+    .filter(line => !/^here(?:'s| is)\b/i.test(line))
+    .filter(line => !/^let me\b/i.test(line))
+    .join('\n');
+  return message.slice(0, 500);
+}
+
+function commitMessageArea(context = {}) {
+  const paths = (context.files || []).map(file => file.path || '').filter(Boolean);
+  if (paths.some(file => /(^|\/)(GitPanel|gitApi|gitService)\./i.test(file) || /\/git\//i.test(file))) return 'Git workflow';
+  if (paths.some(file => file.includes('/CommandCenter/'))) return 'Command Center';
+  if (paths.some(file => file.startsWith('den/src/ai/'))) return 'AI routes';
+  if (paths.some(file => file.startsWith('den/'))) return 'backend';
+  if (paths.some(file => file.startsWith('neko/'))) return 'frontend';
+  const first = paths[0] || 'workspace';
+  return first.split('/').filter(Boolean).slice(0, 2).join('/') || 'workspace';
+}
+
+function fallbackCommitMessage(context = {}) {
+  const files = context.files || [];
+  const paths = files.map(file => file.path || '').filter(Boolean);
+  const diff = String(context.diff || '');
+
+  if (/commit-message|commit message|generateCommitMessage|getGitCommitMessageContext/i.test(`${diff}\n${paths.join('\n')}`)) {
+    return 'feat: add Git commit message generation';
+  }
+
+  const docsOnly = paths.length > 0 && paths.every(file => /\.(md|mdx|txt|rst)$/i.test(file));
+  const testsOnly = paths.length > 0 && paths.every(file => /(^|\/)(__tests__|tests?|specs?)(\/|$)|\.(test|spec)\.[jt]sx?$/i.test(file));
+  const configOnly = paths.length > 0 && paths.every(file => /(^|\/)(package(-lock)?\.json|vite\.config|eslint\.config|tsconfig|tailwind\.config)/i.test(file));
+  const hasFeatureShape = /^\+.*\b(export function|router\.(get|post|put|patch|delete)|function\s+\w+|const\s+\[|<button)\b/im.test(diff);
+  const hasFixShape = /\b(fix|error|fallback|sanitize|strip|guard|prevent|reject|catch)\b/i.test(diff);
+
+  const type = docsOnly ? 'docs'
+    : testsOnly ? 'test'
+      : configOnly ? 'build'
+        : hasFeatureShape ? 'feat'
+          : hasFixShape ? 'fix'
+            : 'chore';
+
+  const allDeleted = files.length > 0 && files.every(file => file.deleted || file.status === 'deleted');
+  const allUntracked = files.length > 0 && files.every(file => file.untracked || file.code === '??');
+  const hasRenames = files.some(file => file.renamed || file.status === 'renamed');
+  const action = allDeleted ? 'remove' : hasRenames ? 'rename' : allUntracked ? 'add' : 'update';
+  return `${type}: ${action} ${commitMessageArea(context)}`.slice(0, 72);
+}
+
 router.get('/git/state', authenticate, (req, res) => {
   try {
     res.json(getGitState(gitWorkingDir(req)));
@@ -1072,6 +1137,59 @@ router.get('/git/diff', authenticate, (req, res) => {
     }));
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/commit-message', authenticate, async (req, res) => {
+  try {
+    const context = getGitCommitMessageContext(gitWorkingDir(req), {
+      scope: req.body?.scope || 'auto',
+    });
+    if (!context.success) {
+      return res.status(400).json(context);
+    }
+
+    const { client: aiClient, model } = getAiClientForUser(req.user.id);
+    const response = await aiClient.messages.create({
+      model,
+      max_completion_tokens: 1000,
+      system: [
+        'Generate an accurate Git commit message from the provided status and diff.',
+        'Return exactly one commit message line. No quotes, no markdown, no bullet list, no explanations.',
+        'Do not include reasoning, analysis, XML tags, or <think> tags.',
+        'Prefer one concise subject line under 72 characters.',
+        'Use imperative mood and conventional prefixes when obvious, such as feat:, fix:, refactor:, docs:, test:, chore:, or build:.',
+        'Do not invent changes that are not present in the diff or status.',
+      ].join(' '),
+      messages: [{
+        role: 'user',
+        content: JSON.stringify({
+          branch: context.branch,
+          scope: context.scope,
+          files: context.files,
+          status: context.status,
+          diff_truncated: context.diffTruncated,
+          diff: context.diff || '(No textual diff available. Use the file status only.)',
+        }, null, 2),
+      }],
+    });
+
+    let message = cleanGeneratedCommitMessage(response.content?.[0]?.text || '');
+    const source = message ? 'ai' : 'fallback';
+    if (!message) message = fallbackCommitMessage(context);
+
+    res.json({
+      success: true,
+      message,
+      source,
+      scope: context.scope,
+      branch: context.branch,
+      changedCount: context.changedCount,
+      diffTruncated: context.diffTruncated,
+    });
+  } catch (err) {
+    console.error('Commit message generation error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Commit message generation failed.' });
   }
 });
 

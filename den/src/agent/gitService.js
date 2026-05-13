@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 const MAX_OUTPUT = 1024 * 1024;
+const DEFAULT_COMMIT_MESSAGE_DIFF_CHARS = 24000;
 
 function runGit(args, cwd, timeout = 30000) {
   try {
@@ -134,6 +135,50 @@ function groupFiles(files = []) {
   };
 }
 
+function truncateWithNotice(value = '', maxChars = DEFAULT_COMMIT_MESSAGE_DIFF_CHARS) {
+  const text = String(value || '');
+  if (text.length <= maxChars) return { text, truncated: false };
+  return {
+    text: `${text.slice(0, maxChars)}\n\n[Diff truncated for commit message generation]`,
+    truncated: true,
+  };
+}
+
+function describeStatusFile(file = {}) {
+  const source = file.oldPath ? ` from ${file.oldPath}` : '';
+  return `${file.code || '??'} ${file.path || ''}${source}`.trim();
+}
+
+function diffUntrackedFiles(repoRoot, files = [], remainingChars = DEFAULT_COMMIT_MESSAGE_DIFF_CHARS) {
+  const parts = [];
+  let used = 0;
+
+  for (const file of files) {
+    if (used >= remainingChars) break;
+    const safeFile = normalizeGitPath(repoRoot, file.path);
+    if (!safeFile) continue;
+    const abs = path.join(repoRoot, safeFile);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
+
+    const result = runGit(['diff', '--no-index', '--no-color', '/dev/null', safeFile], repoRoot, 10000);
+    const output = result.output || result.stdout || '';
+    if (!output) {
+      parts.push(`Untracked file: ${safeFile}`);
+      used += safeFile.length + 18;
+      continue;
+    }
+
+    const remaining = Math.max(0, remainingChars - used);
+    const chunk = output.length > remaining
+      ? `${output.slice(0, remaining)}\n\n[Untracked file diff truncated]`
+      : output;
+    parts.push(chunk);
+    used += chunk.length;
+  }
+
+  return parts.join('\n\n');
+}
+
 function parseRemotes(output = '') {
   const byKey = new Map();
   for (const line of output.split('\n')) {
@@ -242,6 +287,68 @@ export function getGitDiff(cwd, { file = null, staged = false } = {}) {
   const additions = (output.match(/^\+[^+]/gm) || []).length;
   const deletions = (output.match(/^-[^-]/gm) || []).length;
   return { success: result.success || Boolean(output), detected: true, root: repo.root, file: safeFile, staged: Boolean(staged), diff: output, additions, deletions };
+}
+
+export function getGitCommitMessageContext(cwd, { scope = 'auto', maxDiffChars = DEFAULT_COMMIT_MESSAGE_DIFF_CHARS } = {}) {
+  const state = getGitState(cwd);
+  if (!state.detected) {
+    return { ...state, success: false, error: state.reason || 'Not a git repository.' };
+  }
+
+  const stagedFiles = state.changes?.staged || [];
+  const allFiles = state.changes?.all || [];
+  const requestedScope = scope === 'staged' || scope === 'all' ? scope : 'auto';
+  const useStaged = requestedScope === 'staged' || (requestedScope === 'auto' && stagedFiles.length > 0);
+  const selectedFiles = useStaged ? stagedFiles : allFiles;
+
+  if (!selectedFiles.length) {
+    return {
+      success: false,
+      detected: true,
+      root: state.root,
+      branch: state.branch,
+      scope: useStaged ? 'staged' : 'all',
+      error: 'No changes available for commit message generation.',
+    };
+  }
+
+  const diffArgs = useStaged
+    ? ['diff', '--cached', '--no-color']
+    : ['diff', '--no-color', 'HEAD'];
+  const diffResult = runGit(diffArgs, state.root, 30000);
+  let diff = diffResult.output || diffResult.stdout || '';
+
+  if (!useStaged) {
+    const untrackedDiff = diffUntrackedFiles(
+      state.root,
+      selectedFiles.filter(file => file.untracked),
+      Math.max(0, Number(maxDiffChars) - diff.length),
+    );
+    if (untrackedDiff) diff = [diff, untrackedDiff].filter(Boolean).join('\n\n');
+  }
+
+  const truncated = truncateWithNotice(diff, Number(maxDiffChars) || DEFAULT_COMMIT_MESSAGE_DIFF_CHARS);
+
+  return {
+    success: true,
+    detected: true,
+    root: state.root,
+    branch: state.branch,
+    scope: useStaged ? 'staged' : 'all',
+    changedCount: selectedFiles.length,
+    files: selectedFiles.map(file => ({
+      path: file.path,
+      oldPath: file.oldPath || null,
+      code: file.code,
+      status: file.status,
+      staged: Boolean(file.staged),
+      unstaged: Boolean(file.unstaged),
+      untracked: Boolean(file.untracked),
+    })),
+    status: selectedFiles.map(describeStatusFile).join('\n'),
+    diff: truncated.text,
+    diffTruncated: truncated.truncated,
+  };
 }
 
 export function stageGitFiles(cwd, files = []) {

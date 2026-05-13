@@ -16,6 +16,13 @@ export const gitApi = {
     return await apiRequest(`${API_BASE_URL}/agent/git/diff?${params}`);
   },
 
+  generateCommitMessage: async ({ scope = 'auto' } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/commit-message`, {
+      method: 'POST',
+      body: JSON.stringify({ scope }),
+    });
+  },
+
   stage: async (files = []) => {
     return await apiRequest(`${API_BASE_URL}/agent/git/stage`, {
       method: 'POST',

@@ -65,6 +65,8 @@ import {
   buildExportHtmlDocument,
 } from "./utils/exportUtils.js";
 
+const EMPTY_AGENT_EVENTS = [];
+
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
   const navigate = useNavigate();
@@ -167,7 +169,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const currentRun = chatRuns[currentRunKey] || {};
   const agentMode = toolsEnabled ? 'action' : 'plan';
   const agentRunning = Boolean(currentRun.running);
-  const agentEvents = currentRun.events || [];
+  const agentEvents = currentRun.events || EMPTY_AGENT_EVENTS;
   const agentCurrentGoal = currentRun.goal || '';
   const agentCurrentSessionId = currentRun.sessionId || null;
   const agentCurrentSession = currentRun.session || null;
@@ -859,50 +861,108 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   // Voice Mode: auto-speak agent answers via TTS
   const lastSpokenAnswerRef = useRef('');
+  const voicePlaybackRequestRef = useRef(0);
+  const autoRecordPromptTimerRef = useRef(null);
+  const stopVoiceAudio = useCallback(() => {
+    if (autoRecordPromptTimerRef.current) {
+      clearTimeout(autoRecordPromptTimerRef.current);
+      autoRecordPromptTimerRef.current = null;
+    }
+    const audio = voiceAudioRef.current;
+    if (!audio) return;
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    const src = audio.src;
+    if (src?.startsWith('blob:')) URL.revokeObjectURL(src);
+    audio.removeAttribute('src');
+    voiceAudioRef.current = null;
+  }, []);
+
   useEffect(() => {
-    if (!voiceMode || !ttsReady || agentRunning) return;
+    return () => {
+      voicePlaybackRequestRef.current += 1;
+      stopVoiceAudio();
+    };
+  }, [stopVoiceAudio]);
+
+  useEffect(() => {
+    if (!voiceMode || !ttsReady || agentRunning) {
+      voicePlaybackRequestRef.current += 1;
+      stopVoiceAudio();
+      setVoiceModeTtsState('idle');
+      setAutoRecordAfterTts(false);
+      return;
+    }
+
     // Find the most recent answer event
     for (let i = agentEvents.length - 1; i >= 0; i--) {
       const ev = agentEvents[i];
       if (ev.type === 'answer' && ev.data?.answer) {
         const answerText = ev.data.answer.trim();
-        if (answerText && answerText !== lastSpokenAnswerRef.current) {
-          lastSpokenAnswerRef.current = answerText;
+        const answerKey = `${currentRunKey}:${ev.arrivedAt || ev.data?.timestamp || i}:${answerText}`;
+        if (answerText && answerKey !== lastSpokenAnswerRef.current) {
+          lastSpokenAnswerRef.current = answerKey;
+          const playbackRequest = voicePlaybackRequestRef.current + 1;
+          voicePlaybackRequestRef.current = playbackRequest;
+          stopVoiceAudio();
+          setAutoRecordAfterTts(false);
           setVoiceModeTtsState('loading');
           audioApi.tts.speak(answerText).then(blobUrl => {
-            if (voiceAudioRef.current) {
-              voiceAudioRef.current.pause();
-              URL.revokeObjectURL(voiceAudioRef.current.src);
+            if (voicePlaybackRequestRef.current !== playbackRequest) {
+              URL.revokeObjectURL(blobUrl);
+              return;
             }
+            stopVoiceAudio();
             const audio = new Audio(blobUrl);
+            let released = false;
+            const releaseAudio = () => {
+              if (released) return;
+              released = true;
+              URL.revokeObjectURL(blobUrl);
+              if (voiceAudioRef.current === audio) voiceAudioRef.current = null;
+            };
             voiceAudioRef.current = audio;
             audio.onended = () => {
+              if (voicePlaybackRequestRef.current !== playbackRequest) {
+                releaseAudio();
+                return;
+              }
               setVoiceModeTtsState('idle');
-              URL.revokeObjectURL(blobUrl);
-              voiceAudioRef.current = null;
+              releaseAudio();
               // Signal that we should start listening again
               setAutoRecordAfterTts(true);
-              setTimeout(() => setAutoRecordAfterTts(false), 3000);
+              autoRecordPromptTimerRef.current = setTimeout(() => {
+                autoRecordPromptTimerRef.current = null;
+                setAutoRecordAfterTts(false);
+              }, 3000);
             };
             audio.onerror = () => {
-              setVoiceModeTtsState('idle');
-              URL.revokeObjectURL(blobUrl);
-              voiceAudioRef.current = null;
+              if (voicePlaybackRequestRef.current === playbackRequest) {
+                setVoiceModeTtsState('idle');
+              }
+              releaseAudio();
             };
-            audio.play().catch(() => {
-              setVoiceModeTtsState('idle');
-              URL.revokeObjectURL(blobUrl);
-              voiceAudioRef.current = null;
+            audio.play().then(() => {
+              if (voicePlaybackRequestRef.current === playbackRequest) {
+                setVoiceModeTtsState('playing');
+              }
+            }).catch(() => {
+              if (voicePlaybackRequestRef.current === playbackRequest) {
+                setVoiceModeTtsState('idle');
+              }
+              releaseAudio();
             });
-            setVoiceModeTtsState('playing');
           }).catch(() => {
-            setVoiceModeTtsState('idle');
+            if (voicePlaybackRequestRef.current === playbackRequest) {
+              setVoiceModeTtsState('idle');
+            }
           });
         }
         break;
       }
     }
-  }, [voiceMode, ttsReady, agentRunning, agentEvents]);
+  }, [voiceMode, ttsReady, agentRunning, agentEvents, currentRunKey, stopVoiceAudio]);
 
   const handleAgentPermission = useCallback(async (requestId, decision) => {
     if (!requestId) return;
