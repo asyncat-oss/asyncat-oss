@@ -8,11 +8,6 @@ import { initializeTheme, setupThemeListener } from '../auth/utils.js';
 import { loadKeyboardShortcuts } from '../utils/keyboardShortcutsUtils.js';
 import TopMenuBar from '../components/TopMenuBar.jsx';
 
-// Helper to check if top menu bar should be visible
-const isTopMenuBarVisible = () => {
-  return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
-};
-
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
 import CreateProjectFlow from '../projects/components/CreateProjectFlow.jsx';
@@ -40,7 +35,13 @@ const AppLayout = ({ session, onSignOut }) => {
   const [pageTransitionsEnabled, setPageTransitionsEnabled] = useState(() => {
     return localStorage.getItem('pageTransitions') !== 'off';
   });
-  
+  const [dockPosition, setDockPosition] = useState(() => {
+    return localStorage.getItem('dockPosition') || 'bottom';
+  });
+  const [topBarVisible, setTopBarVisible] = useState(() => {
+    return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
+  });
+
   // Project state
   const [selectedProject, setSelectedProject] = useState(null);
   
@@ -207,6 +208,32 @@ const AppLayout = ({ session, onSignOut }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const syncDockPosition = () => {
+      setDockPosition(localStorage.getItem('dockPosition') || 'bottom');
+    };
+
+    window.addEventListener('storage', syncDockPosition);
+    window.addEventListener('dock-position-changed', syncDockPosition);
+    return () => {
+      window.removeEventListener('storage', syncDockPosition);
+      window.removeEventListener('dock-position-changed', syncDockPosition);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncTopBar = () => {
+      setTopBarVisible(localStorage.getItem('topMenuBarVisibility') !== 'hidden');
+    };
+
+    window.addEventListener('storage', syncTopBar);
+    window.addEventListener('top-menu-bar-visibility-changed', syncTopBar);
+    return () => {
+      window.removeEventListener('storage', syncTopBar);
+      window.removeEventListener('top-menu-bar-visibility-changed', syncTopBar);
+    };
+  }, []);
+
   // Keyboard shortcuts for mode switching
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -279,7 +306,7 @@ const AppLayout = ({ session, onSignOut }) => {
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 flex flex-col items-center justify-center">
         <TopMenuBar />
-        <div className={isTopMenuBarVisible() ? 'mt-10 mb-8' : 'mb-8'}>
+        <div className={topBarVisible ? 'mt-10 mb-8' : 'mb-8'}>
           <div className="w-8 h-8 border-4 border-indigo-200 dark:border-indigo-800 midnight:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 midnight:border-t-indigo-300 rounded-full animate-spin"></div>
         </div>
         <p className="text-lg font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-300 text-center px-4 mb-4 transition-all duration-300">
@@ -310,7 +337,7 @@ const AppLayout = ({ session, onSignOut }) => {
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 flex flex-col items-center justify-center">
         <TopMenuBar />
-        <div className={`${isTopMenuBarVisible() ? 'mt-10' : ''} text-center max-w-md mx-auto px-4`}>
+        <div className={`${topBarVisible ? 'mt-10' : ''} text-center max-w-md mx-auto px-4`}>
           <div className="text-red-500 dark:text-red-400 midnight:text-red-400 text-6xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-300 mb-2">
             {isAuthError ? 'Session Expired' : isNetworkError ? 'Connection Error' : 'Workspace Error'}
@@ -442,6 +469,12 @@ const AppLayout = ({ session, onSignOut }) => {
     );
   }
 
+  const dockPaddingClass = {
+    bottom: 'pb-20',
+    left: 'pl-20',
+    right: 'pr-20',
+  };
+
   // Normal dashboard when user has workspaces
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
@@ -459,10 +492,10 @@ const AppLayout = ({ session, onSignOut }) => {
         onSearchOpen={setIsSearchOpen}
       />
 
-      <main className={`flex-1 overflow-hidden h-full ${isTopMenuBarVisible() ? 'pt-10' : ''}`}>
+      <main className={`flex-1 overflow-hidden h-full ${topBarVisible ? 'pt-10' : ''}`}>
         <div
           key={routeTransitionKey}
-          className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full pb-20`}
+          className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full ${dockPaddingClass[dockPosition]}`}
         >
           <Outlet context={{
               selectedProject: getProjectValue(true),

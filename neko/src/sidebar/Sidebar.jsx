@@ -58,49 +58,74 @@ ProfileImage.displayName = "ProfileImage";
 
 // ── DockItem ──────────────────────────────────────────────────────────────────
 
-const DockItem = memo(({ children, label, onClick, isActive, className = "" }) => (
-  <div className="relative group/item flex-shrink-0">
-    <button
-      onClick={onClick}
-      title={label}
-      className={`
-        relative w-10 h-10 rounded-xl flex items-center justify-center
-        transition-all duration-150 active:scale-90 hover:scale-105
-        ${isActive
-          ? "text-gray-900 dark:text-white midnight:text-white bg-black/[0.07] dark:bg-white/10 midnight:bg-white/10"
-          : "text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-800 dark:hover:text-white midnight:hover:text-white hover:bg-black/[0.05] dark:hover:bg-white/[0.06] midnight:hover:bg-white/[0.06]"
-        }
-        ${className}
-      `}
-    >
-      {children}
-    </button>
+const DockItem = memo(({ children, label, onClick, isActive, dockPosition = 'bottom', className = "" }) => {
+  const isVertical = dockPosition === 'left' || dockPosition === 'right';
 
-    {/* Active indicator dot */}
-    {isActive && (
-      <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-500 dark:bg-indigo-400 midnight:bg-indigo-400 shadow-sm shadow-indigo-500/60" />
-    )}
+  const tooltipClasses = {
+    bottom: 'absolute bottom-full mb-3 left-1/2 -translate-x-1/2 origin-bottom',
+    left: 'absolute right-full mr-3 top-1/2 -translate-y-1/2 origin-right',
+    right: 'absolute left-full ml-3 top-1/2 -translate-y-1/2 origin-left',
+  };
 
-    {/* Tooltip */}
-    <div className="
-      absolute bottom-full mb-3 left-1/2 -translate-x-1/2
-      px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap pointer-events-none z-[70]
-      bg-gray-900 dark:bg-gray-800 midnight:bg-gray-800 text-white shadow-xl
-      opacity-0 scale-95 group-hover/item:opacity-100 group-hover/item:scale-100
-      transition-all duration-150 origin-bottom
-    ">
-      {label}
-      <span className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-gray-800 midnight:border-t-gray-800" />
+  const arrowClasses = {
+    bottom: 'absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-gray-800 midnight:border-t-gray-800',
+    left: 'absolute top-1/2 left-full -translate-y-1/2 border-[5px] border-transparent border-l-gray-900 dark:border-l-gray-800 midnight:border-l-gray-800',
+    right: 'absolute top-1/2 right-full -translate-y-1/2 border-[5px] border-transparent border-r-gray-900 dark:border-r-gray-800 midnight:border-r-gray-800',
+  };
+
+  const activeDotClasses = {
+    bottom: 'absolute -bottom-1.5 left-1/2 -translate-x-1/2',
+    left: 'absolute -right-1.5 top-1/2 -translate-y-1/2',
+    right: 'absolute -left-1.5 top-1/2 -translate-y-1/2',
+  };
+
+  return (
+    <div className={`relative group/item flex-shrink-0 ${isVertical ? 'flex justify-center' : ''}`}>
+      <button
+        onClick={onClick}
+        title={label}
+        className={`
+          relative w-10 h-10 rounded-xl flex items-center justify-center
+          transition-all duration-150 active:scale-90 hover:scale-105
+          ${isActive
+            ? "text-gray-900 dark:text-white midnight:text-white bg-black/[0.07] dark:bg-white/10 midnight:bg-white/10"
+            : "text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-800 dark:hover:text-white midnight:hover:text-white hover:bg-black/[0.05] dark:hover:bg-white/[0.06] midnight:hover:bg-white/[0.06]"
+          }
+          ${className}
+        `}
+      >
+        {children}
+      </button>
+
+      {/* Active indicator dot */}
+      {isActive && (
+        <span className={`${activeDotClasses[dockPosition]} w-1 h-1 rounded-full bg-indigo-500 dark:bg-indigo-400 midnight:bg-indigo-400 shadow-sm shadow-indigo-500/60`} />
+      )}
+
+      {/* Tooltip */}
+      <div className={`
+        ${tooltipClasses[dockPosition]}
+        px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap pointer-events-none z-[70]
+        bg-gray-900 dark:bg-gray-800 midnight:bg-gray-800 text-white shadow-xl
+        opacity-0 scale-95 group-hover/item:opacity-100 group-hover/item:scale-100
+        transition-all duration-150
+      `}>
+        {label}
+        <span className={arrowClasses[dockPosition]} />
+      </div>
     </div>
-  </div>
-));
+  );
+});
 DockItem.displayName = "DockItem";
 
 // ── Dock separator ────────────────────────────────────────────────────────────
 
-const DockSep = () => (
-  <div className="w-px h-6 bg-gray-200 dark:bg-white/10 midnight:bg-white/10 mx-0.5 flex-shrink-0" />
-);
+const DockSep = ({ dockPosition = 'bottom' }) => {
+  const isVertical = dockPosition === 'left' || dockPosition === 'right';
+  return (
+    <div className={`${isVertical ? 'h-px w-6 my-0.5' : 'w-px h-6 mx-0.5'} bg-gray-200 dark:bg-white/10 midnight:bg-white/10 flex-shrink-0`} />
+  );
+};
 
 // ── Main Dock Component ───────────────────────────────────────────────────────
 
@@ -117,6 +142,10 @@ const DynamicSidebar = ({
 
   const [isDockVisible, setIsDockVisible] = useState(() => {
     return localStorage.getItem('dockVisibility') !== 'hover';
+  });
+
+  const [dockPosition, setDockPosition] = useState(() => {
+    return localStorage.getItem('dockPosition') || 'bottom';
   });
 
   // Profile state (for dock avatar only)
@@ -150,9 +179,13 @@ const DynamicSidebar = ({
   }, [commandCenterTarget, navigate]);
 
   useEffect(() => {
-    const handleStorageChange = () => {
-      const dockVis = localStorage.getItem('dockVisibility');
-      setIsDockVisible(dockVis !== 'hover');
+    const handleStorageChange = (e) => {
+      if (e.key === 'dockVisibility') {
+        setIsDockVisible(e.newValue !== 'hover');
+      }
+      if (e.key === 'dockPosition') {
+        setDockPosition(e.newValue || 'bottom');
+      }
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
@@ -162,15 +195,30 @@ const DynamicSidebar = ({
     const interval = setInterval(() => {
       const dockVis = localStorage.getItem('dockVisibility');
       setIsDockVisible(dockVis !== 'hover');
+      const dockPos = localStorage.getItem('dockPosition') || 'bottom';
+      setDockPosition(dockPos);
     }, 500);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleDockPositionChange = () => {
+      setDockPosition(localStorage.getItem('dockPosition') || 'bottom');
+    };
+    window.addEventListener('dock-position-changed', handleDockPositionChange);
+    return () => window.removeEventListener('dock-position-changed', handleDockPositionChange);
   }, []);
 
   useEffect(() => {
     if (localStorage.getItem('dockVisibility') !== 'hover') return;
 
     const handleMouseMove = (e) => {
-      if (e.clientY > window.innerHeight - 100) {
+      const pos = localStorage.getItem('dockPosition') || 'bottom';
+      if (pos === 'bottom' && e.clientY > window.innerHeight - 100) {
+        setIsDockVisible(true);
+      } else if (pos === 'left' && e.clientX < 100) {
+        setIsDockVisible(true);
+      } else if (pos === 'right' && e.clientX > window.innerWidth - 100) {
         setIsDockVisible(true);
       }
     };
@@ -298,12 +346,24 @@ const DynamicSidebar = ({
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
 
+  const dockContainerClasses = {
+    bottom: 'fixed bottom-4 left-1/2 -translate-x-1/2 flex-row items-center px-2.5 py-2',
+    left: 'fixed left-4 top-1/2 -translate-y-1/2 flex-col items-center py-2.5 px-2',
+    right: 'fixed right-4 top-1/2 -translate-y-1/2 flex-col items-center py-2.5 px-2',
+  };
+
+  const hoverTriggerClasses = {
+    bottom: 'fixed bottom-0 left-0 right-0 h-24 z-40',
+    left: 'fixed left-0 top-0 bottom-0 w-24 z-40',
+    right: 'fixed right-0 top-0 bottom-0 w-24 z-40',
+  };
+
   return (
     <>
       {/* ── Hover Trigger Zone (only when dockVisibility === 'hover') ── */}
       {localStorage.getItem('dockVisibility') === 'hover' && !isDockVisible && (
         <div
-          className="fixed bottom-0 left-0 right-0 h-24 z-40"
+          className={hoverTriggerClasses[dockPosition]}
           onMouseEnter={() => setIsDockVisible(true)}
         />
       )}
@@ -311,14 +371,15 @@ const DynamicSidebar = ({
       {/* ── The Dock ── */}
       <div
         className={`
-          fixed bottom-4 left-1/2 -translate-x-1/2 z-50
-          flex items-center gap-0.5 px-2.5 py-2
+          z-50
+          flex gap-0.5
           bg-white/85 dark:bg-gray-900/85 midnight:bg-gray-950/90
           backdrop-blur-2xl
           border border-gray-200/70 dark:border-white/[0.08] midnight:border-white/[0.05]
           rounded-2xl
           shadow-[0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.55)] midnight:shadow-[0_8px_40px_rgba(0,0,0,0.7)]
           transition-opacity duration-200
+          ${dockContainerClasses[dockPosition]}
           ${isDockVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}
         `}
         onMouseEnter={() => {
@@ -337,6 +398,7 @@ const DynamicSidebar = ({
           label={conversationTitle ? `Command Center · ${conversationTitle}` : "Command Center"}
           onClick={openCommandCenter}
           isActive={isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")}
+          dockPosition={dockPosition}
         >
           <img src="/cat.svg" alt="Asyncat" className="w-5 h-5" />
           {hasActiveRuns && (
@@ -347,13 +409,14 @@ const DynamicSidebar = ({
           )}
         </DockItem>
 
-        <DockSep />
+        <DockSep dockPosition={dockPosition} />
 
         {/* History — navigates to all chats history */}
         <DockItem
           label="History  ⌘2"
           onClick={() => navigate("/all-chats")}
           isActive={isOnConversations}
+          dockPosition={dockPosition}
         >
           <ChatIcon className="w-5 h-5" />
         </DockItem>
@@ -363,6 +426,7 @@ const DynamicSidebar = ({
           label="Workspace  ⌘3"
           onClick={() => navigate("/workspace")}
           isActive={isOnWorkspace}
+          dockPosition={dockPosition}
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -376,6 +440,7 @@ const DynamicSidebar = ({
           label="Calendar  ⌘4"
           onClick={() => navigate("/calendar")}
           isActive={isOnCalendar}
+          dockPosition={dockPosition}
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -390,17 +455,19 @@ const DynamicSidebar = ({
           label="Files  ⌘5"
           onClick={() => navigate("/files")}
           isActive={isOnFiles}
+          dockPosition={dockPosition}
         >
           <HardDrive className="w-5 h-5" />
         </DockItem>
 
-        <DockSep />
+        <DockSep dockPosition={dockPosition} />
 
         {/* Models — standalone app */}
         <DockItem
           label="Models  ⌘6"
           onClick={() => navigate("/models")}
           isActive={isOnModels}
+          dockPosition={dockPosition}
         >
           <Cpu className="w-5 h-5" />
         </DockItem>
@@ -410,6 +477,7 @@ const DynamicSidebar = ({
           label="Tools & Skills  ⌘7"
           onClick={() => navigate("/tools")}
           isActive={isOnTools}
+          dockPosition={dockPosition}
         >
           <Wrench className="w-5 h-5" />
         </DockItem>
@@ -419,6 +487,7 @@ const DynamicSidebar = ({
           label="Scheduler  ⌘8"
           onClick={() => navigate("/scheduler")}
           isActive={isOnScheduler}
+          dockPosition={dockPosition}
         >
           <Clock className="w-5 h-5" />
         </DockItem>
@@ -428,6 +497,7 @@ const DynamicSidebar = ({
           label="Profiles  ⌘9"
           onClick={() => navigate("/profiles")}
           isActive={isOnProfiles}
+          dockPosition={dockPosition}
         >
           <Layers className="w-5 h-5" />
         </DockItem>
@@ -437,17 +507,19 @@ const DynamicSidebar = ({
           label="Trash"
           onClick={() => navigate("/trash")}
           isActive={isOnTrash}
+          dockPosition={dockPosition}
         >
           <Trash2 className="w-5 h-5" />
         </DockItem>
 
-        <DockSep />
+        <DockSep dockPosition={dockPosition} />
 
         {/* Settings/Profile — navigates to unified settings page */}
         <DockItem
           label="Settings & Profile"
           onClick={() => navigate("/settings/profile")}
           isActive={isOnSettings}
+          dockPosition={dockPosition}
         >
           {profilePictureUrl || profileInitials ? (
             <ProfileImage
