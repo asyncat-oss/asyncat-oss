@@ -10,6 +10,10 @@ const STATUS_COLORS = {
   error: 'bg-red-500',
 };
 
+const notifyModelRuntimeUpdated = () => {
+  window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
+};
+
 const AudioModelCard = ({ model, isLoaded, isStarting, highlighted, onStart, onDelete, type }) => {
   const typeLabel = type === 'whisper' ? 'STT' : 'TTS';
   const engineLabel = type === 'whisper' ? 'Whisper' : 'Piper';
@@ -215,6 +219,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
       onModelsChange?.(nextModels);
       setWhisperStatus(wStatus);
       setTtsStatus(tStatus);
+      notifyModelRuntimeUpdated();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -249,10 +254,11 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
     setError('');
     try {
       await audioApi.whisper.start(model.path);
+      notifyModelRuntimeUpdated();
       const cleanup = audioApi.whisper.pollStatus(
-        (snap) => setWhisperStatus(snap),
-        (snap) => { setWhisperStatus(snap); setStartingModel(null); },
-        (snap) => { setWhisperStatus(snap); setStartingModel(null); setError(snap?.error || 'Failed to start Whisper'); }
+        (snap) => { setWhisperStatus(snap); notifyModelRuntimeUpdated(); },
+        (snap) => { setWhisperStatus(snap); setStartingModel(null); notifyModelRuntimeUpdated(); },
+        (snap) => { setWhisperStatus(snap); setStartingModel(null); notifyModelRuntimeUpdated(); setError(snap?.error || 'Failed to start Whisper'); }
       );
       // Auto-cleanup after 2 min
       setTimeout(() => cleanup(), 120000);
@@ -266,6 +272,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
     try {
       await audioApi.whisper.stop();
       setWhisperStatus({ status: 'idle' });
+      notifyModelRuntimeUpdated();
     } catch (err) { setError(err.message); }
   };
 
@@ -276,6 +283,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
       const res = await audioApi.tts.start(model.path);
       setTtsStatus(res);
       setStartingModel(null);
+      notifyModelRuntimeUpdated();
     } catch (err) {
       setStartingModel(null);
       setError(err.message);
@@ -286,6 +294,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
     try {
       await audioApi.tts.stop();
       setTtsStatus({ status: 'idle' });
+      notifyModelRuntimeUpdated();
     } catch (err) { setError(err.message); }
   };
 

@@ -64,7 +64,13 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
       }
     };
 
+    const refreshNow = () => {
+      clearTimeout(timer);
+      load();
+    };
+
     load();
+    window.addEventListener("asyncat-model-runtime-updated", refreshNow);
     cleanupStream = aiProviderApi.streamStatus?.((payload) => {
       if (cancelled) return;
       setConfig(payload.config || null);
@@ -77,6 +83,7 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      window.removeEventListener("asyncat-model-runtime-updated", refreshNow);
       cleanupStream?.();
     };
   }, [pollMs]);

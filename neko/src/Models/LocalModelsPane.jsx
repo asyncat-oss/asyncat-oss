@@ -3,6 +3,10 @@ import MlxModelsSection from './MlxModelsSection.jsx';
 import { localModelsApi, llamaServerApi, mlxApi } from '../Settings/settingApi.js';
 import { Badge, DEFAULT_LOAD_CTX_SIZE, Panel, SectionHeader, getModelContextLimit, getModelLoadCtxError } from './modelPageShared.jsx';
 
+const notifyModelRuntimeUpdated = () => {
+  window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
+};
+
 // ── Model card ─────────────────────────────────────────────────────────────────
 const ModelCard = ({
   m, serverStatus, status, startingModel, deletingModel,
@@ -133,11 +137,12 @@ const ModelCard = ({
               setStartingModel(m.path);
               mlxApi.start(m.path).then(() => {
                 setServerStatus(prev => ({ ...prev, status: 'loading', model: m.name, modelPath: m.path, port: 8766 }));
+                notifyModelRuntimeUpdated();
                 pollCleanup.current?.();
                 pollCleanup.current = mlxApi.pollStatus(
-                  (snap) => setServerStatus(snap),
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); await loadEngineData(); },
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); setSwitchError(snap?.error || 'Failed to load MLX model'); }
+                  (snap) => { setServerStatus(snap); notifyModelRuntimeUpdated(); },
+                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); await loadEngineData(); },
+                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); setSwitchError(snap?.error || 'Failed to load MLX model'); }
                 );
               }).catch(err => {
                 setStartingModel(null);
@@ -219,12 +224,13 @@ const LocalModelsPane = ({
                   model: p.split(/[\\/]/).pop(), modelPath: p,
                   port: res.engine === 'mlx' ? 8766 : 8765
                 }));
+                notifyModelRuntimeUpdated();
                 pollCleanup.current?.();
                 const api = res.engine === 'mlx' ? mlxApi : llamaServerApi;
                 pollCleanup.current = api.pollStatus(
-                  (snap) => setServerStatus(snap),
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); await loadEngineData(); await loadProviderData(); },
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); setSwitchError(snap?.error || `Failed to load ${res.engine?.toUpperCase()} model`); }
+                  (snap) => { setServerStatus(snap); notifyModelRuntimeUpdated(); },
+                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); await loadEngineData(); await loadProviderData(); },
+                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); setSwitchError(snap?.error || `Failed to load ${res.engine?.toUpperCase()} model`); }
                 );
               } catch (err) {
                 setStartingModel(null);

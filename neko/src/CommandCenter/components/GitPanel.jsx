@@ -243,31 +243,31 @@ function DiffViewer({ file, staged }) {
 
   if (!file) return null;
   return (
-    <div className="border-t border-gray-100 bg-gray-950 dark:border-gray-800">
+    <div className="border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-950">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="min-w-0 truncate text-[11px] font-medium text-gray-300">{file.path}</span>
+        <span className="min-w-0 truncate text-[11px] font-medium text-gray-700 dark:text-gray-300">{file.path}</span>
         {diff && (
-          <span className="shrink-0 text-[10px] tabular-nums text-gray-400">
+          <span className="shrink-0 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
             +{diff.additions || 0} -{diff.deletions || 0}
           </span>
         )}
       </div>
       {loading && (
-        <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-400">
+        <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-500 dark:text-gray-400">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Loading diff
         </div>
       )}
-      {error && <div className="px-3 py-3 text-xs text-red-300">{error}</div>}
+      {error && <div className="px-3 py-3 text-xs text-red-600 dark:text-red-300">{error}</div>}
       {!loading && !error && (
-        <pre className="max-h-72 overflow-auto px-3 pb-3 text-[10px] leading-relaxed text-gray-300">
+        <pre className="max-h-72 overflow-auto px-3 pb-3 text-[10px] leading-relaxed text-gray-700 dark:text-gray-300">
           {(diff?.diff || 'No diff for this file.').split('\n').map((line, index) => (
             <div
               key={`${index}-${line.slice(0, 12)}`}
               className={
-                line.startsWith('+') && !line.startsWith('+++') ? 'text-emerald-300'
-                  : line.startsWith('-') && !line.startsWith('---') ? 'text-red-300'
-                    : line.startsWith('@@') ? 'text-sky-300'
+                line.startsWith('+') && !line.startsWith('+++') ? 'text-emerald-700 dark:text-emerald-300'
+                  : line.startsWith('-') && !line.startsWith('---') ? 'text-red-700 dark:text-red-300'
+                    : line.startsWith('@@') ? 'text-sky-700 dark:text-sky-300'
                       : ''
               }
             >
@@ -613,12 +613,6 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
               </div>
             )}
           </div>
-          <IconButton title="Stage all changes" onClick={() => openAction('stage', { files: [] })} disabled={!workingFiles.length}>
-            <Plus className="h-4 w-4" />
-          </IconButton>
-          <IconButton title="Unstage all" onClick={() => openAction('unstage', { files: [] })} disabled={!stagedFiles.length}>
-            <Upload className="h-4 w-4 rotate-180" />
-          </IconButton>
           <IconButton title={syncTitle} onClick={() => openAction('sync')} disabled={!state.upstream}>
             <GitCompare className={`h-4 w-4 ${syncNeeded ? 'text-sky-600 dark:text-sky-300' : ''}`} />
           </IconButton>
@@ -673,15 +667,26 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
               <div className="space-y-3 mb-4">
                 {stagedFiles.length > 0 && (
                   <section>
-                    <button
-                      type="button"
-                      onClick={() => setStagedExpanded(v => !v)}
-                      className="mb-1 flex w-full items-center gap-2 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
-                    >
-                      {stagedExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                      Staged
-                      <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stagedFiles.length}</span>
-                    </button>
+                    <div className="mb-1 flex items-center gap-1 px-2">
+                      <button
+                        type="button"
+                        onClick={() => setStagedExpanded(v => !v)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                      >
+                        {stagedExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        Staged
+                        <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stagedFiles.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAction('unstage', { files: [] })}
+                        disabled={!stagedFiles.length}
+                        className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                        title="Unstage all"
+                      >
+                        <Upload className="h-3.5 w-3.5 rotate-180" />
+                      </button>
+                    </div>
                     {stagedExpanded && (
                       <div className="space-y-px">
                         {stagedFiles.map(file => (
@@ -698,15 +703,26 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                 )}
                 {workingFiles.length > 0 && (
                   <section>
-                    <button
-                      type="button"
-                      onClick={() => setChangesExpanded(v => !v)}
-                      className="mb-1 flex w-full items-center gap-2 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
-                    >
-                      {changesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                      Changes
-                      <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{workingFiles.length}</span>
-                    </button>
+                    <div className="mb-1 flex items-center gap-1 px-2">
+                      <button
+                        type="button"
+                        onClick={() => setChangesExpanded(v => !v)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                      >
+                        {changesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        Changes
+                        <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{workingFiles.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAction('stage', { files: [] })}
+                        disabled={!workingFiles.length}
+                        className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                        title="Stage all changes"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                     {changesExpanded && (
                       <div className="space-y-px">
                         {workingFiles.map(file => (

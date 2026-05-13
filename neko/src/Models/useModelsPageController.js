@@ -3,6 +3,10 @@ import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from '../Settin
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 import { INSTALL_PROFILE_LABELS, DEFAULT_LOAD_CTX_SIZE, MAX_LOAD_CTX_SIZE, normalizeLoadCtxSize, getModelContextLimit, getModelLoadCtxError, loadSavedModelContextSizes, saveModelContextSizes } from './modelPageShared.jsx';
 
+const notifyModelRuntimeUpdated = () => {
+  window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
+};
+
 export const useModelsPageController = () => {
   const { config: modelContextConfig, setConfig: setModelContextConfig } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
@@ -335,6 +339,7 @@ export const useModelsPageController = () => {
     try {
       await aiProviderApi.activateProfile(id, { stopLocal });
       await Promise.all([loadProviderData(), loadStatus()]);
+      notifyModelRuntimeUpdated();
     } catch (err) {
       setProviderError(err.message || 'Failed to activate provider.');
     } finally {
@@ -348,6 +353,7 @@ export const useModelsPageController = () => {
     try {
       await aiProviderApi.deactivate();
       await loadProviderData();
+      notifyModelRuntimeUpdated();
     } catch (err) {
       setProviderError(err.message || 'Failed to deactivate provider.');
     } finally {
@@ -417,14 +423,16 @@ export const useModelsPageController = () => {
     try {
       await llamaServerApi.start(filename, ctxSize);
       setServerStatus(prev => ({ ...prev, status: 'loading', model: filename }));
+      notifyModelRuntimeUpdated();
       pollCleanup.current?.();
       pollCleanup.current = llamaServerApi.pollStatus(
-        (snap) => setServerStatus(snap),
-        async (snap) => { setServerStatus(snap); setStartingModel(null); pollCleanup.current = null; await loadProviderData(); },
-        (snap) => { setServerStatus(snap); setStartingModel(null); pollCleanup.current = null; },
+        (snap) => { setServerStatus(snap); notifyModelRuntimeUpdated(); },
+        async (snap) => { setServerStatus(snap); setStartingModel(null); pollCleanup.current = null; notifyModelRuntimeUpdated(); await loadProviderData(); },
+        (snap) => { setServerStatus(snap); setStartingModel(null); pollCleanup.current = null; notifyModelRuntimeUpdated(); },
       );
     } catch (err) {
       setServerStatus(prev => ({ ...prev, status: 'error', error: err.message }));
+      notifyModelRuntimeUpdated();
       setStartingModel(null);
     }
   };
@@ -442,6 +450,7 @@ export const useModelsPageController = () => {
       setServerStatus({ status: 'idle', model: null });
       await loadProviderData();
       await loadStatus();
+      notifyModelRuntimeUpdated();
     } catch (err) {
       console.error('Failed to stop server:', err);
     } finally {
