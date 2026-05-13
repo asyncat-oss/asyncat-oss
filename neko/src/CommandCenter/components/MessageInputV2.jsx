@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, HardDrive, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
+import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
 import ConfirmModal from "./ConfirmModal.jsx";
 import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../hooks/useModelConfig.js";
@@ -1458,22 +1458,6 @@ export const MessageInputV2 = ({
             </div>
           </div>
           </form>
-
-        {activeWorkingContext?.workingDir && (
-          <div className="mt-2 flex justify-center">
-            <button
-              type="button"
-              onClick={openWorkingContextMenu}
-              disabled={disabled || !onWorkingContextChange}
-              title={`@ file search and agent tools are scoped to ${activeWorkingContext.workingDir}`}
-              className="inline-flex max-w-full items-center gap-1.5 px-1 text-[10px] font-medium text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-default disabled:hover:text-gray-400 dark:text-gray-500 dark:hover:text-gray-300 midnight:text-slate-500"
-            >
-              <HardDrive className="h-3 w-3 shrink-0" />
-              <span className="shrink-0">@ files search</span>
-              <span className="min-w-0 truncate">{activeContextLabel}</span>
-            </button>
-          </div>
-        )}
 
         {hasMessages && (
           <div className="mt-2 text-center">
