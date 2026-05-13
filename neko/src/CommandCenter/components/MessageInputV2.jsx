@@ -118,6 +118,58 @@ export const MessageInputV2 = ({
   const [cursorPosition, setCursorPosition] = useState(0);
   const [dismissedTrigger, setDismissedTrigger] = useState(null);
   const [runElapsed, setRunElapsed] = useState(0);
+  const voiceCapabilityMode = sttReady && ttsReady ? 'full' : sttReady ? 'stt' : ttsReady ? 'tts' : 'none';
+  const voiceConversationAvailable = voiceCapabilityMode === 'full';
+  const voiceConversationActive = voiceMode && voiceConversationAvailable;
+  const voiceBadge = useMemo(() => {
+    if (voiceCapabilityMode === 'none') return null;
+
+    if (voiceCapabilityMode === 'stt') {
+      return {
+        kind: 'stt',
+        label: 'Speech input active',
+        className: 'bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400',
+      };
+    }
+
+    if (voiceCapabilityMode === 'tts') {
+      return {
+        kind: 'tts',
+        label: 'Speech output active',
+        className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
+      };
+    }
+
+    if (voiceTtsState === 'playing') {
+      return {
+        kind: 'full',
+        label: 'Agent is speaking...',
+        className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
+      };
+    }
+
+    if (voiceTtsState === 'loading') {
+      return {
+        kind: 'full',
+        label: 'Agent is preparing speech...',
+        className: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',
+      };
+    }
+
+    if (autoRecordPrompt) {
+      return {
+        kind: 'full',
+        label: 'Your turn - click the mic',
+        className: 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400 animate-pulse',
+      };
+    }
+
+    return {
+      kind: 'full',
+      label: 'Full voice active',
+      className: 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400',
+    };
+  }, [autoRecordPrompt, voiceCapabilityMode, voiceTtsState]);
 
   // File attachments state
   const [fileAttachments, setFileAttachments] = useState([]);
@@ -568,7 +620,7 @@ export const MessageInputV2 = ({
               return base ? `${base} ${transcribed}` : transcribed;
             });
             // Voice Mode: auto-submit after a brief delay so the user sees what was transcribed
-            if (voiceMode && transcribed) {
+            if (voiceConversationActive && transcribed) {
               setTimeout(() => {
                 handleSubmit(null, transcribed);
               }, 400);
@@ -637,25 +689,20 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              {voiceMode && (
+              {voiceBadge && (
                 <div className="mb-2 flex items-center gap-2">
-                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                    voiceTtsState === 'playing'
-                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
-                      : voiceTtsState === 'loading'
-                        ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-                        : autoRecordPrompt
-                          ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400 animate-pulse'
-                          : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                  }`}>
-                    <Headphones className="w-3 h-3" />
-                    {voiceTtsState === 'playing'
-                      ? 'Agent is speaking…'
-                      : voiceTtsState === 'loading'
-                        ? 'Agent is preparing speech…'
-                        : autoRecordPrompt
-                          ? 'Your turn — click the mic'
-                          : 'Voice mode active'}
+                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${voiceBadge.className}`}>
+                    {voiceBadge.kind === 'stt' ? (
+                      <Mic className="w-3 h-3" />
+                    ) : voiceBadge.kind === 'tts' ? (
+                      <Headphones className="w-3 h-3" />
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5">
+                        <Mic className="w-3 h-3" />
+                        <Headphones className="w-3 h-3" />
+                      </span>
+                    )}
+                    {voiceBadge.label}
                   </div>
                 </div>
               )}
@@ -902,13 +949,13 @@ export const MessageInputV2 = ({
                       type="button"
                       onClick={isRecording ? stopRecording : startRecording}
                       disabled={disabled && !isRecording}
-                      title={isRecording ? "Stop recording" : voiceMode ? "Voice mode — click to speak" : "Record voice input"}
+                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice conversation - click to speak" : "Record voice input"}
                       className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         isRecording
                           ? "text-red-500 bg-red-50 dark:text-red-400 dark:bg-red-900/20 midnight:bg-red-900/20"
                           : autoRecordPrompt
                             ? "text-violet-600 bg-violet-100 dark:text-violet-300 dark:bg-violet-900/30 animate-bounce ring-2 ring-violet-300 dark:ring-violet-700"
-                            : voiceMode
+                            : voiceConversationActive
                               ? "text-violet-500 bg-violet-50 dark:text-violet-400 dark:bg-violet-900/20"
                               : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                       }`}
@@ -922,20 +969,20 @@ export const MessageInputV2 = ({
                       {!isRecording && autoRecordPrompt && <span className="hidden sm:inline font-medium">Speak</span>}
                     </button>
                   )}
-                  {sttReady && ttsReady && onToggleVoiceMode && (
+                  {voiceConversationAvailable && onToggleVoiceMode && (
                     <button
                       type="button"
                       onClick={onToggleVoiceMode}
                       disabled={disabled}
-                      title={voiceMode ? "Voice mode ON — click to disable" : "Voice mode — hands-free conversation"}
+                      title={voiceConversationActive ? "Voice mode ON - click to disable" : "Voice mode - hands-free conversation"}
                       className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                        voiceMode
+                        voiceConversationActive
                           ? "text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-900/20"
                           : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                       }`}
                     >
                       <Headphones className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">{voiceMode ? 'Voice' : 'Voice'}</span>
+                      <span className="hidden sm:inline">Voice</span>
                     </button>
                   )}
 

@@ -67,6 +67,19 @@ import {
 
 const EMPTY_AGENT_EVENTS = [];
 
+function getVoicePlaceholder(sttReady, ttsReady, fallback) {
+  if (sttReady && ttsReady) {
+    return "Full voice active - click the mic to speak, and replies will play aloud...";
+  }
+  if (sttReady) {
+    return "Speech input active - click the mic to dictate, then send your message...";
+  }
+  if (ttsReady) {
+    return "Speech output active - type a message and play replies aloud...";
+  }
+  return fallback;
+}
+
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
   const navigate = useNavigate();
@@ -151,6 +164,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     try { return localStorage.getItem('asyncat_voice_mode') === 'true'; }
     catch { return false; }
   });
+  const voiceConversationActive = voiceMode && sttReady && ttsReady;
   const voiceAudioRef = useRef(null);
   const [voiceModeTtsState, setVoiceModeTtsState] = useState('idle'); // idle | loading | playing
   const [autoRecordAfterTts, setAutoRecordAfterTts] = useState(false);
@@ -887,7 +901,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [stopVoiceAudio]);
 
   useEffect(() => {
-    if (!voiceMode || !ttsReady || agentRunning) {
+    if (!voiceConversationActive || agentRunning) {
       voicePlaybackRequestRef.current += 1;
       stopVoiceAudio();
       setVoiceModeTtsState('idle');
@@ -962,7 +976,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         break;
       }
     }
-  }, [voiceMode, ttsReady, agentRunning, agentEvents, currentRunKey, stopVoiceAudio]);
+  }, [voiceConversationActive, agentRunning, agentEvents, currentRunKey, stopVoiceAudio]);
 
   const handleAgentPermission = useCallback(async (requestId, decision) => {
     if (!requestId) return;
@@ -1341,9 +1355,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               placeholder={
                 isGhostMode
                   ? "👻 Ghost Mode — messages won't be saved..."
-                  : voiceMode
-                    ? "Voice mode active — click the mic to speak..."
-                    : "Ask anything, or create tasks, events, notes..."
+                  : getVoicePlaceholder(sttReady, ttsReady, "Ask anything, or create tasks, events, notes...")
               }
               hasMessages={hasConversationContent}
               toolsEnabled={toolsEnabled}
@@ -1689,9 +1701,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     ? `Reply to the task agent about "${agentTaskRun.cardTitle || 'this task'}"...`
                     : isGhostMode
                     ? "👻 Ghost Mode - Messages won't be saved..."
-                    : voiceMode
-                      ? "Voice mode active — click the mic to speak..."
-                      : "Ask anything..."
+                    : getVoicePlaceholder(sttReady, ttsReady, "Ask anything...")
                 }
                 hasMessages={hasConversationContent}
                 toolsEnabled={toolsEnabled}

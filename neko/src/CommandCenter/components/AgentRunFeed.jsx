@@ -515,7 +515,7 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
           className="group relative h-1.5 w-full cursor-pointer rounded-full bg-gray-100 dark:bg-gray-800"
         >
           <div
-            className="h-full rounded-full bg-emerald-500 transition-[width] duration-75"
+            className="h-full rounded-full bg-emerald-500"
             style={{ width: `${progressPct}%` }}
           />
           <div

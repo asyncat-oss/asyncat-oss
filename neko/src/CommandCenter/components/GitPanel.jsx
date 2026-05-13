@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, CheckCircle2, ChevronDown, ChevronRight, GitBranch,
-  GitCommitHorizontal, GitPullRequestArrow, GitPullRequestDraft, Loader2,
+  GitCommitHorizontal, GitCompare, GitPullRequestArrow, GitPullRequestDraft, Loader2,
   Paperclip, Plus, RefreshCw, Save, Sparkles, Upload, X,
 } from 'lucide-react';
 import { gitApi } from '../api';
@@ -31,6 +31,20 @@ const REQUIRED_MESSAGE_ACTIONS = new Set([
   'stage-commit-sync',
   'stash-save',
 ]);
+
+const COMMIT_MESSAGE_MIN_HEIGHT = 40;
+const COMMIT_MESSAGE_MAX_HEIGHT = 176;
+
+function resizeCommitMessageTextarea(element) {
+  if (!element) return;
+  element.style.height = `${COMMIT_MESSAGE_MIN_HEIGHT}px`;
+  const nextHeight = Math.min(
+    Math.max(element.scrollHeight, COMMIT_MESSAGE_MIN_HEIGHT),
+    COMMIT_MESSAGE_MAX_HEIGHT,
+  );
+  element.style.height = `${nextHeight}px`;
+  element.style.overflowY = element.scrollHeight > COMMIT_MESSAGE_MAX_HEIGHT ? 'auto' : 'hidden';
+}
 
 function compactPath(path = '') {
   const parts = String(path).split('/').filter(Boolean);
@@ -90,6 +104,7 @@ function commandForAction(action, payload = {}) {
     case 'stage-commit': return 'git add -A && git commit -m <message>';
     case 'stage-commit-push': return 'git add -A && git commit -m <message> && git push origin';
     case 'stage-commit-sync': return 'git add -A && git commit -m <message> && git pull && git push origin';
+    case 'sync': return 'git pull && git push origin';
     case 'pull': return 'git pull';
     case 'push': return 'git push origin';
     case 'stash-save': return 'git stash push -u -m <message>';
@@ -110,6 +125,7 @@ function actionCopy(action) {
   if (action === 'stage-commit') return 'This stages every current change, then creates a local commit.';
   if (action === 'stage-commit-push') return 'This stages every change, commits, then pushes the new commit.';
   if (action === 'stage-commit-sync') return 'This stages every change, commits, pulls remote changes, then pushes. Pull may merge or conflict.';
+  if (action === 'sync') return 'Sync pulls remote commits, then pushes local commits to the configured remote.';
   if (action === 'stash-pop') return 'Stash pop reapplies saved changes and may create conflicts.';
   if (action?.startsWith('branch')) return 'Branch operations change the active repository context.';
   if (action === 'commit') return 'Commit records staged changes in local history.';
@@ -132,6 +148,7 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
     'stage-commit': 'Stage all and commit?',
     'stage-commit-push': 'Stage all, commit, and push?',
     'stage-commit-sync': 'Stage all, commit, and sync?',
+    sync: 'Sync changes?',
     pull: 'Pull from remote?',
     push: 'Push to remote?',
     'stash-save': 'Stash changes?',
@@ -312,11 +329,20 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const [stagedExpanded, setStagedExpanded] = useState(true);
   const [changesExpanded, setChangesExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('working'); // 'working', 'history', 'stashes'
+  const commitMessageTextareaRef = useRef(null);
   const files = useMemo(() => state?.changes?.all || [], [state?.changes?.all]);
   const stagedFiles = useMemo(() => state?.changes?.staged || [], [state?.changes?.staged]);
   const workingFiles = useMemo(() => files.filter(file => !file.staged || file.unstaged), [files]);
   const hasCommitMessage = commitMessage.trim().length > 0;
   const canGenerateCommitMessage = files.length > 0 && !generatingCommitMessage && !busy;
+  const aheadCount = state?.ahead || 0;
+  const behindCount = state?.behind || 0;
+  const syncNeeded = aheadCount > 0 || behindCount > 0;
+  const syncTitle = !state?.upstream
+    ? 'No upstream configured'
+    : syncNeeded
+      ? `Sync changes (${aheadCount} ahead, ${behindCount} behind)`
+      : 'Sync changes';
   const mainCommitAction = stagedFiles.length > 0 ? 'commit' : 'stage-commit';
   const canMainCommit = hasCommitMessage && (stagedFiles.length > 0 || files.length > 0);
   const commitMenuItems = useMemo(() => {
@@ -335,6 +361,10 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
       { action: 'stage-commit-sync', label: 'Stage all, commit, and sync', disabled: !canStageCommit },
     ];
   }, [files.length, hasCommitMessage, stagedFiles.length]);
+
+  useEffect(() => {
+    resizeCommitMessageTextarea(commitMessageTextareaRef.current);
+  }, [commitMessage]);
 
   const executeAction = useCallback(async (targetAction, targetPayload) => {
     setBusy(true);
@@ -378,6 +408,10 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
       if (targetAction === 'stage-commit-sync') {
         res = assertSuccess(await gitApi.stage([]), 'Stage all');
         res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: [] }), 'Commit');
+        res = assertSuccess(await gitApi.pull(), 'Pull');
+        res = await gitApi.push();
+      }
+      if (targetAction === 'sync') {
         res = assertSuccess(await gitApi.pull(), 'Pull');
         res = await gitApi.push();
       }
@@ -443,6 +477,11 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
     }
   }, [files.length]);
 
+  const handleCommitMessageChange = useCallback((event) => {
+    setCommitMessage(event.target.value);
+    resizeCommitMessageTextarea(event.target);
+  }, []);
+
   const attachFile = useCallback((file) => {
     const name = basename(file.path || '');
     const ext = name.includes('.') ? name.split('.').pop() : '';
@@ -493,8 +532,10 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
           </button>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-slate-500">
-          <span>{state.ahead || 0} ahead</span>
-          <span>{state.behind || 0} behind</span>
+          <span className={syncNeeded ? 'inline-flex items-center gap-1 font-medium text-sky-600 dark:text-sky-300' : ''}>
+            {syncNeeded && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
+            {aheadCount} ahead · {behindCount} behind
+          </span>
           <span>{state.stashCount || 0} stash</span>
           <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -517,11 +558,12 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
       <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-slate-800 midnight:border-slate-800">
         <div className="relative">
           <textarea
+            ref={commitMessageTextareaRef}
             value={commitMessage}
-            onChange={event => setCommitMessage(event.target.value)}
-            rows={2}
+            onChange={handleCommitMessageChange}
+            rows={1}
             placeholder={`Message${state.branch ? ` for ${state.branch}` : ''}`}
-            className="w-full resize-none rounded-md border border-gray-200 bg-gray-50 py-2 pl-3 pr-10 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700 dark:focus:bg-[#0b1220]"
+            className="w-full resize-none rounded-md border border-gray-200 bg-gray-50 py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700 dark:focus:bg-[#0b1220]"
           />
           <button
             type="button"
@@ -576,6 +618,9 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
           </IconButton>
           <IconButton title="Unstage all" onClick={() => openAction('unstage', { files: [] })} disabled={!stagedFiles.length}>
             <Upload className="h-4 w-4 rotate-180" />
+          </IconButton>
+          <IconButton title={syncTitle} onClick={() => openAction('sync')} disabled={!state.upstream}>
+            <GitCompare className={`h-4 w-4 ${syncNeeded ? 'text-sky-600 dark:text-sky-300' : ''}`} />
           </IconButton>
           <IconButton title="Pull" onClick={() => openAction('pull')}>
             <GitPullRequestArrow className="h-4 w-4" />
