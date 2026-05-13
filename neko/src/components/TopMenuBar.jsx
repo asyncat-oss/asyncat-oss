@@ -193,13 +193,6 @@ const modelStatusMeta = {
   },
 };
 
-const getCombinedStatus = (items) => {
-  if (items.some(item => item.status === "loading")) return "loading";
-  if (items.some(item => item.status === "error")) return "error";
-  if (items.some(item => item.status === "ready")) return "ready";
-  return "idle";
-};
-
 const ModelStatusRow = ({ Icon, label, detail, status }) => {
   const meta = modelStatusMeta[status] || modelStatusMeta.idle;
 
@@ -280,15 +273,23 @@ const ModelActivityIndicators = () => {
     },
   ];
 
-  const combinedStatus = getCombinedStatus(items);
-  const combinedMeta = modelStatusMeta[combinedStatus] || modelStatusMeta.idle;
+  const getIconColorClass = (items) => {
+    const statuses = items.map(i => i.status);
+    if (statuses.includes("loading")) return "text-amber-500 animate-pulse";
+    if (statuses.includes("error")) return "text-red-500";
+    if (statuses.every(s => s === "ready")) return "text-emerald-500";
+    if (statuses.some(s => s === "ready")) return "text-amber-400";
+    return "text-gray-400 dark:text-gray-500 midnight:text-gray-500";
+  };
+
+  const iconColorClass = getIconColorClass(items);
 
   return (
     <div ref={menuRef} className="relative hidden min-[360px]:block">
       <button
         type="button"
         onClick={() => setIsOpen(value => !value)}
-        className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-gray-800 midnight:hover:text-gray-200 ${combinedMeta.textClassName}`}
+        className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 ${iconColorClass}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         title="Model status"
