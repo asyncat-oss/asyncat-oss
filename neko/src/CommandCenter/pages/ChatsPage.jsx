@@ -8,6 +8,19 @@ import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plu
 
 import { getRelativeTime, cleanTaskAgentTitle } from '../utils/conversationUtils.js';
 
+function basenamePath(value = '') {
+  const parts = String(value || '').split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || '';
+}
+
+function formatWorkingContextLabel(context) {
+  if (!context || typeof context !== 'object') return null;
+  if (context.relativePath && context.relativePath !== '.') return basenamePath(context.relativePath);
+  if (context.workingDir) return basenamePath(context.workingDir);
+  if (context.rootPath) return basenamePath(context.rootPath);
+  return context.rootLabel || null;
+}
+
 const ChatsPage = () => {
   const navigate = useNavigate();
   const { currentWorkspace } = useWorkspace();
@@ -254,6 +267,7 @@ const ChatsPage = () => {
     const hasSelection = selectedCount > 0;
     const canSelect = !isTaskAgent && !isActiveRun;
     const canOpen = isActiveRun || !isTaskAgent || chat.sessionId;
+    const workingContextLabel = formatWorkingContextLabel(chat.metadata?.workingContext || chat.workingContext);
 
     return (
       <div
@@ -316,6 +330,18 @@ const ChatsPage = () => {
                 }`}>
                   {isTaskAgent ? <Bot className="w-3 h-3" /> : <Wrench className="w-3 h-3" />}
                   {running ? 'Generating' : isTaskAgent ? (chat.profile?.name || 'Agent') : actionModeUsed ? 'Action' : 'Plan'}
+                </span>
+              </>
+            )}
+            {workingContextLabel && (
+              <>
+                <span>•</span>
+                <span
+                  className="inline-flex min-w-0 items-center gap-0.5 truncate text-gray-500 dark:text-gray-400 midnight:text-slate-400"
+                  title={chat.metadata?.workingContext?.workingDir || chat.workingContext?.workingDir || ''}
+                >
+                  <FolderOpen className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">Worked in {workingContextLabel}</span>
                 </span>
               </>
             )}

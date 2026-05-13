@@ -95,6 +95,44 @@ function relativeToContext(entryPath, contextPath = ".") {
     : entryPath;
 }
 
+function normalizeFsPath(value = "") {
+  return String(value || "").trim().replace(/\\/g, "/").replace(/\/+$/, "") || "/";
+}
+
+function contextFromAbsolutePath(rawPath, roots = []) {
+  const target = normalizeFsPath(rawPath);
+  const matches = roots
+    .map(root => ({ root, rootPath: normalizeFsPath(root.path || "") }))
+    .filter(item => item.rootPath && (target === item.rootPath || target.startsWith(`${item.rootPath}/`)))
+    .sort((a, b) => b.rootPath.length - a.rootPath.length);
+  const match = matches[0];
+  if (!match) return null;
+  const relativePath = target === match.rootPath
+    ? "."
+    : target.slice(match.rootPath.length + 1) || ".";
+  return {
+    rootId: match.root.id,
+    rootLabel: match.root.label,
+    rootKind: match.root.kind,
+    rootPath: match.root.path,
+    relativePath,
+    workingDir: absoluteFromRoot(match.root.path, relativePath),
+  };
+}
+
+function buildBreadcrumbs(relativePath = ".") {
+  if (!relativePath || relativePath === ".") return [{ label: "Root", path: "." }];
+  const segments = String(relativePath).split("/").filter(Boolean);
+  const crumbs = [{ label: "Root", path: "." }];
+  segments.forEach((segment, index) => {
+    crumbs.push({
+      label: segment,
+      path: segments.slice(0, index + 1).join("/"),
+    });
+  });
+  return crumbs;
+}
+
 const suggestionPanelClass =
   "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1a1a1a] midnight:border-[#2a2a2a] midnight:bg-[#1a1a1a]";
 const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
@@ -185,6 +223,8 @@ export const MessageInputV2 = ({
   const [fileRoots, setFileRoots] = useState([]);
   const [contextBrowseRootId, setContextBrowseRootId] = useState("workspace");
   const [contextBrowsePath, setContextBrowsePath] = useState(".");
+  const [manualContextPath, setManualContextPath] = useState("");
+  const [manualContextError, setManualContextError] = useState(null);
   const [contextBrowseEntries, setContextBrowseEntries] = useState([]);
   const [contextBrowseLoading, setContextBrowseLoading] = useState(false);
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
@@ -257,6 +297,10 @@ export const MessageInputV2 = ({
   const contextBrowseLabel = contextBrowsePath === "."
     ? (contextBrowseRoot?.label || "Root")
     : basename(contextBrowsePath);
+  const contextBreadcrumbs = useMemo(
+    () => buildBreadcrumbs(contextBrowsePath),
+    [contextBrowsePath],
+  );
   
   const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {
@@ -674,6 +718,8 @@ export const MessageInputV2 = ({
       if (next === "context") {
         setContextBrowseRootId(activeWorkingContext?.rootId || "workspace");
         setContextBrowsePath(activeWorkingContext?.relativePath || ".");
+        setManualContextPath(activeWorkingContext?.workingDir || "");
+        setManualContextError(null);
       }
       return next;
     });
@@ -690,9 +736,29 @@ export const MessageInputV2 = ({
       relativePath: relativePath || ".",
       workingDir: absoluteFromRoot(root.path, relativePath || "."),
     };
+    const currentKey = `${activeWorkingContext?.rootId || ""}:${activeWorkingContext?.relativePath || "."}`;
+    const nextKey = `${nextContext.rootId}:${nextContext.relativePath}`;
+    if (hasMessages && currentKey !== nextKey) {
+      const ok = window.confirm(
+        "Switch this chat to a different working folder?\n\nFuture file search, Git, shell tools, and edits will use the new folder. Earlier messages and edits stay as history."
+      );
+      if (!ok) return;
+    }
     onWorkingContextChange(nextContext);
     setOpenMenu(null);
-  }, [activeRoot, fileRoots, onWorkingContextChange]);
+  }, [activeRoot, activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileRoots, hasMessages, onWorkingContextChange]);
+
+  const applyManualContextPath = useCallback(() => {
+    const context = contextFromAbsolutePath(manualContextPath, fileRoots);
+    if (!context) {
+      setManualContextError("Path must be inside one of the listed roots.");
+      return;
+    }
+    setManualContextError(null);
+    setContextBrowseRootId(context.rootId);
+    setContextBrowsePath(context.relativePath);
+    selectWorkingContext(context.rootId, context.relativePath);
+  }, [fileRoots, manualContextPath, selectWorkingContext]);
 
   useEffect(() => {
     if (openMenu !== "context") return;
@@ -1025,6 +1091,8 @@ export const MessageInputV2 = ({
                                     onClick={() => {
                                       setContextBrowseRootId(root.id);
                                       setContextBrowsePath(".");
+                                      setManualContextPath(root.path || "");
+                                      setManualContextError(null);
                                     }}
                                     className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
                                       active
@@ -1040,20 +1108,78 @@ export const MessageInputV2 = ({
                             </div>
 
 	                            <div className="min-w-0">
-	                              <div className="flex items-center gap-1 border-b border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
-	                                <div className="min-w-0 flex-1 px-2 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">
-	                                  <span className="block truncate">{contextBrowseLabel}</span>
+	                              <div className="border-b border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
+	                                <div className="mb-1 flex min-w-0 items-center gap-1 overflow-hidden px-1">
+	                                  {contextBreadcrumbs.map((crumb, index) => (
+	                                    <span key={crumb.path} className="inline-flex min-w-0 items-center gap-1">
+	                                      {index > 0 && <ChevronDown className="h-3 w-3 -rotate-90 text-gray-300 dark:text-gray-600" />}
+	                                      <button
+	                                        type="button"
+	                                        onClick={() => {
+	                                          setContextBrowsePath(crumb.path);
+	                                          setManualContextPath(absoluteFromRoot(contextBrowseRoot?.path || "", crumb.path));
+	                                          setManualContextError(null);
+	                                        }}
+	                                        className={`max-w-[7rem] truncate rounded px-1.5 py-1 text-[11px] transition-colors ${
+	                                          index === contextBreadcrumbs.length - 1
+	                                            ? "bg-gray-100 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+	                                            : "text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+	                                        }`}
+	                                      >
+	                                        {crumb.label}
+	                                      </button>
+	                                    </span>
+	                                  ))}
 	                                </div>
+	                                <div className="flex items-center gap-1">
+	                                  <div className="min-w-0 flex-1 px-2 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+	                                    <span className="block truncate">{contextBrowseLabel}</span>
+	                                  </div>
 	                                {contextBrowsePath !== "." && (
 	                                  <button
 	                                    type="button"
-                                    onClick={() => setContextBrowsePath(dirname(contextBrowsePath))}
-                                    className="rounded-md px-2 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                                  >
-                                    Up
-                                  </button>
-                                )}
-                              </div>
+	                                    onClick={() => {
+	                                      const parent = dirname(contextBrowsePath);
+	                                      setContextBrowsePath(parent);
+	                                      setManualContextPath(absoluteFromRoot(contextBrowseRoot?.path || "", parent));
+	                                      setManualContextError(null);
+	                                    }}
+	                                    className="rounded-md px-2 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+	                                  >
+	                                    Up
+	                                  </button>
+	                                )}
+	                                </div>
+	                                <div className="mt-1 flex items-center gap-1 px-1">
+	                                  <input
+	                                    value={manualContextPath}
+	                                    onChange={(event) => {
+	                                      setManualContextPath(event.target.value);
+	                                      setManualContextError(null);
+	                                    }}
+	                                    onKeyDown={(event) => {
+	                                      if (event.key === "Enter") {
+	                                        event.preventDefault();
+	                                        applyManualContextPath();
+	                                      }
+	                                    }}
+	                                    placeholder="/path/to/project"
+	                                    className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 outline-none transition-colors placeholder:text-gray-300 focus:border-gray-300 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:placeholder:text-gray-600 dark:focus:border-gray-600"
+	                                  />
+	                                  <button
+	                                    type="button"
+	                                    onClick={applyManualContextPath}
+	                                    className="rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+	                                  >
+	                                    Go
+	                                  </button>
+	                                </div>
+	                                {manualContextError && (
+	                                  <div className="px-2 pb-1 pt-1 text-[11px] text-red-500 dark:text-red-400">
+	                                    {manualContextError}
+	                                  </div>
+	                                )}
+	                              </div>
                               <div className="max-h-60 overflow-y-auto p-1">
                                 {contextBrowseLoading ? (
                                   <div className="flex items-center gap-2 px-2 py-2 text-xs text-gray-400 dark:text-gray-500">
@@ -1065,7 +1191,11 @@ export const MessageInputV2 = ({
                                     <button
                                       key={entry.path}
                                       type="button"
-                                      onClick={() => setContextBrowsePath(entry.path)}
+                                      onClick={() => {
+                                        setContextBrowsePath(entry.path);
+                                        setManualContextPath(absoluteFromRoot(contextBrowseRoot?.path || "", entry.path));
+                                        setManualContextError(null);
+                                      }}
                                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
                                     >
                                       <FolderOpen className="h-3.5 w-3.5 shrink-0 text-gray-400" />

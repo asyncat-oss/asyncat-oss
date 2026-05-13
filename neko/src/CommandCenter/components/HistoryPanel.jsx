@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, MessageSquare } from 'lucide-react';
+import { FolderOpen, Loader2, MessageSquare } from 'lucide-react';
 
 const getRelativeConversationTime = (dateString) => {
   if (!dateString) return '';
@@ -12,6 +12,19 @@ const getRelativeConversationTime = (dateString) => {
   if (diffD < 7) return `${diffD}d ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
+
+function basenamePath(value = '') {
+  const parts = String(value || '').split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || '';
+}
+
+function formatWorkingContextLabel(context) {
+  if (!context || typeof context !== 'object') return null;
+  if (context.relativePath && context.relativePath !== '.') return basenamePath(context.relativePath);
+  if (context.workingDir) return basenamePath(context.workingDir);
+  if (context.rootPath) return basenamePath(context.rootPath);
+  return context.rootLabel || null;
+}
 
 export default function HistoryPanel({
   recentConversations = [],
@@ -47,10 +60,12 @@ export default function HistoryPanel({
                 {recentConversations.length}
               </span>
             </div>
-            {recentConversations.map((conversation) => {
-              const active = conversation.id === currentConversationId;
-              const running = activeConversationIds.has(conversation.id);
-              return (
+	            {recentConversations.map((conversation) => {
+	              const active = conversation.id === currentConversationId;
+	              const running = activeConversationIds.has(conversation.id);
+	              const workingContext = conversation.metadata?.workingContext || conversation.workingContext;
+	              const workingContextLabel = formatWorkingContextLabel(workingContext);
+	              return (
                 <button
                   key={conversation.id}
                   type="button"
@@ -83,12 +98,21 @@ export default function HistoryPanel({
                           · {running ? 'Generating' : getRelativeConversationTime(conversation.updated_at)}
                         </span>
                       </div>
-                      {(conversation.preview || conversation.messages?.[0]?.content) && (
-                        <p className="mt-1 text-[10px] leading-snug text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2 break-all">
-                          {conversation.preview || conversation.messages?.[0]?.content}
-                        </p>
-                      )}
-                    </div>
+	                      {(conversation.preview || conversation.messages?.[0]?.content) && (
+	                        <p className="mt-1 text-[10px] leading-snug text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2 break-all">
+	                          {conversation.preview || conversation.messages?.[0]?.content}
+	                        </p>
+	                      )}
+	                      {workingContextLabel && (
+	                        <div
+	                          className="mt-1 inline-flex max-w-full items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+	                          title={workingContext?.workingDir || ''}
+	                        >
+	                          <FolderOpen className="h-3 w-3 shrink-0" />
+	                          <span className="truncate">Worked in {workingContextLabel}</span>
+	                        </div>
+	                      )}
+	                    </div>
                   </div>
                 </button>
               );
