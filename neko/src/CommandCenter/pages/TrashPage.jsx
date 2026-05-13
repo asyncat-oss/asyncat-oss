@@ -57,20 +57,20 @@ const TrashPage = () => {
   return (
     <div className="h-full flex flex-col bg-transparent">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-6 py-4">
+      <div className="flex-shrink-0 border-b border-gray-100 px-6 py-4 dark:border-gray-800 midnight:border-slate-800">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+            <h1 className="text-lg font-semibold leading-none text-gray-950 dark:text-gray-100 midnight:text-slate-100">
               Trash
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
               Deleted conversations are kept for 30 days
             </p>
           </div>
           {trashItems.length > 0 && (
             <button
               onClick={() => setConfirmDelete({ type: "empty", count: trashItems.length })}
-              className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 rounded-lg transition-colors"
+              className="h-8 rounded-lg px-2.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 midnight:hover:bg-red-950/30"
             >
               Empty trash ({trashItems.length})
             </button>
@@ -83,14 +83,14 @@ const TrashPage = () => {
         <div className="px-6 py-6">
           {loading ? (
             <div className="flex items-center py-12">
-              <div className="text-gray-400 dark:text-gray-500">Loading...</div>
+              <div className="text-sm text-gray-400 dark:text-gray-500">Loading...</div>
             </div>
           ) : trashItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-16 h-16 rounded-full border border-gray-200/60 dark:border-gray-800/60 midnight:border-slate-800/60 bg-gradient-to-b from-gray-50/50 to-gray-100/50 dark:from-gray-800/30 dark:to-gray-800/10 midnight:from-slate-800/30 midnight:to-slate-800/10 shadow-sm flex items-center justify-center mb-4">
-                <Trash2 className="w-7 h-7 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-400 dark:border-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:text-slate-500">
+                <Trash2 className="w-4 h-4" />
               </div>
-              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-2">
+              <h2 className="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
                 Trash is empty
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 max-w-xs">
@@ -102,10 +102,10 @@ const TrashPage = () => {
               {trashItems.map((conv) => (
                 <div
                   key={conv.id}
-                  className="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group"
+                  className="group flex items-center gap-3 border-b border-gray-100 px-3 py-3 transition-colors hover:bg-gray-50/70 dark:border-gray-800 dark:hover:bg-gray-800/35 midnight:border-slate-800 midnight:hover:bg-slate-900/45"
                 >
-                  <div className="w-10 h-10 rounded-xl border border-gray-200/60 dark:border-gray-800/60 midnight:border-slate-800/60 bg-gradient-to-b from-gray-50/50 to-gray-100/50 dark:from-gray-800/30 dark:to-gray-800/10 midnight:from-slate-800/30 midnight:to-slate-800/10 shadow-sm flex items-center justify-center flex-shrink-0">
-                    <MessageSquare className="w-4 h-4 text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-400">
+                    <MessageSquare className="w-3.5 h-3.5" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 truncate">
@@ -115,20 +115,20 @@ const TrashPage = () => {
                       Deleted {conv.deleted_at ? new Date(conv.deleted_at).toLocaleDateString() : "recently"}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       onClick={() => handleRestore(conv.id)}
-                      className="p-2 rounded-lg text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-emerald-600 dark:hover:bg-gray-800 dark:hover:text-emerald-400"
                       title="Restore"
                     >
-                      <RotateCcw className="w-4 h-4" />
+                      <RotateCcw className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setConfirmDelete({ type: "single", conv })}
-                      className="p-2 rounded-lg text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
                       title="Delete permanently"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -141,12 +141,12 @@ const TrashPage = () => {
       {/* Confirm Dialog */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-xl shadow-2xl max-w-md w-full p-6">
+          <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 midnight:bg-red-900/30 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
+                <AlertTriangle className="w-4 h-4" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
                 {confirmDelete.type === "empty" ? "Empty trash?" : "Delete permanently?"}
               </h3>
             </div>
@@ -158,7 +158,7 @@ const TrashPage = () => {
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 rounded-lg transition-colors"
+                className="h-8 rounded-lg px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-900"
               >
                 Cancel
               </button>
@@ -168,7 +168,7 @@ const TrashPage = () => {
                     ? handleEmptyTrash()
                     : handlePermanentDelete(confirmDelete.conv.id)
                 }
-                className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                className="h-8 rounded-lg bg-red-600 px-3 text-xs font-medium text-white transition-colors hover:bg-red-700"
               >
                 Delete
               </button>
