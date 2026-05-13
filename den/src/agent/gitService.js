@@ -442,6 +442,88 @@ export function stashGit(cwd, { action = 'list', message = null, index = null } 
   return { ...result, command: `git ${args.join(' ')}` };
 }
 
+export function getGitCommit(cwd, hash) {
+  const repo = ensureRepo(cwd);
+  if (!repo.success) return repo;
+
+  const info = runGit(['show', '-s', '--format=%H%x00%h%x00%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI%x00%s%x00%b%x00%P', hash], repo.root, 5000);
+  if (!info.success) return info;
+
+  const parts = info.output.split('\x00');
+  const [fullHash, shortHash, author, authorEmail, authorDate, committer, committerEmail, commitDate, subject, body, parentsRaw] = parts;
+
+  const statResult = runGit(['show', '--stat', '--format=', hash], repo.root, 5000);
+  const changedFiles = [];
+  if (statResult.success && statResult.output) {
+    const lines = statResult.output.trim().split('\n');
+    for (const line of lines) {
+      const match = line.match(/^\s*(.+?)\s+\|\s+(\d+)\s+([\+\-]*)/);
+      if (match) {
+        changedFiles.push({
+          path: match[1].trim(),
+          changes: parseInt(match[2], 10),
+          diff: match[3] || ''
+        });
+      }
+    }
+  }
+
+  return {
+    success: true,
+    detected: true,
+    root: repo.root,
+    commit: {
+      hash: fullHash,
+      shortHash,
+      author,
+      authorEmail,
+      authorDate,
+      committer,
+      committerEmail,
+      commitDate,
+      subject,
+      body: body?.trim() || '',
+      parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [],
+      changedFiles
+    }
+  };
+}
+
+export function getGitBranches(cwd) {
+  const repo = ensureRepo(cwd);
+  if (!repo.success) return repo;
+
+  const localResult = runGit(['branch', '-vv'], repo.root, 10000);
+  const branches = [];
+
+  if (localResult.success) {
+    for (const line of (localResult.output || '').split('\n').filter(Boolean)) {
+      const current = line.startsWith('*');
+      const clean = line.replace(/^\*\s*/, '').trim();
+      const nameMatch = clean.match(/^([^\s]+)/);
+      const name = nameMatch ? nameMatch[1] : clean;
+      const upstreamMatch = clean.match(/\[(.*?)\]/);
+      branches.push({
+        name,
+        current,
+        upstream: upstreamMatch ? upstreamMatch[1] : null,
+        raw: clean
+      });
+    }
+  }
+
+  return { success: true, branches };
+}
+
+export function discardGitFiles(cwd, files = []) {
+  const repo = ensureRepo(cwd);
+  if (!repo.success) return repo;
+  const paths = normalizeGitPaths(repo.root, files);
+  const args = paths.length ? ['checkout', '--', ...paths] : ['checkout', '--', '.'];
+  const result = runGit(args, repo.root, 30000);
+  return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
+}
+
 export function branchGit(cwd, { action = 'list', name = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;

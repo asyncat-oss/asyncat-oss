@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState, useMemo } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, X, Copy, Check, GitCommit, User, Clock, FileCode } from 'lucide-react';
 import { gitApi } from '../api';
+import Portal from '../../components/Portal';
 
 const COL_WIDTH = 14;
 const ROW_HEIGHT = 32;
@@ -25,12 +26,176 @@ function Path({ x1, y1, x2, y2, color }) {
   return <path d={d} fill="none" stroke={color} strokeWidth="2" />;
 }
 
+function CommitDetailModal({ hash, workingDir, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    gitApi.commitDetail({ hash, path: workingDir })
+      .then(res => {
+        if (!cancelled) {
+          if (res.success) setData(res.commit);
+          else setError(res.error || 'Failed to load commit details');
+        }
+      })
+      .catch(err => {
+        if (!cancelled) setError(err.message || 'Failed to load commit details');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [hash, workingDir]);
+
+  const copyHash = async () => {
+    try {
+      await navigator.clipboard.writeText(hash);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4" onClick={onClose}>
+        <div
+          className="w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800 midnight:border-slate-800">
+            <div className="flex items-center gap-2">
+              <GitCommit className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Commit Details</h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="max-h-[70vh] overflow-y-auto px-4 py-3">
+            {loading && (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading commit...
+              </div>
+            )}
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {error}
+              </div>
+            )}
+            {data && (
+              <div className="space-y-4">
+                {/* Hash */}
+                <div className="flex items-center gap-2">
+                  <code className="rounded-md bg-gray-100 px-2 py-1 text-xs font-mono text-gray-700 dark:bg-slate-800 dark:text-slate-300">
+                    {data.hash}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={copyHash}
+                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    title="Copy hash"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+
+                {/* Message */}
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{data.subject}</p>
+                  {data.body && (
+                    <pre className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                      {data.body}
+                    </pre>
+                  )}
+                </div>
+
+                {/* Meta */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-gray-100 p-2.5 dark:border-gray-800">
+                    <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      <User className="h-3 w-3" /> Author
+                    </div>
+                    <p className="mt-1 text-xs font-medium text-gray-800 dark:text-gray-200">{data.author}</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">{data.authorEmail}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 p-2.5 dark:border-gray-800">
+                    <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      <Clock className="h-3 w-3" /> Date
+                    </div>
+                    <p className="mt-1 text-xs font-medium text-gray-800 dark:text-gray-200">
+                      {new Date(data.authorDate).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {data.parents.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      Parents
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {data.parents.map(p => (
+                        <code key={p} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-600 dark:bg-slate-800 dark:text-slate-400">
+                          {p.slice(0, 7)}
+                        </code>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Changed files */}
+                {data.changedFiles.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      <FileCode className="h-3 w-3" /> Changed Files ({data.changedFiles.length})
+                    </div>
+                    <div className="space-y-1">
+                      {data.changedFiles.map(f => (
+                        <div key={f.path} className="flex items-center justify-between rounded-md bg-gray-50 px-2.5 py-1.5 text-xs dark:bg-slate-800/50">
+                          <span className="min-w-0 truncate font-medium text-gray-700 dark:text-gray-300" title={f.path}>
+                            {f.path}
+                          </span>
+                          <div className="ml-2 flex shrink-0 items-center gap-1.5">
+                            <span className="text-[10px] tabular-nums text-gray-500 dark:text-gray-400">{f.changes}</span>
+                            <div className="flex h-1 w-8 overflow-hidden rounded-full bg-gray-200 dark:bg-slate-700">
+                              <div
+                                className="bg-emerald-500"
+                                style={{ width: `${Math.max(10, Math.min(100, (f.diff.replace(/-/g, '').length / Math.max(1, f.diff.length)) * 100))}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 export default function GitGraph({ workingDir = null }) {
   const [commits, setCommits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedHash, setSelectedHash] = useState(null);
 
   const fetchCommits = useCallback(async (skip = 0) => {
     try {
@@ -144,7 +309,12 @@ export default function GitGraph({ workingDir = null }) {
             const maxW = Math.max(row.incoming.length, row.outgoing.length);
             const svgWidth = (maxW + 1) * COL_WIDTH;
             return (
-              <div key={row.commit.hash} className="group relative flex h-8 items-center hover:bg-gray-100/80 dark:hover:bg-slate-800/70 rounded-md transition-colors px-2 cursor-default overflow-hidden">
+              <div
+                key={row.commit.hash}
+                onClick={() => setSelectedHash(row.commit.hash)}
+                className="group relative flex h-8 cursor-pointer items-center overflow-hidden rounded-md px-2 transition-colors hover:bg-gray-100/80 dark:hover:bg-slate-800/70"
+                title={`${row.commit.subject} — ${row.commit.author}`}
+              >
                 <div className="relative h-8 shrink-0" style={{ width: svgWidth }}>
                   <svg width={svgWidth} height={ROW_HEIGHT} className="absolute left-0 top-0">
                     {/* Pass-through lines */}
@@ -165,7 +335,15 @@ export default function GitGraph({ workingDir = null }) {
                       <Path key={`out-${idx}`} x1={line.from * COL_WIDTH + COL_WIDTH / 2} y1={ROW_HEIGHT / 2} x2={line.to * COL_WIDTH + COL_WIDTH / 2} y2={ROW_HEIGHT} color={line.color} />
                     ))}
                     {/* Node Dot */}
-                    <circle cx={row.col * COL_WIDTH + COL_WIDTH / 2} cy={ROW_HEIGHT / 2} r="3.5" fill={row.color} stroke="currentColor" className="text-white dark:text-[#0b1220]" strokeWidth="2" />
+                    <circle
+                      cx={row.col * COL_WIDTH + COL_WIDTH / 2}
+                      cy={ROW_HEIGHT / 2}
+                      r="3.5"
+                      fill={row.color}
+                      stroke="currentColor"
+                      className="text-white dark:text-[#0b1220]"
+                      strokeWidth="2"
+                    />
                   </svg>
                 </div>
                 
@@ -185,7 +363,7 @@ export default function GitGraph({ workingDir = null }) {
                       );
                     })}
                   </div>
-                  <div className="shrink-0 flex items-center gap-2 text-[10px] text-gray-500 dark:text-slate-500">
+                  <div className="flex shrink-0 items-center gap-2 text-[10px] text-gray-500 dark:text-slate-500">
                     <span className="truncate max-w-[80px]" title={row.commit.author}>{row.commit.author}</span>
                     <span className="w-16 text-right tabular-nums">{row.commit.date}</span>
                   </div>
@@ -196,12 +374,12 @@ export default function GitGraph({ workingDir = null }) {
         </div>
         
         {hasMore && (
-          <div className="mt-1 text-center pb-2">
+          <div className="mt-1 pb-2 text-center">
             <button
               type="button"
               onClick={loadMore}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900/50 px-4 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded border border-gray-200 bg-gray-50 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             >
               {loading && <Loader2 className="h-3 w-3 animate-spin" />}
               {loading ? 'Loading...' : 'Load older commits'}
@@ -209,11 +387,19 @@ export default function GitGraph({ workingDir = null }) {
           </div>
         )}
         {!hasMore && commits.length > 0 && (
-           <div className="text-center pb-2 text-xs text-gray-400 dark:text-slate-600">
+           <div className="pb-2 text-center text-xs text-gray-400 dark:text-slate-600">
              End of history
            </div>
         )}
       </div>
+
+      {selectedHash && (
+        <CommitDetailModal
+          hash={selectedHash}
+          workingDir={workingDir}
+          onClose={() => setSelectedHash(null)}
+        />
+      )}
     </div>
   );
 }

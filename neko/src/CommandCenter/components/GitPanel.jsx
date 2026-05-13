@@ -3,13 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, CheckCircle2, ChevronDown, ChevronRight, GitBranch,
   GitCommitHorizontal, GitCompare, GitPullRequestArrow, GitPullRequestDraft, Loader2,
-  Paperclip, Plus, RefreshCw, Save, Sparkles, Upload, X,
+  Paperclip, Plus, RefreshCw, Save, Sparkles, Upload, X, Trash2, CheckSquare, Square,
 } from 'lucide-react';
 import { gitApi } from '../api';
 import Portal from '../../components/Portal';
 import { basename, fileIconMeta } from '../../files/fileUtils.js';
 import GitGraph from './GitGraph';
 import StashManager from './StashManager';
+import BranchManager from './BranchManager';
 
 const COMMIT_ACTIONS = new Set([
   'commit',
@@ -67,6 +68,10 @@ function statusMeta(file = {}) {
   return { label: 'M', text: 'text-amber-600 dark:text-amber-300', title: 'Modified' };
 }
 
+function canDiscard(file = {}) {
+  return !file.staged && !file.untracked && (file.unstaged || file.deleted);
+}
+
 function normalizeGeneratedCommitMessage(value = '') {
   return String(value || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '\n')
@@ -96,6 +101,7 @@ function commandForAction(action, payload = {}) {
   switch (action) {
     case 'stage': return payload.files?.length ? `git add -- ${payload.files.join(' ')}` : 'git add -A';
     case 'unstage': return payload.files?.length ? `git restore --staged -- ${payload.files.join(' ')}` : 'git restore --staged .';
+    case 'discard': return payload.files?.length ? `git checkout -- ${payload.files.join(' ')}` : 'git checkout -- .';
     case 'commit': return 'git commit -m <message>';
     case 'commit-push': return 'git commit -m <message> && git push origin';
     case 'commit-sync': return 'git commit -m <message> && git pull && git push origin';
@@ -129,6 +135,7 @@ function actionCopy(action) {
   if (action === 'stash-pop') return 'Stash pop reapplies saved changes and may create conflicts.';
   if (action?.startsWith('branch')) return 'Branch operations change the active repository context.';
   if (action === 'commit') return 'Commit records staged changes in local history.';
+  if (action === 'discard') return 'This permanently discards the selected unstaged changes. This cannot be undone.';
   return 'This changes Git state in your workspace.';
 }
 
@@ -140,6 +147,7 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
   const title = {
     stage: 'Stage changes?',
     unstage: 'Unstage changes?',
+    discard: 'Discard changes?',
     commit: 'Create commit?',
     'commit-push': 'Commit and push?',
     'commit-sync': 'Commit and sync?',
@@ -218,7 +226,7 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
   );
 }
 
-function DiffViewer({ file, staged, workingDir = null }) {
+function DiffPanel({ file, staged, workingDir = null, onClose }) {
   const [diff, setDiff] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -243,77 +251,101 @@ function DiffViewer({ file, staged, workingDir = null }) {
 
   if (!file) return null;
   return (
-    <div className="border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-950">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="min-w-0 truncate text-[11px] font-medium text-gray-700 dark:text-gray-300">{file.path}</span>
-        {diff && (
-          <span className="shrink-0 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
-            +{diff.additions || 0} -{diff.deletions || 0}
-          </span>
+    <div className="flex h-full flex-col border-t border-gray-200 bg-white dark:border-slate-800 dark:bg-gray-950">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-slate-800">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate text-[11px] font-medium text-gray-700 dark:text-gray-300">{file.path}</span>
+          {diff && (
+            <span className="shrink-0 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
+              +{diff.additions || 0} -{diff.deletions || 0}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          title="Close diff"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        {loading && (
+          <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-500 dark:text-gray-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Loading diff
+          </div>
+        )}
+        {error && <div className="px-3 py-3 text-xs text-red-600 dark:text-red-300">{error}</div>}
+        {!loading && !error && (
+          <pre className="px-3 pb-3 text-[10px] leading-relaxed text-gray-700 dark:text-gray-300">
+            {(diff?.diff || 'No diff for this file.').split('\n').map((line, index) => (
+              <div
+                key={`${index}-${line.slice(0, 12)}`}
+                className={
+                  line.startsWith('+') && !line.startsWith('+++') ? 'text-emerald-700 dark:text-emerald-300'
+                    : line.startsWith('-') && !line.startsWith('---') ? 'text-red-700 dark:text-red-300'
+                      : line.startsWith('@@') ? 'text-sky-700 dark:text-sky-300'
+                        : ''
+                }
+              >
+                {line || ' '}
+              </div>
+            ))}
+          </pre>
         )}
       </div>
-      {loading && (
-        <div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-500 dark:text-gray-400">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading diff
-        </div>
-      )}
-      {error && <div className="px-3 py-3 text-xs text-red-600 dark:text-red-300">{error}</div>}
-      {!loading && !error && (
-        <pre className="max-h-72 overflow-auto px-3 pb-3 text-[10px] leading-relaxed text-gray-700 dark:text-gray-300">
-          {(diff?.diff || 'No diff for this file.').split('\n').map((line, index) => (
-            <div
-              key={`${index}-${line.slice(0, 12)}`}
-              className={
-                line.startsWith('+') && !line.startsWith('+++') ? 'text-emerald-700 dark:text-emerald-300'
-                  : line.startsWith('-') && !line.startsWith('---') ? 'text-red-700 dark:text-red-300'
-                    : line.startsWith('@@') ? 'text-sky-700 dark:text-sky-300'
-                      : ''
-              }
-            >
-              {line || ' '}
-            </div>
-          ))}
-        </pre>
-      )}
     </div>
   );
 }
 
-function ChangeRow({ file, onAction, onAttach, workingDir = null }) {
-  const [open, setOpen] = useState(false);
+function ChangeRow({ file, selected, checked, onToggleCheck, onSelect, onAction, onAttach, onDiscard }) {
   const { name, dir } = splitPath(file.path || '');
   const ext = name.split('.').pop();
   const { Icon, color } = fileIconMeta(ext, 'file');
   const meta = statusMeta(file);
   return (
-    <div className="group overflow-hidden">
-      <div className="flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-100/80 dark:hover:bg-slate-800/70">
-        <button type="button" onClick={() => setOpen(v => !v)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-          {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-500" />}
-          <Icon className={`h-4 w-4 shrink-0 ${color}`} />
-          <span className="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-slate-200" title={file.path}>
-            <span className="font-medium">{name}</span>
-            {dir && <span className="ml-2 text-xs text-gray-400 dark:text-slate-500">{compactPath(dir)}</span>}
-          </span>
-          <span className={`w-4 shrink-0 text-right text-xs font-semibold ${meta.text}`} title={meta.title}>
-            {meta.label}
-          </span>
+    <div
+      className={`group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors ${
+        selected ? 'bg-sky-50 dark:bg-sky-500/10' : 'hover:bg-gray-100/80 dark:hover:bg-slate-800/70'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggleCheck}
+        className="shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-200"
+        title={checked ? 'Deselect' : 'Select'}
+      >
+        {checked ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
+      </button>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+      >
+        <Icon className={`h-4 w-4 shrink-0 ${color}`} />
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-slate-200" title={file.path}>
+          <span className="font-medium">{name}</span>
+          {dir && <span className="ml-2 text-xs text-gray-400 dark:text-slate-500">{compactPath(dir)}</span>}
+        </span>
+        <span className={`w-4 shrink-0 text-right text-xs font-semibold ${meta.text}`} title={meta.title}>
+          {meta.label}
+        </span>
+      </button>
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <button type="button" onClick={() => onAttach(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Attach to composer">
+          <Paperclip className="h-3.5 w-3.5" />
         </button>
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-          <button type="button" onClick={() => onAttach(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Attach to composer">
-            <Paperclip className="h-3.5 w-3.5" />
+        {onDiscard && (
+          <button type="button" onClick={() => onDiscard(file)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400" title="Discard changes">
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={() => onAction(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100" title={file.staged && !file.unstaged ? 'Unstage' : 'Stage'}>
-            {file.staged && !file.unstaged ? <Upload className="h-3.5 w-3.5 rotate-180" /> : <Plus className="h-3.5 w-3.5" />}
-          </button>
-        </div>
+        )}
+        <button type="button" onClick={() => onAction(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100" title={file.staged && !file.unstaged ? 'Unstage' : 'Stage'}>
+          {file.staged && !file.unstaged ? <Upload className="h-3.5 w-3.5 rotate-180" /> : <Plus className="h-3.5 w-3.5" />}
+        </button>
       </div>
-      {open && (
-        <div className="mx-2 mb-2 overflow-hidden rounded-md border border-gray-200 dark:border-slate-800">
-          <DiffViewer file={file} staged={file.staged && !file.unstaged} workingDir={workingDir} />
-        </div>
-      )}
     </div>
   );
 }
@@ -328,7 +360,10 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const [actionError, setActionError] = useState(null);
   const [stagedExpanded, setStagedExpanded] = useState(true);
   const [changesExpanded, setChangesExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState('working'); // 'working', 'history', 'stashes'
+  const [activeTab, setActiveTab] = useState('working');
+  const [diffFile, setDiffFile] = useState(null);
+  const [checkedStaged, setCheckedStaged] = useState(new Set());
+  const [checkedChanges, setCheckedChanges] = useState(new Set());
   const commitMessageTextareaRef = useRef(null);
   const files = useMemo(() => state?.changes?.all || [], [state?.changes?.all]);
   const stagedFiles = useMemo(() => state?.changes?.staged || [], [state?.changes?.staged]);
@@ -379,6 +414,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
       };
       if (targetAction === 'stage') res = await gitApi.stage(targetPayload.files || [], workingDir);
       if (targetAction === 'unstage') res = await gitApi.unstage(targetPayload.files || [], workingDir);
+      if (targetAction === 'discard') res = await gitApi.discard(targetPayload.files || [], workingDir);
       if (targetAction === 'commit') res = await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [], path: workingDir });
       if (targetAction === 'commit-push') {
         res = assertSuccess(await gitApi.commit({ message: targetPayload.message, files: targetPayload.files || [], path: workingDir }), 'Commit');
@@ -436,7 +472,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
 
   const openAction = useCallback((nextAction, nextPayload = {}) => {
     setCommitMenuOpen(false);
-    if (nextAction === 'stage' || nextAction === 'unstage') {
+    if (nextAction === 'stage' || nextAction === 'unstage' || nextAction === 'discard') {
       executeAction(nextAction, nextPayload);
       return;
     }
@@ -488,6 +524,46 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
     onAttachFile?.({ path: file.path, name, ext });
   }, [onAttachFile]);
 
+  // Selection helpers
+  const toggleStagedCheck = useCallback((path) => {
+    setCheckedStaged(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const toggleChangesCheck = useCallback((path) => {
+    setCheckedChanges(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const selectAllStaged = useCallback(() => {
+    if (checkedStaged.size === stagedFiles.length) setCheckedStaged(new Set());
+    else setCheckedStaged(new Set(stagedFiles.map(f => f.path)));
+  }, [checkedStaged.size, stagedFiles]);
+
+  const selectAllChanges = useCallback(() => {
+    if (checkedChanges.size === workingFiles.length) setCheckedChanges(new Set());
+    else setCheckedChanges(new Set(workingFiles.map(f => f.path)));
+  }, [checkedChanges.size, workingFiles]);
+
+  const clearSelections = useCallback(() => {
+    setCheckedStaged(new Set());
+    setCheckedChanges(new Set());
+  }, []);
+
+  // Reset diff/selections when tab changes or state refreshes
+  useEffect(() => {
+    setDiffFile(null);
+    clearSelections();
+  }, [activeTab, state, clearSelections]);
+
   if (loading && !state) {
     return (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-400">
@@ -513,6 +589,9 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
       </div>
     );
   }
+
+  const hasStagedChecked = checkedStaged.size > 0;
+  const hasChangesChecked = checkedChanges.size > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col text-gray-800 dark:text-slate-200">
@@ -555,6 +634,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
           </div>
         </div>
       )}
+
       <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-slate-800 midnight:border-slate-800">
         <div className="relative">
           <textarea
@@ -625,17 +705,12 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
           <IconButton title="Stash" onClick={() => openAction('stash-save')} disabled={!files.length}>
             <Save className="h-4 w-4" />
           </IconButton>
-          <IconButton title="Create branch" onClick={() => openAction('branch-create')}>
-            <GitBranch className="h-4 w-4" />
-          </IconButton>
-          <IconButton title="Switch branch" onClick={() => openAction('branch-switch')}>
-            <ChevronRight className="h-4 w-4" />
-          </IconButton>
+          <BranchManager currentBranch={state.branch} onSwitch={() => onChanged?.()} workingDir={workingDir} />
         </div>
       </div>
       
       {/* Tabs */}
-      <div className="flex border-b border-gray-100 px-2 dark:border-slate-800 midnight:border-slate-800 shrink-0">
+      <div className="flex shrink-0 border-b border-gray-100 px-2 dark:border-slate-800 midnight:border-slate-800">
         <button
           onClick={() => setActiveTab('working')}
           className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'working' ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300'}`}
@@ -656,92 +731,178 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab === 'working' && (
-          <>
-            {files.length === 0 && (
-              <div className="py-8 text-center text-sm text-gray-400">Working tree clean.</div>
-            )}
-            
-            {files.length > 0 && (
-              <div className="space-y-3 mb-4">
-                {stagedFiles.length > 0 && (
-                  <section>
-                    <div className="mb-1 flex items-center gap-1 px-2">
-                      <button
-                        type="button"
-                        onClick={() => setStagedExpanded(v => !v)}
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
-                      >
-                        {stagedExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                        Staged
-                        <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stagedFiles.length}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openAction('unstage', { files: [] })}
-                        disabled={!stagedFiles.length}
-                        className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                        title="Unstage all"
-                      >
-                        <Upload className="h-3.5 w-3.5 rotate-180" />
-                      </button>
-                    </div>
-                    {stagedExpanded && (
-                      <div className="space-y-px">
-                        {stagedFiles.map(file => (
-                          <ChangeRow
-                            key={`staged-${file.code}-${file.path}-${file.oldPath || ''}`}
-                            file={file}
-                            workingDir={workingDir}
-                            onAttach={attachFile}
-                            onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
-                          />
-                        ))}
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+              {files.length === 0 && (
+                <div className="py-8 text-center text-sm text-gray-400">Working tree clean.</div>
+              )}
+              
+              {files.length > 0 && (
+                <div className="mb-4 space-y-3">
+                  {stagedFiles.length > 0 && (
+                    <section>
+                      <div className="mb-1 flex items-center gap-1 px-2">
+                        <button
+                          type="button"
+                          onClick={() => setStagedExpanded(v => !v)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                        >
+                          {stagedExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          Staged
+                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stagedFiles.length}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={selectAllStaged}
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          title={checkedStaged.size === stagedFiles.length ? 'Deselect all staged' : 'Select all staged'}
+                        >
+                          {checkedStaged.size === stagedFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openAction('unstage', { files: [] })}
+                          disabled={!stagedFiles.length}
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          title="Unstage all"
+                        >
+                          <Upload className="h-3.5 w-3.5 rotate-180" />
+                        </button>
                       </div>
-                    )}
-                  </section>
-                )}
-                {workingFiles.length > 0 && (
-                  <section>
-                    <div className="mb-1 flex items-center gap-1 px-2">
-                      <button
-                        type="button"
-                        onClick={() => setChangesExpanded(v => !v)}
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
-                      >
-                        {changesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                        Changes
-                        <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{workingFiles.length}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openAction('stage', { files: [] })}
-                        disabled={!workingFiles.length}
-                        className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                        title="Stage all changes"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    {changesExpanded && (
-                      <div className="space-y-px">
-                        {workingFiles.map(file => (
-                          <ChangeRow
-                            key={`working-${file.code}-${file.path}-${file.oldPath || ''}`}
-                            file={file}
-                            workingDir={workingDir}
-                            onAttach={attachFile}
-                            onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
-                          />
-                        ))}
+                      {hasStagedChecked && (
+                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400">{checkedStaged.size} selected</span>
+                          <div className="ml-auto flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { openAction('unstage', { files: Array.from(checkedStaged) }); setCheckedStaged(new Set()); }}
+                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700"
+                            >
+                              Unstage
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCheckedStaged(new Set())}
+                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {stagedExpanded && (
+                        <div className="space-y-px">
+                          {stagedFiles.map(file => (
+                            <ChangeRow
+                              key={`staged-${file.code}-${file.path}-${file.oldPath || ''}`}
+                              file={file}
+                              workingDir={workingDir}
+                              selected={diffFile?.file?.path === file.path && diffFile?.staged}
+                              checked={checkedStaged.has(file.path)}
+                              onToggleCheck={() => toggleStagedCheck(file.path)}
+                              onSelect={() => setDiffFile({ file, staged: true })}
+                              onAttach={attachFile}
+                              onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
+                  {workingFiles.length > 0 && (
+                    <section>
+                      <div className="mb-1 flex items-center gap-1 px-2">
+                        <button
+                          type="button"
+                          onClick={() => setChangesExpanded(v => !v)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                        >
+                          {changesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          Changes
+                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{workingFiles.length}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={selectAllChanges}
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          title={checkedChanges.size === workingFiles.length ? 'Deselect all changes' : 'Select all changes'}
+                        >
+                          {checkedChanges.size === workingFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openAction('stage', { files: [] })}
+                          disabled={!workingFiles.length}
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          title="Stage all changes"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    )}
-                  </section>
-                )}
+                      {hasChangesChecked && (
+                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400">{checkedChanges.size} selected</span>
+                          <div className="ml-auto flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { openAction('stage', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}
+                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700"
+                            >
+                              Stage
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { openAction('discard', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}
+                              className="rounded px-2 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                            >
+                              Discard
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCheckedChanges(new Set())}
+                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {changesExpanded && (
+                        <div className="space-y-px">
+                          {workingFiles.map(file => (
+                            <ChangeRow
+                              key={`working-${file.code}-${file.path}-${file.oldPath || ''}`}
+                              file={file}
+                              workingDir={workingDir}
+                              selected={diffFile?.file?.path === file.path && !diffFile?.staged}
+                              checked={checkedChanges.has(file.path)}
+                              onToggleCheck={() => toggleChangesCheck(file.path)}
+                              onSelect={() => setDiffFile({ file, staged: false })}
+                              onAttach={attachFile}
+                              onAction={(item) => openAction(item.staged && !item.unstaged ? 'unstage' : 'stage', { files: [item.path] })}
+                              onDiscard={canDiscard(file) ? ((item) => openAction('discard', { files: [item.path] })) : null}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
+                </div>
+              )}
+            </div>
+            {diffFile && (
+              <div className="h-56 shrink-0">
+                <DiffPanel
+                  file={diffFile.file}
+                  staged={diffFile.staged}
+                  workingDir={workingDir}
+                  onClose={() => setDiffFile(null)}
+                />
               </div>
             )}
-          </>
+          </div>
         )}
         
         {activeTab === 'history' && (

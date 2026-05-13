@@ -76,4 +76,25 @@ export const gitApi = {
       body: JSON.stringify({ action, name, path }),
     });
   },
+
+  branches: async ({ path = null } = {}) => {
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    const suffix = params.toString() ? `?${params}` : '';
+    return await apiRequest(`${API_BASE_URL}/agent/git/branches${suffix}`);
+  },
+
+  commitDetail: async ({ hash, path = null } = {}) => {
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    const suffix = params.toString() ? `?${params}` : '';
+    return await apiRequest(`${API_BASE_URL}/agent/git/commit/${hash}${suffix}`);
+  },
+
+  discard: async (files = [], path = null) => {
+    return await apiRequest(`${API_BASE_URL}/agent/git/discard`, {
+      method: 'POST',
+      body: JSON.stringify({ files, path }),
+    });
+  },
 };

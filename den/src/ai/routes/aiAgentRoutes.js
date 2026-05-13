@@ -17,7 +17,7 @@ import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
-import { branchGit, commitGit, getGitCommitMessageContext, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
+import { branchGit, commitGit, discardGitFiles, getGitBranches, getGitCommit, getGitCommitMessageContext, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -1288,6 +1288,30 @@ router.post('/git/branch', authenticate, (req, res) => {
       action: req.body?.action || 'list',
       name: req.body?.name || null,
     }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/git/branches', authenticate, (req, res) => {
+  try {
+    res.json(getGitBranches(gitWorkingDir(req)));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/git/commit/:hash', authenticate, (req, res) => {
+  try {
+    res.json(getGitCommit(gitWorkingDir(req), req.params.hash));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/git/discard', authenticate, (req, res) => {
+  try {
+    res.json(discardGitFiles(gitWorkingDir(req), req.body?.files || []));
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
