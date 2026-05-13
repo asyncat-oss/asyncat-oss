@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Cpu, Zap, Clock, Activity, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { aiProviderApi, llamaServerApi } from '../../Settings/settingApi.js';
+import { aiProviderApi, llamaServerApi } from '../../../Settings/settingApi.js';
 
 // ── Token speed tracker ───────────────────────────────────────────────────────
 // Called externally by the streaming handler to feed token timestamps.

@@ -17,12 +17,12 @@ import {
   useMemo,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { MessageInputV2 } from "./components/MessageInputV2";
-import AgentRunFeed, { CurrentPlanPanel } from './components/AgentRunFeed';
-import AgentChangesPanel from './components/AgentChangesPanel';
-import CommandCenterSidePanel from './components/CommandCenterSidePanel';
-import ConversationLoadingSkeleton from './components/ConversationLoadingSkeleton';
-import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
+import { MessageInputV2 } from "./components/input/MessageInputV2";
+import AgentRunFeed, { CurrentPlanPanel } from './components/agent/AgentRunFeed';
+import AgentChangesPanel from './components/agent/AgentChangesPanel';
+import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
+import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
+import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
 import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
 import { chatApi, agentApi, gitApi } from "./api";

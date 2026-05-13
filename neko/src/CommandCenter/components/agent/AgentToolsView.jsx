@@ -4,7 +4,7 @@ import {
   Brain, Loader2, AlertCircle, ChevronDown, ChevronRight,
   BookOpen, Cpu, ShieldAlert, Monitor,
 } from 'lucide-react';
-import { agentApi } from '../api';
+import { agentApi } from '../../api';
 
 const PERM_META = {
   safe:      { label: 'Safe',      dot: 'bg-emerald-400', text: 'text-emerald-600 dark:text-emerald-400' },

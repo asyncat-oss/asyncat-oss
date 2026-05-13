@@ -1,8 +1,8 @@
 // BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
 import { useMemo, useState, useCallback, memo, useEffect, useRef } from 'react';
 import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2 } from 'lucide-react';
-import { fileIconMeta } from '../../files/fileUtils.js';
-import { tokenTracker } from './LocalModelStats';
+import { fileIconMeta } from '../../../files/fileUtils.js';
+import { tokenTracker } from '../stats/LocalModelStats';
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';

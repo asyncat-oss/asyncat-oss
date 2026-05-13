@@ -6,12 +6,12 @@ import {
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward
 } from 'lucide-react';
-import { audioApi } from '../../Settings/settingApi.js';
-import { filesApi } from '../api';
-import { parseAIResponseToBlocks, BlockRenderer } from '../../CommandCenter/components/BlockBasedMessageRenderer';
-import { extractReasoningFromText } from '../utils/reasoningParser.js';
-import ArtifactCard from './ArtifactRenderer';
-import { fileIconMeta } from '../../files/fileUtils.js';
+import { audioApi } from '../../../Settings/settingApi.js';
+import { filesApi } from '../../api';
+import { parseAIResponseToBlocks, BlockRenderer } from '../renderers/BlockBasedMessageRenderer';
+import { extractReasoningFromText } from '../../utils/reasoningParser.js';
+import ArtifactCard from '../renderers/ArtifactRenderer';
+import { fileIconMeta } from '../../../files/fileUtils.js';
 
 // ── Tool icon / label map ─────────────────────────────────────────────────────
 const TOOL_META = {

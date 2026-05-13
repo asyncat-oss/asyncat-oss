@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { Loader2, AlertCircle, X, Copy, Check, GitCommit, User, Clock, FileCode, Search, Eye } from 'lucide-react';
-import { gitApi } from '../api';
-import Portal from '../../components/Portal';
+import { gitApi } from '../../api';
+import Portal from '../../../components/Portal';
 import DiffModal from './DiffModal';
 
 const COL_WIDTH = 14;

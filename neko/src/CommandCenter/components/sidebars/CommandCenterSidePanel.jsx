@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types */
 import { Activity, GitBranch, Image, X, History } from 'lucide-react';
-import AgentActivitySidebar from './AgentActivitySidebar';
+import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
-import GitPanel from './GitPanel';
+import GitPanel from '../git/GitPanel';
 import HistoryPanel from './HistoryPanel';
 
 const panelMeta = {

@@ -5,9 +5,9 @@ import {
   GitCommitHorizontal, GitCompare, GitPullRequestArrow, GitPullRequestDraft, Loader2,
   Paperclip, Plus, RefreshCw, Save, Sparkles, Upload, X, Trash2, CheckSquare, Square,
 } from 'lucide-react';
-import { gitApi } from '../api';
-import Portal from '../../components/Portal';
-import { basename, fileIconMeta } from '../../files/fileUtils.js';
+import { gitApi } from '../../api';
+import Portal from '../../../components/Portal';
+import { basename, fileIconMeta } from '../../../files/fileUtils.js';
 import GitGraph from './GitGraph';
 import StashManager from './StashManager';
 import BranchManager from './BranchManager';

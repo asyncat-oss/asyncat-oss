@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle, X, Copy, Check, FileCode } from 'lucide-react';
-import { gitApi } from '../api';
-import Portal from '../../components/Portal';
+import { gitApi } from '../../api';
+import Portal from '../../../components/Portal';
 
 export default function DiffModal({ file, staged = false, compare = null, workingDir = null, onClose }) {
   const [diff, setDiff] = useState(null);

@@ -1,5 +1,5 @@
 import { AlertTriangle, X, Trash2, Loader2 } from 'lucide-react';
-import Portal from '../../components/Portal';
+import Portal from '../../../components/Portal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, title, isDeleting: _isDeleting }) => {
   if (!isOpen) return null;

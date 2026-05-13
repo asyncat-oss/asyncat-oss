@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useState, useEffect } from 'react';
 import { Loader2, AlertCircle, Inbox, Trash2, ArrowUpFromLine } from 'lucide-react';
-import { gitApi } from '../api';
+import { gitApi } from '../../api';
 
 export default function StashManager({ onRefresh, workingDir = null }) {
   const [stashes, setStashes] = useState([]);

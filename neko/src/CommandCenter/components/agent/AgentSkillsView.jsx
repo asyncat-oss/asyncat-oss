@@ -4,7 +4,7 @@ import {
   Search, Loader2, AlertCircle, ChevronDown, ChevronRight,
   Brain, BookOpen, Shield, Cpu, Lightbulb, LayoutList, Tag,
 } from 'lucide-react';
-import { agentApi } from '../api';
+import { agentApi } from '../../api';
 
 const BRAIN_REGION_META = {
   prefrontal:    { label: 'Prefrontal',    icon: Brain,       color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-900/20',  desc: 'Planning · decisions' },

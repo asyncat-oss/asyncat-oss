@@ -1,13 +1,13 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
-import ConfirmModal from "./ConfirmModal.jsx";
-import { useLocalModelStatus } from "../hooks/useLocalModelStatus.js";
-import { useModelConfig } from "../hooks/useModelConfig.js";
-import { useActiveBrainStatus } from "../hooks/useActiveBrainStatus.js";
-import { localModelsApi, llamaServerApi, audioApi } from "../../Settings/settingApi.js";
-import { profilesApi, filesApi } from "../api";
-import { dirname, basename, fileIconMeta, rootIcon } from "../../files/fileUtils.js";
+import ConfirmModal from "../modals/ConfirmModal.jsx";
+import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
+import { useModelConfig } from "../../hooks/useModelConfig.js";
+import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
+import { localModelsApi, llamaServerApi, audioApi } from "../../../Settings/settingApi.js";
+import { profilesApi, filesApi } from "../../api";
+import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);

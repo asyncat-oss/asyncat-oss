@@ -1,5 +1,5 @@
 import { AlertTriangle, X, Loader2, Check } from 'lucide-react';
-import Portal from '../../components/Portal';
+import Portal from '../../../components/Portal';
 
 const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', isDestructive = false, isProcessing = false }) => {
   if (!isOpen) return null;
