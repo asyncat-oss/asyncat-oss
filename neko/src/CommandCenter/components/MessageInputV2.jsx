@@ -73,6 +73,32 @@ const suggestionPanelClass =
 const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
 const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:hover:bg-[#242424]";
 
+function RecordingWaveform() {
+  const bars = [
+    { height: "0.55rem", delay: "0ms", duration: "720ms" },
+    { height: "0.95rem", delay: "90ms", duration: "640ms" },
+    { height: "1.25rem", delay: "180ms", duration: "760ms" },
+    { height: "0.8rem", delay: "270ms", duration: "680ms" },
+    { height: "1.1rem", delay: "360ms", duration: "800ms" },
+  ];
+
+  return (
+    <span className="inline-flex h-5 items-center gap-0.5" aria-hidden="true">
+      {bars.map((bar, index) => (
+        <span
+          key={index}
+          className="w-1 rounded-full bg-current"
+          style={{
+            height: bar.height,
+            animation: `asyncat-recording-wave ${bar.duration} ease-in-out ${bar.delay} infinite`,
+            transformOrigin: "center",
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 export const MessageInputV2 = ({
   onSubmit,
   disabled,
@@ -638,6 +664,13 @@ export const MessageInputV2 = ({
 
   return (
     <div className="bg-transparent">
+      <style>{`
+        @keyframes asyncat-recording-wave {
+          0%, 100% { transform: scaleY(0.45); opacity: 0.55; }
+          35% { transform: scaleY(1); opacity: 1; }
+          65% { transform: scaleY(0.7); opacity: 0.78; }
+        }
+      `}</style>
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
         <form onSubmit={handleSubmit}>
             <div
@@ -819,8 +852,8 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              <div className="mt-2 flex items-center gap-0.5">
-                <div ref={toolbarRef} className="flex items-center gap-0.5 min-w-0 flex-1">
+              <div ref={toolbarRef} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <div className="relative">
                     <button
                       type="button"
@@ -920,48 +953,6 @@ export const MessageInputV2 = ({
                       )}
                     </div>
                   )}
-                  {sttReady && (
-                    <button
-                      type="button"
-                      onClick={isRecording ? stopRecording : startRecording}
-                      disabled={disabled && !isRecording}
-                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice conversation - click to speak" : "Record voice input"}
-                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                        isRecording
-                          ? "text-red-500 bg-red-50 dark:text-red-400 dark:bg-red-900/20 midnight:bg-red-900/20"
-                          : autoRecordPrompt
-                            ? "text-violet-600 bg-violet-100 dark:text-violet-300 dark:bg-violet-900/30 animate-bounce ring-2 ring-violet-300 dark:ring-violet-700"
-                            : voiceConversationActive
-                              ? "text-violet-500 bg-violet-50 dark:text-violet-400 dark:bg-violet-900/20"
-                              : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                      }`}
-                    >
-                      {isRecording ? (
-                        <Square className="w-3.5 h-3.5 fill-current" />
-                      ) : (
-                        <Mic className="w-3.5 h-3.5" />
-                      )}
-                      {isRecording && <span className="hidden sm:inline tabular-nums">{formatElapsed(recordingDuration)}</span>}
-                      {!isRecording && autoRecordPrompt && <span className="hidden sm:inline font-medium">Speak</span>}
-                    </button>
-                  )}
-                  {voiceConversationAvailable && onToggleVoiceMode && (
-                    <button
-                      type="button"
-                      onClick={onToggleVoiceMode}
-                      disabled={disabled}
-                      title={voiceConversationActive ? "Voice mode ON - click to disable" : "Voice mode - hands-free conversation"}
-                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                        voiceConversationActive
-                          ? "text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-900/20"
-                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                      }`}
-                    >
-                      <Headphones className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Voice</span>
-                    </button>
-                  )}
-
                   {(onToggleAgentMode || onToggleTools) && (
                     <button
                       type="button"
@@ -997,6 +988,54 @@ export const MessageInputV2 = ({
                   )}
                 </div>
 
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2 dark:border-gray-800 midnight:border-slate-800 sm:flex-nowrap sm:border-t-0 sm:pt-0">
+                  {voiceConversationAvailable && onToggleVoiceMode && (
+                    <button
+                      type="button"
+                      onClick={onToggleVoiceMode}
+                      disabled={disabled}
+                      title={voiceConversationActive ? "Voice mode ON - click to disable" : "Voice mode - hands-free conversation"}
+                      className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs transition-all duration-200 ${
+                        voiceConversationActive
+                          ? "bg-violet-50 text-violet-600 ring-1 ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-800"
+                          : "text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
+                      }`}
+                    >
+                      <Headphones className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Voice</span>
+                    </button>
+                  )}
+
+                  {sttReady && (
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      disabled={disabled && !isRecording}
+                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice conversation - click to speak" : "Record voice input"}
+                      className={`inline-flex h-8 min-w-8 items-center justify-center gap-2 rounded-lg px-2.5 text-xs font-medium transition-all duration-200 ${
+                        isRecording
+                          ? "bg-red-50 text-red-500 ring-1 ring-red-200 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-800/70 midnight:bg-red-900/20"
+                          : autoRecordPrompt
+                            ? "animate-bounce bg-violet-100 text-violet-600 ring-2 ring-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-700"
+                            : voiceConversationActive
+                              ? "bg-violet-50 text-violet-500 ring-1 ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-800"
+                              : "text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
+                      }`}
+                    >
+                      {isRecording ? (
+                        <>
+                          <RecordingWaveform />
+                          <span className="tabular-nums">{formatElapsed(recordingDuration)}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="w-3.5 h-3.5" />
+                          {autoRecordPrompt && <span className="hidden sm:inline">Speak</span>}
+                        </>
+                      )}
+                    </button>
+                  )}
+
                 {isRunning ? (
                   <div className="inline-flex items-center gap-1.5">
                     {runElapsed > 0 && (
@@ -1029,7 +1068,7 @@ export const MessageInputV2 = ({
                     <button
                       type="button"
                       onClick={onStop}
-                      className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-all duration-200"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs text-red-500 transition-all duration-200 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:text-red-300"
                       title="Stop generating"
                     >
                       <Square className="h-3.5 w-3.5 fill-current" />
@@ -1046,9 +1085,9 @@ export const MessageInputV2 = ({
                     <button
                       type="submit"
                       disabled={!canSubmit}
-                      className={`inline-flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-200 ${
                         canSubmit
-                          ? "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 active:scale-95"
+                          ? "text-gray-500 hover:bg-gray-50 hover:text-gray-800 active:scale-95 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-100"
                           : "text-gray-300 dark:text-gray-600 midnight:text-gray-600 cursor-not-allowed"
                       }`}
                       title={localModelSendBlockReason || (canSubmit ? "Send (Enter)" : "Type a message")}
@@ -1059,6 +1098,7 @@ export const MessageInputV2 = ({
                 )}
               </div>
             </div>
+          </div>
           </form>
 
         {fileRoot?.path && (
