@@ -121,56 +121,6 @@ export const MessageInputV2 = ({
   const voiceCapabilityMode = sttReady && ttsReady ? 'full' : sttReady ? 'stt' : ttsReady ? 'tts' : 'none';
   const voiceConversationAvailable = voiceCapabilityMode === 'full';
   const voiceConversationActive = voiceMode && voiceConversationAvailable;
-  const voiceBadge = useMemo(() => {
-    if (voiceCapabilityMode === 'none') return null;
-
-    if (voiceCapabilityMode === 'stt') {
-      return {
-        kind: 'stt',
-        label: 'Speech input active',
-        className: 'bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400',
-      };
-    }
-
-    if (voiceCapabilityMode === 'tts') {
-      return {
-        kind: 'tts',
-        label: 'Speech output active',
-        className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
-      };
-    }
-
-    if (voiceTtsState === 'playing') {
-      return {
-        kind: 'full',
-        label: 'Agent is speaking...',
-        className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
-      };
-    }
-
-    if (voiceTtsState === 'loading') {
-      return {
-        kind: 'full',
-        label: 'Agent is preparing speech...',
-        className: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',
-      };
-    }
-
-    if (autoRecordPrompt) {
-      return {
-        kind: 'full',
-        label: 'Your turn - click the mic',
-        className: 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400 animate-pulse',
-      };
-    }
-
-    return {
-      kind: 'full',
-      label: 'Full voice active',
-      className: 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400',
-    };
-  }, [autoRecordPrompt, voiceCapabilityMode, voiceTtsState]);
-
   // File attachments state
   const [fileAttachments, setFileAttachments] = useState([]);
   const [fileSearchResults, setFileSearchResults] = useState([]);
@@ -241,6 +191,25 @@ export const MessageInputV2 = ({
   }, [activeBrain.capabilities, supportsReasoningControl]);
 
   const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || (activeBrain.isLocal ? 8192 : 128000);
+  const localModelSendBlockReason = useMemo(() => {
+    if (!activeBrain.isBuiltin) return null;
+    if (activeBrain.loading) return "Checking model status...";
+    if (activeBrain.isLoadingModel) {
+      return activeBrain.model
+        ? `Model ${activeBrain.model} is still loading.`
+        : "Model is still loading.";
+    }
+    if (activeBrain.isReady) return null;
+    if (activeBrain.status === "error") return "Model failed to load. Choose another model or provider before sending.";
+    return "Choose a model or provider before sending a message.";
+  }, [
+    activeBrain.isBuiltin,
+    activeBrain.loading,
+    activeBrain.isLoadingModel,
+    activeBrain.isReady,
+    activeBrain.status,
+    activeBrain.model,
+  ]);
 
   useEffect(() => {
     if (!isRunning || !runStartedAt) { setRunElapsed(0); return; }
@@ -441,6 +410,9 @@ export const MessageInputV2 = ({
       if (e) e.preventDefault();
       const textToSend = overrideText || value;
       if (!textToSend?.trim() || disabled) return;
+      if (localModelSendBlockReason) {
+        return;
+      }
 
       try {
         const messageToSend = {
@@ -460,7 +432,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, onSubmit, detectedAgentMentions, fileAttachments, activeBrain.supportsReasoning, reasoningEffort],
+    [value, disabled, localModelSendBlockReason, onSubmit, detectedAgentMentions, fileAttachments, activeBrain.supportsReasoning, reasoningEffort],
   );
 
   const handleKeyDown = useCallback(
@@ -525,7 +497,7 @@ export const MessageInputV2 = ({
     [handleSubmit, insertAgentMention, attachFile, isComposing, agentSuggestions, fileSearchResults, agentTrigger, fileTrigger, activeAgentIndex, activeFileIndex, value],
   );
 
-  const canSubmit = value.trim() && !disabled && !isRunning;
+  const canSubmit = value.trim() && !disabled && !isRunning && !localModelSendBlockReason;
   const isActionMode = agentMode === 'action';
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
   const currentReasoningOption = currentReasoningOptions.find(option => option.value === reasoningEffort) || currentReasoningOptions[0] || { label: "Auto", short: "Think auto" };
@@ -689,21 +661,25 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              {voiceBadge && (
-                <div className="mb-2 flex items-center gap-2">
-                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${voiceBadge.className}`}>
-                    {voiceBadge.kind === 'stt' ? (
-                      <Mic className="w-3 h-3" />
-                    ) : voiceBadge.kind === 'tts' ? (
-                      <Headphones className="w-3 h-3" />
+              {localModelSendBlockReason && (
+                <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200 midnight:border-amber-900/50 midnight:bg-amber-900/20 midnight:text-amber-200">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {activeBrain.isLoadingModel || activeBrain.loading ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
                     ) : (
-                      <span className="inline-flex items-center gap-0.5">
-                        <Mic className="w-3 h-3" />
-                        <Headphones className="w-3 h-3" />
-                      </span>
+                      <Cpu className="h-4 w-4 shrink-0" />
                     )}
-                    {voiceBadge.label}
+                    <span className="min-w-0 truncate">{localModelSendBlockReason}</span>
                   </div>
+                  {!activeBrain.loading && !activeBrain.isLoadingModel && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenu("model")}
+                      className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/30 midnight:hover:bg-amber-900/30"
+                    >
+                      Models
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1075,7 +1051,7 @@ export const MessageInputV2 = ({
                           ? "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 active:scale-95"
                           : "text-gray-300 dark:text-gray-600 midnight:text-gray-600 cursor-not-allowed"
                       }`}
-                      title={canSubmit ? "Send (Enter)" : "Type a message"}
+                      title={localModelSendBlockReason || (canSubmit ? "Send (Enter)" : "Type a message")}
                     >
                       <Send className="w-4 h-4" />
                     </button>
