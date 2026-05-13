@@ -7,6 +7,55 @@ const SKIP_NAMES = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dis
 const TEXT_PREVIEW_LIMIT = 5 * 1024 * 1024;
 const SEARCH_COLLECT_LIMIT = 2000;
 const SOURCE_WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico']);
+const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov', 'mkv', 'avi']);
+const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a']);
+const BINARY_EXTS = new Set([
+  ...IMAGE_EXTS,
+  ...VIDEO_EXTS,
+  ...AUDIO_EXTS,
+  'woff', 'woff2', 'ttf', 'eot', 'otf',
+  'pdf', 'zip', 'tar', 'gz', 'rar', '7z',
+  'exe', 'dll', 'so', 'dylib', 'bin',
+]);
+const TEXT_EXTS = new Set([
+  'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
+  'json', 'md', 'mdx', 'txt', 'rst', 'log', 'csv',
+  'html', 'htm', 'xml', 'css', 'scss', 'less', 'sass',
+  'yaml', 'yml', 'toml', 'ini', 'env',
+  'sql', 'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+  'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'php', 'swift', 'kt', 'astro',
+]);
+const MIME_TYPES = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  avi: 'video/x-msvideo',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  m4a: 'audio/mp4',
+  pdf: 'application/pdf',
+  json: 'application/json',
+  md: 'text/markdown',
+  txt: 'text/plain',
+  log: 'text/plain',
+  html: 'text/html',
+  htm: 'text/html',
+  xml: 'application/xml',
+  css: 'text/css',
+  csv: 'text/csv',
+};
 
 function existsDir(dir) {
   try {
@@ -79,6 +128,7 @@ export function resolveExplorerPath(rootId = 'workspace', relativePath = '.') {
   if (resolved !== rootPath && !resolved.startsWith(rootPath + path.sep)) {
     const err = new Error('Path outside selected root');
     err.status = 403;
+    err.code = 'OUTSIDE_ROOT';
     throw err;
   }
 
@@ -94,39 +144,88 @@ function fileExt(name) {
   return path.extname(name).slice(1).toLowerCase();
 }
 
+function mimeForExt(ext) {
+  if (!ext) return 'application/octet-stream';
+  if (MIME_TYPES[ext]) return MIME_TYPES[ext];
+  if (TEXT_EXTS.has(ext)) return 'text/plain';
+  return 'application/octet-stream';
+}
+
+function isEditableExt(ext) {
+  return !BINARY_EXTS.has(ext) && (TEXT_EXTS.has(ext) || !ext);
+}
+
+function isPreviewableExt(ext) {
+  return IMAGE_EXTS.has(ext) || VIDEO_EXTS.has(ext) || AUDIO_EXTS.has(ext) || ext === 'pdf' || isEditableExt(ext);
+}
+
+function countChildren(absolutePath) {
+  try {
+    return fs.readdirSync(absolutePath).length;
+  } catch {
+    return null;
+  }
+}
+
 function entryMeta(rootPath, absolutePath, name = path.basename(absolutePath)) {
   const stat = fs.statSync(absolutePath);
   const rel = path.relative(rootPath, absolutePath) || '.';
   const isDir = stat.isDirectory();
+  const ext = isDir ? '' : fileExt(name);
   return {
     name,
     path: rel,
     type: isDir ? 'dir' : 'file',
     size: isDir ? null : stat.size,
     mtime: stat.mtime,
-    ext: isDir ? '' : fileExt(name),
+    ext,
+    mime: isDir ? 'inode/directory' : mimeForExt(ext),
+    isPreviewable: isDir ? false : isPreviewableExt(ext),
+    isEditable: isDir ? false : isEditableExt(ext) && stat.size <= TEXT_PREVIEW_LIMIT,
+    childrenCount: isDir ? countChildren(absolutePath) : undefined,
     hidden: name.startsWith('.'),
   };
 }
 
-function sortEntries(entries) {
+function normalizeSort(sort) {
+  return ['name', 'size', 'mtime', 'type'].includes(sort) ? sort : 'name';
+}
+
+function sortEntries(entries, sort = 'name', order = 'asc') {
+  const sortKey = normalizeSort(sort);
+  const dir = order === 'desc' ? -1 : 1;
   return entries.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+    if (sortKey === 'name' && a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+    let result = 0;
+    if (sortKey === 'size') result = (a.size || 0) - (b.size || 0);
+    else if (sortKey === 'mtime') result = new Date(a.mtime).getTime() - new Date(b.mtime).getTime();
+    else if (sortKey === 'type') result = `${a.type}:${a.ext || ''}`.localeCompare(`${b.type}:${b.ext || ''}`);
+    else result = a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+    if (result === 0) result = a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+    return result * dir;
   });
 }
 
-export function listDirectory({ rootId = 'workspace', relativePath = '.', includeHidden = false }) {
+function createRouteError(message, status, code) {
+  const err = new Error(message);
+  err.status = status;
+  err.code = code;
+  return err;
+}
+
+function assertDestinationAvailable(ctx, overwrite) {
+  if (!overwrite && fs.existsSync(ctx.absolutePath)) {
+    throw createRouteError('Destination already exists', 409, 'CONFLICT');
+  }
+}
+
+export function listDirectory({ rootId = 'workspace', relativePath = '.', includeHidden = false, sort = 'name', order = 'asc', limit = 1000 }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
   if (!fs.existsSync(ctx.absolutePath)) {
-    const err = new Error('Directory not found');
-    err.status = 404;
-    throw err;
+    throw createRouteError('Directory not found', 404, 'NOT_FOUND');
   }
   if (!fs.statSync(ctx.absolutePath).isDirectory()) {
-    const err = new Error('Not a directory');
-    err.status = 400;
-    throw err;
+    throw createRouteError('Not a directory', 400, 'NOT_DIRECTORY');
   }
 
   let names = [];
@@ -151,27 +250,29 @@ export function listDirectory({ rootId = 'workspace', relativePath = '.', includ
     success: true,
     root: publicRoot(ctx.root),
     path: ctx.relativePath,
-    entries: sortEntries(entries),
+    entries: sortEntries(entries, sort, order).slice(0, limit),
   };
 }
 
-export function loadEntry({ rootId = 'workspace', relativePath = '.', includeHidden = false }) {
+export function loadEntry({ rootId = 'workspace', relativePath = '.', includeHidden = false, sort = 'name', order = 'asc', limit = 1000 }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
   if (!fs.existsSync(ctx.absolutePath)) {
-    const err = new Error('Path not found');
-    err.status = 404;
-    throw err;
+    throw createRouteError('Path not found', 404, 'NOT_FOUND');
   }
 
   const stat = fs.statSync(ctx.absolutePath);
   if (stat.isDirectory()) {
-    const listed = listDirectory({ rootId: ctx.root.id, relativePath: ctx.relativePath, includeHidden });
+    const listed = listDirectory({ rootId: ctx.root.id, relativePath: ctx.relativePath, includeHidden, sort, order, limit });
     return { ...listed, type: 'dir' };
   }
 
   const meta = entryMeta(ctx.rootPath, ctx.absolutePath);
   if (stat.size > TEXT_PREVIEW_LIMIT) {
-    return { success: true, root: publicRoot(ctx.root), ...meta, tooLarge: true };
+    return { success: true, root: publicRoot(ctx.root), ...meta, tooLarge: true, code: 'TOO_LARGE' };
+  }
+
+  if (!meta.isEditable) {
+    return { success: true, root: publicRoot(ctx.root), ...meta, binary: true };
   }
 
   try {
@@ -213,7 +314,7 @@ function sortSearchEntries(entries, needle) {
   });
 }
 
-export function searchEntries({ rootId = 'workspace', relativePath = '.', query = '', includeHidden = false, maxResults = 80 }) {
+export function searchEntries({ rootId = 'workspace', relativePath = '.', query = '', includeHidden = false, maxResults = 80, sort = 'relevance', order = 'asc' }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
   const needle = query.trim().toLowerCase();
   if (!needle) return { success: true, root: publicRoot(ctx.root), path: ctx.relativePath, entries: [] };
@@ -241,18 +342,20 @@ export function searchEntries({ rootId = 'workspace', relativePath = '.', query 
     success: true,
     root: publicRoot(ctx.root),
     path: ctx.relativePath,
-    entries: sortSearchEntries(results, needle).slice(0, maxResults),
+    entries: (sort === 'relevance' ? sortSearchEntries(results, needle) : sortEntries(results, sort, order)).slice(0, maxResults),
   };
 }
 
-export function createDirectory({ rootId = 'workspace', relativePath }) {
+export function createDirectory({ rootId = 'workspace', relativePath, overwrite = false }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
+  assertDestinationAvailable(ctx, overwrite);
   fs.mkdirSync(ctx.absolutePath, { recursive: true });
   return { success: true, entry: entryMeta(ctx.rootPath, ctx.absolutePath) };
 }
 
-export function writeFile({ rootId = 'workspace', relativePath, content = '' }) {
+export function writeFile({ rootId = 'workspace', relativePath, content = '', overwrite = true }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
+  assertDestinationAvailable(ctx, overwrite);
   fs.mkdirSync(path.dirname(ctx.absolutePath), { recursive: true });
   if (Buffer.isBuffer(content)) {
     fs.writeFileSync(ctx.absolutePath, content);
@@ -262,27 +365,25 @@ export function writeFile({ rootId = 'workspace', relativePath, content = '' }) 
   return { success: true, entry: entryMeta(ctx.rootPath, ctx.absolutePath) };
 }
 
-export function copyEntry({ rootId = 'workspace', source, destination }) {
+export function copyEntry({ rootId = 'workspace', source, destination, overwrite = true }) {
   const src = resolveExplorerPath(rootId, source);
   const dst = resolveExplorerPath(rootId, destination);
   if (!fs.existsSync(src.absolutePath)) {
-    const err = new Error('Source not found');
-    err.status = 404;
-    throw err;
+    throw createRouteError('Source not found', 404, 'NOT_FOUND');
   }
+  assertDestinationAvailable(dst, overwrite);
   fs.mkdirSync(path.dirname(dst.absolutePath), { recursive: true });
-  fs.cpSync(src.absolutePath, dst.absolutePath, { recursive: true, errorOnExist: false });
+  fs.cpSync(src.absolutePath, dst.absolutePath, { recursive: true, errorOnExist: !overwrite, force: overwrite });
   return { success: true, entry: entryMeta(dst.rootPath, dst.absolutePath) };
 }
 
-export function moveEntry({ rootId = 'workspace', source, destination }) {
+export function moveEntry({ rootId = 'workspace', source, destination, overwrite = true }) {
   const src = resolveExplorerPath(rootId, source);
   const dst = resolveExplorerPath(rootId, destination);
   if (!fs.existsSync(src.absolutePath)) {
-    const err = new Error('Source not found');
-    err.status = 404;
-    throw err;
+    throw createRouteError('Source not found', 404, 'NOT_FOUND');
   }
+  assertDestinationAvailable(dst, overwrite);
   fs.mkdirSync(path.dirname(dst.absolutePath), { recursive: true });
   fs.renameSync(src.absolutePath, dst.absolutePath);
   return { success: true, entry: entryMeta(dst.rootPath, dst.absolutePath) };
@@ -291,24 +392,46 @@ export function moveEntry({ rootId = 'workspace', source, destination }) {
 export function deleteEntry({ rootId = 'workspace', relativePath, recursive = false }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
   if (ctx.relativePath === '.') {
-    const err = new Error('Cannot delete a root');
-    err.status = 400;
-    throw err;
+    throw createRouteError('Cannot delete a root', 400, 'ROOT_DELETE');
   }
   if (!fs.existsSync(ctx.absolutePath)) {
-    const err = new Error('Path not found');
-    err.status = 404;
-    throw err;
+    throw createRouteError('Path not found', 404, 'NOT_FOUND');
   }
   const stat = fs.statSync(ctx.absolutePath);
   if (stat.isDirectory() && !recursive) {
-    const err = new Error('Directory delete requires recursive=true');
-    err.status = 400;
-    throw err;
+    throw createRouteError('Directory delete requires recursive=true', 400, 'RECURSIVE_REQUIRED');
   }
   if (stat.isDirectory()) fs.rmSync(ctx.absolutePath, { recursive: true, force: true });
   else fs.unlinkSync(ctx.absolutePath);
   return { success: true, path: ctx.relativePath };
+}
+
+export function batchDeleteEntries({ rootId = 'workspace', entries = [] }) {
+  const deleted = [];
+  const errors = [];
+  for (const item of entries) {
+    try {
+      const result = deleteEntry({ rootId, relativePath: item.path, recursive: item.recursive === true });
+      deleted.push(result.path);
+    } catch (err) {
+      errors.push({ path: item.path, error: err.message, code: err.code || 'UNKNOWN' });
+    }
+  }
+  return { success: errors.length === 0, deleted, errors };
+}
+
+export function batchCopyEntries({ rootId = 'workspace', entries = [] }) {
+  const copied = [];
+  const errors = [];
+  for (const item of entries) {
+    try {
+      const result = copyEntry({ rootId, source: item.source, destination: item.destination, overwrite: item.overwrite === true });
+      copied.push(result.entry);
+    } catch (err) {
+      errors.push({ source: item.source, destination: item.destination, error: err.message, code: err.code || 'UNKNOWN' });
+    }
+  }
+  return { success: errors.length === 0, entries: copied, errors };
 }
 
 export function publicRoot(root) {

@@ -1,5 +1,4 @@
 import { RefreshCw, Play, Trash2, Box, Cpu, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, FolderOpen } from 'lucide-react';
-import LocalModelsSection from './LocalModelsSection.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';
 import { localModelsApi, llamaServerApi, mlxApi } from '../Settings/settingApi.js';
 import { Badge, DEFAULT_LOAD_CTX_SIZE, Panel, SectionHeader, getModelContextLimit, getModelLoadCtxError } from './modelPageShared.jsx';
@@ -8,11 +7,12 @@ import { Badge, DEFAULT_LOAD_CTX_SIZE, Panel, SectionHeader, getModelContextLimi
 const ModelCard = ({
   m, serverStatus, status, startingModel, deletingModel,
   switchingEngine, installingEngine,
+  highlighted,
   modelLoadCtxSizes, modelLoadCtxErrors,
   updateModelLoadCtxSize, commitModelLoadCtxSize,
   handleStart, handleDelete,
   setStartingModel, setServerStatus,
-  pollCleanup, loadEngineData, loadProviderData,
+  pollCleanup, loadEngineData,
   setSwitchError
 }) => {
   const isLoaded = (
@@ -27,10 +27,13 @@ const ModelCard = ({
   const loadCtxError = modelLoadCtxErrors[m.filename] || getModelLoadCtxError(modelLoadCtxValue, modelContextLimit);
 
   return (
-    <div className={`group relative flex flex-col rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
+    <div
+      id={`model-card-${m.id || m.filename}`}
+      className={`group relative flex flex-col rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
       ${isLoaded
         ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
-        : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}`}
+        : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}
+      ${highlighted ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 midnight:ring-offset-slate-950' : ''}`}
     >
       <div className="px-5 pt-5 pb-4 flex-1">
         {/* Top row: icon + name */}
@@ -57,6 +60,7 @@ const ModelCard = ({
             </div>
 
             <div className="mt-1 flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">Model</span>
               {m.engineType === 'gguf' && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">GGUF</span>}
               {m.engineType === 'mlx' && <span className="text-[10px] font-medium text-amber-500 dark:text-amber-400">MLX</span>}
               {m.isExternal && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">External</span>}
@@ -171,26 +175,16 @@ const LocalModelsPane = ({
   models, loadingModels, serverStatus, status,
   startingModel, setStartingModel, deletingModel,
   switchingEngine, installingEngine,
+  highlightedItem,
   quickLoadPath, setQuickLoadPath,
   modelContextConfig, setServerStatus, pollCleanup,
-  loadEngineData, loadProviderData, loadStatus, loadModelList,
+  loadEngineData, loadProviderData, loadStatus,
   handleAddPath, switchError, switchSuccess, setSwitchError, setSwitchSuccess,
   modelLoadCtxSizes, modelLoadCtxErrors,
   updateModelLoadCtxSize, commitModelLoadCtxSize,
   handleStart, handleDelete
 }) => (
   <div className="flex flex-col gap-6">
-    {/* Add Model — HF search + custom URL */}
-    <div>
-      <SectionHeader
-        title="Add Model"
-        description="Search HuggingFace or paste a URL to download GGUF models"
-      />
-      <Panel className="mt-3 p-5">
-        <LocalModelsSection onRefresh={loadModelList} />
-      </Panel>
-    </div>
-
     {/* From Disk loader */}
     <Panel className="p-5">
       <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
@@ -304,6 +298,7 @@ const LocalModelsPane = ({
             deletingModel={deletingModel}
             switchingEngine={switchingEngine}
             installingEngine={installingEngine}
+            highlighted={highlightedItem?.type === 'model' && String(highlightedItem.id) === String(m.id || m.filename)}
             modelLoadCtxSizes={modelLoadCtxSizes}
             modelLoadCtxErrors={modelLoadCtxErrors}
             updateModelLoadCtxSize={updateModelLoadCtxSize}
@@ -314,7 +309,6 @@ const LocalModelsPane = ({
             setServerStatus={setServerStatus}
             pollCleanup={pollCleanup}
             loadEngineData={loadEngineData}
-            loadProviderData={loadProviderData}
             setSwitchError={setSwitchError}
           />
         ))}

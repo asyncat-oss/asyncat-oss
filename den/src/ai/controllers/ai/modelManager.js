@@ -335,6 +335,7 @@ export async function startDownload(url, filename, subDir = '') {
   activeDownloads.set(downloadId, {
     filename: safeFilename,
     url,
+    subDir,
     progress: 0,
     total: 0,
     downloaded: 0,
@@ -439,6 +440,7 @@ export function getDownloadStatus(downloadId) {
     downloadId,
     filename: dl.filename,
     url: dl.url,
+    subDir: dl.subDir || '',
     progress: dl.progress,
     downloaded: dl.downloaded,
     total: dl.total,
@@ -456,6 +458,7 @@ export function listActiveDownloads() {
   return Array.from(activeDownloads.entries()).map(([id, dl]) => ({
     downloadId: id,
     filename: dl.filename,
+    subDir: dl.subDir || '',
     progress: dl.progress,
     downloaded: dl.downloaded,
     total: dl.total,

@@ -782,6 +782,9 @@ export const audioApi = {
     checkBinary: async () => {
       return apiCall(`${AI_API_BASE}/audio/whisper/check`);
     },
+    checkFfmpeg: async () => {
+      return apiCall(`${AI_API_BASE}/audio/whisper/ffmpeg-check`);
+    },
     start: async (modelPath) => {
       return apiCall(`${AI_API_BASE}/audio/whisper/start`, {
         method: 'POST',
@@ -794,14 +797,21 @@ export const audioApi = {
     pollStatus: (onUpdate, onReady, onError) => {
       let stopped = false;
       let timerId = null;
+      let pollCount = 0;
       const poll = async () => {
         if (stopped) return;
         try {
           const snap = await apiCall(`${AI_API_BASE}/audio/whisper/status`);
           if (stopped) return;
+          pollCount += 1;
           onUpdate?.(snap);
           if (snap.status === 'ready') { stopped = true; onReady?.(snap); return; }
           if (snap.status === 'error') { stopped = true; onError?.(snap); return; }
+          if (snap.status === 'idle' && pollCount > 1) {
+            stopped = true;
+            onError?.({ ...snap, status: 'error', error: 'Whisper server stopped before it became ready.' });
+            return;
+          }
         } catch (err) {
           if (!stopped) { stopped = true; onError?.({ status: 'error', error: err.message }); return; }
         }
@@ -868,4 +878,3 @@ export const audioApi = {
     },
   },
 };
-

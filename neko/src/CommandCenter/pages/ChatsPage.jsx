@@ -244,7 +244,9 @@ const ChatsPage = () => {
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
     const lastAssistant = [...messages].reverse().find(msg => msg.type === 'assistant');
     const running = isActiveRun || activeConversationIds.has(chat.id) || activeConversationIds.has(String(chat.id));
-    const toolsUsed = isTaskAgent || running || messages.some(msg => msg.toolsEnabled === true || msg.agentSessionId);
+    const actionModeUsed = messages.some(msg => msg.agentMode === 'action' || msg.toolsEnabled === true);
+    const planModeUsed = messages.some(msg => msg.agentMode === 'plan' || msg.agentSessionId);
+    const toolsUsed = isTaskAgent || running || actionModeUsed || planModeUsed;
     const updatedAt = chat.updated_at || chat.updatedAt;
     const itemTitle = chat.title || (isTaskAgent ? 'Task agent run' : 'Untitled conversation');
     const selectionItem = { id: chat.id, type: chat.type, title: itemTitle };
@@ -311,7 +313,7 @@ const ChatsPage = () => {
                 <span>•</span>
                 <span className="inline-flex items-center gap-0.5 text-gray-500 dark:text-gray-400 flex-shrink-0">
                   {isTaskAgent ? <Bot className="w-3 h-3" /> : <Wrench className="w-3 h-3" />}
-                  {running ? 'Generating' : isTaskAgent ? (chat.profile?.name || 'Agent') : 'Tools'}
+                  {running ? 'Generating' : isTaskAgent ? (chat.profile?.name || 'Agent') : actionModeUsed ? 'Action' : 'Plan'}
                 </span>
               </>
             )}

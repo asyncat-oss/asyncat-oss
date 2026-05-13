@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Mic, Volume2, Play, Square, Trash2, FolderOpen, Plus, RefreshCw, AlertTriangle, CheckCircle2, Info, Search, Download, X, Loader2, AlertCircle } from 'lucide-react';
-import { audioApi, localModelsApi } from '../Settings/settingApi.js';
+import { useState, useEffect, useCallback } from 'react';
+import { Mic, Volume2, Play, Square, Trash2, FolderOpen, Plus, RefreshCw, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import { audioApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 
 const STATUS_COLORS = {
@@ -10,15 +10,19 @@ const STATUS_COLORS = {
   error: 'bg-red-500',
 };
 
-const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }) => {
-  const typeLabel = type === 'whisper' ? 'Whisper' : 'Piper';
+const AudioModelCard = ({ model, isLoaded, isStarting, highlighted, onStart, onDelete, type }) => {
+  const typeLabel = type === 'whisper' ? 'STT' : 'TTS';
+  const engineLabel = type === 'whisper' ? 'Whisper' : 'Piper';
   const icon = type === 'whisper' ? <Mic className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />;
 
   return (
-    <div className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
+    <div
+      id={`audio-card-${type}-${model.id || model.filename}`}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
       ${isLoaded
         ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
-        : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}`}
+        : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}
+      ${highlighted ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 midnight:ring-offset-slate-950' : ''}`}
     >
       <div className="px-5 pt-5 pb-4 flex-1">
         <div className="flex items-start gap-3">
@@ -42,7 +46,8 @@ const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }
               )}
             </div>
             <div className="mt-1 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">{typeLabel}</span>
+              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">{typeLabel}</span>
+              <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">{engineLabel}</span>
               {model.isExternal && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">External</span>}
               {model.isMissing && <span className="text-[10px] font-medium text-red-500">Missing</span>}
               {model.missingConfig && <span className="text-[10px] font-medium text-amber-500">No config</span>}
@@ -100,7 +105,6 @@ const AudioModelCard = ({ model, isLoaded, isStarting, onStart, onDelete, type }
 
 const EngineStatusBanner = ({ type, status, binaryFound, onCheck }) => {
   const label = type === 'whisper' ? 'whisper.cpp' : 'Piper TTS';
-  const icon = type === 'whisper' ? <Mic className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />;
 
   if (binaryFound === false) {
     return (
@@ -182,129 +186,13 @@ const AddPathForm = ({ type, onAdd }) => {
   );
 };
 
-// ── Format helpers ────────────────────────────────────────────────────────────
-const formatBytes = (bytes) => {
-  if (!bytes) return null;
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
-  return `${(bytes / 1e3).toFixed(0)} KB`;
-};
-
-// Uses the HF search API without gguf filter to find audio models
-const useHFAudioSearch = () => {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState(null);
-  const debounceRef = useRef(null);
-
-  const search = useCallback(async (q) => {
-    if (!q.trim()) { setResults([]); return; }
-    setSearching(true);
-    setSearchError(null);
-    try {
-      const res = await fetch(
-        `https://huggingface.co/api/models?search=${encodeURIComponent(q)}&limit=15&sort=downloads&direction=-1`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (!res.ok) throw new Error("Search failed");
-      const data = await res.json();
-      setResults(data || []);
-    } catch {
-      setSearchError("Could not reach HuggingFace. Check your connection.");
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
-
-  const handleQueryChange = useCallback((q) => {
-    setQuery(q);
-    clearTimeout(debounceRef.current);
-    if (!q.trim()) {
-      setResults([]);
-      setSearchError(null);
-      return;
-    }
-    debounceRef.current = setTimeout(() => search(q), 500);
-  }, [search]);
-
-  return { query, handleQueryChange, results, searching, searchError, setResults, setQuery };
-};
-
-const HFAudioFilePicker = ({ repoId, onSelect, onClose }) => {
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchFiles = async () => {
-      try {
-        const res = await fetch(`https://huggingface.co/api/models/${repoId}`, {
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) throw new Error("Failed to fetch model files");
-        const data = await res.json();
-        const validFiles = (data.siblings || []).filter(
-          (f) => f.rfilename.endsWith(".bin") || f.rfilename.endsWith(".gguf") || f.rfilename.endsWith(".onnx") || f.rfilename.endsWith(".json")
-        );
-        setFiles(validFiles);
-      } catch {
-        setError("Could not load model files.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFiles();
-  }, [repoId]);
-
-  return (
-    <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 truncate">
-          {repoId}
-        </span>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-2 flex-shrink-0">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-      <div className="max-h-48 overflow-y-auto">
-        {loading && <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>}
-        {error && <p className="text-xs text-red-500 px-3 py-2">{error}</p>}
-        {!loading && !error && files.length === 0 && <p className="text-xs text-gray-400 px-3 py-2">No .bin, .gguf, .onnx, or .json files found.</p>}
-        {files.map((f) => (
-          <div key={f.rfilename} className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800">
-             <div className="min-w-0 flex-1">
-               <span className="text-xs text-gray-700 dark:text-gray-300 truncate font-mono block">
-                 {f.rfilename}
-               </span>
-               {f.size && <span className="text-[10px] text-gray-400 dark:text-gray-500 block">{formatBytes(f.size)}</span>}
-             </div>
-             <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
-               {(!f.rfilename.endsWith('.onnx') && !f.rfilename.endsWith('.json')) && (
-                 <button onClick={() => onSelect({ url: `https://huggingface.co/${repoId}/resolve/main/${f.rfilename}`, filename: f.rfilename, subDir: 'audio/whisper' })} className="px-2 py-1 bg-violet-50 text-violet-600 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:hover:bg-violet-900/50 rounded text-[10px] font-medium transition-colors">
-                   STT
-                 </button>
-               )}
-               {(!f.rfilename.endsWith('.bin') && !f.rfilename.endsWith('.gguf')) && (
-                 <button onClick={() => onSelect({ url: `https://huggingface.co/${repoId}/resolve/main/${f.rfilename}`, filename: f.rfilename, subDir: 'audio/tts' })} className="px-2 py-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 rounded text-[10px] font-medium transition-colors">
-                   TTS
-                 </button>
-               )}
-             </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const AudioModelsSection = ({ searchQuery = '' }) => {
+const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
   const [whisperModels, setWhisperModels] = useState([]);
   const [ttsModels, setTtsModels] = useState([]);
   const [whisperStatus, setWhisperStatus] = useState({ status: 'idle' });
   const [ttsStatus, setTtsStatus] = useState({ status: 'idle' });
   const [whisperBinary, setWhisperBinary] = useState(null);
+  const [ffmpegFound, setFfmpegFound] = useState(null);
   const [ttsBinary, setTtsBinary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [startingModel, setStartingModel] = useState(null);
@@ -318,8 +206,13 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
         audioApi.whisper.getStatus().catch(() => ({ status: 'idle' })),
         audioApi.tts.getStatus().catch(() => ({ status: 'idle' })),
       ]);
-      setWhisperModels(modelsRes.whisper || []);
-      setTtsModels(modelsRes.tts || []);
+      const nextModels = {
+        whisper: modelsRes.whisper || [],
+        tts: modelsRes.tts || [],
+      };
+      setWhisperModels(nextModels.whisper);
+      setTtsModels(nextModels.tts);
+      onModelsChange?.(nextModels);
       setWhisperStatus(wStatus);
       setTtsStatus(tStatus);
     } catch (err) {
@@ -327,14 +220,16 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onModelsChange]);
 
   const checkBinaries = useCallback(async () => {
-    const [w, t] = await Promise.all([
+    const [w, f, t] = await Promise.all([
       audioApi.whisper.checkBinary().catch(() => ({ found: false })),
+      audioApi.whisper.checkFfmpeg().catch(() => ({ found: false })),
       audioApi.tts.checkBinary().catch(() => ({ found: false })),
     ]);
     setWhisperBinary(w.found);
+    setFfmpegFound(f.found);
     setTtsBinary(t.found);
   }, []);
 
@@ -342,6 +237,12 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
     loadData();
     checkBinaries();
   }, [loadData, checkBinaries]);
+
+  useEffect(() => {
+    const refreshAudioModels = () => loadData();
+    window.addEventListener('asyncat-audio-models-updated', refreshAudioModels);
+    return () => window.removeEventListener('asyncat-audio-models-updated', refreshAudioModels);
+  }, [loadData]);
 
   const handleWhisperStart = async (model) => {
     setStartingModel(model.path || model.filename);
@@ -399,30 +300,6 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
   const whisperReady = whisperStatus?.status === 'ready';
   const ttsReady = ttsStatus?.status === 'ready';
 
-  const q = searchQuery.toLowerCase();
-  const filteredWhisper = q ? whisperModels.filter(m => (m.name || m.filename || '').toLowerCase().includes(q)) : whisperModels;
-  const filteredTts = q ? ttsModels.filter(m => (m.name || m.filename || '').toLowerCase().includes(q)) : ttsModels;
-
-  const { query, handleQueryChange, results, searching, searchError, setResults, setQuery } = useHFAudioSearch();
-  const [expandedRepo, setExpandedRepo] = useState(null);
-  const [downloadingUrl, setDownloadingUrl] = useState(null);
-
-  const handleDownload = async ({ url, filename, subDir }) => {
-    setDownloadingUrl(url);
-    try {
-      await localModelsApi.startDownload(url, filename, subDir);
-      // Wait a moment then refresh
-      setTimeout(() => loadData(), 2000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDownloadingUrl(null);
-      setQuery("");
-      setResults([]);
-      setExpandedRepo(null);
-    }
-  };
-
   return (
     <div>
       <SectionHeader
@@ -438,67 +315,6 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
           </div>
         }
       />
-
-      {/* HuggingFace Search */}
-      <Panel className="p-5 mt-5">
-        <div className="flex items-center gap-2 mb-2">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Download from HuggingFace
-          </h3>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Search audio models… e.g. ggerganov/whisper.cpp, rhasspy/piper-voices"
-            className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-lg bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 transition-shadow"
-          />
-          {query && (
-            <button onClick={() => { handleQueryChange(""); setExpandedRepo(null); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {searching && <div className="flex items-center gap-2 mt-3 text-xs text-gray-400 dark:text-gray-500"><Loader2 className="w-3.5 h-3.5 animate-spin" />Searching…</div>}
-        {searchError && <p className="mt-2 text-xs text-red-500 dark:text-red-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {searchError}</p>}
-        
-        {!searching && results.length > 0 && (
-          <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-            {results.map((model, i) => {
-              const repoId = model.modelId || model.id;
-              const isExpanded = expandedRepo === repoId;
-              const downloads = model.downloads ? `${(model.downloads / 1000).toFixed(0)}k downloads` : null;
-              return (
-                <div key={repoId} className={`border-b border-gray-100 dark:border-gray-800 last:border-0 ${i % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-gray-800/30"}`}>
-                  <div className="flex items-center justify-between px-3 py-2.5 gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{repoId}</div>
-                      {downloads && <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{downloads}</div>}
-                    </div>
-                    <button onClick={() => setExpandedRepo(isExpanded ? null : repoId)} className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors">
-                      <Download className="w-3 h-3" /> {isExpanded ? "Hide" : "Select files"}
-                    </button>
-                  </div>
-                  {isExpanded && (
-                    <div className="px-3 pb-3">
-                      <HFAudioFilePicker repoId={repoId} onSelect={handleDownload} onClose={() => setExpandedRepo(null)} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {!searching && query && results.length === 0 && !searchError && <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">No models found for "{query}"</p>}
-        {downloadingUrl && (
-          <div className="mt-3 flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400">
-            <Loader2 className="w-4 h-4 animate-spin" /> Download started. Check the active downloads list in the Library tab for progress.
-          </div>
-        )}
-      </Panel>
 
       {error && (
         <div className="mt-3 flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-xs shadow-sm">
@@ -532,11 +348,21 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
 
           <EngineStatusBanner type="whisper" status={whisperStatus} binaryFound={whisperBinary} onCheck={checkBinaries} />
 
+          {whisperBinary && ffmpegFound === false && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span>
+                Install <code className="rounded bg-amber-100 px-1 py-0.5 text-[10px] dark:bg-amber-900/30">ffmpeg</code> for transcription from recorded or uploaded audio formats.
+                Whisper model loading still works without it.
+              </span>
+            </div>
+          )}
+
           {loading ? (
             <div className="mt-4 space-y-3">
               {[1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800/50" />)}
             </div>
-          ) : filteredWhisper.length === 0 ? (
+          ) : whisperModels.length === 0 ? (
             <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 px-4 py-8">
               <Mic className="w-6 h-6 text-gray-300 dark:text-gray-600 mb-2" />
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
@@ -546,13 +372,14 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {filteredWhisper.map(m => (
+              {whisperModels.map(m => (
                 <AudioModelCard
                   key={m.id}
                   model={m}
                   type="whisper"
                   isLoaded={whisperReady && whisperStatus?.model === m.filename?.replace(/\.(bin|gguf)$/i, '')}
                   isStarting={startingModel === (m.path || m.filename)}
+                  highlighted={highlightedItem?.type === 'whisper' && String(highlightedItem.id) === String(m.id || m.filename)}
                   onStart={handleWhisperStart}
                   onDelete={handleDelete}
                 />
@@ -587,7 +414,7 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
             <div className="mt-4 space-y-3">
               {[1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800/50" />)}
             </div>
-          ) : filteredTts.length === 0 ? (
+          ) : ttsModels.length === 0 ? (
             <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 px-4 py-8">
               <Volume2 className="w-6 h-6 text-gray-300 dark:text-gray-600 mb-2" />
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
@@ -597,13 +424,14 @@ const AudioModelsSection = ({ searchQuery = '' }) => {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {filteredTts.map(m => (
+              {ttsModels.map(m => (
                 <AudioModelCard
                   key={m.id}
                   model={m}
                   type="tts"
                   isLoaded={ttsReady && ttsStatus?.model === m.filename?.replace(/\.onnx$/i, '')}
                   isStarting={startingModel === (m.path || m.filename)}
+                  highlighted={highlightedItem?.type === 'tts' && String(highlightedItem.id) === String(m.id || m.filename)}
                   onStart={handleTtsStart}
                   onDelete={handleDelete}
                 />

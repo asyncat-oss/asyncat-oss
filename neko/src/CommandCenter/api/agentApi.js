@@ -31,6 +31,7 @@ export const agentApi = {
         agentMentions: opts.agentMentions || [],
         fileAttachments: opts.fileAttachments || [],
         enableTools: opts.enableTools !== false,
+        agentMode: opts.agentMode || (opts.enableTools === false ? 'plan' : 'action'),
         reasoningEffort: opts.reasoningEffort || 'auto',
       })
     });

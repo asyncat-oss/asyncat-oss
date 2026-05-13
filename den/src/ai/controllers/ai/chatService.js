@@ -157,6 +157,10 @@ class ChatService {
         baseMessage.toolsEnabled = msg.toolsEnabled;
       }
 
+      if (msg.agentMode === 'plan' || msg.agentMode === 'action') {
+        baseMessage.agentMode = msg.agentMode;
+      }
+
       if (msg.agentSessionId) {
         baseMessage.agentSessionId = msg.agentSessionId;
       }
@@ -246,6 +250,10 @@ class ChatService {
 
       if (typeof msg.toolsEnabled === 'boolean') {
         baseMessage.toolsEnabled = msg.toolsEnabled;
+      }
+
+      if (msg.agentMode === 'plan' || msg.agentMode === 'action') {
+        baseMessage.agentMode = msg.agentMode;
       }
 
       if (msg.agentSessionId) {

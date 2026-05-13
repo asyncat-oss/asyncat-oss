@@ -118,7 +118,7 @@ function buildEventsFromMessages(messages = []) {
   const events = [];
   for (const msg of messages) {
     if (msg.type === 'user') {
-      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMentions: msg.agentMentions || [], fileAttachments: msg.fileAttachments || [] } });
+      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMode: msg.agentMode, agentMentions: msg.agentMentions || [], fileAttachments: msg.fileAttachments || [] } });
     } else if (msg.type === 'assistant') {
       if (Array.isArray(msg.agentEvents) && msg.agentEvents.length > 0) {
         events.push(...msg.agentEvents.filter(ev => ev?.type && ev.type !== 'user_goal' && ev.type !== 'answer'));
@@ -127,7 +127,7 @@ function buildEventsFromMessages(messages = []) {
         type: msg.isError ? 'error' : 'answer',
         data: msg.isError
           ? { message: msg.content }
-          : { answer: msg.content, toolsEnabled: msg.toolsEnabled, searchEvent: msg.searchEvent || null },
+          : { answer: msg.content, toolsEnabled: msg.toolsEnabled, agentMode: msg.agentMode, searchEvent: msg.searchEvent || null },
       });
     }
   }

@@ -17,8 +17,6 @@ import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
-import { getModelCapabilities, normalizeReasoningEffort } from '../controllers/ai/modelCapabilities.js';
-import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from '../../agent/reasoningParser.js';
 import { branchGit, commitGit, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
@@ -39,17 +37,6 @@ function normalizeConversationHistory(history = []) {
 
 function defaultAgentWorkingDir() {
   return getWorkspaceRoot();
-}
-
-function applyReasoningEffort(params, effort, providerInfo, model) {
-  const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
-  const capabilities = getModelCapabilities(providerId, model);
-  const normalized = normalizeReasoningEffort(effort, capabilities);
-  
-  if (!normalized) return params; // either not supported, no effort provided, or native_tags
-  
-  if (providerId === 'openrouter') return { ...params, reasoning: { effort: normalized } };
-  return { ...params, reasoning_effort: normalized };
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -1176,89 +1163,13 @@ router.post('/run', authenticate, async (req, res) => {
     abortController.abort();
   });
   try {
-    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto' } = req.body;
+    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMode, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto' } = req.body;
     const resolvedFiles = resolveFileAttachments(fileAttachments);
     const goal = injectFileAttachments((rawGoal || rawMessage || '').trim(), resolvedFiles);
+    const resolvedAgentMode = agentMode === 'plan' || enableTools === false ? 'plan' : 'action';
 
     if (!goal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
-    }
-
-    if (!enableTools) {
-      const { client: aiClient, model, isLocal, providerInfo } = getAiClientForUser(req.user.id);
-      const maxTokens = isLocal ? 1024 : 4000;
-
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Content-Encoding', 'identity');
-      res.setHeader('X-Accel-Buffering', 'no');
-      res.flushHeaders?.();
-
-      const hbInterval = setInterval(() => writeAgentSseComment(res, 'ping'), 15000);
-      res.on('close', () => {
-        clearInterval(hbInterval);
-        abortController.abort();
-      });
-
-      try {
-        const messages = [
-          ...conversationHistory.slice(-6).map(m => ({ role: m.role, content: m.content })),
-          { role: 'user', content: goal },
-        ];
-        const systemPrompt = [
-          'You are a helpful AI assistant in answer-only mode.',
-          'Tools are disabled for this message, so you cannot inspect files, modify data, create tasks/events/notes, browse, or call any external tools.',
-          'Recent earlier messages may include agent/tool actions from when Tools were ON, but you cannot inspect fresh state or perform new actions right now.',
-          'Do not claim that you used tools or completed actions outside the chat.',
-          'If the user asks you to perform an action that requires tools, explain what you can answer directly and tell them to turn Tools ON if they want you to act.',
-          'Respond clearly and concisely.',
-        ].join(' ');
-
-        const params = applyReasoningEffort({
-          model,
-          messages: [{ role: 'system', content: systemPrompt }, ...messages],
-          stream: true,
-          max_tokens: maxTokens,
-        }, reasoningEffort, providerInfo, model);
-        const stream = await aiClient.client.chat.completions.create(params, { signal: abortController.signal });
-
-        let fullContent = '';
-        let fullReasoning = '';
-        for await (const chunk of stream) {
-          if (abortController.signal.aborted || res.destroyed || res.writableEnded) break;
-          const delta = chunk.choices[0]?.delta;
-          if (!delta) continue;
-
-          const reasoningDelta = reasoningTextFromDelta(delta);
-          if (reasoningDelta) {
-            fullReasoning += reasoningDelta;
-          }
-
-          if (delta.content) {
-            fullContent += delta.content;
-            writeAgentSse(res, { type: 'delta', data: { content: delta.content } });
-          }
-        }
-
-        const parsed = extractReasoningFromText(fullContent);
-        const thinking = combineReasoningParts(fullReasoning, parsed.thinking);
-        if (thinking) {
-          writeAgentSse(res, { type: 'thinking', data: { thought: thinking, round: 1 } });
-        }
-
-        if (!abortController.signal.aborted) {
-          writeAgentSse(res, { type: 'done', data: { answer: cleanReasoningAnswer(parsed.answer || fullContent) } });
-        }
-      } catch (err) {
-        if (err?.name !== 'AbortError' && !abortController.signal.aborted) {
-          writeAgentSse(res, { type: 'error', data: { message: err.message } });
-        }
-      } finally {
-        clearInterval(hbInterval);
-        if (!res.destroyed && !res.writableEnded) res.end();
-      }
-      return;
     }
 
     let profile = null;
@@ -1295,7 +1206,9 @@ router.post('/run', authenticate, async (req, res) => {
 
     const resolvedWorkingDir = workingDir || profile?.working_dir || defaultAgentWorkingDir();
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
-    const resolvedAutoApprove = autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false;
+    const resolvedAutoApprove = resolvedAgentMode === 'action'
+      ? (autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false)
+      : false;
     const profileTools = Array.isArray(profile?.always_allowed_tools) ? profile.always_allowed_tools : [];
     const mentionedAgentProfiles = resolveAgentMentions(agentMentions, req.user.id);
     const continuedTaskRun = continueSessionId
@@ -1326,6 +1239,7 @@ router.post('/run', authenticate, async (req, res) => {
       soul: resolvedSoul,
       providerInfo,
       reasoningEffort,
+      agentMode: resolvedAgentMode,
       mentionedAgents: mentionedAgentProfiles,
       abortSignal: abortController.signal,
       onEvent: continuedTaskRun ? (event) => {

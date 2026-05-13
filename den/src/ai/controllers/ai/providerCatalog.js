@@ -6,7 +6,7 @@ export const LLAMA_PROVIDER_ID = 'llamacpp-builtin';
 export const LLAMA_BASE_URL = `http://127.0.0.1:${LLAMA_PORT}/v1`;
 
 const MLX_PORT = parseInt(process.env.MLX_SERVER_PORT ?? '8766', 10);
-export const MLX_PROVIDER_ID = 'mlx-local';
+export const MLX_PROVIDER_ID = 'mlx-builtin';
 export const MLX_BASE_URL = `http://127.0.0.1:${MLX_PORT}/v1`;
 
 export const PROVIDER_CATALOG = [
@@ -139,11 +139,11 @@ export const PROVIDER_CATALOG = [
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: false,
-    contextWindow: 200000,
+    contextWindow: 1000000,
     local: false,
     apiKeyEnv: 'ANTHROPIC_API_KEY',
     docsUrl: 'https://docs.anthropic.com/en/api/openai-sdk',
-    compatibility: 'Anthropic documents this OpenAI SDK layer as useful for testing and comparison, with native Anthropic API recommended for the full feature set.',
+    compatibility: 'Anthropic documents this OpenAI SDK layer as useful for testing and comparison, with native Anthropic API recommended for the full feature set. OpenAI reasoning_effort is ignored by the compatibility layer.',
     setup: [
       'Use an Anthropic API key.',
       'Claude model listing is not exposed through the OpenAI-compatible /models flow here, so enter the model ID manually.',
@@ -177,18 +177,18 @@ export const PROVIDER_CATALOG = [
     providerType: 'cloud',
     providerId: 'xai',
     baseUrl: 'https://api.x.ai/v1',
-    model: 'grok-4.20-reasoning',
+    model: 'grok-4.3',
     requiresApiKey: true,
-    supportsTools: false,
+    supportsTools: true,
     supportsModelList: true,
-    contextWindow: 256000,
+    contextWindow: 1000000,
     local: false,
     apiKeyEnv: 'XAI_API_KEY',
     docsUrl: 'https://docs.x.ai/docs/guides/chat-completions',
     setup: [
       'Create an xAI API key in the xAI Console.',
       'Long-running reasoning models may need higher client timeouts; Asyncat streams responses but provider-side limits still apply.',
-      'Native tool support varies by xAI model, so this preset keeps tool calling off by default.'
+      'Grok 4.3 supports function calling, structured outputs, and configurable reasoning.'
     ],
     description: 'Grok models through xAI OpenAI-compatible Chat Completions.',
   },
@@ -217,20 +217,63 @@ export const PROVIDER_CATALOG = [
     name: 'DeepSeek',
     providerType: 'cloud',
     providerId: 'deepseek',
-    baseUrl: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-v4-flash',
     requiresApiKey: true,
     supportsTools: true,
     supportsModelList: false,
-    contextWindow: 64000,
+    contextWindow: 1000000,
     local: false,
     apiKeyEnv: 'DEEPSEEK_API_KEY',
     docsUrl: 'https://api-docs.deepseek.com/',
     setup: [
       'Create a DeepSeek API key.',
-      'DeepSeek supports OpenAI-compatible chat completions. Model aliases can change over time, so verify the selected model in DeepSeek docs before production use.'
+      'DeepSeek uses https://api.deepseek.com as the OpenAI SDK base URL; do not append /v1.',
+      'Use deepseek-v4-flash or deepseek-v4-pro. The older deepseek-chat and deepseek-reasoner aliases are scheduled for deprecation on July 24, 2026.'
     ],
     description: 'DeepSeek models through an OpenAI-compatible API.',
+  },
+  {
+    id: 'qwen',
+    name: 'Alibaba Qwen',
+    providerType: 'cloud',
+    providerId: 'qwen',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-plus',
+    requiresApiKey: true,
+    supportsTools: true,
+    supportsModelList: false,
+    contextWindow: 131072,
+    local: false,
+    apiKeyEnv: 'DASHSCOPE_API_KEY',
+    docsUrl: 'https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope',
+    setup: [
+      'Create an Alibaba Cloud Model Studio API key.',
+      'The default endpoint is the Singapore international region. Change the base URL for US, Beijing, Hong Kong, or workspace-specific regions.',
+      'Qwen supports OpenAI-compatible chat completions and tool calls; thinking controls may require provider-specific extra_body parameters.'
+    ],
+    description: 'Qwen models through Alibaba Cloud Model Studio OpenAI compatibility.',
+  },
+  {
+    id: 'kimi',
+    name: 'Kimi',
+    providerType: 'cloud',
+    providerId: 'kimi',
+    baseUrl: 'https://api.moonshot.ai/v1',
+    model: 'kimi-k2.6',
+    requiresApiKey: true,
+    supportsTools: true,
+    supportsModelList: true,
+    contextWindow: 256000,
+    local: false,
+    apiKeyEnv: 'MOONSHOT_API_KEY',
+    docsUrl: 'https://platform.kimi.ai/docs/api/overview',
+    setup: [
+      'Create a Kimi/Moonshot API key.',
+      'Kimi exposes OpenAI-compatible /v1/chat/completions and /v1/models endpoints.',
+      'Provider-specific thinking controls use Kimi extra_body fields, so leave reasoning controls on auto unless you have tested the model.'
+    ],
+    description: 'Kimi K-series models through Moonshot OpenAI-compatible APIs.',
   },
   {
     id: 'together',
@@ -325,6 +368,48 @@ export const PROVIDER_CATALOG = [
       'Groq uses https://api.groq.com/openai/v1 and supports /models for available model IDs.'
     ],
     description: 'Groq OpenAI-compatible API.',
+  },
+  {
+    id: 'huggingface',
+    name: 'Hugging Face',
+    providerType: 'cloud',
+    providerId: 'huggingface',
+    baseUrl: 'https://router.huggingface.co/v1',
+    model: 'openai/gpt-oss-120b:fastest',
+    requiresApiKey: true,
+    supportsTools: false,
+    supportsModelList: true,
+    contextWindow: 131072,
+    local: false,
+    apiKeyEnv: 'HF_TOKEN',
+    docsUrl: 'https://huggingface.co/docs/inference-providers/main/index',
+    setup: [
+      'Create a Hugging Face token with Inference Providers permission.',
+      'The router endpoint is chat-completions only and can route to providers with suffixes such as :fastest or :cerebras.',
+      'Tool support is model/provider-dependent, so enable native tools only after testing the selected route.'
+    ],
+    description: 'Hugging Face Inference Providers through its OpenAI-compatible router.',
+  },
+  {
+    id: 'nvidia-nim',
+    name: 'NVIDIA NIM',
+    providerType: 'cloud',
+    providerId: 'nvidia-nim',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    model: 'openai/gpt-oss-120b',
+    requiresApiKey: true,
+    supportsTools: false,
+    supportsModelList: false,
+    contextWindow: 131072,
+    local: false,
+    apiKeyEnv: 'NVIDIA_API_KEY',
+    docsUrl: 'https://docs.api.nvidia.com/nim/reference/llm-apis',
+    setup: [
+      'Create an NVIDIA API catalog key.',
+      'Hosted NIM uses https://integrate.api.nvidia.com/v1/chat/completions.',
+      'For self-hosted NIM, use a Custom provider pointed at your local or private /v1 endpoint.'
+    ],
+    description: 'Hosted NVIDIA NIM language models through OpenAI-compatible chat completions.',
   },
   {
     id: 'openrouter',
@@ -431,6 +516,27 @@ export const PROVIDER_CATALOG = [
     description: 'DeepInfra hosted open-source models through OpenAI-compatible chat.',
   },
   {
+    id: 'bedrock',
+    name: 'Amazon Bedrock',
+    providerType: 'cloud',
+    providerId: 'bedrock',
+    baseUrl: '',
+    model: 'openai.gpt-oss-20b-1:0',
+    requiresApiKey: true,
+    supportsTools: false,
+    supportsModelList: false,
+    contextWindow: 128000,
+    local: false,
+    apiKeyEnv: 'AWS_BEARER_TOKEN_BEDROCK',
+    docsUrl: 'https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html',
+    setup: [
+      'Generate an Amazon Bedrock API key.',
+      'Set Base URL to your region endpoint plus /openai/v1, for example https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1.',
+      'Bedrock region and model availability vary; choose a model ID enabled in your AWS account.'
+    ],
+    description: 'Amazon Bedrock models through its OpenAI Chat Completions compatibility endpoint.',
+  },
+  {
     id: 'azure',
     name: 'Azure OpenAI',
     providerType: 'cloud',
@@ -474,7 +580,8 @@ export const PROVIDER_CATALOG = [
 ];
 
 export function getProviderPreset(providerId) {
-  return PROVIDER_CATALOG.find(p => p.id === providerId || p.providerId === providerId) || null;
+  const normalized = providerId === 'mlx-local' ? MLX_PROVIDER_ID : providerId;
+  return PROVIDER_CATALOG.find(p => p.id === normalized || p.providerId === normalized) || null;
 }
 
 export function parseSettings(value) {
@@ -502,8 +609,9 @@ export function normalizeBaseUrl(baseUrl, providerId) {
   if (providerId === 'openai-codex') return url.replace(/\/+$/, '');
   if (providerId === 'codex-cli' || url.startsWith('runtime://')) return url;
   if (providerId === 'azure') return url.replace(/\/+$/, '');
+  if (providerId === 'deepseek') return url.replace(/\/v1\/?$/i, '').replace(/\/+$/, '');
   if (providerId === 'perplexity') return url.replace(/\/+$/, '');
-  if (/\/(v\d+(?:beta)?|openai\/v\d+|v\d+\/openai|api\/v\d+|v\d+beta\/openai|compatibility\/v\d+|inference\/v\d+)\/?$/i.test(url)) {
+  if (/\/(v\d+(?:beta)?|openai\/v\d+|v\d+\/openai|api\/v\d+|v\d+beta\/openai|compatibility\/v\d+|compatible-mode\/v\d+|inference\/v\d+)\/?$/i.test(url)) {
     return url;
   }
   return `${url.replace(/\/+$/, '')}/v1`;
@@ -529,19 +637,20 @@ export function providerSupportsTools(providerInfo = {}) {
 
 export function publicProvider(row) {
   if (!row) return null;
-  const preset = getProviderPreset(row.provider_id);
+  const effectiveProviderId = row.provider_id === 'mlx-local' ? MLX_PROVIDER_ID : row.provider_id;
+  const preset = getProviderPreset(effectiveProviderId);
   const settings = parseSettings(row.settings);
   const resolvedContext = resolveContextWindow({
-    providerId: row.provider_id,
+    providerId: effectiveProviderId,
     model: row.model,
     settings,
     preset,
   });
   return {
     id: row.id,
-    name: row.name || preset?.name || row.provider_id || row.provider_type,
-    provider_type: normalizeProviderType(row.provider_type, row.provider_id),
-    provider_id: row.provider_id || preset?.providerId || 'custom',
+    name: row.name || preset?.name || effectiveProviderId || row.provider_type,
+    provider_type: normalizeProviderType(row.provider_type, effectiveProviderId),
+    provider_id: effectiveProviderId || preset?.providerId || 'custom',
     base_url: row.base_url || '',
     model: row.model || '',
     api_key_set: Boolean(row.api_key),
@@ -552,7 +661,7 @@ export function publicProvider(row) {
     context_window_source: resolvedContext.source,
     context_window_confidence: resolvedContext.confidence,
     local: providerIsLocal(row),
-    managed: row.provider_id === LLAMA_PROVIDER_ID,
+    managed: effectiveProviderId === LLAMA_PROVIDER_ID || effectiveProviderId === MLX_PROVIDER_ID,
     last_test_status: row.last_test_status || null,
     last_test_message: row.last_test_message || null,
     last_test_at: row.last_test_at || null,

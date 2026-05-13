@@ -178,15 +178,17 @@ function useElapsedTime(startMs) {
   return elapsed;
 }
 
-function ModeBadge({ toolsEnabled }) {
-  if (typeof toolsEnabled !== 'boolean') return null;
+function ModeBadge({ toolsEnabled, agentMode }) {
+  const mode = agentMode || (typeof toolsEnabled === 'boolean' ? (toolsEnabled ? 'action' : 'plan') : null);
+  if (!mode) return null;
+  const isActionMode = mode === 'action';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-      toolsEnabled
+      isActionMode
         ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300'
-        : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+        : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
     }`}>
-      {toolsEnabled ? 'Tools ON' : 'Answer only'}
+      {isActionMode ? 'Action' : 'Plan'}
     </span>
   );
 }
@@ -210,7 +212,7 @@ function UserGoalEvent({ data }) {
       <div className="max-w-4xl mx-auto flex justify-end">
         <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
           <div className="mb-1 flex justify-end gap-2 items-center">
-            <ModeBadge toolsEnabled={data?.toolsEnabled} />
+            <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
             <button 
               onClick={handleCopy} 
               className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors" 
@@ -974,7 +976,7 @@ function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) 
       {displayAnswer && <div className="group mb-6">
         <div className="max-w-4xl mx-auto">
           <div className="mb-2">
-            <ModeBadge toolsEnabled={data?.toolsEnabled} />
+            <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
           </div>
           <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
             {blocks.length > 0
@@ -1018,19 +1020,19 @@ function ErrorEvent({ data }) {
   );
 }
 
-function StatusEvent({ data, onRunWithTools }) {
+function StatusEvent({ data, onRunWithAction }) {
   return (
     <FeedFrame className="mb-3">
       <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
         <span>{data?.message || 'Agent stopped.'}</span>
-        {data?.canRetryWithTools && data?.goal && (
+        {(data?.canRetryWithAction || data?.canRetryWithTools) && data?.goal && (
           <button
             type="button"
-            onClick={() => onRunWithTools?.(data.goal)}
+            onClick={() => onRunWithAction?.(data.goal)}
             className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
           >
             <Zap className="w-3 h-3" />
-            Run with Tools ON
+            Run in Action
           </button>
         )}
       </div>
@@ -1387,7 +1389,7 @@ function RunningIndicator({ runStartedAt }) {
 
 // ── Main feed component ───────────────────────────────────────────────────────
 
-export default function AgentRunFeed({ events, isRunning, streamingText, runStartedAt, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithTools, ttsReady = false }) {
+export default function AgentRunFeed({ events, isRunning, streamingText, runStartedAt, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithAction, ttsReady = false }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
@@ -1436,7 +1438,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, runStar
         renderedEvents.push(<ErrorEvent key={i} data={ev.data} />);
         break;
       case 'status':
-        renderedEvents.push(<StatusEvent key={i} data={ev.data} onRunWithTools={onRunWithTools} />);
+        renderedEvents.push(<StatusEvent key={i} data={ev.data} onRunWithAction={onRunWithAction} />);
         break;
       case 'agent_delegate_start':
         renderedEvents.push(<AgentDelegateEvent key={i} data={ev.data} pending />);

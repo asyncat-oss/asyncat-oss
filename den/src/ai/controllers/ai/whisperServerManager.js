@@ -79,10 +79,25 @@ async function findWhisperBinary() {
   return { found: false, path: null, source: null };
 }
 
+async function findFfmpegBinary() {
+  try {
+    const cmd = IS_WIN ? 'where ffmpeg 2>nul' : 'which ffmpeg 2>/dev/null';
+    const { stdout } = await execAsync(cmd, { timeout: 3000 });
+    const p = stdout.trim().split('\n')[0]?.trim();
+    if (p) return { found: true, path: p, source: 'PATH' };
+  } catch { /* not in PATH */ }
+
+  return { found: false, path: null, source: null };
+}
+
 // ── Server lifecycle ───────────────────────────────────────────────────────────
 
 export async function checkBinary() {
   return findWhisperBinary();
+}
+
+export async function checkFfmpeg() {
+  return findFfmpegBinary();
 }
 
 export function getStatus() {
@@ -112,14 +127,18 @@ export async function startWhisper(modelPath) {
     '--model', modelPath,
     '--port', String(WHISPER_PORT),
     '--host', WHISPER_HOST,
-    '--convert',
   ];
+  if (process.env.WHISPER_USE_GPU !== '1') {
+    args.push('--no-gpu');
+  }
 
   try {
     serverProcess = spawn(binary.path, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
     });
+
+    let stderrBuffer = '';
 
     serverProcess.on('error', (err) => {
       console.error('[whisper] Process error:', err.message);
@@ -130,22 +149,32 @@ export async function startWhisper(modelPath) {
     serverProcess.on('exit', (code) => {
       if (state.status !== 'idle') {
         console.info(`[whisper] Process exited with code ${code}`);
-        setState({ status: 'idle', model: null, pid: null, error: code ? `Exited with code ${code}` : null });
+        const stderrTail = stderrBuffer.trim().split('\n').slice(-3).join(' ').trim();
+        const error = stderrTail || (code ? `Exited with code ${code}` : 'Whisper server exited before becoming ready.');
+        setState({ status: 'error', model: null, pid: null, error });
       }
       serverProcess = null;
     });
 
     // Capture stderr for startup detection
-    let stderrBuffer = '';
-    serverProcess.stderr?.on('data', (chunk) => {
-      stderrBuffer += chunk.toString();
+    const handleServerOutput = (text) => {
       // whisper-server logs "whisper_init_from_file_with_params_no_state: ... model loaded" on success
-      if (stderrBuffer.includes('model loaded') || stderrBuffer.includes('server is listening')) {
+      if (text.includes('model loaded') || text.includes('server is listening') || text.toLowerCase().includes('listening')) {
         if (state.status === 'loading') {
           setState({ status: 'ready', error: null, pid: serverProcess?.pid || null });
           if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
         }
       }
+    };
+
+    serverProcess.stdout?.on('data', (chunk) => {
+      handleServerOutput(chunk.toString());
+    });
+
+    serverProcess.stderr?.on('data', (chunk) => {
+      const text = chunk.toString();
+      stderrBuffer += text;
+      handleServerOutput(text);
     });
 
     setState({ pid: serverProcess.pid });

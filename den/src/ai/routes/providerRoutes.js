@@ -73,6 +73,7 @@ import {
 } from '../controllers/ai/audioModelManager.js';
 import {
   checkBinary as checkWhisperBinary,
+  checkFfmpeg as checkWhisperFfmpeg,
   getStatus as getWhisperStatus,
   startWhisper,
   stopWhisper,
@@ -147,18 +148,18 @@ function saveMlxProviderConfig(userId, modelPath) {
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO ai_provider_config (user_id, profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools, updated_at)
-    VALUES (?, NULL, 'local', 'mlx-builtin', ?, ?, NULL, '{}', 0, ?)
+    VALUES (?, NULL, 'local', ?, ?, ?, NULL, '{}', 0, ?)
     ON CONFLICT(user_id) DO UPDATE SET
       profile_id     = NULL,
       provider_type = 'local',
-      provider_id   = 'mlx-builtin',
+      provider_id   = excluded.provider_id,
       base_url      = excluded.base_url,
       model         = excluded.model,
       api_key       = NULL,
       settings      = '{}',
       supports_tools = 0,
       updated_at    = excluded.updated_at
-  `).run(userId, MLX_BASE_URL, modelPath, now);
+  `).run(userId, MLX_PROVIDER_ID, MLX_BASE_URL, modelPath, now);
   notifyProviderStatus(userId);
 }
 
@@ -1298,6 +1299,16 @@ router.get('/audio/whisper/status', verifyUser, (req, res) => {
 router.get('/audio/whisper/check', verifyUser, async (req, res) => {
   try {
     const result = await checkWhisperBinary();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /audio/whisper/ffmpeg-check — check if ffmpeg exists ──────────────────
+router.get('/audio/whisper/ffmpeg-check', verifyUser, async (req, res) => {
+  try {
+    const result = await checkWhisperFfmpeg();
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

@@ -5,6 +5,8 @@ import multer from 'multer';
 import { verifyUser as jwtVerify } from '../auth/authMiddleware.js';
 import { attachDb } from '../db/sqlite.js';
 import {
+  batchCopyEntries,
+  batchDeleteEntries,
   copyEntry,
   createDirectory,
   deleteEntry,
@@ -29,7 +31,19 @@ const authenticate = (req, res, next) => {
 };
 
 function sendRouteError(res, err) {
-  res.status(err.status || 500).json({ success: false, error: err.message || 'File operation failed' });
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'File operation failed',
+    code: err.code || 'FILE_OPERATION_FAILED',
+  });
+}
+
+function parseListOptions(query) {
+  return {
+    sort: query.sort || 'name',
+    order: query.order === 'desc' ? 'desc' : 'asc',
+    limit: Math.min(Math.max(parseInt(query.limit || '1000', 10) || 1000, 1), 5000),
+  };
 }
 
 router.get('/roots', authenticate, (req, res) => {
@@ -46,6 +60,7 @@ router.get('/list', authenticate, (req, res) => {
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
       includeHidden: req.query.hidden === 'true',
+      ...parseListOptions(req.query),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -58,6 +73,7 @@ router.get('/entry', authenticate, (req, res) => {
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
       includeHidden: req.query.hidden === 'true',
+      ...parseListOptions(req.query),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -69,6 +85,7 @@ router.get('/preview', authenticate, (req, res) => {
     res.json(loadEntry({
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
+      ...parseListOptions(req.query),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -84,6 +101,8 @@ router.get('/search', authenticate, (req, res) => {
       query: req.query.q || '',
       includeHidden: req.query.hidden === 'true',
       maxResults,
+      sort: req.query.sort || 'relevance',
+      order: req.query.order === 'desc' ? 'desc' : 'asc',
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -95,6 +114,7 @@ router.post('/mkdir', authenticate, (req, res) => {
     res.json(createDirectory({
       rootId: req.body.rootId || 'workspace',
       relativePath: req.body.path,
+      overwrite: req.body.overwrite === true,
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -107,6 +127,7 @@ router.post('/write', authenticate, (req, res) => {
       rootId: req.body.rootId || 'workspace',
       relativePath: req.body.path,
       content: req.body.content || '',
+      overwrite: req.body.overwrite !== false,
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -119,6 +140,7 @@ router.post('/copy', authenticate, (req, res) => {
       rootId: req.body.rootId || 'workspace',
       source: req.body.source,
       destination: req.body.destination,
+      overwrite: req.body.overwrite !== false,
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -131,6 +153,29 @@ router.post('/move', authenticate, (req, res) => {
       rootId: req.body.rootId || 'workspace',
       source: req.body.source,
       destination: req.body.destination,
+      overwrite: req.body.overwrite !== false,
+    }));
+  } catch (err) {
+    sendRouteError(res, err);
+  }
+});
+
+router.post('/batch-delete', authenticate, (req, res) => {
+  try {
+    res.json(batchDeleteEntries({
+      rootId: req.body.rootId || 'workspace',
+      entries: Array.isArray(req.body.entries) ? req.body.entries : [],
+    }));
+  } catch (err) {
+    sendRouteError(res, err);
+  }
+});
+
+router.post('/batch-copy', authenticate, (req, res) => {
+  try {
+    res.json(batchCopyEntries({
+      rootId: req.body.rootId || 'workspace',
+      entries: Array.isArray(req.body.entries) ? req.body.entries : [],
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -207,6 +252,7 @@ router.post('/upload', authenticate, upload.single('file'), (req, res) => {
       rootId,
       relativePath,
       content: req.file.buffer,
+      overwrite: req.body.overwrite === true || req.body.overwrite === 'true',
     }));
   } catch (err) {
     sendRouteError(res, err);

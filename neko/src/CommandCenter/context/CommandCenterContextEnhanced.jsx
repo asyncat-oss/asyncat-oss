@@ -1,5 +1,5 @@
 // CommandCenterContextEnhanced.jsx
-// Manages conversation metadata, message state, ghost mode, and tools toggle.
+// Manages conversation metadata, message state, ghost mode, and agent mode.
 // Streaming is handled directly in CommandCenterV2Enhanced via agentApi.runStream.
 
 import { createContext, useState, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -127,7 +127,12 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const location = useLocation();
 
   const [toolsEnabled, setToolsEnabled] = useState(() => {
-    try { return localStorage.getItem('asyncat_tools_enabled') !== 'false'; } catch { return true; }
+    try {
+      const savedMode = localStorage.getItem('asyncat_agent_mode');
+      if (savedMode === 'plan') return false;
+      if (savedMode === 'action') return true;
+      return localStorage.getItem('asyncat_tools_enabled') !== 'false';
+    } catch { return true; }
   });
   const [conversationListRefresh, setConversationListRefresh] = useState(null);
   const [chatRuns, setChatRuns] = useState({});
@@ -200,7 +205,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
 
   const handleSetToolsEnabled = useCallback((val) => {
     setToolsEnabled(val);
-    try { localStorage.setItem('asyncat_tools_enabled', String(val)); } catch {}
+    try {
+      localStorage.setItem('asyncat_agent_mode', val ? 'action' : 'plan');
+      localStorage.setItem('asyncat_tools_enabled', String(val));
+    } catch {}
   }, []);
 
   useEffect(() => {

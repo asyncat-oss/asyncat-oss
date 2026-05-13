@@ -41,6 +41,19 @@ const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|writ
 const MULTI_STEP_GOAL_RE = /\b(and then|after that|also|then|next|finally|step[\s-]?\d|multiple|several|both|all of)\b/i;
 const AUTO_PLAN_IDS = new Set(['auto_plan_inspect', 'auto_plan_understand', 'auto_plan_apply', 'auto_plan_verify']);
 const RETRYABLE_TOOLS = new Set(['run_command', 'run_python', 'run_node', 'browse_website', 'web_search']);
+const PLAN_DYNAMIC_SAFE_TOOLS = new Set(['run_command', 'package_manager']);
+const PLAN_BLOCKED_SAFE_TOOLS = new Set([
+  'save_memory',
+  'forget_memory',
+  'notify',
+  'clipboard_write',
+  'speak_text',
+  'create_artifact',
+  'create_markdown',
+  'create_diagram',
+  'create_csv',
+  'create_html_page',
+]);
 
 function applyReasoningEffort(params, effort, providerInfo, model) {
   const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
@@ -167,6 +180,7 @@ export class AgentRuntime {
     this.providerInfo = opts.providerInfo || null;
     this.reasoningEffort = opts.reasoningEffort || 'auto';
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
+    this.agentMode = opts.agentMode === 'plan' ? 'plan' : 'action';
     this.abortSignal = opts.abortSignal || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
@@ -247,6 +261,7 @@ export class AgentRuntime {
       model: this.model,
       isLocal: this.isLocal,
       supportsNativeTools: this.supportsNativeTools,
+      agentMode: this.agentMode,
     });
     this.session.save();
 
@@ -257,6 +272,7 @@ export class AgentRuntime {
         goal,
         status: this.session.status,
         continued: Boolean(this.continueSessionId),
+        agentMode: this.agentMode,
       },
     });
 
@@ -264,7 +280,7 @@ export class AgentRuntime {
     const memories = this._loadMemories(goal);
 
     // Build system prompt
-    const toolDefs = toolRegistry.all();
+    const toolDefs = this._toolDefinitionsForMode();
     const toolDescriptions = ToolCallFormatter.formatToolsForPrompt(
       toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
     );
@@ -307,6 +323,7 @@ export class AgentRuntime {
       skills: relevantSkills,
       mentionedAgents: this.mentionedAgents,
       soul,
+      agentMode: this.agentMode,
     });
 
     // Auto-detect and store corrections from user's latest message in continued conversations
@@ -337,7 +354,7 @@ export class AgentRuntime {
         : null,
     };
 
-    const knownTools = toolRegistry.names();
+    const knownTools = toolDefs.map(t => t.name);
     this._ensureAutoPlan(goal, 0);
 
     // ── ReAct Loop ──────────────────────────────────────────────────────────
@@ -554,10 +571,12 @@ export class AgentRuntime {
       const permitted = [];
       let repairRequested = false;
       for (const tc of toolCalls) {
-        if (!toolRegistry.has(tc.tool_name)) {
+        if (!toolRegistry.has(tc.tool_name) || !knownTools.includes(tc.tool_name)) {
           const unknownResult = {
             success: false,
-            error: `Unknown tool: "${tc.tool_name}"`,
+            error: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
+              ? `Tool "${tc.tool_name}" is not available in Plan mode.`
+              : `Unknown tool: "${tc.tool_name}"`,
           };
           this.onEvent({
             type: 'tool_start',
@@ -566,16 +585,22 @@ export class AgentRuntime {
               args: tc.arguments,
               permission: 'none',
               permissionDecision: 'not_applicable',
-              permissionReason: 'Unknown tool; not sent for approval',
+              permissionReason: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
+                ? 'Unavailable in Plan mode'
+                : 'Unknown tool; not sent for approval',
               workingDir: this.workingDir,
-              description: `Unknown tool: ${tc.tool_name}`,
+              description: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
+                ? `Unavailable in Plan mode: ${tc.tool_name}`
+                : `Unknown tool: ${tc.tool_name}`,
               round,
             }
           });
           this.session.recordToolCall(tc.tool_name, tc.arguments, unknownResult, {
             permissionLevel: 'none',
             permissionDecision: 'not_applicable',
-            permissionReason: 'Unknown tool; not sent for approval',
+            permissionReason: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
+              ? 'Unavailable in Plan mode'
+              : 'Unknown tool; not sent for approval',
             workingDir: this.workingDir,
             startedAt: new Date().toISOString(),
           });
@@ -946,6 +971,14 @@ export class AgentRuntime {
       return { allowed: true, decision: 'auto_safe' };
     }
 
+    if (this.agentMode === 'plan') {
+      return {
+        allowed: false,
+        decision: 'plan_mode_denied',
+        reason: 'Plan mode can inspect and plan with safe tools only. Switch to Action mode to execute changes.',
+      };
+    }
+
     if (this.autoApprove) {
       return { allowed: true, decision: 'auto_approved' };
     }
@@ -998,7 +1031,7 @@ export class AgentRuntime {
 
     // For cloud models with native tool support, pass tool definitions via API
     if (useNativeTools) {
-      params.tools = toolRegistry.toOpenAIFormat();
+      params.tools = toolRegistry.toOpenAIFormat(this._toolDefinitionsForMode().map(t => t.name));
       params.tool_choice = options.forceToolName
         ? { type: 'function', function: { name: options.forceToolName } }
         : 'auto';
@@ -1076,32 +1109,59 @@ export class AgentRuntime {
     if (!ACTION_GOAL_RE.test(String(goal || ''))) return;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return;
 
-    const plan = [
-      {
-        id: 'auto_plan_inspect',
-        content: 'Inspect current context',
-        activeForm: 'Inspecting current context',
-        status: 'in_progress',
-      },
-      {
-        id: 'auto_plan_understand',
-        content: 'Identify the cause',
-        activeForm: 'Identifying the cause',
-        status: 'pending',
-      },
-      {
-        id: 'auto_plan_apply',
-        content: 'Apply the needed change',
-        activeForm: 'Applying the needed change',
-        status: 'pending',
-      },
-      {
-        id: 'auto_plan_verify',
-        content: 'Verify the result',
-        activeForm: 'Verifying the result',
-        status: 'pending',
-      },
-    ];
+    const plan = this.agentMode === 'plan'
+      ? [
+          {
+            id: 'auto_plan_inspect',
+            content: 'Inspect current context',
+            activeForm: 'Inspecting current context',
+            status: 'in_progress',
+          },
+          {
+            id: 'auto_plan_understand',
+            content: 'Identify constraints and risks',
+            activeForm: 'Identifying constraints and risks',
+            status: 'pending',
+          },
+          {
+            id: 'auto_plan_apply',
+            content: 'Draft the action plan',
+            activeForm: 'Drafting the action plan',
+            status: 'pending',
+          },
+          {
+            id: 'auto_plan_verify',
+            content: 'Answer with next steps',
+            activeForm: 'Answering with next steps',
+            status: 'pending',
+          },
+        ]
+      : [
+          {
+            id: 'auto_plan_inspect',
+            content: 'Inspect current context',
+            activeForm: 'Inspecting current context',
+            status: 'in_progress',
+          },
+          {
+            id: 'auto_plan_understand',
+            content: 'Identify the cause',
+            activeForm: 'Identifying the cause',
+            status: 'pending',
+          },
+          {
+            id: 'auto_plan_apply',
+            content: 'Apply the needed change',
+            activeForm: 'Applying the needed change',
+            status: 'pending',
+          },
+          {
+            id: 'auto_plan_verify',
+            content: 'Verify the result',
+            activeForm: 'Verifying the result',
+            status: 'pending',
+          },
+        ];
 
     this.session.plan = plan;
     this.session.save();
@@ -1246,6 +1306,10 @@ export class AgentRuntime {
     if (toolName === 'run_command' && this._looksReadOnlyShellCommand(args.command || '')) {
       return 'safe';
     }
+    if (toolName === 'http_request') {
+      const method = String(args.method || 'GET').trim().toUpperCase();
+      return method === 'GET' || method === 'HEAD' ? 'safe' : 'moderate';
+    }
     if (toolName?.startsWith('git_')) {
       if (isGitDangerousAction(toolName, args)) return 'dangerous';
       if (isGitReadOnlyAction(toolName, args)) return 'safe';
@@ -1257,6 +1321,17 @@ export class AgentRuntime {
       return 'moderate';
     }
     return fallbackPermission;
+  }
+
+  _toolDefinitionsForMode() {
+    if (this.agentMode !== 'plan') return toolRegistry.all();
+    return toolRegistry.all().filter(tool => {
+      if (PLAN_BLOCKED_SAFE_TOOLS.has(tool.name)) return false;
+      if (tool.permission === 'safe') return true;
+      if (PLAN_DYNAMIC_SAFE_TOOLS.has(tool.name)) return true;
+      if (tool.name?.startsWith('git_')) return true;
+      return false;
+    });
   }
 
   _isMutatingTool(toolName, args = {}) {

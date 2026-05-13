@@ -50,12 +50,15 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
   const selectedPreset = catalog.find(item => item.providerId === form.provider_id || item.id === form.provider_id);
   const isAzure = form.provider_id === 'azure';
   const isLocalManaged = form.provider_id === 'llamacpp-builtin';
+  const isRuntime = Boolean(selectedPreset?.runtime || form.provider_id === 'codex-cli');
   const requiresKey = selectedPreset?.requiresApiKey;
+  const showApiKeyInput = !isRuntime && !isLocalManaged && (!selectedPreset?.local || selectedPreset?.requiresApiKey || form.provider_id === 'custom' || profile?.api_key_set || apiKeyTouched);
   const isAddingFromPreset = !profile && preset;
   const presetHasDefaults = Boolean(selectedPreset?.baseUrl && selectedPreset?.model);
   const setupItems = Array.isArray(selectedPreset?.setup) ? selectedPreset.setup : [];
   const docsUrl = selectedPreset?.docsUrl || '';
   const apiKeyEnv = selectedPreset?.apiKeyEnv || '';
+  const modalAction = isRuntime || isLocalManaged ? 'Use' : 'Connect';
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
   const updateSetting = (key, value) => setForm(prev => ({ ...prev, settings: { ...(prev.settings || {}), [key]: value } }));
@@ -79,7 +82,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
       <form onSubmit={submit} className="w-full max-w-2xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
           <div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{profile ? 'Edit Provider' : `Connect ${selectedPreset?.name || 'Provider'}`}</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{profile ? 'Edit Provider' : `${modalAction} ${selectedPreset?.name || 'Provider'}`}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedPreset?.description || 'Configure an OpenAI-compatible endpoint.'}</p>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
@@ -88,22 +91,23 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Hero API Key input */}
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
-            <span className="flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5" />
-              API Key
-              {profile?.api_key_set && !apiKeyTouched ? <span className="text-gray-400 font-normal">(saved)</span> : null}
-            </span>
-            <input
-              value={form.api_key}
-              onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
-              type="password"
-              className="mt-1.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
-              placeholder={requiresKey ? `Paste API key${apiKeyEnv ? ` (${apiKeyEnv})` : ''}` : 'Optional'}
-              autoFocus
-            />
-          </label>
+          {showApiKeyInput && (
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+              <span className="flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5" />
+                API Key
+                {profile?.api_key_set && !apiKeyTouched ? <span className="text-gray-400 font-normal">(saved)</span> : null}
+              </span>
+              <input
+                value={form.api_key}
+                onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
+                type="password"
+                className="mt-1.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                placeholder={requiresKey ? `Paste API key${apiKeyEnv ? ` (${apiKeyEnv})` : ''}` : 'Optional'}
+                autoFocus
+              />
+            </label>
+          )}
 
           {(isAddingFromPreset && presetHasDefaults) || setupItems.length > 0 || selectedPreset?.compatibility || docsUrl ? (
             <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
@@ -563,7 +567,7 @@ const ProvidersSection = ({
   }, []);
 
   const activeProfileId = activeConfig?.profile_id;
-  const cloudPresets = catalog.filter(item => !item.managed && item.id !== 'openai-codex' && item.providerId !== 'openai-codex');
+  const availablePresets = catalog.filter(item => !item.managed && item.id !== 'openai-codex' && item.providerId !== 'openai-codex');
   const localServerRunning = serverStatus?.status === 'ready' || serverStatus?.status === 'loading';
   const configuredProviderIds = new Set((profiles || []).map(profile => profile.provider_id).filter(Boolean));
   const showOllamaDetected = Boolean(ollamaInfo?.found && !configuredProviderIds.has('ollama'));
@@ -783,7 +787,7 @@ const ProvidersSection = ({
             )}
             {showOpenAiCodexDetected && (
               <LocalProviderCard
-                name="OpenAI Codex Direct"
+                name="OpenAI Codex"
                 found
                 running
                 baseUrl="https://chatgpt.com/backend-api/codex"
@@ -814,7 +818,7 @@ const ProvidersSection = ({
         <div className="flex items-center justify-between gap-4 mb-3">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Provider</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Connect cloud APIs, Ollama, LM Studio, or any OpenAI-compatible endpoint.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Add cloud APIs, local runtimes, Ollama, LM Studio, or any OpenAI-compatible endpoint.</p>
           </div>
           <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
             <Plus className="w-4 h-4" />
@@ -822,7 +826,7 @@ const ProvidersSection = ({
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {cloudPresets.map(item => {
+          {availablePresets.map(item => {
             const typeBadge = providerTypeBadge(item);
             return (
               <button

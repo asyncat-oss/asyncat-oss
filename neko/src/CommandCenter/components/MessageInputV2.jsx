@@ -83,6 +83,8 @@ export const MessageInputV2 = ({
   prefillValue,
   toolsEnabled = true,
   onToggleTools,
+  agentMode = toolsEnabled ? 'action' : 'plan',
+  onToggleAgentMode,
   autoApprove = false,
   onToggleAutoApprove,
   isRunning = false,
@@ -472,6 +474,7 @@ export const MessageInputV2 = ({
   );
 
   const canSubmit = value.trim() && !disabled && !isRunning;
+  const isActionMode = agentMode === 'action';
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
   const currentReasoningOption = currentReasoningOptions.find(option => option.value === reasoningEffort) || currentReasoningOptions[0] || { label: "Auto", short: "Think auto" };
   const modelLabel = activeBrain.isLoadingModel
@@ -936,24 +939,24 @@ export const MessageInputV2 = ({
                     </button>
                   )}
 
-                  {onToggleTools && (
+                  {(onToggleAgentMode || onToggleTools) && (
                     <button
                       type="button"
-                      onClick={onToggleTools}
+                      onClick={onToggleAgentMode || onToggleTools}
                       disabled={disabled}
-                      title={toolsEnabled ? "Tools enabled — click to disable" : "Tools disabled — click to enable"}
+                      title={isActionMode ? "Action mode — can execute approved changes" : "Plan mode — safe inspection and answers only"}
                       className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                        toolsEnabled
+                        isActionMode
                           ? "text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                          : "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                       }`}
                     >
-                      <Wrench className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">{toolsEnabled ? 'Tools' : 'No tools'}</span>
+                      {isActionMode ? <Wrench className="w-3.5 h-3.5" /> : <Brain className="w-3.5 h-3.5" />}
+                      <span className="hidden sm:inline">{isActionMode ? 'Action' : 'Plan'}</span>
                     </button>
                   )}
 
-                  {onToggleAutoApprove && toolsEnabled && (
+                  {onToggleAutoApprove && isActionMode && (
                     <button
                       type="button"
                       onClick={onToggleAutoApprove}

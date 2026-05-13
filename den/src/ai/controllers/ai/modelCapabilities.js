@@ -2,12 +2,10 @@
 
 const CAPABILITIES_REGISTRY = [
   // OpenAI
-  { match: /^(o1|o3|o4-mini|gpt-5\.4-thinking|gpt-5\.5)/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['low', 'medium', 'high'] },
-  // Anthropic
-  { match: /^claude-(opus|sonnet|haiku)-?4\.[67]/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['low', 'medium', 'high', 'xhigh'] },
-  { match: /^claude-4/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['low', 'medium', 'high', 'xhigh'] },
+  { match: /^(o1|o3|o4-mini|gpt-5(?:[.-]|$)|gpt-5\.4-thinking|gpt-5\.5)/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['low', 'medium', 'high'] },
   // DeepSeek
-  { match: /^deepseek-(r1|r2|v3\.1|v3\.2|v4)/i, supportsReasoning: true, reasoningType: 'native_tags', reasoningTiers: null },
+  { match: /^deepseek-v4/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['low', 'medium', 'high'] },
+  { match: /^deepseek-(r1|r2|v3\.1|v3\.2)/i, supportsReasoning: true, reasoningType: 'native_tags', reasoningTiers: null },
   // Google Gemini
   { match: /^gemini-(2\.5|3(\.[0-9]+)?)/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['minimal', 'low', 'medium', 'high'] },
   // Qwen
@@ -24,6 +22,14 @@ export function getModelCapabilities(providerId, modelId) {
   
   // Clean off prefixes like "openrouter/" if they exist in the model string
   const cleanModelId = normalizedModelId.includes('/') ? normalizedModelId.split('/').pop() : normalizedModelId;
+
+  if (normalizedProviderId === 'anthropic') {
+    return {
+      supportsReasoning: false,
+      reasoningType: null,
+      reasoningTiers: null,
+    };
+  }
 
   for (const entry of CAPABILITIES_REGISTRY) {
     if (entry.match.test(cleanModelId)) {

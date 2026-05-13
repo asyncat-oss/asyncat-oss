@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, Bot, Check, ChevronRight, Copy, Edit3,
   Eye, EyeOff, FilePlus, Folder, FolderPlus, Grid3X3, List, Loader2, MoreHorizontal,
-  RefreshCw, Save, Search, Trash2, Upload, X,
+  RefreshCw, Save, Search, Square, CheckSquare, Trash2, Upload, X,
 } from 'lucide-react';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -44,7 +44,50 @@ hljs.registerLanguage('go', go);
 hljs.registerLanguage('rust', rust); hljs.registerLanguage('rs', rust);
 
 function escapeHtml(text) {
-  return (text || '').replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
+  return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function isUnsafeName(name) {
+  return !name || name === '.' || name === '..' || name.includes('/') || name.includes('\\');
+}
+
+function duplicateName(name) {
+  const dot = name.lastIndexOf('.');
+  if (dot > 0) return `${name.slice(0, dot)} copy${name.slice(dot)}`;
+  return `${name} copy`;
+}
+
+function uniqueDuplicatePath(item, siblings) {
+  const dir = dirname(item.path);
+  const taken = new Set((siblings || []).map(entry => entry.path));
+  const base = duplicateName(item.name || basename(item.path));
+  const dot = base.lastIndexOf('.');
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot) : '';
+  let candidate = joinPath(dir, base);
+  let i = 2;
+  while (taken.has(candidate)) {
+    candidate = joinPath(dir, `${stem} ${i}${ext}`);
+    i += 1;
+  }
+  return candidate;
+}
+
+function getPreviewText(entry) {
+  const text = entry?.content || '';
+  if ((entry?.ext || '').toLowerCase() !== 'json') return text;
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+}
+
+function lineNumberHtml(html) {
+  const lines = (html || '').split('\n');
+  return lines.map((line, index) => (
+    `<span class="select-none text-gray-600 pr-4">${index + 1}</span>${line || ' '}`
+  )).join('\n');
 }
 
 // ─── Root Selector ──────────────────────────────────────────────────────────
@@ -153,18 +196,27 @@ function Modal({ open, onClose, title, children }) {
 }
 
 // ─── Name Input Modal ───────────────────────────────────────────────────────
-function NameModal({ open, onClose, title, placeholder, onConfirm }) {
+function NameModal({ open, onClose, title, placeholder, initialValue = '', confirmLabel = 'Create', validate, onConfirm }) {
   const [value, setValue] = useState('');
+  const [localError, setLocalError] = useState('');
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (open) setValue('');
+    if (open) {
+      setValue(initialValue);
+      setLocalError('');
+    }
     setTimeout(() => inputRef.current?.focus(), 50);
-  }, [open]);
+  }, [initialValue, open]);
 
   const submit = () => {
-    if (!value.trim()) return;
-    onConfirm(value.trim());
+    const nextValue = value.trim();
+    const validationError = validate?.(nextValue);
+    if (!nextValue || validationError) {
+      setLocalError(validationError || 'Name is required');
+      return;
+    }
+    onConfirm(nextValue);
     onClose();
   };
 
@@ -175,14 +227,15 @@ function NameModal({ open, onClose, title, placeholder, onConfirm }) {
           ref={inputRef}
           type="text"
           value={value}
-          onChange={e => setValue(e.target.value)}
+          onChange={e => { setValue(e.target.value); setLocalError(''); }}
           onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
           placeholder={placeholder}
           className="w-full rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-gray-50 dark:bg-gray-950 midnight:bg-black px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 outline-none focus:border-[#5555a0]"
         />
+        {localError && <p className="text-xs text-red-500">{localError}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 dark:border-gray-700 midnight:border-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">Cancel</button>
-          <button onClick={submit} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#5555a0] text-white hover:bg-[#4a4a8f] transition-colors">Create</button>
+          <button onClick={submit} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#5555a0] text-white hover:bg-[#4a4a8f] transition-colors">{confirmLabel}</button>
         </div>
       </div>
     </Modal>
@@ -190,17 +243,64 @@ function NameModal({ open, onClose, title, placeholder, onConfirm }) {
 }
 
 // ─── Delete Confirm Modal ───────────────────────────────────────────────────
-function DeleteModal({ open, onClose, itemName, onConfirm }) {
+function DeleteModal({ open, onClose, targets = [], onConfirm }) {
+  const folders = targets.filter(item => item.type === 'dir').length;
+  const files = targets.length - folders;
+  const label = targets.length === 1 ? targets[0]?.name : `${targets.length} items`;
   return (
     <Modal open={open} onClose={onClose} title="Delete">
       <div className="space-y-4">
-        <p className="text-sm text-gray-600 dark:text-gray-400">Delete <span className="font-medium text-gray-900 dark:text-gray-100">{itemName}</span>? This cannot be undone.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Delete <span className="font-medium text-gray-900 dark:text-gray-100">{label}</span>? This cannot be undone.
+        </p>
+        {folders > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+            This includes {folders} folder{folders !== 1 ? 's' : ''}{files ? ` and ${files} file${files !== 1 ? 's' : ''}` : ''}. Folder contents will be deleted recursively.
+          </div>
+        )}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 dark:border-gray-700 midnight:border-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">Cancel</button>
           <button onClick={onConfirm} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors">Delete</button>
         </div>
       </div>
     </Modal>
+  );
+}
+
+function ConfirmModal({ open, onClose, title, message, confirmLabel = 'Continue', destructive = false, onConfirm }) {
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-400">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 dark:border-gray-700 midnight:border-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">Cancel</button>
+          <button
+            onClick={() => { onConfirm?.(); onClose(); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors ${destructive ? 'bg-red-600 hover:bg-red-700' : 'bg-[#5555a0] hover:bg-[#4a4a8f]'}`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function Toast({ toast, onClose }) {
+  if (!toast) return null;
+  const isError = toast.type === 'error';
+  return (
+    <div className={`fixed right-4 top-4 z-50 flex max-w-sm items-start gap-2 rounded-lg border px-3 py-2 shadow-lg animate-fadeIn ${
+      isError
+        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950 dark:text-red-300'
+        : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950 dark:text-emerald-300'
+    }`}>
+      {isError ? <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" /> : <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />}
+      <span className="text-xs">{toast.text}</span>
+      <button onClick={onClose} className="ml-1 text-current opacity-60 hover:opacity-100">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 }
 
@@ -242,7 +342,7 @@ function EditorPanel({ name, editText, setEditText, onSave, onCancel, saving }) 
 }
 
 // ─── Actions Dropdown (toolbar) ─────────────────────────────────────────────
-function ActionsDropdown({ selected, onRename, onDuplicate, onDelete }) {
+function ActionsDropdown({ selectedCount, selected, onRename, onDuplicate, onCopyPaths, onDelete }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -253,7 +353,7 @@ function ActionsDropdown({ selected, onRename, onDuplicate, onDelete }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  if (!selected) {
+  if (!selectedCount) {
     return (
       <button disabled className="p-1.5 rounded-md text-gray-400 disabled:opacity-30">
         <MoreHorizontal className="w-4 h-4" />
@@ -271,11 +371,16 @@ function ActionsDropdown({ selected, onRename, onDuplicate, onDelete }) {
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1.5 z-30 w-44 rounded-lg border border-gray-200 dark:border-gray-800 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 shadow-lg py-1">
-          <button onClick={() => { onRename(); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">
-            <Edit3 className="w-3.5 h-3.5" /> Rename
-          </button>
+          {selectedCount === 1 && (
+            <button onClick={() => { onRename(); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">
+              <Edit3 className="w-3.5 h-3.5" /> Rename
+            </button>
+          )}
           <button onClick={() => { onDuplicate(); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">
-            <Copy className="w-3.5 h-3.5" /> Duplicate
+            <Copy className="w-3.5 h-3.5" /> Duplicate{selectedCount > 1 ? ` ${selectedCount}` : ''}
+          </button>
+          <button onClick={() => { onCopyPaths(); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 transition-colors">
+            <Copy className="w-3.5 h-3.5" /> Copy path{selectedCount > 1 ? 's' : ''}
           </button>
           <div className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800" />
           <button onClick={() => { onDelete(); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 midnight:hover:bg-red-950/30 transition-colors">
@@ -288,20 +393,35 @@ function ActionsDropdown({ selected, onRename, onDuplicate, onDelete }) {
 }
 
 // ─── Directory Row ──────────────────────────────────────────────────────────
-function DirectoryRow({ entry, selected, onSelect, onOpen }) {
+function SelectionBox({ checked, onClick }) {
+  return (
+    <span
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={-1}
+      onClick={onClick}
+      className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-gray-400 hover:text-[#5555a0]"
+    >
+      {checked ? <CheckSquare className="h-4 w-4 text-[#5555a0]" /> : <Square className="h-4 w-4" />}
+    </span>
+  );
+}
+
+function DirectoryRow({ entry, selected, checked, onSelect, onToggleSelect, onOpen }) {
   const { Icon, color } = fileIconMeta(entry.ext || '', entry.type);
   return (
     <button
       onClick={() => onSelect(entry)}
       onDoubleClick={() => onOpen(entry)}
       className={`group w-full grid grid-cols-[minmax(0,1fr)_96px_172px] items-center gap-3 px-4 py-2 text-left outline-none transition-colors ${
-        selected
+        selected || checked
           ? 'bg-gray-100/70 dark:bg-white/[0.04] midnight:bg-white/[0.04]'
           : 'hover:bg-gray-50/60 dark:hover:bg-white/[0.02] midnight:hover:bg-white/[0.02]'
       }`}
     >
       <span className="flex items-center gap-3 min-w-0">
         <div className={`w-1 h-5 rounded-full transition-all duration-200 ${selected ? 'bg-[#5555a0] scale-y-100' : 'bg-transparent scale-y-0'}`} />
+        <SelectionBox checked={checked} onClick={(e) => { e.stopPropagation(); onToggleSelect(entry); }} />
         <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
         <span className={`text-sm truncate ${selected ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}>
           {entry.name}{entry.type === 'dir' ? '/' : ''}
@@ -314,23 +434,25 @@ function DirectoryRow({ entry, selected, onSelect, onOpen }) {
 }
 
 // ─── Directory Grid ─────────────────────────────────────────────────────────
-function DirectoryGrid({ entries, selectedPath, onSelect, onOpen }) {
+function DirectoryGrid({ entries, selectedPath, selectedPaths, onSelect, onToggleSelect, onOpen }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3 p-5">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-3 p-5">
       {entries.map(entry => {
         const { Icon, color } = fileIconMeta(entry.ext || '', entry.type);
         const selected = selectedPath === entry.path;
+        const checked = selectedPaths.has(entry.path);
         return (
           <button
             key={entry.path}
             onClick={() => onSelect(entry)}
             onDoubleClick={() => onOpen(entry)}
-            className={`group flex flex-col items-center justify-center gap-2.5 rounded-lg border px-3 py-4 transition-all ${
-              selected
+            className={`group relative flex min-h-[108px] flex-col items-center justify-center gap-2.5 rounded-lg border px-3 py-4 transition-all ${
+              selected || checked
                 ? 'border-gray-300 dark:border-gray-600 midnight:border-gray-600 bg-gray-50 dark:bg-white/[0.04] midnight:bg-white/[0.04] ring-1 ring-gray-200 dark:ring-gray-700 midnight:ring-gray-700'
                 : 'border-transparent hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-white/[0.03] midnight:hover:bg-white/[0.03]'
             }`}
           >
+            <SelectionBox checked={checked} onClick={(e) => { e.stopPropagation(); onToggleSelect(entry); }} />
             <Icon className={`w-7 h-7 ${color}`} />
             <span className={`w-full text-xs text-center truncate px-1 ${selected ? 'font-medium text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>
               {entry.name}{entry.type === 'dir' ? '/' : ''}
@@ -343,7 +465,20 @@ function DirectoryGrid({ entries, selectedPath, onSelect, onOpen }) {
 }
 
 // ─── Directory View ─────────────────────────────────────────────────────────
-function DirectoryView({ entries, viewMode, selectedPath, onSelect, onOpen, searchActive }) {
+function SortHeader({ label, sortKey, activeSort, activeOrder, onSort, className = '' }) {
+  const active = activeSort === sortKey;
+  return (
+    <button
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ${className}`}
+    >
+      {label}
+      {active && <ChevronRight className={`h-3 w-3 transition-transform ${activeOrder === 'desc' ? 'rotate-90' : '-rotate-90'}`} />}
+    </button>
+  );
+}
+
+function DirectoryView({ entries, viewMode, selectedPath, selectedPaths, onSelect, onToggleSelect, onToggleAll, allSelected, onOpen, searchActive, sort, order, onSort }) {
   if (!entries.length) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-400">
@@ -355,22 +490,27 @@ function DirectoryView({ entries, viewMode, selectedPath, onSelect, onOpen, sear
   }
 
   if (viewMode === 'grid') {
-    return <DirectoryGrid entries={entries} selectedPath={selectedPath} onSelect={onSelect} onOpen={onOpen} />;
+    return <DirectoryGrid entries={entries} selectedPath={selectedPath} selectedPaths={selectedPaths} onSelect={onSelect} onToggleSelect={onToggleSelect} onOpen={onOpen} />;
   }
 
   return (
     <div className="pb-20">
-      <div className="grid grid-cols-[minmax(0,1fr)_96px_172px] items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/50">
-        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider pl-6">Name</span>
-        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-right">Size</span>
-        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-right hidden md:block">Modified</span>
+      <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_96px_172px] items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur">
+        <span className="flex items-center gap-3 pl-1">
+          <SelectionBox checked={allSelected} onClick={(e) => { e.stopPropagation(); onToggleAll(); }} />
+          <SortHeader label="Name" sortKey="name" activeSort={sort} activeOrder={order} onSort={onSort} />
+        </span>
+        <SortHeader label="Size" sortKey="size" activeSort={sort} activeOrder={order} onSort={onSort} className="justify-end" />
+        <SortHeader label="Modified" sortKey="mtime" activeSort={sort} activeOrder={order} onSort={onSort} className="hidden justify-end md:inline-flex" />
       </div>
       {entries.map(entry => (
         <DirectoryRow
           key={entry.path}
           entry={entry}
           selected={selectedPath === entry.path}
+          checked={selectedPaths.has(entry.path)}
           onSelect={onSelect}
+          onToggleSelect={onToggleSelect}
           onOpen={onOpen}
         />
       ))}
@@ -384,20 +524,39 @@ const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov', 'mkv']);
 const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a']);
 
 function FilePreview({ entry, rootId, onCopy }) {
-  const highlighted = useMemo(() => {
-    if (!entry?.content || entry.tooLarge || entry.binary || BINARY_EXTS.has(entry.ext || '')) return '';
-    try {
-      if (hljs.getLanguage(entry.ext || '')) return hljs.highlight(entry.content, { language: entry.ext }).value;
-      return hljs.highlightAuto(entry.content).value;
-    } catch {
-      return escapeHtml(entry.content);
-    }
-  }, [entry]);
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [blobError, setBlobError] = useState(null);
+  const previewText = useMemo(() => getPreviewText(entry), [entry]);
 
-  const rawUrl = useMemo(() => {
-    if (!entry || entry.type !== 'file') return null;
-    return filesApi.getRawUrl(rootId, entry.path);
+  useEffect(() => {
+    let cancelled = false;
+    setBlobUrl(null);
+    setBlobError(null);
+    if (!entry || entry.type !== 'file') return undefined;
+    if (![...IMAGE_EXTS, ...VIDEO_EXTS, ...AUDIO_EXTS].includes(entry.ext || '') && entry.ext !== 'pdf') return undefined;
+    filesApi.fetchRawBlob(rootId, entry.path)
+      .then(url => { if (!cancelled) setBlobUrl(url); })
+      .catch(err => { if (!cancelled) setBlobError(err.message || 'Failed to load preview'); });
+    return () => {
+      cancelled = true;
+    };
   }, [entry, rootId]);
+
+  useEffect(() => () => {
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+  }, [blobUrl]);
+
+  const highlighted = useMemo(() => {
+    if (!previewText || entry.tooLarge || entry.binary || BINARY_EXTS.has(entry.ext || '')) return '';
+    try {
+      if (hljs.getLanguage(entry.ext || '')) return hljs.highlight(previewText, { language: entry.ext }).value;
+      return hljs.highlightAuto(previewText).value;
+    } catch {
+      return escapeHtml(previewText);
+    }
+  }, [entry, previewText]);
+
+  const rawUrl = blobUrl || (entry ? filesApi.getRawUrl(rootId, entry.path) : null);
 
   if (!entry) return null;
   if (entry.tooLarge) {
@@ -416,7 +575,13 @@ function FilePreview({ entry, rootId, onCopy }) {
           <span className="text-xs font-mono text-gray-400">{entry.name}</span>
         </div>
         <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-5">
-          <img src={rawUrl} alt={entry.name} className="max-w-full max-h-full object-contain rounded-lg shadow-lg" />
+          {blobError ? (
+            <p className="text-sm text-red-300">{blobError}</p>
+          ) : rawUrl ? (
+            <img src={rawUrl} alt={entry.name} className="max-w-full max-h-full object-contain rounded-lg shadow-lg" />
+          ) : (
+            <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+          )}
         </div>
       </div>
     );
@@ -428,7 +593,7 @@ function FilePreview({ entry, rootId, onCopy }) {
           <span className="text-xs font-mono text-gray-400">{entry.name}</span>
         </div>
         <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-5">
-          <video src={rawUrl} controls className="max-w-full max-h-full rounded-lg shadow-lg" />
+          {blobError ? <p className="text-sm text-red-300">{blobError}</p> : <video src={rawUrl} controls className="max-w-full max-h-full rounded-lg shadow-lg" />}
         </div>
       </div>
     );
@@ -440,8 +605,22 @@ function FilePreview({ entry, rootId, onCopy }) {
           <span className="text-xs font-mono text-gray-400">{entry.name}</span>
         </div>
         <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-5">
-          <audio src={rawUrl} controls className="w-full max-w-md" />
+          {blobError ? <p className="text-sm text-red-300">{blobError}</p> : <audio src={rawUrl} controls className="w-full max-w-md" />}
         </div>
+      </div>
+    );
+  }
+  if (entry.ext === 'pdf') {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col bg-[#1a1d21]">
+        <div className="flex items-center justify-between px-5 py-2 border-b border-white/5 bg-[#22262d]">
+          <span className="text-xs font-mono text-gray-400">{entry.name}</span>
+        </div>
+        {blobError ? (
+          <div className="flex-1 flex items-center justify-center text-sm text-red-300">{blobError}</div>
+        ) : (
+          <iframe title={entry.name} src={rawUrl} className="flex-1 min-h-0 w-full border-0 bg-white" />
+        )}
       </div>
     );
   }
@@ -468,7 +647,7 @@ function FilePreview({ entry, rootId, onCopy }) {
       </div>
       <div className="flex-1 min-h-0 overflow-auto">
         <pre className="m-0 p-5 text-[13px] font-mono leading-6">
-          <code className="hljs block whitespace-pre" dangerouslySetInnerHTML={{ __html: highlighted || escapeHtml(entry.content || '') }} />
+          <code className="hljs block whitespace-pre" dangerouslySetInnerHTML={{ __html: lineNumberHtml(highlighted || escapeHtml(previewText || '')) }} />
         </pre>
       </div>
     </div>
@@ -493,7 +672,7 @@ function DetailsPanel({ selected, activeEntry, onCopyPath, onAgent, onEdit, onOp
 
   const item = activeEntry || selected;
   const isFile = item?.type === 'file';
-  const canEdit = activeEntry?.type === 'file' && !BINARY_EXTS.has(activeEntry.ext || '') && !activeEntry.tooLarge;
+  const canEdit = activeEntry?.type === 'file' && activeEntry.isEditable && !activeEntry.tooLarge;
   const { Icon, color } = fileIconMeta(item?.ext || '', item?.type);
 
   const meta = [
@@ -598,44 +777,61 @@ export default function FilesPage() {
   const currentPath = searchParams.get('path') || '.';
   const viewMode = searchParams.get('view') || 'list';
   const showHidden = searchParams.get('hidden') === 'true';
+  const sort = searchParams.get('sort') || 'name';
+  const order = searchParams.get('order') || 'asc';
 
   const [roots, setRoots] = useState([]);
   const [entry, setEntry] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [selectedPaths, setSelectedPaths] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const [toast, setToast] = useState(null);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [selectedPreview, setSelectedPreview] = useState(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   // Modals
   const [showNameModal, setShowNameModal] = useState(false);
   const [nameModalConfig, setNameModalConfig] = useState({ title: '', placeholder: '', onConfirm: () => {} });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTargets, setDeleteTargets] = useState([]);
+  const [overwriteConfirm, setOverwriteConfirm] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const fileInputRef = useRef(null);
+  const toastTimerRef = useRef(null);
 
   const activeRoot = roots.find(root => root.id === rootId) || roots[0];
   const activeEntry = entry?.type === 'file' ? entry : selectedPreview;
   const entries = searchResults || (entry?.type === 'dir' ? entry.entries : []);
+  const selectedItems = useMemo(() => entries.filter(item => selectedPaths.has(item.path)), [entries, selectedPaths]);
+  const selectedCount = selectedItems.length;
+  const allSelected = entries.length > 0 && selectedPaths.size === entries.length;
   const isRoot = currentPath === '.';
+
+  const showToast = useCallback((text, type = 'success') => {
+    setToast({ text, type });
+    window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2200);
+  }, []);
 
   const navigateTo = useCallback((path, nextRootId = rootId, extra = {}) => {
     const nextParams = {
       rootId: nextRootId,
       path: path || '.',
       view: extra.view || viewMode,
+      sort: extra.sort || sort,
+      order: extra.order || order,
     };
     const hidden = extra.hidden ?? showHidden;
     if (hidden) nextParams.hidden = 'true';
     setSearchParams(nextParams);
-  }, [rootId, setSearchParams, showHidden, viewMode]);
+  }, [order, rootId, setSearchParams, showHidden, sort, viewMode]);
 
   const loadRoots = useCallback(async () => {
     const res = await filesApi.getRoots();
@@ -648,9 +844,10 @@ export default function FilesPage() {
     setEntry(null);
     setSearchResults(null);
     setSelectedPreview(null);
+    setSelectedPaths(new Set());
     setEditing(false);
     try {
-      const res = await filesApi.loadEntry(rootId, currentPath, showHidden);
+      const res = await filesApi.loadEntry(rootId, currentPath, showHidden, { sort, order });
       if (res.success) {
         setEntry(res);
         setSelected(res.type === 'file' ? res : null);
@@ -663,7 +860,7 @@ export default function FilesPage() {
     } finally {
       setLoading(false);
     }
-  }, [rootId, currentPath, showHidden]);
+  }, [rootId, currentPath, showHidden, sort, order]);
 
   useEffect(() => { loadRoots().catch(() => {}); }, [loadRoots]);
   useEffect(() => { loadEntry(); }, [loadEntry]);
@@ -673,7 +870,7 @@ export default function FilesPage() {
     setSelectedPreview(null);
     if (!selected || selected.type !== 'file' || entry?.type !== 'dir') return undefined;
 
-    filesApi.loadEntry(rootId, selected.path, showHidden)
+    filesApi.loadEntry(rootId, selected.path, showHidden, { sort, order })
       .then(res => {
         if (!cancelled && res.success && res.type === 'file') {
           setSelectedPreview(res);
@@ -683,7 +880,7 @@ export default function FilesPage() {
       .catch(() => {});
 
     return () => { cancelled = true; };
-  }, [entry?.type, rootId, selected, showHidden]);
+  }, [entry?.type, order, rootId, selected, showHidden, sort]);
 
   // Cancel editing when selection changes
   useEffect(() => {
@@ -704,113 +901,211 @@ export default function FilesPage() {
     navigateTo(currentPath, rootId, { view: nextMode });
   }, [currentPath, navigateTo, rootId]);
 
+  const setSortMode = useCallback((nextSort) => {
+    const nextOrder = sort === nextSort && order === 'asc' ? 'desc' : 'asc';
+    navigateTo(currentPath, rootId, { sort: nextSort, order: nextOrder });
+  }, [currentPath, navigateTo, order, rootId, sort]);
+
   const toggleHidden = useCallback(() => {
     navigateTo(currentPath, rootId, { hidden: !showHidden });
   }, [currentPath, navigateTo, rootId, showHidden]);
 
   const copyPath = useCallback(() => {
-    const target = selected?.path || currentPath;
-    navigator.clipboard?.writeText(target);
-    setNotice('Path copied');
-    setTimeout(() => setNotice(null), 1200);
-  }, [currentPath, selected]);
+    const paths = selectedItems.length ? selectedItems.map(item => item.path) : [selected?.path || currentPath];
+    navigator.clipboard?.writeText(paths.join('\n'));
+    showToast(paths.length === 1 ? 'Path copied' : `${paths.length} paths copied`);
+  }, [currentPath, selected, selectedItems, showToast]);
 
   const agentPrompt = useCallback(() => {
-    const target = selected || entry;
-    const prompt = `Use the file explorer selection as context.\nRoot: ${activeRoot?.label || rootId} (${rootId})\nPath: ${target?.path || currentPath}\nType: ${target?.type || entry?.type || 'path'}\n\nHelp me work with this path.`;
-    window.dispatchEvent(new CustomEvent('asyncat:prefill-agent', { detail: { prompt, rootId, path: target?.path || currentPath } }));
+    const target = selectedItems.length ? selectedItems : [selected || entry].filter(Boolean);
+    const targetLines = target.map(item => `- ${item.path || currentPath} (${item.type || 'path'})`).join('\n');
+    const prompt = `Use the file explorer selection as context.\nRoot: ${activeRoot?.label || rootId} (${rootId})\n${target.length > 1 ? `Selected paths:\n${targetLines}` : `Path: ${target[0]?.path || currentPath}\nType: ${target[0]?.type || entry?.type || 'path'}`}\n\nHelp me work with this path.`;
+    window.dispatchEvent(new CustomEvent('asyncat:prefill-agent', { detail: { prompt, rootId, path: target[0]?.path || currentPath } }));
     navigate('/agents');
-  }, [activeRoot, currentPath, entry, navigate, rootId, selected]);
+  }, [activeRoot, currentPath, entry, navigate, rootId, selected, selectedItems]);
 
-  const openNameModal = useCallback((title, placeholder, onConfirm) => {
-    setNameModalConfig({ title, placeholder, onConfirm });
+  const openNameModal = useCallback((config) => {
+    setNameModalConfig({
+      validate: (name) => isUnsafeName(name) ? 'Use a name without slashes or reserved path segments' : '',
+      ...config,
+    });
     setShowNameModal(true);
   }, []);
 
   const createFolder = useCallback(() => {
-    openNameModal('New Folder', 'New Folder', async (name) => {
-      await filesApi.createFolder(rootId, joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name));
-      await loadEntry();
+    openNameModal({
+      title: 'New Folder',
+      placeholder: 'New Folder',
+      confirmLabel: 'Create',
+      onConfirm: async (name) => {
+        try {
+          await filesApi.createFolder(rootId, joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name), { overwrite: false });
+          showToast('Folder created');
+          await loadEntry();
+        } catch (err) {
+          showToast(err.code === 'CONFLICT' ? 'A folder or file with that name already exists' : (err.message || 'Create folder failed'), 'error');
+        }
+      },
     });
-  }, [currentPath, entry, loadEntry, openNameModal, rootId]);
+  }, [currentPath, entry, loadEntry, openNameModal, rootId, showToast]);
 
   const createFile = useCallback(() => {
-    openNameModal('New File', 'untitled.txt', async (name) => {
-      const filePath = joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name);
-      await filesApi.writeFile(rootId, filePath, '');
-      navigateTo(filePath);
+    openNameModal({
+      title: 'New File',
+      placeholder: 'untitled.txt',
+      confirmLabel: 'Create',
+      onConfirm: async (name) => {
+        const filePath = joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), name);
+        try {
+          await filesApi.writeFile(rootId, filePath, '', { overwrite: false });
+          showToast('File created');
+          navigateTo(filePath);
+        } catch (err) {
+          showToast(err.code === 'CONFLICT' ? 'A file or folder with that name already exists' : (err.message || 'Create file failed'), 'error');
+        }
+      },
     });
-  }, [currentPath, entry, navigateTo, openNameModal, rootId]);
+  }, [currentPath, entry, navigateTo, openNameModal, rootId, showToast]);
 
   const renameSelected = useCallback(() => {
-    if (!selected) return;
-    openNameModal('Rename', selected.name, async (name) => {
-      if (name === selected.name) return;
-      const dest = joinPath(dirname(selected.path), name);
-      await filesApi.move(rootId, selected.path, dest);
-      navigateTo(dest);
+    const target = selectedItems.length === 1 ? selectedItems[0] : selected;
+    if (!target || selectedItems.length > 1) return;
+    openNameModal({
+      title: 'Rename',
+      placeholder: target.name,
+      initialValue: target.name,
+      confirmLabel: 'Rename',
+      onConfirm: async (name) => {
+        if (name === target.name) return;
+        const dest = joinPath(dirname(target.path), name);
+        try {
+          await filesApi.move(rootId, target.path, dest, { overwrite: false });
+          showToast('Renamed');
+          navigateTo(dest);
+        } catch (err) {
+          showToast(err.code === 'CONFLICT' ? 'A file or folder with that name already exists' : (err.message || 'Rename failed'), 'error');
+        }
+      },
     });
-  }, [openNameModal, rootId, selected, navigateTo]);
+  }, [navigateTo, openNameModal, rootId, selected, selectedItems, showToast]);
 
   const copySelected = useCallback(() => {
-    if (!selected) return;
-    const base = selected.name || basename(selected.path);
-    openNameModal('Copy as', `Copy of ${base}`, async (name) => {
-      await filesApi.copy(rootId, selected.path, joinPath(dirname(selected.path), name));
-      await loadEntry();
+    const targets = selectedItems.length ? selectedItems : (selected ? [selected] : []);
+    if (!targets.length) return;
+    if (targets.length > 1) {
+      const batchEntries = targets.map(item => ({
+        source: item.path,
+        destination: uniqueDuplicatePath(item, entries),
+        overwrite: false,
+      }));
+      filesApi.batchCopy(rootId, batchEntries)
+        .then(async (res) => {
+          if (res.errors?.length) showToast(`${res.errors.length} item${res.errors.length !== 1 ? 's' : ''} could not be duplicated`, 'error');
+          else showToast(`${targets.length} items duplicated`);
+          await loadEntry();
+        })
+        .catch(err => showToast(err.message || 'Duplicate failed', 'error'));
+      return;
+    }
+    const target = targets[0];
+    const base = target.name || basename(target.path);
+    openNameModal({
+      title: 'Copy as',
+      placeholder: duplicateName(base),
+      initialValue: duplicateName(base),
+      confirmLabel: 'Duplicate',
+      onConfirm: async (name) => {
+        try {
+          await filesApi.copy(rootId, target.path, joinPath(dirname(target.path), name), { overwrite: false });
+          showToast('Duplicated');
+          await loadEntry();
+        } catch (err) {
+          showToast(err.code === 'CONFLICT' ? 'A file or folder with that name already exists' : (err.message || 'Duplicate failed'), 'error');
+        }
+      },
     });
-  }, [openNameModal, rootId, selected, loadEntry]);
+  }, [entries, loadEntry, openNameModal, rootId, selected, selectedItems, showToast]);
 
   const deleteSelected = useCallback(() => {
-    if (!selected) return;
-    setDeleteTarget(selected);
+    const targets = selectedItems.length ? selectedItems : (selected ? [selected] : []);
+    if (!targets.length) return;
+    setDeleteTargets(targets);
     setShowDeleteModal(true);
-  }, [selected]);
+  }, [selected, selectedItems]);
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    await filesApi.delete(rootId, deleteTarget.path, deleteTarget.type === 'dir');
-    const nextPath = deleteTarget.type === 'file' && currentPath === deleteTarget.path ? dirname(deleteTarget.path) : currentPath;
+    if (!deleteTargets.length) return;
+    const nextPath = deleteTargets.some(target => target.type === 'file' && currentPath === target.path) ? dirname(currentPath) : currentPath;
+    if (deleteTargets.length === 1) {
+      const target = deleteTargets[0];
+      await filesApi.delete(rootId, target.path, target.type === 'dir');
+    } else {
+      const res = await filesApi.batchDelete(rootId, deleteTargets.map(target => ({ path: target.path, recursive: target.type === 'dir' })));
+      if (res.errors?.length) showToast(`${res.errors.length} item${res.errors.length !== 1 ? 's' : ''} could not be deleted`, 'error');
+    }
+    showToast(deleteTargets.length === 1 ? 'Deleted' : `${deleteTargets.length} items deleted`);
     setSelected(null);
+    setSelectedPaths(new Set());
     if (nextPath !== currentPath) navigateTo(nextPath);
     else await loadEntry();
     setShowDeleteModal(false);
-    setDeleteTarget(null);
-  }, [currentPath, deleteTarget, loadEntry, navigateTo, rootId]);
+    setDeleteTargets([]);
+  }, [currentPath, deleteTargets, loadEntry, navigateTo, rootId, showToast]);
 
   const runSearch = useCallback(async () => {
     if (!search.trim()) {
       setSearchResults(null);
       return;
     }
-    const res = await filesApi.search(rootId, entry?.type === 'dir' ? currentPath : dirname(currentPath), search, showHidden);
+    const res = await filesApi.search(rootId, entry?.type === 'dir' ? currentPath : dirname(currentPath), search, showHidden, 120, { sort: 'relevance', order });
     if (res.success) setSearchResults(res.entries || []);
-  }, [currentPath, entry, rootId, search, showHidden]);
+  }, [currentPath, entry, order, rootId, search, showHidden]);
 
   const saveEdit = useCallback(async () => {
     if (!activeEntry) return;
     setSaving(true);
     try {
-      await filesApi.writeFile(rootId, activeEntry.path, editText);
+      await filesApi.writeFile(rootId, activeEntry.path, editText, { overwrite: true });
       setEditing(false);
+      showToast('Saved');
       await loadEntry();
+    } catch (err) {
+      showToast(err.message || 'Save failed', 'error');
     } finally {
       setSaving(false);
     }
-  }, [activeEntry, editText, loadEntry, rootId]);
+  }, [activeEntry, editText, loadEntry, rootId, showToast]);
 
-  const handleUpload = useCallback(async (file) => {
-    if (!file) return;
-    const targetPath = joinPath(entry?.type === 'dir' ? currentPath : dirname(currentPath), file.name);
+  const uploadFiles = useCallback(async (fileList, options = {}) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const basePath = entry?.type === 'dir' ? currentPath : dirname(currentPath);
+    setUploading(true);
     try {
-      await filesApi.upload(rootId, targetPath, file);
-      setNotice('Uploaded');
-      setTimeout(() => setNotice(null), 1200);
+      let uploadedCount = 0;
+      for (const file of files) {
+        const targetPath = joinPath(basePath, file.name);
+        try {
+          await filesApi.upload(rootId, targetPath, file, { overwrite: options.overwrite === true });
+          uploadedCount += 1;
+        } catch (err) {
+          if (err.code === 'CONFLICT' && !options.overwrite) {
+            setOverwriteConfirm({
+              title: 'Replace existing file?',
+              message: `${file.name} already exists in this folder.`,
+              onConfirm: () => uploadFiles([file], { overwrite: true }),
+            });
+          } else {
+            showToast(err.message || `Upload failed for ${file.name}`, 'error');
+          }
+        }
+      }
+      if (uploadedCount > 0) showToast(uploadedCount === 1 ? 'Uploaded' : `${uploadedCount} files uploaded`);
       await loadEntry();
-    } catch (err) {
-      setError(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
     }
-  }, [currentPath, entry, loadEntry, rootId]);
+  }, [currentPath, entry, loadEntry, rootId, showToast]);
 
   const onDragOver = useCallback((e) => {
     e.preventDefault();
@@ -838,11 +1133,33 @@ export default function FilesPage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
+    dragCounterRef.current = 0;
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
-      handleUpload(files[0]);
+      uploadFiles(files);
     }
-  }, [handleUpload]);
+  }, [uploadFiles]);
+
+  const selectEntry = useCallback((item) => {
+    setSelected(item);
+  }, []);
+
+  const toggleSelect = useCallback((item) => {
+    setSelected(item);
+    setSelectedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(item.path)) next.delete(item.path);
+      else next.add(item.path);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    setSelectedPaths(prev => {
+      if (entries.length > 0 && prev.size === entries.length) return new Set();
+      return new Set(entries.map(item => item.path));
+    });
+  }, [entries]);
 
   return (
     <div className="h-full flex bg-white dark:bg-gray-900 midnight:bg-gray-950 overflow-hidden">
@@ -864,10 +1181,9 @@ export default function FilesPage() {
               <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-700 flex-shrink-0" />
               <Breadcrumb path={currentPath} onNavigate={navigateTo} />
             </div>
-            {notice && (
-              <span className="hidden sm:inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 animate-fadeIn">
-                <Check className="w-3 h-3" />
-                {notice}
+            {selectedCount > 0 && (
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-[#5555a0]/10 px-2 py-1 text-xs font-medium text-[#5555a0] animate-fadeIn">
+                {selectedCount} selected
               </span>
             )}
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -891,7 +1207,7 @@ export default function FilesPage() {
           </div>
 
           {/* Bottom row: search + actions */}
-          <div className="flex items-center gap-3 px-5 pb-3">
+          <div className="flex flex-col gap-3 px-5 pb-3 lg:flex-row lg:items-center">
             <div className="flex-1 min-w-0 relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input
@@ -910,7 +1226,7 @@ export default function FilesPage() {
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
               <button onClick={createFile} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                 <FilePlus className="w-3.5 h-3.5" />
                 New File
@@ -921,17 +1237,18 @@ export default function FilesPage() {
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
-                <Upload className="w-3.5 h-3.5" />
-                Upload
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {uploading ? 'Uploading' : 'Upload'}
               </button>
               <button onClick={agentPrompt} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs bg-gray-100 dark:bg-white/[0.08] midnight:bg-white/[0.08] border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/[0.12] midnight:hover:bg-white/[0.12] transition-colors">
                 <Bot className="w-3.5 h-3.5" />
                 Agent
               </button>
               <div className="w-px h-4 bg-gray-200 dark:bg-gray-700" />
-              <ActionsDropdown selected={selected} onRename={renameSelected} onDuplicate={copySelected} onDelete={deleteSelected} />
+              <ActionsDropdown selectedCount={selectedCount || (selected ? 1 : 0)} selected={selected} onRename={renameSelected} onDuplicate={copySelected} onCopyPaths={copyPath} onDelete={deleteSelected} />
             </div>
           </div>
         </div>
@@ -947,14 +1264,15 @@ export default function FilesPage() {
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             className="hidden"
-            onChange={e => { handleUpload(e.target.files?.[0]); e.target.value = ''; }}
+            onChange={e => { uploadFiles(e.target.files); e.target.value = ''; }}
           />
           {isDragOver && (
             <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#5555a0]/10 border-2 border-dashed border-[#5555a0] m-4 rounded-xl pointer-events-none">
               <div className="flex flex-col items-center gap-2 text-[#5555a0]">
                 <Upload className="w-10 h-10" />
-                <span className="text-sm font-medium">Drop file to upload</span>
+                <span className="text-sm font-medium">Drop files to upload</span>
               </div>
             </div>
           )}
@@ -1002,9 +1320,16 @@ export default function FilesPage() {
                 entries={entries}
                 viewMode={viewMode}
                 selectedPath={selected?.path}
-                onSelect={setSelected}
+                selectedPaths={selectedPaths}
+                onSelect={selectEntry}
+                onToggleSelect={toggleSelect}
+                onToggleAll={toggleAll}
+                allSelected={allSelected}
                 onOpen={openEntry}
                 searchActive={searchResults !== null}
+                sort={sort}
+                order={order}
+                onSort={setSortMode}
               />
             </>
           )}
@@ -1025,7 +1350,7 @@ export default function FilesPage() {
               <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/30">
                 <span className="text-sm font-mono text-gray-700 dark:text-gray-300">{entry.name}</span>
                 <div className="flex items-center gap-2">
-                  {!BINARY_EXTS.has(entry.ext || '') && !entry.tooLarge && (
+                  {entry.isEditable && !entry.tooLarge && (
                     <button
                       onClick={() => setEditing(true)}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -1035,7 +1360,7 @@ export default function FilesPage() {
                     </button>
                   )}
                   <button
-                    onClick={() => navigator.clipboard?.writeText(entry.content || '')}
+                    onClick={() => { navigator.clipboard?.writeText(getPreviewText(entry)); showToast('Content copied'); }}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -1043,7 +1368,7 @@ export default function FilesPage() {
                   </button>
                 </div>
               </div>
-              <FilePreview entry={entry} rootId={rootId} onCopy={() => navigator.clipboard?.writeText(entry.content || '')} />
+              <FilePreview entry={entry} rootId={rootId} onCopy={() => { navigator.clipboard?.writeText(getPreviewText(entry)); showToast('Content copied'); }} />
             </div>
           )}
         </div>
@@ -1066,15 +1391,28 @@ export default function FilesPage() {
         onClose={() => setShowNameModal(false)}
         title={nameModalConfig.title}
         placeholder={nameModalConfig.placeholder}
+        initialValue={nameModalConfig.initialValue}
+        confirmLabel={nameModalConfig.confirmLabel}
+        validate={nameModalConfig.validate}
         onConfirm={nameModalConfig.onConfirm}
       />
 
       <DeleteModal
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        itemName={deleteTarget?.name}
+        targets={deleteTargets}
         onConfirm={confirmDelete}
       />
+      <ConfirmModal
+        open={!!overwriteConfirm}
+        onClose={() => setOverwriteConfirm(null)}
+        title={overwriteConfirm?.title}
+        message={overwriteConfirm?.message}
+        confirmLabel="Replace"
+        destructive
+        onConfirm={overwriteConfirm?.onConfirm}
+      />
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

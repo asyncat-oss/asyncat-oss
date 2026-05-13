@@ -1,4 +1,4 @@
-// CommandCenterV2Enhanced.jsx — Unified agent interface (tools ON = acts, tools OFF = answers only)
+// CommandCenterV2Enhanced.jsx — Unified agent interface (Plan = safe inspection, Action = execution)
 
 import {
   buildAgentEventsFromSession,
@@ -165,6 +165,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
+  const agentMode = toolsEnabled ? 'action' : 'plan';
   const agentRunning = Boolean(currentRun.running);
   const agentEvents = currentRun.events || [];
   const agentCurrentGoal = currentRun.goal || '';
@@ -472,7 +473,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const runKey = currentRunKey;
     const runConversationId = currentConversationId;
     const runMessages = messages;
-    const effectiveToolsEnabled = runOptions.enableTools ?? toolsEnabled;
+    const effectiveAgentMode = runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
+    const effectiveToolsEnabled = effectiveAgentMode === 'action';
     const activeConversationHistory = agentConversationHistory.length > 0
       ? agentConversationHistory
       : conversationHistory;
@@ -496,7 +498,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         fileAttachments,
         events: [
           ...baseEvents,
-          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
+          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null }, arrivedAt: Date.now() },
         ],
       };
     });
@@ -510,17 +512,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
     const runEvents = [
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null } },
+      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null } },
     ];
 
     try {
       for await (const event of agentApi.runStream(submittedGoal, activeConversationHistory, null, 25, controller.signal, agentCurrentSessionId, {
-        autoApprove: agentAutoApprove,
-        preApprovedTools: [...alwaysAllowedTools],
+        autoApprove: effectiveAgentMode === 'action' ? agentAutoApprove : false,
+        preApprovedTools: effectiveAgentMode === 'action' ? [...alwaysAllowedTools] : [],
         profileId: effectiveProfileId,
         agentMentions,
         fileAttachments,
         enableTools: effectiveToolsEnabled,
+        agentMode: effectiveAgentMode,
         reasoningEffort: selectedReasoningEffort,
       })) {
         if (controller.signal.aborted) break;
@@ -561,6 +564,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     answer: doneAnswer,
                     round: event.data.rounds,
                     toolsEnabled: effectiveToolsEnabled,
+                    agentMode: effectiveAgentMode,
                   },
                   arrivedAt: Date.now(),
                 },
@@ -630,7 +634,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           continue;
         }
         const eventWithMode = event.type === 'answer'
-          ? { ...event, data: { ...event.data, toolsEnabled: effectiveToolsEnabled } }
+          ? { ...event, data: { ...event.data, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode } }
           : event;
         runEvents.push(eventWithMode);
         updateChatRun(runKey, prev => ({
@@ -664,8 +668,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       if (capturedFinalAnswer) {
         const nextHistory = [
           ...activeConversationHistory,
-          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments },
-          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId },
+          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments },
+          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId },
         ];
         const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
         updateChatRun(runKey, { conversationHistory: nextHistory });
@@ -679,6 +683,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           type: 'user',
           timestamp: new Date().toISOString(),
           toolsEnabled: effectiveToolsEnabled,
+          agentMode: effectiveAgentMode,
           reasoningEffort: selectedReasoningEffort,
           agentMentions,
           fileAttachments,
@@ -707,6 +712,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           timestamp: new Date().toISOString(),
           agentSessionId: runSessionId,
           toolsEnabled: effectiveToolsEnabled,
+          agentMode: effectiveAgentMode,
           reasoningEffort: selectedReasoningEffort,
           agentEvents: getPersistableAgentEvents(runEventsForMsg),
           searchEvent,
@@ -748,27 +754,27 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           }
         }
 
-        if (!effectiveToolsEnabled && isLikelyToolActionRequest(submittedGoal)) {
+        if (effectiveAgentMode === 'plan' && isLikelyToolActionRequest(submittedGoal)) {
           updateChatRun(runKey, prev => ({
             ...prev,
             events: [...(prev.events || []), {
               type: 'status',
               data: {
-                message: 'Tools were off for this request. Run it again with Tools ON if you want the agent to act.',
-                canRetryWithTools: true,
+                message: 'Plan mode can inspect and plan, but it will not execute changes. Run again in Action mode if you want the agent to apply it.',
+                canRetryWithAction: true,
                 goal: submittedGoal,
               },
             }],
           }));
         }
-      } else if (!controller.signal.aborted && !effectiveToolsEnabled && isLikelyToolActionRequest(submittedGoal)) {
+      } else if (!controller.signal.aborted && effectiveAgentMode === 'plan' && isLikelyToolActionRequest(submittedGoal)) {
         updateChatRun(runKey, prev => ({
           ...prev,
           events: [...(prev.events || []), {
             type: 'status',
             data: {
-              message: 'Tools are off for this request. Turn Tools ON to let the agent act on it.',
-              canRetryWithTools: true,
+              message: 'Plan mode cannot execute changes. Switch to Action mode to let the agent apply it.',
+              canRetryWithAction: true,
               goal: submittedGoal,
             },
           }],
@@ -792,7 +798,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     reasoningEffort,
     alwaysAllowedTools,
     selectedProfileId,
-    toolsEnabled,
+    agentMode,
     currentConversationId,
     messages,
     isGhostMode,
@@ -824,10 +830,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     handleAgentRun({ content: goal });
   }, [agentCurrentGoal, handleAgentRun]);
 
-  const handleRunWithTools = useCallback((goal) => {
+  const handleRunInActionMode = useCallback((goal) => {
     if (!goal?.trim() || agentRunning) return;
     setToolsEnabled(true);
-    handleAgentRun({ content: goal }, { enableTools: true });
+    handleAgentRun({ content: goal }, { enableTools: true, agentMode: 'action' });
   }, [agentRunning, handleAgentRun, setToolsEnabled]);
 
   const handleAgentStop = useCallback(() => {
@@ -1281,7 +1287,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               }
               hasMessages={hasConversationContent}
               toolsEnabled={toolsEnabled}
-              onToggleTools={() => setToolsEnabled(!toolsEnabled)}
+              agentMode={agentMode}
+              onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
               autoApprove={agentAutoApprove}
               onToggleAutoApprove={handleToggleAgentAutoApprove}
               reasoningEffort={reasoningEffort}
@@ -1579,7 +1586,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     onPermissionDecision={handleAgentPermission}
                     onAskUserAnswer={handleAgentAskUser}
                     onRetryTool={handleRetryTool}
-                    onRunWithTools={handleRunWithTools}
+                    onRunWithAction={handleRunInActionMode}
                     ttsReady={ttsReady}
                   />
                   {!agentRunning && (
@@ -1628,7 +1635,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 }
                 hasMessages={hasConversationContent}
                 toolsEnabled={toolsEnabled}
-                onToggleTools={() => setToolsEnabled(!toolsEnabled)}
+                agentMode={agentMode}
+                onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
                 autoApprove={agentAutoApprove}
                 onToggleAutoApprove={handleToggleAgentAutoApprove}
                 reasoningEffort={reasoningEffort}

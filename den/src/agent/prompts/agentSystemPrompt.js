@@ -79,12 +79,26 @@ export function buildAgentSystemPrompt(opts = {}) {
     skills = [],
     mentionedAgents = [],
     soul = null,
+    agentMode = 'action',
     platform = process.platform,
   } = opts;
 
   const shellName = getShellName(platform);
 
   const identity = soul || DEFAULT_IDENTITY;
+  const modeSection = agentMode === 'plan'
+    ? `
+## Current Mode: Plan
+- You are in Plan mode. Use safe/read-only tools to inspect files, search, gather context, answer questions, and propose plans.
+- You may run commands only when they are read-only/safe. Do not attempt to write files, edit data, install packages, open apps, change git state, or perform actions with side effects.
+- If the user asks you to make a change or execute a risky action, inspect what you safely can, explain the plan or answer, and tell them to switch to Action mode to apply it.
+- Never claim that you changed the workspace, committed code, installed dependencies, or completed an external action while in Plan mode.
+`
+    : `
+## Current Mode: Action
+- You are in Action mode. You may use tools to inspect, modify, verify, and complete the user's requested work.
+- Safe tools run automatically. Tools with side effects may require approval unless already approved by the user or profile.
+`;
 
   const memorySection = memories.length > 0
     ? `\n## Stored Memories\n${memories.map(m => {
@@ -128,6 +142,7 @@ export function buildAgentSystemPrompt(opts = {}) {
 - **Platform**: ${platform}
 - **Working directory**: ${workingDir}
 - **Shell**: ${shellName}
+${modeSection}
 
 ## How You Work (ReAct Pattern)
 For each step, you MUST output your response in this exact format:

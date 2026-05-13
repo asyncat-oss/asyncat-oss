@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  RefreshCw, TriangleAlert, X, Search, ChevronDown,
+  RefreshCw, TriangleAlert, X, ChevronDown,
   Mic, Cpu, Box, Globe
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
@@ -9,6 +9,7 @@ import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
 import AudioModelsSection from './AudioModelsSection.jsx';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
+import ModelDownloadHub from './ModelDownloadHub.jsx';
 import {
   Badge, STATUS_META, conciseHardwareSummary,
   providerLabel, capabilityBadgeColor
@@ -161,12 +162,19 @@ const ModelsPage = () => {
     ttsStatus: 'idle', ttsModel: null,
     loaded: false,
   });
+  const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
+  const [highlightedItem, setHighlightedItem] = useState(null);
 
-  useEffect(() => {
+  const refreshVoiceData = useCallback(() => {
     Promise.all([
+      audioApi.listModels().catch(() => ({ whisper: [], tts: [] })),
       audioApi.whisper.getStatus().catch(() => ({ status: 'idle' })),
       audioApi.tts.getStatus().catch(() => ({ status: 'idle' })),
-    ]).then(([w, t]) => {
+    ]).then(([modelsRes, w, t]) => {
+      setAudioModels({
+        whisper: modelsRes.whisper || [],
+        tts: modelsRes.tts || [],
+      });
       setVoiceState({
         sttStatus: w.status || 'idle',
         sttModel: w.model || null,
@@ -176,6 +184,10 @@ const ModelsPage = () => {
       });
     });
   }, []);
+
+  useEffect(() => {
+    refreshVoiceData();
+  }, [refreshVoiceData]);
 
   // ── Collapsible section state ──────────────────────────────────────────────
   const [expandedVoice, setExpandedVoice] = useState(false);
@@ -194,24 +206,54 @@ const ModelsPage = () => {
   // ── Unified search ─────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredModels = useMemo(() => {
-    if (!searchQuery.trim()) return models;
-    const q = searchQuery.toLowerCase();
-    return models.filter(m =>
-      (m.name || m.filename || '').toLowerCase().includes(q) ||
-      (m.architecture || '').toLowerCase().includes(q)
-    );
-  }, [models, searchQuery]);
+  const downloadedMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const matches = [];
+    for (const m of models) {
+      const haystack = [m.name, m.filename, m.architecture, m.engineType].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) continue;
+      matches.push({
+        type: 'model',
+        id: m.id || m.filename,
+        name: m.name || m.filename,
+        detail: [m.engineType?.toUpperCase(), m.sizeFormatted, m.architecture].filter(Boolean).join(' · ') || 'Local model',
+      });
+    }
+    for (const m of audioModels.whisper) {
+      const haystack = [m.name, m.filename, m.quality, m.language, 'stt whisper'].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) continue;
+      matches.push({
+        type: 'whisper',
+        id: m.id || m.filename,
+        name: m.name || m.filename,
+        detail: ['STT', 'Whisper', m.sizeFormatted].filter(Boolean).join(' · '),
+      });
+    }
+    for (const m of audioModels.tts) {
+      const haystack = [m.name, m.filename, m.qualityLabel, m.languageName, 'tts piper'].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) continue;
+      matches.push({
+        type: 'tts',
+        id: m.id || m.filename,
+        name: m.name || m.filename,
+        detail: ['TTS', 'Piper', m.sizeFormatted].filter(Boolean).join(' · '),
+      });
+    }
+    return matches.slice(0, 8);
+  }, [audioModels.tts, audioModels.whisper, models, searchQuery]);
 
-  const filteredProviders = useMemo(() => {
-    if (!searchQuery.trim()) return providerProfiles;
-    const q = searchQuery.toLowerCase();
-    return providerProfiles.filter(p =>
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.provider_id || '').toLowerCase().includes(q) ||
-      (p.model || '').toLowerCase().includes(q)
-    );
-  }, [providerProfiles, searchQuery]);
+  const handleDownloadedSelect = (item) => {
+    setHighlightedItem(item);
+    if (item.type === 'model') setExpandedLibrary(true);
+    if (item.type === 'whisper' || item.type === 'tts') setExpandedVoice(true);
+    window.setTimeout(() => {
+      const id = item.type === 'model'
+        ? `model-card-${item.id}`
+        : `audio-card-${item.type}-${item.id}`;
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+  };
 
   // ── Refresh handler ────────────────────────────────────────────────────────
   const handleRefresh = () => {
@@ -219,6 +261,7 @@ const ModelsPage = () => {
     setInstallJob(null);
     loadStatus();
     loadModelList();
+    refreshVoiceData();
     loadEngineData({ clearActions: true });
     loadEngineCatalog(true);
     loadProviderData();
@@ -258,24 +301,7 @@ const ModelsPage = () => {
               </div>
             </div>
 
-            {/* Unified search */}
             <div className="flex items-center gap-2">
-              <div className="relative hidden sm:block">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search models, providers..."
-                  className="w-56 pl-9 pr-8 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-gray-600 dark:focus:border-gray-600 midnight:border-slate-700 midnight:bg-slate-800/60 transition-all"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-
               <button
                 onClick={handleRefresh}
                 disabled={isLoading || isBusy}
@@ -327,6 +353,15 @@ const ModelsPage = () => {
             onDeactivateProvider={handleProviderDeactivate}
           />
 
+          <ModelDownloadHub
+            searchQuery={searchQuery}
+            downloadedMatches={downloadedMatches}
+            onSearchQueryChange={setSearchQuery}
+            onDownloadedSelect={handleDownloadedSelect}
+            onModelRefresh={loadModelList}
+            onAudioRefresh={refreshVoiceData}
+          />
+
           {/* ── Voice ─────────────────────────────────────────────────────── */}
           <CollapsibleSection
             icon={Mic}
@@ -337,7 +372,10 @@ const ModelsPage = () => {
             onToggle={() => setExpandedVoice(v => !v)}
           >
             <div className="pt-5">
-              <AudioModelsSection searchQuery="" />
+              <AudioModelsSection
+                highlightedItem={highlightedItem}
+                onModelsChange={setAudioModels}
+              />
             </div>
           </CollapsibleSection>
 
@@ -394,7 +432,7 @@ const ModelsPage = () => {
           >
             <div className="pt-5">
               <LocalModelsPane
-                models={filteredModels}
+                models={models}
                 loadingModels={loadingModels}
                 serverStatus={serverStatus}
                 status={status}
@@ -403,6 +441,7 @@ const ModelsPage = () => {
                 deletingModel={deletingModel}
                 switchingEngine={switchingEngine}
                 installingEngine={installingEngine}
+                highlightedItem={highlightedItem}
                 quickLoadPath={quickLoadPath}
                 setQuickLoadPath={setQuickLoadPath}
                 modelContextConfig={modelContextConfig}
@@ -411,7 +450,6 @@ const ModelsPage = () => {
                 loadEngineData={loadEngineData}
                 loadProviderData={loadProviderData}
                 loadStatus={loadStatus}
-                loadModelList={loadModelList}
                 handleAddPath={handleAddPath}
                 switchError={switchError}
                 switchSuccess={switchSuccess}
@@ -441,7 +479,7 @@ const ModelsPage = () => {
             <div className="pt-5">
               <ProvidersSection
                 catalog={providerCatalog}
-                profiles={filteredProviders}
+                profiles={providerProfiles}
                 activeConfig={providerConfig}
                 serverStatus={serverStatus}
                 loading={loadingProviders}
