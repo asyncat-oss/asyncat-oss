@@ -12,6 +12,55 @@ function normalizeAgentToolRows(rows = []) {
   }));
 }
 
+function normalizePermissionDecision(decision) {
+  if (!decision) return null;
+  if (['allow', 'allow_session', 'allow_always', 'session_approved', 'auto_approved', 'local_auto'].includes(decision)) {
+    return decision;
+  }
+  if (['deny', 'denied', 'not_executed'].includes(decision)) return 'deny';
+  return decision;
+}
+
+function argsFingerprint(args) {
+  try {
+    return JSON.stringify(args || {});
+  } catch {
+    return '';
+  }
+}
+
+function inferHistoricalPermissionDecision(events, permissionIndex) {
+  const permissionEvent = events[permissionIndex];
+  const tool = permissionEvent?.data?.tool || permissionEvent?.data?.toolName;
+  const argsKey = argsFingerprint(permissionEvent?.data?.args);
+
+  for (let i = permissionIndex + 1; i < events.length; i += 1) {
+    const event = events[i];
+    if (event?.type === 'permission_request') break;
+    if (event?.type !== 'tool_start') continue;
+    if ((event.data?.tool || event.data?.toolName) !== tool) continue;
+    if (argsFingerprint(event.data?.args) !== argsKey) continue;
+
+    return normalizePermissionDecision(event.data?.permissionDecision)
+      || (event.result?.error || event.result?.success === false ? 'deny' : 'allow');
+  }
+
+  return normalizePermissionDecision(permissionEvent?.data?.decision) || 'resolved';
+}
+
+function asHistoricalPermissionEvent(event, decision) {
+  const { requestId, expiresInMs, resolving, ...restData } = event.data || {};
+  return {
+    ...event,
+    data: {
+      ...restData,
+      resolved: true,
+      historical: true,
+      decision: normalizePermissionDecision(decision) || 'resolved',
+    },
+  };
+}
+
 function buildAgentEventsFromSession(session, auditRows = []) {
   const rounds = Array.isArray(session?.scratchpad?.conversationRounds)
     ? session.scratchpad.conversationRounds
@@ -121,7 +170,12 @@ function buildEventsFromMessages(messages = []) {
       events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMode: msg.agentMode, agentMentions: msg.agentMentions || [], fileAttachments: msg.fileAttachments || [] } });
     } else if (msg.type === 'assistant') {
       if (Array.isArray(msg.agentEvents) && msg.agentEvents.length > 0) {
-        events.push(...msg.agentEvents.filter(ev => ev?.type && ev.type !== 'user_goal' && ev.type !== 'answer'));
+        const agentEvents = msg.agentEvents.filter(ev => ev?.type && ev.type !== 'user_goal' && ev.type !== 'answer');
+        events.push(...agentEvents.map((ev, index) => (
+          ev.type === 'permission_request'
+            ? asHistoricalPermissionEvent(ev, inferHistoricalPermissionDecision(agentEvents, index))
+            : ev
+        )));
       }
       events.push({
         type: msg.isError ? 'error' : 'answer',
@@ -137,13 +191,19 @@ function buildEventsFromMessages(messages = []) {
 function getPersistableAgentEvents(events = []) {
   return events
     .filter(ev => ev?.type && !['user_goal', 'answer', 'delta', 'done', 'session_start', 'tool_result', 'tool_progress'].includes(ev.type))
-    .map(ev => ({
-      type: ev.type,
-      data: ev.data,
-      result: ev.result,
-      arrivedAt: ev.arrivedAt,
-      completedAt: ev.completedAt,
-    }));
+    .map((ev, index, filteredEvents) => {
+      const event = ev.type === 'permission_request'
+        ? asHistoricalPermissionEvent(ev, inferHistoricalPermissionDecision(filteredEvents, index))
+        : ev;
+
+      return {
+        type: event.type,
+        data: event.data,
+        result: event.result,
+        arrivedAt: event.arrivedAt,
+        completedAt: event.completedAt,
+      };
+    });
 }
 
 function buildSearchEvent(events = []) {

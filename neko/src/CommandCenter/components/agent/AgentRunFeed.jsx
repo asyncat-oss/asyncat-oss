@@ -595,12 +595,13 @@ function CompactPermissionEvent({ data, onDecision }) {
   const intent = getToolIntent(data);
   const resolved = data?.resolved;
   const decision = data?.decision;
+  const historical = Boolean(data?.historical);
   const dangerous = data?.permission === 'dangerous';
-  const isAllowed = decision === 'allow' || decision === 'allow_session' || decision === 'allow_always';
-  const isDenied = decision === 'deny';
+  const isAllowed = ['allow', 'allow_session', 'allow_always', 'session_approved', 'auto_approved', 'local_auto'].includes(decision);
+  const isDenied = decision === 'deny' || decision === 'denied';
   const expiresAt = useMemo(() => (
-    Number.isFinite(data?.expiresInMs) ? Date.now() + data.expiresInMs : null
-  ), [data?.expiresInMs]);
+    !historical && Number.isFinite(data?.expiresInMs) ? Date.now() + data.expiresInMs : null
+  ), [data?.expiresInMs, historical]);
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : null;
   const expired = !resolved && remainingMs === 0;
   const showDecision = resolved || expired;
@@ -611,7 +612,65 @@ function CompactPermissionEvent({ data, onDecision }) {
     return () => clearInterval(id);
   }, [expiresAt, resolved]);
 
-  const accent = dangerous ? 'rose' : 'amber';
+  const decisionLabel = isAllowed
+    ? 'Approved'
+    : isDenied
+      ? 'Denied'
+      : expired
+        ? 'Expired, denied'
+        : 'Resolved';
+  const decisionTone = isAllowed
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : isDenied || expired
+      ? 'text-red-600 dark:text-red-400'
+      : 'text-gray-500 dark:text-gray-400';
+  const decisionDot = isAllowed
+    ? 'bg-emerald-500'
+    : isDenied || expired
+      ? 'bg-red-500'
+      : 'bg-gray-400';
+
+  if (historical) {
+    return (
+      <div className="rounded-lg border border-gray-200/80 bg-white/70 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/35 midnight:border-slate-800 midnight:bg-slate-900/35">
+        <div className="flex items-start gap-2.5">
+          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${isDenied ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400' : 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400'}`}>
+            {isDenied ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className={`text-xs font-medium ${decisionTone}`}>{decisionLabel}</span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800/80 dark:text-gray-400">
+                <Icon className="h-3 w-3" />
+                {label}
+              </span>
+              <span className="truncate text-xs text-gray-500 dark:text-gray-400">{intent.value}</span>
+            </div>
+            {(data?.diff || data?.workingDir) && (
+              <button
+                type="button"
+                onClick={() => setShowDetails(v => !v)}
+                className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
+              >
+                {showDetails ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                {data?.diff ? 'View changes' : 'Details'}
+              </button>
+            )}
+            {showDetails && (
+              <div className="mt-2 space-y-1.5">
+                {data?.workingDir && <p className="truncate text-[11px] text-gray-400 dark:text-gray-500">Working directory: {data.workingDir}</p>}
+                {data?.diff && (
+                  <pre className="max-h-40 overflow-y-auto whitespace-pre rounded-lg border border-gray-200 bg-gray-950 p-3 font-mono text-[11px] leading-relaxed text-gray-300 dark:border-gray-700">
+                    {data.diff}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm">
@@ -664,9 +723,9 @@ function CompactPermissionEvent({ data, onDecision }) {
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-4 py-2.5">
         {showDecision ? (
-          <span className={`flex items-center gap-1.5 text-xs font-medium ${isAllowed ? 'text-emerald-600 dark:text-emerald-400' : isDenied || expired ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${isAllowed ? 'bg-emerald-500' : isDenied || expired ? 'bg-red-500' : 'bg-gray-400'}`} />
-            {isAllowed ? 'Approved' : isDenied ? 'Denied' : expired ? 'Expired, denied' : 'Resolved'}
+          <span className={`flex items-center gap-1.5 text-xs font-medium ${decisionTone}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${decisionDot}`} />
+            {decisionLabel}
             {decision === 'allow_always' && <span className="text-[10px] opacity-70">(always)</span>}
             {decision === 'allow_session' && <span className="text-[10px] opacity-70">(this run)</span>}
           </span>
