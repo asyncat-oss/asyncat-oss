@@ -3,7 +3,7 @@
 // Renders agent-created artifacts inline with preview and download.
 // Matches the minimal, compact design language of the AgentRunFeed.
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   Download, FileText, Table2, Code2,
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
@@ -174,36 +174,46 @@ function HtmlPreview({ content, title }) {
 
 // ── Main ArtifactCard ───────────────────────────────────────────────────────
 // Uses a <div> wrapper with onClick for toggle instead of nested buttons.
-export default function ArtifactCard({ artifact }) {
-  const [expanded, setExpanded] = useState(false);
-  const [content, setContent] = useState(artifact?.content || null);
+export default function ArtifactCard({ artifact, defaultExpanded = false }) {
+  const artifactData = artifact || {};
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [content, setContent] = useState(artifactData.content || null);
   const [loading, setLoading] = useState(false);
+
+  const type = artifactData.type || artifactData.originalType || 'text';
+  const meta = getTypeMeta(type);
+  const Icon = meta.icon;
+  const title = artifactData.title || artifactData.filename || 'Untitled';
+  const size = formatSize(artifactData.size || artifactData.sizeBytes);
+  const filename = artifactData.filename || '';
+  const artifactPath = artifactData.path || '';
+
+  const loadContent = async () => {
+    if (content || loading) return;
+    setLoading(true);
+    try {
+      if (artifactData.content) {
+        setContent(artifactData.content);
+      } else if (filename) {
+        const data = await agentApi.getArtifact(filename);
+        if (data.success) setContent(data.content);
+      }
+    } catch (err) {
+      console.error('Failed to load artifact:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (expanded) loadContent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, filename]);
 
   if (!artifact) return null;
 
-  const type = artifact.type || artifact.originalType || 'text';
-  const meta = getTypeMeta(type);
-  const Icon = meta.icon;
-  const title = artifact.title || artifact.filename || 'Untitled';
-  const size = formatSize(artifact.size || artifact.sizeBytes);
-  const filename = artifact.filename || '';
-  const artifactPath = artifact.path || '';
-
   const handleToggle = async () => {
-    if (!expanded && !content) {
-      setLoading(true);
-      try {
-        if (artifact.content) {
-          setContent(artifact.content);
-        } else if (filename) {
-          const data = await agentApi.getArtifact(filename);
-          if (data.success) setContent(data.content);
-        }
-      } catch (err) {
-        console.error('Failed to load artifact:', err);
-      }
-      setLoading(false);
-    }
+    if (!expanded) loadContent();
     setExpanded(v => !v);
   };
 
@@ -213,9 +223,9 @@ export default function ArtifactCard({ artifact }) {
       // Use the agentApi to get the download URL
       const downloadUrl = agentApi.getArtifactDownloadUrl(filename);
       window.open(downloadUrl, '_blank');
-    } else if (content || artifact.content) {
+    } else if (content || artifactData.content) {
       // Fallback: download from content already in memory
-      const data = content || artifact.content;
+      const data = content || artifactData.content;
       const blob = new Blob([data], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -317,9 +327,9 @@ export default function ArtifactCard({ artifact }) {
       </div>
 
       {/* Description (always visible if present) */}
-      {artifact.description && !expanded && (
+      {artifactData.description && !expanded && (
         <p className="px-3 pb-2 -mt-0.5 text-[10px] text-gray-400 dark:text-gray-600 italic pl-[2.25rem]">
-          {artifact.description}
+          {artifactData.description}
         </p>
       )}
 

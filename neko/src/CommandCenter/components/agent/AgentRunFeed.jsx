@@ -350,12 +350,31 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
 
 // ── Artifact tool result inline card ────────────────────────────────────────
 const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page']);
+const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'mermaid']);
 
-function ArtifactResultCard({ result }) {
+function ArtifactResultCard({ result, prominent = false }) {
   if (!result?.artifact) return null;
+  const artifact = result.artifact;
+  const shouldAutoExpand = AUTO_EXPAND_ARTIFACT_TYPES.has(artifact.type || artifact.originalType);
+
+  if (prominent) {
+    return (
+      <FeedFrame className="mb-4">
+        <div className="mb-1.5 flex items-center gap-2 px-0.5">
+          <FilePlus className="h-3.5 w-3.5 text-fuchsia-500" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Artifact created</span>
+          <span className="min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-600">
+            {artifact.path || artifact.filename}
+          </span>
+        </div>
+        <ArtifactCard artifact={artifact} defaultExpanded={shouldAutoExpand} />
+      </FeedFrame>
+    );
+  }
+
   return (
     <div className="mt-1 mb-2">
-      <ArtifactCard artifact={result.artifact} />
+      <ArtifactCard artifact={artifact} defaultExpanded={shouldAutoExpand} />
     </div>
   );
 }
@@ -808,13 +827,10 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
                 return <CompactPermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
               }
               if (ev.type === 'tool_start') {
-                const isArtifact = ARTIFACT_TOOLS.has(ev.data?.tool);
-                const hasArtifactResult = isArtifact && ev.result?.success && ev.result?.artifact;
                 const hasAudioResult = ev.data?.tool === 'speak_text' && ev.result?.success && ev.result?.path;
                 return (
                   <div key={i}>
                     <ToolEvent data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} progress={ev.progress} />
-                    {hasArtifactResult && <ArtifactResultCard result={ev.result} />}
                     {hasAudioResult && <AudioResultCard result={ev.result} />}
                   </div>
                 );
@@ -1473,6 +1489,15 @@ export default function AgentRunFeed({ events, isRunning, streamingText, runStar
   (events || []).forEach((ev, i) => {
     if (ev.type === 'permission_request' || ev.type === 'tool_start') {
       toolEvents.push(ev);
+      if (
+        ev.type === 'tool_start'
+        && ARTIFACT_TOOLS.has(ev.data?.tool)
+        && ev.result?.success
+        && ev.result?.artifact
+      ) {
+        flushTools();
+        renderedEvents.push(<ArtifactResultCard key={`artifact_${i}`} result={ev.result} prominent />);
+      }
       return;
     }
 
