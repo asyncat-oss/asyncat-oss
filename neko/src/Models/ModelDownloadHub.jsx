@@ -540,10 +540,11 @@ const ModelDownloadHub = ({
         {searchQuery && downloadedMatches.length > 0 && (
           <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
             <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-500">
-              Downloaded
+              Library & Providers
             </div>
             {downloadedMatches.map((item) => {
-              const target = TARGETS[item.type] || TARGETS.model;
+              const isProvider = item.type === 'provider';
+              const target = isProvider ? null : (TARGETS[item.type] || TARGETS.model);
               return (
                 <button
                   key={`${item.type}:${item.id}`}
@@ -554,9 +555,15 @@ const ModelDownloadHub = ({
                     <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{item.name}</div>
                     <div className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-500">{item.detail}</div>
                   </div>
-                  <span className="flex-shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                    {target.label}
-                  </span>
+                  {isProvider ? (
+                    <span className="flex-shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                      Provider
+                    </span>
+                  ) : (
+                    <span className="flex-shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                      {target.label}
+                    </span>
+                  )}
                 </button>
               );
             })}

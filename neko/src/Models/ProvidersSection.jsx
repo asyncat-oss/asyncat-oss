@@ -523,6 +523,7 @@ const ProvidersSection = ({
   loading,
   providerAction,
   providerError,
+  highlightedItem,
   onRefresh,
   onSave,
   onDelete,
@@ -676,11 +677,16 @@ const ProvidersSection = ({
               const isActive = activeProfileId === profile.id;
               const busy = providerAction === profile.id;
               const isLocal = profile.provider_type === 'local';
+              const isHighlighted = highlightedItem?.type === 'provider' && highlightedItem.id === profile.id;
               return (
-                <div key={profile.id} className={`group relative flex flex-col rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
+                <div
+                  key={profile.id}
+                  id={`provider-card-${profile.id}`}
+                  className={`group relative flex flex-col rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
                   ${isActive
                     ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
-                    : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}`}
+                    : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}
+                  ${isHighlighted ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 midnight:ring-offset-slate-950' : ''}`}
                 >
                   <div className="px-5 pt-5 pb-4 flex-1">
                     <div className="flex items-start gap-3">

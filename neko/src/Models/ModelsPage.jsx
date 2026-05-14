@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X, ChevronDown,
-  Mic, Cpu, Box, Globe, Eye, Image
+  Mic, Cpu, Box, Globe, Eye, Image, Cloud
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import EngineRuntimeSection from './EngineRuntimeSection.jsx';
@@ -282,8 +282,26 @@ const ModelsPage = () => {
         detail: ['Image', m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
       });
     }
-    return matches.slice(0, 8);
-  }, [audioModels.tts, audioModels.whisper, models, searchQuery, visualModels.image, visualModels.vision]);
+    for (const p of providerProfiles) {
+      const preset = providerCatalog.find(item => item.providerId === p.provider_id || item.id === p.provider_id);
+      const haystack = [
+        p.name,
+        p.provider_id,
+        preset?.name,
+        p.model,
+        p.base_url,
+        'provider cloud api endpoint',
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) continue;
+      matches.push({
+        type: 'provider',
+        id: p.id,
+        name: p.name,
+        detail: [preset?.name || p.provider_id, p.model, p.provider_type === 'local' ? 'Local' : 'Cloud'].filter(Boolean).join(' · '),
+      });
+    }
+    return matches.slice(0, 10);
+  }, [audioModels.tts, audioModels.whisper, models, searchQuery, visualModels.image, visualModels.vision, providerProfiles, providerCatalog]);
 
   const handleDownloadedSelect = (item) => {
     setHighlightedItem(item);
@@ -291,12 +309,15 @@ const ModelsPage = () => {
     if (item.type === 'whisper' || item.type === 'tts') setExpandedVoice(true);
     if (item.type === 'vision') setExpandedVision(true);
     if (item.type === 'image') setExpandedImage(true);
+    if (item.type === 'provider') setExpandedProviders(true);
     window.setTimeout(() => {
       const id = item.type === 'model'
         ? `model-card-${item.id}`
         : item.type === 'whisper' || item.type === 'tts'
           ? `audio-card-${item.type}-${item.id}`
-          : `visual-card-${item.type}-${item.id}`;
+          : item.type === 'provider'
+            ? `provider-card-${item.id}`
+            : `visual-card-${item.type}-${item.id}`;
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 120);
   };
@@ -579,6 +600,7 @@ const ModelsPage = () => {
                 loading={loadingProviders}
                 providerAction={providerAction}
                 providerError={providerError}
+                highlightedItem={highlightedItem}
                 onRefresh={loadProviderData}
                 onSave={handleProviderSave}
                 onDelete={handleProviderDelete}
