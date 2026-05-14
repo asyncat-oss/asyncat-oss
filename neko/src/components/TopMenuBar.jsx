@@ -1,9 +1,9 @@
 // components/TopMenuBar.jsx - OS-style top menu bar
 import { useState, useEffect, useRef } from "react";
-import { Cpu, Mic, ServerCrash, Volume2, Wifi, WifiOff, Search, RotateCw } from "lucide-react";
+import { Cpu, Eye, Image, Mic, ServerCrash, Volume2, Wifi, WifiOff, Search, RotateCw } from "lucide-react";
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 import useActiveBrainStatus from '../CommandCenter/hooks/useActiveBrainStatus.js';
-import { audioApi } from '../Settings/settingApi.js';
+import { audioApi, visualModelsApi } from '../Settings/settingApi.js';
 
 // Time formatting helper
 const formatSystemTime = (date) => (
@@ -165,6 +165,47 @@ const useAudioModelActivity = ({ pollMs = 10000 } = {}) => {
   return audioState;
 };
 
+const useVisualModelActivity = ({ pollMs = 30000 } = {}) => {
+  const [visualState, setVisualState] = useState({
+    vision: { count: 0 },
+    image: { count: 0 },
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+
+    const load = async () => {
+      try {
+        const res = await visualModelsApi.listModels().catch(() => ({ vision: [], image: [] }));
+        if (cancelled) return;
+        setVisualState({
+          vision: { count: res.vision?.length || 0 },
+          image: { count: res.image?.length || 0 },
+        });
+      } finally {
+        if (!cancelled) timer = window.setTimeout(load, pollMs);
+      }
+    };
+
+    const refreshNow = () => {
+      window.clearTimeout(timer);
+      load();
+    };
+
+    load();
+    window.addEventListener("asyncat-visual-models-updated", refreshNow);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("asyncat-visual-models-updated", refreshNow);
+    };
+  }, [pollMs]);
+
+  return visualState;
+};
+
 const normalizeRuntimeStatus = (status) => {
   if (status === "ready" || status === "loading" || status === "error") return status;
   return "idle";
@@ -193,7 +234,7 @@ const modelStatusMeta = {
   },
 };
 
-const ModelStatusRow = ({ Icon, label, detail, status }) => {
+const ModelStatusRow = ({ Icon, label, detail, status, statusLabel }) => {
   const meta = modelStatusMeta[status] || modelStatusMeta.idle;
 
   return (
@@ -206,7 +247,7 @@ const ModelStatusRow = ({ Icon, label, detail, status }) => {
             {label}
           </span>
           <span className={`text-[11px] font-medium ${meta.textClassName}`}>
-            {meta.label}
+            {statusLabel || meta.label}
           </span>
         </div>
         <div className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">
@@ -220,6 +261,7 @@ const ModelStatusRow = ({ Icon, label, detail, status }) => {
 const ModelActivityIndicators = () => {
   const activeBrain = useActiveBrainStatus({ pollMs: 5000 });
   const audioState = useAudioModelActivity();
+  const visualState = useVisualModelActivity();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -271,6 +313,22 @@ const ModelActivityIndicators = () => {
       status: normalizeRuntimeStatus(audioState.tts.status),
       detail: audioState.tts.model,
     },
+    {
+      key: "vision",
+      Icon: Eye,
+      label: "Vision",
+      status: visualState.vision.count > 0 ? "ready" : "idle",
+      statusLabel: visualState.vision.count > 0 ? "Indexed" : undefined,
+      detail: visualState.vision.count > 0 ? `${visualState.vision.count} asset${visualState.vision.count === 1 ? "" : "s"} available` : "",
+    },
+    {
+      key: "image",
+      Icon: Image,
+      label: "Image",
+      status: visualState.image.count > 0 ? "ready" : "idle",
+      statusLabel: visualState.image.count > 0 ? "Indexed" : undefined,
+      detail: visualState.image.count > 0 ? `${visualState.image.count} asset${visualState.image.count === 1 ? "" : "s"} available` : "",
+    },
   ];
 
   const getIconColorClass = (items) => {
@@ -304,7 +362,7 @@ const ModelActivityIndicators = () => {
               Model Status
             </div>
             <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-              LLM, speech input, and speech output
+              LLM, voice, vision, and image assets
             </div>
           </div>
           <div className="py-1">

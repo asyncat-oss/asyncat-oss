@@ -448,6 +448,6 @@ CREATE TABLE IF NOT EXISTS custom_model_paths (
   id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   name        TEXT NOT NULL,
   path        TEXT NOT NULL UNIQUE,
-  type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx', 'whisper', 'tts')),
+  type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx', 'whisper', 'tts', 'vision', 'image')),
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );

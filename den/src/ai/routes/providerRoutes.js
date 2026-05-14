@@ -72,6 +72,20 @@ import {
   TTS_DIR,
 } from '../controllers/ai/audioModelManager.js';
 import {
+  listVisualModels,
+  deleteVisualModel,
+  clearCache as clearVisualCache,
+} from '../controllers/ai/visualModelManager.js';
+import {
+  checkComfyUi,
+  listComfyUiModels,
+  generateComfyUiImage,
+} from '../controllers/ai/comfyUiManager.js';
+import {
+  checkSdCpp,
+  generateSdCppImage,
+} from '../controllers/ai/sdCppManager.js';
+import {
   checkBinary as checkWhisperBinary,
   checkFfmpeg as checkWhisperFfmpeg,
   getStatus as getWhisperStatus,
@@ -1216,6 +1230,109 @@ function formatBytes(bytes) {
   const kb = bytes / 1024;
   return `${kb.toFixed(0)} KB`;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISUAL MODEL ROUTES — /api/ai/providers/visual/*
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.get('/visual/models', verifyUser, (req, res) => {
+  try {
+    res.json({ success: true, ...listVisualModels() });
+  } catch (err) {
+    console.error('List visual models error:', err);
+    res.status(500).json({ success: false, error: 'Failed to list visual models' });
+  }
+});
+
+router.post('/visual/models/custom-paths', verifyUser, (req, res) => {
+  let { name, path: modelPath, type } = req.body;
+  if (!name || !modelPath) {
+    return res.status(400).json({ success: false, error: 'Name and path are required' });
+  }
+  modelPath = modelPath.trim();
+
+  if (!type || type === 'auto') {
+    const lower = modelPath.toLowerCase();
+    type = lower.includes('mmproj') || lower.includes('clip') || lower.includes('siglip') ? 'vision' : 'image';
+  }
+
+  if (type !== 'vision' && type !== 'image') {
+    return res.status(400).json({ success: false, error: 'Type must be "vision" or "image"' });
+  }
+
+  try {
+    const result = db.prepare('INSERT INTO custom_model_paths (name, path, type) VALUES (?, ?, ?)').run(name, modelPath, type);
+    clearVisualCache(type);
+    res.json({ success: true, id: result.lastInsertRowid, type });
+  } catch (err) {
+    if (err.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).json({ success: false, error: 'This path is already in your library' });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/visual/models/:id', verifyUser, (req, res) => {
+  const { id } = req.params;
+  const { type } = req.query;
+  try {
+    if (type !== 'vision' && type !== 'image') {
+      return res.status(400).json({ success: false, error: 'type query must be "vision" or "image"' });
+    }
+    deleteVisualModel(id, type);
+    res.json({ success: true, message: 'Visual model removed' });
+  } catch (err) {
+    if (err.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: err.message });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/visual/image/simple/status', verifyUser, async (req, res) => {
+  try {
+    const status = await checkSdCpp();
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/visual/image/simple/generate', verifyUser, async (req, res) => {
+  try {
+    const result = await generateSdCppImage(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/visual/image/comfyui/status', verifyUser, async (req, res) => {
+  try {
+    const status = await checkComfyUi();
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/visual/image/comfyui/models', verifyUser, async (req, res) => {
+  try {
+    const models = await listComfyUiModels();
+    res.json({ success: true, ...models });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/visual/image/comfyui/generate', verifyUser, async (req, res) => {
+  try {
+    const result = await generateComfyUiImage(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AUDIO MODEL ROUTES — /api/ai/providers/audio/*

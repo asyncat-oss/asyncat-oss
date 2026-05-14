@@ -320,8 +320,9 @@ export function deleteModel(filename) {
 export async function startDownload(url, filename, subDir = '') {
   // Sanitize filename
   const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
-  if (!safeFilename.endsWith('.gguf') && !safeFilename.endsWith('.bin') && !safeFilename.endsWith('.onnx') && !safeFilename.endsWith('.json')) {
-    throw new Error('Only .gguf, .bin, .onnx, and .json model files are supported');
+  const allowedExtensions = ['.gguf', '.bin', '.onnx', '.json', '.mmproj', '.safetensors', '.ckpt', '.pt', '.pth'];
+  if (!allowedExtensions.some(ext => safeFilename.toLowerCase().endsWith(ext))) {
+    throw new Error(`Only ${allowedExtensions.join(', ')} model files are supported`);
   }
 
   const baseDir = subDir ? path.join(MODELS_DIR, subDir) : MODELS_DIR;

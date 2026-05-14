@@ -878,3 +878,53 @@ export const audioApi = {
     },
   },
 };
+
+// ===========================================
+// VISUAL MODEL API
+// ===========================================
+
+export const visualModelsApi = {
+  listModels: async () => {
+    return apiCall(`${AI_API_BASE}/visual/models`);
+  },
+
+  addCustomPath: async (name, path, type) => {
+    return apiCall(`${AI_API_BASE}/visual/models/custom-paths`, {
+      method: 'POST',
+      body: JSON.stringify({ name, path, type }),
+    });
+  },
+
+  deleteModel: async (id, type) => {
+    return apiCall(`${AI_API_BASE}/visual/models/${encodeURIComponent(id)}?type=${encodeURIComponent(type)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  simpleImage: {
+    getStatus: async () => {
+      return apiCall(`${AI_API_BASE}/visual/image/simple/status`);
+    },
+    generate: async (payload) => {
+      return apiCall(`${AI_API_BASE}/visual/image/simple/generate`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+  },
+
+  comfyui: {
+    getStatus: async () => {
+      return apiCall(`${AI_API_BASE}/visual/image/comfyui/status`);
+    },
+    listModels: async () => {
+      return apiCall(`${AI_API_BASE}/visual/image/comfyui/models`);
+    },
+    generate: async (payload) => {
+      return apiCall(`${AI_API_BASE}/visual/image/comfyui/generate`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+  },
+};

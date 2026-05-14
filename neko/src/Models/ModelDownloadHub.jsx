@@ -32,6 +32,18 @@ const TARGETS = {
     subDir: 'audio/tts',
     extensions: ['.onnx', '.onnx.json'],
   },
+  vision: {
+    label: 'Vision',
+    color: 'bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50',
+    subDir: 'vision',
+    extensions: ['.gguf', '.bin', '.mmproj', '.safetensors', '.json'],
+  },
+  image: {
+    label: 'Image',
+    color: 'bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 dark:hover:bg-fuchsia-900/50',
+    subDir: 'image',
+    extensions: ['.safetensors', '.ckpt', '.gguf', '.onnx', '.pt', '.pth', '.bin', '.json'],
+  },
 };
 
 const formatBytes = (bytes) => {
@@ -76,9 +88,29 @@ const targetOptionsForFile = (filename, repoId = '') => {
     lowerName.endsWith('.onnx') ||
     lowerName.endsWith('.onnx.json')
   );
+  const isVisionLike = (
+    context.includes('vision') ||
+    context.includes('llava') ||
+    context.includes('bakllava') ||
+    context.includes('moondream') ||
+    context.includes('mmproj') ||
+    context.includes('clip') ||
+    context.includes('siglip')
+  );
+  const isImageLike = (
+    context.includes('stable-diffusion') ||
+    context.includes('sdxl') ||
+    context.includes('flux') ||
+    context.includes('diffusion') ||
+    context.includes('controlnet') ||
+    context.includes('lora') ||
+    context.includes('vae') ||
+    context.includes('text-to-image') ||
+    context.includes('image-generation')
+  );
   const options = [];
 
-  if ((lowerName.endsWith('.gguf') || lowerName.endsWith('.bin')) && !isWhisperLike) {
+  if ((lowerName.endsWith('.gguf') || lowerName.endsWith('.bin')) && !isWhisperLike && !isVisionLike && !isImageLike) {
     options.push(['model', TARGETS.model]);
   }
   if ((lowerName.endsWith('.bin') || lowerName.endsWith('.gguf')) && isWhisperLike) {
@@ -86,6 +118,12 @@ const targetOptionsForFile = (filename, repoId = '') => {
   }
   if (isPiperLike && (lowerName.endsWith('.onnx') || lowerName.endsWith('.onnx.json'))) {
     options.push(['tts', TARGETS.tts]);
+  }
+  if (isVisionLike && ['.gguf', '.bin', '.mmproj', '.safetensors', '.json'].some(ext => lowerName.endsWith(ext))) {
+    options.push(['vision', TARGETS.vision]);
+  }
+  if (isImageLike && ['.safetensors', '.ckpt', '.gguf', '.onnx', '.pt', '.pth', '.bin', '.json'].some(ext => lowerName.endsWith(ext))) {
+    options.push(['image', TARGETS.image]);
   }
 
   return options;
@@ -170,7 +208,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
         {loading && <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>}
         {error && <p className="px-3 py-2 text-xs text-red-500">{error}</p>}
         {!loading && !error && files.length === 0 && (
-          <p className="px-3 py-2 text-xs text-gray-400">No downloadable model, STT, or TTS files found.</p>
+          <p className="px-3 py-2 text-xs text-gray-400">No downloadable model, voice, vision, or image files found.</p>
         )}
         {files.map((f) => {
           const targets = targetOptionsForFile(f.rfilename, repoId);
@@ -211,6 +249,7 @@ const ModelDownloadHub = ({
   onDownloadedSelect,
   onModelRefresh,
   onAudioRefresh,
+  onVisualRefresh,
 }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
   const [expandedRepo, setExpandedRepo] = useState(null);
@@ -240,7 +279,15 @@ const ModelDownloadHub = ({
         window.dispatchEvent(new CustomEvent('asyncat-audio-models-updated'));
       }, 11000);
     }
-  }, [onAudioRefresh, onModelRefresh]);
+    if (targetKey === 'vision' || targetKey === 'image') {
+      onVisualRefresh?.();
+      window.dispatchEvent(new CustomEvent('asyncat-visual-models-updated'));
+      setTimeout(() => {
+        onVisualRefresh?.();
+        window.dispatchEvent(new CustomEvent('asyncat-visual-models-updated'));
+      }, 11000);
+    }
+  }, [onAudioRefresh, onModelRefresh, onVisualRefresh]);
 
   const startTrackingDownload = useCallback((downloadId, filename, targetKey = 'model') => {
     const trackingKey = `${targetKey}:${filename}`;
@@ -347,7 +394,11 @@ const ModelDownloadHub = ({
             ? 'tts'
             : String(dl.subDir || '').includes('audio/whisper')
               ? 'whisper'
-              : 'model';
+              : String(dl.subDir || '').includes('vision')
+                ? 'vision'
+                : String(dl.subDir || '').includes('image')
+                  ? 'image'
+                  : 'model';
           startTrackingDownload(dl.downloadId, filename, targetKey);
         });
       })
@@ -425,7 +476,7 @@ const ModelDownloadHub = ({
     <Panel className="p-5">
       <SectionHeader
         title="Download Models"
-        description="Search HuggingFace once, then save files as local models, speech-to-text, or text-to-speech assets."
+        description="Search HuggingFace once, then save files as local LLM, voice, vision, or image generation assets."
         action={activeEntries.length > 0 ? <Badge color="amber">{activeEntries.length} downloading</Badge> : null}
       />
 
@@ -476,7 +527,7 @@ const ModelDownloadHub = ({
             type="text"
             value={searchQuery}
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Search downloads and library... e.g. llama, qwen, whisper.cpp, piper voices"
+            placeholder="Search downloads and library... e.g. llama, qwen, whisper.cpp, piper, llava, flux"
             className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-9 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 dark:focus:ring-gray-600 midnight:border-gray-800/80 midnight:bg-gray-900/50"
           />
           {searchQuery && (
@@ -561,7 +612,7 @@ const ModelDownloadHub = ({
 
         {showCustomUrl && (
           <div className="space-y-3 bg-white p-4 dark:bg-gray-800 midnight:bg-gray-900">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {Object.entries(TARGETS).map(([key, target]) => (
                 <button
                   key={key}

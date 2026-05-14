@@ -196,13 +196,18 @@ function cleanupDeadTables() {
   `);
 }
 
-function ensureAudioModelPathsSchema() {
+function ensureModelPathsSchema() {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'custom_model_paths'").get();
   if (!table) return;
 
   const createSql = table.sql || '';
-  // Check if the table already supports audio types
-  if (createSql.includes("'whisper'") && createSql.includes("'tts'")) return;
+  // Check if the table already supports every model asset type.
+  if (
+    createSql.includes("'whisper'") &&
+    createSql.includes("'tts'") &&
+    createSql.includes("'vision'") &&
+    createSql.includes("'image'")
+  ) return;
 
   // Recreate table with expanded CHECK constraint
   db.exec(`
@@ -210,7 +215,7 @@ function ensureAudioModelPathsSchema() {
       id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
       name        TEXT NOT NULL,
       path        TEXT NOT NULL UNIQUE,
-      type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx', 'whisper', 'tts')),
+      type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx', 'whisper', 'tts', 'vision', 'image')),
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -225,7 +230,7 @@ function ensureAudioModelPathsSchema() {
 cleanupDeadTables();
 ensureCalendarSchema();
 ensureAgentMemorySchema();
-ensureAudioModelPathsSchema();
+ensureModelPathsSchema();
 
 logger.info(`Database: SQLite at ${DB_PATH}`);
 

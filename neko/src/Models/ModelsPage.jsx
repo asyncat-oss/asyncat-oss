@@ -1,13 +1,15 @@
+/* eslint-disable react/prop-types */
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X, ChevronDown,
-  Mic, Cpu, Box, Globe
+  Mic, Cpu, Box, Globe, Eye, Image
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import EngineRuntimeSection from './EngineRuntimeSection.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
 import AudioModelsSection from './AudioModelsSection.jsx';
+import VisualModelsSection from './VisualModelsSection.jsx';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
 import {
@@ -15,7 +17,7 @@ import {
   providerLabel, capabilityBadgeColor
 } from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
-import { audioApi } from '../Settings/settingApi.js';
+import { audioApi, visualModelsApi } from '../Settings/settingApi.js';
 
 // ── Status dot ────────────────────────────────────────────────────────────────
 const StatusDot = ({ status }) => {
@@ -95,6 +97,11 @@ const VoiceCompactBadge = ({ sttStatus, ttsStatus }) => (
   </div>
 );
 
+const AssetSubtitle = ({ count, emptyLabel, singularLabel, pluralLabel }) => {
+  if (!count) return emptyLabel;
+  return `${count} ${count === 1 ? singularLabel : pluralLabel}`;
+};
+
 // ── Engine compact subtitle ───────────────────────────────────────────────────
 const EngineSubtitle = ({ engineData }) => {
   if (!engineData?.current) return 'Not detected';
@@ -163,6 +170,7 @@ const ModelsPage = () => {
     loaded: false,
   });
   const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
+  const [visualModels, setVisualModels] = useState({ vision: [], image: [] });
   const [highlightedItem, setHighlightedItem] = useState(null);
 
   const refreshVoiceData = useCallback(() => {
@@ -185,12 +193,26 @@ const ModelsPage = () => {
     });
   }, []);
 
+  const refreshVisualData = useCallback(() => {
+    visualModelsApi.listModels()
+      .then((modelsRes) => {
+        setVisualModels({
+          vision: modelsRes.vision || [],
+          image: modelsRes.image || [],
+        });
+      })
+      .catch(() => setVisualModels({ vision: [], image: [] }));
+  }, []);
+
   useEffect(() => {
     refreshVoiceData();
-  }, [refreshVoiceData]);
+    refreshVisualData();
+  }, [refreshVoiceData, refreshVisualData]);
 
   // ── Collapsible section state ──────────────────────────────────────────────
   const [expandedVoice, setExpandedVoice] = useState(false);
+  const [expandedVision, setExpandedVision] = useState(false);
+  const [expandedImage, setExpandedImage] = useState(false);
   const [expandedEngine, setExpandedEngine] = useState(false);
   const [expandedLibrary, setExpandedLibrary] = useState(models.length > 0);
   const [expandedProviders, setExpandedProviders] = useState(providerProfiles.length > 0);
@@ -240,17 +262,41 @@ const ModelsPage = () => {
         detail: ['TTS', 'Piper', m.sizeFormatted].filter(Boolean).join(' · '),
       });
     }
+    for (const m of visualModels.vision) {
+      const haystack = [m.name, m.filename, m.assetKind, 'vision multimodal projector mmproj'].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) continue;
+      matches.push({
+        type: 'vision',
+        id: m.id || m.filename,
+        name: m.name || m.filename,
+        detail: ['Vision', m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
+      });
+    }
+    for (const m of visualModels.image) {
+      const haystack = [m.name, m.filename, m.assetKind, 'image generation diffusion stable flux sdxl'].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) continue;
+      matches.push({
+        type: 'image',
+        id: m.id || m.filename,
+        name: m.name || m.filename,
+        detail: ['Image', m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
+      });
+    }
     return matches.slice(0, 8);
-  }, [audioModels.tts, audioModels.whisper, models, searchQuery]);
+  }, [audioModels.tts, audioModels.whisper, models, searchQuery, visualModels.image, visualModels.vision]);
 
   const handleDownloadedSelect = (item) => {
     setHighlightedItem(item);
     if (item.type === 'model') setExpandedLibrary(true);
     if (item.type === 'whisper' || item.type === 'tts') setExpandedVoice(true);
+    if (item.type === 'vision') setExpandedVision(true);
+    if (item.type === 'image') setExpandedImage(true);
     window.setTimeout(() => {
       const id = item.type === 'model'
         ? `model-card-${item.id}`
-        : `audio-card-${item.type}-${item.id}`;
+        : item.type === 'whisper' || item.type === 'tts'
+          ? `audio-card-${item.type}-${item.id}`
+          : `visual-card-${item.type}-${item.id}`;
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 120);
   };
@@ -262,6 +308,7 @@ const ModelsPage = () => {
     loadStatus();
     loadModelList();
     refreshVoiceData();
+    refreshVisualData();
     loadEngineData({ clearActions: true });
     loadEngineCatalog(true);
     loadProviderData();
@@ -360,6 +407,7 @@ const ModelsPage = () => {
             onDownloadedSelect={handleDownloadedSelect}
             onModelRefresh={loadModelList}
             onAudioRefresh={refreshVoiceData}
+            onVisualRefresh={refreshVisualData}
           />
 
           {/* ── Voice ─────────────────────────────────────────────────────── */}
@@ -375,6 +423,52 @@ const ModelsPage = () => {
               <AudioModelsSection
                 highlightedItem={highlightedItem}
                 onModelsChange={setAudioModels}
+              />
+            </div>
+          </CollapsibleSection>
+
+          {/* ── Vision ────────────────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={Eye}
+            title="Vision"
+            subtitle={AssetSubtitle({
+              count: visualModels.vision.length,
+              emptyLabel: 'No vision assets yet',
+              singularLabel: 'vision asset',
+              pluralLabel: 'vision assets',
+            })}
+            badge={visualModels.vision.length > 0 ? <Badge color="gray">{visualModels.vision.length}</Badge> : null}
+            expanded={expandedVision}
+            onToggle={() => setExpandedVision(v => !v)}
+          >
+            <div className="pt-5">
+              <VisualModelsSection
+                mode="vision"
+                highlightedItem={highlightedItem}
+                onModelsChange={setVisualModels}
+              />
+            </div>
+          </CollapsibleSection>
+
+          {/* ── Image Generation ──────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={Image}
+            title="Image Generation"
+            subtitle={AssetSubtitle({
+              count: visualModels.image.length,
+              emptyLabel: 'No image generation assets yet',
+              singularLabel: 'image asset',
+              pluralLabel: 'image assets',
+            })}
+            badge={visualModels.image.length > 0 ? <Badge color="gray">{visualModels.image.length}</Badge> : null}
+            expanded={expandedImage}
+            onToggle={() => setExpandedImage(v => !v)}
+          >
+            <div className="pt-5">
+              <VisualModelsSection
+                mode="image"
+                highlightedItem={highlightedItem}
+                onModelsChange={setVisualModels}
               />
             </div>
           </CollapsibleSection>

@@ -116,6 +116,7 @@ const ServerSection = () => {
     { key: 'WHISPER_BINARY_PATH', label: 'Whisper Binary Path' },
     { key: 'TTS_SERVER_PORT', label: 'Piper TTS Port' },
     { key: 'PIPER_BINARY_PATH', label: 'Piper Binary Path' },
+    { key: 'IMAGEGEN_BINARY_PATH', label: 'Simple Image Engine Binary Path' },
   ];
 
   const editableConfig = [
@@ -124,6 +125,12 @@ const ServerSection = () => {
       label: 'Agent file workspace root',
       placeholder: runtime.workspaceRoot || '/path/to/project',
       help: 'Controls what @ file search and default agent tools can see. Restart the server after changing it.',
+    },
+    {
+      key: 'COMFYUI_BASE_URL',
+      label: 'ComfyUI base URL',
+      placeholder: 'http://127.0.0.1:8188',
+      help: 'Controls where the image generation tester looks for ComfyUI. Default is http://127.0.0.1:8188.',
     },
   ];
 
@@ -217,7 +224,11 @@ const ServerSection = () => {
         </p>
 
         <div className="space-y-4">
-          {editableConfig.map(({ key, label, placeholder, help }) => (
+          {editableConfig.map(({ key, label, placeholder, help }) => {
+            const currentValue = key === 'ASYNCAT_WORKSPACE_ROOT'
+              ? (runtime.workspaceRoot || config[key] || '(auto-detected)')
+              : (config[key] || '(not set)');
+            return (
             <div key={key}>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1.5">
                 {label}
@@ -230,7 +241,7 @@ const ServerSection = () => {
                 className={inputCls}
               />
               <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
-                Current: {runtime.workspaceRoot || config[key] || '(auto-detected)'}
+                Current: {currentValue}
               </p>
               <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
                 {help}
@@ -247,11 +258,12 @@ const ServerSection = () => {
                     disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {saving ? <Loader2 size={11} className="animate-spin" /> : null}
-                  Save Workspace Root
+                  Save {label}
                 </button>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       </div>
 
