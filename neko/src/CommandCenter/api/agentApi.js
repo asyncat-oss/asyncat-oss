@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiRequest, handleResponse } from './client.js';
+import { API_BASE_URL, apiRequest, addWorkspaceToUrl, getCurrentWorkspaceId } from './client.js';
 import authService from '../../services/authService.js';
 import eventBus from '../../utils/eventBus.js';
 
@@ -204,6 +204,28 @@ export const agentApi = {
 
   getArtifactDownloadUrl: (filename) => {
     return `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}?download=1`;
+  },
+
+  downloadArtifact: async (filename) => {
+    const workspaceId = getCurrentWorkspaceId();
+    const url = `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}?download=1`;
+    const response = await authService.authenticatedFetch(
+      workspaceId ? addWorkspaceToUrl(url, workspaceId) : url,
+      { method: 'GET', credentials: 'include' }
+    );
+    if (!response.ok) {
+      let message = `Download failed: ${response.status} ${response.statusText}`;
+      try {
+        const data = await response.json();
+        message = data.message || data.error || message;
+      } catch { /* response may not be JSON */ }
+      throw new Error(message);
+    }
+    return {
+      blob: await response.blob(),
+      filename,
+      contentType: response.headers.get('content-type') || 'application/octet-stream',
+    };
   },
 
   deleteArtifact: async (filename) => {

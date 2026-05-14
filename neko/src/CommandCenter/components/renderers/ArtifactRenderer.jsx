@@ -179,6 +179,8 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [content, setContent] = useState(artifactData.content || null);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   const type = artifactData.type || artifactData.originalType || 'text';
   const meta = getTypeMeta(type);
@@ -191,6 +193,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
   const loadContent = async () => {
     if (content || loading) return;
     setLoading(true);
+    setFetchError(null);
     try {
       if (artifactData.content) {
         setContent(artifactData.content);
@@ -200,6 +203,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
       }
     } catch (err) {
       console.error('Failed to load artifact:', err);
+      setFetchError(err.message || 'Failed to load preview');
     } finally {
       setLoading(false);
     }
@@ -217,24 +221,41 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
     setExpanded(v => !v);
   };
 
-  const handleDownload = (e) => {
+  const handleDownload = async (e) => {
     e.stopPropagation();
-    if (filename) {
-      // Use the agentApi to get the download URL
-      const downloadUrl = agentApi.getArtifactDownloadUrl(filename);
-      window.open(downloadUrl, '_blank');
-    } else if (content || artifactData.content) {
-      // Fallback: download from content already in memory
-      const data = content || artifactData.content;
-      const blob = new Blob([data], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || 'artifact.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+    if (downloading) return;
+    try {
+      setDownloading(true);
+      if (filename) {
+        const { blob } = await agentApi.downloadArtifact(filename);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+      }
+      if (content || artifactData.content) {
+        // Fallback: download from content already in memory
+        const data = content || artifactData.content;
+        const blob = new Blob([data], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'artifact.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Failed to download artifact:', err);
+      setFetchError(err.message || 'Failed to download artifact');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -252,7 +273,22 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
       );
     }
     if (!content) {
-      return <p className="py-3 text-center text-[11px] text-gray-400 dark:text-gray-600">Click to load preview</p>;
+      return (
+        <div className="py-3 text-center">
+          {fetchError && (
+            <p className="mb-2 text-[11px] text-red-500 dark:text-red-400">
+              {fetchError}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={loadContent}
+            className="rounded-md border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+          >
+            Load preview
+          </button>
+        </div>
+      );
     }
     switch (type) {
       case 'markdown':
@@ -315,14 +351,18 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
           <button
             type="button"
             onClick={handleDownload}
-            className="rounded p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
-            title={`Download ${filename}`}
+            disabled={downloading}
+            className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            title={downloading ? 'Downloading…' : `Download ${filename}`}
           >
-            <Download className="h-3.5 w-3.5" />
+            {downloading ? <span className="block h-3.5 w-3.5 animate-pulse rounded-full bg-current opacity-50" /> : <Download className="h-3.5 w-3.5" />}
           </button>
-          {expanded
-            ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
-            : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300">
+            {expanded ? 'Hide' : 'Preview'}
+            {expanded
+              ? <ChevronDown className="h-3.5 w-3.5" />
+              : <ChevronRight className="h-3.5 w-3.5" />}
+          </span>
         </div>
       </div>
 
