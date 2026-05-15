@@ -8,6 +8,7 @@ import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi, audioApi } from "../../../Settings/settingApi.js";
 import { profilesApi, filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
+import { attachmentKind, attachmentBadge, badgeToneClass, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -174,83 +175,6 @@ function RecordingWaveform() {
   );
 }
 
-function attachmentKind(file = {}) {
-  const mime = String(file.mime || '').toLowerCase();
-  const ext = String(file.ext || file.name?.split('.').pop() || file.path?.split('.').pop() || '').toLowerCase();
-  if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(ext)) return 'image';
-  if (mime.startsWith('audio/') || ['wav', 'mp3', 'm4a', 'ogg', 'flac', 'webm'].includes(ext)) return 'audio';
-  if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
-  if (['txt', 'md', 'json', 'csv', 'tsv', 'js', 'jsx', 'ts', 'tsx', 'py', 'html', 'css', 'xml', 'yaml', 'yml', 'toml', 'sql', 'log'].includes(ext)) return 'text';
-  return 'file';
-}
-
-function attachmentBadge(file, capabilities) {
-  const kind = attachmentKind(file);
-  if (kind === 'image') {
-    return capabilities?.vision?.ready
-      ? { label: 'Vision ready', tone: 'emerald' }
-      : { label: 'Needs vision', tone: 'amber' };
-  }
-  if (kind === 'audio') {
-    return capabilities?.stt?.ready
-      ? { label: 'Whisper ready', tone: 'emerald' }
-      : { label: 'Needs Whisper', tone: 'amber' };
-  }
-  if (kind === 'pdf') return { label: 'PDF readable', tone: 'blue' };
-  if (kind === 'text') return { label: 'Text included', tone: 'slate' };
-  return { label: 'Metadata only', tone: 'slate' };
-}
-
-const badgeToneClass = {
-  emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50',
-  amber: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/50',
-  blue: 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-950/30 dark:text-blue-300 dark:ring-blue-900/50',
-  slate: 'bg-slate-50 text-slate-600 ring-slate-100 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-800',
-};
-
-function AttachmentChip({ file, capabilities, onRemove }) {
-  const { Icon, color } = fileIconMeta(file.ext, "file");
-  const kind = attachmentKind(file);
-  const badge = attachmentBadge(file, capabilities);
-  const [previewUrl, setPreviewUrl] = useState(null);
-
-  useEffect(() => {
-    if (!['image', 'audio'].includes(kind) || !file.rootId || !file.path) return undefined;
-    let cancelled = false;
-    filesApi.fetchRawBlob(file.rootId, file.path)
-      .then(url => { if (!cancelled) setPreviewUrl(url); })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [file.path, file.rootId, kind]);
-
-  return (
-    <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 midnight:border-slate-700 midnight:bg-slate-900">
-      {kind === 'image' && previewUrl ? (
-        <img src={previewUrl} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover" />
-      ) : kind === 'audio' && previewUrl ? (
-        <audio src={previewUrl} controls className="h-7 w-32 max-w-[35vw]" />
-      ) : (
-        <Icon className={`h-4 w-4 shrink-0 ${color}`} />
-      )}
-      <span className="min-w-0">
-        <span className="block max-w-[12rem] truncate">{file.name}</span>
-        <span className={`mt-0.5 inline-flex rounded px-1.5 py-0.5 text-[10px] ring-1 ${badgeToneClass[badge.tone]}`}>
-          {badge.label}
-        </span>
-      </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="ml-0.5 shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </span>
-  );
-}
-
 export const MessageInputV2 = ({
   onSubmit,
   disabled,
@@ -317,6 +241,7 @@ export const MessageInputV2 = ({
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [pendingContextSwitch, setPendingContextSwitch] = useState(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
@@ -1156,6 +1081,7 @@ export const MessageInputV2 = ({
                       file={file}
                       capabilities={multimodalCapabilities}
                       onRemove={() => removeFileAttachment(file.path, file.rootId || "workspace")}
+                      onPreview={setLightbox}
                     />
                   ))}
                 </div>
@@ -1612,6 +1538,14 @@ export const MessageInputV2 = ({
           </div>
         )}
       </div>
+
+      {lightbox && (
+        <ImageLightbox
+          url={lightbox.url}
+          name={lightbox.name}
+          onClose={() => setLightbox(null)}
+        />
+      )}
 
       <ConfirmModal
         isOpen={!!pendingContextSwitch}

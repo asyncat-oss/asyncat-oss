@@ -12,6 +12,7 @@ import { parseAIResponseToBlocks, BlockRenderer } from '../renderers/BlockBasedM
 import { extractReasoningFromText } from '../../utils/reasoningParser.js';
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import { fileIconMeta } from '../../../files/fileUtils.js';
+import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.jsx';
 
 // ── Tool icon / label map ─────────────────────────────────────────────────────
 const TOOL_META = {
@@ -214,6 +215,7 @@ function ModeBadge({ toolsEnabled, agentMode }) {
 function UserGoalEvent({ data }) {
   const goal = data?.goal || data?.content || '';
   const [copied, setCopied] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(goal);
@@ -229,9 +231,9 @@ function UserGoalEvent({ data }) {
         <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
           <div className="mb-1 flex justify-end gap-2 items-center">
             <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
-            <button 
-              onClick={handleCopy} 
-              className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors" 
+            <button
+              onClick={handleCopy}
+              className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
               title="Copy message"
             >
               {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -251,18 +253,22 @@ function UserGoalEvent({ data }) {
             </div>
           )}
           {Array.isArray(data?.fileAttachments) && data.fileAttachments.length > 0 && (
-            <div className="mt-2 flex flex-wrap justify-end gap-1">
-              {data.fileAttachments.map(file => {
-                const ext = file.ext || (file.name || file.path).split('.').pop();
-                const { Icon, color } = fileIconMeta(ext, 'file');
-                return (
-                  <span key={file.path || file.name} className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
-                    <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
-                    <span className="truncate">{file.path || file.name}</span>
-                  </span>
-                );
-              })}
+            <div className="mt-2 flex flex-wrap justify-end gap-2">
+              {data.fileAttachments.map(file => (
+                <AttachmentChip
+                  key={file.path || file.name}
+                  file={file}
+                  onPreview={setLightbox}
+                />
+              ))}
             </div>
+          )}
+          {lightbox && (
+            <ImageLightbox
+              url={lightbox.url}
+              name={lightbox.name}
+              onClose={() => setLightbox(null)}
+            />
           )}
         </div>
       </div>
