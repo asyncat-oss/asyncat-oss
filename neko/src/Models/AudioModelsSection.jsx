@@ -190,7 +190,7 @@ const AddPathForm = ({ type, onAdd }) => {
   );
 };
 
-const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
+const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'all' }) => {
   const [whisperModels, setWhisperModels] = useState([]);
   const [ttsModels, setTtsModels] = useState([]);
   const [whisperStatus, setWhisperStatus] = useState({ status: 'idle' });
@@ -305,19 +305,31 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
     } catch (err) { setError(err.message); }
   };
 
-  const totalModels = whisperModels.length + ttsModels.length;
   const whisperReady = whisperStatus?.status === 'ready';
   const ttsReady = ttsStatus?.status === 'ready';
+  const showWhisper = mode === 'all' || mode === 'whisper';
+  const showTts = mode === 'all' || mode === 'tts';
+  const visibleTotal = (showWhisper ? whisperModels.length : 0) + (showTts ? ttsModels.length : 0);
+  const sectionTitle = mode === 'whisper'
+    ? 'Speech-to-Text Models'
+    : mode === 'tts'
+      ? 'Text-to-Speech Voices'
+      : 'Audio Models';
+  const sectionDescription = mode === 'whisper'
+    ? 'Local Whisper models for transcription.'
+    : mode === 'tts'
+      ? 'Local Piper voices for speech output.'
+      : 'Local speech-to-text and text-to-speech models.';
 
   return (
     <div>
       <SectionHeader
-        title="Audio Models"
-        description="Local speech-to-text (Whisper) and text-to-speech (Piper) models"
+        title={sectionTitle}
+        description={sectionDescription}
         action={
           <div className="flex items-center gap-2">
-            {(whisperReady || ttsReady) && <Badge color="green">{[whisperReady && 'STT', ttsReady && 'TTS'].filter(Boolean).join(' + ')} Active</Badge>}
-            {totalModels > 0 && <Badge color="gray">{totalModels} Model{totalModels !== 1 ? 's' : ''}</Badge>}
+            {((showWhisper && whisperReady) || (showTts && ttsReady)) && <Badge color="green">{[showWhisper && whisperReady && 'STT', showTts && ttsReady && 'TTS'].filter(Boolean).join(' + ')} Active</Badge>}
+            {visibleTotal > 0 && <Badge color="gray">{visibleTotal} Model{visibleTotal !== 1 ? 's' : ''}</Badge>}
             <button onClick={loadData} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-400 transition-colors">
               <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
             </button>
@@ -335,9 +347,9 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
         </div>
       )}
 
-      <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`mt-5 grid grid-cols-1 gap-6 ${showWhisper && showTts ? 'lg:grid-cols-2' : ''}`}>
         {/* ── Speech-to-Text (Whisper) ─────────────── */}
-        <Panel className="p-5">
+        {showWhisper && <Panel className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
@@ -396,10 +408,10 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
             </div>
           )}
           <AddPathForm type="whisper" onAdd={loadData} />
-        </Panel>
+        </Panel>}
 
         {/* ── Text-to-Speech (Piper TTS) ─────────────── */}
-        <Panel className="p-5">
+        {showTts && <Panel className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
@@ -448,7 +460,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
             </div>
           )}
           <AddPathForm type="tts" onAdd={loadData} />
-        </Panel>
+        </Panel>}
       </div>
 
       {/* Info banner */}
@@ -457,19 +469,19 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange }) => {
           <Info className="w-3 h-3 text-gray-400 dark:text-gray-500" />
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed space-y-1.5">
-          <div>
+          {showWhisper && showTts && <div>
             <span className="font-medium text-gray-700 dark:text-gray-200">Agent tools:</span>{' '}
             When models are loaded, your agent can use <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">transcribe_audio</code> and{' '}
             <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">speak_text</code> tools automatically.
-          </div>
-          <div>
+          </div>}
+          {showWhisper && <div>
             <span className="font-medium text-gray-700 dark:text-gray-200">Whisper STT:</span>{' '}
             Needs a single <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.bin</code> file (e.g. <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">ggml-base.en.bin</code>).
-          </div>
-          <div>
+          </div>}
+          {showTts && <div>
             <span className="font-medium text-gray-700 dark:text-gray-200">Piper TTS:</span>{' '}
             Needs <strong>two files</strong> — the <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx</code> voice model <strong>and</strong> its matching <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx.json</code> config. Download both to the same folder.
-          </div>
+          </div>}
         </div>
       </div>
     </div>

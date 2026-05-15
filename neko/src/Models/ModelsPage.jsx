@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X, ChevronDown,
-  Mic, Cpu, Eye, Image, MessageSquare
+  Mic, Volume2, Cpu, Eye, Image, MessageSquare
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import EngineRuntimeSection from './EngineRuntimeSection.jsx';
@@ -72,30 +72,20 @@ const CollapsibleSection = ({
   </div>
 );
 
-// ── Voice compact subtitle ────────────────────────────────────────────────────
-const VoiceSubtitle = ({ sttStatus, sttModel, ttsStatus, ttsModel, loaded }) => {
+// ── Speech compact subtitles ─────────────────────────────────────────────────
+const SpeechSubtitle = ({ status, model, loaded, idleLabel }) => {
   if (!loaded) return 'Checking...';
-  const parts = [];
-  if (sttStatus === 'ready') parts.push(`STT: ${sttModel || 'active'}`);
-  else if (sttStatus === 'loading') parts.push('STT: loading...');
-  else parts.push('STT: idle');
-  if (ttsStatus === 'ready') parts.push(`TTS: ${ttsModel || 'active'}`);
-  else if (ttsStatus === 'loading') parts.push('TTS: loading...');
-  else parts.push('TTS: idle');
-  return parts.join(' · ');
+  if (status === 'ready') return model || 'Active local model';
+  if (status === 'loading') return 'Loading local model...';
+  if (status === 'error') return 'Needs attention';
+  return idleLabel;
 };
 
-const VoiceCompactBadge = ({ sttStatus, ttsStatus }) => (
-  <div className="flex items-center gap-2">
-    <span className="flex items-center gap-1">
-      <StatusDot status={sttStatus} />
-      <span className="text-[10px] text-gray-500 dark:text-gray-400">STT</span>
-    </span>
-    <span className="flex items-center gap-1">
-      <StatusDot status={ttsStatus} />
-      <span className="text-[10px] text-gray-500 dark:text-gray-400">TTS</span>
-    </span>
-  </div>
+const SpeechCompactBadge = ({ status, label }) => (
+  <span className="flex items-center gap-1.5">
+    <StatusDot status={status} />
+    <span className="text-[10px] text-gray-500 dark:text-gray-400">{label}</span>
+  </span>
 );
 
 const AssetSubtitle = ({ count, emptyLabel, singularLabel, pluralLabel }) => {
@@ -211,7 +201,8 @@ const ModelsPage = () => {
   }, [refreshVoiceData, refreshVisualData]);
 
   // ── Collapsible section state ──────────────────────────────────────────────
-  const [expandedVoice, setExpandedVoice] = useState(false);
+  const [expandedStt, setExpandedStt] = useState(false);
+  const [expandedTts, setExpandedTts] = useState(false);
   const [expandedVision, setExpandedVision] = useState(false);
   const [expandedImage, setExpandedImage] = useState(false);
   const [expandedEngine, setExpandedEngine] = useState(false);
@@ -298,7 +289,8 @@ const ModelsPage = () => {
   const handleDownloadedSelect = (item) => {
     setHighlightedItem(item);
     if (item.type === 'model') setExpandedChat(true);
-    if (item.type === 'whisper' || item.type === 'tts') setExpandedVoice(true);
+    if (item.type === 'whisper') setExpandedStt(true);
+    if (item.type === 'tts') setExpandedTts(true);
     if (item.type === 'vision') setExpandedVision(true);
     if (item.type === 'image') setExpandedImage(true);
     if (item.type === 'provider') setExpandedChat(true);
@@ -486,21 +478,48 @@ const ModelsPage = () => {
             </div>
           </CollapsibleSection>
 
-          {/* ── Voice ─────────────────────────────────────────────────────── */}
+          {/* ── Speech-to-Text ────────────────────────────────────────────── */}
           <CollapsibleSection
             icon={Mic}
-            title="Voice"
-            subtitle={VoiceSubtitle(voiceState)}
-            badge={<VoiceCompactBadge sttStatus={voiceState.sttStatus} ttsStatus={voiceState.ttsStatus} />}
-            expanded={expandedVoice}
-            onToggle={() => setExpandedVoice(v => !v)}
+            title="Speech-to-Text"
+            subtitle={SpeechSubtitle({
+              status: voiceState.sttStatus,
+              model: voiceState.sttModel,
+              loaded: voiceState.loaded,
+              idleLabel: 'Transcribe audio with a hosted provider or local Whisper model',
+            })}
+            badge={<SpeechCompactBadge status={voiceState.sttStatus} label="STT" />}
+            expanded={expandedStt}
+            onToggle={() => setExpandedStt(v => !v)}
           >
             <div className="pt-5 space-y-5">
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                <CapabilityProvidersSection capability="stt" />
-                <CapabilityProvidersSection capability="tts" />
-              </div>
+              <CapabilityProvidersSection capability="stt" />
               <AudioModelsSection
+                mode="whisper"
+                highlightedItem={highlightedItem}
+                onModelsChange={setAudioModels}
+              />
+            </div>
+          </CollapsibleSection>
+
+          {/* ── Text-to-Speech ────────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={Volume2}
+            title="Text-to-Speech"
+            subtitle={SpeechSubtitle({
+              status: voiceState.ttsStatus,
+              model: voiceState.ttsModel,
+              loaded: voiceState.loaded,
+              idleLabel: 'Create spoken responses with a hosted provider or local Piper voice',
+            })}
+            badge={<SpeechCompactBadge status={voiceState.ttsStatus} label="TTS" />}
+            expanded={expandedTts}
+            onToggle={() => setExpandedTts(v => !v)}
+          >
+            <div className="pt-5 space-y-5">
+              <CapabilityProvidersSection capability="tts" />
+              <AudioModelsSection
+                mode="tts"
                 highlightedItem={highlightedItem}
                 onModelsChange={setAudioModels}
               />
