@@ -1,11 +1,11 @@
-import React, {
+import {
   useState,
   useEffect,
   memo,
   useCallback,
   useMemo,
-  useRef,
 } from "react";
+import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";
 import authService from "../services/authService.js";
 import {
@@ -20,13 +20,40 @@ import {
 } from "lucide-react";
 
 import UniversalSearch from "./UniversalSearch";
-import { useWorkspace } from "../contexts/WorkspaceContext";
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import eventBus from "../utils/eventBus.js";
+import catDP from "../assets/dp/CAT.webp";
+import dogDP from "../assets/dp/DOG.webp";
+import dolphinDP from "../assets/dp/DOLPHIN.webp";
+import dragonDP from "../assets/dp/DRAGON.webp";
+import elephantDP from "../assets/dp/ELEPHANT.webp";
+import foxDP from "../assets/dp/FOX.webp";
+import lionDP from "../assets/dp/LION.webp";
+import owlDP from "../assets/dp/OWL.webp";
+import penguinDP from "../assets/dp/PENGUIN.webp";
+import wolfDP from "../assets/dp/WOLF.webp";
 
 let globalProfileCache = null;
 let profileCacheInitialized = false;
+
+const PROFILE_PICTURE_MAP = {
+  CAT: catDP,
+  DOG: dogDP,
+  DOLPHIN: dolphinDP,
+  DRAGON: dragonDP,
+  ELEPHANT: elephantDP,
+  FOX: foxDP,
+  LION: lionDP,
+  OWL: owlDP,
+  PENGUIN: penguinDP,
+  WOLF: wolfDP,
+};
+
+const isProfilePictureUrl = (value) => {
+  if (!value) return false;
+  return /^(https?:|data:|blob:)/i.test(value) || value.startsWith("/");
+};
 
 // ── ProfileImage ──────────────────────────────────────────────────────────────
 
@@ -55,6 +82,15 @@ const ProfileImage = memo(
   }
 );
 ProfileImage.displayName = "ProfileImage";
+ProfileImage.propTypes = {
+  size: PropTypes.string,
+  className: PropTypes.string,
+  src: PropTypes.string,
+  initials: PropTypes.string,
+  hasError: PropTypes.bool,
+  onError: PropTypes.func,
+  onLoad: PropTypes.func,
+};
 
 // ── DockItem ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +153,14 @@ const DockItem = memo(({ children, label, onClick, isActive, dockPosition = 'bot
   );
 });
 DockItem.displayName = "DockItem";
+DockItem.propTypes = {
+  children: PropTypes.node,
+  label: PropTypes.string,
+  onClick: PropTypes.func,
+  isActive: PropTypes.bool,
+  dockPosition: PropTypes.oneOf(["bottom", "left", "right"]),
+  className: PropTypes.string,
+};
 
 // ── Dock separator ────────────────────────────────────────────────────────────
 
@@ -125,6 +169,9 @@ const DockSep = ({ dockPosition = 'bottom' }) => {
   return (
     <div className={`${isVertical ? 'h-px w-6 my-0.5' : 'w-px h-6 mx-0.5'} bg-gray-200 dark:bg-white/10 midnight:bg-white/10 flex-shrink-0`} />
   );
+};
+DockSep.propTypes = {
+  dockPosition: PropTypes.oneOf(["bottom", "left", "right"]),
 };
 
 // ── Main Dock Component ───────────────────────────────────────────────────────
@@ -154,13 +201,6 @@ const DynamicSidebar = ({
     () => globalProfileCache || { name: "", profilePicture: "" }
   );
   const [profileImageError, setProfileImageError] = useState(false);
-  const [dockItemsVisible, setDockItemsVisible] = useState(() => {
-    const stored = localStorage.getItem('dockItemsVisible');
-    if (stored) return JSON.parse(stored);
-    return { chat: true, workspace: true, calendar: true, files: true, models: true, tools: true, scheduler: true, profiles: true, search: true, settings: true };
-  });
-
-  const { currentWorkspace } = useWorkspace();
   const {
     currentConversationId,
     conversationTitle,
@@ -269,18 +309,8 @@ const DynamicSidebar = ({
   // Resolve profile picture URL — default to CAT when no picture is set
   const profilePictureUrl = useMemo(() => {
     const pic = profileData.profilePicture || "CAT";
-    if (pic.startsWith("https://")) return pic;
-    try {
-      const dpMap = {
-        CAT: "../assets/dp/CAT.webp", DOG: "../assets/dp/DOG.webp",
-        DOLPHIN: "../assets/dp/DOLPHIN.webp", DRAGON: "../assets/dp/DRAGON.webp",
-        ELEPHANT: "../assets/dp/ELEPHANT.webp", FOX: "../assets/dp/FOX.webp",
-        LION: "../assets/dp/LION.webp", OWL: "../assets/dp/OWL.webp",
-        PENGUIN: "../assets/dp/PENGUIN.webp", WOLF: "../assets/dp/WOLF.webp",
-      };
-      if (dpMap[pic]) return new URL(dpMap[pic], import.meta.url).href;
-    } catch { return null; }
-    return null;
+    if (isProfilePictureUrl(pic)) return pic;
+    return PROFILE_PICTURE_MAP[pic] || null;
   }, [profileData.profilePicture]);
 
   const profileInitials = useMemo(() => {
@@ -540,6 +570,21 @@ const DynamicSidebar = ({
       <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} onNavigate={onPageChange} />
     </>
   );
+};
+
+DynamicSidebar.propTypes = {
+  onPageChange: PropTypes.func,
+  session: PropTypes.shape({
+    user: PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      name: PropTypes.string,
+      email: PropTypes.string,
+    }),
+  }),
+  onNewChat: PropTypes.func,
+  basePage: PropTypes.string,
+  isSearchOpen: PropTypes.bool,
+  onSearchOpen: PropTypes.func,
 };
 
 export default memo(DynamicSidebar);
