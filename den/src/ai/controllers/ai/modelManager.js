@@ -317,7 +317,7 @@ export function deleteModel(filename) {
  * Returns a downloadId that can be used to track progress.
  * Progress is streamed via SSE from the route handler.
  */
-export async function startDownload(url, filename, subDir = '') {
+export async function startDownload(url, filename, subDir = '', options = {}) {
   // Sanitize filename
   const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
   const allowedExtensions = ['.gguf', '.bin', '.onnx', '.json', '.mmproj', '.safetensors', '.ckpt', '.pt', '.pth'];
@@ -348,7 +348,10 @@ export async function startDownload(url, filename, subDir = '') {
   // Run download in background
   (async () => {
     try {
-      const response = await fetch(url, { signal: abortController.signal });
+      const response = await fetch(url, {
+        signal: abortController.signal,
+        headers: options.headers || undefined,
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

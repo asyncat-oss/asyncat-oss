@@ -648,8 +648,8 @@ const ProvidersSection = ({
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Provider Profiles</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Activate one profile to route chat and agents through it.</p>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Endpoint Profiles</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cloud APIs and OpenAI-compatible local runtimes for chat and agents.</p>
           </div>
           <div className="flex items-center gap-2">
             <Badge color={network.fullyOnline ? 'green' : 'red'}>{network.fullyOnline ? 'Online' : 'Offline'}</Badge>
@@ -669,7 +669,7 @@ const ProvidersSection = ({
           <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-8 text-center">
             <Cloud className="w-7 h-7 text-gray-300 dark:text-gray-600 mx-auto" />
             <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">No provider profiles yet</p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Add a provider below when you want cloud or OpenAI-compatible local routing.</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Add a cloud API or local runtime below.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -764,7 +764,7 @@ const ProvidersSection = ({
       {(showOllamaDetected || showLmStudioDetected || showOpenAiCodexDetected || showCodexCliDetected) && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Detected Local Providers</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Detected Chat Runtimes</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {showOllamaDetected && (
@@ -823,8 +823,8 @@ const ProvidersSection = ({
       <div>
         <div className="flex items-center justify-between gap-4 mb-3">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Provider</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Add cloud APIs, local runtimes, Ollama, LM Studio, or any OpenAI-compatible endpoint.</p>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Endpoint</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Hosted chat APIs, local runtimes, and custom OpenAI-compatible endpoints.</p>
           </div>
           <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
             <Plus className="w-4 h-4" />

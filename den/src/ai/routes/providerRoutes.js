@@ -110,6 +110,161 @@ const router = express.Router();
 const providerStatusClients = new Map();
 const execFileAsync = promisify(execFile);
 
+function getHuggingFaceToken(userId) {
+  const envToken = String(process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || '').trim();
+  if (envToken) return envToken;
+  if (!userId) return '';
+  try {
+    const row = db.prepare(`
+      SELECT api_key
+      FROM ai_provider_profiles
+      WHERE user_id = ? AND provider_id = 'huggingface' AND api_key IS NOT NULL AND api_key <> ''
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(userId);
+    return String(row?.api_key || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function huggingFaceHeaders(userId, extra = {}) {
+  const token = getHuggingFaceToken(userId);
+  return {
+    Accept: 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  };
+}
+
+function isHuggingFaceUrl(rawUrl = '') {
+  try {
+    const url = new URL(rawUrl);
+    return url.hostname === 'huggingface.co' || url.hostname.endsWith('.huggingface.co');
+  } catch {
+    return false;
+  }
+}
+
+function requiredEnv(name, providerName) {
+  const value = String(process.env[name] || '').trim();
+  if (!value) throw new Error(`${providerName} is selected but ${name} is not saved.`);
+  return value;
+}
+
+async function transcribeWithCloudProvider(providerId, audioBuffer, options = {}) {
+  if (providerId === 'openai') {
+    const form = new FormData();
+    form.append('file', new Blob([audioBuffer], { type: 'audio/webm' }), 'audio.webm');
+    form.append('model', process.env.OPENAI_STT_MODEL || 'gpt-4o-transcribe');
+    if (options.language) form.append('language', options.language);
+
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${requiredEnv('OPENAI_API_KEY', 'OpenAI STT')}` },
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`OpenAI transcription failed: ${error}`);
+    }
+    const result = await response.json();
+    return {
+      text: result.text || '',
+      segments: result.segments || [],
+      language: result.language || options.language || 'auto',
+      provider: 'openai',
+      model: process.env.OPENAI_STT_MODEL || 'gpt-4o-transcribe',
+    };
+  }
+
+  if (providerId === 'elevenlabs') {
+    const form = new FormData();
+    form.append('file', new Blob([audioBuffer], { type: 'audio/webm' }), 'audio.webm');
+    form.append('model_id', process.env.ELEVENLABS_STT_MODEL || 'scribe_v2');
+    if (options.language) form.append('language_code', options.language);
+
+    const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+      method: 'POST',
+      headers: { 'xi-api-key': requiredEnv('ELEVENLABS_API_KEY', 'ElevenLabs STT') },
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`ElevenLabs transcription failed: ${error}`);
+    }
+    const result = await response.json();
+    return {
+      text: result.text || '',
+      words: result.words || [],
+      language: result.language_code || options.language || 'auto',
+      provider: 'elevenlabs',
+      model: process.env.ELEVENLABS_STT_MODEL || 'scribe_v2',
+    };
+  }
+
+  throw new Error(`${providerId} speech-to-text is configured but does not have a runtime adapter yet.`);
+}
+
+async function synthesizeWithCloudProvider(providerId, text, options = {}) {
+  if (providerId === 'openai') {
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${requiredEnv('OPENAI_API_KEY', 'OpenAI TTS')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: options.model || process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
+        input: text,
+        voice: options.voice || process.env.OPENAI_TTS_VOICE || 'coral',
+        ...(options.instructions ? { instructions: options.instructions } : {}),
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`OpenAI speech generation failed: ${error}`);
+    }
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      contentType: response.headers.get('content-type') || 'audio/mpeg',
+      provider: 'openai',
+    };
+  }
+
+  if (providerId === 'elevenlabs') {
+    const voiceId = options.voiceId || process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb';
+    const outputFormat = options.outputFormat || process.env.ELEVENLABS_OUTPUT_FORMAT || 'mp3_44100_128';
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': requiredEnv('ELEVENLABS_API_KEY', 'ElevenLabs TTS'),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: options.model || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
+        ...(options.languageCode ? { language_code: options.languageCode } : {}),
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`ElevenLabs speech generation failed: ${error}`);
+    }
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      contentType: response.headers.get('content-type') || 'audio/mpeg',
+      provider: 'elevenlabs',
+    };
+  }
+
+  throw new Error(`${providerId} text-to-speech is configured but does not have a runtime adapter yet.`);
+}
+
 function activeProviderSnapshot(userId) {
   const active = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools, updated_at FROM ai_provider_config WHERE user_id = ?').get(userId);
   const localStatus = getLlamaStatus();
@@ -888,7 +1043,9 @@ router.post('/local-models/download', verifyUser, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid URL' });
     }
 
-    const downloadId = await startDownload(url, filename, subDir);
+    const downloadId = await startDownload(url, filename, subDir, {
+      headers: isHuggingFaceUrl(url) ? huggingFaceHeaders(req.user.id, { Accept: '*/*' }) : undefined,
+    });
     res.json({ success: true, downloadId, message: 'Download started' });
   } catch (err) {
     console.error('Start download error:', err);
@@ -980,12 +1137,20 @@ router.get('/local-models/downloads/:downloadId/stream', async (req, res) => {
 // ── GET /hf-search — search HuggingFace GGUF models ─────────────────────────
 router.get('/hf-search', verifyUser, async (req, res) => {
   try {
-    const { q = '', filter = 'gguf', sort = 'trending', page = 0 } = req.query;
-    const query = encodeURIComponent(q || 'text generation gguf');
-    const url = `https://huggingface.co/api/models?search=${query}&filter=${filter}&sort=${sort}&direction=-1&page=${page}&full=true`;
+    const { q = '', filter = '', sort = 'downloads', page = 0, limit = 20 } = req.query;
+    const params = new URLSearchParams({
+      search: q || 'text generation gguf',
+      sort,
+      direction: '-1',
+      page: String(page),
+      limit: String(limit),
+      full: 'true',
+    });
+    if (filter) params.set('filter', String(filter));
+    const url = `https://huggingface.co/api/models?${params.toString()}`;
 
     const hfRes = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
+      headers: huggingFaceHeaders(req.user.id),
       signal: AbortSignal.timeout(8000),
     });
 
@@ -1001,19 +1166,59 @@ router.get('/hf-search', verifyUser, async (req, res) => {
       repo: m.repoId || m.id,
       modelId: m.modelId || m.id,
       author: m.author || m.id.split('/')[0],
-     downloads: m.downloads || 0,
+      downloads: m.downloads || 0,
       likes: m.likes || 0,
       tags: (m.tags || []).filter(t => !t.startsWith('license:')),
       pipeline_tag: m.pipeline_tag || '',
       created: m.createdAt || null,
       updated: m.lastModified || null,
       private: m.private || false,
+      gated: m.gated || false,
     }));
 
     res.json({ success: true, models, count: models.length });
   } catch (err) {
     console.error('HF search error:', err.message);
     res.status(500).json({ success: false, error: 'HuggingFace search failed', details: err.message });
+  }
+});
+
+// ── GET /hf-files?repoId=org/name — list downloadable files in a HF repo ─────
+router.get('/hf-files', verifyUser, async (req, res) => {
+  try {
+    const repoId = String(req.query.repoId || '').trim();
+    if (!repoId) {
+      return res.status(400).json({ success: false, error: 'repoId is required' });
+    }
+
+    const encodedRepo = repoId.split('/').map(encodeURIComponent).join('/');
+    const url = `https://huggingface.co/api/models/${encodedRepo}`;
+    const hfRes = await fetch(url, {
+      headers: huggingFaceHeaders(req.user.id),
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!hfRes.ok) {
+      const hint = hfRes.status === 401 || hfRes.status === 403
+        ? 'Check that HF_TOKEN is saved and that your Hugging Face account has accepted this model license.'
+        : hfRes.statusText;
+      throw new Error(`HF API ${hfRes.status}: ${hint}`);
+    }
+
+    const data = await hfRes.json();
+    const files = (data.siblings || []).map(f => ({
+      rfilename: f.rfilename,
+      size: f.size || 0,
+    }));
+    res.json({
+      success: true,
+      repoId,
+      private: Boolean(data.private),
+      gated: data.gated || false,
+      files,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch repo files', details: err.message });
   }
 });
 
@@ -1165,7 +1370,7 @@ router.get('/hf-repo/:repoId/files', verifyUser, async (req, res) => {
     const url = `https://huggingface.co/api/models/${repoId}/tree/main?recursive=true`;
 
     const hfRes = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
+      headers: huggingFaceHeaders(req.user.id),
       signal: AbortSignal.timeout(8000),
     });
 
@@ -1202,6 +1407,7 @@ router.get('/hf-download-url', verifyUser, async (req, res) => {
     const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURIComponent(filename)}`;
     const headRes = await fetch(url, {
       method: 'HEAD',
+      headers: huggingFaceHeaders(req.user.id, { Accept: '*/*' }),
       signal: AbortSignal.timeout(5000),
     });
 
@@ -1463,9 +1669,13 @@ router.post('/audio/transcribe', verifyUser, express.raw({ type: '*/*', limit: '
     if (!audioBuffer || audioBuffer.length === 0) {
       return res.status(400).json({ success: false, error: 'No audio data provided' });
     }
-    const result = await whisperTranscribe(audioBuffer, {
+    const options = {
       language: req.query.language || undefined,
-    });
+    };
+    const providerId = String(process.env.ASYNCAT_STT_PROVIDER || 'local').trim();
+    const result = providerId && providerId !== 'local'
+      ? await transcribeWithCloudProvider(providerId, audioBuffer, options)
+      : await whisperTranscribe(audioBuffer, options);
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1522,11 +1732,20 @@ router.post('/audio/speak', verifyUser, async (req, res) => {
     return res.status(400).json({ success: false, error: 'text is required' });
   }
   try {
-    const audioBuffer = await ttsSynthesize(text, { speakerId, lengthScale, noiseScale });
-    res.setHeader('Content-Type', 'audio/wav');
-    res.setHeader('Content-Length', audioBuffer.length);
-    res.setHeader('Content-Disposition', `inline; filename="speech_${Date.now()}.wav"`);
-    res.send(audioBuffer);
+    const providerId = String(process.env.ASYNCAT_TTS_PROVIDER || 'local').trim();
+    const result = providerId && providerId !== 'local'
+      ? await synthesizeWithCloudProvider(providerId, text, req.body || {})
+      : {
+          buffer: await ttsSynthesize(text, { speakerId, lengthScale, noiseScale }),
+          contentType: 'audio/wav',
+          provider: 'local',
+        };
+    const ext = result.contentType.includes('mpeg') || result.contentType.includes('mp3') ? 'mp3' : 'wav';
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Length', result.buffer.length);
+    res.setHeader('X-Asyncat-Audio-Provider', result.provider || providerId || 'local');
+    res.setHeader('Content-Disposition', `inline; filename="speech_${Date.now()}.${ext}"`);
+    res.send(result.buffer);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X, ChevronDown,
-  Mic, Cpu, Box, Globe, Eye, Image, Cloud
+  Mic, Cpu, Eye, Image, MessageSquare
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import EngineRuntimeSection from './EngineRuntimeSection.jsx';
@@ -10,6 +10,7 @@ import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
 import AudioModelsSection from './AudioModelsSection.jsx';
 import VisualModelsSection from './VisualModelsSection.jsx';
+import CapabilityProvidersSection from './CapabilityProvidersSection.jsx';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
 import {
@@ -214,16 +215,7 @@ const ModelsPage = () => {
   const [expandedVision, setExpandedVision] = useState(false);
   const [expandedImage, setExpandedImage] = useState(false);
   const [expandedEngine, setExpandedEngine] = useState(false);
-  const [expandedLibrary, setExpandedLibrary] = useState(models.length > 0);
-  const [expandedProviders, setExpandedProviders] = useState(providerProfiles.length > 0);
-
-  const [libraryEverExpanded, setLibraryEverExpanded] = useState(false);
-  useEffect(() => {
-    if (!libraryEverExpanded && models.length > 0) {
-      setExpandedLibrary(true);
-      setLibraryEverExpanded(true);
-    }
-  }, [models.length, libraryEverExpanded]);
+  const [expandedChat, setExpandedChat] = useState(true);
 
   // ── Unified search ─────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -305,11 +297,11 @@ const ModelsPage = () => {
 
   const handleDownloadedSelect = (item) => {
     setHighlightedItem(item);
-    if (item.type === 'model') setExpandedLibrary(true);
+    if (item.type === 'model') setExpandedChat(true);
     if (item.type === 'whisper' || item.type === 'tts') setExpandedVoice(true);
     if (item.type === 'vision') setExpandedVision(true);
     if (item.type === 'image') setExpandedImage(true);
-    if (item.type === 'provider') setExpandedProviders(true);
+    if (item.type === 'provider') setExpandedChat(true);
     window.setTimeout(() => {
       const id = item.type === 'model'
         ? `model-card-${item.id}`
@@ -417,6 +409,8 @@ const ModelsPage = () => {
             providerAction={providerAction}
             switchingEngine={switchingEngine}
             installingEngine={installingEngine}
+            voiceState={voiceState}
+            visualModels={visualModels}
             onStop={handleStop}
             onDeactivateProvider={handleProviderDeactivate}
           />
@@ -431,6 +425,67 @@ const ModelsPage = () => {
             onVisualRefresh={refreshVisualData}
           />
 
+          {/* ── Chat & Agent Models ──────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={MessageSquare}
+            title="Chat & Agent Models"
+            subtitle={`${providerProfiles.length} endpoint profile${providerProfiles.length === 1 ? '' : 's'} · ${models.length} local LLM${models.length === 1 ? '' : 's'}${activeProviderName ? ` · ${activeProviderName} active` : ''}`}
+            badge={<Badge color={status === 'ready' || providerConfig?.model ? 'green' : 'gray'}>{status === 'ready' || providerConfig?.model ? 'Active' : 'Choose one'}</Badge>}
+            expanded={expandedChat}
+            onToggle={() => setExpandedChat(v => !v)}
+          >
+            <div className="pt-5 space-y-8">
+              <ProvidersSection
+                catalog={providerCatalog}
+                profiles={providerProfiles}
+                activeConfig={providerConfig}
+                serverStatus={serverStatus}
+                loading={loadingProviders}
+                providerAction={providerAction}
+                providerError={providerError}
+                highlightedItem={highlightedItem}
+                onRefresh={loadProviderData}
+                onSave={handleProviderSave}
+                onDelete={handleProviderDelete}
+                onTest={handleProviderTest}
+                onActivate={handleProviderActivate}
+                onLoadModels={handleLoadProviderModels}
+              />
+
+              <LocalModelsPane
+                models={models}
+                loadingModels={loadingModels}
+                serverStatus={serverStatus}
+                status={status}
+                startingModel={startingModel}
+                setStartingModel={setStartingModel}
+                deletingModel={deletingModel}
+                switchingEngine={switchingEngine}
+                installingEngine={installingEngine}
+                highlightedItem={highlightedItem}
+                quickLoadPath={quickLoadPath}
+                setQuickLoadPath={setQuickLoadPath}
+                modelContextConfig={modelContextConfig}
+                setServerStatus={setServerStatus}
+                pollCleanup={pollCleanup}
+                loadEngineData={loadEngineData}
+                loadProviderData={loadProviderData}
+                loadStatus={loadStatus}
+                handleAddPath={handleAddPath}
+                switchError={switchError}
+                switchSuccess={switchSuccess}
+                setSwitchError={setSwitchError}
+                setSwitchSuccess={setSwitchSuccess}
+                modelLoadCtxSizes={modelLoadCtxSizes}
+                modelLoadCtxErrors={modelLoadCtxErrors}
+                updateModelLoadCtxSize={updateModelLoadCtxSize}
+                commitModelLoadCtxSize={commitModelLoadCtxSize}
+                handleStart={handleStart}
+                handleDelete={handleDelete}
+              />
+            </div>
+          </CollapsibleSection>
+
           {/* ── Voice ─────────────────────────────────────────────────────── */}
           <CollapsibleSection
             icon={Mic}
@@ -440,7 +495,11 @@ const ModelsPage = () => {
             expanded={expandedVoice}
             onToggle={() => setExpandedVoice(v => !v)}
           >
-            <div className="pt-5">
+            <div className="pt-5 space-y-5">
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                <CapabilityProvidersSection capability="stt" />
+                <CapabilityProvidersSection capability="tts" />
+              </div>
               <AudioModelsSection
                 highlightedItem={highlightedItem}
                 onModelsChange={setAudioModels}
@@ -462,7 +521,8 @@ const ModelsPage = () => {
             expanded={expandedVision}
             onToggle={() => setExpandedVision(v => !v)}
           >
-            <div className="pt-5">
+            <div className="pt-5 space-y-5">
+              <CapabilityProvidersSection capability="vision" />
               <VisualModelsSection
                 mode="vision"
                 highlightedItem={highlightedItem}
@@ -485,7 +545,8 @@ const ModelsPage = () => {
             expanded={expandedImage}
             onToggle={() => setExpandedImage(v => !v)}
           >
-            <div className="pt-5">
+            <div className="pt-5 space-y-5">
+              <CapabilityProvidersSection capability="image" />
               <VisualModelsSection
                 mode="image"
                 highlightedItem={highlightedItem}
@@ -530,83 +591,6 @@ const ModelsPage = () => {
                 onInstall={handleManagedInstall}
                 onBuildGpuRuntime={handleBuildGpuRuntime}
                 onRefreshCatalog={loadEngineCatalog}
-              />
-            </div>
-          </CollapsibleSection>
-
-          {/* ── Model Library ─────────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={Box}
-            title="Model Library"
-            subtitle={models.length > 0
-              ? `${models.length} model${models.length !== 1 ? 's' : ''} — GGUF & MLX`
-              : 'No local models yet'}
-            badge={models.length > 0 ? <Badge color="gray">{models.length}</Badge> : null}
-            expanded={expandedLibrary}
-            onToggle={() => setExpandedLibrary(v => !v)}
-          >
-            <div className="pt-5">
-              <LocalModelsPane
-                models={models}
-                loadingModels={loadingModels}
-                serverStatus={serverStatus}
-                status={status}
-                startingModel={startingModel}
-                setStartingModel={setStartingModel}
-                deletingModel={deletingModel}
-                switchingEngine={switchingEngine}
-                installingEngine={installingEngine}
-                highlightedItem={highlightedItem}
-                quickLoadPath={quickLoadPath}
-                setQuickLoadPath={setQuickLoadPath}
-                modelContextConfig={modelContextConfig}
-                setServerStatus={setServerStatus}
-                pollCleanup={pollCleanup}
-                loadEngineData={loadEngineData}
-                loadProviderData={loadProviderData}
-                loadStatus={loadStatus}
-                handleAddPath={handleAddPath}
-                switchError={switchError}
-                switchSuccess={switchSuccess}
-                setSwitchError={setSwitchError}
-                setSwitchSuccess={setSwitchSuccess}
-                modelLoadCtxSizes={modelLoadCtxSizes}
-                modelLoadCtxErrors={modelLoadCtxErrors}
-                updateModelLoadCtxSize={updateModelLoadCtxSize}
-                commitModelLoadCtxSize={commitModelLoadCtxSize}
-                handleStart={handleStart}
-                handleDelete={handleDelete}
-              />
-            </div>
-          </CollapsibleSection>
-
-          {/* ── Providers ─────────────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={Globe}
-            title="Providers"
-            subtitle={providerProfiles.length > 0
-              ? `${providerProfiles.length} profile${providerProfiles.length !== 1 ? 's' : ''}${activeProviderName ? ` · ${activeProviderName} active` : ''}`
-              : 'Connect cloud APIs or local endpoints'}
-            badge={providerProfiles.length > 0 ? <Badge color="gray">{providerProfiles.length}</Badge> : null}
-            expanded={expandedProviders}
-            onToggle={() => setExpandedProviders(v => !v)}
-          >
-            <div className="pt-5">
-              <ProvidersSection
-                catalog={providerCatalog}
-                profiles={providerProfiles}
-                activeConfig={providerConfig}
-                serverStatus={serverStatus}
-                loading={loadingProviders}
-                providerAction={providerAction}
-                providerError={providerError}
-                highlightedItem={highlightedItem}
-                onRefresh={loadProviderData}
-                onSave={handleProviderSave}
-                onDelete={handleProviderDelete}
-                onTest={handleProviderTest}
-                onActivate={handleProviderActivate}
-                onLoadModels={handleLoadProviderModels}
               />
             </div>
           </CollapsibleSection>

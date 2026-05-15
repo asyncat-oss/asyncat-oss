@@ -1,4 +1,4 @@
-import { Square, Cloud, Cpu, Gauge } from 'lucide-react';
+import { Square, Cpu, Gauge, MessageSquare, Mic, Volume2, Eye, Image } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
 
 const STATUS_DOT = {
@@ -7,6 +7,17 @@ const STATUS_DOT = {
   ready:   'bg-green-500',
   error:   'bg-red-500',
 };
+
+const CapabilityStatus = ({ icon: Icon, label, value, status = 'idle' }) => (
+  <div className="flex min-w-0 items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-900/50">
+    <span className={`h-2 w-2 flex-shrink-0 rounded-full ${STATUS_DOT[status] || STATUS_DOT.idle}`} />
+    <Icon className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+    <div className="min-w-0">
+      <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">{label}</div>
+      <div className="truncate text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{value}</div>
+    </div>
+  </div>
+);
 
 const ActiveBrainPanel = ({
   activeConfig,
@@ -24,6 +35,8 @@ const ActiveBrainPanel = ({
   providerAction,
   switchingEngine,
   installingEngine,
+  voiceState,
+  visualModels,
   onStop,
   onDeactivateProvider,
 }) => {
@@ -60,6 +73,9 @@ const ActiveBrainPanel = ({
     : '';
 
   const dotColor = STATUS_DOT[serverStatus?.status] || STATUS_DOT.idle;
+  const chatStatus = providerIsExternal ? 'ready' : serverStatus?.status || 'idle';
+  const visionCount = visualModels?.vision?.length || 0;
+  const imageCount = visualModels?.image?.length || 0;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
@@ -95,6 +111,39 @@ const ActiveBrainPanel = ({
         {serverStatus?.error && (
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">{serverStatus.error}</p>
         )}
+
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <CapabilityStatus
+            icon={MessageSquare}
+            label="Chat"
+            status={chatStatus}
+            value={providerIsExternal ? displayModel || activeProviderName : serverStatus?.model || 'Not selected'}
+          />
+          <CapabilityStatus
+            icon={Mic}
+            label="STT"
+            status={voiceState?.sttStatus || 'idle'}
+            value={voiceState?.sttModel || (voiceState?.sttStatus === 'ready' ? 'Ready' : 'Idle')}
+          />
+          <CapabilityStatus
+            icon={Volume2}
+            label="TTS"
+            status={voiceState?.ttsStatus || 'idle'}
+            value={voiceState?.ttsModel || (voiceState?.ttsStatus === 'ready' ? 'Ready' : 'Idle')}
+          />
+          <CapabilityStatus
+            icon={Eye}
+            label="Vision"
+            status={visionCount ? 'ready' : 'idle'}
+            value={visionCount ? `${visionCount} asset${visionCount === 1 ? '' : 's'}` : 'No assets'}
+          />
+          <CapabilityStatus
+            icon={Image}
+            label="Image"
+            status={imageCount ? 'ready' : 'idle'}
+            value={imageCount ? `${imageCount} asset${imageCount === 1 ? '' : 's'}` : 'No assets'}
+          />
+        </div>
 
         {/* Actions */}
         <div className="mt-6 flex flex-wrap items-center gap-3">

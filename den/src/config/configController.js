@@ -9,7 +9,18 @@ const ROOT = path.resolve(__dirname, '..', '..', '..');
 
 const ENV_FILE = path.join(ROOT, 'den', '.env');
 
-const SECRETS = ['JWT_SECRET', 'LOCAL_PASSWORD'];
+const SECRETS = [
+  'JWT_SECRET',
+  'LOCAL_PASSWORD',
+  'HF_TOKEN',
+  'OPENAI_API_KEY',
+  'ELEVENLABS_API_KEY',
+  'STABILITY_API_KEY',
+  'FAL_KEY',
+  'REPLICATE_API_TOKEN',
+  'GEMINI_API_KEY',
+  'MINIMAX_API_KEY',
+];
 const LEGACY_SECRETS = ['SOLO_PASSWORD'];
 
 function maskSecret(value) {
@@ -88,7 +99,7 @@ export function updateConfig(req, res) {
     return res.status(400).json({ success: false, error: 'key and value are required' });
   }
 
-  const allowed = [...SECRETS, 'LOCAL_EMAIL', 'ASYNCAT_WORKSPACE_ROOT', 'WORKSPACE_ROOT', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH', 'WHISPER_SERVER_PORT', 'WHISPER_BINARY_PATH', 'TTS_SERVER_PORT', 'PIPER_BINARY_PATH', 'IMAGEGEN_BINARY_PATH', 'COMFYUI_BASE_URL'];
+  const allowed = [...SECRETS, 'LOCAL_EMAIL', 'ASYNCAT_WORKSPACE_ROOT', 'WORKSPACE_ROOT', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH', 'WHISPER_SERVER_PORT', 'WHISPER_BINARY_PATH', 'TTS_SERVER_PORT', 'PIPER_BINARY_PATH', 'IMAGEGEN_BINARY_PATH', 'COMFYUI_BASE_URL', 'ASYNCAT_STT_PROVIDER', 'ASYNCAT_TTS_PROVIDER', 'ASYNCAT_VISION_PROVIDER', 'ASYNCAT_IMAGE_PROVIDER'];
   if (!allowed.includes(key)) {
     return res.status(400).json({ success: false, error: `Key not allowed: ${key}. Allowed: ${allowed.join(', ')}` });
   }
@@ -130,5 +141,7 @@ export function updateSecret(req, res) {
     return res.status(500).json({ success: false, error: 'Failed to write secret' });
   }
 
-  res.json({ success: true, message: 'Secret updated. Restart the server to apply changes.' });
+  process.env[key] = value;
+
+  res.json({ success: true, message: 'Secret updated.' });
 }

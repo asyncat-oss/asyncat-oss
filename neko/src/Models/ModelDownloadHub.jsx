@@ -4,13 +4,15 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
   Download,
+  KeyRound,
   Loader2,
   Plus,
   Search,
   X,
 } from 'lucide-react';
-import { localModelsApi } from '../Settings/settingApi.js';
+import { configApi, localModelsApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 
 const TARGETS = {
@@ -143,15 +145,10 @@ const useHFSearch = (query, setQuery) => {
     setSearching(true);
     setSearchError(null);
     try {
-      const res = await fetch(
-        `https://huggingface.co/api/models?search=${encodeURIComponent(q)}&limit=20&sort=downloads&direction=-1`,
-        { headers: { Accept: 'application/json' } },
-      );
-      if (!res.ok) throw new Error('Search failed');
-      const data = await res.json();
-      setResults(data || []);
-    } catch {
-      setSearchError('Could not reach HuggingFace. Check your connection.');
+      const data = await localModelsApi.searchHuggingFace(q, { limit: 20 });
+      setResults(data.models || []);
+    } catch (err) {
+      setSearchError(err.message || 'Could not reach HuggingFace. Check your connection.');
       setResults([]);
     } finally {
       setSearching(false);
@@ -180,15 +177,11 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const res = await fetch(`https://huggingface.co/api/models/${repoId}`, {
-          headers: { Accept: 'application/json' },
-        });
-        if (!res.ok) throw new Error('Failed to fetch model files');
-        const data = await res.json();
-        const validFiles = (data.siblings || []).filter(f => targetOptionsForFile(f.rfilename, repoId).length > 0);
+        const data = await localModelsApi.listHuggingFaceFiles(repoId);
+        const validFiles = (data.files || []).filter(f => targetOptionsForFile(f.rfilename, repoId).length > 0);
         setFiles(validFiles);
-      } catch {
-        setError('Could not load model files.');
+      } catch (err) {
+        setError(err.message || 'Could not load model files.');
       } finally {
         setLoading(false);
       }
@@ -238,6 +231,89 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
           );
         })}
       </div>
+    </div>
+  );
+};
+
+const HuggingFaceAccessPanel = () => {
+  const [tokenValue, setTokenValue] = useState('');
+  const [maskedToken, setMaskedToken] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await configApi.getSecrets();
+      setMaskedToken(res.secrets?.HF_TOKEN || '');
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Could not load Hugging Face token status.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async () => {
+    const value = tokenValue.trim();
+    if (!value) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await configApi.updateSecret('HF_TOKEN', value);
+      setTokenValue('');
+      setMessage('Hugging Face token saved.');
+      await load();
+    } catch (err) {
+      setError(err.message || 'Could not save Hugging Face token.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/40 midnight:border-gray-800 midnight:bg-gray-900/50">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="min-w-0 flex-1 text-xs font-medium text-gray-600 dark:text-gray-300">
+          <span className="flex items-center gap-1.5">
+            <KeyRound className="h-3.5 w-3.5 text-gray-400" />
+            Hugging Face token
+            {maskedToken && !loading ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 dark:text-green-400">
+                <CheckCircle2 className="h-3 w-3" />
+                saved {maskedToken}
+              </span>
+            ) : null}
+          </span>
+          <input
+            type="password"
+            value={tokenValue}
+            onChange={(e) => setTokenValue(e.target.value)}
+            placeholder={maskedToken ? 'Replace saved token' : 'hf_...'}
+            className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-gray-600"
+          />
+        </label>
+        <button
+          onClick={save}
+          disabled={!tokenValue.trim() || saving}
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+          Save Token
+        </button>
+      </div>
+      {(message || error) && (
+        <p className={`mt-2 text-xs ${error ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+          {error || message}
+        </p>
+      )}
     </div>
   );
 };
@@ -519,6 +595,8 @@ const ModelDownloadHub = ({
           })}
         </div>
       )}
+
+      <HuggingFaceAccessPanel />
 
       <div className="mt-5">
         <div className="relative">

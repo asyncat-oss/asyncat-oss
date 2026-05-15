@@ -273,7 +273,7 @@ const LocalModelsPane = ({
 
     {/* Library header */}
     <div className="flex items-center justify-between">
-      <SectionHeader title="Library" />
+      <SectionHeader title="Local LLM Library" />
       {models.length > 0 && <Badge color="gray">{models.length} model{models.length !== 1 ? 's' : ''}</Badge>}
     </div>
 
@@ -287,7 +287,7 @@ const LocalModelsPane = ({
     ) : models.length === 0 ? (
       <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800 midnight:border-slate-800 px-4 py-12 text-center">
         <Box className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-3" />
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Your library is empty</p>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No local LLMs yet</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 max-w-xs">
           Search above to find and download GGUF models from HuggingFace.
         </p>

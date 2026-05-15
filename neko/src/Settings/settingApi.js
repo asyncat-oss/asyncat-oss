@@ -282,6 +282,20 @@ export const localModelsApi = {
     });
   },
 
+  searchHuggingFace: async (query, { limit = 20 } = {}) => {
+    const params = new URLSearchParams({
+      q: query,
+      limit: String(limit),
+      sort: 'downloads',
+    });
+    return apiCall(`${AI_API_BASE}/hf-search?${params.toString()}`);
+  },
+
+  listHuggingFaceFiles: async (repoId) => {
+    const params = new URLSearchParams({ repoId });
+    return apiCall(`${AI_API_BASE}/hf-files?${params.toString()}`);
+  },
+
   // List active downloads
   listDownloads: async () => {
     return apiCall(`${AI_API_BASE}/local-models/downloads`);
