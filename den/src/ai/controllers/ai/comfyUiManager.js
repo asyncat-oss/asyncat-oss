@@ -1,5 +1,7 @@
 // comfyUiManager.js — ComfyUI image generation bridge
 
+import fs from 'fs';
+import path from 'path';
 import { randomUUID } from 'crypto';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
@@ -157,6 +159,67 @@ function buildTxt2ImgWorkflow(options) {
   };
 }
 
+async function uploadInputImage(imagePath) {
+  const bytes = fs.readFileSync(imagePath);
+  const form = new FormData();
+  form.append('image', new Blob([bytes]), path.basename(imagePath));
+  form.append('overwrite', 'true');
+  const res = await fetch(url('/upload/image'), {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+  });
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!res.ok) throw new Error(data?.error || data?.raw || `ComfyUI image upload failed: HTTP ${res.status}`);
+  return data.name || path.basename(imagePath);
+}
+
+function buildImg2ImgWorkflow(options) {
+  const width = clampInt(options.width, 768, 256, 2048);
+  const height = clampInt(options.height, 768, 256, 2048);
+  const steps = clampInt(options.steps, 24, 1, 80);
+  const cfg = clampFloat(options.cfg, 7, 1, 20);
+  const denoise = clampFloat(options.strength ?? options.denoise, 0.55, 0.05, 1);
+  const seed = options.seed === undefined || options.seed === null || options.seed === ''
+    ? Math.floor(Math.random() * 1_000_000_000_000)
+    : clampInt(options.seed, 1, 0, Number.MAX_SAFE_INTEGER);
+
+  return {
+    workflow: {
+      1: { class_type: 'LoadImage', inputs: { image: options.imageName } },
+      2: { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: options.checkpoint } },
+      3: { class_type: 'CLIPTextEncode', inputs: { text: options.prompt, clip: ['2', 1] } },
+      4: { class_type: 'CLIPTextEncode', inputs: { text: options.negativePrompt || '', clip: ['2', 1] } },
+      5: { class_type: 'VAEEncode', inputs: { pixels: ['1', 0], vae: ['2', 2] } },
+      6: {
+        class_type: 'KSampler',
+        inputs: {
+          seed,
+          steps,
+          cfg,
+          sampler_name: options.sampler || 'euler',
+          scheduler: options.scheduler || 'normal',
+          denoise,
+          model: ['2', 0],
+          positive: ['3', 0],
+          negative: ['4', 0],
+          latent_image: ['5', 0],
+        },
+      },
+      7: { class_type: 'VAEDecode', inputs: { samples: ['6', 0], vae: ['2', 2] } },
+      8: { class_type: 'SaveImage', inputs: { filename_prefix: 'asyncat_edit', images: ['7', 0] } },
+    },
+    seed,
+    width,
+    height,
+    steps,
+    cfg,
+    denoise,
+  };
+}
+
 async function pollHistory(promptId) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < GENERATION_TIMEOUT_MS) {
@@ -247,5 +310,60 @@ export async function generateComfyUiImage(options = {}) {
     height: built.height,
     steps: built.steps,
     cfg: built.cfg,
+  };
+}
+
+export async function editComfyUiImage(options = {}) {
+  const prompt = String(options.prompt || '').trim();
+  if (!prompt) throw new Error('prompt is required');
+  const imagePath = String(options.imagePath || options.inputPath || '').trim();
+  if (!imagePath) throw new Error('imagePath is required');
+  if (!fs.existsSync(imagePath)) throw new Error(`Input image not found: ${imagePath}`);
+
+  const models = await listComfyUiModels();
+  const checkpoint = String(options.checkpoint || models.checkpoints[0] || '').trim();
+  if (!checkpoint) {
+    throw new Error('No ComfyUI checkpoint is available. Add a checkpoint to ComfyUI/models/checkpoints and restart or refresh ComfyUI.');
+  }
+  if (models.checkpoints.length > 0 && !models.checkpoints.includes(checkpoint)) {
+    throw new Error(`Checkpoint not found in ComfyUI: ${checkpoint}`);
+  }
+
+  const imageName = await uploadInputImage(imagePath);
+  const built = buildImg2ImgWorkflow({ ...options, prompt, checkpoint, imageName });
+  const clientId = randomUUID();
+  const queued = await fetchJson('/prompt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: built.workflow, client_id: clientId }),
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+  });
+
+  const promptId = queued.prompt_id;
+  if (!promptId) {
+    throw new Error(queued?.error?.message || queued?.error || 'ComfyUI did not return a prompt id');
+  }
+
+  const historyEntry = await pollHistory(promptId);
+  const imageRef = firstOutputImage(historyEntry);
+  if (!imageRef) throw new Error('ComfyUI completed but did not return an image');
+
+  const image = await fetchImage(imageRef);
+  return {
+    success: true,
+    runtime: 'comfyui',
+    mode: 'image-to-image',
+    baseUrl: baseUrl(),
+    promptId,
+    checkpoint,
+    image: image.dataUrl,
+    imageRef,
+    mimeType: image.mimeType,
+    seed: built.seed,
+    width: built.width,
+    height: built.height,
+    steps: built.steps,
+    cfg: built.cfg,
+    strength: built.denoise,
   };
 }

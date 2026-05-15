@@ -158,6 +158,10 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/tools`);
   },
 
+  getMultimodalCapabilities: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/capabilities/multimodal`);
+  },
+
   getSkills: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/skills`);
   },

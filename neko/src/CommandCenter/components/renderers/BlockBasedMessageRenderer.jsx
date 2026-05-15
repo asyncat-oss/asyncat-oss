@@ -426,7 +426,7 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
     // Groups: 1=annot-term, 2=annot-def, 3=img-alt, 4=img-url,
     //         5=md-label, 6=md-url, 7=bare-url, 8=bold, 9=italic,
     //         10=code, 11=citation
-    const inlineRegex = /\[\[([^\]|]+)\|([^\]]+)\]\]|!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"')\]]+)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\*?\(from ([^)]+)\)\*?/g;
+    const inlineRegex = /\[\[([^\]|]+)\|([^\]]+)\]\]|!\[([^\]]*)\]\(((?:https?:\/\/|data:image\/)[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|((?:https?:\/\/|data:image\/)[^\s<>"')\]]+)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\*?\(from ([^)]+)\)\*?/g;
 
     let last = 0;
     let m;
@@ -456,7 +456,7 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
         parts.push(<InlineLink key={`lnk-${key++}`} href={m[6]} label={m[5]} variant={options.linkVariant} />);
       } else if (m[7] !== undefined) {
         // bare https://... URL
-        if (isLikelyImageUrl(m[7])) {
+        if (isLikelyImageUrl(m[7]) || String(m[7]).startsWith('data:image/')) {
           parts.push(<InlineImage key={`imgurl-${key++}`} src={m[7]} alt="Image" />);
         } else {
           parts.push(<InlineLink key={`url-${key++}`} href={m[7]} label={m[7]} variant={options.linkVariant} />);

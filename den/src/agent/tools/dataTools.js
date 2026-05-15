@@ -8,12 +8,33 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
+import { getStatus as getWhisperStatus, transcribe } from '../../ai/controllers/ai/whisperServerManager.js';
 
 const PLATFORM = os.platform();
 const IS_WIN   = PLATFORM === 'win32';
+const TEXT_EXTS = new Set(['txt', 'md', 'mdx', 'json', 'csv', 'tsv', 'xml', 'html', 'htm', 'css', 'js', 'jsx', 'ts', 'tsx', 'py', 'sql', 'yaml', 'yml', 'toml', 'ini', 'env', 'log', 'sh', 'bash', 'zsh']);
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
+const AUDIO_EXTS = new Set(['wav', 'mp3', 'ogg', 'flac', 'm4a', 'webm']);
 
 function hasBin(bin) {
   try { execSync(IS_WIN ? `where ${bin} 2>nul` : `which ${bin} 2>/dev/null`); return true; } catch { return false; }
+}
+
+function safePath(filePath, workingDir) {
+  const resolved = path.resolve(workingDir, filePath);
+  if (!resolved.startsWith(path.resolve(workingDir))) {
+    throw new Error(`Path "${filePath}" is outside the working directory`);
+  }
+  return resolved;
+}
+
+function fileKind(filePath) {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  if (IMAGE_EXTS.has(ext)) return { kind: 'image', ext };
+  if (AUDIO_EXTS.has(ext)) return { kind: 'audio', ext };
+  if (ext === 'pdf') return { kind: 'pdf', ext };
+  if (TEXT_EXTS.has(ext) || !ext) return { kind: 'text', ext };
+  return { kind: 'binary', ext };
 }
 
 function runProc(cmd, opts = {}) {
@@ -489,7 +510,75 @@ export const imageDescribeTool = {
   },
 };
 
+// ── inspect_attachment ───────────────────────────────────────────────────────
+export const inspectAttachmentTool = {
+  name: 'inspect_attachment',
+  description: 'Inspect an attached file by routing to the right capability: images use vision, audio uses Whisper transcription, PDFs use text extraction, text files are read directly, and unknown binaries return metadata.',
+  category: 'data',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Attachment/file path relative to working directory' },
+      prompt: { type: 'string', description: 'Optional question or focus for image inspection' },
+      language: { type: 'string', description: 'Optional audio language code for transcription' },
+    },
+    required: ['path'],
+  },
+  execute: async (args, context) => {
+    const filePath = safePath(args.path, context.workingDir);
+    if (!fs.existsSync(filePath)) return { success: false, error: `File not found: ${args.path}` };
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) return { success: false, error: `"${args.path}" is a directory, not a file.` };
+
+    const { kind, ext } = fileKind(filePath);
+    const base = {
+      path: args.path,
+      kind,
+      ext,
+      size: stat.size,
+      sizeLabel: stat.size < 1024 ? `${stat.size}B` : stat.size < 1048576 ? `${(stat.size / 1024).toFixed(1)}KB` : `${(stat.size / 1048576).toFixed(1)}MB`,
+    };
+
+    if (kind === 'image') {
+      return imageDescribeTool.execute({ path: args.path, prompt: args.prompt || 'Describe this image and note any text, UI, objects, or important visual details.' }, context);
+    }
+
+    if (kind === 'audio') {
+      const whisperStatus = getWhisperStatus();
+      if (whisperStatus.status !== 'ready') {
+        return { success: false, ...base, error: 'Whisper STT model is not loaded. Load a Whisper model before inspecting audio attachments.' };
+      }
+      try {
+        const result = await transcribe(fs.readFileSync(filePath), { language: args.language || undefined });
+        return { success: true, ...base, text: result.text, language: result.language, segments: result.segments?.length || 0, model: whisperStatus.model };
+      } catch (err) {
+        return { success: false, ...base, error: `Transcription failed: ${err.message}` };
+      }
+    }
+
+    if (kind === 'pdf') {
+      return readPdfTool.execute({ path: args.path }, context);
+    }
+
+    if (kind === 'text') {
+      if (stat.size > 1024 * 1024) {
+        return { success: false, ...base, error: 'Text file is too large to inspect fully. Ask to inspect a smaller portion or use search tools.' };
+      }
+      const content = fs.readFileSync(filePath, 'utf8');
+      return { success: true, ...base, content: content.length > 12000 ? `${content.slice(0, 12000)}\n... [truncated]` : content };
+    }
+
+    return {
+      success: true,
+      ...base,
+      message: 'This attachment is a binary or unsupported type. I can report metadata, but need a specialized tool to inspect its contents.',
+    };
+  },
+};
+
 export const dataTools = [
+  inspectAttachmentTool,
   readPdfTool,
   readCsvTool,
   writeCsvTool,

@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic } from "lucide-react";
+import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic, Paperclip } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../../hooks/useModelConfig.js";
@@ -80,6 +80,15 @@ function absoluteFromRoot(rootPath = "", relativePath = ".") {
   if (!rootPath) return "";
   if (!relativePath || relativePath === ".") return rootPath;
   return `${String(rootPath).replace(/[\\/]+$/, "")}/${String(relativePath).replace(/^\/+/, "")}`;
+}
+
+function safeAttachmentName(name = "attachment") {
+  const cleaned = String(name || "attachment")
+    .replace(/[\\/]+/g, "-")
+    .replace(/[^\w.\- ]+/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+  return cleaned || "attachment";
 }
 
 function labelForWorkingContext(context, root) {
@@ -165,6 +174,83 @@ function RecordingWaveform() {
   );
 }
 
+function attachmentKind(file = {}) {
+  const mime = String(file.mime || '').toLowerCase();
+  const ext = String(file.ext || file.name?.split('.').pop() || file.path?.split('.').pop() || '').toLowerCase();
+  if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(ext)) return 'image';
+  if (mime.startsWith('audio/') || ['wav', 'mp3', 'm4a', 'ogg', 'flac', 'webm'].includes(ext)) return 'audio';
+  if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (['txt', 'md', 'json', 'csv', 'tsv', 'js', 'jsx', 'ts', 'tsx', 'py', 'html', 'css', 'xml', 'yaml', 'yml', 'toml', 'sql', 'log'].includes(ext)) return 'text';
+  return 'file';
+}
+
+function attachmentBadge(file, capabilities) {
+  const kind = attachmentKind(file);
+  if (kind === 'image') {
+    return capabilities?.vision?.ready
+      ? { label: 'Vision ready', tone: 'emerald' }
+      : { label: 'Needs vision', tone: 'amber' };
+  }
+  if (kind === 'audio') {
+    return capabilities?.stt?.ready
+      ? { label: 'Whisper ready', tone: 'emerald' }
+      : { label: 'Needs Whisper', tone: 'amber' };
+  }
+  if (kind === 'pdf') return { label: 'PDF readable', tone: 'blue' };
+  if (kind === 'text') return { label: 'Text included', tone: 'slate' };
+  return { label: 'Metadata only', tone: 'slate' };
+}
+
+const badgeToneClass = {
+  emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50',
+  amber: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/50',
+  blue: 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-950/30 dark:text-blue-300 dark:ring-blue-900/50',
+  slate: 'bg-slate-50 text-slate-600 ring-slate-100 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-800',
+};
+
+function AttachmentChip({ file, capabilities, onRemove }) {
+  const { Icon, color } = fileIconMeta(file.ext, "file");
+  const kind = attachmentKind(file);
+  const badge = attachmentBadge(file, capabilities);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    if (!['image', 'audio'].includes(kind) || !file.rootId || !file.path) return undefined;
+    let cancelled = false;
+    filesApi.fetchRawBlob(file.rootId, file.path)
+      .then(url => { if (!cancelled) setPreviewUrl(url); })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [file.path, file.rootId, kind]);
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 midnight:border-slate-700 midnight:bg-slate-900">
+      {kind === 'image' && previewUrl ? (
+        <img src={previewUrl} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover" />
+      ) : kind === 'audio' && previewUrl ? (
+        <audio src={previewUrl} controls className="h-7 w-32 max-w-[35vw]" />
+      ) : (
+        <Icon className={`h-4 w-4 shrink-0 ${color}`} />
+      )}
+      <span className="min-w-0">
+        <span className="block max-w-[12rem] truncate">{file.name}</span>
+        <span className={`mt-0.5 inline-flex rounded px-1.5 py-0.5 text-[10px] ring-1 ${badgeToneClass[badge.tone]}`}>
+          {badge.label}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-0.5 shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
 export const MessageInputV2 = ({
   onSubmit,
   disabled,
@@ -193,6 +279,7 @@ export const MessageInputV2 = ({
   onToggleVoiceMode,
   autoRecordPrompt = false,
   voiceTtsState = 'idle',
+  multimodalCapabilities = null,
 }) => {
   const [value, setValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -229,12 +316,14 @@ export const MessageInputV2 = ({
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [pendingContextSwitch, setPendingContextSwitch] = useState(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
   const { config: modelContextConfig } = useModelConfig();
   const textareaRef = useRef(null);
   const toolbarRef = useRef(null);
+  const filePickerRef = useRef(null);
   const rawAgentTrigger = useMemo(
     () => getAgentTrigger(value, cursorPosition),
     [value, cursorPosition],
@@ -537,6 +626,52 @@ export const MessageInputV2 = ({
   const removeFileAttachment = useCallback((path, rootId = "workspace") => {
     setFileAttachments(prev => prev.filter(f => !(f.path === path && (f.rootId || "workspace") === rootId)));
   }, []);
+
+  const handlePickedFiles = useCallback(async (event) => {
+    const picked = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!picked.length || disabled) return;
+
+    const rootId = activeWorkingContext?.rootId || "workspace";
+    const basePath = activeWorkingContext?.relativePath || ".";
+    const uploadDir = joinRelativePath(basePath, ".asyncat-attachments");
+    setUploadingAttachment(true);
+    setError(null);
+
+    try {
+      const uploaded = [];
+      for (const file of picked.slice(0, 8)) {
+        const safeName = safeAttachmentName(file.name);
+        const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const targetPath = joinRelativePath(uploadDir, `${stamp}-${safeName}`);
+        await filesApi.upload(rootId, targetPath, file, { overwrite: true });
+        uploaded.push({
+          rootId,
+          path: targetPath,
+          name: file.name,
+          ext: file.name.split(".").pop() || "",
+          mime: file.type || "",
+          size: file.size,
+          uploaded: true,
+        });
+      }
+
+      setFileAttachments(prev => {
+        const seen = new Set(prev.map(file => `${file.rootId || "workspace"}:${file.path}`));
+        const next = [...prev];
+        for (const file of uploaded) {
+          const key = `${file.rootId || "workspace"}:${file.path}`;
+          if (!seen.has(key)) next.push(file);
+        }
+        return next;
+      });
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    } catch (err) {
+      setError(`Failed to attach file: ${err.message || "Upload failed"}`);
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, disabled]);
 
   const handleSubmit = useCallback(
     async (e, overrideText = null) => {
@@ -1014,26 +1149,15 @@ export const MessageInputV2 = ({
               </div>
 
               {fileAttachments.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {fileAttachments.map(file => {
-                    const { Icon, color } = fileIconMeta(file.ext, "file");
-                    return (
-                      <span
-                        key={`${file.rootId || "workspace"}:${file.path}`}
-                        className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 midnight:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-700 dark:text-slate-300"
-                      >
-                        <Icon className={`h-3.5 w-3.5 ${color}`} />
-                        <span className="truncate max-w-[12rem]">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeFileAttachment(file.path, file.rootId || "workspace")}
-                          className="ml-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {fileAttachments.map(file => (
+                    <AttachmentChip
+                      key={`${file.rootId || "workspace"}:${file.path}`}
+                      file={file}
+                      capabilities={multimodalCapabilities}
+                      onRemove={() => removeFileAttachment(file.path, file.rootId || "workspace")}
+                    />
+                  ))}
                 </div>
               )}
 
@@ -1352,6 +1476,27 @@ export const MessageInputV2 = ({
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2 dark:border-gray-800 midnight:border-slate-800 sm:flex-nowrap sm:border-t-0 sm:pt-0">
+                  <input
+                    ref={filePickerRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handlePickedFiles}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => filePickerRef.current?.click()}
+                    disabled={disabled || uploadingAttachment}
+                    title="Attach files"
+                    className={`inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2.5 text-xs transition-all duration-200 ${
+                      uploadingAttachment
+                        ? "text-blue-500 dark:text-blue-400"
+                        : "text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
+                    }`}
+                  >
+                    {uploadingAttachment ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                  </button>
+
                   {voiceConversationAvailable && onToggleVoiceMode && (
                     <button
                       type="button"

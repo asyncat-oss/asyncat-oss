@@ -147,6 +147,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [gitLoading, setGitLoading] = useState(false);
   const [gitError, setGitError] = useState(null);
   const [externalFileAttachment, setExternalFileAttachment] = useState(null);
+  const [multimodalCapabilities, setMultimodalCapabilities] = useState(null);
   const [agentAutoApprove, setAgentAutoApprove] = useState(() => {
     try {
       return localStorage.getItem('asyncat_agent_auto_approve') === 'true';
@@ -203,6 +204,29 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const setCurrentChatRun = useCallback((updater) => {
     updateChatRun(currentRunKey, updater);
   }, [currentRunKey, updateChatRun]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCapabilities = () => {
+      agentApi.getMultimodalCapabilities()
+        .then(res => {
+          if (!cancelled) setMultimodalCapabilities(res.capabilities || null);
+        })
+        .catch(() => {
+          if (!cancelled) setMultimodalCapabilities(null);
+        });
+    };
+    loadCapabilities();
+    const interval = setInterval(loadCapabilities, 30000);
+    window.addEventListener('asyncat-visual-models-updated', loadCapabilities);
+    window.addEventListener('asyncat-audio-models-updated', loadCapabilities);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('asyncat-visual-models-updated', loadCapabilities);
+      window.removeEventListener('asyncat-audio-models-updated', loadCapabilities);
+    };
+  }, []);
 
   useEffect(() => {
     if (!agentSessionId) return;
@@ -1382,10 +1406,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onToggleAutoApprove={handleToggleAgentAutoApprove}
               reasoningEffort={reasoningEffort}
               onReasoningEffortChange={handleReasoningEffortChange}
-              externalFileAttachment={externalFileAttachment}
-              workingContext={workingContext}
-              onWorkingContextChange={setWorkingContext}
-            />
+                externalFileAttachment={externalFileAttachment}
+                workingContext={workingContext}
+                onWorkingContextChange={setWorkingContext}
+                multimodalCapabilities={multimodalCapabilities}
+              />
 
 
           </div>
@@ -1737,6 +1762,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 workingContext={workingContext}
                 onWorkingContextChange={setWorkingContext}
                 tokenUsage={latestTokenUsage}
+                multimodalCapabilities={multimodalCapabilities}
               />
             </div>
           </>

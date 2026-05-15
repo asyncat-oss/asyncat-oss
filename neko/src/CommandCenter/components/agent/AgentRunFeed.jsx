@@ -51,6 +51,11 @@ const TOOL_META = {
   web_search:        { icon: Globe,       label: 'Web search' },
   browse_website:    { icon: Globe,       label: 'Browse URL' },
   search_images:     { icon: Image,       label: 'Search images' },
+  inspect_attachment:{ icon: File,        label: 'Inspect attachment' },
+  image_describe:    { icon: Image,       label: 'Inspect image' },
+  generate_image:    { icon: Image,       label: 'Generated image' },
+  edit_image:        { icon: Image,       label: 'Edited image' },
+  screenshot_page:   { icon: Image,       label: 'Screenshot page' },
   remember:          { icon: BookMarked,  label: 'Remember' },
   recall_memory:     { icon: BookMarked,  label: 'Recall memory' },
   list_memories:     { icon: BookMarked,  label: 'List memories' },
@@ -104,6 +109,17 @@ function getResultSummary(result, toolName) {
   if (toolName === 'transcribe_audio' && result.success) {
     const text = result.text || '';
     return text.length > 100 ? text.slice(0, 100) + '…' : (text || 'Transcription complete');
+  }
+  if (toolName === 'image_describe' && result.success) {
+    const text = result.description || '';
+    return text.length > 100 ? text.slice(0, 100) + '…' : 'Image inspected';
+  }
+  if (toolName === 'inspect_attachment' && result.success) {
+    const text = result.description || result.text || result.content || result.message || '';
+    return text.length > 100 ? text.slice(0, 100) + '…' : (text || `${result.kind || 'Attachment'} inspected`);
+  }
+  if ((toolName === 'generate_image' || toolName === 'edit_image') && result.success) {
+    return `${result.width || result.media?.width || '?'}x${result.height || result.media?.height || '?'} · seed ${result.seed || result.media?.seed || 'random'}`;
   }
   if (result.output !== undefined) { const s = String(result.output); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
   if (result.content) { const s = String(result.content); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
@@ -607,6 +623,78 @@ function AudioResultCard({ result }) {
   );
 }
 
+function ImageResultCard({ result }) {
+  const media = result?.media || {};
+  const [blobUrl, setBlobUrl] = useState(result?.image && String(result.image).startsWith('data:image/') ? result.image : null);
+  const [fetchError, setFetchError] = useState(null);
+  const imagePath = media.path || result?.imagePath;
+  const canFetch = media.rootId && media.path;
+
+  useEffect(() => {
+    if (!canFetch) return undefined;
+    let cancelled = false;
+    filesApi.fetchRawBlob(media.rootId, media.path)
+      .then(url => { if (!cancelled) setBlobUrl(url); })
+      .catch(err => { if (!cancelled) setFetchError(err.message); });
+    return () => {
+      cancelled = true;
+    };
+  }, [canFetch, media.path, media.rootId]);
+
+  if (!result?.success || (!blobUrl && !canFetch && !result?.image)) return null;
+
+  return (
+    <div className="mt-1.5 mb-3 ml-7 max-w-xl">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900/50">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+          <div className="min-w-0">
+            <div className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200">
+              {media.prompt || result.prompt || 'Generated image'}
+            </div>
+            <div className="mt-0.5 flex flex-wrap gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+              <span>{result.runtime || media.runtime || 'image'}</span>
+              {(result.width || media.width) && (result.height || media.height) && <span>{result.width || media.width}x{result.height || media.height}</span>}
+              {(result.seed || media.seed) !== undefined && <span>seed {result.seed || media.seed}</span>}
+            </div>
+          </div>
+          {blobUrl && (
+            <a
+              href={blobUrl}
+              download={(imagePath || 'generated-image.png').split('/').pop()}
+              className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              title="Download image"
+            >
+              <Download className="h-4 w-4" />
+            </a>
+          )}
+        </div>
+        {fetchError ? (
+          <div className="px-3 py-3 text-xs text-red-500">Failed to load image: {fetchError}</div>
+        ) : blobUrl ? (
+          <button
+            type="button"
+            onClick={() => window.open(blobUrl, '_blank', 'noopener,noreferrer')}
+            className="block w-full bg-gray-50 p-2 dark:bg-gray-950/60"
+            title="Open image"
+          >
+            <img src={blobUrl} alt={media.prompt || 'Generated image'} className="max-h-96 w-full rounded-lg object-contain" />
+          </button>
+        ) : (
+          <div className="flex h-40 items-center justify-center text-xs text-gray-400">
+            <Spinner className="mr-2 h-3.5 w-3.5 animate-spin" />
+            Loading image...
+          </div>
+        )}
+        {imagePath && (
+          <div className="border-t border-gray-100 px-3 py-2 text-[10px] font-medium text-gray-400 dark:border-gray-800 dark:text-gray-500">
+            <span className="block truncate">{imagePath}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CompactPermissionEvent({ data, onDecision }) {
   const [showDetails, setShowDetails] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -828,10 +916,12 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
               }
               if (ev.type === 'tool_start') {
                 const hasAudioResult = ev.data?.tool === 'speak_text' && ev.result?.success && ev.result?.path;
+                const hasImageResult = (ev.data?.tool === 'generate_image' || ev.data?.tool === 'edit_image') && ev.result?.success && (ev.result?.media || ev.result?.image);
                 return (
                   <div key={i}>
                     <ToolEvent data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} progress={ev.progress} />
                     {hasAudioResult && <AudioResultCard result={ev.result} />}
+                    {hasImageResult && <ImageResultCard result={ev.result} />}
                   </div>
                 );
               }
@@ -1462,6 +1552,97 @@ function RunningIndicator({ runStartedAt }) {
   );
 }
 
+function collectGeneratedMedia(events = []) {
+  const items = [];
+  for (const ev of events) {
+    if (ev.type !== 'tool_start' || !ev.result?.success) continue;
+    const tool = ev.data?.tool;
+    if ((tool === 'generate_image' || tool === 'edit_image') && (ev.result.media || ev.result.image)) {
+      items.push({ type: 'image', tool, result: ev.result, id: `${tool}:${ev.result.media?.path || ev.result.seed || items.length}` });
+    } else if (tool === 'speak_text' && ev.result.path) {
+      items.push({ type: 'audio', tool, result: ev.result, id: `audio:${ev.result.path}` });
+    } else if (ARTIFACT_TOOLS.has(tool) && ev.result.artifact) {
+      items.push({ type: 'artifact', tool, result: ev.result, id: `artifact:${ev.result.artifact.path || ev.result.artifact.filename}` });
+    }
+  }
+  return items;
+}
+
+function MediaThumb({ item }) {
+  const media = item.result?.media || {};
+  const [src, setSrc] = useState(item.result?.image && String(item.result.image).startsWith('data:') ? item.result.image : null);
+
+  useEffect(() => {
+    const path = item.type === 'audio' ? item.result?.path : media.path;
+    const rootId = item.type === 'audio' ? 'workspace' : media.rootId;
+    if (!path || !rootId) return undefined;
+    let cancelled = false;
+    filesApi.fetchRawBlob(rootId, path)
+      .then(url => { if (!cancelled) setSrc(url); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [item.result?.path, item.type, media.path, media.rootId]);
+
+  if (item.type === 'image') {
+    return src ? <img src={src} alt="" className="h-14 w-14 rounded-lg object-cover" /> : <Image className="h-5 w-5 text-gray-400" />;
+  }
+  if (item.type === 'audio') {
+    return <Volume2 className="h-5 w-5 text-emerald-500" />;
+  }
+  return <FilePlus className="h-5 w-5 text-fuchsia-500" />;
+}
+
+function GeneratedMediaLibrary({ events }) {
+  const [expanded, setExpanded] = useState(false);
+  const items = useMemo(() => collectGeneratedMedia(events), [events]);
+  if (!items.length) return null;
+
+  return (
+    <FeedFrame className="mb-4">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/60"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+          <Image className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Generated media</span>
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{items.length}</span>
+        </span>
+      </button>
+      {expanded && (
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {items.map((item) => {
+            const artifact = item.result?.artifact;
+            const label = item.type === 'image'
+              ? (item.result?.prompt || item.result?.media?.prompt || 'Generated image')
+              : item.type === 'audio'
+                ? (item.result?.path?.split('/').pop() || 'Generated speech')
+                : (artifact?.title || artifact?.filename || 'Artifact');
+            const detail = item.type === 'image'
+              ? `${item.result?.runtime || 'image'} · ${item.result?.width || item.result?.media?.width || '?'}x${item.result?.height || item.result?.media?.height || '?'}`
+              : item.type === 'audio'
+                ? `${item.result?.audio_size || 'Audio'} · ${item.result?.voice || 'TTS'}`
+                : artifact?.type || 'artifact';
+            return (
+              <div key={item.id} className="flex min-w-0 items-center gap-3 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900/60">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-50 dark:bg-gray-950">
+                  <MediaThumb item={item} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{label}</span>
+                  <span className="mt-0.5 block truncate text-[10px] text-gray-400 dark:text-gray-500">{detail}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </FeedFrame>
+  );
+}
+
 // ── Main feed component ───────────────────────────────────────────────────────
 
 export default function AgentRunFeed({ events, isRunning, streamingText, runStartedAt, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithAction, ttsReady = false }) {
@@ -1559,6 +1740,7 @@ export default function AgentRunFeed({ events, isRunning, streamingText, runStar
 
   return (
     <div className="space-y-0">
+      <GeneratedMediaLibrary events={events || []} />
       {renderedEvents}
 
       {isRunning && <StreamingPreview text={streamingText} />}

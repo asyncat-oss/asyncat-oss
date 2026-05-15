@@ -16,6 +16,7 @@ import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
+import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
 import { branchGit, commitGit, discardGitFiles, getGitBranches, getGitCommit, getGitCommitMessageContext, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
@@ -331,8 +332,25 @@ function resolveFileAttachments(fileAttachments = [], workingContext = null) {
       : workingContext?.rootId || 'workspace';
     try {
       const entry = loadEntry({ rootId, relativePath: filePath });
-      if (entry.success && entry.type === 'file' && entry.content) {
-        results.push({ path: filePath, rootId, name: entry.name, content: entry.content });
+      if (entry.success && entry.type === 'file') {
+        const absolutePath = entry.root?.path
+          ? path.resolve(entry.root.path, filePath)
+          : null;
+        const toolPath = absolutePath && workingContext?.workingDir
+          ? path.relative(workingContext.workingDir, absolutePath)
+          : filePath;
+        results.push({
+          path: filePath,
+          toolPath: toolPath || filePath,
+          rootId,
+          name: entry.name,
+          ext: entry.ext,
+          mime: entry.mime,
+          size: entry.size,
+          binary: Boolean(entry.binary),
+          tooLarge: Boolean(entry.tooLarge),
+          content: entry.content || '',
+        });
       }
     } catch (err) {
       console.warn(`[agent] Failed to load attached file ${filePath}:`, err.message);
@@ -344,10 +362,27 @@ function resolveFileAttachments(fileAttachments = [], workingContext = null) {
 function injectFileAttachments(goal, fileAttachments = []) {
   if (!fileAttachments.length) return goal;
   const blocks = fileAttachments.map(f => {
-    const ext = f.name ? f.name.split('.').pop() : '';
-    return `--- File: ${f.path} ---\n\`\`\`${ext}\n${f.content}\n\`\`\`\n`;
+    const ext = f.ext || (f.name ? f.name.split('.').pop() : '');
+    const mime = String(f.mime || '').toLowerCase();
+    const toolPath = f.toolPath || f.path;
+    if (f.content) {
+      return `--- Attached file: ${f.path} ---\nTool path: ${toolPath}\nMIME: ${f.mime || 'text/plain'}\n\`\`\`${ext}\n${f.content}\n\`\`\`\n`;
+    }
+    const hint = mime.startsWith('image/')
+      ? `Use inspect_attachment with path "${toolPath}" first; it will route to image_describe when vision is available.`
+      : mime.startsWith('audio/')
+        ? `Use inspect_attachment with path "${toolPath}" first; it will route to transcribe_audio when Whisper is available.`
+        : `Use inspect_attachment with path "${toolPath}" first; it will route by file type or return metadata.`;
+    return [
+      `--- Attached media file: ${f.path} ---`,
+      `Tool path: ${toolPath}`,
+      `MIME: ${f.mime || 'application/octet-stream'}`,
+      f.size ? `Size: ${f.size} bytes` : null,
+      hint,
+      '',
+    ].filter(Boolean).join('\n');
   }).join('\n');
-  return `${blocks}\n\n${goal}`;
+  return `The user attached the following file(s). These attachment paths are available in the agent working directory unless marked otherwise.\n\n${blocks}\n\nUser request:\n${goal}`;
 }
 
 function markStaleActiveSessions() {
@@ -997,6 +1032,14 @@ router.get('/tools', authenticate, async (req, res) => {
   res.json({ tools });
 });
 
+router.get('/capabilities/multimodal', authenticate, async (req, res) => {
+  try {
+    res.json({ success: true, capabilities: await getMultimodalCapabilities(req.user.id) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to load multimodal capabilities' });
+  }
+});
+
 router.get('/skills', authenticate, (req, res) => {
   loadSkills();
   const skills = listSkills().map(s => ({
@@ -1372,7 +1415,8 @@ router.post('/run', authenticate, async (req, res) => {
     const resolvedWorkingContext = resolveAgentWorkingContext({ workingContext, workingDir, profile });
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
     const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext);
-    const goal = injectFileAttachments(baseGoal, resolvedFiles);
+    const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
+    const goal = `${formatMultimodalCapabilityPrompt(multimodalCapabilities)}\n\n${injectFileAttachments(baseGoal, resolvedFiles)}`;
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
     const resolvedAutoApprove = resolvedAgentMode === 'action'
       ? (autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false)
