@@ -2,14 +2,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
-  ChevronDown,
-  ChevronUp,
   CheckCircle2,
+  Cloud,
+  Cpu,
   Download,
+  Eye,
+  File,
+  FileArchive,
+  Heart,
+  Image as ImageIcon,
   KeyRound,
   Loader2,
-  Plus,
+  Mic,
   Search,
+  ShieldAlert,
+  Volume2,
   X,
 } from 'lucide-react';
 import { configApi, localModelsApi } from '../Settings/settingApi.js';
@@ -189,27 +196,68 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
     fetchFiles();
   }, [repoId]);
 
+  const fileIconFor = (filename) => {
+    const lower = String(filename).toLowerCase();
+    if (lower.endsWith('.gguf')) return FileArchive;
+    if (lower.endsWith('.safetensors')) return FileArchive;
+    if (lower.endsWith('.bin')) return FileArchive;
+    if (lower.endsWith('.onnx') || lower.endsWith('.onnx.json')) return FileArchive;
+    if (lower.endsWith('.pt') || lower.endsWith('.pth')) return FileArchive;
+    if (lower.endsWith('.ckpt')) return FileArchive;
+    return File;
+  };
+
   return (
-    <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800">
-        <span className="truncate text-xs font-medium text-gray-600 dark:text-gray-400">{repoId}</span>
-        <button onClick={onClose} className="ml-2 flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+    <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/60 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/60">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{repoId}</span>
+        <button onClick={onClose} className="ml-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="max-h-56 overflow-y-auto">
-        {loading && <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /></div>}
-        {error && <p className="px-3 py-2 text-xs text-red-500">{error}</p>}
+      <div className="max-h-72 overflow-y-auto">
+        {loading && (
+          <div className="flex items-center justify-center gap-2 py-5 text-xs text-gray-400 dark:text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading files…
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-3 text-xs text-red-500 dark:text-red-400">
+            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+            {error}
+          </div>
+        )}
         {!loading && !error && files.length === 0 && (
-          <p className="px-3 py-2 text-xs text-gray-400">No downloadable model, voice, vision, or image files found.</p>
+          <div className="flex flex-col items-center gap-1 py-5 text-xs text-gray-400 dark:text-gray-500">
+            <File className="h-5 w-5 opacity-40" />
+            No downloadable files found in this repo.
+          </div>
         )}
         {files.map((f) => {
           const targets = targetOptionsForFile(f.rfilename, repoId);
+          const pathParts = String(f.rfilename).split('/');
+          const folder = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') + '/' : '';
+          const basename = pathParts[pathParts.length - 1];
+          const FileIcon = fileIconFor(f.rfilename);
           return (
-            <div key={f.rfilename} className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 last:border-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+            <div
+              key={f.rfilename}
+              className="flex items-center gap-3 border-b border-gray-50 px-3 py-2.5 last:border-0 transition-colors hover:bg-gray-50/60 dark:border-gray-800/50 dark:hover:bg-gray-800/60"
+            >
+              <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400`}>
+                <FileIcon className="h-4 w-4" />
+              </div>
               <div className="min-w-0 flex-1">
-                <span className="block truncate font-mono text-xs text-gray-700 dark:text-gray-300">{f.rfilename}</span>
-                {f.size && <span className="block text-[10px] text-gray-400 dark:text-gray-500">{formatBytes(f.size)}</span>}
+                <div className="truncate font-mono text-xs text-gray-800 dark:text-gray-200">
+                  {folder && <span className="text-gray-400 dark:text-gray-500">{folder}</span>}
+                  {basename}
+                </div>
+                {f.size > 0 && (
+                  <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                    {formatBytes(f.size)}
+                  </span>
+                )}
               </div>
               <div className="flex flex-shrink-0 items-center gap-1.5">
                 {targets.map(([key, target]) => (
@@ -221,7 +269,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
                       targetKey: key,
                       subDir: target.subDir,
                     })}
-                    className={`rounded px-2 py-1 text-[10px] font-medium transition-colors ${target.color}`}
+                    className={`rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${target.color}`}
                   >
                     {target.label}
                   </button>
@@ -233,6 +281,97 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
       </div>
     </div>
   );
+};
+
+// ── Search highlight ───────────────────────────────────────────────────────────
+const HighlightText = ({ text, query }) => {
+  if (!query?.trim()) return <>{text}</>;
+  const q = query.trim().toLowerCase();
+  const lowerText = String(text || '').toLowerCase();
+  const idx = lowerText.indexOf(q);
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="rounded bg-amber-100 px-0.5 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+        {text.slice(idx, idx + q.length)}
+      </mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+};
+
+// ── Local result type metadata ───────────────────────────────────────────────
+const TYPE_META = {
+  model: {
+    label: 'Model',
+    icon: Cpu,
+    iconBg: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    activeBadge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  },
+  whisper: {
+    label: 'STT',
+    icon: Mic,
+    iconBg: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400',
+    badge: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400',
+  },
+  tts: {
+    label: 'TTS',
+    icon: Volume2,
+    iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+    badge: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+  },
+  vision: {
+    label: 'Vision',
+    icon: Eye,
+    iconBg: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400',
+    badge: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400',
+  },
+  image: {
+    label: 'Image',
+    icon: ImageIcon,
+    iconBg: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400',
+    badge: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400',
+  },
+  provider: {
+    label: 'Provider',
+    icon: Cloud,
+    iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+    activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+    activeBadge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  },
+};
+
+const groupMatches = (matches) => {
+  const order = [
+    { key: 'model', label: 'Models' },
+    { key: 'audio', label: 'Audio' },
+    { key: 'vision', label: 'Vision' },
+    { key: 'image', label: 'Image' },
+    { key: 'provider', label: 'Providers' },
+  ];
+  const groups = {};
+  for (const m of matches) {
+    const cat = m.category || m.type;
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(m);
+  }
+  return order.filter(o => groups[o.key]).map(o => ({ ...o, items: groups[o.key] }));
+};
+
+// ── Relative time ────────────────────────────────────────────────────────────
+const timeAgo = (dateStr) => {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days < 1) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 };
 
 const HuggingFaceAccessPanel = () => {
@@ -318,6 +457,46 @@ const HuggingFaceAccessPanel = () => {
   );
 };
 
+const FILTER_CHIPS = [
+  { key: 'all', label: 'All' },
+  { key: 'model', label: 'Models' },
+  { key: 'audio', label: 'Audio' },
+  { key: 'vision', label: 'Vision' },
+  { key: 'image', label: 'Image' },
+  { key: 'provider', label: 'Providers' },
+  { key: 'hf', label: 'HuggingFace' },
+];
+
+const matchesFilter = (item, filter) => {
+  if (filter === 'all') return true;
+  if (filter === 'hf') return false; // HF results are separate
+  if (filter === 'model') return item.category === 'model';
+  if (filter === 'audio') return item.category === 'audio';
+  if (filter === 'vision') return item.category === 'vision';
+  if (filter === 'image') return item.category === 'image';
+  if (filter === 'provider') return item.category === 'provider';
+  return true;
+};
+
+const matchesHFFilter = (model, filter) => {
+  if (filter === 'all' || filter === 'hf') return true;
+  if (filter === 'model') {
+    const tag = (model.pipeline_tag || '').toLowerCase();
+    return ['text-generation', 'image-text-to-text', 'text2text-generation'].some(t => tag.includes(t));
+  }
+  if (filter === 'vision') {
+    const tag = (model.pipeline_tag || '').toLowerCase();
+    const tags = (model.tags || []).map(t => t.toLowerCase());
+    return tag.includes('vision') || tag.includes('image-to-text') || tags.some(t => t.includes('vision') || t.includes('llava') || t.includes('mmproj'));
+  }
+  if (filter === 'image') {
+    const tag = (model.pipeline_tag || '').toLowerCase();
+    const tags = (model.tags || []).map(t => t.toLowerCase());
+    return tag.includes('text-to-image') || tag.includes('image-generation') || tags.some(t => t.includes('diffusion') || t.includes('flux') || t.includes('sdxl') || t.includes('stable-diffusion'));
+  }
+  return false;
+};
+
 const ModelDownloadHub = ({
   searchQuery = '',
   downloadedMatches = [],
@@ -329,11 +508,7 @@ const ModelDownloadHub = ({
 }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
   const [expandedRepo, setExpandedRepo] = useState(null);
-  const [showCustomUrl, setShowCustomUrl] = useState(false);
-  const [customUrl, setCustomUrl] = useState('');
-  const [customFilename, setCustomFilename] = useState('');
-  const [customTarget, setCustomTarget] = useState('model');
-  const [customUrlError, setCustomUrlError] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
   const cleanupFnsRef = useRef({});
 
   const {
@@ -493,7 +668,7 @@ const ModelDownloadHub = ({
       const res = await localModelsApi.startDownload(url, filename, subDir);
       if (res.success) startTrackingDownload(res.downloadId, filename, targetKey);
     } catch (err) {
-      setCustomUrlError(err.message || 'Failed to start download');
+      console.error('Download start failed:', err.message || err);
     }
   };
 
@@ -519,31 +694,6 @@ const ModelDownloadHub = ({
     setQuery('');
     setResults([]);
     handleDownload(payload);
-  };
-
-  const handleCustomDownload = async () => {
-    setCustomUrlError('');
-    const target = TARGETS[customTarget] || TARGETS.model;
-    const filename = customFilename.trim();
-    if (!customUrl.trim()) return setCustomUrlError('URL is required');
-    if (!filename) return setCustomUrlError('Filename is required');
-    if (!filenameMatches(filename, target.extensions)) {
-      return setCustomUrlError(`${target.label} downloads need ${target.extensions.join(' or ')} files.`);
-    }
-    try {
-      new URL(customUrl);
-    } catch {
-      return setCustomUrlError('Invalid URL');
-    }
-    await handleDownload({
-      url: customUrl.trim(),
-      filename,
-      targetKey: customTarget,
-      subDir: target.subDir,
-    });
-    setCustomUrl('');
-    setCustomFilename('');
-    setShowCustomUrl(false);
   };
 
   const activeEntries = Object.entries(activeDownloads);
@@ -599,6 +749,24 @@ const ModelDownloadHub = ({
       <HuggingFaceAccessPanel />
 
       <div className="mt-5">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {FILTER_CHIPS.map((chip) => {
+            const isActive = activeFilter === chip.key;
+            return (
+              <button
+                key={chip.key}
+                onClick={() => setActiveFilter(isActive ? 'all' : chip.key)}
+                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+                  isActive
+                    ? 'bg-gray-900 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900'
+                    : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
           <input
@@ -609,61 +777,144 @@ const ModelDownloadHub = ({
             className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-9 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 dark:focus:ring-gray-600 midnight:border-gray-800/80 midnight:bg-gray-900/50"
           />
           {searchQuery && (
-            <button onClick={() => { handleQueryChange(''); setExpandedRepo(null); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <button onClick={() => { handleQueryChange(''); setExpandedRepo(null); setActiveFilter('all'); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
-        {searchQuery && downloadedMatches.length > 0 && (
+        {searchQuery && activeFilter !== 'hf' && downloadedMatches.filter(m => matchesFilter(m, activeFilter)).length > 0 && (
           <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-            <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-500">
-              Library & Providers
-            </div>
-            {downloadedMatches.map((item) => {
-              const isProvider = item.type === 'provider';
-              const target = isProvider ? null : (TARGETS[item.type] || TARGETS.model);
-              return (
-                <button
-                  key={`${item.type}:${item.id}`}
-                  onClick={() => onDownloadedSelect?.(item)}
-                  className="flex w-full items-center justify-between gap-3 border-b border-gray-100 px-3 py-2.5 text-left last:border-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{item.name}</div>
-                    <div className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-500">{item.detail}</div>
-                  </div>
-                  {isProvider ? (
-                    <span className="flex-shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-                      Provider
-                    </span>
-                  ) : (
-                    <span className="flex-shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                      {target.label}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {groupMatches(downloadedMatches.filter(m => matchesFilter(m, activeFilter))).map((group) => (
+              <div key={group.key}>
+                <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    {group.label}
+                  </span>
+                  <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                    {group.items.length}
+                  </span>
+                </div>
+                {group.items.map((item) => {
+                  const meta = TYPE_META[item.type] || TYPE_META.model;
+                  const Icon = meta.icon;
+                  const iconBg = item.isActive ? (meta.activeIconBg || meta.iconBg) : meta.iconBg;
+                  const badgeClasses = item.isActive
+                    ? `inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${meta.activeBadge || meta.badge}`
+                    : `inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${meta.badge}`;
+                  return (
+                    <button
+                      key={`${item.type}:${item.id}`}
+                      onClick={() => onDownloadedSelect?.(item)}
+                      className="flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-gray-50/60 dark:border-gray-800 dark:hover:bg-gray-800/60"
+                    >
+                      <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+                        <Icon className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+                          <HighlightText text={item.name} query={searchQuery} />
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{item.detail}</div>
+                      </div>
+                      <div className="flex flex-shrink-0 items-center gap-2">
+                        {item.isActive && (
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+                            <span className="text-[10px] font-medium text-green-600 dark:text-green-400">Active</span>
+                          </span>
+                        )}
+                        <span className={badgeClasses}>
+                          {meta.label}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
 
         {searching && <div className="mt-3 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Searching HuggingFace...</div>}
         {searchError && <p className="mt-2 flex items-center gap-1 text-xs text-red-500 dark:text-red-400"><AlertCircle className="h-3 w-3" /> {searchError}</p>}
-        {!searching && results.length > 0 && (
+        {!searching && results.filter(m => matchesHFFilter(m, activeFilter)).length > 0 && (
           <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-            {results.map((model, i) => {
+            <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                HuggingFace
+              </span>
+              <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                {results.filter(m => matchesHFFilter(m, activeFilter)).length}
+              </span>
+            </div>
+            {results.filter(m => matchesHFFilter(m, activeFilter)).map((model) => {
               const repoId = model.modelId || model.id;
               const isExpanded = expandedRepo === repoId;
-              const downloads = model.downloads ? `${(model.downloads / 1000).toFixed(0)}k downloads` : null;
+              const downloads = model.downloads ? `${(model.downloads >= 1000 ? (model.downloads / 1000).toFixed(0) + 'k' : model.downloads)}` : null;
+              const likes = model.likes ? `${(model.likes >= 1000 ? (model.likes / 1000).toFixed(1) + 'k' : model.likes)}` : null;
+              const author = model.author || (repoId.includes('/') ? repoId.split('/')[0] : '');
+              const modelName = repoId.includes('/') ? repoId.split('/').slice(1).join('/') : repoId;
+              const updated = timeAgo(model.updated);
+              const tags = (model.tags || []).slice(0, 3);
+              const pipeline = model.pipeline_tag || '';
               return (
-                <div key={repoId} className={`border-b border-gray-100 last:border-0 dark:border-gray-800 ${i % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-gray-800/30'}`}>
-                  <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                <div key={repoId} className="border-b border-gray-100 last:border-0 dark:border-gray-800">
+                  <div className="flex items-start justify-between gap-3 px-3 py-3">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{repoId}</div>
-                      {downloads && <div className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{downloads}</div>}
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-gray-500 dark:text-gray-400">{author}</span>
+                        <span className="text-gray-300 dark:text-gray-600">/</span>
+                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          <HighlightText text={modelName} query={searchQuery} />
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {pipeline && (
+                          <span className="inline-flex items-center rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                            {pipeline}
+                          </span>
+                        )}
+                        {tags.map((tag) => (
+                          <span key={tag} className="text-[10px] text-gray-400 dark:text-gray-500">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500">
+                        {downloads && (
+                          <span className="flex items-center gap-1">
+                            <Download className="h-3 w-3 opacity-70" />
+                            {downloads}
+                          </span>
+                        )}
+                        {likes && (
+                          <span className="flex items-center gap-1">
+                            <Heart className="h-3 w-3 opacity-70" />
+                            {likes}
+                          </span>
+                        )}
+                        {updated && (
+                          <span>Updated {updated}</span>
+                        )}
+                        {model.gated && (
+                          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                            <ShieldAlert className="h-3 w-3" />
+                            Gated
+                          </span>
+                        )}
+                        {model.private && (
+                          <span className="flex items-center gap-1 text-red-500 dark:text-red-400">
+                            <Lock className="h-3 w-3" />
+                            Private
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <button onClick={() => setExpandedRepo(isExpanded ? null : repoId)} className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-950 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 midnight:hover:bg-slate-800">
+                    <button
+                      onClick={() => setExpandedRepo(isExpanded ? null : repoId)}
+                      className="mt-0.5 flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-950 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 midnight:hover:bg-slate-800"
+                    >
                       <Download className="h-3 w-3" />
                       {isExpanded ? 'Hide' : 'Select files'}
                     </button>
@@ -678,59 +929,15 @@ const ModelDownloadHub = ({
             })}
           </div>
         )}
-        {!searching && searchQuery && downloadedMatches.length === 0 && results.length === 0 && !searchError && (
-          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">No models found for &quot;{searchQuery}&quot;</p>
-        )}
-      </div>
-
-      <div className="mt-5 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80">
-        <button
-          onClick={() => setShowCustomUrl(v => !v)}
-          className="flex w-full items-center justify-between bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:bg-gray-800/50 midnight:hover:bg-gray-800"
-        >
-          <div className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Download from URL
-          </div>
-          {showCustomUrl ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-
-        {showCustomUrl && (
-          <div className="space-y-3 bg-white p-4 dark:bg-gray-800 midnight:bg-gray-900">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {Object.entries(TARGETS).map(([key, target]) => (
-                <button
-                  key={key}
-                  onClick={() => setCustomTarget(key)}
-                  className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
-                    customTarget === key
-                      ? 'border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {target.label}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              value={customUrl}
-              onChange={(e) => setCustomUrl(e.target.value)}
-              placeholder="https://huggingface.co/.../model.gguf"
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-shadow focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:focus:border-gray-600 dark:focus:ring-gray-600"
-            />
-            <input
-              type="text"
-              value={customFilename}
-              onChange={(e) => setCustomFilename(e.target.value)}
-              placeholder="Save as filename"
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-shadow focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:focus:border-gray-600 dark:focus:ring-gray-600"
-            />
-            {customUrlError && <p className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><AlertCircle className="h-3 w-3" /> {customUrlError}</p>}
-            <button onClick={handleCustomDownload} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200">
-              <Download className="h-4 w-4" />
-              Start Download
-            </button>
+        {!searching && searchQuery && downloadedMatches.filter(m => matchesFilter(m, activeFilter)).length === 0 && results.filter(m => matchesHFFilter(m, activeFilter)).length === 0 && !searchError && (
+          <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 py-6 dark:border-gray-800 dark:bg-gray-800/20">
+            <Search className="h-5 w-5 text-gray-300 dark:text-gray-600" />
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {activeFilter === 'all' ? `No results for "${searchQuery}"` : `No ${FILTER_CHIPS.find(c => c.key === activeFilter)?.label || ''} results for "${searchQuery}"`}
+            </p>
+            <p className="text-[10px] text-gray-300 dark:text-gray-600">
+              {activeFilter === 'all' ? 'Try a broader keyword like "llama", "qwen", or "flux"' : 'Try switching the filter to "All" for broader results'}
+            </p>
           </div>
         )}
       </div>

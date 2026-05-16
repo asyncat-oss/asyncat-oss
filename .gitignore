@@ -29,6 +29,7 @@ data/asyncat.db
 data/asyncat.db-shm
 data/asyncat.db-wal
 .asyncat/snapshots/
+.asyncat-attachments/
 den/.asyncat/snapshots/
 *.db
 *.db-shm

@@ -218,11 +218,14 @@ const ModelsPage = () => {
     for (const m of models) {
       const haystack = [m.name, m.filename, m.architecture, m.engineType].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(q)) continue;
+      const isActive = status === 'ready' && serverStatus?.model && (serverStatus.model === m.name || serverStatus.model === m.filename);
       matches.push({
         type: 'model',
+        category: 'model',
         id: m.id || m.filename,
         name: m.name || m.filename,
         detail: [m.engineType?.toUpperCase(), m.sizeFormatted, m.architecture].filter(Boolean).join(' · ') || 'Local model',
+        isActive,
       });
     }
     for (const m of audioModels.whisper) {
@@ -230,9 +233,11 @@ const ModelsPage = () => {
       if (!haystack.includes(q)) continue;
       matches.push({
         type: 'whisper',
+        category: 'audio',
         id: m.id || m.filename,
         name: m.name || m.filename,
-        detail: ['STT', 'Whisper', m.sizeFormatted].filter(Boolean).join(' · '),
+        detail: ['Whisper', m.quality, m.language, m.sizeFormatted].filter(Boolean).join(' · '),
+        isActive: false,
       });
     }
     for (const m of audioModels.tts) {
@@ -240,9 +245,11 @@ const ModelsPage = () => {
       if (!haystack.includes(q)) continue;
       matches.push({
         type: 'tts',
+        category: 'audio',
         id: m.id || m.filename,
         name: m.name || m.filename,
-        detail: ['TTS', 'Piper', m.sizeFormatted].filter(Boolean).join(' · '),
+        detail: ['Piper', m.qualityLabel, m.languageName, m.sizeFormatted].filter(Boolean).join(' · '),
+        isActive: false,
       });
     }
     for (const m of visualModels.vision) {
@@ -250,9 +257,11 @@ const ModelsPage = () => {
       if (!haystack.includes(q)) continue;
       matches.push({
         type: 'vision',
+        category: 'vision',
         id: m.id || m.filename,
         name: m.name || m.filename,
-        detail: ['Vision', m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
+        detail: [m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
+        isActive: false,
       });
     }
     for (const m of visualModels.image) {
@@ -260,9 +269,11 @@ const ModelsPage = () => {
       if (!haystack.includes(q)) continue;
       matches.push({
         type: 'image',
+        category: 'image',
         id: m.id || m.filename,
         name: m.name || m.filename,
-        detail: ['Image', m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
+        detail: [m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
+        isActive: false,
       });
     }
     for (const p of providerProfiles) {
@@ -276,15 +287,18 @@ const ModelsPage = () => {
         'provider cloud api endpoint',
       ].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(q)) continue;
+      const isProviderActive = providerConfig?.provider_id === p.provider_id;
       matches.push({
         type: 'provider',
+        category: 'provider',
         id: p.id,
         name: p.name,
         detail: [preset?.name || p.provider_id, p.model, p.provider_type === 'local' ? 'Local' : 'Cloud'].filter(Boolean).join(' · '),
+        isActive: isProviderActive,
       });
     }
-    return matches.slice(0, 10);
-  }, [audioModels.tts, audioModels.whisper, models, searchQuery, visualModels.image, visualModels.vision, providerProfiles, providerCatalog]);
+    return matches.slice(0, 12);
+  }, [audioModels.tts, audioModels.whisper, models, searchQuery, visualModels.image, visualModels.vision, providerProfiles, providerCatalog, status, serverStatus, providerConfig]);
 
   const handleDownloadedSelect = (item) => {
     setHighlightedItem(item);
