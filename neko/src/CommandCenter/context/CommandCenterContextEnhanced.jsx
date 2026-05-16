@@ -332,6 +332,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: title });
   }, []);
 
+  const setConversationMetadata = useCallback((metadata) => {
+    dispatch({ type: ActionTypes.SET_CONVERSATION_METADATA, payload: metadata });
+  }, []);
+
   // Generate instant title from first user message
   const generateAndSetTitle = useCallback((userMessage) => {
     const title = generateInstantTitle(userMessage);
@@ -472,6 +476,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     // Conversation management
     setCurrentConversationId,
     setConversationTitle,
+    setConversationMetadata,
     generateAndSetTitle,
     handleClearConversation,
     handleNewConversation,

@@ -4,7 +4,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import eventBus from '../../utils/eventBus.js';
 import { agentTaskRunsApi, chatApi, chatFoldersApi } from '../api';
 import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
-import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X } from 'lucide-react';
+import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked } from 'lucide-react';
 
 import { getRelativeTime, cleanTaskAgentTitle } from '../utils/conversationUtils.js';
 
@@ -268,6 +268,9 @@ const ChatsPage = () => {
     const canSelect = !isTaskAgent && !isActiveRun;
     const canOpen = isActiveRun || !isTaskAgent || chat.sessionId;
     const workingContextLabel = formatWorkingContextLabel(chat.metadata?.workingContext || chat.workingContext);
+    const bookmarkCount = Array.isArray(chat.metadata?.highlights?.bookmarkedMessages)
+      ? chat.metadata.highlights.bookmarkedMessages.length
+      : messages.filter(msg => msg.bookmarked).length;
 
     return (
       <div
@@ -342,6 +345,15 @@ const ChatsPage = () => {
                 >
                   <FolderOpen className="h-3 w-3 flex-shrink-0" />
                   <span className="truncate">Worked in {workingContextLabel}</span>
+                </span>
+              </>
+            )}
+            {bookmarkCount > 0 && (
+              <>
+                <span>•</span>
+                <span className="inline-flex items-center gap-0.5 flex-shrink-0 text-amber-500">
+                  <BookMarked className="h-3 w-3" />
+                  {bookmarkCount}
                 </span>
               </>
             )}

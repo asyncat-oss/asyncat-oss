@@ -1,5 +1,6 @@
 // chatService.js - Simplified with SQLite client
 import { sqliteDb as db } from '../../../db/sqlite.js';
+import rawDb from '../../../db/client.js';
 import { v4 as uuidv4 } from 'uuid';
 
 class ChatService {
@@ -129,8 +130,23 @@ class ChatService {
         baseMessage.isEdit = true;
       }
 
+      if (msg.pinned === true) {
+        baseMessage.pinned = true;
+      }
+
+      if (msg.bookmarked === true) {
+        baseMessage.bookmarked = true;
+      }
+
       if (msg.suggestions && Array.isArray(msg.suggestions)) {
         baseMessage.suggestions = msg.suggestions;
+      }
+
+      if (msg.variants && Array.isArray(msg.variants)) {
+        baseMessage.variants = msg.variants;
+        baseMessage.activeVariantIndex = Number.isInteger(msg.activeVariantIndex)
+          ? msg.activeVariantIndex
+          : Math.max(msg.variants.length - 1, 0);
       }
 
       // Preserve blocks (chart blocks from AI)
@@ -191,6 +207,15 @@ class ChatService {
         baseMessage.searchEvent = msg.searchEvent;
       }
 
+      // Preserve conversation branch metadata so edited turns can fork and
+      // reload without needing a separate message table.
+      for (const field of ['branchId', 'parentBranchId', 'branchPointMessageId', 'editedFromMessageId']) {
+        if (msg[field]) baseMessage[field] = msg[field];
+      }
+      if (msg.editedFromContent) {
+        baseMessage.editedFromContent = msg.editedFromContent;
+      }
+
       return baseMessage;
     });
 
@@ -228,8 +253,23 @@ class ChatService {
         baseMessage.isEdit = true;
       }
 
+      if (msg.pinned === true) {
+        baseMessage.pinned = true;
+      }
+
+      if (msg.bookmarked === true) {
+        baseMessage.bookmarked = true;
+      }
+
       if (msg.suggestions && Array.isArray(msg.suggestions)) {
         baseMessage.suggestions = msg.suggestions;
+      }
+
+      if (msg.variants && Array.isArray(msg.variants)) {
+        baseMessage.variants = msg.variants;
+        baseMessage.activeVariantIndex = Number.isInteger(msg.activeVariantIndex)
+          ? msg.activeVariantIndex
+          : Math.max(msg.variants.length - 1, 0);
       }
 
       // Restore blocks (chart blocks from AI)
@@ -290,8 +330,157 @@ class ChatService {
         baseMessage.searchEvent = msg.searchEvent;
       }
 
+      for (const field of ['branchId', 'parentBranchId', 'branchPointMessageId', 'editedFromMessageId']) {
+        if (msg[field]) baseMessage[field] = msg[field];
+      }
+      if (msg.editedFromContent) {
+        baseMessage.editedFromContent = msg.editedFromContent;
+      }
+
       return baseMessage;
     });
+  }
+
+  ensureBranchTables() {
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_branches (
+        id                      TEXT PRIMARY KEY,
+        conversation_id         TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        workspace_id            TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        parent_branch_id        TEXT,
+        branch_point_message_id TEXT,
+        label                   TEXT NOT NULL DEFAULT 'Branch',
+        is_active               INTEGER NOT NULL DEFAULT 0,
+        sort_order              INTEGER NOT NULL DEFAULT 0,
+        metadata                TEXT NOT NULL DEFAULT '{}',
+        created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS conversation_messages (
+        id                TEXT PRIMARY KEY,
+        conversation_id   TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        branch_id         TEXT NOT NULL REFERENCES conversation_branches(id) ON DELETE CASCADE,
+        message_id        TEXT NOT NULL,
+        user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        workspace_id      TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        parent_message_id TEXT,
+        role              TEXT NOT NULL CHECK (role IN ('user','assistant')),
+        content           TEXT NOT NULL DEFAULT '',
+        message_index     INTEGER NOT NULL DEFAULT 0,
+        payload           TEXT NOT NULL DEFAULT '{}',
+        created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(conversation_id, branch_id, message_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_conversation_branches_conversation ON conversation_branches(conversation_id, updated_at);
+      CREATE INDEX IF NOT EXISTS idx_conversation_branches_user         ON conversation_branches(user_id, workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_conversation_messages_branch       ON conversation_messages(conversation_id, branch_id, message_index);
+      CREATE INDEX IF NOT EXISTS idx_conversation_messages_user         ON conversation_messages(user_id, workspace_id);
+    `);
+  }
+
+  syncConversationBranchRecords(conversationId, userId, workspaceId, messages = [], metadata = {}) {
+    try {
+      this.ensureBranchTables();
+      const activeBranchId = metadata?.activeBranchId || messages.find(Boolean)?.branchId || 'main';
+      const storedBranches = Array.isArray(metadata?.branches) ? metadata.branches : [];
+      const branchMap = new Map();
+
+      const putBranch = (branch = {}) => {
+        const id = branch.id || activeBranchId || 'main';
+        if (!id) return;
+        branchMap.set(id, {
+          id,
+          label: branch.label || (id === 'main' ? 'Main' : 'Branch'),
+          parentBranchId: branch.parentBranchId || branch.parent_branch_id || null,
+          branchPointMessageId: branch.branchPointMessageId || branch.fromMessageId || null,
+          messages: Array.isArray(branch.messages) ? branch.messages : [],
+          metadata: branch,
+        });
+      };
+
+      storedBranches.forEach(putBranch);
+      putBranch({
+        id: activeBranchId,
+        label: branchMap.get(activeBranchId)?.label || (activeBranchId === 'main' ? 'Main' : 'Current branch'),
+        branchPointMessageId: metadata?.branchPointMessageId || null,
+        messages,
+      });
+
+      const upsertBranch = rawDb.prepare(`
+        INSERT INTO conversation_branches (
+          id, conversation_id, user_id, workspace_id, parent_branch_id,
+          branch_point_message_id, label, is_active, sort_order, metadata, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          parent_branch_id = excluded.parent_branch_id,
+          branch_point_message_id = excluded.branch_point_message_id,
+          label = excluded.label,
+          is_active = excluded.is_active,
+          sort_order = excluded.sort_order,
+          metadata = excluded.metadata,
+          updated_at = excluded.updated_at
+      `);
+      const insertMessage = rawDb.prepare(`
+        INSERT INTO conversation_messages (
+          id, conversation_id, branch_id, message_id, user_id, workspace_id,
+          parent_message_id, role, content, message_index, payload, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(conversation_id, branch_id, message_id) DO UPDATE SET
+          parent_message_id = excluded.parent_message_id,
+          role = excluded.role,
+          content = excluded.content,
+          message_index = excluded.message_index,
+          payload = excluded.payload,
+          updated_at = excluded.updated_at
+      `);
+
+      const now = new Date().toISOString();
+      const tx = rawDb.transaction(() => {
+        rawDb.prepare('DELETE FROM conversation_messages WHERE conversation_id = ?').run(conversationId);
+        let sortOrder = 0;
+        for (const branch of branchMap.values()) {
+          upsertBranch.run(
+            branch.id,
+            conversationId,
+            userId,
+            workspaceId,
+            branch.parentBranchId,
+            branch.branchPointMessageId,
+            branch.label,
+            branch.id === activeBranchId ? 1 : 0,
+            sortOrder++,
+            JSON.stringify(branch.metadata || {}),
+            now,
+          );
+
+          branch.messages.forEach((msg, index) => {
+            const role = msg?.user !== undefined || msg?.type === 'user' ? 'user' : 'assistant';
+            const messageId = msg?.id || `${branch.id}_${index}`;
+            insertMessage.run(
+              `${branch.id}:${messageId}`,
+              conversationId,
+              branch.id,
+              messageId,
+              userId,
+              workspaceId,
+              msg?.editedFromMessageId || null,
+              role,
+              String(role === 'user' ? (msg.user ?? msg.content ?? '') : (msg.cat ?? msg.content ?? '')),
+              index,
+              JSON.stringify(msg || {}),
+              now,
+            );
+          });
+        }
+      });
+      tx();
+    } catch (error) {
+      console.warn('Failed to sync conversation branch records:', error.message);
+    }
   }
 
   // Simplified save conversation using SQLite
@@ -397,6 +586,7 @@ class ChatService {
       // Clear cache for this user and workspace, including the individual conversation cache
       this.clearUserWorkspaceCache(userId, effectiveWorkspaceId);
       this.cache.delete(`conversation_${finalConversationId}_${userId}`);
+      this.syncConversationBranchRecords(finalConversationId, userId, effectiveWorkspaceId, jsonbMessages, enhancedMetadata);
 
       return {
         success: true,

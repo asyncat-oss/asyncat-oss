@@ -211,6 +211,38 @@ CREATE TABLE IF NOT EXISTS conversations (
   updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS conversation_branches (
+  id                      TEXT PRIMARY KEY,
+  conversation_id         TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id            TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  parent_branch_id        TEXT,
+  branch_point_message_id TEXT,
+  label                   TEXT NOT NULL DEFAULT 'Branch',
+  is_active               INTEGER NOT NULL DEFAULT 0,
+  sort_order              INTEGER NOT NULL DEFAULT 0,
+  metadata                TEXT NOT NULL DEFAULT '{}',
+  created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+  id                TEXT PRIMARY KEY,
+  conversation_id   TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  branch_id         TEXT NOT NULL REFERENCES conversation_branches(id) ON DELETE CASCADE,
+  message_id        TEXT NOT NULL,
+  user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id      TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  parent_message_id TEXT,
+  role              TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content           TEXT NOT NULL DEFAULT '',
+  message_index     INTEGER NOT NULL DEFAULT 0,
+  payload           TEXT NOT NULL DEFAULT '{}',
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(conversation_id, branch_id, message_id)
+);
+
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_projects_team_id         ON projects(team_id);
@@ -223,6 +255,10 @@ CREATE INDEX IF NOT EXISTS idx_Cards_createdBy          ON Cards(createdBy);
 CREATE INDEX IF NOT EXISTS idx_conversations_user       ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_workspace  ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_deleted    ON conversations(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_conversation_branches_conversation ON conversation_branches(conversation_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversation_branches_user         ON conversation_branches(user_id, workspace_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_branch       ON conversation_messages(conversation_id, branch_id, message_index);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_user         ON conversation_messages(user_id, workspace_id);
 -- ─── AI Provider Config (per-user local model preferences) ───────────────────
 
 CREATE TABLE IF NOT EXISTS ai_provider_config (

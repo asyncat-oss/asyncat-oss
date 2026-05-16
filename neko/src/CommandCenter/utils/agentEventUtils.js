@@ -167,7 +167,24 @@ function buildEventsFromMessages(messages = []) {
   const events = [];
   for (const msg of messages) {
     if (msg.type === 'user') {
-      events.push({ type: 'user_goal', data: { goal: msg.content, timestamp: msg.timestamp, toolsEnabled: msg.toolsEnabled, agentMode: msg.agentMode, agentMentions: msg.agentMentions || [], fileAttachments: msg.fileAttachments || [] } });
+      events.push({
+        type: 'user_goal',
+        data: {
+          goal: msg.content,
+          timestamp: msg.timestamp,
+          messageId: msg.id,
+          toolsEnabled: msg.toolsEnabled,
+          agentMode: msg.agentMode,
+          agentMentions: msg.agentMentions || [],
+          fileAttachments: msg.fileAttachments || [],
+          branchId: msg.branchId,
+          parentBranchId: msg.parentBranchId,
+          branchPointMessageId: msg.branchPointMessageId,
+          editedFromMessageId: msg.editedFromMessageId,
+          pinned: Boolean(msg.pinned),
+          bookmarked: Boolean(msg.bookmarked),
+        },
+      });
     } else if (msg.type === 'assistant') {
       if (Array.isArray(msg.agentEvents) && msg.agentEvents.length > 0) {
         const agentEvents = msg.agentEvents.filter(ev => ev?.type && ev.type !== 'user_goal' && ev.type !== 'answer');
@@ -181,7 +198,17 @@ function buildEventsFromMessages(messages = []) {
         type: msg.isError ? 'error' : 'answer',
         data: msg.isError
           ? { message: msg.content }
-          : { answer: msg.content, toolsEnabled: msg.toolsEnabled, agentMode: msg.agentMode, searchEvent: msg.searchEvent || null },
+          : {
+              answer: msg.content,
+              messageId: msg.id,
+              toolsEnabled: msg.toolsEnabled,
+              agentMode: msg.agentMode,
+              searchEvent: msg.searchEvent || null,
+              variants: msg.variants || [],
+              activeVariantIndex: msg.activeVariantIndex,
+              pinned: Boolean(msg.pinned),
+              bookmarked: Boolean(msg.bookmarked),
+            },
       });
     }
   }

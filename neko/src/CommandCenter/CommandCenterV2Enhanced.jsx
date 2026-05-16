@@ -46,6 +46,7 @@ import {
   PanelRightOpen,
   Image,
   GitBranch,
+  BookMarked,
   Headphones,
 } from "lucide-react";
 
@@ -78,6 +79,80 @@ function getVoicePlaceholder(sttReady, ttsReady, fallback) {
     return "Speech output active - type a message and play replies aloud...";
   }
   return fallback;
+}
+
+function createConversationBranchId() {
+  return `branch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getMessageBranchId(message, fallback = 'main') {
+  return message?.branchId || fallback;
+}
+
+function buildConversationHistoryFromMessages(messages = []) {
+  return messages
+    .filter(msg => msg?.type === 'user' || msg?.type === 'assistant')
+    .map(msg => ({
+      role: msg.type,
+      content: msg.content,
+      toolsEnabled: msg.toolsEnabled,
+      agentMode: msg.agentMode,
+      reasoningEffort: msg.reasoningEffort,
+      agentSessionId: msg.agentSessionId,
+      agentMentions: msg.agentMentions,
+      fileAttachments: msg.fileAttachments,
+      workingContext: msg.workingContext,
+      branchId: msg.branchId,
+      parentBranchId: msg.parentBranchId,
+      branchPointMessageId: msg.branchPointMessageId,
+    }));
+}
+
+function summarizeBranch(messages = []) {
+  const lastUser = [...messages].reverse().find(msg => msg?.type === 'user' && msg.content?.trim());
+  const firstUser = messages.find(msg => msg?.type === 'user' && msg.content?.trim());
+  const text = (lastUser || firstUser)?.content || 'Conversation branch';
+  return text.split('\n').find(Boolean)?.trim()?.slice(0, 72) || 'Conversation branch';
+}
+
+function upsertBranchSnapshot(branches = [], snapshot) {
+  if (!snapshot?.id) return branches;
+  const cleaned = {
+    ...snapshot,
+    messages: Array.isArray(snapshot.messages) ? snapshot.messages : [],
+    updatedAt: new Date().toISOString(),
+  };
+  const index = branches.findIndex(branch => branch.id === cleaned.id);
+  if (index === -1) return [...branches, cleaned];
+  return branches.map((branch, i) => i === index ? { ...branch, ...cleaned } : branch);
+}
+
+function buildAssistantVariant(message = {}) {
+  return {
+    id: message.variantId || `variant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    content: message.content || '',
+    timestamp: message.timestamp || new Date().toISOString(),
+    agentSessionId: message.agentSessionId || null,
+    agentEvents: message.agentEvents || [],
+    searchEvent: message.searchEvent || null,
+    toolsEnabled: message.toolsEnabled,
+    agentMode: message.agentMode,
+    reasoningEffort: message.reasoningEffort,
+  };
+}
+
+function buildConversationHighlights(messages = []) {
+  const toItem = (msg) => ({
+    id: msg.id,
+    type: msg.type || msg.role,
+    content: msg.content || '',
+    timestamp: msg.timestamp,
+    bookmarked: Boolean(msg.bookmarked),
+  });
+  return {
+    pinnedMessages: [],
+    bookmarkedMessages: messages.filter(msg => msg?.bookmarked).map(toItem),
+  };
 }
 
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
@@ -120,16 +195,23 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     currentConversationIdRef = fallbackCurrentConversationIdRef,
     workingContext = null,
     setWorkingContext = () => {},
+    conversationMetadata = {},
+    setConversationMetadata = () => {},
   } = commandCenterContext || {};
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
   const exportMenuRef = useRef(null);
+  const branchMenuRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showBranchMenu, setShowBranchMenu] = useState(false);
+  const [editingBranchId, setEditingBranchId] = useState(null);
+  const [branchNameDraft, setBranchNameDraft] = useState('');
 
   const [messageInputResetKey, setMessageInputResetKey] = useState(0);
   const [recentConversations, setRecentConversations] = useState([]);
@@ -313,6 +395,24 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
   }, []);
 
+  const handleOpenSavedMessage = useCallback((messageId) => {
+    if (!messageId || !scrollContainerRef.current) return;
+    const selector = typeof CSS !== 'undefined' && CSS.escape
+      ? `[data-message-id="${CSS.escape(messageId)}"]`
+      : `[data-message-id="${String(messageId).replace(/"/g, '\\"')}"]`;
+    const target = scrollContainerRef.current.querySelector(selector);
+    if (!target) return;
+
+    setHighlightedMessageId(messageId);
+    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    if (window.innerWidth < 1280) {
+      setShowActivitySidebar(false);
+    }
+    window.setTimeout(() => {
+      setHighlightedMessageId(current => (current === messageId ? null : current));
+    }, 1800);
+  }, []);
+
   useEffect(() => {
     if (messages.length > 0) {
       const isLastMessageUser = messages[messages.length - 1]?.type === "user";
@@ -332,6 +432,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showExportMenu]);
+
+  useEffect(() => {
+    if (!showBranchMenu) return;
+    const handler = (e) => {
+      if (!branchMenuRef.current?.contains(e.target)) {
+        setShowBranchMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showBranchMenu]);
 
   const loadRecentConversations = useCallback(async () => {
     try {
@@ -449,6 +560,129 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     toggleSidePanelTab,
   ]);
 
+  const conversationBranches = useMemo(() => {
+    const storedBranches = Array.isArray(conversationMetadata?.branches)
+      ? conversationMetadata.branches
+      : [];
+    const activeBranchId = conversationMetadata?.activeBranchId || getMessageBranchId(messages[0]);
+    const storedActiveBranch = storedBranches.find(branch => branch?.id === activeBranchId);
+    const activeBranch = {
+      ...(storedActiveBranch || {}),
+      id: activeBranchId,
+      label: storedActiveBranch?.label || (activeBranchId === 'main' ? 'Main' : summarizeBranch(messages)),
+      messages,
+      createdAt: conversationMetadata?.created_at || messages[0]?.timestamp || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      active: true,
+    };
+    const merged = upsertBranchSnapshot(storedBranches, activeBranch);
+    return merged.map(branch => ({
+      ...branch,
+      label: branch.label || (branch.id === 'main' ? 'Main' : summarizeBranch(branch.messages)),
+      active: branch.id === activeBranchId,
+      messageCount: Array.isArray(branch.messages) ? branch.messages.length : 0,
+    }));
+  }, [conversationMetadata?.activeBranchId, conversationMetadata?.branches, conversationMetadata?.created_at, messages]);
+
+  const activeBranchId = conversationMetadata?.activeBranchId || getMessageBranchId(messages[0]);
+  const hasConversationBranches = conversationBranches.length > 1;
+
+  const persistBranchState = useCallback(async (nextMessages, nextMetadata) => {
+    setMessages(nextMessages);
+    setConversationHistory(buildConversationHistoryFromMessages(nextMessages).slice(-8));
+    setConversationMetadata(nextMetadata);
+    setCurrentChatRun(prev => ({
+      ...prev,
+      events: buildEventsFromMessages(nextMessages),
+      conversationHistory: buildConversationHistoryFromMessages(nextMessages),
+      streamingText: '',
+      running: false,
+    }));
+
+    if (!isGhostMode && currentConversationId) {
+      await saveCurrentConversation({
+        messages: nextMessages,
+        conversationId: currentConversationId,
+        metadata: nextMetadata,
+      });
+    }
+  }, [
+    currentConversationId,
+    isGhostMode,
+    saveCurrentConversation,
+    setConversationHistory,
+    setConversationMetadata,
+    setCurrentChatRun,
+    setMessages,
+  ]);
+
+  const handleSwitchBranch = useCallback(async (branchId) => {
+    if (!branchId || branchId === activeBranchId || agentRunning) return;
+    const targetBranch = conversationBranches.find(branch => branch.id === branchId);
+    if (!targetBranch || !Array.isArray(targetBranch.messages)) return;
+
+    const currentSnapshot = {
+      id: activeBranchId,
+      label: activeBranchId === 'main' ? 'Main' : summarizeBranch(messages),
+      messages,
+      createdAt: conversationMetadata?.createdAt || messages[0]?.timestamp || new Date().toISOString(),
+      fromMessageId: conversationMetadata?.branchPointMessageId || null,
+    };
+    const branches = upsertBranchSnapshot(conversationMetadata?.branches || [], currentSnapshot);
+    const nextMetadata = {
+      ...(conversationMetadata || {}),
+      activeBranchId: branchId,
+      branches,
+    };
+    await persistBranchState(targetBranch.messages, nextMetadata);
+    setShowBranchMenu(false);
+  }, [
+    activeBranchId,
+    agentRunning,
+    conversationBranches,
+    conversationMetadata,
+    messages,
+    persistBranchState,
+  ]);
+
+  const handleRenameBranch = useCallback(async (branchId, label) => {
+    const nextLabel = String(label || '').trim();
+    if (!branchId || !nextLabel) return;
+    const targetMessages = branchId === activeBranchId
+      ? messages
+      : conversationBranches.find(branch => branch.id === branchId)?.messages || [];
+    const currentBranch = conversationBranches.find(branch => branch.id === branchId);
+    const nextBranches = upsertBranchSnapshot(conversationMetadata?.branches || [], {
+      ...(currentBranch || {}),
+      id: branchId,
+      label: nextLabel,
+      messages: targetMessages,
+    });
+    const nextMetadata = {
+      ...(conversationMetadata || {}),
+      branches: nextBranches,
+    };
+    setConversationMetadata(nextMetadata);
+    setEditingBranchId(null);
+    setBranchNameDraft('');
+    if (!isGhostMode && currentConversationId) {
+      await saveCurrentConversation({
+        messages,
+        conversationId: currentConversationId,
+        metadata: nextMetadata,
+      });
+    }
+  }, [
+    activeBranchId,
+    conversationBranches,
+    conversationMetadata,
+    currentConversationId,
+    isGhostMode,
+    messages,
+    saveCurrentConversation,
+    setConversationMetadata,
+  ]);
+
   const handleStartRename = useCallback(() => {
     setEditTitle(conversationTitle || "");
     setIsEditingTitle(true);
@@ -525,13 +759,24 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
     const runKey = currentRunKey;
     const runConversationId = currentConversationId;
-    const runMessages = messages;
+    const runMessages = Array.isArray(runOptions.baseMessages) ? runOptions.baseMessages : messages;
     const effectiveAgentMode = runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
     const effectiveToolsEnabled = effectiveAgentMode === 'action';
     const activeWorkingContext = workingContext || null;
-    const activeConversationHistory = agentConversationHistory.length > 0
-      ? agentConversationHistory
-      : conversationHistory;
+    const activeConversationHistory = Array.isArray(runOptions.baseConversationHistory)
+      ? runOptions.baseConversationHistory
+      : agentConversationHistory.length > 0
+        ? agentConversationHistory
+        : conversationHistory;
+    const runBranchId = runOptions.branchId || messageObj?.branchId || activeBranchId || getMessageBranchId(runMessages[0]);
+    const runParentBranchId = runOptions.parentBranchId || messageObj?.parentBranchId || null;
+    const runBranchPointMessageId = runOptions.branchPointMessageId || messageObj?.branchPointMessageId || null;
+    const editedFromMessageId = runOptions.editedFromMessageId || messageObj?.editedFromMessageId || null;
+    const editedFromContent = runOptions.editedFromContent || messageObj?.editedFromContent || null;
+    const runMetadata = runOptions.metadata || conversationMetadata || {};
+    const userMessageId = runOptions.userMessageId || messageObj?.id || `msg_${Date.now()}_user_${Math.random().toString(36).substr(2, 9)}`;
+    const assistantMessageId = runOptions.assistantMessageId || runOptions.regenerateAssistantMessageId || `msg_${Date.now()}_assistant_${Math.random().toString(36).substr(2, 9)}`;
+    const regeneratingAssistant = runOptions.regenerateAssistantMessage || null;
 
     if (!currentConversationId && messages.length === 0) {
       generateAndSetTitle(submittedGoal);
@@ -552,7 +797,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         fileAttachments,
         events: [
           ...baseEvents,
-          { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext }, arrivedAt: Date.now() },
+          { type: 'user_goal', data: { goal: submittedGoal, messageId: userMessageId, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext, branchId: runBranchId, parentBranchId: runParentBranchId, branchPointMessageId: runBranchPointMessageId }, arrivedAt: Date.now() },
         ],
       };
     });
@@ -566,11 +811,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
     const runEvents = [
-      { type: 'user_goal', data: { goal: submittedGoal, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext } },
+      { type: 'user_goal', data: { goal: submittedGoal, messageId: userMessageId, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext, branchId: runBranchId, parentBranchId: runParentBranchId, branchPointMessageId: runBranchPointMessageId } },
     ];
 
     try {
-      for await (const event of agentApi.runStream(submittedGoal, activeConversationHistory, activeWorkingContext?.workingDir || null, 25, controller.signal, agentCurrentSessionId, {
+      for await (const event of agentApi.runStream(submittedGoal, activeConversationHistory, activeWorkingContext?.workingDir || null, 25, controller.signal, runOptions.continueSessionId !== undefined ? runOptions.continueSessionId : agentCurrentSessionId, {
         autoApprove: effectiveAgentMode === 'action' ? agentAutoApprove : false,
         preApprovedTools: effectiveAgentMode === 'action' ? [...alwaysAllowedTools] : [],
         profileId: effectiveProfileId,
@@ -617,6 +862,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                   type: 'answer',
                   data: {
                     answer: doneAnswer,
+                    messageId: assistantMessageId,
                     round: event.data.rounds,
                     toolsEnabled: effectiveToolsEnabled,
                     agentMode: effectiveAgentMode,
@@ -703,7 +949,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         updateChatRun(runKey, prev => ({
           ...prev,
           streamingText: '',
-          events: [...(prev.events || []), { type: 'error', data: { message: err.message } }],
+          events: [...(prev.events || []), { type: 'error', data: { message: err.message, goal: submittedGoal } }],
         }));
       }
     } finally {
@@ -723,8 +969,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       if (capturedFinalAnswer) {
         const nextHistory = [
           ...activeConversationHistory,
-          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, workingContext: activeWorkingContext },
-          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId },
+          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, workingContext: activeWorkingContext, branchId: runBranchId },
+          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId, branchId: runBranchId },
         ];
         const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
         updateChatRun(runKey, { conversationHistory: nextHistory });
@@ -733,7 +979,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         }
 
         const userMsg = {
-          id: `msg_${Date.now()}_user_${Math.random().toString(36).substr(2, 9)}`,
+          id: userMessageId,
           content: submittedGoal,
           type: 'user',
           timestamp: new Date().toISOString(),
@@ -743,6 +989,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           agentMentions,
           fileAttachments,
           workingContext: activeWorkingContext,
+          branchId: runBranchId,
+          parentBranchId: runParentBranchId,
+          branchPointMessageId: runBranchPointMessageId,
+          editedFromMessageId,
+          editedFromContent,
         };
         const runEventsForMsg = runEvents;
         const searchEvent = buildSearchEvent(runEventsForMsg);
@@ -761,8 +1012,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           });
         }
 
-        const assistantMsg = {
-          id: `msg_${Date.now()}_assistant_${Math.random().toString(36).substr(2, 9)}`,
+        let assistantMsg = {
+          id: assistantMessageId,
           content: capturedFinalAnswer,
           type: 'assistant',
           timestamp: new Date().toISOString(),
@@ -772,17 +1023,42 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           reasoningEffort: selectedReasoningEffort,
           agentEvents: getPersistableAgentEvents(runEventsForMsg),
           searchEvent,
+          branchId: runBranchId,
+          parentBranchId: runParentBranchId,
+          branchPointMessageId: runBranchPointMessageId,
         };
+        if (regeneratingAssistant) {
+          const existingVariants = Array.isArray(regeneratingAssistant.variants) && regeneratingAssistant.variants.length > 0
+            ? regeneratingAssistant.variants
+            : [buildAssistantVariant(regeneratingAssistant)];
+          const nextVariant = buildAssistantVariant(assistantMsg);
+          assistantMsg = {
+            ...regeneratingAssistant,
+            ...assistantMsg,
+            variants: [...existingVariants, nextVariant],
+            activeVariantIndex: existingVariants.length,
+            regeneratedAt: new Date().toISOString(),
+          };
+        }
         const finalMessages = [...runMessages, userMsg, assistantMsg];
         if (runConversationId === currentConversationIdRef.current) {
           setMessages(finalMessages);
         }
+        updateChatRun(runKey, prev => ({
+          ...prev,
+          events: buildEventsFromMessages(finalMessages),
+          conversationHistory: nextHistory,
+        }));
 
         if (!isGhostMode) {
           const saveResult = await saveCurrentConversation({
             messages: finalMessages,
             conversationId: runConversationId,
-            metadata: shouldPersistCompactedHistory ? { compactedConversationHistory: nextHistory } : undefined,
+            metadata: {
+              ...(runMetadata || {}),
+              activeBranchId: runBranchId,
+              ...(shouldPersistCompactedHistory ? { compactedConversationHistory: nextHistory } : {}),
+            },
           });
           if (!runConversationId && saveResult?.conversationId) {
             setChatRuns(prev => {
@@ -855,6 +1131,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     alwaysAllowedTools,
     selectedProfileId,
     agentMode,
+    activeBranchId,
+    conversationMetadata,
     currentConversationId,
     messages,
     isGhostMode,
@@ -870,6 +1148,194 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     refreshGitState,
     workingContext,
   ]);
+
+  const handleEditConversationTurn = useCallback(async (messageId, nextContent) => {
+    const messageIndex = messages.findIndex(msg => msg.id === messageId);
+    const original = messages[messageIndex];
+    const editedContent = String(nextContent || '').trim();
+    if (messageIndex < 0 || original?.type !== 'user' || !editedContent || editedContent === original.content || agentRunning) {
+      return;
+    }
+
+    const previousBranchId = activeBranchId || getMessageBranchId(original);
+    const nextBranchId = createConversationBranchId();
+    const now = new Date().toISOString();
+    const previousSnapshot = {
+      id: previousBranchId,
+      label: previousBranchId === 'main' ? 'Main' : summarizeBranch(messages),
+      messages,
+      createdAt: conversationMetadata?.createdAt || messages[0]?.timestamp || now,
+      fromMessageId: conversationMetadata?.branchPointMessageId || null,
+      updatedAt: now,
+    };
+    const baseMessages = messages.slice(0, messageIndex).map(msg => ({
+      ...msg,
+      branchId: msg.branchId || previousBranchId,
+    }));
+    const baseHistory = buildConversationHistoryFromMessages(baseMessages);
+    const nextMetadata = {
+      ...(conversationMetadata || {}),
+      activeBranchId: nextBranchId,
+      branchPointMessageId: original.id,
+      branches: upsertBranchSnapshot(
+        upsertBranchSnapshot(conversationMetadata?.branches || [], previousSnapshot),
+        {
+          id: nextBranchId,
+          label: summarizeBranch([{ type: 'user', content: editedContent }]),
+          messages: baseMessages,
+          parentBranchId: previousBranchId,
+          branchPointMessageId: original.id,
+          fromMessageId: original.id,
+        },
+      ),
+    };
+
+    setConversationMetadata(nextMetadata);
+    setMessages(baseMessages);
+    setConversationHistory(baseHistory.slice(-8));
+    setCurrentChatRun(prev => ({
+      ...prev,
+      events: buildEventsFromMessages(baseMessages),
+      conversationHistory: baseHistory,
+      sessionId: null,
+      session: null,
+      streamingText: '',
+      running: false,
+    }));
+
+    await handleAgentRun({
+      ...original,
+      id: undefined,
+      content: editedContent,
+      branchId: nextBranchId,
+      parentBranchId: previousBranchId,
+      branchPointMessageId: original.id,
+      editedFromMessageId: original.id,
+      editedFromContent: original.content,
+    }, {
+      baseMessages,
+      baseConversationHistory: baseHistory,
+      branchId: nextBranchId,
+      parentBranchId: previousBranchId,
+      branchPointMessageId: original.id,
+      editedFromMessageId: original.id,
+      editedFromContent: original.content,
+      metadata: nextMetadata,
+      continueSessionId: null,
+    });
+  }, [
+    activeBranchId,
+    agentRunning,
+    conversationMetadata,
+    handleAgentRun,
+    messages,
+    setConversationHistory,
+    setConversationMetadata,
+    setCurrentChatRun,
+    setMessages,
+  ]);
+
+  const persistMessageMutation = useCallback(async (nextMessages, extraMetadata = null) => {
+    const nextMetadata = {
+      ...(extraMetadata || conversationMetadata || {}),
+      highlights: buildConversationHighlights(nextMessages),
+    };
+    setMessages(nextMessages);
+    setConversationHistory(buildConversationHistoryFromMessages(nextMessages).slice(-8));
+    setCurrentChatRun(prev => ({
+      ...prev,
+      events: buildEventsFromMessages(nextMessages),
+      conversationHistory: buildConversationHistoryFromMessages(nextMessages),
+    }));
+    if (!isGhostMode && currentConversationId) {
+      await saveCurrentConversation({
+        messages: nextMessages,
+        conversationId: currentConversationId,
+        metadata: nextMetadata,
+      });
+    }
+  }, [
+    conversationMetadata,
+    currentConversationId,
+    isGhostMode,
+    saveCurrentConversation,
+    setConversationHistory,
+    setCurrentChatRun,
+    setMessages,
+  ]);
+
+  const handleToggleMessageFlag = useCallback((messageId, field) => {
+    if (!messageId || field !== 'bookmarked') return;
+    const nextMessages = messages.map(msg => (
+      msg.id === messageId ? { ...msg, [field]: !msg[field] } : msg
+    ));
+    persistMessageMutation(nextMessages);
+  }, [messages, persistMessageMutation]);
+
+  const handleSelectAnswerVariant = useCallback((messageId, variantIndex) => {
+    if (!messageId || !Number.isInteger(variantIndex)) return;
+    const target = messages.find(msg => msg.id === messageId);
+    const variants = Array.isArray(target?.variants) ? target.variants : [];
+    const variant = variants[variantIndex];
+    if (!variant) return;
+    const nextMessages = messages.map(msg => (
+      msg.id === messageId
+        ? {
+            ...msg,
+            content: variant.content || msg.content,
+            timestamp: variant.timestamp || msg.timestamp,
+            agentSessionId: variant.agentSessionId || msg.agentSessionId,
+            agentEvents: variant.agentEvents || msg.agentEvents,
+            searchEvent: variant.searchEvent || msg.searchEvent,
+            toolsEnabled: variant.toolsEnabled ?? msg.toolsEnabled,
+            agentMode: variant.agentMode || msg.agentMode,
+            reasoningEffort: variant.reasoningEffort || msg.reasoningEffort,
+            activeVariantIndex: variantIndex,
+          }
+        : msg
+    ));
+    persistMessageMutation(nextMessages);
+  }, [messages, persistMessageMutation]);
+
+  const handleRegenerateAnswer = useCallback((assistantMessageId) => {
+    if (!assistantMessageId || agentRunning) return;
+    const assistantIndex = messages.findIndex(msg => msg.id === assistantMessageId && msg.type === 'assistant');
+    if (assistantIndex <= 0) return;
+    const userIndex = assistantIndex - 1;
+    const userMsg = messages[userIndex];
+    const assistantMsg = messages[assistantIndex];
+    if (!userMsg || userMsg.type !== 'user') return;
+
+    const baseMessages = messages.slice(0, userIndex);
+    const baseHistory = buildConversationHistoryFromMessages(baseMessages);
+    handleAgentRun({
+      ...userMsg,
+      content: userMsg.content,
+    }, {
+      baseMessages,
+      baseConversationHistory: baseHistory,
+      userMessageId: userMsg.id,
+      assistantMessageId: assistantMsg.id,
+      regenerateAssistantMessageId: assistantMsg.id,
+      regenerateAssistantMessage: assistantMsg,
+      branchId: assistantMsg.branchId || userMsg.branchId || activeBranchId,
+      parentBranchId: assistantMsg.parentBranchId || userMsg.parentBranchId || null,
+      branchPointMessageId: assistantMsg.branchPointMessageId || userMsg.branchPointMessageId || null,
+      continueSessionId: null,
+      metadata: conversationMetadata,
+    });
+  }, [
+    activeBranchId,
+    agentRunning,
+    conversationMetadata,
+    handleAgentRun,
+    messages,
+  ]);
+
+  const handleRetryGoal = useCallback((goal) => {
+    if (!goal?.trim() || agentRunning) return;
+    handleAgentRun({ content: goal });
+  }, [agentRunning, handleAgentRun]);
 
   const handleRetryTool = useCallback((failure) => {
     const tool = failure?.tool || 'tool';
@@ -1159,6 +1625,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     () => buildConversationSourceCatalog(messages, persistedAgentEvents),
     [messages, persistedAgentEvents],
   );
+
+  const conversationHighlights = useMemo(
+    () => buildConversationHighlights(messages),
+    [messages],
+  );
+  const savedItemsCount = conversationHighlights.bookmarkedMessages.length;
 
   const agentActivityItems = useMemo(() => {
     return persistedAgentEvents
@@ -1485,6 +1957,91 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                           New
                         </button>
                         <ConversationSwitcher />
+                        {hasConversationBranches && (
+                          <div ref={branchMenuRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setShowBranchMenu(v => !v)}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                                showBranchMenu
+                                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                              }`}
+                              title="Conversation branches"
+                            >
+                              <GitBranch className="h-4 w-4" />
+                              Branches
+                              <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                {conversationBranches.length}
+                              </span>
+                            </button>
+                            {showBranchMenu && (
+                              <div className="absolute right-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+                                <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
+                                  <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">Conversation branches</div>
+                                  <div className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Switch between alternate continuations.</div>
+                                </div>
+                                <div className="max-h-72 overflow-y-auto p-1">
+                                  {conversationBranches.map(branch => (
+                                    <div
+                                      key={branch.id}
+                                      className={`group flex w-full items-start gap-2 rounded-md px-2 py-2 transition-colors ${
+                                        branch.active
+                                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+                                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/70 dark:hover:text-gray-100'
+                                      }`}
+                                    >
+                                      <GitBranch className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${branch.active ? 'text-blue-500' : 'text-gray-400'}`} />
+                                      {editingBranchId === branch.id ? (
+                                        <span className="min-w-0 flex-1">
+                                          <input
+                                            value={branchNameDraft}
+                                            onChange={(e) => setBranchNameDraft(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleRenameBranch(branch.id, branchNameDraft);
+                                              if (e.key === 'Escape') {
+                                                setEditingBranchId(null);
+                                                setBranchNameDraft('');
+                                              }
+                                            }}
+                                            onBlur={() => handleRenameBranch(branch.id, branchNameDraft)}
+                                            className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-800 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:focus:ring-gray-800"
+                                            autoFocus
+                                          />
+                                        </span>
+                                      ) : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSwitchBranch(branch.id)}
+                                            disabled={branch.active || agentRunning}
+                                            className="min-w-0 flex-1 text-left disabled:cursor-default"
+                                          >
+                                            <span className="block truncate text-xs font-semibold">{branch.label}</span>
+                                            <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">
+                                              {branch.messageCount} messages{branch.active ? ' · current' : ''}
+                                            </span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingBranchId(branch.id);
+                                              setBranchNameDraft(branch.label || '');
+                                            }}
+                                            className="mt-0.5 rounded p-1 text-gray-300 opacity-0 transition-colors hover:bg-white hover:text-gray-600 group-hover:opacity-100 dark:hover:bg-gray-950 dark:hover:text-gray-200"
+                                            title="Rename branch"
+                                          >
+                                            <Edit2 className="h-3.5 w-3.5" />
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
 
@@ -1542,6 +2099,25 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       >
                         <PanelRightOpen className="h-4 w-4" />
                         Steps
+                      </button>
+                    )}
+
+                    {savedItemsCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('saved')}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'saved'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Show bookmarked messages"
+                      >
+                        <BookMarked className="h-4 w-4" />
+                        Saved
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {savedItemsCount}
+                        </span>
                       </button>
                     )}
 
@@ -1703,6 +2279,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     onAskUserAnswer={handleAgentAskUser}
                     onRetryTool={handleRetryTool}
                     onRunWithAction={handleRunInActionMode}
+                    onEditMessage={handleEditConversationTurn}
+                    onRegenerateAnswer={handleRegenerateAnswer}
+                    onSelectAnswerVariant={handleSelectAnswerVariant}
+                    onToggleMessageFlag={handleToggleMessageFlag}
+                    onRetryGoal={handleRetryGoal}
+                    highlightedMessageId={highlightedMessageId}
                     ttsReady={ttsReady}
                   />
                   {!agentRunning && (
@@ -1769,7 +2351,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside className="hidden xl:block w-96 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700">
           <CommandCenterSidePanel
             activeTab={sidePanelTab}
@@ -1791,11 +2373,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             currentConversationId={currentConversationId}
             onOpenConversation={handleOpenConversation}
             navigate={navigate}
+            highlights={conversationHighlights}
+            onOpenSavedMessage={handleOpenSavedMessage}
           />
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"
@@ -1825,6 +2409,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               currentConversationId={currentConversationId}
               onOpenConversation={handleOpenConversation}
               navigate={navigate}
+              highlights={conversationHighlights}
+              onOpenSavedMessage={handleOpenSavedMessage}
             />
           </div>
         </div>

@@ -212,10 +212,12 @@ function ModeBadge({ toolsEnabled, agentMode }) {
 
 // ── Individual event components ───────────────────────────────────────────────
 
-function UserGoalEvent({ data }) {
+function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, highlighted = false }) {
   const goal = data?.goal || data?.content || '';
   const [copied, setCopied] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(goal);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(goal);
@@ -223,25 +225,88 @@ function UserGoalEvent({ data }) {
     setTimeout(() => setCopied(false), 2000);
   }, [goal]);
 
+  useEffect(() => {
+    if (!isEditing) setDraft(goal);
+  }, [goal, isEditing]);
+
+  const canEdit = Boolean(onEditMessage && data?.messageId && !isRunning);
+  const submitEdit = useCallback(() => {
+    const next = draft.trim();
+    if (!next || next === goal.trim()) {
+      setIsEditing(false);
+      setDraft(goal);
+      return;
+    }
+    onEditMessage(data.messageId, next);
+    setIsEditing(false);
+  }, [data?.messageId, draft, goal, onEditMessage]);
+
   if (!goal.trim()) return null;
 
   return (
-    <div className="group mb-6">
-      <div className="max-w-4xl mx-auto flex justify-end">
+    <div
+      id={data?.messageId ? `message-${data.messageId}` : undefined}
+      data-message-id={data?.messageId || undefined}
+      className={`group mb-6 scroll-mt-24 rounded-2xl transition-colors duration-700 ${
+        highlighted ? 'bg-amber-50/80 dark:bg-amber-950/20' : ''
+      }`}
+    >
+      <div className="max-w-4xl mx-auto flex flex-col items-end">
         <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
-          <div className="mb-1 flex justify-end gap-2 items-center">
-            <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
-            <button
-              onClick={handleCopy}
-              className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
-              title="Copy message"
-            >
-              {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-          <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
-            {goal}
-          </div>
+          {(data?.toolsEnabled !== undefined || data?.agentMode || data?.parentBranchId || data?.bookmarked) && (
+            <div className="mb-1 flex justify-end gap-1.5 items-center">
+              <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
+              {data?.parentBranchId && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+                  <GitBranch className="h-3 w-3" />
+                  Branch
+                </span>
+              )}
+              {data?.bookmarked && <BookMarked className="h-3.5 w-3.5 text-amber-500" />}
+            </div>
+          )}
+          {isEditing ? (
+            <div className="space-y-2">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitEdit();
+                  if (e.key === 'Escape') {
+                    setIsEditing(false);
+                    setDraft(goal);
+                  }
+                }}
+                className="min-h-[96px] w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-gray-600 dark:focus:ring-gray-800"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setDraft(goal);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitEdit}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                >
+                  <GitBranch className="h-3.5 w-3.5" />
+                  Branch
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
+              {goal}
+            </div>
+          )}
           {Array.isArray(data?.agentMentions) && data.agentMentions.length > 0 && (
             <div className="mt-2 flex flex-wrap justify-end gap-1">
               {data.agentMentions.map(agent => (
@@ -270,6 +335,34 @@ function UserGoalEvent({ data }) {
               onClose={() => setLightbox(null)}
             />
           )}
+        </div>
+        <div className="mt-1 flex justify-end gap-1 pr-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {canEdit && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              title="Edit and branch from here"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </button>
+          )}
+          <button
+            onClick={() => onToggleMessageFlag?.(data?.messageId, 'bookmarked')}
+            className={`inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 ${data?.bookmarked ? 'text-amber-500' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+            title={data?.bookmarked ? 'Remove bookmark' : 'Bookmark message'}
+          >
+            <BookMarked className="w-3.5 h-3.5" />
+            Bookmark
+          </button>
+          <button
+            onClick={handleCopy}
+            className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            title="Copy message"
+          >
+            {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+            Copy
+          </button>
         </div>
       </div>
     </div>
@@ -359,6 +452,16 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
                 <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono text-[10px] leading-relaxed text-gray-500 dark:bg-gray-900/60 dark:text-gray-500">
                   {typeof result === 'string' ? result : (result.output || result.content || result.error || JSON.stringify(result, null, 2))}
                 </pre>
+              )}
+              {onRetryTool && (
+                <button
+                  type="button"
+                  onClick={() => onRetryTool({ tool: data?.tool, args: data?.args, result, repairPrompt: result?.repairPrompt })}
+                  className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Retry from here
+                </button>
               )}
             </div>
           )}
@@ -1128,9 +1231,20 @@ function SourcesPanel({ searchEvent }) {
 }
 
 // Clean chat-like agent response — no "Agent response" header bar
-function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) {
+function AnswerEvent({
+  data,
+  suppressThinkFallback = false,
+  ttsReady = false,
+  onRegenerateAnswer,
+  onSelectAnswerVariant,
+  onToggleMessageFlag,
+  isRunning,
+  highlighted = false,
+}) {
   const raw = data?.answer || '';
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
+  const variants = Array.isArray(data?.variants) ? data.variants : [];
+  const activeVariantIndex = Number.isInteger(data?.activeVariantIndex) ? data.activeVariantIndex : Math.max(variants.length - 1, 0);
 
   const displayAnswer = answer;
 
@@ -1144,10 +1258,17 @@ function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) 
   return (
     <>
       {!suppressThinkFallback && thinkFallback && <ThinkingEvent data={{ thought: thinkFallback }} />}
-      {displayAnswer && <div className="group mb-6">
+      {displayAnswer && <div
+        id={data?.messageId ? `message-${data.messageId}` : undefined}
+        data-message-id={data?.messageId || undefined}
+        className={`group mb-6 scroll-mt-24 rounded-2xl transition-colors duration-700 ${
+          highlighted ? 'bg-amber-50/80 dark:bg-amber-950/20' : ''
+        }`}
+      >
         <div className="max-w-4xl mx-auto">
           <div className="mb-2">
             <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
+            {data?.bookmarked && <BookMarked className="ml-1 inline h-3.5 w-3.5 text-amber-500" />}
           </div>
           <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
             {blocks.length > 0
@@ -1172,20 +1293,86 @@ function AnswerEvent({ data, suppressThinkFallback = false, ttsReady = false }) 
           {data?.round > 1 && (
             <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
           )}
+          <div className="mt-3 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            {variants.length > 1 && (
+              <div className="mr-1 inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1 py-0.5 text-[11px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+                <button
+                  type="button"
+                  onClick={() => onSelectAnswerVariant?.(data?.messageId, Math.max(0, activeVariantIndex - 1))}
+                  disabled={activeVariantIndex <= 0 || isRunning}
+                  className="rounded p-0.5 disabled:opacity-30"
+                  title="Previous variant"
+                >
+                  <SkipBack className="h-3 w-3" />
+                </button>
+                <span className="min-w-8 text-center tabular-nums">{activeVariantIndex + 1} / {variants.length}</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectAnswerVariant?.(data?.messageId, Math.min(variants.length - 1, activeVariantIndex + 1))}
+                  disabled={activeVariantIndex >= variants.length - 1 || isRunning}
+                  className="rounded p-0.5 disabled:opacity-30"
+                  title="Next variant"
+                >
+                  <SkipForward className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => onRegenerateAnswer?.(data?.messageId)}
+              disabled={isRunning}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 disabled:opacity-40 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              title="Regenerate this answer"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Regenerate
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleMessageFlag?.(data?.messageId, 'bookmarked')}
+              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${data?.bookmarked ? 'text-amber-500' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+              title={data?.bookmarked ? 'Remove bookmark' : 'Bookmark answer'}
+            >
+              <BookMarked className="h-3.5 w-3.5" />
+              Bookmark
+            </button>
+          </div>
         </div>
       </div>}
     </>
   );
 }
 
-function ErrorEvent({ data }) {
+function ErrorEvent({ data, onRetryGoal, onRunWithAction }) {
   return (
     <FeedFrame className="mb-3">
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm px-4 py-3 flex items-start gap-3">
         <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center mt-0.5">
           <XCircle className="w-3 h-3 text-red-500" />
         </div>
-        <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{data?.message || 'Agent encountered an error.'}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{data?.message || 'Agent encountered an error.'}</p>
+          {data?.goal && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => onRetryGoal?.(data.goal)}
+                className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={() => onRunWithAction?.(data.goal)}
+                className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                <Zap className="h-3 w-3" />
+                Action mode
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </FeedFrame>
   );
@@ -1651,7 +1838,23 @@ function GeneratedMediaLibrary({ events }) {
 
 // ── Main feed component ───────────────────────────────────────────────────────
 
-export default function AgentRunFeed({ events, isRunning, streamingText, runStartedAt, onPermissionDecision, onAskUserAnswer, onRetryTool, onRunWithAction, ttsReady = false }) {
+export default function AgentRunFeed({
+  events,
+  isRunning,
+  streamingText,
+  runStartedAt,
+  onPermissionDecision,
+  onAskUserAnswer,
+  onRetryTool,
+  onRunWithAction,
+  onEditMessage,
+  onRegenerateAnswer,
+  onSelectAnswerVariant,
+  onToggleMessageFlag,
+  onRetryGoal,
+  highlightedMessageId = null,
+  ttsReady = false,
+}) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
@@ -1693,7 +1896,16 @@ export default function AgentRunFeed({ events, isRunning, streamingText, runStar
     switch (ev.type) {
       case 'user_goal':
         hasThinkingSinceLastGoal = false;
-        renderedEvents.push(<UserGoalEvent key={i} data={ev.data} />);
+        renderedEvents.push(
+          <UserGoalEvent
+            key={i}
+            data={ev.data}
+            onEditMessage={onEditMessage}
+            onToggleMessageFlag={onToggleMessageFlag}
+            isRunning={isRunning}
+            highlighted={Boolean(ev.data?.messageId && ev.data.messageId === highlightedMessageId)}
+          />
+        );
         break;
       case 'thinking':
         hasThinkingSinceLastGoal = true;
@@ -1703,10 +1915,22 @@ export default function AgentRunFeed({ events, isRunning, streamingText, runStar
         renderedEvents.push(<AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />);
         break;
       case 'answer':
-        renderedEvents.push(<AnswerEvent key={i} data={ev.data} suppressThinkFallback={hasThinkingSinceLastGoal} ttsReady={ttsReady} />);
+        renderedEvents.push(
+          <AnswerEvent
+            key={i}
+            data={ev.data}
+            suppressThinkFallback={hasThinkingSinceLastGoal}
+            ttsReady={ttsReady}
+            onRegenerateAnswer={onRegenerateAnswer}
+            onSelectAnswerVariant={onSelectAnswerVariant}
+            onToggleMessageFlag={onToggleMessageFlag}
+            isRunning={isRunning}
+            highlighted={Boolean(ev.data?.messageId && ev.data.messageId === highlightedMessageId)}
+          />
+        );
         break;
       case 'error':
-        renderedEvents.push(<ErrorEvent key={i} data={ev.data} />);
+        renderedEvents.push(<ErrorEvent key={i} data={ev.data} onRetryGoal={onRetryGoal} onRunWithAction={onRunWithAction} />);
         break;
       case 'status':
         renderedEvents.push(<StatusEvent key={i} data={ev.data} onRunWithAction={onRunWithAction} />);
