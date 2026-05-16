@@ -8,7 +8,7 @@ import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
-import { loadSkills, reloadSkills, listSkills, normalizeTags } from '../../agent/skills.js';
+import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
@@ -1081,6 +1081,37 @@ router.post('/skills/reload', authenticate, (_req, res) => {
     res.json({ success: true, count: skills.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/skills', authenticate, (req, res) => {
+  try {
+    const { name, description = '', brain_region = 'unknown', weight = 1, tags = [], when_to_use = '', body = '', created_by = null } = req.body;
+    const result = createSkill({ name, description, brain_region, weight, tags, when_to_use, body, created_by });
+    res.status(201).json({ success: true, ...result });
+  } catch (err) {
+    const status = err.message.includes('already exists') ? 409 : err.message.includes('required') ? 400 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/skills/:name', authenticate, (req, res) => {
+  try {
+    const result = updateSkill(req.params.name, req.body);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const status = err.message.includes('not found') ? 404 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/skills/:name', authenticate, (req, res) => {
+  try {
+    deleteSkill(req.params.name);
+    res.json({ success: true });
+  } catch (err) {
+    const status = err.message.includes('not found') ? 404 : 500;
+    res.status(status).json({ success: false, error: err.message });
   }
 });
 

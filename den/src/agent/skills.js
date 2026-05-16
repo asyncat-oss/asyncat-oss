@@ -83,6 +83,59 @@ export function listSkills() {
   return loadedSkills;
 }
 
+function slugifyName(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function buildSkillMarkdown({ name, description = '', brain_region = 'unknown', weight = 1, tags = [], when_to_use = '', body = '', created_by = null }) {
+  const tagLine = Array.isArray(tags) ? tags.join(', ') : tags;
+  const lines = [
+    '---',
+    `name: ${name}`,
+    `description: ${description}`,
+    `brain_region: ${brain_region}`,
+    `weight: ${weight}`,
+    `tags: [${tagLine}]`,
+  ];
+  if (when_to_use) lines.push(`when_to_use: ${when_to_use}`);
+  if (created_by) lines.push(`created_by: ${created_by}`);
+  lines.push('---');
+  if (body) lines.push('', body);
+  return lines.join('\n');
+}
+
+export function createSkill({ name, description, brain_region, weight, tags, when_to_use, body, created_by }) {
+  if (!name?.trim()) throw new Error('name is required');
+  fs.mkdirSync(USER_SKILLS_DIR, { recursive: true });
+  const filename = `${slugifyName(name)}.md`;
+  const filePath = path.join(USER_SKILLS_DIR, filename);
+  if (fs.existsSync(filePath)) throw new Error(`Skill "${name}" already exists`);
+  const content = buildSkillMarkdown({ name: name.trim(), description, brain_region, weight, tags, when_to_use, body, created_by });
+  fs.writeFileSync(filePath, content, 'utf8');
+  reloadSkills();
+  return { name: name.trim(), filename, path: filePath };
+}
+
+export function updateSkill(name, fields) {
+  const slug = slugifyName(name);
+  const filePath = path.join(USER_SKILLS_DIR, `${slug}.md`);
+  if (!fs.existsSync(filePath)) throw new Error(`User skill "${name}" not found`);
+  const existing = parseFrontmatter(fs.readFileSync(filePath, 'utf8'), name);
+  const merged = { ...existing, ...fields, name: existing.name };
+  const content = buildSkillMarkdown(merged);
+  fs.writeFileSync(filePath, content, 'utf8');
+  reloadSkills();
+  return { name: merged.name };
+}
+
+export function deleteSkill(name) {
+  const slug = slugifyName(name);
+  const filePath = path.join(USER_SKILLS_DIR, `${slug}.md`);
+  if (!fs.existsSync(filePath)) throw new Error(`User skill "${name}" not found or is a bundled skill`);
+  fs.unlinkSync(filePath);
+  reloadSkills();
+}
+
 // ── Tag normalization ────────────────────────────────────────────────────────
 
 export function normalizeTags(tags) {

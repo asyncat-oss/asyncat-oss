@@ -174,6 +174,28 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/skills/reload`, { method: 'POST' });
   },
 
+  createSkill: async (skill) => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(skill),
+    });
+  },
+
+  updateSkill: async (name, fields) => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+  },
+
+  deleteSkill: async (name) => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+  },
+
   getSoul: async (name = 'default') => {
     return await apiRequest(`${API_BASE_URL}/agent/soul?name=${encodeURIComponent(name)}`);
   },

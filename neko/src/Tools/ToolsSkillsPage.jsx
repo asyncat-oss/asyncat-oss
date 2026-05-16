@@ -4,9 +4,11 @@ import {
   Search, Wrench, File,
   Brain, Loader2, AlertCircle, ChevronDown, ChevronRight,
   BookOpen, Cpu, ShieldAlert,
-  Bot, Save, Edit2, X, Check, BookMarked, Trash2, RefreshCw,
+  Bot, Save, Edit2, X, Check, BookMarked, Trash2, RefreshCw, Plus,
+  PanelLeft, PanelLeftClose,
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/api';
+import ConfirmModal from '../CommandCenter/components/modals/ConfirmModal.jsx';
 
 const PERM_META = {
   safe:      { label: 'Safe',      dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' },
@@ -493,7 +495,7 @@ ToolInspector.propTypes = {
   }),
 };
 
-function SkillInspector({ skill }) {
+function SkillInspector({ skill, onRequestDelete, isDeleting }) {
   if (!skill) {
     return (
       <div className="flex h-full min-h-[280px] items-center justify-center px-6 text-center text-sm text-gray-400">
@@ -505,13 +507,26 @@ function SkillInspector({ skill }) {
   const meta = getRegionMeta(skill.brain_region);
   const origin = getSkillOrigin(skill);
   const originMeta = SKILL_ORIGIN_META[origin] || SKILL_ORIGIN_META.default;
+  const isDeletable = origin === 'user' || origin === 'auto';
 
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="mb-5">
-        <div className="flex items-center gap-2">
-          <h3 className="break-words text-base font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{skill.name}</h3>
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${originMeta.className}`}>{originMeta.label}</span>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="break-words text-base font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{skill.name}</h3>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${originMeta.className}`}>{originMeta.label}</span>
+          </div>
+          {isDeletable && (
+            <button
+              onClick={onRequestDelete}
+              disabled={isDeleting}
+              title="Delete this skill"
+              className="flex-shrink-0 rounded p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 dark:text-gray-600 dark:hover:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50"
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </button>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{meta.label}</span>
@@ -560,6 +575,142 @@ SkillInspector.propTypes = {
     when_to_use: PropTypes.string,
     body: PropTypes.string,
   }),
+  onRequestDelete: PropTypes.func,
+  isDeleting: PropTypes.bool,
+};
+
+const BRAIN_REGION_OPTIONS = [
+  { value: 'prefrontal',    label: 'Planning' },
+  { value: 'cerebellum',   label: 'Workflow' },
+  { value: 'hippocampus',  label: 'Recall' },
+  { value: 'amygdala',     label: 'Risk Checks' },
+  { value: 'basal_ganglia',label: 'Habits' },
+  { value: 'limbic',       label: 'Tone' },
+  { value: 'unknown',      label: 'Other' },
+];
+
+const EMPTY_SKILL_FORM = {
+  name: '',
+  description: '',
+  brain_region: 'cerebellum',
+  tags: '',
+  when_to_use: '',
+  body: '',
+};
+
+function NewSkillModal({ open, onClose, onCreated }) {
+  const [form, setForm] = useState(EMPTY_SKILL_FORM);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (open) { setForm(EMPTY_SKILL_FORM); setError(null); }
+  }, [open]);
+
+  if (!open) return null;
+
+  function set(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError('Name is required'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean);
+      await agentApi.createSkill({ ...form, tags });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Failed to create skill');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputClass = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800';
+  const labelClass = 'mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">New Skill</h2>
+          <button onClick={onClose} className="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="max-h-[75vh] overflow-y-auto p-5 space-y-4">
+          <div>
+            <label className={labelClass}>Name *</label>
+            <input className={inputClass} value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Summarize meeting notes" />
+          </div>
+          <div>
+            <label className={labelClass}>Description</label>
+            <input className={inputClass} value={form.description} onChange={e => set('description', e.target.value)} placeholder="One-line summary of what this skill does" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>Brain region</label>
+              <select className={inputClass} value={form.brain_region} onChange={e => set('brain_region', e.target.value)}>
+                {BRAIN_REGION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Tags (comma-separated)</label>
+              <input className={inputClass} value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="writing, summaries" />
+            </div>
+          </div>
+          <div>
+            <label className={labelClass}>When to use</label>
+            <input className={inputClass} value={form.when_to_use} onChange={e => set('when_to_use', e.target.value)} placeholder="When the user asks to summarize…" />
+          </div>
+          <div>
+            <label className={labelClass}>Process / Body</label>
+            <textarea
+              className={`${inputClass} resize-none font-mono text-xs leading-5`}
+              rows={6}
+              value={form.body}
+              onChange={e => set('body', e.target.value)}
+              placeholder="Markdown instructions the agent will follow when this skill is active…"
+            />
+          </div>
+
+          {error && (
+            <p className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+              <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />{error}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !form.name.trim()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Create skill
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+NewSkillModal.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onCreated: PropTypes.func.isRequired,
 };
 
 export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
@@ -577,8 +728,17 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [selectedSkillName, setSelectedSkillName] = useState(null);
   const [reloadingSkills, setReloadingSkills] = useState(false);
   const [reloadSkillsSuccess, setReloadSkillsSuccess] = useState(false);
+  const [newSkillOpen, setNewSkillOpen] = useState(false);
   const toolsFetchedRef = useRef(false);
   const skillsFetchedRef = useRef(false);
+
+  const [skillToDelete, setSkillToDelete] = useState(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deletingSkill, setDeletingSkill] = useState(false);
+
+  const [toolsSidebarOpen, setToolsSidebarOpen] = useState(true);
+  const [skillsSidebarOpen, setSkillsSidebarOpen] = useState(true);
+  const [soulSidebarOpen, setSoulSidebarOpen] = useState(true);
 
   const [soulContent, setSoulContent] = useState('');
   const [soulEdited, setSoulEdited] = useState('');
@@ -699,6 +859,27 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     setEditingSoul(false);
   }
 
+  function requestDeleteSkill(skill) {
+    setSkillToDelete(skill);
+    setConfirmDeleteOpen(true);
+  }
+
+  async function confirmDeleteSkill() {
+    if (!skillToDelete) return;
+    setDeletingSkill(true);
+    try {
+      await agentApi.deleteSkill(skillToDelete.name);
+      await fetchSkills();
+      setSelectedSkillName(null);
+      setConfirmDeleteOpen(false);
+      setSkillToDelete(null);
+    } catch (err) {
+      setErrorSkills(err.message || 'Failed to delete skill');
+    } finally {
+      setDeletingSkill(false);
+    }
+  }
+
   async function fetchMemories() {
     setLoadingMemory(true);
     setErrorMemory(null);
@@ -811,6 +992,22 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
 
   return (
     <div className="flex flex-col h-full bg-transparent">
+      <NewSkillModal
+        open={newSkillOpen}
+        onClose={() => setNewSkillOpen(false)}
+        onCreated={() => { fetchSkills(); setNewSkillOpen(false); }}
+      />
+      <ConfirmModal
+        isOpen={confirmDeleteOpen}
+        onClose={() => { setConfirmDeleteOpen(false); setSkillToDelete(null); }}
+        onConfirm={confirmDeleteSkill}
+        title="Delete Skill"
+        message={skillToDelete ? `Are you sure you want to delete "${skillToDelete.name}"? This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        isDestructive
+        isProcessing={deletingSkill}
+      />
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
         <div className="flex items-center justify-between">
@@ -851,7 +1048,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {toolsTabActive && (
-          <div className="grid h-full overflow-hidden lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className={`grid h-full overflow-hidden ${toolsSidebarOpen ? 'lg:grid-cols-[260px_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+            {toolsSidebarOpen && (
             <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
@@ -875,16 +1073,37 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200">{toolCategoryCount}</span></div>
                   </div>
                 </div>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <button
+                    onClick={() => setToolsSidebarOpen(false)}
+                    className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <PanelLeftClose className="h-3.5 w-3.5" />
+                    Close sidebar
+                  </button>
+                </div>
               </div>
             </aside>
+            )}
 
-            <main className="min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
+            <main className="relative min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
               <div className="mx-auto grid h-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(280px,42vh)] gap-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:grid-rows-none">
                 <section className="flex min-h-0 min-w-0 flex-col">
                   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Tool Catalog</h2>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, or group. Select a row to inspect parameters.</p>
+                    <div className="flex items-center gap-2">
+                      {!toolsSidebarOpen && (
+                        <button
+                          onClick={() => setToolsSidebarOpen(true)}
+                          title="Show sidebar"
+                          className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          <PanelLeft className="h-4 w-4" />
+                        </button>
+                      )}
+                      <div>
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Tool Catalog</h2>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, or group. Select a row to inspect parameters.</p>
+                      </div>
                     </div>
                     <div className="relative w-full sm:w-80">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -937,7 +1156,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
         )}
 
         {skillsTabActive && (
-          <div className="grid h-full overflow-hidden lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className={`grid h-full overflow-hidden ${skillsSidebarOpen ? 'lg:grid-cols-[260px_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+            {skillsSidebarOpen && (
             <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
@@ -962,16 +1182,37 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     The agent chooses relevant skills in context. Opening a row shows when it applies and what process it adds.
                   </p>
                 </div>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <button
+                    onClick={() => setSkillsSidebarOpen(false)}
+                    className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <PanelLeftClose className="h-3.5 w-3.5" />
+                    Close sidebar
+                  </button>
+                </div>
               </div>
             </aside>
+            )}
 
-            <main className="min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
+            <main className="relative min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
               <div className="mx-auto grid h-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(280px,42vh)] gap-4 xl:grid-cols-[minmax(0,1fr)_420px] xl:grid-rows-none">
                 <section className="flex min-h-0 min-w-0 flex-col">
                   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Skill Library</h2>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Select a row to read its instructions.</p>
+                    <div className="flex items-center gap-2">
+                      {!skillsSidebarOpen && (
+                        <button
+                          onClick={() => setSkillsSidebarOpen(true)}
+                          title="Show sidebar"
+                          className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          <PanelLeft className="h-4 w-4" />
+                        </button>
+                      )}
+                      <div>
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Skill Library</h2>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Select a row to read its instructions.</p>
+                      </div>
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                       <div className="flex w-full items-center gap-2 sm:w-auto">
@@ -995,6 +1236,14 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                             ? <Check className="h-3.5 w-3.5 text-emerald-500" />
                             : <RefreshCw className={`h-3.5 w-3.5 ${reloadingSkills ? 'animate-spin' : ''}`} />}
                           {reloadSkillsSuccess ? 'Reloaded' : 'Reload'}
+                        </button>
+                        <button
+                          onClick={() => setNewSkillOpen(true)}
+                          title="Create a new skill"
+                          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          New
                         </button>
                       </div>
                       <div className="flex w-full flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800 sm:w-auto">
@@ -1049,7 +1298,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                 </section>
 
                 <aside className="min-h-0 overflow-hidden border-l border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-                  <SkillInspector skill={selectedSkill} />
+                  <SkillInspector skill={selectedSkill} onRequestDelete={() => requestDeleteSkill(selectedSkill)} isDeleting={deletingSkill} />
                 </aside>
               </div>
             </main>
@@ -1061,6 +1310,15 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 dark:border-gray-800 midnight:border-slate-800 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
+                  {!soulSidebarOpen && (
+                    <button
+                      onClick={() => setSoulSidebarOpen(true)}
+                      title="Show sidebar"
+                      className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                    >
+                      <PanelLeft className="h-4 w-4" />
+                    </button>
+                  )}
                   <span className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">default.md</span>
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                     editingSoul
@@ -1135,7 +1393,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             )}
 
             {!loadingSoul && !errorSoul && (
-              <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[240px_minmax(0,1fr)]">
+              <div className={`grid flex-1 gap-0 overflow-hidden ${soulSidebarOpen ? 'lg:grid-cols-[240px_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+                {soulSidebarOpen && (
                 <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:border-b-0 lg:border-r">
                   <div className="space-y-5">
                     <div>
@@ -1178,9 +1437,19 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                       </div>
                     </div>
                   </div>
+                  <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                    <button
+                      onClick={() => setSoulSidebarOpen(false)}
+                      className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <PanelLeftClose className="h-3.5 w-3.5" />
+                      Close sidebar
+                    </button>
+                  </div>
                 </aside>
+                )}
 
-                <main className="min-h-0 overflow-y-auto p-4 sm:p-6">
+                <main className="relative min-h-0 overflow-y-auto p-4 sm:p-6">
                   <div className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800 midnight:border-slate-800">
                     <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-4 py-2 dark:border-gray-800 dark:bg-gray-900/50 midnight:border-slate-800 midnight:bg-slate-900/50">
                       <span className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">souls/default.md</span>
