@@ -8,7 +8,6 @@
 --
 -- Schema prefixes removed (SQLite has no schemas):
 --   kanban.Columns  → Columns      kanban.Cards  → Cards
---   kanban.TaskDependencies
 --   aichats.conversations / chat_folders
 --
 -- SQLite adaptations:
@@ -60,7 +59,7 @@ CREATE TABLE IF NOT EXISTS projects (
   -- References workspaces instead of the old teams table.
   team_id         TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   is_archived     INTEGER NOT NULL DEFAULT 0,
-  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","gantt","network","notes"]',
+  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","gantt","notes"]',
   enabled_widgets TEXT NOT NULL DEFAULT '["metrics","progress","description","quick-stats","deadlines","team-members","features","project-details"]',
   emoji           TEXT NOT NULL DEFAULT '📁',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
@@ -125,8 +124,8 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 
 -- ─── Kanban ───────────────────────────────────────────────────────────────────
--- Table names kept as "Columns" / "Cards" / "TaskDependencies"
--- to match the existing service and controller code exactly.
+-- Table names kept as "Columns" / "Cards" to match the existing
+-- service and controller code exactly.
 
 CREATE TABLE IF NOT EXISTS Columns (
   id                 TEXT PRIMARY KEY,
@@ -135,7 +134,6 @@ CREATE TABLE IF NOT EXISTS Columns (
   projectId          TEXT REFERENCES projects(id) ON DELETE CASCADE,
   createdBy          TEXT NOT NULL REFERENCES users(id),
   updatedBy          TEXT REFERENCES users(id),
-  isCompletionColumn INTEGER NOT NULL DEFAULT 0,
   createdAt          TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -156,25 +154,13 @@ CREATE TABLE IF NOT EXISTS Cards (
   tags             TEXT NOT NULL DEFAULT '[]',   -- JSON array of strings
   attachments      TEXT NOT NULL DEFAULT '[]',   -- JSON
   predictedMinutes INTEGER,
-  dependencies     TEXT NOT NULL DEFAULT '[]',   -- JSON array of UUIDs
   commentCount     INTEGER NOT NULL DEFAULT 0,
   startedAt        TEXT,
-  completedAt      TEXT,
   administrator_id TEXT REFERENCES users(id),
   createdBy        TEXT NOT NULL REFERENCES users(id),
   updatedBy        TEXT REFERENCES users(id),
   createdAt        TEXT NOT NULL DEFAULT (datetime('now')),
   updatedAt        TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS TaskDependencies (
-  id           TEXT PRIMARY KEY,
-  sourceCardId TEXT NOT NULL REFERENCES Cards(id) ON DELETE CASCADE,
-  targetCardId TEXT NOT NULL REFERENCES Cards(id) ON DELETE CASCADE,
-  type         TEXT NOT NULL DEFAULT 'FS' CHECK (type IN ('FS','SS','FF','SF')),
-  lag          INTEGER NOT NULL DEFAULT 0,
-  createdAt    TEXT NOT NULL DEFAULT (datetime('now')),
-  updatedAt    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ─── AI Chats ─────────────────────────────────────────────────────────────────

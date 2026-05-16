@@ -112,7 +112,6 @@ const UniversalSearch = ({ isOpen, onClose }) => {
       { id: 'kanban',   label: 'Board' },
       { id: 'list',     label: 'List' },
       { id: 'gantt',    label: 'Plan' },
-      { id: 'network',  label: 'Network' },
     ];
 
     const expandedProjects = [];

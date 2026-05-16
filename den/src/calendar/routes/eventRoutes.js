@@ -89,7 +89,7 @@ const formatCard = (card) => {
 		});
 	}
 
-	const isCompleted = card.completedAt || card.Columns?.isCompletionColumn || false;
+	const isCompleted = (card.progress || 0) >= 100;
 
 	return {
 		id: card.id,
@@ -112,7 +112,6 @@ const formatCard = (card) => {
 		column: {
 			id: card.Columns?.id,
 			title: card.Columns?.title,
-			isCompletionColumn: card.Columns?.isCompletionColumn,
 			projectId: card.Columns?.projectId,
 		},
 		projectId: card.Columns?.projectId,
@@ -143,7 +142,7 @@ const getCardsWithDueDates = async (req, db, dateRange = null) => {
 	if (colIds.length > 0) {
 		const { data: cols } = await db
 			.from("Columns")
-			.select("id, title, projectId, isCompletionColumn")
+			.select("id, title, projectId")
 			.in("id", colIds);
 		(cols || []).forEach((col) => {
 			colMap[col.id] = col;

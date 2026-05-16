@@ -4,7 +4,6 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
-  Link2,
   User,
   Calendar,
 } from "lucide-react";
@@ -45,17 +44,10 @@ const PriorityBadge = ({ priority }) => {
 };
 
 // Status Badge Component
-const StatusBadge = ({ columnTitle, isCompletionColumn }) => {
-  const getStatusColor = () => {
-    if (isCompletionColumn) {
-      return "bg-emerald-50 dark:bg-emerald-900/10 midnight:bg-emerald-900/5 text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 border border-emerald-200 dark:border-emerald-800 midnight:border-emerald-900";
-    }
-    return "bg-blue-50 dark:bg-blue-900/10 midnight:bg-blue-900/5 text-blue-700 dark:text-blue-400 midnight:text-blue-300 border border-blue-200 dark:border-blue-800 midnight:border-blue-900";
-  };
-
+const StatusBadge = ({ columnTitle }) => {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md ${getStatusColor()}`}
+      className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-blue-50 dark:bg-blue-900/10 midnight:bg-blue-900/5 text-blue-700 dark:text-blue-400 midnight:text-blue-300 border border-blue-200 dark:border-blue-800 midnight:border-blue-900"
     >
       {columnTitle}
     </span>
@@ -276,7 +268,7 @@ const GanttTaskList = ({
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center min-w-0 flex-1">
                     {/* Status icon */}
-                    {card.progress === 100 || card.isCompletionColumn ? (
+                    {card.progress === 100 ? (
                       <CheckCircle className="w-4 h-4 text-emerald-500 dark:text-emerald-400 midnight:text-emerald-500 mr-2 flex-shrink-0" />
                     ) : card.priority === "High" ? (
                       <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400 midnight:text-red-500 mr-2 flex-shrink-0" />
@@ -301,7 +293,6 @@ const GanttTaskList = ({
                   <div className="flex items-center justify-between text-xs">
                     <StatusBadge
                       columnTitle={card.columnTitle}
-                      isCompletionColumn={card.isCompletionColumn}
                     />
                     <div className="flex items-center text-gray-500 dark:text-gray-400 midnight:text-gray-500">
                       <Calendar className="w-3 h-3 mr-1" />
@@ -354,13 +345,6 @@ const GanttTaskList = ({
                     )}
                   </div>
 
-                  {/* Dependencies indicator */}
-                  {card.dependencies && card.dependencies.length > 0 && (
-                    <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-                      <Link2 className="w-3 h-3 mr-1" />
-                      <span>{card.dependencies.length}</span>
-                    </div>
-                  )}
                 </div>
               </div>
             );

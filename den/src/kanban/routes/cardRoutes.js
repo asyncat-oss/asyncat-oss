@@ -97,14 +97,4 @@ router.put(
 	cardController.updateSubtaskDuration
 );
 
-// Dependency management routes
-router.get("/:id/dependencies", cardController.getCardDependencies);
-router.get("/:id/dependent-cards", cardController.getDependentCards);
-router.post("/:id/dependencies", cardController.addDependency);
-router.delete(
-	"/:id/dependencies/:dependencyId",
-	cardController.removeDependency
-);
-router.get("/:id/dependencies/status", cardController.checkDependenciesStatus);
-
 export default router;

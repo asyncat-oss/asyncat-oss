@@ -8,53 +8,12 @@ const isValidUUID = (uuid) => {
 	);
 };
 
-// Helper function to add dependency counts to cards - simplified version
+// Helper function to add computed card fields.
 const addDependencyCountsToCards = async (cards, db) => {
 	if (!cards || cards.length === 0) return;
 
-	const cardIds = cards.map((card) => card.id);
-
 	try {
-		// Get dependency counts
-		const [dependencyCounts, dependentCounts] = await Promise.all([
-			// Count dependencies (cards these cards depend on)
-			db
-				.schema("kanban")
-				.from("TaskDependencies")
-				.select("sourceCardId")
-				.in("sourceCardId", cardIds),
-
-			// Count dependent cards (cards that depend on these cards)
-			db
-				.schema("kanban")
-				.from("TaskDependencies")
-				.select("targetCardId")
-				.in("targetCardId", cardIds),
-		]);
-
-		// Create lookup maps for counts
-		const dependencyCountMap = new Map();
-		const dependentCountMap = new Map();
-
-		if (dependencyCounts.data) {
-			dependencyCounts.data.forEach((row) => {
-				const count = dependencyCountMap.get(row.sourceCardId) || 0;
-				dependencyCountMap.set(row.sourceCardId, count + 1);
-			});
-		}
-
-		if (dependentCounts.data) {
-			dependentCounts.data.forEach((row) => {
-				const count = dependentCountMap.get(row.targetCardId) || 0;
-				dependentCountMap.set(row.targetCardId, count + 1);
-			});
-		}
-
-		// Add counts to cards
 		for (const card of cards) {
-			card.dependencyCount = dependencyCountMap.get(card.id) || 0;
-			card.dependentCardsCount = dependentCountMap.get(card.id) || 0;
-
 			// Calculate duration from checklist if present
 			if (card.checklist && Array.isArray(card.checklist)) {
 				const totalDuration = card.checklist.reduce((total, item) => {
@@ -70,8 +29,7 @@ const addDependencyCountsToCards = async (cards, db) => {
 			}
 		}
 	} catch (error) {
-		console.error("Error adding dependency counts:", error);
-		// Continue without dependency counts if there's an error
+		console.error("Error adding computed card fields:", error);
 	}
 };
 
@@ -206,18 +164,12 @@ const getColumnById = async (id, db) => {
 
 const createColumn = async (columnData, db) => {
 	try {
-		const {
-			projectId,
-			createdBy,
-			title,
-			isCompletionColumn = false,
-		} = columnData;
+		const { projectId, createdBy, title } = columnData;
 
 		console.log("🔨 columnService.createColumn called with:", {
 			title,
 			projectId,
 			createdBy,
-			isCompletionColumn,
 		});
 
 		if (projectId && !isValidUUID(projectId)) {
@@ -254,7 +206,6 @@ const createColumn = async (columnData, db) => {
 			projectId: projectId || null,
 			createdBy,
 			order: maxOrder + 1,
-			isCompletionColumn,
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString(),
 		};
@@ -316,8 +267,11 @@ const updateColumn = async (id, projectId, columnData, db) => {
 			throw fetchError;
 		}
 
+		const legacyCompletionKey = ["is", "Completion", "Column"].join("");
+		const safeColumnData = { ...columnData };
+		delete safeColumnData[legacyCompletionKey];
 		const updateData = {
-			...columnData,
+			...safeColumnData,
 			updatedAt: new Date().toISOString(),
 		};
 

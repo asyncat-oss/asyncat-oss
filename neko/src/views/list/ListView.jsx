@@ -38,7 +38,6 @@ const ListView = ({ selectedProject }) => {
 					...card,
 					columnId: column.id,
 					columnTitle: column.title,
-					isCompletionColumn: column.isCompletionColumn || false,
 					agentRun: agentRunsByCard[card.id] || null,
 				}));
 				return [...acc, ...cardsWithColumn];

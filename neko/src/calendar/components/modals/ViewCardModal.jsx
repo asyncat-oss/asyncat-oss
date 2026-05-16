@@ -338,12 +338,6 @@ const ViewCardModal = ({
 													<p className="font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
 														{card.column.title}
 													</p>
-													{card.column
-														.isCompletionColumn && (
-														<span className="text-xs bg-green-100 dark:bg-green-900/20 midnight:bg-green-900/10 text-green-700 dark:text-green-400 midnight:text-green-400 px-2 py-0.5 rounded-full font-medium">
-															Completed
-														</span>
-													)}
 												</div>
 											</div>
 										</div>

@@ -6,7 +6,6 @@ const VALID_PROJECT_TABS = [
   'kanban',
   'list',
   'gantt',
-  'network',
   'notes',
   'settings',
 ];

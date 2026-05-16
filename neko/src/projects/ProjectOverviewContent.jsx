@@ -6,7 +6,6 @@ import {
 	KanbanSquare,
 	List,
 	GanttChartSquare,
-	Link2,
 	FileText,
 } from "lucide-react";
 
@@ -14,7 +13,6 @@ import {
 import KanIndex from "../views/kanban/KanIndex";
 import ListView from "../views/list/ListView";
 import GanttView from "../views/gantt/GanttView";
-import NetworkView from "../views/network/NetworkView";
 import NotesIndex from "../notes/NotesIndex";
 
 // Import context providers
@@ -30,7 +28,6 @@ const PROJECT_VIEWS = [
 	{ key: 'kanban',   label: 'Board',    Icon: KanbanSquare },
 	{ key: 'list',     label: 'List',     Icon: List },
 	{ key: 'gantt',    label: 'Plan',     Icon: GanttChartSquare },
-	{ key: 'network',  label: 'Network',  Icon: Link2 },
 	{ key: 'notes',    label: 'Notes',    Icon: FileText },
 ];
 
@@ -38,7 +35,6 @@ const TASK_VIEW_COMPONENTS = {
 	kanban: KanIndex,
 	list: ListView,
 	gantt: GanttView,
-	network: NetworkView,
 };
 
 // Comprehensive skeleton component for the project overview

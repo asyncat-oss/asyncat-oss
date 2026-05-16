@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Check, Info } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { useColumnActions } from "../hooks/useColumnActions";
 
 const defaultSettings = {
 	title: "",
-	isCompletionColumn: false,
 	styles: {
 		headerFontFamily: "sans-serif",
 		headerFontSize: "16px",
@@ -26,14 +25,6 @@ const AddColumnModal = ({ onClose, onSuccess }) => {
 		setSettings((prev) => ({
 			...prev,
 			[name]: value,
-		}));
-	};
-
-	// Add toggle handler for completion column status
-	const handleToggleCompletionStatus = () => {
-		setSettings((prev) => ({
-			...prev,
-			isCompletionColumn: !prev.isCompletionColumn,
 		}));
 	};
 
@@ -118,60 +109,6 @@ const AddColumnModal = ({ onClose, onSuccess }) => {
 								/>
 							</div>
 
-							{/* Completion Column Section */}
-							<div className="mb-6">
-								<div className="flex items-center justify-between mb-3">
-									<div>
-										<h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-indigo-200 flex items-center mb-1">
-											<Check className="w-4 h-4 mr-1" />
-											Completion Column
-										</h3>
-										<p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-											Cards in this column are considered
-											completed
-										</p>
-									</div>
-
-									<button
-										type="button"
-										onClick={handleToggleCompletionStatus}
-										disabled={isSubmitting}
-										className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 midnight:focus:ring-indigo-700
-                      ${
-							settings.isCompletionColumn
-								? "bg-green-500 dark:bg-green-600 midnight:bg-green-700"
-								: "bg-gray-300 dark:bg-gray-600 midnight:bg-gray-700"
-						}`}
-									>
-										<span
-											className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                        ${
-							settings.isCompletionColumn
-								? "translate-x-6"
-								: "translate-x-1"
-						}`}
-										/>
-									</button>
-								</div>
-
-								{/* Info Banner */}
-								<div className="p-3 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/10 border border-blue-200 dark:border-blue-700 midnight:border-blue-800 rounded-lg text-blue-600 dark:text-blue-400 midnight:text-blue-500 text-sm flex items-start">
-									<Info className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
-									<div>
-										<p className="font-medium mb-1">
-											What is a completion column?
-										</p>
-										<p className="text-xs">
-											When a card depends on other cards,
-											it can only be moved to a completion
-											column when all its dependencies are
-											completed. Cards in a completion
-											column are considered "done" and
-											will unblock dependent cards.
-										</p>
-									</div>
-								</div>
-							</div>
 						</div>
 					</div>
 

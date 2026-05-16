@@ -1,6 +1,5 @@
 // cardController.js - Updated to use Supabase
 import cardService from "../services/cardService.js";
-import dependencyService from "../services/dependencyService.js";
 
 // Get all cards in a column
 const getCards = async (req, res) => {
@@ -307,124 +306,6 @@ const getCalendarData = async (req, res) => {
 	}
 };
 
-// DEPENDENCY MANAGEMENT CONTROLLER METHODS
-
-// Get all dependencies for a card
-const getCardDependencies = async (req, res) => {
-	try {
-		const { id } = req.params;
-		const dependencies = await dependencyService.getCardDependencies(
-			id,
-			req.db
-		);
-		res.status(200).json(dependencies);
-	} catch (error) {
-		console.error("Error getting card dependencies:", error);
-		res.status(500).json({ error: error.message });
-	}
-};
-
-// Get all cards that depend on this card
-const getDependentCards = async (req, res) => {
-	try {
-		const { id } = req.params;
-		const dependentCards = await dependencyService.getDependentCards(
-			id,
-			req.db
-		);
-		res.status(200).json(dependentCards);
-	} catch (error) {
-		console.error("Error getting dependent cards:", error);
-		res.status(500).json({ error: error.message });
-	}
-};
-
-// Add a dependency to a card
-const addDependency = async (req, res) => {
-	try {
-		const { id } = req.params;
-		const { targetCardId, type = "FS", lag = 0 } = req.body;
-
-		if (!targetCardId) {
-			return res
-				.status(400)
-				.json({ error: "Target card ID is required" });
-		}
-
-		const dependency = await dependencyService.createDependency(
-			id,
-			targetCardId,
-			type,
-			lag,
-			req.db
-		);
-
-		res.status(200).json(dependency);
-	} catch (error) {
-		console.error("Error adding dependency:", error);
-		res.status(500).json({ error: error.message });
-	}
-};
-
-// Remove a dependency from a card
-const removeDependency = async (req, res) => {
-	try {
-		const { id, dependencyId } = req.params;
-
-		await dependencyService.deleteDependency(
-			id,
-			dependencyId,
-			req.db
-		);
-
-		// Return updated dependencies
-		const updatedDependencies = await dependencyService.getCardDependencies(
-			id,
-			req.db
-		);
-		res.status(200).json(updatedDependencies);
-	} catch (error) {
-		console.error("Error removing dependency:", error);
-		res.status(500).json({ error: error.message });
-	}
-};
-
-// Check if all dependencies are met for a card
-const checkDependenciesStatus = async (req, res) => {
-	try {
-		const { id } = req.params;
-		const areMet = await dependencyService.areDependenciesMet(
-			id,
-			req.db
-		);
-
-		res.status(200).json({
-			areDependenciesMet: areMet,
-			cardId: id,
-		});
-	} catch (error) {
-		console.error("Error checking dependencies status:", error);
-		res.status(500).json({ error: error.message });
-	}
-};
-
-// Get cards that would be unblocked if this card is completed
-const getUnlockedCards = async (req, res) => {
-	try {
-		const { id } = req.params;
-		const unlockedCards =
-			await dependencyService.getUnlockedCardsByDependency(
-				id,
-				req.db
-			);
-
-		res.status(200).json(unlockedCards);
-	} catch (error) {
-		console.error("Error getting unlocked cards:", error);
-		res.status(500).json({ error: error.message });
-	}
-};
-
 // ATTACHMENT MANAGEMENT CONTROLLER METHODS
 
 // Add attachment(s) to a card
@@ -490,13 +371,6 @@ export default {
 	updateChecklist,
 	updateSubtaskDuration,
 	getCalendarData,
-	// Dependency management
-	getCardDependencies,
-	getDependentCards,
-	addDependency,
-	removeDependency,
-	checkDependenciesStatus,
-	getUnlockedCards,
 	// Attachment management
 	addAttachment,
 	addMultipleAttachments,

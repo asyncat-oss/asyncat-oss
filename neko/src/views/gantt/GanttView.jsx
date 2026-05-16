@@ -60,17 +60,10 @@ const GanttEmptyState = () => {
 };
 
 // Status Badge Component
-const StatusBadge = ({ columnTitle, isCompletionColumn }) => {
-	const getStatusColor = () => {
-		if (isCompletionColumn) {
-			return "bg-emerald-50 dark:bg-emerald-900/10 midnight:bg-emerald-900/5 text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 border border-emerald-200 dark:border-emerald-800 midnight:border-emerald-900";
-		}
-		return "bg-blue-50 dark:bg-blue-900/10 midnight:bg-blue-900/5 text-blue-700 dark:text-blue-400 midnight:text-blue-300 border border-blue-200 dark:border-blue-800 midnight:border-blue-900";
-	};
-
+const StatusBadge = ({ columnTitle }) => {
 	return (
 		<span
-			className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md ${getStatusColor()}`}
+			className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-blue-50 dark:bg-blue-900/10 midnight:bg-blue-900/5 text-blue-700 dark:text-blue-400 midnight:text-blue-300 border border-blue-200 dark:border-blue-800 midnight:border-blue-900"
 		>
 			{columnTitle}
 		</span>
@@ -415,7 +408,6 @@ const GanttView = ({ selectedProject }) => {
 				const cardsWithColumn = column.Cards.map((card) => ({
 					...card,
 					columnTitle: column.title,
-					isCompletionColumn: column.isCompletionColumn || false,
 				}));
 				return [...acc, ...cardsWithColumn];
 			}
@@ -681,7 +673,7 @@ const GanttView = ({ selectedProject }) => {
 		// Apply other filters
 		if (filterConfig.completed) {
 			filtered = filtered.filter(
-				(card) => card.progress === 100 || card.isCompletionColumn
+				(card) => card.progress === 100
 			);
 		}
 
@@ -719,8 +711,7 @@ const GanttView = ({ selectedProject }) => {
 							return (
 								cardEndDate < today &&
 								!(
-									card.progress === 100 ||
-									card.isCompletionColumn
+									card.progress === 100
 								)
 							);
 						case "today":
@@ -1296,8 +1287,7 @@ const GanttView = ({ selectedProject }) => {
 																	<div className="flex items-center space-x-2 mb-1">
 																		{/* Status icon */}
 																		{task.progress ===
-																			100 ||
-																		task.isCompletionColumn ? (
+																			100 ? (
 																			<CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
 																		) : task.priority ===
 																		  "High" ? (
@@ -1319,9 +1309,6 @@ const GanttView = ({ selectedProject }) => {
 																			<StatusBadge
 																				columnTitle={
 																					task.columnTitle
-																				}
-																				isCompletionColumn={
-																					task.isCompletionColumn
 																				}
 																			/>
 																		</div>
@@ -1590,8 +1577,7 @@ const GanttView = ({ selectedProject }) => {
 																<div className="flex items-center space-x-2 mb-1">
 																	{/* Status icon */}
 																	{task.progress ===
-																		100 ||
-																	task.isCompletionColumn ? (
+																		100 ? (
 																		<CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
 																	) : task.priority ===
 																	  "High" ? (
@@ -1613,9 +1599,6 @@ const GanttView = ({ selectedProject }) => {
 																		<StatusBadge
 																			columnTitle={
 																				task.columnTitle
-																			}
-																			isCompletionColumn={
-																				task.isCompletionColumn
 																			}
 																		/>
 																	</div>

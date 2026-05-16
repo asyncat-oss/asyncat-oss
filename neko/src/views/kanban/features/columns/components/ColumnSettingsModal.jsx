@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Trash2, Info, CheckCircle } from "lucide-react";
+import { X, Trash2, CheckCircle } from "lucide-react";
 import { useColumnActions } from "../hooks/useColumnActions";
 
 const ColumnSettingsModal = ({ column, onClose, onDelete }) => {
 	const { handleColumnUpdate } = useColumnActions();
 	const [title, setTitle] = useState(column.title);
-	const [isCompletionColumn, setIsCompletionColumn] = useState(
-		column.isCompletionColumn || false
-	);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [isUpdating, setIsUpdating] = useState(false);
@@ -25,7 +22,7 @@ const ColumnSettingsModal = ({ column, onClose, onDelete }) => {
 		try {
 			setIsUpdating(true);
 			setError(null);
-			await handleColumnUpdate(column.id, { title, isCompletionColumn });
+			await handleColumnUpdate(column.id, { title });
 			setShowSuccessMessage(true);
 			setTimeout(() => setShowSuccessMessage(false), 3000);
 			onClose();
@@ -59,10 +56,6 @@ const ColumnSettingsModal = ({ column, onClose, onDelete }) => {
 			setIsDeleting(false);
 			setConfirmDelete(false);
 		}
-	};
-
-	const handleToggleCompletionStatus = () => {
-		setIsCompletionColumn((prev) => !prev);
 	};
 
 	const handleBackdropClick = (e) => {
@@ -120,61 +113,6 @@ const ColumnSettingsModal = ({ column, onClose, onDelete }) => {
 										font-medium"
 									disabled={isUpdating || isDeleting}
 								/>
-							</div>
-
-							{/* Completion Column Section */}
-							<div className="mb-6">
-								<div className="flex items-center justify-between mb-3">
-									<div>
-										<h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-indigo-200 flex items-center mb-1">
-											<CheckCircle className="w-4 h-4 mr-1" />
-											Completion Column
-										</h3>
-										<p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-											Cards in this column are considered
-											completed
-										</p>
-									</div>
-
-									<button
-										type="button"
-										onClick={handleToggleCompletionStatus}
-										disabled={isUpdating || isDeleting}
-										className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 midnight:focus:ring-indigo-700
-                    ${
-						isCompletionColumn
-							? "bg-green-500 dark:bg-green-600 midnight:bg-green-700"
-							: "bg-gray-300 dark:bg-gray-600 midnight:bg-gray-700"
-					}`}
-									>
-										<span
-											className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                      ${
-							isCompletionColumn
-								? "translate-x-6"
-								: "translate-x-1"
-						}`}
-										/>
-									</button>
-								</div>
-
-								{/* Info Banner */}
-								<div className="p-3 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/10 border border-blue-200 dark:border-blue-700 midnight:border-blue-800 rounded-lg text-blue-600 dark:text-blue-400 midnight:text-blue-500 text-sm flex items-start">
-									<Info className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
-									<div>
-										<p className="font-medium mb-1">
-											What is a completion column?
-										</p>
-										<p className="text-xs">
-											When a card depends on other cards,
-											it can only be moved to a completion
-											column when all its dependencies are
-											completed. Cards in a completion
-											column are considered "done" and
-											will unblock dependent cards.
-										</p>
-									</div>
-								</div>
 							</div>
 
 							{/* Status Messages */}

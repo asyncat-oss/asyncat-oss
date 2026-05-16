@@ -21,19 +21,12 @@ import {
 	Upload,
 	Plus,
 	Columns3,
-	Link2,
-	Clock,
-	Search,
-	ChevronUp,
-	ChevronDown,
-	Link2Off,
 } from "lucide-react";
 import { useColumnContext } from "../../../context/viewContexts";
 import { useCardContext } from "../../../context/viewContexts";
 import { useCardActions } from "../../../hooks/useCardActions";
 import TaskChecklist from "../shared/components/TaskChecklist";
 import DropdownBar from "../shared/components/DropdownBar";
-import viewsApi from "../../../viewsApi";
 import CustomDatePicker from "../shared/components/CustomDatePicker";
 import AddColumnModal from "../columns/components/AddColumnModal";
 
@@ -57,11 +50,9 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 		description: "",
 		priority: "Medium",
 		columnId:
-			defaultColumnId &&
-			!columns.find((col) => col.id === defaultColumnId)
-				?.isCompletionColumn
+			defaultColumnId && columns.find((col) => col.id === defaultColumnId)
 				? defaultColumnId
-				: columns.find((col) => !col.isCompletionColumn)?.id || "",
+				: columns[0]?.id || "",
 		startDate: new Date().toISOString().split("T")[0],
 		dueDate: new Date().toISOString().split("T")[0],
 		//duration: null,
@@ -77,12 +68,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 
 	const [fileError, setFileError] = useState(null);
 	const [selectedFiles, setSelectedFiles] = useState([]);
-
-	// Dependencies state
-	const [dependencies, setDependencies] = useState([]);
-	const [activeDependencyType, setActiveDependencyType] = useState(null); // Which dependency type is being edited
-	const [dependencySearch, setDependencySearch] = useState("");
-	const [selectedLagTime, setSelectedLagTime] = useState(0);
 
 	// Date validation function
 	const validateDates = (startDate, dueDate) => {
@@ -113,98 +98,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 		setIsLoadingMembers(false);
 	}, [cardData.columnId, columns]);
 
-	// Dependency handlers
-	const handleAddDependency = (targetCard, type) => {
-		// Check if dependency already exists
-		if (dependencies.some(dep => dep.targetCardId === targetCard.id && dep.type === type)) {
-			return;
-		}
-
-		const newDependency = {
-			targetCardId: targetCard.id,
-			targetCardTitle: targetCard.title,
-			targetCardColumn: columns.find(col => col.id === targetCard.columnId)?.title || "Unknown",
-			type: type,
-			lag: parseFloat(selectedLagTime) || 0,
-		};
-
-		setDependencies([...dependencies, newDependency]);
-		setActiveDependencyType(null);
-		setDependencySearch("");
-		setSelectedLagTime(0);
-	};
-
-	const handleRemoveDependency = (targetCardId, type) => {
-		setDependencies(dependencies.filter(dep => !(dep.targetCardId === targetCardId && dep.type === type)));
-	};
-
-	const resetDependencyState = () => {
-		setActiveDependencyType(null);
-		setDependencySearch("");
-		setSelectedLagTime(0);
-	};
-
-	// Get all available cards for dependency selection
-	const getAvailableCards = () => {
-		const allCards = [];
-		columns.forEach(column => {
-			// Check both Cards (capital C from backend) and cards (lowercase)
-			const columnCards = column.Cards || column.cards || [];
-			if (Array.isArray(columnCards)) {
-				columnCards.forEach(card => {
-					allCards.push({
-						...card,
-						columnTitle: column.title,
-					});
-				});
-			}
-		});
-		return allCards;
-	};
-
-	const availableCards = getAvailableCards().filter(card =>
-		card.title.toLowerCase().includes(dependencySearch.toLowerCase())
-	);
-
-	// Get dependency type styling
-	const getDependencyTypeStyle = (type) => {
-		const styles = {
-			FS: {
-				bg: "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/10",
-				border: "border-blue-200 dark:border-blue-800 midnight:border-blue-700",
-				text: "text-blue-700 dark:text-blue-400 midnight:text-blue-400",
-				hoverBg: "hover:bg-blue-100 dark:hover:bg-blue-900/30 midnight:hover:bg-blue-900/20",
-				activeBg: "bg-blue-100 dark:bg-blue-900/40 midnight:bg-blue-900/30",
-				icon: "text-blue-600 dark:text-blue-500 midnight:text-blue-500",
-			},
-			SS: {
-				bg: "bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/10",
-				border: "border-green-200 dark:border-green-800 midnight:border-green-700",
-				text: "text-green-700 dark:text-green-400 midnight:text-green-400",
-				hoverBg: "hover:bg-green-100 dark:hover:bg-green-900/30 midnight:hover:bg-green-900/20",
-				activeBg: "bg-green-100 dark:bg-green-900/40 midnight:bg-green-900/30",
-				icon: "text-green-600 dark:text-green-500 midnight:text-green-500",
-			},
-			FF: {
-				bg: "bg-purple-50 dark:bg-purple-900/20 midnight:bg-purple-900/10",
-				border: "border-purple-200 dark:border-purple-800 midnight:border-purple-700",
-				text: "text-purple-700 dark:text-purple-400 midnight:text-purple-400",
-				hoverBg: "hover:bg-purple-100 dark:hover:bg-purple-900/30 midnight:hover:bg-purple-900/20",
-				activeBg: "bg-purple-100 dark:bg-purple-900/40 midnight:bg-purple-900/30",
-				icon: "text-purple-600 dark:text-purple-500 midnight:text-purple-500",
-			},
-			SF: {
-				bg: "bg-orange-50 dark:bg-orange-900/20 midnight:bg-orange-900/10",
-				border: "border-orange-200 dark:border-orange-800 midnight:border-orange-700",
-				text: "text-orange-700 dark:text-orange-400 midnight:text-orange-400",
-				hoverBg: "hover:bg-orange-100 dark:hover:bg-orange-900/30 midnight:hover:bg-orange-900/20",
-				activeBg: "bg-orange-100 dark:bg-orange-900/40 midnight:bg-orange-900/30",
-				icon: "text-orange-600 dark:text-orange-500 midnight:text-orange-500",
-			},
-		};
-		return styles[type] || styles.FS;
-	};
-
 	// Priority options for dropdown
 	const priorityOptions = [
 		{ value: "High", label: "High" },
@@ -212,9 +105,7 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 		{ value: "Low", label: "Low" },
 	];
 
-	const columnOptions = columns
-		.filter((column) => !column.isCompletionColumn)
-		.map((column) => ({
+	const columnOptions = columns.map((column) => ({
 			value: column.id,
 			label: column.title,
 		}));
@@ -379,24 +270,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 			// Create the card
 			const createdCard = await addCard(cardData.columnId, newCard);
 
-			// Create dependencies if any were added
-			if (dependencies.length > 0 && createdCard?.id) {
-				const dependencyPromises = dependencies.map((dep) =>
-					viewsApi.dependency.addDependency(
-						createdCard.id,
-						dep.targetCardId,
-						dep.type,
-						dep.lag
-					).catch(err => {
-						console.error("Error creating dependency:", err);
-						// Don't fail the entire operation if dependency creation fails
-						return null;
-					})
-				);
-
-				await Promise.all(dependencyPromises);
-			}
-
 			// Call success callback
 			if (onSuccess) {
 				onSuccess();
@@ -411,7 +284,7 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 
 	// Step navigation functions
 	const nextStep = () => {
-		if (currentStep < 2) {
+		if (currentStep < 1) {
 			setCurrentStep(currentStep + 1);
 		}
 	};
@@ -442,7 +315,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 	const handleBackdropClick = (e) => {
 		// Only close if clicking on the backdrop itself, not its children
 		if (e.target === e.currentTarget) {
-			resetDependencyState();
 			onClose();
 		}
 	};
@@ -802,349 +674,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 		);
 	};
 
-	// Render step 3 content - Dependencies
-	const renderStep3Content = () => {
-		// Check if card has subtasks
-		const hasSubtasks = cardData.checklist && cardData.checklist.length > 0;
-
-		if (!hasSubtasks) {
-			return (
-				<div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-					<div className="w-20 h-20 rounded-full bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/40 flex items-center justify-center">
-						<Link2Off className="w-10 h-10 text-amber-500" />
-					</div>
-					<div className="text-center space-y-2 max-w-md">
-						<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200">
-							No Subtasks Available
-						</h3>
-						<p className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-							Please add subtasks to this card before managing dependencies. Dependencies help track relationships between tasks with subtasks.
-						</p>
-					</div>
-				</div>
-			);
-		}
-
-		const dependencyTypes = [
-			{
-				value: "FS",
-				label: "Finish-to-Start",
-				shortLabel: "FS",
-				description: "Target card must finish before this card can start"
-			},
-			{
-				value: "SS",
-				label: "Start-to-Start",
-				shortLabel: "SS",
-				description: "Target card must start before this card can start"
-			},
-			{
-				value: "FF",
-				label: "Finish-to-Finish",
-				shortLabel: "FF",
-				description: "Target card must finish before this card can finish"
-			},
-			{
-				value: "SF",
-				label: "Start-to-Finish",
-				shortLabel: "SF",
-				description: "Target card must start before this card can finish"
-			},
-		];
-
-		// Card selection view
-		if (activeDependencyType) {
-			const style = getDependencyTypeStyle(activeDependencyType);
-			const selectedType = dependencyTypes.find(t => t.value === activeDependencyType);
-
-			return (
-				<div className="space-y-6 min-h-[500px]">
-					{/* Back Button */}
-					<div className="flex items-center space-x-3">
-						<button
-							type="button"
-							onClick={() => {
-								setActiveDependencyType(null);
-								setDependencySearch("");
-							}}
-							className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 rounded-lg transition-colors"
-							disabled={isSubmitting}
-						>
-							<ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400" />
-						</button>
-						<div>
-							<h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200 flex items-center">
-								<div className={`w-8 h-8 rounded-lg ${style.activeBg} flex items-center justify-center mr-3`}>
-									<span className={`text-sm font-bold ${style.icon}`}>
-										{selectedType.shortLabel}
-									</span>
-								</div>
-								{selectedType.label}
-							</h3>
-							<p className={`text-sm mt-1 ${style.text}`}>
-								{selectedType.description}
-							</p>
-						</div>
-					</div>
-
-					{/* Search Bar */}
-					<div className={`p-4 rounded-lg border-2 ${style.border} ${style.bg}`}>
-						<div className="relative">
-							<Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${style.icon}`} />
-							<input
-								type="text"
-								value={dependencySearch}
-								onChange={(e) => setDependencySearch(e.target.value)}
-								placeholder="Search cards..."
-								className={`w-full pl-12 pr-4 py-3 rounded-lg border-2 ${style.border} bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-900 dark:text-white midnight:text-indigo-200 focus:ring-2 focus:ring-offset-0 ${style.icon.replace('text-', 'focus:ring-')}`}
-								disabled={isSubmitting}
-								autoFocus
-							/>
-						</div>
-					</div>
-
-					{/* Card List */}
-					<div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-						{availableCards.length === 0 ? (
-							<div className="p-8 text-center">
-								<div className={`w-16 h-16 rounded-full ${style.bg} flex items-center justify-center mx-auto mb-3`}>
-									<Search className={`w-8 h-8 ${style.icon}`} />
-								</div>
-								<p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 text-sm">
-									{dependencySearch ? "No matching cards found" : "No cards available"}
-								</p>
-							</div>
-						) : (
-							availableCards.map((card) => {
-								const alreadyAdded = dependencies.some(
-									d => d.targetCardId === card.id && d.type === activeDependencyType
-								);
-								return (
-									<button
-										key={card.id}
-										type="button"
-										onClick={() => !alreadyAdded && handleAddDependency(card, activeDependencyType)}
-										disabled={alreadyAdded || isSubmitting}
-										className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
-											alreadyAdded
-												? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border-gray-200 dark:border-gray-700 midnight:border-gray-800'
-												: `${style.border} ${style.bg} ${style.hoverBg} hover:shadow-md`
-										}`}
-									>
-										<div className="flex items-start justify-between">
-											<div className="flex-1 min-w-0">
-												<div className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200 mb-1">
-													{card.title}
-												</div>
-												<div className={`text-xs ${style.text} flex items-center space-x-2`}>
-													<Columns3 className="w-3 h-3" />
-													<span>{card.columnTitle}</span>
-													{alreadyAdded && (
-														<>
-															<span>•</span>
-															<span className="font-medium">Already added</span>
-														</>
-													)}
-												</div>
-											</div>
-											{!alreadyAdded && (
-												<Plus className={`w-5 h-5 ${style.icon} flex-shrink-0 ml-3`} />
-											)}
-										</div>
-									</button>
-								);
-							})
-						)}
-					</div>
-				</div>
-			);
-		}
-
-		// Main view
-		return (
-			<div className="space-y-6 min-h-[500px]">
-				{/* Header */}
-				<div>
-					<h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200 flex items-center mb-2">
-						<Link2 className="w-5 h-5 mr-2" />
-						Card Dependencies
-						{dependencies.length > 0 && (
-							<span className="ml-2 px-2.5 py-0.5 text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 midnight:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 midnight:text-indigo-400 rounded-full">
-								{dependencies.length}
-							</span>
-						)}
-					</h3>
-					<p className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-						Set which cards must be completed before this card can begin
-					</p>
-				</div>
-
-				{/* Added Dependencies List */}
-				<div className="space-y-3">
-					<h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-indigo-200">
-						Added Dependencies
-					</h4>
-					{dependencies.length === 0 ? (
-						<div className="p-6 text-center border-2 border-dashed border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg">
-							<div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 flex items-center justify-center mx-auto mb-3">
-								<Link2 className="w-6 h-6 text-gray-400 dark:text-gray-500 midnight:text-gray-600" />
-							</div>
-							<p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-								No dependencies added yet
-							</p>
-							<p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-600 mt-1">
-								This card can start immediately
-							</p>
-						</div>
-					) : (
-						<div className="space-y-2">
-							{dependencies.map((dep, index) => {
-								const style = getDependencyTypeStyle(dep.type);
-								return (
-									<div
-										key={`${dep.targetCardId}-${dep.type}-${index}`}
-										className={`p-4 rounded-lg border-2 ${style.border} ${style.bg} flex items-start justify-between`}
-									>
-										<div className="flex items-start space-x-3 flex-1 min-w-0">
-											<div className={`w-10 h-10 rounded-lg ${style.activeBg} flex items-center justify-center flex-shrink-0`}>
-												<span className={`text-xs font-bold ${style.icon}`}>
-													{dep.type}
-												</span>
-											</div>
-											<div className="flex-1 min-w-0">
-												<div className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-indigo-200 mb-1">
-													{dep.targetCardTitle}
-												</div>
-												<div className={`text-xs ${style.text} flex items-center flex-wrap gap-2`}>
-													<span className="flex items-center space-x-1">
-														<Columns3 className="w-3 h-3" />
-														<span>{dep.targetCardColumn}</span>
-													</span>
-													{dep.lag > 0 && (
-														<>
-															<span>•</span>
-															<span className="flex items-center space-x-1">
-																<Clock className="w-3 h-3" />
-																<span>{dep.lag}h lag</span>
-															</span>
-														</>
-													)}
-												</div>
-											</div>
-										</div>
-										<button
-											type="button"
-											onClick={() => handleRemoveDependency(dep.targetCardId, dep.type)}
-											className="p-2 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/10 rounded-lg transition-colors ml-3 flex-shrink-0"
-											disabled={isSubmitting}
-										>
-											<X className="w-4 h-4" />
-										</button>
-									</div>
-								);
-							})}
-						</div>
-					)}
-				</div>
-
-				{/* Dependency Type Buttons */}
-				<div className="space-y-3">
-					<h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-indigo-200">
-						Add Dependency by Type
-					</h4>
-					<div className="space-y-2">
-						{dependencyTypes.map((type) => {
-							const style = getDependencyTypeStyle(type.value);
-							const typeDependencies = dependencies.filter(d => d.type === type.value);
-
-							return (
-								<button
-									key={type.value}
-									type="button"
-									onClick={() => setActiveDependencyType(type.value)}
-									className={`w-full p-4 rounded-lg border-2 transition-all text-left ${style.border} ${style.bg} ${style.hoverBg} hover:shadow-md`}
-									disabled={isSubmitting}
-								>
-									<div className="flex items-center justify-between">
-										<div className="flex items-center space-x-3">
-											<div className={`w-10 h-10 rounded-lg ${style.activeBg} flex items-center justify-center flex-shrink-0`}>
-												<span className={`text-sm font-bold ${style.icon}`}>
-													{type.shortLabel}
-												</span>
-											</div>
-											<div>
-												<div className={`text-sm font-semibold ${style.text} mb-0.5`}>
-													{type.label}
-												</div>
-												<div className={`text-xs ${style.text}`}>
-													{type.description}
-												</div>
-											</div>
-										</div>
-										<div className="flex items-center space-x-3">
-											{typeDependencies.length > 0 && (
-												<span className={`px-2.5 py-1 text-xs font-medium rounded-full ${style.activeBg} ${style.text}`}>
-													{typeDependencies.length}
-												</span>
-											)}
-											<ArrowRight className={`w-5 h-5 ${style.icon} flex-shrink-0`} />
-										</div>
-									</div>
-								</button>
-							);
-						})}
-					</div>
-				</div>
-
-				{/* Lag Time Configuration - Moved below dependency types */}
-				<div className="p-4 bg-gray-50 dark:bg-gray-900 midnight:bg-gray-950 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg">
-					<label className="block text-sm font-medium mb-3 text-gray-700 dark:text-gray-300 midnight:text-indigo-200 flex items-center">
-						<Clock className="w-4 h-4 mr-2" />
-						Lag Time for New Dependencies
-					</label>
-					<div className="relative">
-						<input
-							type="number"
-							value={selectedLagTime}
-							onChange={(e) => setSelectedLagTime(Math.max(0, parseFloat(e.target.value) || 0))}
-							min="0"
-							step="0.5"
-							className="w-full pl-4 pr-24 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 midnight:border-gray-700 bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-900 dark:text-white midnight:text-indigo-200 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 midnight:focus:ring-indigo-500 focus:border-transparent
-							[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-							disabled={isSubmitting}
-						/>
-						<div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center space-x-2">
-							<span className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-								hours
-							</span>
-							<div className="flex flex-col">
-								<button
-									type="button"
-									onClick={() => setSelectedLagTime(prev => Math.max(0, (parseFloat(prev) || 0) + 0.5))}
-									className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 text-gray-600 dark:text-gray-400 midnight:text-gray-400 transition-colors rounded-t"
-									disabled={isSubmitting}
-								>
-									<ChevronUp className="w-3.5 h-3.5" />
-								</button>
-								<button
-									type="button"
-									onClick={() => setSelectedLagTime(prev => Math.max(0, (parseFloat(prev) || 0) - 0.5))}
-									className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 text-gray-600 dark:text-gray-400 midnight:text-gray-400 transition-colors rounded-b"
-									disabled={isSubmitting}
-								>
-									<ChevronDown className="w-3.5 h-3.5" />
-								</button>
-							</div>
-						</div>
-					</div>
-					<p className="mt-2 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-						Time delay applied to dependencies you add next
-					</p>
-				</div>
-			</div>
-		);
-	};
-
 	// Render current step content
 	const renderStepContent = () => {
 		switch (currentStep) {
@@ -1152,8 +681,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 				return renderStep1Content();
 			case 1:
 				return renderStep2Content();
-			case 2:
-				return renderStep3Content();
 			default:
 				return renderStep1Content();
 		}
@@ -1179,16 +706,11 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 								<p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-500 mt-1">
 									{currentStep === 0
 										? "Enter the basic details for your task"
-										: currentStep === 1
-										? "Configure subtasks and attachments"
-										: activeDependencyType
-										? "Select a card to add as a dependency"
-										: "Set up card dependencies"}
+										: "Configure subtasks and attachments"}
 								</p>
 							</div>
 							<button
 								onClick={() => {
-									resetDependencyState();
 									onClose();
 								}}
 								className="p-2 rounded-lg text-gray-500 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900"
@@ -1209,7 +731,6 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 								<button
 									type="button"
 									onClick={() => {
-										resetDependencyState();
 										onClose();
 									}}
 									disabled={isSubmitting}
@@ -1244,7 +765,7 @@ const AddCardModal = ({ onClose, onSuccess, defaultColumnId }) => {
 									</button>
 								)}
 
-								{currentStep < 2 ? (
+								{currentStep < 1 ? (
 									<button
 										type="button"
 										onClick={nextStep}

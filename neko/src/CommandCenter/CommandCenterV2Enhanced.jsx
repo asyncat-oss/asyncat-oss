@@ -875,27 +875,35 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             updateChatRun(runKey, { sessionId: event.data.sessionId });
           }
           const doneAnswer = String(event.data?.answer || '').trim();
+          const stopReason = event.data?.stopReason || 'answer';
           if (doneAnswer) {
             sawFinalResponse = true;
           }
           if (!capturedFinalAnswer && doneAnswer) {
             capturedFinalAnswer = doneAnswer;
+            const newEvents = [
+              {
+                type: 'answer',
+                data: {
+                  answer: doneAnswer,
+                  messageId: assistantMessageId,
+                  round: event.data.rounds,
+                  toolsEnabled: effectiveToolsEnabled,
+                  agentMode: effectiveAgentMode,
+                },
+                arrivedAt: Date.now(),
+              },
+            ];
+            if (stopReason !== 'answer') {
+              newEvents.push({
+                type: 'stop_reason',
+                data: { stopReason, rounds: event.data.rounds, maxRounds: event.data.maxRounds },
+                arrivedAt: Date.now(),
+              });
+            }
             updateChatRun(runKey, prev => ({
               ...prev,
-              events: [
-                ...(prev.events || []),
-                {
-                  type: 'answer',
-                  data: {
-                    answer: doneAnswer,
-                    messageId: assistantMessageId,
-                    round: event.data.rounds,
-                    toolsEnabled: effectiveToolsEnabled,
-                    agentMode: effectiveAgentMode,
-                  },
-                  arrivedAt: Date.now(),
-                },
-              ],
+              events: [...(prev.events || []), ...newEvents],
             }));
           } else if (!doneAnswer) {
             sawDoneWithoutAnswer = true;

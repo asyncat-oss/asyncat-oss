@@ -364,6 +364,7 @@ export class AgentRuntime {
 
     // ── ReAct Loop ──────────────────────────────────────────────────────────
     let answer = null;
+    let stopReason = 'answer'; // 'answer' | 'max_rounds' | 'tool_failure' | 'loop_detected' | 'reflection_abort' | 'cancelled'
     let formatRepairAttempts = 0;
     const argumentRepairAttempts = new Map();
     // Smart loop detection: sliding window of recent tool signatures
@@ -783,6 +784,7 @@ export class AgentRuntime {
                 (completedItems.length > 0
                   ? completedItems.map(i => `✓ ${i.content}`).join('\n')
                   : this.session.toolHistory.slice(-5).map(t => `- ${t.tool}: ${t.result?.error || (t.result?.success ? 'success' : 'failed')}`).join('\n'));
+              stopReason = 'tool_failure';
               this.onEvent({ type: 'answer', data: { answer, round } });
               break;
             }
@@ -825,6 +827,7 @@ export class AgentRuntime {
             reasoningEvents.push({ thought: repeatedToolThought, round, timestamp: new Date().toISOString() });
             this.onEvent({ type: 'thinking', data: { thought: repeatedToolThought, round } });
             answer = this._formatRepeatedToolAnswer(tc, result);
+            stopReason = 'loop_detected';
             this.onEvent({ type: 'answer', data: { answer, round } });
             break;
           }
@@ -848,6 +851,7 @@ export class AgentRuntime {
                   reasoningEvents.push({ thought: loopThought, round, timestamp: new Date().toISOString() });
                   this.onEvent({ type: 'thinking', data: { thought: loopThought, round } });
                   answer = `I stopped because I detected a repeating cycle: ${cycleTools}. This usually means I'm stuck. Here's the latest result:\n\n${JSON.stringify(result).slice(0, 2000)}`;
+                  stopReason = 'loop_detected';
                   this.onEvent({ type: 'answer', data: { answer, round } });
                   break;
                 }
@@ -885,6 +889,7 @@ export class AgentRuntime {
         if (reflection?.abort) {
           answer = `I've been reflecting on my progress and determined I'm stuck: ${reflection.reason}\n\nHere's what I accomplished:\n` +
             this.session.toolHistory.slice(-5).map(t => `- ${t.tool}: ${t.result?.message || (t.result?.success ? 'success' : 'failed')}`).join('\n');
+          stopReason = 'reflection_abort';
           this.onEvent({ type: 'answer', data: { answer, round } });
           break;
         }
@@ -901,6 +906,7 @@ export class AgentRuntime {
     if (!answer) {
       answer = 'I reached the maximum number of steps. Here is what I accomplished:\n\n' +
         this.session.toolHistory.map(t => `- ${t.tool}: ${t.result?.message || (t.result?.success ? 'success' : 'failed')}`).join('\n');
+      stopReason = 'max_rounds';
       this.onEvent({ type: 'answer', data: { answer, round: this.maxRounds } });
     }
 
@@ -929,7 +935,7 @@ export class AgentRuntime {
       console.error('[agent] Post-run memory extraction failed:', err.message)
     );
 
-    return { answer, session: this.session, toolCalls: this.session.toolHistory };
+    return { answer, stopReason, session: this.session, toolCalls: this.session.toolHistory };
   }
 
   /**
@@ -957,8 +963,10 @@ export class AgentRuntime {
       type: 'done',
       data: {
         answer: result.answer,
+        stopReason: result.stopReason || 'answer',
         sessionId: result.session.id,
         rounds: result.session.totalRounds,
+        maxRounds: this.maxRounds,
         conversationRounds: result.session.scratchpad.conversationRounds || []
       }
     });

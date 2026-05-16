@@ -1195,9 +1195,6 @@ const CardDetailModal = ({
 															columnTitle={
 																currentColumn.title
 															}
-															isCompletionColumn={
-																currentColumn.isCompletionColumn
-															}
 															cardId={
 																localCard.id
 															}

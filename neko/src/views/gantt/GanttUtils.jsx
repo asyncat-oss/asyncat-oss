@@ -343,7 +343,7 @@ export const getTaskBarStyle = (
   let bgColor, borderColor;
 
   // Color based on priority and completion with solid colors
-  if (card.progress === 100 || card.isCompletionColumn) {
+  if (card.progress === 100) {
     bgColor = "bg-emerald-500 dark:bg-emerald-600 midnight:bg-emerald-700";
     borderColor =
       "border-emerald-400 dark:border-emerald-500 midnight:border-emerald-600";
@@ -367,8 +367,7 @@ export const getTaskBarStyle = (
   // Check if overdue
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const isOverdue =
-    cardEnd < today && !(card.progress === 100 || card.isCompletionColumn);
+  const isOverdue = cardEnd < today && card.progress !== 100;
 
   if (isOverdue) {
     bgColor = "bg-red-600 dark:bg-red-700 midnight:bg-red-800";
@@ -523,16 +522,7 @@ export const getPriorityStyle = (priority) => {
 };
 
 // Enhanced status styling
-export const getStatusStyle = (isCompletionColumn) => {
-  if (isCompletionColumn) {
-    return {
-      bg: "bg-emerald-50 dark:bg-emerald-900/20 midnight:bg-emerald-900/10",
-      text: "text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 font-semibold",
-      border:
-        "border border-emerald-200/60 dark:border-emerald-700/60 midnight:border-emerald-800/60",
-      ring: "ring-1 ring-emerald-500/20",
-    };
-  }
+export const getStatusStyle = () => {
   return {
     bg: "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/10",
     text: "text-blue-700 dark:text-blue-400 midnight:text-blue-300 font-semibold",

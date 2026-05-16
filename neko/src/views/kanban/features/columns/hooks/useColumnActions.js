@@ -84,36 +84,6 @@ export const useColumnActions = () => {
 		}
 	};
 
-	const handleUpdateCompletionStatus = async (
-		columnId,
-		isCompletionColumn
-	) => {
-		try {
-			const updatedColumn = await viewsApi.column.updateCompletionStatus(
-				columnId,
-				isCompletionColumn
-			);
-
-			setColumns((prev) =>
-				prev.map((col) => {
-					if (col.id === columnId) {
-						return {
-							...col,
-							isCompletionColumn:
-								updatedColumn.isCompletionColumn,
-						};
-					}
-					return col;
-				})
-			);
-
-			return updatedColumn;
-		} catch (err) {
-			console.error("Error updating column completion status:", err);
-			throw err;
-		}
-	};
-
 	const handleColumnDelete = async (columnId) => {
 		try {
 			setPendingOperations((prev) => ({
@@ -165,7 +135,6 @@ export const useColumnActions = () => {
 		handleColumnDelete,
 		handleColumnStyle,
 		handleReorderColumns,
-		handleUpdateCompletionStatus,
 		pendingOperations,
 	};
 };

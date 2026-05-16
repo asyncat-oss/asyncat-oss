@@ -365,42 +365,11 @@ const KanbanBoard = () => {
 					position: dropPosition,
 				});
 
-				// Check if this would be an invalid move to a completion column
-				const targetColumn = allColumns.find(
-					(col) => col.id === targetColumnId
-				);
-				const activeContainer = findContainer(active.id);
-				const activeCards = Array.isArray(activeContainer?.Cards)
-					? activeContainer.Cards
-					: [];
-				const activeCard = activeCards.find(
-					(card) => card.id === active.id
-				);
-
-				if (targetColumn?.isCompletionColumn && activeCard) {
-					// Check if card has incomplete subtasks
-					const hasIncompleteSubtasks =
-						activeCard.checklist &&
-						Array.isArray(activeCard.checklist) &&
-						activeCard.checklist.length > 0 &&
-						!activeCard.checklist.every((task) => task.completed);
-
-					// Store this information for visual feedback
-					setPendingOperations((prev) => ({
-						...prev,
-						wouldBeBlocked: hasIncompleteSubtasks,
-						blockReason: hasIncompleteSubtasks
-							? "Complete all subtasks before moving to completion column"
-							: null,
-					}));
-				} else {
-					// Clear the would-be-blocked state
-					setPendingOperations((prev) => ({
-						...prev,
-						wouldBeBlocked: false,
-						blockReason: null,
-					}));
-				}
+				setPendingOperations((prev) => ({
+					...prev,
+					wouldBeBlocked: false,
+					blockReason: null,
+				}));
 			}
 		}
 
@@ -703,7 +672,7 @@ const KanbanBoard = () => {
 					destIndex
 				);
 
-				// Check if the move was blocked due to dependencies
+				// Check if the move was blocked by the backend
 				if (result && result.blocked) {
 					// Revert to the original state
 					if (previousColumnsRef.current) {
@@ -717,9 +686,7 @@ const KanbanBoard = () => {
 					setPendingOperations((prev) => ({
 						...prev,
 						movingCardId: null,
-						moveCardError:
-							result.reason ||
-							"Cannot move card due to unmet dependencies",
+						moveCardError: result.reason || "Cannot move card",
 					}));
 
 					// Clear the error after a few seconds
@@ -753,14 +720,7 @@ const KanbanBoard = () => {
 				// Extract user-friendly error message
 				let errorMessage = "Failed to move card. Please try again.";
 				if (error.message) {
-					if (
-						error.message.includes("All subtasks must be completed")
-					) {
-						errorMessage =
-							"Complete all subtasks before moving to completion column";
-					} else if (error.message.includes("dependencies")) {
-						errorMessage = error.message;
-					} else if (error.message.includes("permission")) {
+					if (error.message.includes("permission")) {
 						errorMessage =
 							"You don't have permission to move this card";
 					} else {

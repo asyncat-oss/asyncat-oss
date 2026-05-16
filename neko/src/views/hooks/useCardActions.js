@@ -515,16 +515,8 @@ export const useCardActions = () => {
 				newOrder
 			);
 
-			// Update timestamps based on column type
-			const targetColumn = columns.find(
-				(col) => col.id === destinationColumnId
-			);
-
 			const updateData = {};
-
-			if (targetColumn?.isCompletionColumn) {
-				updateData.completedAt = new Date().toISOString();
-			} else if (!result.startedAt) {
+			if (!result.startedAt) {
 				updateData.startedAt = new Date().toISOString();
 			}
 
@@ -655,26 +647,6 @@ export const useCardActions = () => {
 		return null;
 	};
 
-	const addDependency = async (
-		sourceCardId,
-		targetCardId,
-		type = "FS",
-		lag = 0
-	) => {
-		try {
-			const result = await viewsApi.dependency.addDependency(
-				sourceCardId,
-				targetCardId,
-				type,
-				lag
-			);
-			return result;
-		} catch (error) {
-			console.error("Error adding dependency:", error);
-			throw error;
-		}
-	};
-
 	return {
 		addCard,
 		handleCardUpdate,
@@ -687,7 +659,6 @@ export const useCardActions = () => {
 		addAttachment,
 		removeAttachment,
 		sendCatMessage,
-		addDependency,
 	};
 };
 

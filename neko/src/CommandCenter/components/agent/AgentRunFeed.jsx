@@ -4,7 +4,8 @@ import {
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
-  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward
+  ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
+  AlertTriangle, RefreshCw, TimerOff
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi } from '../../api';
@@ -1398,6 +1399,66 @@ function StatusEvent({ data, onRunWithAction }) {
   );
 }
 
+const STOP_REASON_CONFIG = {
+  max_rounds: {
+    icon: TimerOff,
+    color: 'amber',
+    label: 'Step limit reached',
+    detail: (d) => `Used ${d.rounds ?? '?'} of ${d.maxRounds ?? '?'} steps. Reply to continue the task from where it left off.`,
+  },
+  tool_failure: {
+    icon: XCircle,
+    color: 'red',
+    label: 'Stopped — repeated tool failures',
+    detail: () => 'The agent hit too many consecutive tool errors. Check the tools above and try again.',
+  },
+  loop_detected: {
+    icon: RefreshCw,
+    color: 'amber',
+    label: 'Stopped — loop detected',
+    detail: () => 'The agent detected a repeating cycle and stopped to avoid runaway. Rephrase or add constraints to continue.',
+  },
+  reflection_abort: {
+    icon: AlertTriangle,
+    color: 'amber',
+    label: 'Stopped — agent determined it was stuck',
+    detail: () => 'Self-reflection concluded progress was blocked. Add more context or try a different approach.',
+  },
+  cancelled: {
+    icon: XCircle,
+    color: 'gray',
+    label: 'Cancelled',
+    detail: () => 'Run was stopped by the user.',
+  },
+};
+
+function StopReasonBanner({ data }) {
+  const cfg = STOP_REASON_CONFIG[data?.stopReason] || null;
+  if (!cfg) return null;
+  const Icon = cfg.icon;
+  const colorMap = {
+    amber: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-950/20 dark:text-amber-400',
+    red:   'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-950/20 dark:text-red-400',
+    gray:  'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
+  };
+  const iconColorMap = {
+    amber: 'text-amber-500 dark:text-amber-400',
+    red:   'text-red-500 dark:text-red-400',
+    gray:  'text-gray-400 dark:text-gray-500',
+  };
+  return (
+    <FeedFrame className="mb-4">
+      <div className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 ${colorMap[cfg.color]}`}>
+        <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${iconColorMap[cfg.color]}`} />
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold leading-none mb-0.5">{cfg.label}</p>
+          <p className="text-[11px] opacity-80 leading-relaxed">{cfg.detail(data)}</p>
+        </div>
+      </div>
+    </FeedFrame>
+  );
+}
+
 function AgentDelegateEvent({ data, result, pending = false }) {
   const profile = result?.profile || data?.profile || {};
   const handle = profile.handle || data?.profileHandle;
@@ -1934,6 +1995,9 @@ export default function AgentRunFeed({
         break;
       case 'status':
         renderedEvents.push(<StatusEvent key={i} data={ev.data} onRunWithAction={onRunWithAction} />);
+        break;
+      case 'stop_reason':
+        renderedEvents.push(<StopReasonBanner key={i} data={ev.data} />);
         break;
       case 'agent_delegate_start':
         renderedEvents.push(<AgentDelegateEvent key={i} data={ev.data} pending />);

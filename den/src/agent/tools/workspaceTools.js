@@ -4,7 +4,7 @@ import { PermissionLevel } from './toolRegistry.js';
 
 function getCardForWorkspace(cardId, workspaceId) {
   return db.prepare(`
-    SELECT c.*, col.title AS column_title, col.isCompletionColumn AS is_completion_column,
+    SELECT c.*, col.title AS column_title,
            p.id AS project_id, p.name AS project_name
     FROM Cards c
     JOIN Columns col ON col.id = c.columnId
@@ -34,7 +34,6 @@ function summarizeCard(row) {
     checklist,
     columnId: row.columnId,
     columnTitle: row.column_title,
-    isCompletionColumn: Boolean(row.is_completion_column),
     projectId: row.project_id,
     projectName: row.project_name,
     updatedAt: row.updatedAt,
@@ -98,7 +97,7 @@ export const workspaceTools = [
       try {
         const status = String(args.status || '').toLowerCase();
         let rows = db.prepare(`
-          SELECT c.*, col.title AS column_title, col.isCompletionColumn AS is_completion_column,
+          SELECT c.*, col.title AS column_title,
                  p.id AS project_id, p.name AS project_name
           FROM Cards c
           JOIN Columns col ON col.id = c.columnId
@@ -111,7 +110,7 @@ export const workspaceTools = [
         if (status) {
           rows = rows.filter(row => {
             const title = String(row.column_title || '').toLowerCase();
-            if (status === 'done' || status === 'completed') return Boolean(row.is_completion_column) || row.progress === 100;
+            if (status === 'done' || status === 'completed') return row.progress === 100;
             if (status === 'todo') return title.includes('todo') || title.includes('to do');
             if (status === 'in-progress' || status === 'in progress') return title.includes('progress') || title.includes('doing');
             return title.includes(status);
@@ -165,10 +164,9 @@ export const workspaceTools = [
         db.prepare(`
           UPDATE Cards
           SET columnId = ?, "order" = ?, updatedAt = ?,
-              startedAt = COALESCE(startedAt, ?),
-              completedAt = CASE WHEN ? THEN ? ELSE completedAt END
+              startedAt = COALESCE(startedAt, ?)
           WHERE id = ?
-        `).run(dest.id, maxOrder + 1, now, now, dest.isCompletionColumn ? 1 : 0, now, card.id);
+        `).run(dest.id, maxOrder + 1, now, now, card.id);
 
         return { success: true, message: `Moved "${card.title}" to ${dest.title}.`, task: { id: card.id, columnId: dest.id, columnTitle: dest.title } };
       } catch (err) {

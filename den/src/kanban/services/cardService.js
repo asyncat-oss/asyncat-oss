@@ -110,7 +110,6 @@ const createCard = async (cardData, db, files = []) => {
 			checklist = [],
 			createdBy,
 			administrator_id,
-			dependencies = [],
 			attachments = [],
 		} = cardData;
 
@@ -178,7 +177,6 @@ const createCard = async (cardData, db, files = []) => {
 				administrator_id !== null
 					? administrator_id.id
 					: administrator_id,
-			dependencies: Array.isArray(dependencies) ? dependencies : [],
 			attachments: allAttachments,
 			progress,
 			tasks: {
@@ -382,165 +380,8 @@ const moveCard = async (
 			updatedAt: new Date().toISOString(),
 		};
 
-		// Check if moving to a completion column
-		const isCompleting = destColumn.isCompletionColumn;
-		const isStarting = !sourceColumn.isCompletionColumn && !isCompleting;
-
-		// Add timestamps based on column type
-		if (isStarting && !card.startedAt) {
+		if (!card.startedAt) {
 			cardUpdates.startedAt = new Date().toISOString();
-		}
-		if (isCompleting) {
-			cardUpdates.completedAt = new Date().toISOString();
-		}
-
-		// Validate completion requirements
-		if (isCompleting) {
-			// Check if all subtasks are completed
-			if (card.checklist && card.checklist.length > 0) {
-				const allSubtasksCompleted = card.checklist.every(
-					(item) => item.completed
-				);
-				if (!allSubtasksCompleted) {
-					throw new Error(
-						"All subtasks must be completed before moving to a completion column"
-					);
-				}
-			}
-
-			// Check dependencies using the TaskDependencies table
-			const { data: dependencies, error: depsError } = await db
-				.schema("kanban")
-				.from("TaskDependencies")
-				.select("*")
-				.eq("sourceCardId", cardId);
-
-			if (depsError) throw depsError;
-
-			if (dependencies && dependencies.length > 0) {
-				// Get target cards and their columns separately
-				const targetCardIds = dependencies.map(
-					(dep) => dep.targetCardId
-				);
-
-				const { data: targetCards, error: cardsError } = await db
-					.schema("kanban")
-					.from("Cards")
-					.select("*")
-					.in("id", targetCardIds);
-
-				if (cardsError) throw cardsError;
-
-				// Get columns for target cards
-				const columnIds = [
-					...new Set(targetCards.map((card) => card.columnId)),
-				];
-				const { data: columns, error: columnsError } = await db
-					.schema("kanban")
-					.from("Columns")
-					.select("*")
-					.in("id", columnIds);
-
-				if (columnsError) throw columnsError;
-
-				// Create column lookup map
-				const columnMap = new Map(columns.map((col) => [col.id, col]));
-
-				for (const dependency of dependencies) {
-					const depCard = targetCards.find(
-						(card) => card.id === dependency.targetCardId
-					);
-					const depColumn = depCard
-						? columnMap.get(depCard.columnId)
-						: null;
-
-					if (!depCard || !depColumn) {
-						console.warn(
-							`Dependency card ${dependency.targetCardId} or its column not found`
-						);
-						continue;
-					}
-
-					const depType = dependency.type;
-
-					// Check if dependency is met based on its type
-					let isDepMet = false;
-					let errorMessage = "";
-
-					switch (depType) {
-						case "FS": // Finish-to-Start
-							isDepMet = depColumn.isCompletionColumn;
-							errorMessage = `Cannot complete this card until "${depCard.title}" is finished`;
-							break;
-
-						case "SS": // Start-to-Start
-							isDepMet =
-								depCard.startedAt !== null ||
-								depColumn.isCompletionColumn;
-							errorMessage = `Cannot complete this card until "${depCard.title}" is started`;
-							break;
-
-						case "FF": // Finish-to-Finish
-							isDepMet = depColumn.isCompletionColumn;
-							errorMessage = `Cannot complete this card until "${depCard.title}" is finished`;
-							break;
-
-						case "SF": // Start-to-Finish
-							isDepMet =
-								depCard.startedAt !== null ||
-								depColumn.isCompletionColumn;
-							errorMessage = `Cannot complete this card until "${depCard.title}" is started`;
-							break;
-
-						default:
-							isDepMet = false;
-							errorMessage = `Unknown dependency type for "${depCard.title}"`;
-					}
-
-					if (!isDepMet) {
-						// Check lag time if applicable
-						if (dependency.lag > 0) {
-							let referenceDate;
-
-							if (depType === "FS" || depType === "FF") {
-								referenceDate = depCard.completedAt;
-							} else {
-								referenceDate = depCard.startedAt;
-							}
-
-							if (referenceDate) {
-								const now = new Date();
-								const lagMs = dependency.lag * 60 * 60 * 1000; // Convert hours to milliseconds
-								const requiredDate = new Date(
-									new Date(referenceDate).getTime() + lagMs
-								);
-								const lagMet = now >= requiredDate;
-
-								if (!lagMet) {
-									const remainingHours = Math.ceil(
-										(requiredDate - now) / (60 * 60 * 1000)
-									);
-									errorMessage += ` (${remainingHours}h lag remaining)`;
-								}
-							}
-						}
-
-						throw new Error(errorMessage);
-					}
-
-					// Check if dependency has incomplete subtasks
-					if (depCard.checklist && depCard.checklist.length > 0) {
-						const hasIncompleteSubtasks = depCard.checklist.some(
-							(item) => !item.completed
-						);
-						if (hasIncompleteSubtasks) {
-							throw new Error(
-								`Cannot complete this card until all subtasks in "${depCard.title}" are completed`
-							);
-						}
-					}
-				}
-			}
 		}
 
 		// Update card order in columns
@@ -717,14 +558,6 @@ const moveCard = async (
 			updatedDestinationColumn = destCol;
 		}
 
-		// Get unlocked cards if completing
-		let unlockedCards = [];
-		if (isCompleting) {
-			// This would need to be implemented based on dependency logic
-			// For now, return empty array
-			unlockedCards = [];
-		}
-
 		// Add dependency counts to the updated card
 		await addDependencyCountsToCards([updatedCard], db);
 
@@ -732,7 +565,6 @@ const moveCard = async (
 			sourceColumn: updatedSourceColumn,
 			destinationColumn: updatedDestinationColumn,
 			card: updatedCard,
-			unlockedCards: unlockedCards.length > 0 ? unlockedCards : undefined,
 		};
 	} catch (error) {
 		console.error("Error moving card:", error);
@@ -861,11 +693,10 @@ const fetchUserDetails = async (userIds, sessionToken = null) => {
 	return userDetailsMap;
 };
 
-// Helper function to efficiently add dependency counts and relationships to cards
+// Helper function to add computed fields and preload related user details.
 const addDependencyCountsToCards = async (cards, db) => {
 	if (!cards || cards.length === 0) return;
 
-	const cardIds = cards.map((card) => card.id);
 	const allUserIds = new Set();
 
 	// Collect user IDs from cards
@@ -878,50 +709,10 @@ const addDependencyCountsToCards = async (cards, db) => {
 	});
 
 	try {
-		// Get dependency counts and user details with parallel queries
-		const [dependencyCounts, dependentCounts, userDetailsMap] =
-			await Promise.all([
-				// Count dependencies (cards these cards depend on)
-				db
-					.schema("kanban")
-					.from("TaskDependencies")
-					.select("sourceCardId")
-					.in("sourceCardId", cardIds),
-
-				// Count dependent cards (cards that depend on these cards)
-				db
-					.schema("kanban")
-					.from("TaskDependencies")
-					.select("targetCardId")
-					.in("targetCardId", cardIds),
-
-				// Fetch user details for administrators
-				fetchUserDetails(allUserIds),
-			]);
-
-		// Create lookup maps for counts
-		const dependencyCountMap = new Map();
-		const dependentCountMap = new Map();
-
-		if (dependencyCounts.data) {
-			dependencyCounts.data.forEach((row) => {
-				const count = dependencyCountMap.get(row.sourceCardId) || 0;
-				dependencyCountMap.set(row.sourceCardId, count + 1);
-			});
-		}
-
-		if (dependentCounts.data) {
-			dependentCounts.data.forEach((row) => {
-				const count = dependentCountMap.get(row.targetCardId) || 0;
-				dependentCountMap.set(row.targetCardId, count + 1);
-			});
-		}
+		const userDetailsMap = await fetchUserDetails(allUserIds);
 
 		// Add counts and user details to cards
 		for (const card of cards) {
-			card.dependencyCount = dependencyCountMap.get(card.id) || 0;
-			card.dependentCardsCount = dependentCountMap.get(card.id) || 0;
-
 			// Add preloaded administrator details
 			if (
 				card.administrator_id &&
@@ -953,8 +744,7 @@ const addDependencyCountsToCards = async (cards, db) => {
 			}
 		}
 	} catch (error) {
-		console.error("Error adding dependency counts:", error);
-		// Continue without dependency counts if there's an error
+		console.error("Error adding computed card fields:", error);
 	}
 };
 

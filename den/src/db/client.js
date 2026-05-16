@@ -193,7 +193,24 @@ function cleanupDeadTables() {
     DROP TABLE IF EXISTS note_operations;
     DROP TABLE IF EXISTS mcp_auth_codes;
     DROP TABLE IF EXISTS mcp_access_tokens;
+    DROP TABLE IF EXISTS TaskDependencies;
   `);
+}
+
+function ensureKanbanSchema() {
+  const dropColumn = (table, column) => {
+    const columns = tableColumns(table);
+    if (!columns.has(column)) return;
+    try {
+      db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+    } catch (err) {
+      logger.warn(`Database: could not drop ${table}.${column}: ${err.message}`);
+    }
+  };
+
+  dropColumn('Columns', 'isCompletionColumn');
+  dropColumn('Cards', 'dependencies');
+  dropColumn('Cards', 'completedAt');
 }
 
 function ensureModelPathsSchema() {
@@ -228,6 +245,7 @@ function ensureModelPathsSchema() {
 }
 
 cleanupDeadTables();
+ensureKanbanSchema();
 ensureCalendarSchema();
 ensureAgentMemorySchema();
 ensureModelPathsSchema();

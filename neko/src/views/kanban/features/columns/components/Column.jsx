@@ -5,7 +5,7 @@ import {
 	useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Settings, CheckCircle, AlertTriangle } from "lucide-react";
+import { Plus, Settings, AlertTriangle } from "lucide-react";
 import Card from "../../cards/Card";
 import { useColumnContext } from "../../../../context/viewContexts";
 import LoadingCard from "../../shared/components/LoadingCard";
@@ -143,11 +143,6 @@ const Column = ({
 					: "shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10 midnight:ring-white/5 hover:shadow-md"
 			} 
             ${
-				column.isCompletionColumn
-					? "ring-2 ring-green-200 dark:ring-green-800 midnight:ring-green-900"
-					: ""
-			}
-            ${
 				// Enhanced visual feedback when cards are being dragged over this column
 				isOver && draggingCardId
 					? wouldBeBlocked
@@ -160,11 +155,7 @@ const Column = ({
 					{/* Column Header - only header gets the drag handle listeners */}{" "}
 					<div
 						className={`p-4 rounded-t-xl flex items-center justify-between cursor-grab active:cursor-grabbing 
-              ${
-					column.isCompletionColumn
-						? "bg-green-50/50 dark:bg-green-900/10 midnight:bg-green-900/5"
-						: "bg-gray-50/50 dark:bg-gray-800/50 midnight:bg-gray-900/50"
-				}`}
+              bg-gray-50/50 dark:bg-gray-800/50 midnight:bg-gray-900/50`}
 						{...attributes}
 						{...listeners}
 					>
@@ -176,15 +167,6 @@ const Column = ({
 							>
 								{column.title}
 							</h2>
-							{/* Completion column indicator */}
-							{column.isCompletionColumn && (
-								<div
-									className="ml-2 flex items-center text-green-600 dark:text-green-500 midnight:text-green-400"
-									title="Completion Column - Cards here are considered done"
-								>
-									<CheckCircle className="w-4 h-4" />
-								</div>
-							)}
 						</div>
 
 						<div className="flex items-center gap-2">

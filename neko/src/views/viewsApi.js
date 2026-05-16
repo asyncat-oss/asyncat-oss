@@ -145,19 +145,6 @@ export const columnAPI = {
 	},
 
 	/**
-	 * Update column completion status
-	 */
-	updateCompletionStatus: async (columnId, isCompletionColumn) => {
-		return apiRequest(
-			`${KANBAN_API_URL}/columns/${columnId}/completion-status`,
-			{
-				method: "PUT",
-				body: JSON.stringify({ isCompletionColumn }),
-			}
-		);
-	},
-
-	/**
 	 * Load columns for a project
 	 */
 	loadColumns: async (projectId, userId) => {
@@ -268,73 +255,6 @@ export const cardAPI = {
 		);
 	},
 
-};
-
-// =============================================================================
-// DEPENDENCY API METHODS
-// =============================================================================
-
-export const dependencyAPI = {
-	/**
-	 * Get dependencies for a card
-	 */
-	getCardDependencies: async (cardId) => {
-		return apiRequest(`${KANBAN_API_URL}/cards/${cardId}/dependencies`);
-	},
-
-	/**
-	 * Get dependencies of a card (cards this card depends on)
-	 */
-	getDependencies: async (cardId) => {
-		return apiRequest(`${KANBAN_API_URL}/dependencies/card/${cardId}/dependencies`);
-	},
-
-	/**
-	 * Get cards that depend on this card (dependent cards)
-	 */
-	getDependentCards: async (cardId) => {
-		return apiRequest(`${KANBAN_API_URL}/dependencies/card/${cardId}/dependents`);
-	},
-
-	/**
-	 * Add a dependency to a card
-	 */
-	addDependency: async (cardId, targetCardId, type = "FS", lag = 0) => {
-		return apiRequest(`${KANBAN_API_URL}/dependencies/card/${cardId}/dependencies`, {
-			method: "POST",
-			body: JSON.stringify({ targetCardId, type, lag }),
-		});
-	},
-
-	/**
-	 * Remove a dependency from a card
-	 */
-	removeDependency: async (cardId, targetCardId) => {
-		return apiRequestRaw(
-			`${KANBAN_API_URL}/dependencies/card/${cardId}/dependencies/${targetCardId}`,
-			{
-				method: "DELETE",
-			}
-		);
-	},
-
-	/**
-	 * Check dependencies status for a card
-	 */
-	checkDependenciesStatus: async (cardId) => {
-		return apiRequest(
-			`${KANBAN_API_URL}/dependencies/card/${cardId}/dependencies/status`
-		);
-	},
-
-	/**
-	 * Get unlocked cards that can be started
-	 */
-	getUnlockedCards: async (cardId) => {
-		return apiRequest(
-			`${KANBAN_API_URL}/cards/${cardId}/dependencies/unlocked`
-		);
-	},
 };
 
 // =============================================================================
@@ -454,7 +374,6 @@ export const batchAPI = {
 const viewsApi = {
 	column: columnAPI,
 	card: cardAPI,
-	dependency: dependencyAPI,
 	user: userAPI,
 	ai: aiAPI,
 	batch: batchAPI,

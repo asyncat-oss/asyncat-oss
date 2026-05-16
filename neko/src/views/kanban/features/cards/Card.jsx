@@ -13,11 +13,6 @@ import {
   User,
   Calendar,
   Check,
-  MoveRight,
-  Lock,
-  Link2,
-  Link,
-  Loader,
 } from "lucide-react";
 import { useCardContext } from "../../../context/viewContexts";
 import { useColumnContext } from "../../../context/viewContexts";
@@ -51,7 +46,7 @@ const profilePictureMap = {
   WOLF: wolfDP,
 };
 
-// Session-level cache for administrator details to persist across dependency updates
+// Session-level cache for administrator details.
 const administratorCache = new Map();
 
 // Format predicted time in minutes to readable form (e.g., "4h 30m" or "2h")
@@ -107,10 +102,10 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     deletingCards,
   } = useCardContext();
 
-  const { columns, onCardStatusChange } = useColumnContext();
+  const { columns } = useColumnContext();
 
   // Import needed functions from useCardActions
-  const { moveCard, fetchFreshCardData } = useCardActions();
+  const { fetchFreshCardData } = useCardActions();
 
   // Helper function to open card with cached data
   const openCardWithCache = () => {
@@ -178,16 +173,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
   const [isExiting, setIsExiting] = useState(false);
   const [assigneeDetails, setAssigneeDetails] = useState([]);
   const [isLoadingAssignees, setIsLoadingAssignees] = useState(false);
-  const [completionTarget, setCompletionTarget] = useState(null);
-  const [isCompletingTask, setIsCompletingTask] = useState(false);
-
-  // Dependency state
-  const [dependencyCounts, setDependencyCounts] = useState({
-    hasDependencies: 0, // Number of cards this card depends on
-    isBlockedBy: 0, // Number of cards that depend on this card
-  });
-  const [areDependenciesMet, setAreDependenciesMet] = useState(true); // Whether this card's dependencies are fulfilled
-  const [isLoadingDependencies, setIsLoadingDependencies] = useState(true); // Track loading state
 
   // Memoized duration calculation from incomplete checklist items
   const displayDuration = useMemo(() => {
@@ -212,42 +197,8 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
   // Check if card is fully completed (100% progress)
   const isFullyCompleted = cardData.progress === 100;
 
-  // Check if card has all subtasks completed
-  const allSubtasksCompleted = useMemo(() => {
-    if (!cardData.checklist || cardData.checklist.length === 0) {
-      return false; // No subtasks to complete
-    }
-
-    return cardData.checklist.every((item) => item.completed);
-  }, [cardData.checklist]);
-
-  // Find completion columns
-  const completionColumns = useMemo(() => {
-    return columns.filter((col) => col.isCompletionColumn);
-  }, [columns]);
-
-  // Current column
-  const currentColumn = useMemo(() => {
-    return columns.find((col) => col.id === columnId);
-  }, [columns, columnId]);
-
   // Determine if this card is being deleted from the context
   const isDeleting = deletingCards.includes(card.id);
-
-  // Determine if card is ready to complete
-  const isReadyToComplete = useMemo(() => {
-    return (
-      allSubtasksCompleted &&
-      completionColumns.length > 0 &&
-      !currentColumn?.isCompletionColumn &&
-      !isFullyCompleted
-    );
-  }, [
-    allSubtasksCompleted,
-    completionColumns,
-    currentColumn,
-    isFullyCompleted,
-  ]);
 
   useEffect(() => {
     // When isDeleting changes to true, trigger the exit animation
@@ -335,122 +286,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     };
 
     fetchAdministratorDetails();
-  }, [cardData.administrator_id, cardData.id]); // Simplified dependencies - only what actually matters
-
-  // Fetch dependency counts and status
-  useEffect(() => {
-    const fetchDependencyCounts = async () => {
-      setIsLoadingDependencies(true);
-      try {
-        // Get dependencies where this card is the source (cards this card depends on)
-        const hasDependenciesResponse =
-          await viewsApi.dependency.getDependencies(cardData.id);
-        const hasDependenciesCount = Array.isArray(hasDependenciesResponse)
-          ? hasDependenciesResponse.length
-          : 0;
-
-        // Get dependent cards (cards that depend on this card)
-        const dependentCardsResponse =
-          await viewsApi.dependency.getDependentCards(cardData.id);
-        const dependentCardsCount = Array.isArray(dependentCardsResponse)
-          ? dependentCardsResponse.length
-          : 0;
-
-        setDependencyCounts({
-          hasDependencies: hasDependenciesCount,
-          isBlockedBy: dependentCardsCount,
-        });
-
-        // Check if dependencies are met (only if card has dependencies)
-        if (hasDependenciesCount > 0) {
-          const statusResponse =
-            await viewsApi.dependency.checkDependenciesStatus(cardData.id);
-          setAreDependenciesMet(statusResponse.areDependenciesMet);
-        } else {
-          // No dependencies means they're met by default
-          setAreDependenciesMet(true);
-        }
-      } catch (error) {
-        console.error("Error fetching dependency counts:", error);
-        // Silently fail - dependency indicators just won't show
-        // Assume dependencies are met on error to not block card unnecessarily
-        setAreDependenciesMet(true);
-      } finally {
-        setIsLoadingDependencies(false);
-      }
-    };
-
-    fetchDependencyCounts();
-  }, [cardData.id]);
-
-  // Handle automatic completion of a task
-  const handleCompleteTask = async (e) => {
-    if (e) {
-      e.stopPropagation(); // Prevent card selection
-    }
-
-    // If no completion columns available, show the card details instead
-    if (completionColumns.length === 0) {
-      openCardWithCache();
-      return;
-    }
-
-    // If there's only one completion column, use it automatically
-    if (completionColumns.length === 1) {
-      completeCardToColumn(completionColumns[0].id);
-    } else {
-      // Show completion target selection
-      setCompletionTarget("select");
-    }
-  };
-
-  // Complete card to a specific column
-  const completeCardToColumn = async (targetColumnId) => {
-    if (!targetColumnId) return;
-
-    try {
-      setIsCompletingTask(true);
-
-      // Determine status change
-      const sourceColumn = columns.find((col) => col.id === columnId);
-      const targetColumn = columns.find((col) => col.id === targetColumnId);
-      const oldStatus = sourceColumn?.isCompletionColumn
-        ? "completed"
-        : "in-progress";
-      const newStatus = targetColumn?.isCompletionColumn
-        ? "completed"
-        : "in-progress";
-
-      // Move the card to the completion column
-      const result = await moveCard(card.id, columnId, targetColumnId);
-
-      // Check if the move was blocked due to dependencies
-      if (result && result.blocked) {
-        // You could show a toast notification here
-        alert(result.reason || "Cannot complete card");
-        return;
-      }
-
-      // Update local card data with completion status
-      setCardData((prev) => ({
-        ...prev,
-        columnId: targetColumnId,
-        completedAt: new Date().toISOString(),
-      }));
-
-      // Notify about status change to update dependent cards
-      if (onCardStatusChange && oldStatus !== newStatus) {
-        await onCardStatusChange(card.id, newStatus, oldStatus);
-      }
-
-      // Hide completion targets
-      setCompletionTarget(null);
-    } catch (error) {
-      console.error("Error completing card:", error);
-    } finally {
-      setIsCompletingTask(false);
-    }
-  };
+  }, [cardData.administrator_id, cardData.id]);
 
   const defaultCardStyles = {
     fontFamily: "sans-serif",
@@ -481,7 +317,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       columnId, // Make sure this is passed
       index,
     },
-    disabled: !areDependenciesMet, // Disable dragging if dependencies not met
   });
 
   useEffect(() => {
@@ -573,7 +408,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
   const getCompletionDate = () => {
     // For demo, using current date - in a real app you would store the completion date
     // when the card's progress reaches 100%
-    return cardData.completedAt || new Date().toISOString();
+    return new Date().toISOString();
   };
 
   const style = {
@@ -616,21 +451,11 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
     // Fixed width for all cards to prevent layout shifts
     baseClasses += ` w-full max-w-sm`;
 
-    // Cursor based on drag state
-    if (!areDependenciesMet) {
-      baseClasses += ` cursor-not-allowed`;
-    } else {
-      baseClasses += ` cursor-grab`;
-    }
+    baseClasses += ` cursor-grab`;
 
     // Background and ring styling based on card state
-    if (!areDependenciesMet) {
-      // Blocked by dependencies - red/orange border
-      baseClasses += ` bg-orange-50/30 dark:bg-orange-900/10 midnight:bg-orange-950/10 ring-2 ring-orange-400 dark:ring-orange-600 midnight:ring-orange-700`;
-    } else if (isFullyCompleted) {
+    if (isFullyCompleted) {
       baseClasses += ` bg-green-50/50 dark:bg-green-900/5 midnight:bg-green-950/5 ring-2 ring-green-200 dark:ring-green-800 midnight:ring-green-900 completed-card`;
-    } else if (isReadyToComplete) {
-      baseClasses += ` bg-white dark:bg-gray-900 midnight:bg-gray-950 ring-2 ring-green-200 dark:ring-green-800 midnight:ring-green-900`;
     } else {
       baseClasses += ` bg-white dark:bg-gray-900 midnight:bg-gray-950 ring-1 ring-gray-900/5 dark:ring-white/10 midnight:ring-white/5`;
     }
@@ -725,43 +550,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
             </div>
           )}
 
-          {/* Dependency indicators for completed cards */}
-          {isLoadingDependencies ? (
-            <div className="flex items-center text-gray-400 dark:text-gray-500 text-xs">
-              <Loader className="w-3 h-3 animate-spin mr-1" />
-              <span>Loading Dependencies</span>
-            </div>
-          ) : (
-            <>
-              {dependencyCounts.hasDependencies > 0 && (
-                <div
-                  className="flex items-center text-blue-600 dark:text-blue-400 midnight:text-blue-500"
-                  title={`This card depends on ${
-                    dependencyCounts.hasDependencies
-                  } other card${
-                    dependencyCounts.hasDependencies > 1 ? "s" : ""
-                  }`}
-                >
-                  <Link2 className="w-3 h-3 mr-1" />
-                  {dependencyCounts.hasDependencies}
-                </div>
-              )}
-
-              {dependencyCounts.isBlockedBy > 0 && (
-                <div
-                  className="flex items-center text-purple-600 dark:text-purple-400 midnight:text-purple-500"
-                  title={`${dependencyCounts.isBlockedBy} card${
-                    dependencyCounts.isBlockedBy > 1 ? "s" : ""
-                  } depend${
-                    dependencyCounts.isBlockedBy === 1 ? "s" : ""
-                  } on this card`}
-                >
-                  <Link className="w-3 h-3 mr-1" />
-                  {dependencyCounts.isBlockedBy}
-                </div>
-              )}
-            </>
-          )}
         </div>
 
         {/* Owner row */}
@@ -824,26 +612,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
       style={style}
       onClick={handleCardClick}
     >
-      {/* NEW: Blocked by dependencies indicator */}
-      {!areDependenciesMet && dependencyCounts.hasDependencies > 0 && (
-        <div className="mb-2 px-2 py-1 bg-orange-100 dark:bg-orange-900/20 midnight:bg-orange-950/20 rounded-md border border-orange-200 dark:border-orange-700 midnight:border-orange-800">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5">
-              <Lock className="w-3 h-3 text-orange-600 dark:text-orange-400 midnight:text-orange-400" />
-              <span className="font-medium text-orange-700 dark:text-orange-400 midnight:text-orange-400">
-                Blocked by {dependencyCounts.hasDependencies}{" "}
-                {dependencyCounts.hasDependencies === 1
-                  ? "dependency"
-                  : "dependencies"}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 midnight:text-orange-400">
-              <Link2 className="w-3 h-3" />
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex items-start justify-between mb-2">
         <h3
           className="font-medium text-gray-900 dark:text-white midnight:text-indigo-200 line-clamp-1"
@@ -868,33 +636,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>
-
-      {/* Ready to complete notification banner */}
-      {isReadyToComplete && (
-        <div
-          className="mb-2 px-2 py-1 text-xs rounded-md flex items-center justify-between
-                       bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/10 
-                       text-green-700 dark:text-green-500 midnight:text-green-500"
-        >
-          <div className="flex items-center">
-            <CheckCircle className="w-3 h-3 mr-1 flex-shrink-0" />
-            <span>All subtasks complete</span>
-          </div>
-
-          <button
-            onClick={handleCompleteTask}
-            disabled={isCompletingTask}
-            className="ml-2 flex items-center text-green-600 dark:text-green-400 midnight:text-green-400 hover:underline"
-          >
-            {isCompletingTask ? (
-              <div className="w-3 h-3 border-2 border-t-transparent border-green-600 dark:border-green-400 midnight:border-green-400 rounded-full animate-spin mr-1"></div>
-            ) : (
-              <MoveRight className="w-3 h-3 mr-1" />
-            )}
-            <span>Complete</span>
-          </button>
-        </div>
-      )}
 
       {/* Overdue indicator banner */}
       {cardData.dueDate && (
@@ -984,7 +725,7 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
         </div>
       )}
 
-      {/* Card metrics with dependencies indicator */}
+      {/* Card metrics */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
         <div className="flex items-center text-gray-500 dark:text-gray-200 midnight:text-gray-500">
           <CheckCircle className="w-3 h-3 mr-1" />
@@ -996,42 +737,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
           <Paperclip className="w-3 h-3 mr-1" />
           {getAttachmentCount()}
         </div>
-
-        {/* Dependency indicators */}
-        {isLoadingDependencies ? (
-          <div className="flex items-center text-gray-400 dark:text-gray-500 text-xs">
-            <Loader className="w-3 h-3 animate-spin mr-1" />
-            <span>Loading Dependencies</span>
-          </div>
-        ) : (
-          <>
-            {dependencyCounts.hasDependencies > 0 && (
-              <div
-                className="flex items-center text-blue-600 dark:text-blue-400 midnight:text-blue-500"
-                title={`This card depends on ${
-                  dependencyCounts.hasDependencies
-                } other card${dependencyCounts.hasDependencies > 1 ? "s" : ""}`}
-              >
-                <Link2 className="w-3 h-3 mr-1" />
-                {dependencyCounts.hasDependencies}
-              </div>
-            )}
-
-            {dependencyCounts.isBlockedBy > 0 && (
-              <div
-                className="flex items-center text-purple-600 dark:text-purple-400 midnight:text-purple-500"
-                title={`${dependencyCounts.isBlockedBy} card${
-                  dependencyCounts.isBlockedBy > 1 ? "s" : ""
-                } depend${
-                  dependencyCounts.isBlockedBy === 1 ? "s" : ""
-                } on this card`}
-              >
-                <Link className="w-3 h-3 mr-1" />
-                {dependencyCounts.isBlockedBy}
-              </div>
-            )}
-          </>
-        )}
 
         {/* Time prediction indicator */}
         {cardData.predictedMinutes > 0 && (
@@ -1120,46 +825,6 @@ const Card = ({ card, columnId, index, dragOverlay, zoomLevel = 90 }) => {
                 })}
               </>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Completion Target Column Selector */}
-      {completionTarget === "select" && completionColumns.length > 1 && (
-        <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/10 rounded-md border border-green-200 dark:border-green-900 midnight:border-green-900/50">
-          <div className="text-xs font-medium text-green-700 dark:text-green-500 midnight:text-green-400 mb-1.5">
-            Move to completion column:
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {completionColumns.map((col) => (
-              <button
-                key={col.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  completeCardToColumn(col.id);
-                }}
-                disabled={isCompletingTask}
-                className="px-2 py-1 text-xs rounded 
-                          bg-green-200 dark:bg-green-800 midnight:bg-green-900
-                          text-green-700 dark:text-green-300 midnight:text-green-300
-                          hover:bg-green-300 dark:hover:bg-green-700 midnight:hover:bg-green-800
-                          disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {col.title}
-              </button>
-            ))}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setCompletionTarget(null);
-              }}
-              className="px-2 py-1 text-xs rounded 
-                          bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800
-                          text-gray-700 dark:text-gray-300 midnight:text-gray-300
-                          hover:bg-gray-300 dark:hover:bg-gray-600 midnight:hover:bg-gray-700"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}

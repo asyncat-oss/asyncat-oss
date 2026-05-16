@@ -206,7 +206,7 @@ const GanttTaskBar = ({
         <div className="flex items-center min-w-0 flex-1">
           {/* Status icon */}
           <div className="flex-shrink-0 mr-2">
-            {card.progress === 100 || card.isCompletionColumn ? (
+            {card.progress === 100 ? (
               <CheckCircle className="w-4 h-4 text-white/90 drop-shadow-sm" />
             ) : card.priority === "High" ? (
               <AlertCircle className="w-4 h-4 text-white/90 drop-shadow-sm animate-pulse" />
@@ -231,13 +231,6 @@ const GanttTaskBar = ({
           )}
         </div>
       </div>
-
-      {/* Dependencies indicator */}
-      {card.dependencies && card.dependencies.length > 0 && (
-        <div className="absolute -left-1 top-1/2 transform -translate-y-1/2">
-          <div className="w-2 h-2 rounded-full bg-yellow-400 border border-white shadow-sm animate-pulse" />
-        </div>
-      )}
 
       {/* Hover effects */}
       {isHovered && (

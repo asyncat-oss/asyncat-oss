@@ -16,10 +16,4 @@ router.put("/order", columnController.updateColumnOrder);
 router.put("/:id", columnController.updateColumn);
 router.delete("/:id", columnController.deleteColumn);
 
-// New route for updating column completion status
-router.put(
-  "/:id/completion-status",
-  columnController.updateColumnCompletionStatus
-);
-
 export default router;

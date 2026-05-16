@@ -171,7 +171,7 @@ function getWorkspaceIdForRequest(req) {
 
 function loadTaskCard(cardId, workspaceId, userId) {
   return db.prepare(`
-    SELECT c.*, col.title AS column_title, col.isCompletionColumn AS is_completion_column,
+    SELECT c.*, col.title AS column_title,
            p.id AS project_id, p.name AS project_name, p.team_id AS workspace_id
     FROM Cards c
     JOIN Columns col ON col.id = c.columnId
@@ -198,7 +198,6 @@ function formatTaskCard(row) {
     attachments: parseJson(row.attachments, []),
     columnId: row.columnId,
     columnTitle: row.column_title,
-    isCompletionColumn: Boolean(row.is_completion_column),
     projectId: row.project_id,
     projectName: row.project_name,
     updatedAt: row.updatedAt,
@@ -1533,7 +1532,7 @@ router.get('/task-runs', authenticate, (req, res) => {
         LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
         WHERE atr.user_id = ? AND atr.workspace_id = ?
       )
-      SELECT c.*, col.title AS column_title, col.isCompletionColumn AS is_completion_column,
+      SELECT c.*, col.title AS column_title,
              p.id AS project_id, p.name AS project_name,
              lr.id AS run_id, lr.session_id, lr.profile_id, lr.goal AS run_goal, lr.status AS run_status,
              lr.last_event_type, lr.last_event_label, lr.summary, lr.error,
