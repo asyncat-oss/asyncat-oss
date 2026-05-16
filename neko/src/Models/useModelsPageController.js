@@ -292,10 +292,21 @@ export const useModelsPageController = () => {
     setProviderAction(actionId);
     setProviderError('');
     try {
+      let profileId = id;
       if (id) {
         await aiProviderApi.updateProfile(id, payload);
       } else {
-        await aiProviderApi.createProfile(payload);
+        const res = await aiProviderApi.createProfile(payload);
+        profileId = res?.profile?.id;
+      }
+      // Auto-test immediately after save — result stored in DB and shown on the card
+      if (profileId) {
+        setProviderAction(profileId);
+        try {
+          await aiProviderApi.testProfile(profileId);
+        } catch {
+          // Test failure is non-blocking; the error is stored and displayed on the card
+        }
       }
       await loadProviderData();
     } catch (err) {

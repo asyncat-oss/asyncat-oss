@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, KeyRound, Loader2, RefreshCw, Zap } from 'lucide-react';
+import { CheckCircle2, ExternalLink, KeyRound, Loader2, RefreshCw, Zap, Construction } from 'lucide-react';
 import { configApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 
@@ -17,16 +17,22 @@ const CAPABILITY_LABELS = {
   image: 'Image Generation',
 };
 
+// Vision uses the active chat LLM's multimodal capability — not a separate routing system.
+const VISION_ROUTING_NOTE = 'Vision is handled by your active chat provider if it supports multimodal input (e.g. GPT-4o, Claude 3, Gemini, MiniMax-M2). To change the vision model, switch your chat provider above.';
+
+// implemented: which capabilities are actually wired in the backend.
+// Providers listed but not implemented will show a "Coming soon" badge and cannot be selected.
 const PROVIDERS = [
   {
     id: 'local',
     name: 'Local Runtime',
     secretKey: null,
     capabilities: ['stt', 'tts', 'vision', 'image'],
+    implemented: { stt: true, tts: true, vision: true, image: true },
     models: {
       stt: 'whisper.cpp',
       tts: 'Piper',
-      vision: 'Local multimodal assets',
+      vision: 'Local multimodal assets (mmproj)',
       image: 'stable-diffusion.cpp / ComfyUI',
     },
     description: 'Runs on your machine with the assets and engines configured on this page.',
@@ -37,13 +43,14 @@ const PROVIDERS = [
     name: 'OpenAI',
     secretKey: 'OPENAI_API_KEY',
     capabilities: ['stt', 'tts', 'vision', 'image'],
+    implemented: { stt: true, tts: true, vision: false, image: false },
     models: {
       stt: 'gpt-4o-transcribe',
       tts: 'gpt-4o-mini-tts',
-      vision: 'Responses vision models',
-      image: 'gpt-image-1.5 / gpt-image-1',
+      vision: 'Routes through active LLM — set OpenAI as your chat provider',
+      image: 'gpt-image-1 (coming soon)',
     },
-    description: 'Best all-round cloud fallback: image understanding, image generation/editing, transcription, and speech.',
+    description: 'Best all-round cloud option for transcription and speech. Vision works via active chat provider.',
     docsUrl: 'https://platform.openai.com/docs',
   },
   {
@@ -51,11 +58,12 @@ const PROVIDERS = [
     name: 'ElevenLabs',
     secretKey: 'ELEVENLABS_API_KEY',
     capabilities: ['stt', 'tts'],
+    implemented: { stt: true, tts: true },
     models: {
       stt: 'Scribe v2',
       tts: 'Eleven v3 / Flash v2.5',
     },
-    description: 'High-quality voices, voice library, voice cloning, and strong transcription.',
+    description: 'High-quality voices, voice cloning, and strong transcription.',
     docsUrl: 'https://elevenlabs.io/docs',
   },
   {
@@ -63,10 +71,11 @@ const PROVIDERS = [
     name: 'Stability AI',
     secretKey: 'STABILITY_API_KEY',
     capabilities: ['image'],
+    implemented: { image: false },
     models: {
-      image: 'Stable Image / SD3 family',
+      image: 'Stable Image / SD3 family (coming soon)',
     },
-    description: 'Image generation and editing via Stability hosted APIs.',
+    description: 'Image generation via Stability hosted APIs.',
     docsUrl: 'https://platform.stability.ai/docs',
   },
   {
@@ -74,52 +83,52 @@ const PROVIDERS = [
     name: 'fal.ai',
     secretKey: 'FAL_KEY',
     capabilities: ['stt', 'tts', 'image'],
+    implemented: { stt: false, tts: false, image: false },
     models: {
-      stt: 'Whisper endpoints',
-      tts: 'Voice/audio endpoints',
-      image: 'Flux, Stable Diffusion, image/video models',
+      stt: 'Whisper endpoints (coming soon)',
+      tts: 'Voice/audio endpoints (coming soon)',
+      image: 'Flux, Stable Diffusion (coming soon)',
     },
-    description: 'Broad media router for image, video, audio, speech, and multimodal model endpoints.',
+    description: 'Broad media router for image, audio, and speech endpoints.',
     docsUrl: 'https://fal.ai/docs',
   },
   {
     id: 'replicate',
     name: 'Replicate',
     secretKey: 'REPLICATE_API_TOKEN',
-    capabilities: ['stt', 'tts', 'vision', 'image'],
+    capabilities: ['stt', 'tts', 'image'],
+    implemented: { stt: false, tts: false, image: false },
     models: {
-      stt: 'Community STT models',
-      tts: 'Community TTS models',
-      vision: 'Captioning and vision models',
-      image: 'Flux, Imagen, GPT Image, community models',
+      stt: 'Community STT models (coming soon)',
+      tts: 'Community TTS models (coming soon)',
+      image: 'Flux, Imagen, community models (coming soon)',
     },
-    description: 'Run many hosted open and commercial media models through one prediction API.',
+    description: 'Hosted open and commercial media models through one prediction API.',
     docsUrl: 'https://replicate.com/docs',
   },
   {
     id: 'gemini',
     name: 'Gemini',
     secretKey: 'GEMINI_API_KEY',
-    capabilities: ['tts', 'vision', 'image'],
+    capabilities: ['tts', 'image'],
+    implemented: { tts: false, image: false },
     models: {
-      tts: 'Gemini native TTS',
-      vision: 'Gemini multimodal models',
-      image: 'Gemini image models',
+      tts: 'Gemini native TTS (coming soon)',
+      image: 'Gemini image models (coming soon)',
     },
-    description: 'Strong image understanding, Gemini image models, and native TTS where available.',
+    description: 'Gemini image generation and native TTS where available.',
     docsUrl: 'https://ai.google.dev/gemini-api/docs',
   },
   {
     id: 'minimax',
     name: 'MiniMax',
     secretKey: 'MINIMAX_API_KEY',
-    capabilities: ['tts', 'vision', 'image'],
+    capabilities: ['tts'],
+    implemented: { tts: false },
     models: {
-      tts: 'MiniMax speech models',
-      vision: 'MiniMax multimodal models',
-      image: 'MiniMax image generation',
+      tts: 'MiniMax speech models (coming soon)',
     },
-    description: 'Useful for image generation, speech, and multimodal workflows depending on region/account.',
+    description: 'MiniMax speech. For vision/image, set MiniMax as your active chat provider.',
     docsUrl: 'https://platform.minimax.io/docs',
   },
 ];
@@ -209,6 +218,12 @@ const CapabilityProvidersSection = ({ capability }) => {
         }
       />
 
+      {capability === 'vision' && (
+        <p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
+          {VISION_ROUTING_NOTE}
+        </p>
+      )}
+
       {(message || error) && (
         <p className={`mt-3 text-xs ${error ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
           {error || message}
@@ -217,12 +232,15 @@ const CapabilityProvidersSection = ({ capability }) => {
 
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
         {providers.map(provider => {
+          const isImplemented = provider.implemented?.[capability] !== false;
           const isActive = activeProvider === provider.id;
           const hasKey = !provider.secretKey || Boolean(secrets[provider.secretKey]);
           const busy = saving.endsWith(`:${provider.id}`);
           return (
             <div key={provider.id} className={`rounded-xl border bg-white p-4 transition-colors dark:bg-gray-900 midnight:bg-slate-950 ${
-              isActive
+              !isImplemented
+                ? 'opacity-60 border-gray-100 dark:border-gray-800 midnight:border-slate-800'
+                : isActive
                 ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
                 : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800'
             }`}>
@@ -230,8 +248,13 @@ const CapabilityProvidersSection = ({ capability }) => {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{provider.name}</h3>
-                    {isActive && <Badge color="green">Selected</Badge>}
-                    {hasKey ? <Badge color="gray">{provider.secretKey ? 'Key ready' : 'Local'}</Badge> : <Badge color="amber">Key needed</Badge>}
+                    {isActive && isImplemented && <Badge color="green">Selected</Badge>}
+                    {!isImplemented
+                      ? <Badge color="gray"><Construction className="inline h-2.5 w-2.5 mr-0.5" />Coming soon</Badge>
+                      : hasKey
+                        ? <Badge color="gray">{provider.secretKey ? 'Key ready' : 'Local'}</Badge>
+                        : <Badge color="amber">Key needed</Badge>
+                    }
                   </div>
                   <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{provider.description}</p>
                   <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
@@ -245,7 +268,7 @@ const CapabilityProvidersSection = ({ capability }) => {
                 )}
               </div>
 
-              {provider.secretKey && (
+              {isImplemented && provider.secretKey && (
                 <div className="mt-3 flex gap-2">
                   <div className="relative flex-1">
                     <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
@@ -270,15 +293,21 @@ const CapabilityProvidersSection = ({ capability }) => {
 
               <button
                 onClick={() => activate(provider)}
-                disabled={isActive || !hasKey || busy}
+                disabled={!isImplemented || isActive || !hasKey || busy}
+                title={!isImplemented ? 'Not yet available — coming soon' : undefined}
                 className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors disabled:opacity-40 ${
-                  isActive
+                  !isImplemented
+                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed'
+                    : isActive
                     ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
                     : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200'
                 }`}
               >
-                {saving === `active:${provider.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : isActive ? <CheckCircle2 className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
-                {isActive ? 'Selected' : 'Use for this capability'}
+                {saving === `active:${provider.id}` ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : !isImplemented ? <Construction className="h-4 w-4" />
+                  : isActive ? <CheckCircle2 className="h-4 w-4" />
+                  : <Zap className="h-4 w-4" />}
+                {!isImplemented ? 'Coming soon' : isActive ? 'Selected' : 'Use for this capability'}
               </button>
             </div>
           );
