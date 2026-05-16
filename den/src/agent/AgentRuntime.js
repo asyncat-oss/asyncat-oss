@@ -17,7 +17,7 @@ import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js';
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
-import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
+import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } from './skills.js';
 import { listMemories, searchMemories } from './tools/memoryTools.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
@@ -338,7 +338,20 @@ export class AgentRuntime {
 
     // Build conversation thread (filter out UI system messages)
     const validHistory = conversationHistory.filter(m => m.role === 'user' || m.role === 'assistant');
-    const historyPrefix = validHistory.slice(-8).map(m => ({ role: m.role, content: m.content }));
+    // Token-aware history prefix: walk backwards until we hit 4000 token budget
+    // or 12 messages (hard cap). Short conversations get more context, long ones
+    // are capped by tokens rather than by a fixed message count.
+    const HISTORY_TOKEN_BUDGET = 4000;
+    const historyPrefix = [];
+    let _historyTokens = 0;
+    for (let _hi = validHistory.length - 1; _hi >= 0; _hi--) {
+      const _hm = validHistory[_hi];
+      const _hTokens = this._estimateTokens(typeof _hm.content === 'string' ? _hm.content : '');
+      if (_historyTokens + _hTokens > HISTORY_TOKEN_BUDGET && historyPrefix.length >= 2) break;
+      historyPrefix.unshift({ role: _hm.role, content: _hm.content });
+      _historyTokens += _hTokens;
+      if (historyPrefix.length >= 12) break; // hard cap
+    }
     const messages = [
       ...historyPrefix,
       { role: 'user', content: goal },
@@ -357,6 +370,21 @@ export class AgentRuntime {
       askUser: this.askUser
         ? (request) => this.askUser({ ...request, round: this.session?.totalRounds || 0 })
         : null,
+      // Embedding computation for vector memory search.
+      // Uses any OpenAI-compatible embeddings endpoint; returns null gracefully
+      // if the provider doesn't support it (e.g. Anthropic native, local models
+      // without an embed endpoint).
+      computeEmbedding: async (text) => {
+        if (!this.aiClient?.client?.embeddings?.create) return null;
+        try {
+          const embModel = process.env.EMBED_MODEL || 'text-embedding-3-small';
+          const res = await this.aiClient.client.embeddings.create({
+            model: embModel,
+            input: String(text || '').slice(0, 8000),
+          });
+          return res.data?.[0]?.embedding || null;
+        } catch { return null; }
+      },
     };
 
     const knownTools = toolDefs.map(t => t.name);
@@ -385,8 +413,13 @@ export class AgentRuntime {
       this.session.nextRound();
 
       // Compact before the LLM call if we're over budget.
+      // LLM-backed when aiClient is present; mechanical fallback otherwise.
       if (this.compactor.needsCompaction(messages)) {
-        const result = this.compactor.compact(messages, this.session, { goalIndex });
+        const result = await this.compactor.compact(messages, this.session, {
+          goalIndex,
+          aiClient: this.aiClient,
+          model: this.model,
+        });
         if (result.compacted) {
           messages.length = 0;
           messages.push(...result.messages);
@@ -744,15 +777,37 @@ export class AgentRuntime {
       if (repairRequested) continue;
       if (answer) break;
 
-      // Execute permitted tools in parallel — safe tools gain the most from this
+      // Execute permitted tools: reads run in parallel, writes run sequentially
+      // to prevent race conditions (e.g. two write_file calls on the same path).
       if (permitted.length > 0) {
         this._throwIfAborted();
-        const execResults = await Promise.all(
-          permitted.map(({ toolCall }) =>
-            toolRegistry.execute(toolCall.tool_name, toolCall.arguments, toolContext)
-              .catch(err => ({ success: false, error: err.message || String(err) }))
-          )
-        );
+
+        // Classify each permitted tool as read-only or mutating
+        const isRead = permitted.map(({ toolCall }) =>
+          !this._isMutatingTool(toolCall.tool_name, toolCall.arguments));
+        const readIndices = isRead.reduce((acc, r, i) => (r ? [...acc, i] : acc), []);
+        const writeIndices = isRead.reduce((acc, r, i) => (!r ? [...acc, i] : acc), []);
+
+        const execResults = new Array(permitted.length);
+
+        // Parallel reads
+        if (readIndices.length > 0) {
+          const readResults = await Promise.all(
+            readIndices.map(i => {
+              const { toolCall } = permitted[i];
+              return toolRegistry.execute(toolCall.tool_name, toolCall.arguments, toolContext)
+                .catch(err => ({ success: false, error: err.message || String(err) }));
+            })
+          );
+          readIndices.forEach((origIdx, ri) => { execResults[origIdx] = readResults[ri]; });
+        }
+
+        // Sequential writes — preserves order, prevents clobber
+        for (const i of writeIndices) {
+          const { toolCall } = permitted[i];
+          execResults[i] = await toolRegistry.execute(toolCall.tool_name, toolCall.arguments, toolContext)
+            .catch(err => ({ success: false, error: err.message || String(err) }));
+        }
         this._throwIfAborted();
         for (let i = 0; i < permitted.length; i++) {
           const item = permitted[i];
@@ -934,6 +989,16 @@ export class AgentRuntime {
     this._extractMemories(goal, answer, messages).catch(err =>
       console.error('[agent] Post-run memory extraction failed:', err.message)
     );
+
+    // Post-run skill synthesis — if the run was non-trivial and successful,
+    // ask the LLM if a reusable skill can be extracted and saved for future runs.
+    synthesizeSkillFromRun({
+      aiClient: this.aiClient,
+      model: this.model,
+      goal,
+      toolHistory: this.session.toolHistory,
+      answer,
+    }).catch(err => console.error('[agent] Post-run skill synthesis failed:', err.message));
 
     return { answer, stopReason, session: this.session, toolCalls: this.session.toolHistory };
   }
@@ -1328,7 +1393,15 @@ export class AgentRuntime {
   }
 
   _estimateTokens(value) {
-    return Math.ceil(String(value || '').length / 4);
+    // Content-aware: structured/code content ~3.2 chars/token, prose ~4.5 chars/token
+    const text = String(value || '');
+    const toolResultChars = (text.match(/<tool_result[\s\S]*?<\/tool_result>/g) || [])
+      .reduce((sum, m) => sum + m.length, 0);
+    const codeBlockChars = (text.match(/```[\s\S]*?```/g) || [])
+      .reduce((sum, m) => sum + m.length, 0);
+    const structuredChars = toolResultChars + codeBlockChars;
+    const proseChars = Math.max(0, text.length - structuredChars);
+    return Math.ceil(structuredChars / 3.2) + Math.ceil(proseChars / 4.5);
   }
 
   _effectivePermission(toolName, args = {}, fallbackPermission = 'dangerous') {

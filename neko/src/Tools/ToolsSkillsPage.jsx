@@ -64,7 +64,9 @@ function getSkillOrigin(skill) {
   const tags = Array.isArray(skill.tags) ? skill.tags.map(tag => String(tag).toLowerCase()) : [];
   if (
     skill.created_by === 'basal-ganglia' ||
+    skill.created_by === 'skill-synthesizer' ||
     tags.includes('auto-generated') ||
+    tags.includes('auto-synthesized') ||
     tags.includes('learned')
   ) {
     return 'auto';

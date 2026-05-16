@@ -426,3 +426,91 @@ function _runDeterministic(goal, limit) {
   const tagMatches = tagBasedMatch(goal, excluded, limit - direct.length);
   return [...direct, ...tagMatches].slice(0, limit);
 }
+
+// ── Post-run skill synthesis ──────────────────────────────────────────────────
+// After a non-trivial run succeeds, ask the LLM if a reusable skill can be
+// extracted.  Fires as fire-and-forget (called without await in AgentRuntime).
+// Trivial / conversational runs are skipped by checking tool count and goal
+// structure so the LLM call is only made when it's worth it.
+
+const ACTION_GOAL_RE_SYNTH = /\b(create|add|update|edit|delete|remove|move|rename|write|save|run|execute|install|fix|change|modify|implement|build|generate|refactor|deploy|configure|setup|analyze|parse|convert)\b/i;
+
+export async function synthesizeSkillFromRun({ aiClient, model, goal, toolHistory, answer } = {}) {
+  if (!aiClient?.client?.chat?.completions?.create) return;
+
+  // Only synthesize for action-oriented runs with 3+ successful tool calls
+  const successfulTools = (toolHistory || []).filter(t => t.result?.success !== false);
+  if (successfulTools.length < 3) return;
+  if (!ACTION_GOAL_RE_SYNTH.test(goal || '')) return;
+
+  try {
+    const llmCreate = aiClient.client.chat.completions.create.bind(aiClient.client.chat.completions);
+
+    const toolSummary = successfulTools
+      .slice(-15)
+      .map(t => `${t.tool}(${Object.keys(t.args || {}).slice(0, 2).join(', ')})`)
+      .join(' → ');
+
+    const response = await llmCreate({
+      model,
+      max_tokens: 600,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You extract reusable agent skill patterns from completed task runs.',
+            'Return ONLY valid JSON:',
+            '{"should_create":bool,"name":"kebab-case-name","description":"one sentence",',
+            '"when_to_use":"trigger conditions","tags":["tag1","tag2"],',
+            '"key_steps":["step1","step2"],"pitfalls":["pitfall1"]}',
+            'Set should_create=true ONLY when there is a genuinely reusable pattern.',
+            'Skip one-off tasks, simple lookups, or anything already in common skills.',
+            'Name must be descriptive and unique (not generic like "code-editing").',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            goal: String(goal || '').slice(0, 400),
+            tools_used: toolSummary,
+            answer_preview: String(answer || '').slice(0, 300),
+          }),
+        },
+      ],
+    });
+
+    const raw = response.choices?.[0]?.message?.content || '';
+    const parsed = extractJsonObject(raw);
+    if (!parsed?.should_create || !parsed?.name) return;
+
+    const slug = slugifyName(parsed.name);
+    const skillPath = path.join(USER_SKILLS_DIR, `${slug}.md`);
+    if (fs.existsSync(skillPath)) return; // skill already exists — don't overwrite
+
+    const body = [
+      `## When to Use\n${parsed.when_to_use || ''}`,
+      `## Key Steps\n${(parsed.key_steps || []).map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
+      `## Pitfalls\n${(parsed.pitfalls || []).map(p => `- ${p}`).join('\n') || '- None noted'}`,
+      `## Source\nAuto-synthesized from a ${successfulTools.length}-tool run on: "${String(goal || '').slice(0, 80)}".`,
+    ].join('\n\n');
+
+    fs.mkdirSync(USER_SKILLS_DIR, { recursive: true });
+    const content = buildSkillMarkdown({
+      name: parsed.name,
+      description: parsed.description || '',
+      brain_region: 'hippocampus', // hippocampus = Recall — synthesized patterns aid future recall
+      weight: 0.9,
+      tags: Array.isArray(parsed.tags) ? parsed.tags : ['auto-synthesized'],
+      when_to_use: parsed.when_to_use || '',
+      created_by: 'skill-synthesizer',
+      body,
+    });
+
+    fs.writeFileSync(skillPath, content, 'utf8');
+    reloadSkills();
+    console.log(`[skills] Synthesized new skill: ${parsed.name} (${slug}.md)`);
+  } catch (err) {
+    // Non-critical path — swallow errors silently
+    console.warn('[skills] Skill synthesis skipped:', err.message);
+  }
+}

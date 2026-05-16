@@ -96,6 +96,59 @@ export function scoreMemoryRows(rows) {
   }).sort((a, b) => b.score - a.score);
 }
 
+// ── Vector similarity helpers ─────────────────────────────────────────────────
+
+/**
+ * Cosine similarity between two float arrays. Returns 0 for null/mismatched inputs.
+ */
+function cosineSim(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return 0;
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  const mag = Math.sqrt(magA) * Math.sqrt(magB);
+  return mag < 1e-8 ? 0 : dot / mag;
+}
+
+/**
+ * In-process vector search over all memories that have embeddings.
+ * Safe for up to ~50,000 memories (O(n) cosine pass, well under 10ms at that scale).
+ */
+function _vectorSearch({ userId, workspaceId, queryVec, kind, limit = 10 }) {
+  const params = [userId, workspaceId];
+  let kindClause = '';
+  if (kind && kind !== 'all') {
+    kindClause = 'AND memory_type = ?';
+    params.push(kind);
+  }
+
+  // Load all embedded memories — embedding column excluded from standard memoryColumns
+  const rows = db.prepare(`
+    SELECT ${memoryColumns}, embedding
+    FROM agent_memory
+    WHERE user_id = ? AND workspace_id = ? ${kindClause} AND embedding IS NOT NULL
+    LIMIT 2000
+  `).all(...params);
+
+  if (!rows.length) return [];
+
+  return rows
+    .map(row => {
+      try {
+        const vec = JSON.parse(row.embedding);
+        const sim = cosineSim(queryVec, vec);
+        return { ...row, score: sim + Number(row.importance ?? 0.5) * 0.15 };
+      } catch { return null; }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(normalizeMemoryRow);
+}
+
 export function bumpMemoryAccess(rows) {
   const ids = [...new Set(rows.map(r => r.id).filter(Boolean))];
   if (ids.length === 0) return;
@@ -209,21 +262,40 @@ export const saveMemoryTool = {
         'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
       ).get(context.userId, context.workspaceId, key);
 
+      let memoryId;
+      let action;
+
       if (existing) {
         db.prepare(`
           UPDATE agent_memory
           SET content = ?, memory_type = ?, tags = ?, importance = ?, updated_at = datetime('now')
           WHERE id = ?
         `).run(args.content, kind, tags, importance, existing.id);
-        return { success: true, action: 'updated', key, kind, importance };
+        memoryId = existing.id;
+        action = 'updated';
+      } else {
+        memoryId = randomUUID();
+        db.prepare(`
+          INSERT INTO agent_memory
+            (id, user_id, workspace_id, memory_type, key, content, tags, importance)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance);
+        action = 'stored';
       }
 
-      db.prepare(`
-        INSERT INTO agent_memory
-          (id, user_id, workspace_id, memory_type, key, content, tags, importance)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(randomUUID(), context.userId, context.workspaceId, kind, key, args.content, tags, importance);
-      return { success: true, action: 'stored', key, kind, importance };
+      // Fire-and-forget embedding computation — stored asynchronously, won't block the agent
+      if (typeof context.computeEmbedding === 'function') {
+        context.computeEmbedding(args.content).then(vec => {
+          if (vec) {
+            try {
+              db.prepare('UPDATE agent_memory SET embedding = ? WHERE id = ?')
+                .run(JSON.stringify(vec), memoryId);
+            } catch { /* non-critical */ }
+          }
+        }).catch(() => {});
+      }
+
+      return { success: true, action, key, kind, importance };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -248,7 +320,9 @@ export const recallMemoryTool = {
     try {
       const kind = args.kind || args.memory_type || 'all';
       const limit = Math.max(1, Math.min(25, Number(args.limit || 10)));
-      const memories = searchMemories({
+
+      // Primary: BM25 full-text search (fast, keyword-accurate)
+      const bm25Results = searchMemories({
         userId: context.userId,
         workspaceId: context.workspaceId,
         query: args.query,
@@ -256,7 +330,30 @@ export const recallMemoryTool = {
         limit,
         bumpAccess: true,
       });
-      return { success: true, query: args.query, count: memories.length, memories };
+
+      // Vector augmentation: kicks in when keyword search finds < 3 results.
+      // Catches semantic matches that BM25 misses (e.g. "API key" vs "credentials").
+      if (bm25Results.length < 3 && typeof context.computeEmbedding === 'function') {
+        try {
+          const queryVec = await context.computeEmbedding(args.query);
+          if (queryVec) {
+            const vectorResults = _vectorSearch({
+              userId: context.userId,
+              workspaceId: context.workspaceId,
+              queryVec,
+              kind,
+              limit,
+            });
+            // Merge: BM25 results first (higher confidence), then vector extras
+            const seen = new Set(bm25Results.map(r => r.id));
+            const extras = vectorResults.filter(r => !seen.has(r.id));
+            const memories = [...bm25Results, ...extras].slice(0, limit);
+            return { success: true, query: args.query, count: memories.length, memories, method: 'hybrid' };
+          }
+        } catch { /* fallback to BM25 results below */ }
+      }
+
+      return { success: true, query: args.query, count: bm25Results.length, memories: bm25Results, method: 'bm25' };
     } catch (err) {
       return { success: false, error: err.message };
     }

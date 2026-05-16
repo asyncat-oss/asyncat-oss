@@ -152,6 +152,7 @@ function ensureAgentMemorySchema() {
   addColumn('importance', 'REAL NOT NULL DEFAULT 0.5');
   addColumn('last_accessed_at', 'TEXT');
   addColumn('access_count', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('embedding', 'TEXT'); // JSON float array for vector similarity search
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_agent_memory_user       ON agent_memory(user_id);

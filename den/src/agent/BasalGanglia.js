@@ -53,14 +53,27 @@ class BasalGanglia {
   }
 
   hashPattern(tools, goal) {
-    const key = `${goal.slice(0, 30)}|${tools.slice(0, 5).join('→')}`;
-    let hash = 0;
+    // Normalize goal: lowercase, strip stop words, use up to 80 meaningful chars
+    const STOP = new Set(['a','an','the','to','of','and','or','in','on','at','is','it',
+      'that','this','i','you','me','we','they','my','your','our','their','be','do','have']);
+    const normalizedGoal = String(goal || '').toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOP.has(w))
+      .join(' ')
+      .slice(0, 80);
+
+    // Sort tools for order-independence (same tools, different order = same skill)
+    const sortedTools = [...tools].sort().join('→');
+    const key = `${normalizedGoal}|${sortedTools}`;
+
+    // djb2-xor: better distribution than the previous djb2-subtract
+    let hash = 5381;
     for (let i = 0; i < key.length; i++) {
-      const char = key.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
+      hash = ((hash << 5) + hash) ^ key.charCodeAt(i);
+      hash = hash | 0; // keep int32
     }
-    return hash.toString(16);
+    return (hash >>> 0).toString(16);
   }
 
   async trackWorkflow({ userId, workspaceId, goal, tools, success, correction }) {
