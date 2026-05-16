@@ -1040,6 +1040,7 @@ export class AgentRuntime {
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       max_tokens: this.isLocal ? 2048 : 4096,
       stream: true,
+      stream_options: { include_usage: true },
     };
 
     // For cloud models with native tool support, pass tool definitions via API
@@ -1067,12 +1068,26 @@ export class AgentRuntime {
     let reasoningText = '';
     const toolCalls = {};
     let finishReason = null;
+    let streamUsage = null;
 
     for await (const chunk of stream) {
       this._throwIfAborted();
+
+      // Final usage chunk (stream_options: { include_usage: true })
+      if (chunk.usage) {
+        streamUsage = {
+          prompt_tokens: chunk.usage.prompt_tokens ?? chunk.usage.input_tokens ?? 0,
+          completion_tokens: chunk.usage.completion_tokens ?? chunk.usage.output_tokens ?? 0,
+          total_tokens: chunk.usage.total_tokens ?? 0,
+        };
+        if (!streamUsage.total_tokens) {
+          streamUsage.total_tokens = streamUsage.prompt_tokens + streamUsage.completion_tokens;
+        }
+      }
+
       const delta = chunk.choices[0]?.delta;
       if (!delta) continue;
-      
+
       finishReason = chunk.choices[0]?.finish_reason || finishReason;
 
       const reasoningDelta = reasoningTextFromDelta(delta);
@@ -1111,6 +1126,7 @@ export class AgentRuntime {
       reasoning: reasoningText,
       toolCalls: apiToolCalls,
       finishReason: finishReason,
+      usage: streamUsage,
     };
   }
 

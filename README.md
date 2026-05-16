@@ -32,10 +32,13 @@ Asyncat gives your local model:
 - **Full file system access** — read, write, delete, execute
 - **Web browsing** — fetch URLs, search the web
 - **Terminal execution** — run commands, scripts, anything
-- **Clipboard & notifications** — system integration
+- **Voice I/O** — speech-to-text and text-to-speech, local or cloud
+- **Image generation** — stable-diffusion.cpp, ComfyUI, or cloud (DALL-E 3, Flux, Stability AI)
+- **Vision** — multimodal input routed through your active chat provider
+- **Clipboard & notifications** — system integration, including OS-level agent alerts
 - **Memory that persists** — across sessions, across restarts
 - **MCP integration** — connect external tools
-- **Skills (Cerebellum)** — procedural knowledge loaded per task
+- **Skills (Cerebellum)** — 36 procedural knowledge guides loaded per task
 - **Soul** — editable agent persona, principles, and safety rules
 - **Agent Profiles** — named configurations bundling soul + tools + permissions
 - **Scheduler** — run agent goals on a cron-style schedule, no human required
@@ -212,12 +215,78 @@ AI_API_KEY=sk-...
 AI_MODEL=gpt-4o
 ```
 
-| Provider | URL | Model |
-|---|---|---|
-| OpenAI | `https://api.openai.com/v1` | gpt-4o |
-| Anthropic | `https://api.anthropic.com/v1` | claude-sonnet-4-6 |
-| Ollama | `http://localhost:11434/v1` | llama3.1 |
-| Anything else | your endpoint | your model |
+Supported chat providers (configure on the Models page):
+
+| Provider | Type |
+|---|---|
+| OpenAI | Cloud |
+| Anthropic | Cloud |
+| Gemini | Cloud |
+| xAI (Grok) | Cloud |
+| Mistral | Cloud |
+| DeepSeek | Cloud |
+| Groq | Cloud |
+| Together | Cloud |
+| Perplexity | Cloud |
+| MiniMax / MiniMax CN | Cloud |
+| Cohere | Cloud |
+| Fireworks | Cloud |
+| Cerebras | Cloud |
+| DeepInfra | Cloud |
+| NVIDIA NIM | Cloud |
+| OpenRouter | Cloud |
+| Hugging Face | Cloud |
+| Azure OpenAI | Cloud |
+| Amazon Bedrock | Cloud |
+| Ollama | Local |
+| LM Studio | Local |
+| llama.cpp (built-in) | Local |
+| Custom OpenAI-compat endpoint | Any |
+
+---
+
+## Multimodal Capabilities
+
+Beyond chat, Asyncat routes speech, image, and vision through dedicated providers. Configure each independently on the Models page under the relevant capability tab.
+
+### Speech-to-Text (STT)
+
+| Provider | Model |
+|---|---|
+| Local (whisper.cpp) | Whisper — runs on-device |
+| OpenAI | gpt-4o-transcribe |
+| ElevenLabs | Scribe v2 |
+| fal.ai | Whisper (fast cloud) |
+
+Set via `ASYNCAT_STT_PROVIDER` (or the Models page UI).
+
+### Text-to-Speech (TTS)
+
+| Provider | Model |
+|---|---|
+| Local (Piper) | Piper — runs on-device |
+| OpenAI | gpt-4o-mini-tts |
+| ElevenLabs | Eleven v3 / Flash v2.5 |
+| fal.ai | Kokoro (natural voices) |
+| Gemini | Gemini 2.5 Flash TTS (30 voices) |
+
+Set via `ASYNCAT_TTS_PROVIDER`.
+
+### Image Generation
+
+| Provider | Model |
+|---|---|
+| Local (stable-diffusion.cpp) | Any GGUF checkpoint |
+| Local (ComfyUI) | Any checkpoint via ComfyUI API |
+| OpenAI | DALL-E 3 |
+| fal.ai | Flux Schnell |
+| Stability AI | Stable Image Ultra |
+
+Set via `ASYNCAT_IMAGE_PROVIDER`. The agent's `generate_image` tool respects this automatically.
+
+### Vision
+
+Vision is handled by your active chat provider's multimodal capability (GPT-4o, Claude 3+, Gemini, MiniMax-M2, etc.). Attach an image to any message and it routes through the active model.
 
 ---
 
@@ -231,7 +300,7 @@ Asyncat runs a real agentic loop — not a chatbot wrapper.
 
 ### Tools
 
-The agent has access to 60+ tools across categories:
+The agent has access to 100+ tools across categories:
 
 | Category | Tools |
 |---|---|
@@ -247,6 +316,8 @@ The agent has access to 60+ tools across categories:
 | OS/Process | process_spawn, process_kill, port_scan, disk_usage |
 | Screen | take_screenshot, screen_click, screen_type, window_list |
 | Data | read_pdf, read_csv, json_query, diff_apply, image_describe, ssh_exec |
+| Visual | generate_image, edit_image |
+| Audio | transcribe_audio, synthesize_speech |
 | Workspace | get_notes, create_note, get_tasks, get_events |
 | Plan | todo_write, list_plan |
 | Agent | delegate_task |
@@ -254,9 +325,9 @@ The agent has access to 60+ tools across categories:
 
 ### Skills (Cerebellum)
 
-27 bundled markdown skills in `cli/skills/`. Each skill is a procedural guide loaded when relevant to the current task. The agent can also call `list_skills` / `load_skill` to fetch any skill on demand mid-run.
+36 bundled markdown skills in `den/src/agent/skills/`. Each skill is a procedural guide loaded when relevant to the current task. The agent can also call `list_skills` / `load_skill` to fetch any skill on demand mid-run.
 
-Skills cover: debugging, git, testing, TDD, refactoring, API design, security, performance, CI/CD, Docker, deployment, SQL, logging, and more.
+Skills cover: debugging, git, testing, TDD, refactoring, API design, security, performance, CI/CD, Docker, deployment, SQL, logging, architecture review, code review, data engineering, incident response, monitoring, NextJS, React patterns, report writing, web research, accessibility auditing, and more.
 
 ### Soul
 
@@ -280,9 +351,29 @@ Every agent run is persisted as a session with a full audit trail of tool calls,
 
 Tools are classified as safe / moderate / dangerous. The agent asks for permission before running moderate/dangerous tools. You can approve once, approve for the session, or set a tool as always-allowed. Profiles can pre-approve specific tools so they never interrupt.
 
+### Stop Reasons
+
+When the agent stops for a non-obvious reason, a banner explains why:
+
+| Reason | Cause |
+|---|---|
+| `max_rounds` | Used all available steps — reply to continue |
+| `tool_failure` | Too many consecutive tool errors |
+| `loop_detected` | Repeating tool cycle detected |
+| `reflection_abort` | Agent self-reflected and decided it was stuck |
+
 ### Changes & Revert
 
 File writes and shell commands are tracked per session. View the changes panel to see what the agent touched. Revert a session to roll back file changes using a git stash or directory snapshot checkpoint.
+
+### OS Notifications
+
+Asyncat fires native OS notifications (via Web Notifications API) when:
+- The agent finishes a run
+- The agent needs your approval (`ask_user`)
+- The agent is requesting a risky permission
+
+Clicking a notification focuses the tab directly.
 
 ### MCP
 
@@ -411,7 +502,7 @@ asyncat-oss/
 │   ├── index.js     # Main CLI entry
 │   ├── commands/    # Individual commands (start, stop, models, etc.)
 │   ├── lib/         # TUI helpers, themes, colors
-│   └── skills/      # 27 bundled Cerebellum skills (markdown)
+│   └── skills/      # 36 bundled Cerebellum skills (markdown)
 ├── den/             # Backend API server (Express + SQLite)
 │   └── src/
 │       ├── agent/
@@ -424,15 +515,18 @@ asyncat-oss/
 │       │   ├── skills.js           # Cerebellum skill loader + relevance matching
 │       │   ├── souls/              # Agent persona files (default.md, editable from UI)
 │       │   ├── prompts/            # System prompt builder (soul + skills + memory + tools)
-│       │   └── tools/              # 60+ tool implementations + skillTools.js
-│       └── ai/routes/agentRoutes.js  # All agent HTTP/SSE routes
+│       │   └── tools/              # 100+ tool implementations
+│       └── ai/
+│           └── routes/
+│               ├── aiAgentRoutes.js   # Agent HTTP/SSE routes
+│               └── providerRoutes.js  # STT/TTS/image cloud provider routes
 ├── neko/            # Frontend web UI (Vite + React)
 │   └── src/
 │       ├── Agent/
 │       │   ├── AgentToolsSkillsPage.jsx  # Tools / Skills / Soul / Memory tabs
 │       │   ├── AgentProfilesPage.jsx     # Profile CRUD UI (/agents/profiles)
-│       │   ├── SchedulerPage.jsx         # Scheduled jobs UI (/agents/schedule)
-│       │   └── components/              # AgentRunFeed, AgentChangesPanel, etc.
+│       │   └── SchedulerPage.jsx         # Scheduled jobs UI (/agents/schedule)
+│       ├── Models/                       # Models page + capability provider sections
 │       ├── CommandCenter/               # Main agent run interface + chat
 │       └── sidebar/                     # Dock sidebar with ⌘1–⌘9 shortcuts
 └── data/            # SQLite DB (asyncat.db), MCP config (mcp.json)
@@ -457,18 +551,19 @@ npm run build         # Build frontend for production
 ### Key Files
 
 - `cat` — 2-line launcher
-- `cli/skills/` — 27 bundled Cerebellum skill markdown files
+- `den/src/agent/skills/` — 36 bundled Cerebellum skill markdown files
 - `den/src/agent/souls/default.md` — agent persona (editable from UI at `/agents/tools` → Soul)
-- `den/src/agent/AgentRuntime.js` — ReAct loop, SSE streaming, tool execution, soul override
+- `den/src/agent/AgentRuntime.js` — ReAct loop, SSE streaming, tool execution, stop reason tracking
 - `den/src/agent/ProfileManager.js` — agent profile CRUD (SQLite-backed)
 - `den/src/agent/Scheduler.js` — SQLite-backed cron scheduler
 - `den/src/agent/skills.js` — skill loader with stop-word filtering and relevance scoring
-- `den/src/ai/routes/agentRoutes.js` — all agent HTTP/SSE routes (run, tools, skills, soul, memory, profiles, schedule, mcp, multi)
+- `den/src/ai/routes/aiAgentRoutes.js` — all agent HTTP/SSE routes (run, tools, skills, soul, memory, profiles, schedule, mcp, multi)
+- `den/src/ai/routes/providerRoutes.js` — STT/TTS/image cloud provider adapters (fal.ai, ElevenLabs, Gemini, Stability AI, OpenAI)
 - `neko/src/Agent/AgentToolsSkillsPage.jsx` — Tools / Skills / Soul / Memory tabs
 - `neko/src/Agent/AgentProfilesPage.jsx` — Profile management UI (`/agents/profiles`)
 - `neko/src/Agent/SchedulerPage.jsx` — Scheduler UI (`/agents/schedule`)
+- `neko/src/Models/CapabilityProvidersSection.jsx` — STT/TTS/image/vision provider selection UI
 - `neko/src/CommandCenter/CommandCenterV2Enhanced.jsx` — main agent run UI with profile picker
-- `neko/src/CommandCenter/commandCenterApi.js` — all API client methods (agentApi, profilesApi, schedulerApi, chatApi, filesApi)
 - `neko/src/sidebar/Sidebar.jsx` — dock sidebar (⌘1–⌘9 shortcuts)
 
 ### Database
