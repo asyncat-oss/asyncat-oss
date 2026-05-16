@@ -1,7 +1,9 @@
 // BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
 import { useMemo, useState, useCallback, memo, useEffect, useRef } from 'react';
-import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2, FolderOpen } from 'lucide-react';
 import { fileIconMeta } from '../../../files/fileUtils.js';
+import { filesApi } from '../../api/index.js';
 import { tokenTracker } from '../stats/LocalModelStats';
 
 import katex from 'katex';
@@ -244,6 +246,153 @@ const getUrlDomain = (url) => {
   }
 };
 
+// ─── File-path chip helpers ──────────────────────────────────────────────────
+
+let _rootsCache = null;
+async function getCachedRoots() {
+  if (_rootsCache) return _rootsCache;
+  try {
+    const res = await filesApi.getRoots();
+    _rootsCache = res?.roots || [];
+  } catch {
+    _rootsCache = [];
+  }
+  return _rootsCache;
+}
+
+/**
+ * Resolve rawPath → react-router URL string for the Files page, or null.
+ * Returns null when the path cannot be mapped to any known root
+ * (e.g. system paths like /Library/…, ~/Library/…).
+ */
+function resolvePathToFilesUrl(rawPath, roots) {
+  // Normalise: strip trailing slash for comparison
+  const p = rawPath.replace(/\/$/, '') || '/';
+
+  // Try every known root (absolute prefix match)
+  for (const root of roots) {
+    const rp = root.path.endsWith('/') ? root.path : root.path + '/';
+    if (p === root.path || p === root.path.replace(/\/$/, '')) {
+      return `/files?rootId=${encodeURIComponent(root.id)}&path=.`;
+    }
+    if (p.startsWith(rp)) {
+      const relative = p.slice(rp.length);
+      return `/files?rootId=${encodeURIComponent(root.id)}&path=${encodeURIComponent(relative)}`;
+    }
+  }
+
+  // Truly relative path (no leading / or ~) → workspace default
+  if (p && !p.startsWith('/') && !p.startsWith('~')) {
+    return `/files?rootId=workspace&path=${encodeURIComponent(rawPath.replace(/\/$/, ''))}`;
+  }
+
+  // Absolute path outside all roots (system dirs, home dir shortcuts, etc.) → no navigation
+  return null;
+}
+
+/**
+ * Heuristic: does this string look like a file path?
+ * Used for backtick-wrapped content — more permissive than the bare-text regex.
+ * macOS paths commonly contain spaces (e.g. "Application Support") so we allow them.
+ */
+function looksLikeAnyFilePath(str) {
+  if (!str || str.length < 4) return false;
+  // Not a URL
+  if (/^https?:\/\//i.test(str)) return false;
+  // Must contain a forward slash
+  if (!str.includes('/')) return false;
+  // Must not contain shell-special or quoting chars
+  if (/["'<>[\]{}|*?]/.test(str)) return false;
+  // Normalise leading ./ ../ ~/
+  const clean = str.replace(/^(?:\.{1,2}|~)\//, '/');
+  const parts = clean.split('/').filter(Boolean);
+  if (parts.length < 2) return false;
+  const last = parts[parts.length - 1];
+  const hasExt = /\.\w{1,12}$/.test(last);
+  return hasExt || parts.length >= 3;
+}
+
+/** Clickable file-path chip — navigates to Files page on click. */
+const InlineFilePath = ({ rawPath }) => {
+  const navigate = useNavigate();
+  const [state, setState] = useState('idle'); // 'idle' | 'loading' | 'outside'
+
+  // Derive display info from path
+  const segments = rawPath.replace(/\/$/, '').split('/').filter(Boolean);
+  const fileName = segments[segments.length - 1] || rawPath;
+  const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+  // Treat as directory if no extension or if it ends with /
+  const isDir = !ext || ext.length > 12 || rawPath.endsWith('/');
+  const { Icon, color } = fileIconMeta(ext, isDir ? 'dir' : 'file');
+
+  // Display: last 2 segments, with ellipsis prefix when path is long
+  const displayPath = segments.length > 2
+    ? `…/${segments.slice(-2).join('/')}`
+    : (rawPath.replace(/\/$/, '') || rawPath);
+
+  const handleClick = useCallback(async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (state === 'loading') return;
+    setState('loading');
+    try {
+      const roots = await getCachedRoots();
+      const url = resolvePathToFilesUrl(rawPath, roots);
+      if (url) {
+        navigate(url);
+        setState('idle');
+      } else {
+        // Path is outside every known root (system path, home dir, etc.)
+        setState('outside');
+        setTimeout(() => setState('idle'), 2200);
+      }
+    } catch {
+      setState('idle');
+    }
+  }, [rawPath, navigate, state]);
+
+  const isOutside = state === 'outside';
+  const isLoading = state === 'loading';
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={isLoading}
+      title={isOutside ? 'Path is outside the workspace' : rawPath}
+      className={[
+        // Base: matches existing <code> chip style
+        'inline-flex items-center gap-1 mx-0.5 px-1.5 py-0.5 rounded font-mono leading-normal align-middle',
+        'text-[0.88em] max-w-[32ch]',
+        'transition-all duration-150 cursor-pointer select-none',
+        // At rest: looks like the code chip
+        'bg-gray-100 dark:bg-gray-800 midnight:bg-slate-700',
+        'border border-transparent',
+        // Hover: reveals interactivity with indigo tint
+        isOutside
+          ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-700'
+          : [
+              'text-[#5555a0] dark:text-indigo-300 midnight:text-indigo-300',
+              'hover:bg-indigo-50 dark:hover:bg-indigo-950/40 midnight:hover:bg-indigo-950/40',
+              'hover:border-indigo-200/80 dark:hover:border-indigo-700/60 midnight:hover:border-indigo-700/60',
+              'hover:text-[#4444880] dark:hover:text-indigo-200',
+            ].join(' '),
+      ].join(' ')}
+    >
+      {isLoading ? (
+        <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0 inline-block" />
+      ) : isOutside ? (
+        <span className="flex-shrink-0 text-[0.75em]">⚠</span>
+      ) : isDir ? (
+        <FolderOpen className={`w-3 h-3 flex-shrink-0 ${color}`} />
+      ) : (
+        <Icon className={`w-3 h-3 flex-shrink-0 ${color}`} />
+      )}
+      <span className="truncate">{isOutside ? 'outside workspace' : displayPath}</span>
+    </button>
+  );
+};
+
 const cleanMarkdownLabel = (value = '') => value
   .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
   .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
@@ -422,11 +571,12 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
     // Plain text segment — scan for all inline patterns in one pass
     const t = seg.value;
     // Combined regex — term annotations first (before [label](url) to avoid conflict),
-    // then markdown images, markdown links, bare URLs, bold, italic, code, citations.
+    // then markdown images, markdown links, bare URLs, bold, italic, code, citations,
+    // and bare absolute file paths (3+ segments, e.g. /Users/foo/bar.js).
     // Groups: 1=annot-term, 2=annot-def, 3=img-alt, 4=img-url,
     //         5=md-label, 6=md-url, 7=bare-url, 8=bold, 9=italic,
-    //         10=code, 11=citation
-    const inlineRegex = /\[\[([^\]|]+)\|([^\]]+)\]\]|!\[([^\]]*)\]\(((?:https?:\/\/|data:image\/)[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|((?:https?:\/\/|data:image\/)[^\s<>"')\]]+)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\*?\(from ([^)]+)\)\*?/g;
+    //         10=code, 11=citation, 12=abs-file-path
+    const inlineRegex = /\[\[([^\]|]+)\|([^\]]+)\]\]|!\[([^\]]*)\]\(((?:https?:\/\/|data:image\/)[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|((?:https?:\/\/|data:image\/)[^\s<>"')\]]+)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\*?\(from ([^)]+)\)\*?|(\/[\w.\-~@]+(?:\/[\w.\-~@]+){2,})/g;
 
     let last = 0;
     let m;
@@ -468,12 +618,16 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
         // *italic*
         parts.push(<em key={`i-${key++}`} className="italic">{m[9]}</em>);
       } else if (m[10] !== undefined) {
-        // `code`
-        parts.push(
-          <code key={`c-${key++}`} className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-700 rounded text-sm font-mono">
-            {m[10]}
-          </code>
-        );
+        // `code` — if it looks like a file path, render as clickable chip; else plain code
+        if (looksLikeAnyFilePath(m[10])) {
+          parts.push(<InlineFilePath key={`fp-${key++}`} rawPath={m[10]} />);
+        } else {
+          parts.push(
+            <code key={`c-${key++}`} className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-700 rounded text-sm font-mono">
+              {m[10]}
+            </code>
+          );
+        }
       } else if (m[11] !== undefined) {
         // (from Source)
         parts.push(
@@ -481,6 +635,9 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
             (from {m[11]})
           </span>
         );
+      } else if (m[12] !== undefined) {
+        // bare absolute file path: /Users/foo/bar/baz.ext
+        parts.push(<InlineFilePath key={`absfp-${key++}`} rawPath={m[12]} />);
       }
 
       last = m.index + m[0].length;
