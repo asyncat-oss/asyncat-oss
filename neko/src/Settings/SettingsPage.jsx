@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { SlidersHorizontal, Lock, Moon, Sun, Server, LogOut, ArrowUpCircle, HardDrive } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
@@ -20,58 +20,47 @@ const SettingsPage = () => {
   const { currentWorkspace, refreshWorkspaces, updateCurrentWorkspace } = useWorkspace();
 
   // UI state
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState('system');
 
-  const activeTab = tab || 'general';
+  const activeTab = tab === 'profile' ? 'general' : (tab || 'general');
 
-  // Load saved theme from localStorage on component mount
-  useEffect(() => {
-    if (localStorage.theme === 'dark') {
+  const applyTheme = useCallback((mode) => {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.remove('dark', 'midnight');
+    if (mode === 'dark' || (mode === 'system' && prefersDark)) {
       document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('midnight');
-      setTheme('dark');
-    } else if (localStorage.theme === 'midnight') {
-      document.documentElement.classList.add('midnight');
-      document.documentElement.classList.remove('dark');
-      setTheme('midnight');
-    } else if (localStorage.theme === 'light') {
-      document.documentElement.classList.remove('dark', 'midnight');
-      setTheme('light');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.classList.toggle('dark', prefersDark);
-      document.documentElement.classList.remove('midnight');
-      setTheme(prefersDark ? 'dark' : 'light');
     }
+  }, []);
+
+  useEffect(() => {
+    const storedTheme = localStorage.theme;
+    const initialTheme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'system';
+    if (storedTheme === 'midnight') localStorage.removeItem('theme');
+    applyTheme(initialTheme);
+    setTheme(initialTheme);
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
       if (!('theme' in localStorage)) {
         document.documentElement.classList.toggle('dark', e.matches);
         document.documentElement.classList.remove('midnight');
-        setTheme(e.matches ? 'dark' : 'light');
+        setTheme('system');
       }
     };
 
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
+  }, [applyTheme]);
 
-  // Set theme function
   const setThemeMode = (mode) => {
-    document.documentElement.classList.remove('dark', 'midnight');
-
-    if (mode === 'dark') {
-      localStorage.theme = 'dark';
-      document.documentElement.classList.add('dark');
-    } else if (mode === 'midnight') {
-      localStorage.theme = 'midnight';
-      document.documentElement.classList.add('midnight');
+    const nextTheme = mode === 'dark' || mode === 'light' ? mode : 'system';
+    if (nextTheme === 'system') {
+      localStorage.removeItem('theme');
     } else {
-      localStorage.theme = 'light';
+      localStorage.theme = nextTheme;
     }
-
-    setTheme(mode);
+    applyTheme(nextTheme);
+    setTheme(nextTheme);
   };
 
   // Handle workspace deletion
@@ -103,8 +92,6 @@ const SettingsPage = () => {
       icon:
         theme === 'dark' ? (
           <Moon className="w-4 h-4" />
-        ) : theme === 'midnight' ? (
-          <Moon className="w-4 h-4 text-indigo-400" />
         ) : (
           <Sun className="w-4 h-4" />
         ),
@@ -141,7 +128,7 @@ const SettingsPage = () => {
             onWorkspaceLeft={handleWorkspaceLeft}
           />
         );
-      case 'security':    return <SecuritySection />;
+      case 'security':    return <SecuritySection session={session} />;
       case 'appearance':  return <AppearanceSection theme={theme} setThemeMode={setThemeMode} />;
       case 'server':      return <ServerSection session={session} />;
       case 'storage':     return <StorageSection />;

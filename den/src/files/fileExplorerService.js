@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 
 const SKIP_NAMES = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dist', 'build', 'venv', '.venv']);
 const TEXT_PREVIEW_LIMIT = 5 * 1024 * 1024;
+const CONTENT_SEARCH_SIZE_LIMIT = 512 * 1024;
 const SEARCH_COLLECT_LIMIT = 2000;
 const SOURCE_WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico']);
@@ -56,6 +57,33 @@ const MIME_TYPES = {
   css: 'text/css',
   csv: 'text/csv',
 };
+
+function formatPermissions(mode) {
+  const oct = (mode & 0o777).toString(8).padStart(3, '0');
+  const symbolic = [
+    mode & 0o400 ? 'r' : '-', mode & 0o200 ? 'w' : '-', mode & 0o100 ? 'x' : '-',
+    mode & 0o040 ? 'r' : '-', mode & 0o020 ? 'w' : '-', mode & 0o010 ? 'x' : '-',
+    mode & 0o004 ? 'r' : '-', mode & 0o002 ? 'w' : '-', mode & 0o001 ? 'x' : '-',
+  ].join('');
+  return { octal: oct, symbolic };
+}
+
+function contentMatchSnippet(absolutePath, needle) {
+  try {
+    const stat = fs.statSync(absolutePath);
+    if (stat.size > CONTENT_SEARCH_SIZE_LIMIT) return null;
+    const content = fs.readFileSync(absolutePath, 'utf8');
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].toLowerCase().includes(needle)) {
+        return { line: i + 1, snippet: lines[i].trim().slice(0, 150) };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function existsDir(dir) {
   try {
@@ -207,6 +235,7 @@ function entryMeta(rootPath, absolutePath, name = path.basename(absolutePath)) {
     isEditable: isDir ? false : isEditableExt(ext) && stat.size <= TEXT_PREVIEW_LIMIT,
     childrenCount: isDir ? countChildren(absolutePath) : undefined,
     hidden: name.startsWith('.'),
+    permissions: formatPermissions(stat.mode),
   };
 }
 
@@ -337,35 +366,45 @@ function sortSearchEntries(entries, needle) {
   });
 }
 
-export function searchEntries({ rootId = 'workspace', relativePath = '.', query = '', includeHidden = false, maxResults = 80, sort = 'relevance', order = 'asc' }) {
+export function searchEntries({ rootId = 'workspace', relativePath = '.', query = '', includeHidden = false, maxResults = 80, sort = 'relevance', order = 'asc', contentQuery = '' }) {
   const ctx = resolveExplorerPath(rootId, relativePath);
-  const needle = query.trim().toLowerCase();
-  if (!needle) return { success: true, root: publicRoot(ctx.root), path: ctx.relativePath, entries: [] };
+  const nameNeedle = query.trim().toLowerCase();
+  const contentNeedle = contentQuery.trim().toLowerCase();
+  if (!nameNeedle && !contentNeedle) return { success: true, root: publicRoot(ctx.root), path: ctx.relativePath, entries: [] };
 
-  const results = [];
+  const seen = new Map();
   function walk(dir) {
-    if (results.length >= SEARCH_COLLECT_LIMIT) return;
+    if (seen.size >= SEARCH_COLLECT_LIMIT) return;
     let names = [];
     try { names = fs.readdirSync(dir); } catch { return; }
     names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
 
     for (const name of names) {
-      if (results.length >= SEARCH_COLLECT_LIMIT) break;
+      if (seen.size >= SEARCH_COLLECT_LIMIT) break;
       if (!includeHidden && (name.startsWith('.') || SKIP_NAMES.has(name))) continue;
       const full = path.join(dir, name);
       let meta;
       try { meta = entryMeta(ctx.rootPath, full, name); } catch { continue; }
-      if (name.toLowerCase().includes(needle)) results.push(meta);
+
+      if (nameNeedle && name.toLowerCase().includes(nameNeedle) && !seen.has(meta.path)) {
+        seen.set(meta.path, meta);
+      }
+      if (contentNeedle && meta.type === 'file' && !BINARY_EXTS.has(meta.ext || '') && !seen.has(meta.path)) {
+        const match = contentMatchSnippet(full, contentNeedle);
+        if (match) seen.set(meta.path, { ...meta, snippet: match.snippet, snippetLine: match.line });
+      }
       if (meta.type === 'dir') walk(full);
     }
   }
   walk(ctx.absolutePath);
 
+  const results = [...seen.values()];
+  const effectiveNeedle = nameNeedle || contentNeedle;
   return {
     success: true,
     root: publicRoot(ctx.root),
     path: ctx.relativePath,
-    entries: (sort === 'relevance' ? sortSearchEntries(results, needle) : sortEntries(results, sort, order)).slice(0, maxResults),
+    entries: (sort === 'relevance' && nameNeedle ? sortSearchEntries(results, effectiveNeedle) : sortEntries(results, sort, order)).slice(0, maxResults),
   };
 }
 
@@ -455,6 +494,84 @@ export function batchCopyEntries({ rootId = 'workspace', entries = [] }) {
     }
   }
   return { success: errors.length === 0, entries: copied, errors };
+}
+
+function archiveBaseName(name) {
+  return name
+    .replace(/\.tar\.gz$/i, '')
+    .replace(/\.tar\.bz2$/i, '')
+    .replace(/\.tar\.xz$/i, '')
+    .replace(/\.(tgz|tbz|zip|tar|gz|bz2|xz)$/i, '');
+}
+
+function addDirToZip(zipFolder, absoluteDir) {
+  for (const child of fs.readdirSync(absoluteDir)) {
+    const childPath = path.join(absoluteDir, child);
+    const stat = fs.statSync(childPath);
+    if (stat.isDirectory()) {
+      addDirToZip(zipFolder.folder(child), childPath);
+    } else {
+      zipFolder.file(child, fs.readFileSync(childPath));
+    }
+  }
+}
+
+export async function extractArchive({ rootId = 'workspace', relativePath, destination }) {
+  const { default: JSZip } = await import('jszip');
+  const ctx = resolveExplorerPath(rootId, relativePath);
+  if (!fs.existsSync(ctx.absolutePath)) throw createRouteError('Archive not found', 404, 'NOT_FOUND');
+
+  const name = path.basename(relativePath);
+  const lowerName = name.toLowerCase();
+  const destRelative = destination || path.join(path.dirname(relativePath), archiveBaseName(name));
+  const destCtx = resolveExplorerPath(rootId, destRelative);
+  fs.mkdirSync(destCtx.absolutePath, { recursive: true });
+
+  if (lowerName.endsWith('.zip')) {
+    const zip = await JSZip.loadAsync(fs.readFileSync(ctx.absolutePath));
+    for (const [entryName, zipEntry] of Object.entries(zip.files)) {
+      const outPath = path.join(destCtx.absolutePath, entryName);
+      if (zipEntry.dir) {
+        fs.mkdirSync(outPath, { recursive: true });
+      } else {
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, await zipEntry.async('nodebuffer'));
+      }
+    }
+  } else if (lowerName.endsWith('.tar') || lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz') || lowerName.endsWith('.tar.bz2') || lowerName.endsWith('.tbz')) {
+    const { execSync } = await import('child_process');
+    execSync(`tar -xf "${ctx.absolutePath}" -C "${destCtx.absolutePath}"`, { stdio: 'pipe' });
+  } else if (lowerName.endsWith('.gz')) {
+    const zlib = await import('zlib');
+    const outName = path.basename(relativePath, '.gz');
+    const outPath = path.join(destCtx.absolutePath, outName);
+    const compressed = fs.readFileSync(ctx.absolutePath);
+    fs.writeFileSync(outPath, zlib.gunzipSync(compressed));
+  } else {
+    throw createRouteError('Unsupported archive format', 400, 'UNSUPPORTED_FORMAT');
+  }
+
+  return { success: true, extractedTo: destCtx.relativePath };
+}
+
+export async function createArchive({ rootId = 'workspace', paths = [], destination }) {
+  const { default: JSZip } = await import('jszip');
+  if (!destination) throw createRouteError('destination is required', 400, 'MISSING_DESTINATION');
+  const zip = new JSZip();
+  for (const relPath of paths) {
+    const ctx = resolveExplorerPath(rootId, relPath);
+    if (!fs.existsSync(ctx.absolutePath)) continue;
+    const entryName = path.basename(ctx.absolutePath);
+    if (fs.statSync(ctx.absolutePath).isDirectory()) {
+      addDirToZip(zip.folder(entryName), ctx.absolutePath);
+    } else {
+      zip.file(entryName, fs.readFileSync(ctx.absolutePath));
+    }
+  }
+  const destCtx = resolveExplorerPath(rootId, destination);
+  fs.mkdirSync(path.dirname(destCtx.absolutePath), { recursive: true });
+  fs.writeFileSync(destCtx.absolutePath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+  return { success: true, archivePath: destCtx.relativePath };
 }
 
 export function publicRoot(root) {

@@ -153,8 +153,6 @@ const WelcomePage = ({ session, onTeamCreated }) => {
       document.documentElement.classList.remove('midnight');
     } else if (themePref === 'light') {
       document.documentElement.classList.remove('dark', 'midnight');
-    } else if (themePref === 'midnight') {
-      document.documentElement.classList.add('dark', 'midnight');
     }
   }, [themePref]);
 

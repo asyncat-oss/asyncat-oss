@@ -174,10 +174,53 @@ DockSep.propTypes = {
   dockPosition: PropTypes.oneOf(["bottom", "left", "right"]),
 };
 
+const formatShortcut = (shortcut) => {
+  if (!shortcut?.key) return "";
+  const parts = [];
+  if (shortcut.meta) parts.push("⌘");
+  else if (shortcut.ctrl) parts.push("Ctrl");
+  parts.push(shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key);
+  return parts.join(shortcut.meta ? "" : "+");
+};
+
+const SidebarNavItem = memo(({ icon, label, shortcut, onClick, isActive }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={shortcut ? `${label} ${shortcut}` : label}
+    className={`
+      w-full h-10 flex items-center gap-3 rounded-lg px-3 transition-colors
+      ${isActive
+        ? "bg-gray-100 text-gray-950 dark:bg-gray-800 dark:text-white"
+        : "text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+      }
+    `}
+  >
+    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
+      {icon}
+    </span>
+    <span className="hidden min-w-0 flex-1 truncate text-left text-sm font-medium sm:block">
+      {label}
+    </span>
+    {shortcut ? (
+      <span className="hidden flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500 sm:block">
+        {shortcut}
+      </span>
+    ) : null}
+  </button>
+));
+SidebarNavItem.displayName = "SidebarNavItem";
+SidebarNavItem.propTypes = {
+  icon: PropTypes.node,
+  label: PropTypes.string.isRequired,
+  shortcut: PropTypes.string,
+  onClick: PropTypes.func,
+  isActive: PropTypes.bool,
+};
+
 // ── Main Dock Component ───────────────────────────────────────────────────────
 
 const DynamicSidebar = ({
-  onPageChange,
   session,
   onNewChat,
   basePage,
@@ -187,13 +230,22 @@ const DynamicSidebar = ({
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [isDockVisible, setIsDockVisible] = useState(() => {
-    return localStorage.getItem('dockVisibility') !== 'hover';
+  const [navigationStyle, setNavigationStyle] = useState(() => {
+    return localStorage.getItem('navigationStyle') || 'dock';
   });
-
+  const [dockVisibility, setDockVisibility] = useState(() => {
+    return localStorage.getItem('dockVisibility') || 'always';
+  });
   const [dockPosition, setDockPosition] = useState(() => {
     return localStorage.getItem('dockPosition') || 'bottom';
   });
+  const [topBarVisible, setTopBarVisible] = useState(() => {
+    return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
+  });
+  const [isDockVisible, setIsDockVisible] = useState(() => {
+    return localStorage.getItem('dockVisibility') !== 'hover';
+  });
+  const [shortcuts, setShortcuts] = useState(loadKeyboardShortcuts);
 
   // Profile state (for dock avatar only)
   const API_URL = import.meta.env.VITE_USER_URL;
@@ -219,46 +271,37 @@ const DynamicSidebar = ({
   }, [commandCenterTarget, navigate]);
 
   useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === 'dockVisibility') {
-        setIsDockVisible(e.newValue !== 'hover');
-      }
-      if (e.key === 'dockPosition') {
-        setDockPosition(e.newValue || 'bottom');
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const dockVis = localStorage.getItem('dockVisibility');
-      setIsDockVisible(dockVis !== 'hover');
-      const dockPos = localStorage.getItem('dockPosition') || 'bottom';
-      setDockPosition(dockPos);
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handleDockPositionChange = () => {
+    const syncNavigationPreferences = () => {
+      const nextDockVisibility = localStorage.getItem('dockVisibility') || 'always';
+      setNavigationStyle(localStorage.getItem('navigationStyle') || 'dock');
+      setDockVisibility(nextDockVisibility);
       setDockPosition(localStorage.getItem('dockPosition') || 'bottom');
+      setTopBarVisible(localStorage.getItem('topMenuBarVisibility') !== 'hidden');
+      setIsDockVisible(nextDockVisibility !== 'hover');
     };
-    window.addEventListener('dock-position-changed', handleDockPositionChange);
-    return () => window.removeEventListener('dock-position-changed', handleDockPositionChange);
+    window.addEventListener('storage', syncNavigationPreferences);
+    window.addEventListener('navigation-style-changed', syncNavigationPreferences);
+    window.addEventListener('dock-visibility-changed', syncNavigationPreferences);
+    window.addEventListener('dock-position-changed', syncNavigationPreferences);
+    window.addEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
+    return () => {
+      window.removeEventListener('storage', syncNavigationPreferences);
+      window.removeEventListener('navigation-style-changed', syncNavigationPreferences);
+      window.removeEventListener('dock-visibility-changed', syncNavigationPreferences);
+      window.removeEventListener('dock-position-changed', syncNavigationPreferences);
+      window.removeEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
+    };
   }, []);
 
   useEffect(() => {
-    if (localStorage.getItem('dockVisibility') !== 'hover') return;
+    if (dockVisibility !== 'hover') return;
 
     const handleMouseMove = (e) => {
-      const pos = localStorage.getItem('dockPosition') || 'bottom';
-      if (pos === 'bottom' && e.clientY > window.innerHeight - 100) {
+      if (dockPosition === 'bottom' && e.clientY > window.innerHeight - 100) {
         setIsDockVisible(true);
-      } else if (pos === 'left' && e.clientX < 100) {
+      } else if (dockPosition === 'left' && e.clientX < 100) {
         setIsDockVisible(true);
-      } else if (pos === 'right' && e.clientX > window.innerWidth - 100) {
+      } else if (dockPosition === 'right' && e.clientX > window.innerWidth - 100) {
         setIsDockVisible(true);
       }
     };
@@ -274,7 +317,7 @@ const DynamicSidebar = ({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, []);
+  }, [dockPosition, dockVisibility]);
 
   // Fetch profile data (for dock avatar)
   const userId = useMemo(() => session?.user?.id, [session?.user?.id]);
@@ -321,8 +364,6 @@ const DynamicSidebar = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e) => {
-      const shortcuts = loadKeyboardShortcuts();
-
       const match = Object.values(shortcuts).find(s => {
         const keyMatch = s.key === e.key;
         const ctrlMatch = s.ctrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey);
@@ -334,7 +375,7 @@ const DynamicSidebar = ({
 
       switch (match.action) {
         case 'openSearch': onSearchOpen(true); break;
-        case 'openSettings': navigate("/settings/profile"); break;
+        case 'openSettings': navigate("/settings/general"); break;
         case 'newChat': onNewChat(); break;
         case 'navHome': openCommandCenter(); break;
         case 'navChat': navigate("/all-chats"); break;
@@ -350,8 +391,7 @@ const DynamicSidebar = ({
     };
 
     const handleShortcutsChange = () => {
-      document.removeEventListener("keydown", handler);
-      document.addEventListener("keydown", handler);
+      setShortcuts(loadKeyboardShortcuts());
     };
 
     document.addEventListener("keydown", handler);
@@ -361,7 +401,7 @@ const DynamicSidebar = ({
       document.removeEventListener("keydown", handler);
       window.removeEventListener('keyboard-shortcuts-changed', handleShortcutsChange);
     };
-  }, [onNewChat, openCommandCenter, navigate, onSearchOpen]);
+  }, [onNewChat, openCommandCenter, navigate, onSearchOpen, shortcuts]);
 
   // Active states
   const isOnHome = basePage === "home";
@@ -388,10 +428,149 @@ const DynamicSidebar = ({
     right: 'fixed right-0 top-0 bottom-0 w-24 z-40',
   };
 
+  const shortcutByAction = useMemo(() => {
+    return Object.values(shortcuts).reduce((acc, shortcut) => {
+      acc[shortcut.action] = formatShortcut(shortcut);
+      return acc;
+    }, {});
+  }, [shortcuts]);
+
+  const labelWithShortcut = useCallback((label, action) => {
+    const shortcut = shortcutByAction[action];
+    return shortcut ? `${label}  ${shortcut}` : label;
+  }, [shortcutByAction]);
+
+  const workspaceIcon = (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
+
+  const calendarIcon = (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+
+  const primaryItems = [
+    { label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
+    { label: "Workspace", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
+    { label: "Calendar", action: "navCalendar", onClick: () => navigate("/calendar"), active: isOnCalendar, icon: calendarIcon },
+    { label: "Files", action: "navFiles", onClick: () => navigate("/files"), active: isOnFiles, icon: <HardDrive className="w-5 h-5" /> },
+  ];
+
+  const appItems = [
+    { label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
+    { label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
+    { label: "Scheduler", action: "navScheduler", onClick: () => navigate("/scheduler"), active: isOnScheduler, icon: <Clock className="w-5 h-5" /> },
+    { label: "Profiles", action: "navProfiles", onClick: () => navigate("/profiles"), active: isOnProfiles, icon: <Layers className="w-5 h-5" /> },
+  ];
+
+  const settingsIcon = profilePictureUrl || profileInitials ? (
+    <ProfileImage
+      size="w-6 h-6"
+      src={profilePictureUrl}
+      initials={profileInitials}
+      hasError={profileImageError}
+      onError={() => setProfileImageError(true)}
+      onLoad={() => setProfileImageError(false)}
+    />
+  ) : (
+    <Settings className="w-5 h-5" />
+  );
+
+  if (navigationStyle === 'sidebar') {
+    return (
+      <>
+        <aside
+          className={`
+            fixed left-0 ${topBarVisible ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}
+            z-50 flex w-16 flex-col border-r border-gray-200/80 bg-white/95 shadow-sm backdrop-blur-xl
+            dark:border-gray-800 dark:bg-gray-950/95 sm:w-56
+          `}
+        >
+          <button
+            type="button"
+            onClick={openCommandCenter}
+            className="flex h-14 items-center gap-3 border-b border-gray-200/80 px-4 text-left dark:border-gray-800"
+            title={labelWithShortcut("Command Center", "navHome")}
+          >
+            <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-900">
+              <img src="/cat.svg" alt="Asyncat" className="h-5 w-5" />
+              {hasActiveRuns && (
+                <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
+              )}
+            </span>
+            <span className="hidden min-w-0 sm:block">
+              <span className="block truncate text-sm font-semibold text-gray-950 dark:text-white">
+                Asyncat
+              </span>
+              <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+                {conversationTitle || "Command Center"}
+              </span>
+            </span>
+          </button>
+
+          <nav className="flex-1 overflow-y-auto px-2 py-3">
+            <div className="space-y-1">
+              {primaryItems.map((item) => (
+                <SidebarNavItem
+                  key={item.label}
+                  icon={item.icon}
+                  label={item.label}
+                  shortcut={shortcutByAction[item.action]}
+                  onClick={item.onClick}
+                  isActive={item.active}
+                />
+              ))}
+            </div>
+
+            <div className="my-3 h-px bg-gray-200 dark:bg-gray-800" />
+
+            <div className="space-y-1">
+              {appItems.map((item) => (
+                <SidebarNavItem
+                  key={item.label}
+                  icon={item.icon}
+                  label={item.label}
+                  shortcut={shortcutByAction[item.action]}
+                  onClick={item.onClick}
+                  isActive={item.active}
+                />
+              ))}
+              <SidebarNavItem
+                icon={<Trash2 className="w-5 h-5" />}
+                label="Trash"
+                onClick={() => navigate("/trash")}
+                isActive={isOnTrash}
+              />
+            </div>
+          </nav>
+
+          <div className="border-t border-gray-200/80 p-2 dark:border-gray-800">
+            <SidebarNavItem
+              icon={settingsIcon}
+              label="Settings"
+              shortcut={shortcutByAction.openSettings}
+              onClick={() => navigate("/settings/general")}
+              isActive={isOnSettings}
+            />
+          </div>
+        </aside>
+        <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} />
+      </>
+    );
+  }
+
   return (
     <>
       {/* ── Hover Trigger Zone (only when dockVisibility === 'hover') ── */}
-      {localStorage.getItem('dockVisibility') === 'hover' && !isDockVisible && (
+      {dockVisibility === 'hover' && !isDockVisible && (
         <div
           className={hoverTriggerClasses[dockPosition]}
           onMouseEnter={() => setIsDockVisible(true)}
@@ -413,19 +592,19 @@ const DynamicSidebar = ({
           ${isDockVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}
         `}
         onMouseEnter={() => {
-          if (localStorage.getItem('dockVisibility') === 'hover') {
+          if (dockVisibility === 'hover') {
             setIsDockVisible(true);
           }
         }}
         onMouseLeave={() => {
-          if (localStorage.getItem('dockVisibility') === 'hover') {
+          if (dockVisibility === 'hover') {
             setIsDockVisible(false);
           }
         }}
       >
         {/* Logo — command center */}
         <DockItem
-          label={conversationTitle ? `Command Center · ${conversationTitle}` : "Command Center"}
+          label={conversationTitle ? labelWithShortcut(`Command Center · ${conversationTitle}`, "navHome") : labelWithShortcut("Command Center", "navHome")}
           onClick={openCommandCenter}
           isActive={isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")}
           dockPosition={dockPosition}
@@ -443,7 +622,7 @@ const DynamicSidebar = ({
 
         {/* History — navigates to all chats history */}
         <DockItem
-          label="History  ⌘2"
+          label={labelWithShortcut("History", "navChat")}
           onClick={() => navigate("/all-chats")}
           isActive={isOnConversations}
           dockPosition={dockPosition}
@@ -453,36 +632,27 @@ const DynamicSidebar = ({
 
         {/* Workspace — navigates directly to projects page */}
         <DockItem
-          label="Workspace  ⌘3"
+          label={labelWithShortcut("Workspace", "navWorkspace")}
           onClick={() => navigate("/workspace")}
           isActive={isOnWorkspace}
           dockPosition={dockPosition}
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="2" y1="12" x2="22" y2="12" />
-            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-          </svg>
+          {workspaceIcon}
         </DockItem>
 
         {/* Calendar — direct navigate */}
         <DockItem
-          label="Calendar  ⌘4"
+          label={labelWithShortcut("Calendar", "navCalendar")}
           onClick={() => navigate("/calendar")}
           isActive={isOnCalendar}
           dockPosition={dockPosition}
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
+          {calendarIcon}
         </DockItem>
 
         {/* Files — direct navigate */}
         <DockItem
-          label="Files  ⌘5"
+          label={labelWithShortcut("Files", "navFiles")}
           onClick={() => navigate("/files")}
           isActive={isOnFiles}
           dockPosition={dockPosition}
@@ -494,7 +664,7 @@ const DynamicSidebar = ({
 
         {/* Models — standalone app */}
         <DockItem
-          label="Models  ⌘6"
+          label={labelWithShortcut("Models", "navModels")}
           onClick={() => navigate("/models")}
           isActive={isOnModels}
           dockPosition={dockPosition}
@@ -504,7 +674,7 @@ const DynamicSidebar = ({
 
         {/* Tools & Skills — standalone app */}
         <DockItem
-          label="Tools & Skills  ⌘7"
+          label={labelWithShortcut("Tools & Skills", "navTools")}
           onClick={() => navigate("/tools")}
           isActive={isOnTools}
           dockPosition={dockPosition}
@@ -514,7 +684,7 @@ const DynamicSidebar = ({
 
         {/* Scheduler */}
         <DockItem
-          label="Scheduler  ⌘8"
+          label={labelWithShortcut("Scheduler", "navScheduler")}
           onClick={() => navigate("/scheduler")}
           isActive={isOnScheduler}
           dockPosition={dockPosition}
@@ -524,7 +694,7 @@ const DynamicSidebar = ({
 
         {/* Profiles */}
         <DockItem
-          label="Profiles  ⌘9"
+          label={labelWithShortcut("Profiles", "navProfiles")}
           onClick={() => navigate("/profiles")}
           isActive={isOnProfiles}
           dockPosition={dockPosition}
@@ -546,34 +716,22 @@ const DynamicSidebar = ({
 
         {/* Settings/Profile — navigates to unified settings page */}
         <DockItem
-          label="Settings & Profile"
-          onClick={() => navigate("/settings/profile")}
+          label={labelWithShortcut("Settings", "openSettings")}
+          onClick={() => navigate("/settings/general")}
           isActive={isOnSettings}
           dockPosition={dockPosition}
         >
-          {profilePictureUrl || profileInitials ? (
-            <ProfileImage
-              size="w-6 h-6"
-              src={profilePictureUrl}
-              initials={profileInitials}
-              hasError={profileImageError}
-              onError={() => setProfileImageError(true)}
-              onLoad={() => setProfileImageError(false)}
-            />
-          ) : (
-            <Settings className="w-5 h-5" />
-          )}
+          {settingsIcon}
         </DockItem>
       </div>
 
       {/* ── Modals ── */}
-      <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} onNavigate={onPageChange} />
+      <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} />
     </>
   );
 };
 
 DynamicSidebar.propTypes = {
-  onPageChange: PropTypes.func,
   session: PropTypes.shape({
     user: PropTypes.shape({
       id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),

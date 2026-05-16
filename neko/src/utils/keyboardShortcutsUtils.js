@@ -2,7 +2,7 @@ const DEFAULT_SHORTCUTS = {
   search: { key: 'k', ctrl: true, meta: true, label: 'Search', action: 'openSearch' },
   settings: { key: ',', ctrl: true, meta: true, label: 'Settings', action: 'openSettings' },
   newChat: { key: 'n', ctrl: true, meta: true, label: 'New Chat', action: 'newChat' },
-  dock1: { key: '1', ctrl: true, meta: true, label: 'New Chat', action: 'navHome' },
+  dock1: { key: '1', ctrl: true, meta: true, label: 'Command Center', action: 'navHome' },
   dock2: { key: '2', ctrl: true, meta: true, label: 'Chat History', action: 'navChat' },
   dock3: { key: '3', ctrl: true, meta: true, label: 'Workspace', action: 'navWorkspace' },
   dock4: { key: '4', ctrl: true, meta: true, label: 'Calendar', action: 'navCalendar' },
@@ -19,7 +19,9 @@ export const loadKeyboardShortcuts = () => {
     if (saved) {
       return { ...DEFAULT_SHORTCUTS, ...JSON.parse(saved) };
     }
-  } catch (e) {}
+  } catch {
+    return DEFAULT_SHORTCUTS;
+  }
   return DEFAULT_SHORTCUTS;
 };
 

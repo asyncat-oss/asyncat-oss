@@ -34,12 +34,16 @@ export const filesApi = {
     const params = new URLSearchParams({
       rootId,
       path: dirPath,
-      q: query,
       hidden: String(hidden),
       max: String(max),
       sort: options.sort || 'relevance',
       order: options.order || 'asc',
     });
+    if (options.contentQuery) {
+      params.set('cq', options.contentQuery);
+    } else {
+      params.set('q', query);
+    }
     return await apiRequest(`${API_BASE_URL}/files/search?${params}`);
   },
 
@@ -108,6 +112,20 @@ export const filesApi = {
     if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
     const blob = await res.blob();
     return URL.createObjectURL(blob);
+  },
+
+  extractArchive: async (rootId, filePath, destination = null) => {
+    return await apiRequest(`${API_BASE_URL}/files/archive/extract`, {
+      method: 'POST',
+      body: JSON.stringify({ rootId, path: filePath, destination }),
+    });
+  },
+
+  createArchive: async (rootId, paths = [], destination) => {
+    return await apiRequest(`${API_BASE_URL}/files/archive/create`, {
+      method: 'POST',
+      body: JSON.stringify({ rootId, paths, destination }),
+    });
   },
 
   upload: async (rootId, filePath, file, options = {}) => {

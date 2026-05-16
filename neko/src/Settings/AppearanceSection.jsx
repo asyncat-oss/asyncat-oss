@@ -1,325 +1,268 @@
-
-
-import React, { useState } from 'react';
-import { Moon, Sun, Palette, MousePointer, Layout, Sparkles, PanelLeft, PanelBottom, PanelRight } from 'lucide-react';
+import { useState } from 'react';
+import PropTypes from 'prop-types';
+import {
+  Layout,
+  Moon,
+  MousePointer,
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
+  Palette,
+  Sparkles,
+  Sun,
+} from 'lucide-react';
 import KeyboardShortcutsSection from './KeyboardShortcutsSection.jsx';
 
-const soraFontBase = "font-sora";
+const cardClasses =
+  'bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-200/70 dark:border-gray-800';
+const insetClasses =
+  'bg-gray-50/80 dark:bg-gray-800/80 p-4 rounded-lg border border-gray-200/60 dark:border-gray-700/70';
+const textClasses = 'text-gray-700 dark:text-gray-200';
+const mutedClasses = 'text-sm text-gray-500 dark:text-gray-400 mt-4';
+
+const dispatchPreferenceChange = (eventName) => {
+  window.dispatchEvent(new Event(eventName));
+};
+
+const PreferenceCard = ({ icon: Icon, title, description, children }) => (
+  <section className={cardClasses}>
+    <div className="flex items-center gap-2 mb-4">
+      <Icon size={20} className="text-gray-700 dark:text-gray-200" />
+      <h3 className="text-base font-medium text-gray-800 dark:text-gray-100">{title}</h3>
+    </div>
+    <div className={insetClasses}>
+      <div className="flex flex-col gap-3">{children}</div>
+      {description ? <p className={mutedClasses}>{description}</p> : null}
+    </div>
+  </section>
+);
+
+const RadioRow = ({ name, checked, onChange, icon: Icon, label }) => (
+  <label className="flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent hover:border-gray-300/70 dark:hover:border-gray-600/70 hover:bg-gray-200/70 dark:hover:bg-gray-700/70 cursor-pointer transition-colors">
+    <span className="flex min-w-0 items-center gap-3">
+      {Icon ? <Icon className="w-5 h-5 flex-shrink-0 text-gray-500 dark:text-gray-400" /> : null}
+      <span className={`${textClasses} truncate`}>{label}</span>
+    </span>
+    <input
+      type="radio"
+      name={name}
+      checked={checked}
+      onChange={onChange}
+      className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400"
+    />
+  </label>
+);
 
 const AppearanceSection = ({ theme, setThemeMode }) => {
+  const [navigationStyle, setNavigationStyle] = useState(() => {
+    return localStorage.getItem('navigationStyle') || 'dock';
+  });
   const [dockVisibility, setDockVisibility] = useState(() => {
     return localStorage.getItem('dockVisibility') || 'always';
   });
-
   const [dockPosition, setDockPosition] = useState(() => {
     return localStorage.getItem('dockPosition') || 'bottom';
   });
-
   const [topMenuBarVisibility, setTopMenuBarVisibility] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') || 'always';
   });
-
   const [pageTransitions, setPageTransitions] = useState(() => {
     return localStorage.getItem('pageTransitions') || 'on';
   });
 
+  const handleNavigationStyleChange = (value) => {
+    setNavigationStyle(value);
+    localStorage.setItem('navigationStyle', value);
+    dispatchPreferenceChange('navigation-style-changed');
+  };
+
   const handleDockVisibilityChange = (value) => {
     setDockVisibility(value);
     localStorage.setItem('dockVisibility', value);
+    dispatchPreferenceChange('dock-visibility-changed');
   };
 
   const handleDockPositionChange = (value) => {
     setDockPosition(value);
     localStorage.setItem('dockPosition', value);
-    window.dispatchEvent(new Event('dock-position-changed'));
+    dispatchPreferenceChange('dock-position-changed');
   };
 
   const handleTopMenuBarVisibilityChange = (value) => {
     setTopMenuBarVisibility(value);
     localStorage.setItem('topMenuBarVisibility', value);
-    window.dispatchEvent(new Event('top-menu-bar-visibility-changed'));
+    dispatchPreferenceChange('top-menu-bar-visibility-changed');
   };
 
   const handlePageTransitionsChange = (value) => {
     setPageTransitions(value);
     localStorage.setItem('pageTransitions', value);
-    window.dispatchEvent(new Event('page-transitions-changed'));
+    dispatchPreferenceChange('page-transitions-changed');
   };
 
-
   return (
-    <div className={`space-y-6 ${soraFontBase}`}>      {/* Theme Setting Card */}
-      <div className="backdrop-blur-md bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 p-6 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-600/50 midnight:border-gray-500/40">
-        <div className="flex items-center gap-2 mb-4">
-          <Palette size={20} className="text-gray-700 dark:text-gray-200 midnight:text-blue-300" />
-          <h3 className="text-base font-medium text-gray-700 dark:text-gray-200 midnight:text-blue-200">
-            Theme
-          </h3>
-        </div>
+    <div className="space-y-6 font-sora">
+      <PreferenceCard
+        icon={Palette}
+        title="Theme"
+        description="Use a fixed theme or follow your operating system preference."
+      >
+        <RadioRow
+          name="theme"
+          icon={Sun}
+          label="Light Mode"
+          checked={theme === 'light'}
+          onChange={() => setThemeMode('light')}
+        />
+        <RadioRow
+          name="theme"
+          icon={Moon}
+          label="Dark Mode"
+          checked={theme === 'dark'}
+          onChange={() => setThemeMode('dark')}
+        />
+        <RadioRow
+          name="theme"
+          icon={Sun}
+          label="System Preference"
+          checked={theme === 'system'}
+          onChange={() => setThemeMode('system')}
+        />
+      </PreferenceCard>
 
-        <div className="backdrop-blur-sm bg-gray-50/80 dark:bg-gray-700/80 midnight:bg-gray-800/80 p-4 rounded-lg border border-gray-200/30 dark:border-gray-600/30 midnight:border-gray-500/30">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3">              {/* Light mode option */}
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <Sun className="text-amber-500 dark:text-amber-400 midnight:text-amber-300 w-5 h-5 mr-3" />
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Light Mode</span>
-                </div>
-                <input
-                  type="radio"
-                  name="theme"
-                  checked={theme === 'light'}
-                  onChange={() => setThemeMode('light')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
+      <PreferenceCard
+        icon={Layout}
+        title="Navigation"
+        description="Choose a floating dock or a persistent left sidebar."
+      >
+        <RadioRow
+          name="navigationStyle"
+          icon={PanelBottom}
+          label="Floating Dock"
+          checked={navigationStyle === 'dock'}
+          onChange={() => handleNavigationStyleChange('dock')}
+        />
+        <RadioRow
+          name="navigationStyle"
+          icon={PanelLeft}
+          label="Left Sidebar"
+          checked={navigationStyle === 'sidebar'}
+          onChange={() => handleNavigationStyleChange('sidebar')}
+        />
+      </PreferenceCard>
 
-              {/* Dark mode option */}
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <Moon className="text-indigo-500 dark:text-indigo-400 midnight:text-indigo-300 w-5 h-5 mr-3" />
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Dark Mode</span>
-                </div>                <input
-                  type="radio"
-                  name="theme"
-                  checked={theme === 'dark'}
-                  onChange={() => setThemeMode('dark')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
+      <PreferenceCard
+        icon={Sparkles}
+        title="Page Motion"
+        description="Add a light fade when moving between main sections."
+      >
+        <RadioRow
+          name="pageTransitions"
+          label="Subtle Transitions"
+          checked={pageTransitions === 'on'}
+          onChange={() => handlePageTransitionsChange('on')}
+        />
+        <RadioRow
+          name="pageTransitions"
+          label="No Page Motion"
+          checked={pageTransitions === 'off'}
+          onChange={() => handlePageTransitionsChange('off')}
+        />
+      </PreferenceCard>
 
+      {navigationStyle === 'dock' && (
+        <>
+          <PreferenceCard
+            icon={MousePointer}
+            title="Dock Visibility"
+            description="Choose whether the floating dock is always visible or appears near the screen edge."
+          >
+            <RadioRow
+              name="dockVisibility"
+              label="Always Visible"
+              checked={dockVisibility === 'always'}
+              onChange={() => handleDockVisibilityChange('always')}
+            />
+            <RadioRow
+              name="dockVisibility"
+              label="Show on Hover"
+              checked={dockVisibility === 'hover'}
+              onChange={() => handleDockVisibilityChange('hover')}
+            />
+          </PreferenceCard>
 
-                {/* System preference option */}
-              <button
-                onClick={() => {
-                  localStorage.removeItem('theme');
-                  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  document.documentElement.classList.toggle('dark', prefersDark);
-                  document.documentElement.classList.remove('midnight');
-                  setThemeMode(prefersDark ? 'dark' : 'light');
-                }}
-                className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer w-full text-left backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30"
-              >
-                <div className="flex items-center">
-                  <svg className="w-5 h-5 mr-3 text-gray-600 dark:text-gray-300 midnight:text-blue-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 18C15.3137 18 18 15.3137 18 12C18 8.68629 15.3137 6 12 6C8.68629 6 6 8.68629 6 12C6 15.3137 8.68629 18 12 18Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M22 12H23M1 12H2M12 22V23M12 1V2M4.93 4.93L4.22 4.22M19.07 4.93L19.78 4.22M4.93 19.07L4.22 19.78M19.07 19.07L19.78 19.78" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">System Preference</span>
-                </div>
-              </button>
-            </div>
-          </div>
+          <PreferenceCard
+            icon={Layout}
+            title="Dock Position"
+            description="Choose where the floating dock appears on your screen."
+          >
+            <RadioRow
+              name="dockPosition"
+              icon={PanelBottom}
+              label="Bottom"
+              checked={dockPosition === 'bottom'}
+              onChange={() => handleDockPositionChange('bottom')}
+            />
+            <RadioRow
+              name="dockPosition"
+              icon={PanelLeft}
+              label="Left"
+              checked={dockPosition === 'left'}
+              onChange={() => handleDockPositionChange('left')}
+            />
+            <RadioRow
+              name="dockPosition"
+              icon={PanelRight}
+              label="Right"
+              checked={dockPosition === 'right'}
+              onChange={() => handleDockPositionChange('right')}
+            />
+          </PreferenceCard>
+        </>
+      )}
 
-          <p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-200 mt-4">
-            Select your preferred theme or use your system's default setting.
-          </p>
-        </div>
-      </div>
-
-      {/* Page Motion Setting Card */}
-      <div className="backdrop-blur-md bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 p-6 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-600/50 midnight:border-gray-500/40">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles size={20} className="text-gray-700 dark:text-gray-200 midnight:text-blue-300" />
-          <h3 className="text-base font-medium text-gray-700 dark:text-gray-200 midnight:text-blue-200">
-            Page Motion
-          </h3>
-        </div>
-
-        <div className="backdrop-blur-sm bg-gray-50/80 dark:bg-gray-700/80 midnight:bg-gray-800/80 p-4 rounded-lg border border-gray-200/30 dark:border-gray-600/30 midnight:border-gray-500/30">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3">
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Subtle Transitions</span>
-                </div>
-                <input
-                  type="radio"
-                  name="pageTransitions"
-                  checked={pageTransitions === 'on'}
-                  onChange={() => handlePageTransitionsChange('on')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">No Page Motion</span>
-                </div>
-                <input
-                  type="radio"
-                  name="pageTransitions"
-                  checked={pageTransitions === 'off'}
-                  onChange={() => handlePageTransitionsChange('off')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-            </div>
-          </div>
-
-          <p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-200 mt-4">
-            Add a light fade when moving between main sections.
-          </p>
-        </div>
-      </div>
-
-      {/* Dock Visibility Setting Card */}
-      <div className="backdrop-blur-md bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 p-6 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-600/50 midnight:border-gray-500/40">
-        <div className="flex items-center gap-2 mb-4">
-          <MousePointer size={20} className="text-gray-700 dark:text-gray-200 midnight:text-blue-300" />
-          <h3 className="text-base font-medium text-gray-700 dark:text-gray-200 midnight:text-blue-200">
-            Dock Visibility
-          </h3>
-        </div>
-
-        <div className="backdrop-blur-sm bg-gray-50/80 dark:bg-gray-700/80 midnight:bg-gray-800/80 p-4 rounded-lg border border-gray-200/30 dark:border-gray-600/30 midnight:border-gray-500/30">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3">
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Always Visible</span>
-                </div>
-                <input
-                  type="radio"
-                  name="dockVisibility"
-                  checked={dockVisibility === 'always'}
-                  onChange={() => handleDockVisibilityChange('always')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Show on Hover</span>
-                </div>
-                <input
-                  type="radio"
-                  name="dockVisibility"
-                  checked={dockVisibility === 'hover'}
-                  onChange={() => handleDockVisibilityChange('hover')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-            </div>
-          </div>
-
-          <p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-200 mt-4">
-            Choose whether the dock is always visible or appears only when you hover near it.
-          </p>
-        </div>
-      </div>
-
-      {/* Dock Position Setting Card */}
-      <div className="backdrop-blur-md bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 p-6 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-600/50 midnight:border-gray-500/40">
-        <div className="flex items-center gap-2 mb-4">
-          <Layout size={20} className="text-gray-700 dark:text-gray-200 midnight:text-blue-300" />
-          <h3 className="text-base font-medium text-gray-700 dark:text-gray-200 midnight:text-blue-200">
-            Dock Position
-          </h3>
-        </div>
-
-        <div className="backdrop-blur-sm bg-gray-50/80 dark:bg-gray-700/80 midnight:bg-gray-800/80 p-4 rounded-lg border border-gray-200/30 dark:border-gray-600/30 midnight:border-gray-500/30">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3">
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <PanelBottom className="text-gray-600 dark:text-gray-300 midnight:text-blue-400 w-5 h-5 mr-3" />
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Bottom</span>
-                </div>
-                <input
-                  type="radio"
-                  name="dockPosition"
-                  checked={dockPosition === 'bottom'}
-                  onChange={() => handleDockPositionChange('bottom')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <PanelLeft className="text-gray-600 dark:text-gray-300 midnight:text-blue-400 w-5 h-5 mr-3" />
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Left</span>
-                </div>
-                <input
-                  type="radio"
-                  name="dockPosition"
-                  checked={dockPosition === 'left'}
-                  onChange={() => handleDockPositionChange('left')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <PanelRight className="text-gray-600 dark:text-gray-300 midnight:text-blue-400 w-5 h-5 mr-3" />
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Right</span>
-                </div>
-                <input
-                  type="radio"
-                  name="dockPosition"
-                  checked={dockPosition === 'right'}
-                  onChange={() => handleDockPositionChange('right')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-            </div>
-          </div>
-
-          <p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-200 mt-4">
-            Choose where the dock appears on your screen.
-          </p>
-        </div>
-      </div>
-
-      {/* Top Menu Bar Visibility Setting Card */}
-      <div className="backdrop-blur-md bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 p-6 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-600/50 midnight:border-gray-500/40">
-        <div className="flex items-center gap-2 mb-4">
-          <Layout size={20} className="text-gray-700 dark:text-gray-200 midnight:text-blue-300" />
-          <h3 className="text-base font-medium text-gray-700 dark:text-gray-200 midnight:text-blue-200">
-            Top Menu Bar
-          </h3>
-        </div>
-
-        <div className="backdrop-blur-sm bg-gray-50/80 dark:bg-gray-700/80 midnight:bg-gray-800/80 p-4 rounded-lg border border-gray-200/30 dark:border-gray-600/30 midnight:border-gray-500/30">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3">
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Always Show</span>
-                </div>
-                <input
-                  type="radio"
-                  name="topMenuBarVisibility"
-                  checked={topMenuBarVisibility === 'always'}
-                  onChange={() => handleTopMenuBarVisibilityChange('always')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-
-              <label className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-700/80 cursor-pointer backdrop-blur-sm transition-all duration-200 border border-transparent hover:border-gray-300/50 dark:hover:border-gray-500/50 midnight:hover:border-gray-400/30">
-                <div className="flex items-center">
-                  <span className="text-gray-700 dark:text-gray-200 midnight:text-gray-100">Hide</span>
-                </div>
-                <input
-                  type="radio"
-                  name="topMenuBarVisibility"
-                  checked={topMenuBarVisibility === 'hidden'}
-                  onChange={() => handleTopMenuBarVisibilityChange('hidden')}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-500 midnight:focus:ring-blue-400"
-                />
-              </label>
-            </div>
-          </div>
-
-          <p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-200 mt-4">
-            Toggle the top menu bar that displays the app name, network status, and time.
-          </p>
-        </div>
-      </div>
+      <PreferenceCard
+        icon={Layout}
+        title="Top Menu Bar"
+        description="Toggle the top menu bar that displays app status and quick actions."
+      >
+        <RadioRow
+          name="topMenuBarVisibility"
+          label="Always Show"
+          checked={topMenuBarVisibility === 'always'}
+          onChange={() => handleTopMenuBarVisibilityChange('always')}
+        />
+        <RadioRow
+          name="topMenuBarVisibility"
+          label="Hide"
+          checked={topMenuBarVisibility === 'hidden'}
+          onChange={() => handleTopMenuBarVisibilityChange('hidden')}
+        />
+      </PreferenceCard>
 
       <KeyboardShortcutsSection />
     </div>
   );
+};
+
+PreferenceCard.propTypes = {
+  icon: PropTypes.elementType.isRequired,
+  title: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  children: PropTypes.node,
+};
+
+RadioRow.propTypes = {
+  name: PropTypes.string.isRequired,
+  checked: PropTypes.bool.isRequired,
+  onChange: PropTypes.func.isRequired,
+  icon: PropTypes.elementType,
+  label: PropTypes.string.isRequired,
+};
+
+AppearanceSection.propTypes = {
+  theme: PropTypes.oneOf(['light', 'dark', 'system']).isRequired,
+  setThemeMode: PropTypes.func.isRequired,
 };
 
 export default AppearanceSection;

@@ -8,8 +8,10 @@ import {
   batchCopyEntries,
   batchDeleteEntries,
   copyEntry,
+  createArchive,
   createDirectory,
   deleteEntry,
+  extractArchive,
   listDirectory,
   loadEntry,
   moveEntry,
@@ -99,6 +101,7 @@ router.get('/search', authenticate, (req, res) => {
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
       query: req.query.q || '',
+      contentQuery: req.query.cq || '',
       includeHidden: req.query.hidden === 'true',
       maxResults,
       sort: req.query.sort || 'relevance',
@@ -233,6 +236,32 @@ router.get('/raw', authenticate, (req, res) => {
     const stream = fs.createReadStream(path.join(entry.root.path, relativePath));
     stream.on('error', () => res.status(500).json({ success: false, error: 'Failed to read file' }));
     stream.pipe(res);
+  } catch (err) {
+    sendRouteError(res, err);
+  }
+});
+
+// ── Archive operations ───────────────────────────────────────────────────────
+
+router.post('/archive/extract', authenticate, async (req, res) => {
+  try {
+    res.json(await extractArchive({
+      rootId: req.body.rootId || 'workspace',
+      relativePath: req.body.path,
+      destination: req.body.destination || null,
+    }));
+  } catch (err) {
+    sendRouteError(res, err);
+  }
+});
+
+router.post('/archive/create', authenticate, async (req, res) => {
+  try {
+    res.json(await createArchive({
+      rootId: req.body.rootId || 'workspace',
+      paths: Array.isArray(req.body.paths) ? req.body.paths : [],
+      destination: req.body.destination,
+    }));
   } catch (err) {
     sendRouteError(res, err);
   }

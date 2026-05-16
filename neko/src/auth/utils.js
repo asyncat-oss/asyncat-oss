@@ -4,13 +4,17 @@ export const initializeTheme = () => {
   if (localStorage.theme === 'dark') {
     document.documentElement.classList.add('dark');
     document.documentElement.classList.remove('midnight');
-  } else if (localStorage.theme === 'midnight') {
-    document.documentElement.classList.add('midnight');
-    document.documentElement.classList.remove('dark');
   } else if (localStorage.theme === 'light') {
     document.documentElement.classList.remove('dark', 'midnight');
   } else {
     // Respect system preference if no theme is explicitly set
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', prefersDark);
+    document.documentElement.classList.remove('midnight');
+  }
+
+  if (localStorage.theme === 'midnight') {
+    localStorage.removeItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     document.documentElement.classList.toggle('dark', prefersDark);
     document.documentElement.classList.remove('midnight');

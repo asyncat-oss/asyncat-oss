@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
+import PropTypes from 'prop-types';
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
 import eventBus from '../utils/eventBus.js';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import { useUnauthorizedError } from '../error/ErrorBoundary.jsx';
 import { initializeTheme, setupThemeListener } from '../auth/utils.js';
-import { loadKeyboardShortcuts } from '../utils/keyboardShortcutsUtils.js';
 import TopMenuBar from '../components/TopMenuBar.jsx';
 
 // Import components
@@ -38,6 +38,9 @@ const AppLayout = ({ session, onSignOut }) => {
   const [dockPosition, setDockPosition] = useState(() => {
     return localStorage.getItem('dockPosition') || 'bottom';
   });
+  const [navigationStyle, setNavigationStyle] = useState(() => {
+    return localStorage.getItem('navigationStyle') || 'dock';
+  });
   const [topBarVisible, setTopBarVisible] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
   });
@@ -55,7 +58,7 @@ const AppLayout = ({ session, onSignOut }) => {
   const shouldShowCreateWorkspace = !workspacesLoading && !workspacesError && !hasWorkspaces;
   
   // Handle workspace creation
-  const handleWorkspaceCreated = useCallback((newWorkspace) => {
+  const handleWorkspaceCreated = useCallback(() => {
     refreshWorkspaces();
   }, [refreshWorkspaces]);
 
@@ -106,7 +109,9 @@ const AppLayout = ({ session, onSignOut }) => {
       setSelectedProject(null);
       sessionStorage.removeItem('projectId');
     }
-}, [params.projectId, getWorkspaceProjects]); // selectedProject intentionally excluded to prevent loops
+    // selectedProject intentionally excluded to prevent loops while enriching the loaded project.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.projectId, getWorkspaceProjects]);
   
   // Reset project selection when workspace changes
   // FIX: Skip redirect on initial mount - let URL/router handle initial navigation
@@ -151,7 +156,7 @@ const AppLayout = ({ session, onSignOut }) => {
     return needsFullObject ? selectedProject : selectedProject.id;
   };
 
-  const handleProjectSelect = (project) => {
+  const handleProjectSelect = useCallback((project) => {
     if (!project) {
       setSelectedProject(null);
       sessionStorage.removeItem('projectId');
@@ -170,20 +175,12 @@ const AppLayout = ({ session, onSignOut }) => {
       const projectId = project;
       navigate(`/workspace/${projectId}`);
     }
-  };
+  }, [navigate]);
 
   // Use CommandCenter context to get new chat functionality
   const {
     handleNewConversation,
-    currentConversationId,
-    chatRunPreviews = [],
   } = useCommandCenter();
-  const latestChatRun = chatRunPreviews[0];
-  const commandCenterTarget = currentConversationId
-    ? `/conversations/${currentConversationId}`
-    : latestChatRun?.conversationId
-      ? `/conversations/${latestChatRun.conversationId}`
-      : '/home';
 
   // Use the 401 error handler
   const { trigger401Error } = useUnauthorizedError();
@@ -222,6 +219,19 @@ const AppLayout = ({ session, onSignOut }) => {
   }, []);
 
   useEffect(() => {
+    const syncNavigationStyle = () => {
+      setNavigationStyle(localStorage.getItem('navigationStyle') || 'dock');
+    };
+
+    window.addEventListener('storage', syncNavigationStyle);
+    window.addEventListener('navigation-style-changed', syncNavigationStyle);
+    return () => {
+      window.removeEventListener('storage', syncNavigationStyle);
+      window.removeEventListener('navigation-style-changed', syncNavigationStyle);
+    };
+  }, []);
+
+  useEffect(() => {
     const syncTopBar = () => {
       setTopBarVisible(localStorage.getItem('topMenuBarVisibility') !== 'hidden');
     };
@@ -233,51 +243,6 @@ const AppLayout = ({ session, onSignOut }) => {
       window.removeEventListener('top-menu-bar-visibility-changed', syncTopBar);
     };
   }, []);
-
-  // Keyboard shortcuts for mode switching
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const shortcuts = loadKeyboardShortcuts();
-      const match = Object.values(shortcuts).find(s => {
-        return s.key === e.key && (e.ctrlKey || e.metaKey);
-      });
-      if (!match) return;
-      e.preventDefault();
-      switch (match.action) {
-        case 'navHome': navigate('/home'); break;
-        case 'navWorkspace': navigate('/workspace'); break;
-        case 'navCalendar': navigate('/calendar'); break;
-        default: break;
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [navigate]);
-
-  // Navigation handler
-  const handleNavigate = useCallback(async (page, options = {}) => {
-    // Handle settings specially - navigate to the settings route instead of a modal
-    if (page === 'settings') {
-      const tab = options.tab || 'general';
-      navigate(`/settings/${tab}`);
-      return;
-    }
-
-    // Handle home navigation - return to the current/recent Command Center session
-    if (page === 'home') {
-      navigate(commandCenterTarget);
-      return;
-    }
-
-    // Handle specific navigation cases
-    if (page === 'notes' && options.noteId) {
-      navigate(`/workspace/${selectedProject?.id}/notes?noteId=${options.noteId}`);
-      return;
-    }
-
-    // Standard navigation
-    navigate(`/${page}`);
-  }, [navigate, commandCenterTarget, selectedProject]);
 
   // Helper function to open settings with a specific tab
   const handleOpenSettings = (tab = 'general') => {
@@ -474,6 +439,9 @@ const AppLayout = ({ session, onSignOut }) => {
     left: 'pl-20',
     right: 'pr-20',
   };
+  const navigationPaddingClass = navigationStyle === 'sidebar'
+    ? 'pl-16 sm:pl-56'
+    : dockPaddingClass[dockPosition];
 
   // Normal dashboard when user has workspaces
   return (
@@ -482,9 +450,7 @@ const AppLayout = ({ session, onSignOut }) => {
         onSearchOpen={() => setIsSearchOpen(true)}
       />
 
-      {/* Dock — renders as fixed overlay, no flex space consumed */}
       <Sidebar
-        onPageChange={handleNavigate}
         session={session}
         onNewChat={handleNewChatWithNavigation}
         basePage={basePage}
@@ -495,7 +461,7 @@ const AppLayout = ({ session, onSignOut }) => {
       <main className={`flex-1 overflow-hidden h-full ${topBarVisible ? 'pt-10' : ''}`}>
         <div
           key={routeTransitionKey}
-          className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full ${dockPaddingClass[dockPosition]}`}
+          className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full ${navigationPaddingClass}`}
         >
           <Outlet context={{
               selectedProject: getProjectValue(true),
@@ -521,3 +487,8 @@ const AppLayout = ({ session, onSignOut }) => {
 };
 
 export default AppLayout;
+
+AppLayout.propTypes = {
+  session: PropTypes.object,
+  onSignOut: PropTypes.func,
+};
