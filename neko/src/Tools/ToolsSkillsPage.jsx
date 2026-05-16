@@ -39,6 +39,19 @@ const SKILL_ORIGIN_META = {
   auto: { label: 'Auto', className: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' },
 };
 
+function formatSkillAge(isoString) {
+  if (!isoString) return null;
+  const diff = Date.now() - new Date(isoString).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years > 1 ? 's' : ''} ago`;
+}
+
 function getRegionMeta(region) {
   const key = (region || 'unknown').toLowerCase().replace(/[\s-]+/g, '_');
   return BRAIN_REGION_META[key] || BRAIN_REGION_META.unknown;
@@ -507,6 +520,12 @@ function SkillInspector({ skill }) {
           ))}
         </div>
       </div>
+
+      {skill.updatedAt && (
+        <p className="mb-4 text-[10px] text-gray-400 dark:text-gray-500">
+          Last updated {formatSkillAge(skill.updatedAt)}
+        </p>
+      )}
 
       <div className="border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Description</p>

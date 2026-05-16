@@ -149,6 +149,25 @@ const suggestionPanelClass =
 const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
 const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:hover:bg-[#242424]";
 
+function TokenBar({ usage }) {
+  const ctx = usage.contextWindow || 128000;
+  const pct = Math.min((usage.totalTokens / ctx) * 100, 100);
+  const color = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-400';
+  const label = `${usage.estimated ? '~' : ''}${(usage.totalTokens / 1000).toFixed(1)}k`;
+  const tooltip = `${usage.estimated ? 'Estimated — ' : ''}${(usage.inputTokens / 1000).toFixed(1)}k in + ${(usage.outputTokens / 1000).toFixed(1)}k out · ${pct.toFixed(0)}% of ${(ctx / 1000).toFixed(0)}k context (${usage.contextWindowSource || 'unknown'})`;
+
+  return (
+    <span className="inline-flex items-center gap-1" title={tooltip}>
+      <span className={`text-[10px] tabular-nums ${pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+        {label}
+      </span>
+      <span className="relative h-1 w-10 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+        <span className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+      </span>
+    </span>
+  );
+}
+
 function RecordingWaveform() {
   const bars = [
     { height: "0.55rem", delay: "0ms", duration: "720ms" },
@@ -1475,15 +1494,7 @@ export const MessageInputV2 = ({
                     {tokenUsage?.totalTokens > 0 && (
                       <>
                         <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
-                        <span className={`text-[10px] tabular-nums ${
-                          tokenUsage.totalTokens > (tokenUsage.contextWindow || 128000) * 0.9
-                            ? 'text-red-400'
-                            : tokenUsage.totalTokens > (tokenUsage.contextWindow || 128000) * 0.7
-                            ? 'text-amber-400'
-                            : 'text-gray-400 dark:text-gray-500'
-                        }`}>
-                          {tokenUsage.estimated ? '~' : ''}{(tokenUsage.totalTokens / 1000).toFixed(1)}k
-                        </span>
+                        <TokenBar usage={tokenUsage} />
                         {tokenUsage.tokensPerSecond > 0 && (
                           <>
                             <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
@@ -1507,9 +1518,7 @@ export const MessageInputV2 = ({
                 ) : (
                   <div className="inline-flex items-center gap-1.5">
                     {tokenUsage?.totalTokens > 0 && (
-                      <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500" title={`${tokenUsage.estimated ? 'Estimated ' : ''}${(tokenUsage.inputTokens / 1000).toFixed(1)}k in + ${(tokenUsage.outputTokens / 1000).toFixed(1)}k out · Context: ${(tokenUsage.contextWindow / 1000).toFixed(0)}k (${tokenUsage.contextWindowSource || 'unknown'})`}>
-                        {tokenUsage.estimated ? '~' : ''}{(tokenUsage.totalTokens / 1000).toFixed(1)}k tokens
-                      </span>
+                      <TokenBar usage={tokenUsage} />
                     )}
                     <button
                       type="submit"

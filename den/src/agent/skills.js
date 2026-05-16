@@ -48,11 +48,14 @@ function readSkillsFromDir(dir, source) {
   return fs.readdirSync(dir)
     .filter(file => file.endsWith('.md') && !file.startsWith('_'))
     .map(file => {
-      const content = fs.readFileSync(path.join(dir, file), 'utf8');
+      const filePath = path.join(dir, file);
+      const content = fs.readFileSync(filePath, 'utf8');
+      const stat = fs.statSync(filePath);
       return {
         ...parseFrontmatter(content, file.replace(/\.md$/, '')),
         source,
-        path: path.join(dir, file),
+        path: filePath,
+        updatedAt: stat.mtime.toISOString(),
       };
     });
 }

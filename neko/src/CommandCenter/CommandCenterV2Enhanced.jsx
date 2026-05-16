@@ -24,6 +24,7 @@ import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
 import { useAudioStatus } from "./hooks/useAudioStatus";
+import { useAgentNotifications } from './hooks/useAgentNotifications';
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
 import { chatApi, agentApi, gitApi } from "./api";
 import { audioApi } from "../Settings/settingApi.js";
@@ -283,6 +284,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
     return null;
   }, [agentEvents]);
+  const latestAnswer = useMemo(() => {
+    for (let i = agentEvents.length - 1; i >= 0; i--) {
+      if (agentEvents[i]?.type === 'answer' && agentEvents[i].data?.answer) return agentEvents[i].data.answer;
+    }
+    return null;
+  }, [agentEvents]);
+  useAgentNotifications({ isRunning: agentRunning, lastAnswer: latestAnswer, conversationTitle });
   const setCurrentChatRun = useCallback((updater) => {
     updateChatRun(currentRunKey, updater);
   }, [currentRunKey, updateChatRun]);
