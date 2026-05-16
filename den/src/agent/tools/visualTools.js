@@ -71,6 +71,81 @@ function imageResultPayload(result, fallbackPrompt) {
   };
 }
 
+async function generateWithCloudImageProvider(providerId, params) {
+  const { prompt, negativePrompt = '', width = 1024, height = 1024, steps, seed } = params;
+
+  async function fetchImageBuffer(url) {
+    const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    return { buffer: Buffer.from(await r.arrayBuffer()), contentType: r.headers.get('content-type') || 'image/png' };
+  }
+
+  let buffer, mimeType, resultWidth, resultHeight, resultSeed, runtime;
+
+  if (providerId === 'openai') {
+    const size = (width <= 512 && height <= 512) ? '512x512'
+      : (width / height > 1.4) ? '1792x1024'
+      : '1024x1024';
+    const r = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'dall-e-3', prompt: negativePrompt ? `${prompt}. Avoid: ${negativePrompt}` : prompt, n: 1, size, response_format: 'url' }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!r.ok) throw new Error(`OpenAI image generation failed: ${await r.text().catch(() => r.statusText)}`);
+    const json = await r.json();
+    const url = json.data?.[0]?.url;
+    if (!url) throw new Error('OpenAI returned no image URL.');
+    const fetched = await fetchImageBuffer(url);
+    buffer = fetched.buffer; mimeType = 'image/png';
+    [resultWidth, resultHeight] = size.split('x').map(Number); runtime = 'openai';
+  } else if (providerId === 'fal') {
+    const imageSize = (width / height > 1.4) ? 'landscape_16_9' : (height / width > 1.4) ? 'portrait_16_9' : 'square_hd';
+    const r = await fetch('https://fal.run/fal-ai/flux/schnell', {
+      method: 'POST',
+      headers: { Authorization: `Key ${process.env.FAL_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, image_size: imageSize, num_inference_steps: steps || 4, num_images: 1, enable_safety_checker: true, ...(seed != null ? { seed } : {}) }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!r.ok) throw new Error(`fal.ai image generation failed: ${await r.text().catch(() => r.statusText)}`);
+    const json = await r.json();
+    const img = json.images?.[0];
+    if (!img?.url) throw new Error('fal.ai returned no image.');
+    const fetched = await fetchImageBuffer(img.url);
+    buffer = fetched.buffer; mimeType = img.content_type || 'image/jpeg';
+    resultWidth = img.width || width; resultHeight = img.height || height; resultSeed = json.seed; runtime = 'fal';
+  } else if (providerId === 'stability') {
+    const form = new FormData();
+    form.append('prompt', prompt);
+    if (negativePrompt) form.append('negative_prompt', negativePrompt);
+    form.append('output_format', 'png');
+    form.append('aspect_ratio', (width / height > 1.4) ? '16:9' : (height / width > 1.4) ? '9:16' : '1:1');
+    if (seed != null) form.append('seed', String(seed));
+    const r = await fetch('https://api.stability.ai/v2beta/stable-image/generate/ultra', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.STABILITY_API_KEY}`, Accept: 'image/*' },
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!r.ok) throw new Error(`Stability AI image generation failed: ${await r.text().catch(() => r.statusText)}`);
+    buffer = Buffer.from(await r.arrayBuffer()); mimeType = 'image/png';
+    resultWidth = width; resultHeight = height; runtime = 'stability';
+    const sh = r.headers.get('seed'); if (sh) resultSeed = parseInt(sh, 10);
+  } else {
+    throw new Error(`Cloud image provider "${providerId}" is not supported.`);
+  }
+
+  // Save to disk in the same format as local generation
+  fs.mkdirSync(GENERATED_DIR, { recursive: true });
+  const ext = mimeType?.includes('png') ? 'png' : 'jpg';
+  const imagePath = path.join(GENERATED_DIR, `agent_${randomUUID()}.${ext}`);
+  fs.writeFileSync(imagePath, buffer);
+
+  return { imagePath, mimeType, width: resultWidth, height: resultHeight, seed: resultSeed, runtime };
+}
+
 export const generateImageTool = {
   name: 'generate_image',
   description:
@@ -99,6 +174,26 @@ export const generateImageTool = {
   execute: async (args) => {
     const prompt = String(args.prompt || '').trim();
     if (!prompt) return { success: false, error: 'prompt is required' };
+
+    // Cloud provider takes priority when configured
+    const cloudProvider = String(process.env.ASYNCAT_IMAGE_PROVIDER || '').trim();
+    if (cloudProvider && cloudProvider !== 'local' && args.engine !== 'simple' && args.engine !== 'comfyui') {
+      try {
+        const width = clampInt(args.width, 1024, 256, 2048);
+        const height = clampInt(args.height, 1024, 256, 2048);
+        const result = await generateWithCloudImageProvider(cloudProvider, {
+          prompt,
+          negativePrompt: String(args.negative_prompt || '').trim(),
+          width,
+          height,
+          steps: args.steps,
+          seed: args.seed,
+        });
+        return imageResultPayload(result, prompt);
+      } catch (err) {
+        return { success: false, error: err.message || 'Cloud image generation failed.' };
+      }
+    }
 
     const engine = ['simple', 'comfyui'].includes(args.engine) ? args.engine : 'auto';
     const width = clampInt(args.width, engine === 'simple' ? 512 : 768, 256, 2048);

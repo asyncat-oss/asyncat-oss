@@ -15,6 +15,10 @@ import {
   MousePointer,
   Eye,
   EyeOff,
+  FolderOpen,
+  Globe,
+  Cpu,
+  Mic,
 } from 'lucide-react';
 import authService from './services/authService.js';
 
@@ -202,12 +206,28 @@ const WelcomePage = ({ session, onTeamCreated }) => {
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         <AnimatePresence mode="wait">
           {step === 0 && (
-            <PageWrapper 
+            <PageWrapper
               key="welcome"
               title="Asyncat OSS"
-              subtitle="The local intelligence environment designed for privacy and speed."
+              subtitle="Your private AI agent that actually does things — not just chat."
             >
-              <div className="flex flex-col items-center gap-12">
+              <div className="flex flex-col items-center gap-10">
+                <div className="grid grid-cols-2 gap-2.5 w-full max-w-[300px]">
+                  {[
+                    { icon: Cpu, label: 'Local or Cloud', detail: 'Any model, your choice' },
+                    { icon: FolderOpen, label: 'Real Workspace', detail: 'Files, shell, git, code' },
+                    { icon: Globe, label: 'Web & Search', detail: 'Browses and researches' },
+                    { icon: Mic, label: 'Voice & Images', detail: 'STT, TTS, image gen' },
+                  ].map(({ icon: Icon, label, detail }) => (
+                    <div key={label} className="flex items-start gap-2.5 rounded-xl border border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/50 dark:bg-gray-800/30 midnight:bg-slate-900/30 p-3 text-left">
+                      <Icon size={13} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+                      <div>
+                        <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300">{label}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-0.5">{detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <button
                   onClick={handleNext}
                   className="group flex items-center gap-2 px-8 py-3 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:hover:bg-slate-200 text-white dark:text-gray-900 midnight:text-slate-950 rounded-full text-[13px] font-bold transition-all active:scale-[0.97] shadow-sm"
@@ -395,36 +415,40 @@ const WelcomePage = ({ session, onTeamCreated }) => {
           )}
 
           {step === 4 && (
-            <PageWrapper 
+            <PageWrapper
               key="connect"
               title="System Check"
-              subtitle="Confirming local service availability and database mapping."
+              subtitle="Confirming local service availability before launch."
             >
               <div className="space-y-4 text-left">
                 <div className="py-2">
-                  <ConnectionRow 
-                    label="Application Kernel" 
-                    status={configStatus} 
-                    detail={configStatus === 'online' ? `Port ${config.PORT || '8716'} (Node.js)` : "Initializing..."} 
-                    icon={Zap} 
+                  <ConnectionRow
+                    label="Application Server"
+                    status={configStatus}
+                    detail={configStatus === 'online' ? `Port ${config.PORT || '8716'} · Node.js` : "Connecting..."}
+                    icon={Zap}
                   />
-                  <ConnectionRow 
-                    label="Secure Database" 
-                    status={configStatus} 
-                    detail="SQLite Local" 
-                    icon={Database} 
+                  <ConnectionRow
+                    label="Local Database"
+                    status={configStatus}
+                    detail="SQLite · encrypted at rest"
+                    icon={Database}
                   />
-                  <ConnectionRow 
-                    label="Inference Engine" 
-                    status={configStatus} 
-                    detail="Llama-cpp Local" 
-                    icon={Activity} 
+                  <ConnectionRow
+                    label="AI Engine"
+                    status={configStatus}
+                    detail="Local or cloud — configure on Models page"
+                    icon={Activity}
                   />
                 </div>
-
+                {configStatus === 'online' && (
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 text-center pt-1">
+                    All systems ready. You can connect your AI provider after setup.
+                  </p>
+                )}
                 <div className="flex gap-4 pt-6">
                   <button onClick={handleBack} className={backButtonClassName}>Back</button>
-                  <button 
+                  <button
                     onClick={handleNext}
                     className={primaryButtonClassName}
                   >
@@ -456,8 +480,8 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                     <span className="text-[13px] font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100 capitalize">{themePref}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest">Protocol</span>
-                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Verified Local</span>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest">AI Engine</span>
+                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Configure after setup</span>
                   </div>
                 </div>
 

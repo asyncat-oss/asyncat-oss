@@ -205,6 +205,30 @@ async function transcribeWithCloudProvider(providerId, audioBuffer, options = {}
     };
   }
 
+  if (providerId === 'fal') {
+    const form = new FormData();
+    form.append('audio', new Blob([audioBuffer], { type: 'audio/webm' }), 'audio.webm');
+    if (options.language) form.append('language', options.language);
+    const response = await fetch('https://fal.run/fal-ai/whisper', {
+      method: 'POST',
+      headers: { Authorization: `Key ${requiredEnv('FAL_KEY', 'fal.ai STT')}` },
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`fal.ai transcription failed: ${error}`);
+    }
+    const result = await response.json();
+    return {
+      text: result.text || '',
+      chunks: result.chunks || [],
+      language: result.language || options.language || 'auto',
+      provider: 'fal',
+      model: 'whisper',
+    };
+  }
+
   throw new Error(`${providerId} speech-to-text is configured but does not have a runtime adapter yet.`);
 }
 
@@ -259,6 +283,66 @@ async function synthesizeWithCloudProvider(providerId, text, options = {}) {
       buffer: Buffer.from(await response.arrayBuffer()),
       contentType: response.headers.get('content-type') || 'audio/mpeg',
       provider: 'elevenlabs',
+    };
+  }
+
+  if (providerId === 'gemini') {
+    const apiKey = requiredEnv('GEMINI_API_KEY', 'Gemini TTS');
+    const voice = options.voice || process.env.GEMINI_TTS_VOICE || 'Aoede';
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text }] }],
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+          },
+        }),
+        signal: AbortSignal.timeout(120_000),
+      }
+    );
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`Gemini TTS failed: ${error}`);
+    }
+    const result = await response.json();
+    const audioData = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!audioData) throw new Error('Gemini TTS returned no audio data.');
+    return {
+      buffer: Buffer.from(audioData, 'base64'),
+      contentType: 'audio/wav',
+      provider: 'gemini',
+    };
+  }
+
+  if (providerId === 'fal') {
+    const response = await fetch('https://fal.run/fal-ai/kokoro', {
+      method: 'POST',
+      headers: {
+        Authorization: `Key ${requiredEnv('FAL_KEY', 'fal.ai TTS')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: text,
+        voice: options.voice || process.env.FAL_TTS_VOICE || 'af_bella',
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`fal.ai TTS failed: ${error}`);
+    }
+    const result = await response.json();
+    const audioUrl = result.audio?.url || result.audio_url;
+    if (!audioUrl) throw new Error('fal.ai TTS returned no audio URL.');
+    const audioRes = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
+    return {
+      buffer: Buffer.from(await audioRes.arrayBuffer()),
+      contentType: audioRes.headers.get('content-type') || 'audio/mpeg',
+      provider: 'fal',
     };
   }
 
@@ -1491,6 +1575,140 @@ router.delete('/visual/models/:id', verifyUser, (req, res) => {
     if (err.message.includes('not found')) {
       return res.status(404).json({ success: false, error: err.message });
     }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Cloud image generation ────────────────────────────────────────────────────
+async function generateWithCloudProvider(providerId, params) {
+  const { prompt, negativePrompt, width = 1024, height = 1024, steps, seed } = params;
+
+  if (providerId === 'openai') {
+    const size = (width <= 512 && height <= 512) ? '512x512'
+      : (width > 1024 || height > 1024) ? '1792x1024'
+      : '1024x1024';
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${requiredEnv('OPENAI_API_KEY', 'OpenAI image generation')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_IMAGE_MODEL || 'dall-e-3',
+        prompt: negativePrompt ? `${prompt}. Avoid: ${negativePrompt}` : prompt,
+        n: 1,
+        size,
+        response_format: 'url',
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`OpenAI image generation failed: ${error}`);
+    }
+    const result = await response.json();
+    const imageUrl = result.data?.[0]?.url;
+    if (!imageUrl) throw new Error('OpenAI image generation returned no URL.');
+    const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(60_000) });
+    return {
+      buffer: Buffer.from(await imgRes.arrayBuffer()),
+      mimeType: 'image/png',
+      provider: 'openai',
+      width: parseInt(size.split('x')[0], 10),
+      height: parseInt(size.split('x')[1], 10),
+      revisedPrompt: result.data?.[0]?.revised_prompt,
+    };
+  }
+
+  if (providerId === 'fal') {
+    const imageSize = (width >= height)
+      ? (width / height > 1.5 ? 'landscape_16_9' : 'square_hd')
+      : 'portrait_16_9';
+    const response = await fetch('https://fal.run/fal-ai/flux/schnell', {
+      method: 'POST',
+      headers: {
+        Authorization: `Key ${requiredEnv('FAL_KEY', 'fal.ai image generation')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        image_size: imageSize,
+        num_inference_steps: steps || 4,
+        num_images: 1,
+        enable_safety_checker: true,
+        ...(seed != null ? { seed } : {}),
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`fal.ai image generation failed: ${error}`);
+    }
+    const result = await response.json();
+    const img = result.images?.[0];
+    if (!img?.url) throw new Error('fal.ai image generation returned no image.');
+    const imgRes = await fetch(img.url, { signal: AbortSignal.timeout(60_000) });
+    return {
+      buffer: Buffer.from(await imgRes.arrayBuffer()),
+      mimeType: img.content_type || 'image/jpeg',
+      provider: 'fal',
+      width: img.width || width,
+      height: img.height || height,
+      seed: result.seed,
+    };
+  }
+
+  if (providerId === 'stability') {
+    const form = new FormData();
+    form.append('prompt', prompt);
+    if (negativePrompt) form.append('negative_prompt', negativePrompt);
+    form.append('output_format', 'png');
+    form.append('aspect_ratio', width >= height ? (width / height > 1.4 ? '16:9' : '1:1') : '9:16');
+    if (seed != null) form.append('seed', String(seed));
+    const response = await fetch('https://api.stability.ai/v2beta/stable-image/generate/ultra', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${requiredEnv('STABILITY_API_KEY', 'Stability AI image generation')}`,
+        Accept: 'image/*',
+      },
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) {
+      const error = await response.text().catch(() => response.statusText);
+      throw new Error(`Stability AI image generation failed: ${error}`);
+    }
+    const seed_header = response.headers.get('seed');
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      mimeType: 'image/png',
+      provider: 'stability',
+      width,
+      height,
+      seed: seed_header ? parseInt(seed_header, 10) : seed,
+    };
+  }
+
+  throw new Error(`${providerId} image generation is not supported.`);
+}
+
+// POST /visual/image/cloud/generate — cloud image gen via ASYNCAT_IMAGE_PROVIDER
+router.post('/visual/image/cloud/generate', verifyUser, async (req, res) => {
+  try {
+    const providerId = String(process.env.ASYNCAT_IMAGE_PROVIDER || '').trim();
+    if (!providerId || providerId === 'local') {
+      return res.status(400).json({ success: false, error: 'No cloud image provider configured. Set ASYNCAT_IMAGE_PROVIDER in Settings.' });
+    }
+    const result = await generateWithCloudProvider(providerId, req.body || {});
+    const ext = result.mimeType?.includes('png') ? 'png' : 'jpg';
+    res.setHeader('Content-Type', result.mimeType || 'image/png');
+    res.setHeader('Content-Length', result.buffer.length);
+    res.setHeader('X-Asyncat-Image-Provider', result.provider);
+    if (result.seed != null) res.setHeader('X-Asyncat-Seed', String(result.seed));
+    if (result.revisedPrompt) res.setHeader('X-Asyncat-Revised-Prompt', result.revisedPrompt.slice(0, 500));
+    res.setHeader('Content-Disposition', `inline; filename="generated_${Date.now()}.${ext}"`);
+    res.send(result.buffer);
+  } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
