@@ -42,6 +42,9 @@ import storageRouter from './storage/storageRouter.js';
 // ─── Update ───────────────────────────────────────────────────────────────────
 import updateRouter from './update/updateRouter.js';
 
+// ─── Install / Runtime Readiness ─────────────────────────────────────────────
+import installRouter from './install/installRouter.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
@@ -131,6 +134,9 @@ app.use('/api/storage', storageRouter);
 
 // ─── Routes: Update ───────────────────────────────────────────────────────────
 app.use('/api/update', updateRouter);
+
+// ─── Routes: Install / Runtime Readiness ─────────────────────────────────────
+app.use('/api/install', installRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

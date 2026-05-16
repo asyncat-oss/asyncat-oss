@@ -7,6 +7,7 @@ export { filesApi } from './filesApi.js';
 export { schedulerApi } from './schedulerApi.js';
 export { bulkApi, workspaceUtils } from './bulkApi.js';
 export { apiUtils, cacheUtils, cachedProjectsApi } from './apiUtils.js';
+export { installApi } from './installApi.js';
 
 import { chatApi } from './chatApi.js';
 import { projectsApi } from './projectsApi.js';
@@ -21,6 +22,7 @@ import { bulkApi } from './bulkApi.js';
 import { workspaceUtils } from './bulkApi.js';
 import { chatFoldersApi } from './chatApi.js';
 import { projectFoldersApi } from './projectsApi.js';
+import { installApi } from './installApi.js';
 
 export default {
   chat: chatApi,
@@ -35,5 +37,6 @@ export default {
   utils: apiUtils,
   cache: cacheUtils,
   workspace: workspaceUtils,
-  files: filesApi
+  files: filesApi,
+  install: installApi
 };

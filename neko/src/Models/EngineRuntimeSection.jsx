@@ -106,6 +106,7 @@ const EngineRuntimeSection = ({
   onInstall,
   onBuildGpuRuntime,
   onRefreshCatalog,
+  installReadiness = null,
 }) => {
   const [showTools, setShowTools] = useState(false);
   const [showDetected, setShowDetected] = useState(false);
@@ -142,6 +143,10 @@ const EngineRuntimeSection = ({
 
   const activeInstallJob = installJob || engineCatalog?.activeJob || null;
   const activeBuildJob = pythonInstallJob || null;
+  const missingRuntimeTools = (installReadiness?.checks || [])
+    .filter(check => ['python', 'ffmpeg', 'whisper-server', 'piper', 'cxx-compiler', 'unzip', 'tar'].includes(check.id) && !check.ok)
+    .slice(0, 5);
+  const installCommand = installReadiness?.commands?.[0]?.command || '';
 
   const primaryAction = useMemo(() => {
     if (recommendationCandidate && !recommendationCandidate.isCurrent) {
@@ -299,6 +304,23 @@ const EngineRuntimeSection = ({
         {actionSuccess && (
           <div className="mt-4 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300">
             {actionSuccess}
+          </div>
+        )}
+        {missingRuntimeTools.length > 0 && (
+          <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+            <div className="flex items-start gap-3">
+              <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-medium">
+                  Missing runtime tools: {missingRuntimeTools.map(item => item.id).join(', ')}
+                </p>
+                {installCommand && (
+                  <p className="mt-1 truncate font-mono text-xs text-amber-700 dark:text-amber-300">
+                    {installCommand}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

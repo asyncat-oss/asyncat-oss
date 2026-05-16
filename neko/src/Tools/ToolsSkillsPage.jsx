@@ -4,7 +4,7 @@ import {
   Search, Wrench, File,
   Brain, Loader2, AlertCircle, ChevronDown, ChevronRight,
   BookOpen, Cpu, ShieldAlert,
-  Bot, Save, Edit2, X, Check, BookMarked, Trash2,
+  Bot, Save, Edit2, X, Check, BookMarked, Trash2, RefreshCw,
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/api';
 
@@ -556,6 +556,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [skillOriginFilter, setSkillOriginFilter] = useState('all');
   const [selectedToolName, setSelectedToolName] = useState(null);
   const [selectedSkillName, setSelectedSkillName] = useState(null);
+  const [reloadingSkills, setReloadingSkills] = useState(false);
+  const [reloadSkillsSuccess, setReloadSkillsSuccess] = useState(false);
   const toolsFetchedRef = useRef(false);
   const skillsFetchedRef = useRef(false);
 
@@ -625,6 +627,21 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       setErrorSkills(err.message || 'Failed to load skills');
     } finally {
       setLoadingSkills(false);
+    }
+  }
+
+  async function handleReloadSkills() {
+    setReloadingSkills(true);
+    setReloadSkillsSuccess(false);
+    try {
+      await agentApi.reloadSkills();
+      await fetchSkills();
+      setReloadSkillsSuccess(true);
+      setTimeout(() => setReloadSkillsSuccess(false), 2000);
+    } catch (err) {
+      setErrorSkills(err.message || 'Reload failed');
+    } finally {
+      setReloadingSkills(false);
     }
   }
 
@@ -938,15 +955,28 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Select a row to read its instructions.</p>
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-                      <div className="relative w-full sm:w-80">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          value={skillSearch}
-                          onChange={e => setSkillSearch(e.target.value)}
-                          placeholder="Search skills"
-                          className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
-                        />
+                      <div className="flex w-full items-center gap-2 sm:w-auto">
+                        <div className="relative flex-1 sm:w-80">
+                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            value={skillSearch}
+                            onChange={e => setSkillSearch(e.target.value)}
+                            placeholder="Search skills"
+                            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+                          />
+                        </div>
+                        <button
+                          onClick={handleReloadSkills}
+                          disabled={reloadingSkills || loadingSkills}
+                          title="Reload skills from disk"
+                          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                        >
+                          {reloadSkillsSuccess
+                            ? <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            : <RefreshCw className={`h-3.5 w-3.5 ${reloadingSkills ? 'animate-spin' : ''}`} />}
+                          {reloadSkillsSuccess ? 'Reloaded' : 'Reload'}
+                        </button>
                       </div>
                       <div className="flex w-full flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800 sm:w-auto">
                         {SKILL_ORIGIN_FILTERS.map(filter => (

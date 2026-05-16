@@ -12,6 +12,7 @@ import {
   managedEngineDir,
   managedLlamaBinaryPath,
 } from '../lib/localEngine.js';
+import { inspectSystemDependencies } from '../lib/systemDeps.js';
 
 function checkCmd(cmd) {
   try {
@@ -61,6 +62,7 @@ export function run() {
   const pass   = (msg) => { ok(msg);   passed++;   };
   const fail   = (msg) => { err(msg);  failures++; };
   const warnIt = (msg) => { warn(msg); warnings++; };
+  const systemDeps = inspectSystemDependencies();
 
   // 1. Node.js >= 20
   try {
@@ -85,12 +87,11 @@ export function run() {
   } catch (_) { fail('git not found'); }
 
   // 4. Python (optional fallback only)
-  const python = (process.platform === 'win32' ? ['python', 'python3', 'py'] : ['python3', 'python']).find(checkCmd);
-  if (python) {
-    try {
-      const ver = execSync(`${python} --version`).toString().trim();
-      pass(`${ver} available (optional fallback only)`);
-    } catch (_) { warnIt('Python found but version check failed'); }
+  const pythonCheck = systemDeps.checks.find(check => check.id === 'python');
+  if (pythonCheck?.ok) {
+    pass(`Python ${pythonCheck.version} available with venv/pip (optional fallback only)`);
+  } else if (pythonCheck?.found) {
+    warnIt(`Python ${pythonCheck.version || ''} found, but Python 3.10+ with venv/pip is needed for Python-backed local runtimes`);
   } else {
     warnIt('Python not found (optional — managed llama.cpp binary is preferred)');
   }
@@ -177,7 +178,20 @@ export function run() {
   if (gpu) warnIt(advice);
   else pass('No GPU acceleration detected; CPU-safe defaults are active');
 
-  // 14. Git repo clean
+  // 14. Optional local media/build tools
+  for (const id of ['ffmpeg', 'whisper-server', 'piper', 'cxx-compiler', 'unzip', 'tar']) {
+    const check = systemDeps.checks.find(item => item.id === id);
+    if (!check) continue;
+    if (check.ok) pass(`${id} available${check.command ? ` (${check.command})` : ''}`);
+    else warnIt(`${id} not found — ${check.reason}`);
+  }
+
+  if (!systemDeps.ready || systemDeps.optionalMissing.length > 0) {
+    const command = systemDeps.commands[0]?.command;
+    if (command) warnIt(`System install hint: ${command}`);
+  }
+
+  // 15. Git repo clean
   if (checkCmd('git')) {
     try {
       const status = execSync('git status --porcelain 2>/dev/null', { cwd: ROOT }).toString().trim();
@@ -188,7 +202,7 @@ export function run() {
     warnIt('git not found — cannot check repo state');
   }
 
-  // 15. Disk space
+  // 16. Disk space
   const freeGB = diskFreeGB(ROOT);
   if (freeGB < 1) warnIt(`Low disk space: ${freeGB.toFixed(2)} GB free (< 1 GB)`);
   else pass(`Disk space: ${freeGB.toFixed(1)} GB free`);

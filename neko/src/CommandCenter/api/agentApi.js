@@ -170,6 +170,10 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/skills/${encodeURIComponent(name)}`);
   },
 
+  reloadSkills: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/skills/reload`, { method: 'POST' });
+  },
+
   getSoul: async (name = 'default') => {
     return await apiRequest(`${API_BASE_URL}/agent/soul?name=${encodeURIComponent(name)}`);
   },

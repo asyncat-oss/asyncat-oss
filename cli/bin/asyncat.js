@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { detectPackageManagers, installSystemPackages, inspectSystemDependencies } from '../lib/systemDeps.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,8 +26,19 @@ if (isInsideRepo) {
     console.log('\n[asyncat] First run — installing the Asyncat Web UI to ' + ASYNCAT_HOME + '...\n');
 
     if (!gitInstalled()) {
-      console.error('[asyncat] git is required. Install it from https://git-scm.com');
-      process.exit(1);
+      if (process.env.ASYNCAT_INSTALL_SYSTEM_DEPS === '1') {
+        const install = installSystemPackages({ includeOptional: false });
+        if (!install.ok) {
+          console.error('[asyncat] Could not install git automatically:', install.error || install.command || 'unknown error');
+        }
+      }
+      if (!gitInstalled()) {
+        const report = inspectSystemDependencies();
+        const pm = detectPackageManagers().preferred;
+        const hint = report.commands[0]?.command || 'Install git from https://git-scm.com';
+        console.error(`[asyncat] git is required. ${pm ? `Detected ${pm.label}. ` : ''}Try: ${hint}`);
+        process.exit(1);
+      }
     }
 
     try {

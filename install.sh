@@ -13,6 +13,7 @@ die()  { printf "%b\n" "${RED}[asyncat]${NC} ✗ $*" >&2; exit 1; }
 INSTALL_DIR="${ASYNCAT_INSTALL_DIR:-$HOME/.asyncat}"
 BIN_DIR="$HOME/.local/bin"
 REPO_URL="https://github.com/asyncat-oss/asyncat-oss.git"
+AUTO_SYSTEM_DEPS="${ASYNCAT_INSTALL_SYSTEM_DEPS:-0}"
 
 echo ""
 echo "    /\_____/\ "
@@ -21,16 +22,84 @@ echo "  ( ==  ^  == )   ──────────────────�
 echo "   )         (    https://asyncat.com"
 echo ""
 
+detect_pkg_manager() {
+  if command -v brew >/dev/null 2>&1; then echo brew; return; fi
+  if command -v apt-get >/dev/null 2>&1; then echo apt; return; fi
+  if command -v dnf >/dev/null 2>&1; then echo dnf; return; fi
+  if command -v pacman >/dev/null 2>&1; then echo pacman; return; fi
+  if command -v zypper >/dev/null 2>&1; then echo zypper; return; fi
+  if command -v apk >/dev/null 2>&1; then echo apk; return; fi
+  echo none
+}
+
+install_system_packages() {
+  packages="$1"
+  [ -n "$packages" ] || return 0
+  pm="$(detect_pkg_manager)"
+  case "$pm" in
+    brew)   brew install $packages ;;
+    apt)    sudo apt-get update && sudo apt-get install -y $packages ;;
+    dnf)    sudo dnf install -y $packages ;;
+    pacman) sudo pacman -S --needed $packages ;;
+    zypper) sudo zypper install -y $packages ;;
+    apk)    sudo apk add $packages ;;
+    *)      return 1 ;;
+  esac
+}
+
+system_install_hint() {
+  pm="$(detect_pkg_manager)"
+  case "$pm" in
+    brew)   echo "brew install git node python@3.12 unzip ffmpeg cmake ninja whisper-cpp" ;;
+    apt)    echo "sudo apt-get update && sudo apt-get install -y git python3 python3-venv python3-pip unzip tar ffmpeg build-essential cmake ninja-build" ;;
+    dnf)    echo "sudo dnf install -y git nodejs npm python3 python3-pip unzip tar ffmpeg gcc-c++ make cmake ninja-build" ;;
+    pacman) echo "sudo pacman -S --needed git nodejs npm python python-pip unzip tar ffmpeg base-devel cmake ninja" ;;
+    zypper) echo "sudo zypper install -y git nodejs20 npm20 python3 python3-pip unzip tar ffmpeg gcc-c++ make cmake ninja" ;;
+    apk)    echo "sudo apk add git nodejs npm python3 py3-pip unzip tar ffmpeg build-base cmake ninja" ;;
+    *)      echo "Install Node.js 20+, npm, git, Python 3.10+ with venv/pip, unzip/tar, ffmpeg, and C++ build tools using your OS package manager." ;;
+  esac
+}
+
+check_optional_system_deps() {
+  missing=""
+  command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || missing="$missing python"
+  command -v ffmpeg >/dev/null 2>&1 || missing="$missing ffmpeg"
+  command -v unzip >/dev/null 2>&1 || missing="$missing unzip"
+  command -v tar >/dev/null 2>&1 || missing="$missing tar"
+  command -v g++ >/dev/null 2>&1 || command -v clang++ >/dev/null 2>&1 || command -v c++ >/dev/null 2>&1 || missing="$missing compiler"
+  if [ -n "$missing" ]; then
+    warn "Optional local-runtime tools missing:$missing"
+    warn "Install hint: $(system_install_hint)"
+    warn "To let this installer try OS packages, rerun with ASYNCAT_INSTALL_SYSTEM_DEPS=1"
+  else
+    ok "Optional local-runtime tools detected"
+  fi
+}
+
+if [ "$AUTO_SYSTEM_DEPS" = "1" ]; then
+  info "Installing system dependencies with $(detect_pkg_manager)..."
+  case "$(detect_pkg_manager)" in
+    brew)   install_system_packages "git node python@3.12 unzip ffmpeg cmake ninja whisper-cpp" || warn "System package install failed; continuing with checks." ;;
+    apt)    install_system_packages "git python3 python3-venv python3-pip unzip tar ffmpeg build-essential cmake ninja-build" || warn "System package install failed; continuing with checks." ;;
+    dnf)    install_system_packages "git nodejs npm python3 python3-pip unzip tar ffmpeg gcc-c++ make cmake ninja-build" || warn "System package install failed; continuing with checks." ;;
+    pacman) install_system_packages "git nodejs npm python python-pip unzip tar ffmpeg base-devel cmake ninja" || warn "System package install failed; continuing with checks." ;;
+    zypper) install_system_packages "git nodejs20 npm20 python3 python3-pip unzip tar ffmpeg gcc-c++ make cmake ninja" || warn "System package install failed; continuing with checks." ;;
+    apk)    install_system_packages "git nodejs npm python3 py3-pip unzip tar ffmpeg build-base cmake ninja" || warn "System package install failed; continuing with checks." ;;
+    none)   warn "No supported package manager detected. $(system_install_hint)" ;;
+  esac
+fi
+
 # ── 1. Node.js v20+ ───────────────────────────────────────────────────────────
 info "Checking Node.js..."
-command -v node >/dev/null 2>&1 || die "Node.js not found. Install from https://nodejs.org (v20+ required)"
+command -v node >/dev/null 2>&1 || die "Node.js not found. Install from https://nodejs.org (v20+ required), or install via your OS package manager."
 NODE_VER=$(node -e "process.stdout.write(process.version)")
 NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v\([0-9]*\).*/\1/')
-[ "$NODE_MAJOR" -ge 20 ] || die "Node.js v20+ required. You have $NODE_VER — upgrade at https://nodejs.org"
+[ "$NODE_MAJOR" -ge 20 ] || die "Node.js v20+ required. You have $NODE_VER — upgrade at https://nodejs.org or with a current package manager."
 ok "Node.js $NODE_VER"
 
 # ── 2. git ────────────────────────────────────────────────────────────────────
-command -v git >/dev/null 2>&1 || die "git not found. Install git and try again."
+command -v git >/dev/null 2>&1 || die "git not found. Install git and try again. Hint: $(system_install_hint)"
+check_optional_system_deps
 
 # ── 3. Clone or update ────────────────────────────────────────────────────────
 if [ -d "$INSTALL_DIR/.git" ]; then

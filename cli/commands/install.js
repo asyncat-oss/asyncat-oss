@@ -16,6 +16,11 @@ import {
 	verifyBinary,
 	writeLlamaBinaryEnv,
 } from "../lib/localEngine.js";
+import {
+	detectPython,
+	inspectSystemDependencies,
+	installSystemPackages,
+} from "../lib/systemDeps.js";
 
 const NPM_CMD = process.platform === "win32" ? "npm.cmd" : "npm";
 
@@ -33,6 +38,56 @@ function checkCmd(cmd) {
 	} catch {
 		return false;
 	}
+}
+
+function importantMissingChecks(report) {
+	const important = new Set([
+		"node",
+		"npm",
+		"git",
+		"python",
+		"ffmpeg",
+		"unzip",
+		"tar",
+		"cxx-compiler",
+	]);
+	return report.checks.filter((check) => important.has(check.id) && !check.ok);
+}
+
+function printSystemDependencySummary(report) {
+	const missing = importantMissingChecks(report);
+	if (missing.length === 0) {
+		ok("System tools ready");
+		return;
+	}
+
+	for (const check of missing) {
+		const level = check.required ? err : warn;
+		const minimum = check.minVersion ? ` ${check.minVersion}+` : "";
+		level(`${check.id}${minimum} missing or unusable — ${check.reason}`);
+	}
+
+	if (report.packageManagers.preferred) {
+		info(`Detected package manager: ${report.packageManagers.preferred.label}`);
+	}
+	for (const item of report.commands.slice(0, 3)) {
+		info(`Install hint: ${col("cyan", item.command)}`);
+	}
+}
+
+function maybeInstallSystemDeps(args) {
+	const requested = args.includes("--install-system-deps") || process.env.ASYNCAT_INSTALL_SYSTEM_DEPS === "1";
+	if (!requested) return;
+	const dryRun = args.includes("--dry-run-system-deps");
+	const includeOptional = !args.includes("--core-system-deps-only");
+	info(`Installing system dependencies with detected package manager${dryRun ? " (dry run)" : ""}...`);
+	const result = installSystemPackages({ includeOptional, dryRun });
+	if (result.ok) {
+		ok(dryRun ? `System install command: ${result.command}` : "System dependencies installed");
+		return;
+	}
+	warn(result.error || "System dependency install did not run.");
+	if (result.command) info(`Run manually: ${col("cyan", result.command)}`);
 }
 
 function setupEnv(target, example) {
@@ -444,6 +499,9 @@ export async function run(args = []) {
 	log(col("bold", "  Checking dependencies..."));
 	log("");
 
+	maybeInstallSystemDeps(args);
+	printSystemDependencySummary(inspectSystemDependencies());
+
 	if (!checkCmd("node")) {
 		err("Node.js not found — install from https://nodejs.org");
 		return;
@@ -470,10 +528,15 @@ export async function run(args = []) {
 	}
 	ok(`git ${execSync("git --version").toString().trim().replace(/^git version /, "")}`);
 
-	const python = ["python3", "python"].find(checkCmd);
-	if (python)
+	const pythonInfo = detectPython();
+	const python = pythonInfo.ok ? pythonInfo.command : null;
+	if (pythonInfo.ok)
 		ok(
-			`Python ${execSync(`${python} --version`).toString().trim().split(" ")[1]}`,
+			`Python ${pythonInfo.version}`,
+		);
+	else if (pythonInfo.found)
+		warn(
+			`Python ${pythonInfo.version || ""} found but Asyncat needs Python 3.10+ with venv and pip for Python-backed local runtimes.`,
 		);
 	else
 		warn(

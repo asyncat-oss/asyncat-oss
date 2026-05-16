@@ -182,6 +182,7 @@ export class AgentRuntime {
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
     this.agentMode = opts.agentMode === 'plan' ? 'plan' : 'action';
     this.abortSignal = opts.abortSignal || null;
+    this.capabilitiesSection = opts.capabilitiesSection || '';
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Wire BasalGanglia events (skill auto-discovery) to the runtime event stream
@@ -293,6 +294,7 @@ export class AgentRuntime {
       model: this.model,
       goal,
       conversationHistory,
+      workingDir: this.workingDir,
       limit: 5,
     });
     const relevantSkills = skillSelection.skills || [];
@@ -326,6 +328,7 @@ export class AgentRuntime {
       mentionedAgents: this.mentionedAgents,
       soul,
       agentMode: this.agentMode,
+      capabilitiesSection: this.capabilitiesSection,
     });
 
     // Auto-detect and store corrections from user's latest message in continued conversations

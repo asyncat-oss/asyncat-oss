@@ -23,6 +23,7 @@ import { skillTools } from './tools/skillTools.js';
 import { artifactTools } from './tools/artifactTools.js';
 import { audioTools } from './tools/audioTools.js';
 import { visualTools } from './tools/visualTools.js';
+import { installTools } from './tools/installTools.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -66,6 +67,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(artifactTools);
   toolRegistry.registerAll(audioTools);
   toolRegistry.registerAll(visualTools);
+  toolRegistry.registerAll(installTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

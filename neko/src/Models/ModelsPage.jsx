@@ -19,6 +19,7 @@ import {
 } from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
 import { audioApi, visualModelsApi } from '../Settings/settingApi.js';
+import { installApi } from '../CommandCenter/api/installApi.js';
 
 // ── Status dot ────────────────────────────────────────────────────────────────
 const StatusDot = ({ status }) => {
@@ -162,6 +163,7 @@ const ModelsPage = () => {
   });
   const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
   const [visualModels, setVisualModels] = useState({ vision: [], image: [] });
+  const [installReadiness, setInstallReadiness] = useState(null);
   const [highlightedItem, setHighlightedItem] = useState(null);
 
   const refreshVoiceData = useCallback(() => {
@@ -199,6 +201,12 @@ const ModelsPage = () => {
     refreshVoiceData();
     refreshVisualData();
   }, [refreshVoiceData, refreshVisualData]);
+
+  useEffect(() => {
+    installApi.getReadiness()
+      .then(setInstallReadiness)
+      .catch(() => setInstallReadiness(null));
+  }, []);
 
   // ── Collapsible section state ──────────────────────────────────────────────
   const [expandedStt, setExpandedStt] = useState(false);
@@ -624,6 +632,7 @@ const ModelsPage = () => {
                 onInstall={handleManagedInstall}
                 onBuildGpuRuntime={handleBuildGpuRuntime}
                 onRefreshCatalog={loadEngineCatalog}
+                installReadiness={installReadiness}
               />
             </div>
           </CollapsibleSection>

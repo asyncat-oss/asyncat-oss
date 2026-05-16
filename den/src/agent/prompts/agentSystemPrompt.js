@@ -81,6 +81,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     soul = null,
     agentMode = 'action',
     platform = process.platform,
+    capabilitiesSection = '',   // multimodal capability status — injected here, NOT in the goal
   } = opts;
 
   const shellName = getShellName(platform);
@@ -116,8 +117,8 @@ export function buildAgentSystemPrompt(opts = {}) {
     ? `\n## Relevant Skills (Cerebellum)\n${skills.map(s => {
       const body = s.body || s.description || '';
       return `### ${s.name}\n${s.description ? `_${s.description}_\n\n` : ''}${body}`;
-    }).join('\n\n---\n\n')}\n`
-    : '';
+    }).join('\n\n---\n\n')}\n\n_If mid-task you encounter a domain not covered above (e.g. you start debugging, or need to write SQL), call \`load_skill\` to pull in the right guidance. Use \`list_skills\` first if unsure of the name._\n`
+    : `\n_Use \`list_skills\` and \`load_skill\` to pull in guidance for specific domains (debugging, git, SQL, docker, security, etc.) when you encounter them during the task._\n`;
 
   const mentionedAgentsSection = mentionedAgents.length > 0
     ? `\n## Mentioned Agent Profiles\n${mentionedAgents.map(agent => {
@@ -136,13 +137,17 @@ export function buildAgentSystemPrompt(opts = {}) {
     }).join('\n')}\n\nUse \`delegate_to_profile\` when the user asks a mentioned profile to investigate or perform a subtask. The delegated profile can load relevant skills itself.\n`
     : '';
 
+  const capSection = capabilitiesSection
+    ? `\n## Multimodal Capabilities\n${capabilitiesSection}\n`
+    : '';
+
   return `${identity}
 
 ## Environment
 - **Platform**: ${platform}
 - **Working directory**: ${workingDir}
 - **Shell**: ${shellName}
-${modeSection}
+${modeSection}${capSection}
 
 ## How You Work (ReAct Pattern)
 For each step, you MUST output your response in this exact format:

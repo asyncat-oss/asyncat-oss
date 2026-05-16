@@ -8,7 +8,7 @@ import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
-import { loadSkills, listSkills, normalizeTags } from '../../agent/skills.js';
+import { loadSkills, reloadSkills, listSkills, normalizeTags } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
@@ -1076,6 +1076,15 @@ router.get('/skills/:name', authenticate, (req, res) => {
   });
 });
 
+router.post('/skills/reload', authenticate, (_req, res) => {
+  try {
+    const skills = reloadSkills();
+    res.json({ success: true, count: skills.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/souls', authenticate, (req, res) => {
   res.json({ success: true, souls: listSouls() });
 });
@@ -1416,7 +1425,9 @@ router.post('/run', authenticate, async (req, res) => {
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
     const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext);
     const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
-    const goal = `${formatMultimodalCapabilityPrompt(multimodalCapabilities)}\n\n${injectFileAttachments(baseGoal, resolvedFiles)}`;
+    // Capabilities go into the system prompt via AgentRuntime — NOT prepended to the user's goal.
+    const capabilitiesSection = formatMultimodalCapabilityPrompt(multimodalCapabilities);
+    const goal = injectFileAttachments(baseGoal, resolvedFiles);
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
     const resolvedAutoApprove = resolvedAgentMode === 'action'
       ? (autoApprove === true || autoApprove === 'all' || profile?.auto_approve || false)
@@ -1453,6 +1464,7 @@ router.post('/run', authenticate, async (req, res) => {
       reasoningEffort,
       agentMode: resolvedAgentMode,
       mentionedAgents: mentionedAgentProfiles,
+      capabilitiesSection,
       abortSignal: abortController.signal,
       onEvent: continuedTaskRun ? (event) => {
         updateTaskRun(continuedTaskRun.id, {
