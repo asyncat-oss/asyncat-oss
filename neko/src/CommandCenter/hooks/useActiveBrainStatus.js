@@ -32,9 +32,18 @@ const PROVIDER_NAMES = {
   custom: "Custom",
 };
 
-const shortModelName = (model) => {
+const shortModelName = (model, providerName = "") => {
   if (!model) return "";
-  return String(model).replace(/\.(gguf|bin)$/i, "").replace(/[-_]?Q\d+[_-]?[A-Z0-9]*$/i, "");
+  let name = String(model).replace(/\.(gguf|bin)$/i, "").replace(/[-_]?Q\d+[_-]?[A-Z0-9]*$/i, "");
+  // Strip provider prefix from model name to avoid "MiniMax · MiniMax-M2.7" redundancy
+  if (providerName) {
+    const prefix = providerName.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const nameStart = name.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    if (nameStart.startsWith(prefix)) {
+      name = name.slice(providerName.length).replace(/^[-_.]/, "");
+    }
+  }
+  return name || String(model).replace(/\.(gguf|bin)$/i, "");
 };
 
 export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
@@ -95,7 +104,7 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
     const isBuiltin = providerId === "llamacpp-builtin";
     const status = isBuiltin ? (localStatus?.status || "idle") : "ready";
     const rawModel = isBuiltin ? (localStatus?.model || config?.model) : config?.model;
-    const model = shortModelName(rawModel);
+    const model = shortModelName(rawModel, providerName);
     const mode = providerId === "openai-codex"
       ? "Codex"
       : providerId === "codex-cli"

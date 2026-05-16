@@ -152,18 +152,22 @@ const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:h
 function TokenBar({ usage }) {
   const ctx = usage.contextWindow || 128000;
   const pct = Math.min((usage.totalTokens / ctx) * 100, 100);
-  const color = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-400';
+  const color = pct >= 90 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : pct >= 70 ? 'bg-yellow-300' : 'bg-emerald-400';
+  const textColor = pct >= 90 ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500';
   const label = `${usage.estimated ? '~' : ''}${(usage.totalTokens / 1000).toFixed(1)}k`;
   const tooltip = `${usage.estimated ? 'Estimated — ' : ''}${(usage.inputTokens / 1000).toFixed(1)}k in + ${(usage.outputTokens / 1000).toFixed(1)}k out · ${pct.toFixed(0)}% of ${(ctx / 1000).toFixed(0)}k context (${usage.contextWindowSource || 'unknown'})`;
 
   return (
     <span className="inline-flex items-center gap-1" title={tooltip}>
-      <span className={`text-[10px] tabular-nums ${pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-        {label}
-      </span>
+      <span className={`text-[10px] tabular-nums ${textColor}`}>{label}</span>
       <span className="relative h-1 w-10 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
         <span className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
       </span>
+      {pct >= 80 && (
+        <span className={`text-[9px] font-medium ${pct >= 90 ? 'text-red-400' : 'text-amber-400'}`} title="Context window is getting full — history may be compacted soon">
+          {pct >= 90 ? 'Full' : 'Filling'}
+        </span>
+      )}
     </span>
   );
 }

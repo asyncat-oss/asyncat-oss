@@ -290,7 +290,25 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
     return null;
   }, [agentEvents]);
-  useAgentNotifications({ isRunning: agentRunning, lastAnswer: latestAnswer, conversationTitle });
+  const latestAskUser = useMemo(() => {
+    for (let i = agentEvents.length - 1; i >= 0; i--) {
+      if (agentEvents[i]?.type === 'ask_user') return agentEvents[i].data;
+    }
+    return null;
+  }, [agentEvents]);
+  const latestPermissionRequest = useMemo(() => {
+    for (let i = agentEvents.length - 1; i >= 0; i--) {
+      if (agentEvents[i]?.type === 'permission_request') return agentEvents[i].data;
+    }
+    return null;
+  }, [agentEvents]);
+  useAgentNotifications({
+    isRunning: agentRunning,
+    lastAnswer: latestAnswer,
+    lastAskUser: latestAskUser,
+    lastPermissionRequest: latestPermissionRequest,
+    conversationTitle,
+  });
   const setCurrentChatRun = useCallback((updater) => {
     updateChatRun(currentRunKey, updater);
   }, [currentRunKey, updateChatRun]);
