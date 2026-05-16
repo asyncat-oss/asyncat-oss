@@ -124,46 +124,55 @@ function _setCachedSkills(goal, result) {
 }
 
 // ── Deterministic matching (used as fallback and to supplement LLM picks) ───
-// Covers all 29 bundled skills by filename. Patterns are matched against the
-// lowercased goal text. Multiple patterns can match the same skill — the first
-// match wins per skill.
+// Keys are FRONTMATTER names (not filenames) — that is what loadedSkills stores.
+// Run: grep '^name:' den/src/agent/skills/*.md to verify any name.
 
 const SKILL_PATTERNS = [
   // Coding / engineering
-  ['agentic-coding',     /\b(implement|feature|component|route|function|class|module|endpoint|refactor|fix\s+(?:the\s+)?(?:code|bug|issue)|write\s+(?:the\s+)?code|update\s+(?:the\s+)?(?:code|file|logic))\b/],
-  ['git',                /\b(git|commit|branch|push|pull|stash|diff|merge|rebase|checkout|version\s+control|amend|cherry.?pick)\b/],
-  ['testing',            /\b(test|tests|testing|coverage|spec|suite|jest|vitest|pytest|mocha|cypress|playwright)\b/],
-  ['tdd',                /\b(tdd|test.?driven|test\s+first|red.?green|write\s+test\s+first)\b/],
-  ['debugging',          /\b(debug|debugg|bug|error|exception|traceback|stack\s*trace|fails|failure|broken|regression|crash|not\s+working)\b/],
-  ['code-review',        /\b(review|pr\b|pull\s*request|code\s*review|lgtm|patch)\b/],
-  ['refactoring',        /\b(refactor|cleanup|clean\s+up|simplify|technical\s*debt|deduplicate|restructure|extract\s+function)\b/],
-  ['performance',        /\b(performance|perf\b|speed|slow|latency|memory\s*leak|profil|benchmark|optimiz|throughput|cpu\s+usage)\b/],
-  ['security',           /\b(security|auth(?:entication|orization)?\b|cve\b|vulnerabilit|injection|xss|csrf|owasp|pentest|exploit|sanitiz)\b/],
-  ['error-handling',     /\b(error.?handl|exception.?handl|retry|fallback|resilience|circuit.?breaker|graceful\s+degradation)\b/],
-  ['api-design',         /\b(api\s+design|rest(?:ful)?\s+api|graphql\s+schema|openapi|swagger|endpoint\s+design|interface\s+design|contract)\b/],
+  ['agentic-coding',            /\b(implement|feature|component|route|function|class|module|endpoint|fix\s+(?:the\s+)?(?:code|bug|issue)|write\s+(?:the\s+)?code|update\s+(?:the\s+)?(?:code|file|logic))\b/],
+  ['git-workflow',              /\b(git|commit|branch|push|pull|stash|diff|merge|rebase|checkout|version\s+control|amend|cherry.?pick)\b/],
+  ['effective-testing',         /\b(test|tests|testing|coverage|spec|suite|jest|vitest|pytest|mocha|cypress|playwright)\b/],
+  ['tdd',                       /\b(tdd|test.?driven|test\s+first|red.?green|write\s+test\s+first)\b/],
+  ['systematic-debugging',      /\b(debug|debugg|bug|error|exception|traceback|stack\s*trace|fails|failure|broken|regression|crash|not\s+working)\b/],
+  ['code-review',               /\b(review|pr\b|pull\s*request|code\s*review|lgtm|patch)\b/],
+  ['refactoring',               /\b(refactor|cleanup|clean\s+up|simplify|technical\s*debt|deduplicate|restructure|extract\s+function)\b/],
+  ['performance-optimization',  /\b(performance|perf\b|speed|slow|latency|memory\s*leak|profil|benchmark|optimiz|throughput|cpu\s+usage)\b/],
+  ['security-best-practices',   /\b(security|auth(?:entication|orization)?\b|cve\b|vulnerabilit|injection|xss|csrf|owasp|pentest|exploit|sanitiz)\b/],
+  ['error-handling',            /\b(error.?handl|exception.?handl|retry|fallback|resilience|circuit.?breaker|graceful\s+degradation)\b/],
+  ['rest-api-design',           /\b(api\s+design|rest(?:ful)?\s+api|graphql\s+schema|openapi|swagger|endpoint\s+design|interface\s+design|contract)\b/],
   // Infra / DevOps
-  ['docker',             /\b(docker|container|dockerfile|compose\b|image\s+build|kubernetes|k8s\b|pod\b|helm)\b/],
-  ['deployment',         /\b(deploy|deployment|release|production|staging|heroku|aws\b|gcp\b|azure|vercel|render|fly\.io|ship\s+to)\b/],
-  ['ci-cd-pipeline',     /\b(ci\b|cd\b|ci\/cd|github\s*actions|workflow\s+file|pipeline|jenkins|gitlab\s*ci|circleci|travis)\b/],
-  ['database-migrations',/\b(migration|migrate|schema\s+change|alembic|prisma\s+migrate|knex\s+migrate|sequel\s+migrate|db\s+change)\b/],
-  ['sql-queries',        /\b(sql\b|query|queries|postgres|mysql|sqlite|select\b|join\b|index\b|explain\s+query)\b/],
-  ['monitoring',         /\b(monitor|monitoring|metrics|grafana|prometheus|alert|uptime|dashboard|observabilit|sentry)\b/],
-  ['logging',            /\b(log(?:ger|ging)?\b|winston|pino|structured\s+log|log\s+level|log\s+format)\b/],
-  ['log-analysis',       /\b(log\s+analysis|parse\s+log|analyze\s+log|search\s+log|grep\s+log|log\s+pattern)\b/],
-  ['cron-jobs',          /\b(cron\b|schedule(?:d)?\s+job|recurring\s+task|timer|interval\s+job|cron\s+expression)\b/],
+  ['docker-basics',             /\b(docker|container|dockerfile|compose\b|image\s+build|kubernetes|k8s\b|pod\b|helm)\b/],
+  ['deployment-patterns',       /\b(deploy|deployment|release|production|staging|heroku|aws\b|gcp\b|azure|vercel|render|fly\.io|ship\s+to)\b/],
+  ['ci-cd-pipeline',            /\b(ci\b|cd\b|ci\/cd|github\s*actions|workflow\s+file|pipeline|jenkins|gitlab\s*ci|circleci|travis)\b/],
+  ['database-migrations',       /\b(migration|migrate|schema\s+change|alembic|prisma\s+migrate|knex\s+migrate|sequel\s+migrate|db\s+change)\b/],
+  ['sql-queries',               /\b(sql\b|query|queries|postgres|mysql|sqlite|select\b|join\b|index\b|explain\s+query)\b/],
+  ['monitoring-setup',          /\b(monitor|monitoring|metrics|grafana|prometheus|alert|uptime|dashboard|observabilit|sentry)\b/],
+  ['effective-logging',         /\b(log(?:ger|ging)?\b|winston|pino|structured\s+log|log\s+level|log\s+format)\b/],
+  ['log-analysis',              /\b(log\s+analysis|parse\s+log|analyze\s+log|search\s+log|grep\s+log|log\s+pattern)\b/],
+  ['cron-jobs',                 /\b(cron\b|schedule(?:d)?\s+job|recurring\s+task|timer|interval\s+job|cron\s+expression)\b/],
   // Docs / writing
-  ['documentation',      /\b(document(?:ation)?|readme|wiki|jsdoc|docstring|api\s+docs|write\s+docs|add\s+comments)\b/],
-  ['report-writing',     /\b(report|write\s+(?:a\s+)?report|generate\s+report|executive\s+summary)\b/],
-  ['email-drafting',     /\b(email|draft\s+(?:an?\s+)?email|write\s+(?:an?\s+)?email|gmail|smtp|outreach)\b/],
-  ['document-generation',/\b(generate\s+(?:a\s+)?(?:document|pdf|doc)\b|pdf\s+report|word\s+document|from\s+template)\b/],
+  ['effective-documentation',   /\b(document(?:ation)?|readme|wiki|jsdoc|docstring|api\s+docs|write\s+docs|add\s+comments)\b/],
+  ['report-writing',            /\b(report|write\s+(?:a\s+)?report|generate\s+report|executive\s+summary)\b/],
+  ['email-drafting',            /\b(email|draft\s+(?:an?\s+)?email|write\s+(?:an?\s+)?email|gmail|smtp|outreach)\b/],
+  ['document-generation',       /\b(generate\s+(?:a\s+)?(?:document|pdf|doc)\b|pdf\s+report|word\s+document|from\s+template)\b/],
   // Data / analytics
-  ['statistics',         /\b(statistic|average|median|regression|correlation|data\s+analysis|hypothesis|p.?value|confidence\s+interval)\b/],
-  ['data-interpretation',/\b(interpret\s+data|data\s+insight|visualize\s+data|chart\b|graph\b|plot\b|trend\s+analysis)\b/],
-  // Planning
-  ['plan',               /\b(plan\b|planning|roadmap|architecture\s+design|design\s+doc|breakdown\s+(?:the\s+)?task|step.?by.?step)\b/],
+  ['statistics-interpretation', /\b(statistic|average|median|regression|correlation|data\s+analysis|hypothesis|p.?value|confidence\s+interval)\b/],
+  ['data-interpretation',       /\b(interpret\s+data|data\s+insight|visualize\s+data|chart\b|graph\b|plot\b|trend\s+analysis)\b/],
+  // Planning / architecture
+  ['plan',                      /\b(plan\b|planning|roadmap|design\s+doc|breakdown\s+(?:the\s+)?task|step.?by.?step)\b/],
+  ['architecture-review',       /\b(architecture|system\s+design|trade.?off|design\s+decision|scalab|coupling|microservice|monolith)\b/],
   // UX / research
-  ['ui-ux-review',       /\b(ui\b|ux\b|user\s+interface|user\s+experience|design\s+review|figma|wireframe|accessibility|a11y)\b/],
-  ['web-research',       /\b(web\s+research|search\s+(?:the\s+)?web|browse|scrape|crawl|look\s+up\s+online|fetch\s+url)\b/],
+  ['ui-ux-review',              /\b(ui\b|ux\b|user\s+interface|user\s+experience|design\s+review|figma|wireframe)\b/],
+  ['accessibility-audit',       /\b(accessib|a11y\b|aria\b|wcag|screen\s+reader|contrast\s+ratio|keyboard\s+nav)\b/],
+  ['web-research',              /\b(web\s+research|search\s+(?:the\s+)?web|browse|scrape|crawl|look\s+up\s+online|fetch\s+url)\b/],
+  // Frameworks (new)
+  ['nextjs-patterns',           /\b(next\.?js|app\s+router|server\s+component|server\s+action|edge\s+runtime|next\s+config)\b/],
+  ['react-patterns',            /\b(react|jsx\b|tsx\b|hook\b|use(?:State|Effect|Memo|Callback|Ref|Context)|context\s+api|component\s+pattern)\b/],
+  // Ops
+  ['incident-response',         /\b(incident|outage|production\s+down|on.?call|postmortem|root\s+cause|sev\d|pager|escalat)\b/],
+  ['onboarding-new-codebase',   /\b(onboard|new\s+(?:to\s+(?:the\s+)?)?(?:repo|codebase|project)|explore\s+(?:the\s+)?(?:repo|code)|understand\s+(?:the\s+)?(?:codebase|project|repo))\b/],
+  // Data engineering
+  ['data-engineering',          /\b(etl\b|pipeline\s+(?:data|ingestion)|dbt\b|airflow|spark\b|kafka\b|data\s+warehouse|ingestion|transformation\s+pipeline)\b/],
 ];
 
 function deterministicSkillMatch(goal = '', limit = 5) {

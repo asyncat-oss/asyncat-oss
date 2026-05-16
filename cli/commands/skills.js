@@ -4,16 +4,10 @@ import { log, info, col, ok, err, warn } from '../lib/colors.js';
 
 function getSkillsDir() {
   const cwd = process.cwd();
-  // Prefer the backend-owned skills directory (canonical location)
   const fromBackend = path.join(cwd, 'den', 'src', 'agent', 'skills');
   if (fs.existsSync(fromBackend)) return fromBackend;
   const fromBackendParent = path.join(cwd, '..', 'den', 'src', 'agent', 'skills');
   if (fs.existsSync(fromBackendParent)) return fromBackendParent;
-  // Legacy fallback: cli/skills (kept for backward compatibility)
-  const fromCwd = path.join(cwd, 'cli', 'skills');
-  if (fs.existsSync(fromCwd)) return fromCwd;
-  const fromParent = path.join(cwd, '..', 'cli', 'skills');
-  if (fs.existsSync(fromParent)) return fromParent;
   return path.join(import.meta.dirname, '..', 'den', 'src', 'agent', 'skills');
 }
 
