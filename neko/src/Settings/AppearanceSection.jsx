@@ -63,6 +63,9 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
   const [dockPosition, setDockPosition] = useState(() => {
     return localStorage.getItem('dockPosition') || 'bottom';
   });
+  const [sidebarPosition, setSidebarPosition] = useState(() => {
+    return localStorage.getItem('sidebarPosition') || 'left';
+  });
   const [topMenuBarVisibility, setTopMenuBarVisibility] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') || 'always';
   });
@@ -86,6 +89,12 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
     setDockPosition(value);
     localStorage.setItem('dockPosition', value);
     dispatchPreferenceChange('dock-position-changed');
+  };
+
+  const handleSidebarPositionChange = (value) => {
+    setSidebarPosition(value);
+    localStorage.setItem('sidebarPosition', value);
+    dispatchPreferenceChange('sidebar-position-changed');
   };
 
   const handleTopMenuBarVisibilityChange = (value) => {
@@ -133,7 +142,7 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
       <PreferenceCard
         icon={Layout}
         title="Navigation"
-        description="Choose a floating dock or a persistent left sidebar."
+        description="Choose a floating dock or a persistent sidebar."
       >
         <RadioRow
           name="navigationStyle"
@@ -145,11 +154,34 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
         <RadioRow
           name="navigationStyle"
           icon={PanelLeft}
-          label="Left Sidebar"
+          label="Sidebar"
           checked={navigationStyle === 'sidebar'}
           onChange={() => handleNavigationStyleChange('sidebar')}
         />
       </PreferenceCard>
+
+      {navigationStyle === 'sidebar' && (
+        <PreferenceCard
+          icon={Layout}
+          title="Sidebar Position"
+          description="Choose which edge the persistent sidebar uses."
+        >
+          <RadioRow
+            name="sidebarPosition"
+            icon={PanelLeft}
+            label="Left"
+            checked={sidebarPosition === 'left'}
+            onChange={() => handleSidebarPositionChange('left')}
+          />
+          <RadioRow
+            name="sidebarPosition"
+            icon={PanelRight}
+            label="Right"
+            checked={sidebarPosition === 'right'}
+            onChange={() => handleSidebarPositionChange('right')}
+          />
+        </PreferenceCard>
+      )}
 
       <PreferenceCard
         icon={Sparkles}

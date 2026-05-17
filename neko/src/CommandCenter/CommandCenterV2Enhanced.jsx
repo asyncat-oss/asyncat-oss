@@ -18,7 +18,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
-import AgentRunFeed, { CurrentPlanPanel } from './components/agent/AgentRunFeed';
+import AgentRunFeed, { CurrentPlanPanel, extractLocalhostUrl } from './components/agent/AgentRunFeed';
 import AgentChangesPanel from './components/agent/AgentChangesPanel';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
@@ -50,6 +50,7 @@ import {
   BookMarked,
   Headphones,
   Sparkles,
+  Globe,
 } from "lucide-react";
 
 import {
@@ -1773,6 +1774,24 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     [messages, persistedAgentEvents],
   );
 
+  // Auto-detect a localhost server URL from the most recent run_command result
+  const detectedPreviewUrl = useMemo(() => {
+    for (let i = persistedAgentEvents.length - 1; i >= 0; i--) {
+      const ev = persistedAgentEvents[i];
+      if (ev?.type === 'tool_start' && ev.data?.tool === 'run_command' && ev.result) {
+        const output = typeof ev.result?.output === 'string' ? ev.result.output
+          : typeof ev.result?.stdout === 'string' ? ev.result.stdout : null;
+        if (output) {
+          const url = extractLocalhostUrl(output);
+          if (url) return url;
+        }
+      }
+    }
+    return null;
+  }, [persistedAgentEvents]);
+
+  const effectivePreviewUrl = detectedPreviewUrl;
+
   const conversationHighlights = useMemo(
     () => buildConversationHighlights(messages),
     [messages],
@@ -2290,6 +2309,25 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       </button>
                     )}
 
+                    {effectivePreviewUrl && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('preview')}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'preview'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 midnight:bg-emerald-950/30'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title={`Preview: ${effectivePreviewUrl}`}
+                      >
+                        <span className="relative flex items-center">
+                          <Globe className="h-4 w-4" />
+                          <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        </span>
+                        Preview
+                      </button>
+                    )}
+
                     {hasConversationContent && (
                       <div ref={exportMenuRef} className="relative">
                         <button
@@ -2520,7 +2558,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside className="hidden xl:block w-96 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700">
           <CommandCenterSidePanel
             activeTab={sidePanelTab}
@@ -2544,11 +2582,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             navigate={navigate}
             highlights={conversationHighlights}
             onOpenSavedMessage={handleOpenSavedMessage}
+            previewUrl={effectivePreviewUrl}
           />
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"
@@ -2580,6 +2619,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               navigate={navigate}
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
+              previewUrl={effectivePreviewUrl}
             />
           </div>
         </div>

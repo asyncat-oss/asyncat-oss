@@ -38,6 +38,9 @@ const AppLayout = ({ session, onSignOut }) => {
   const [dockPosition, setDockPosition] = useState(() => {
     return localStorage.getItem('dockPosition') || 'bottom';
   });
+  const [sidebarPosition, setSidebarPosition] = useState(() => {
+    return localStorage.getItem('sidebarPosition') || 'left';
+  });
   const [navigationStyle, setNavigationStyle] = useState(() => {
     return localStorage.getItem('navigationStyle') || 'dock';
   });
@@ -215,6 +218,19 @@ const AppLayout = ({ session, onSignOut }) => {
     return () => {
       window.removeEventListener('storage', syncDockPosition);
       window.removeEventListener('dock-position-changed', syncDockPosition);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncSidebarPosition = () => {
+      setSidebarPosition(localStorage.getItem('sidebarPosition') || 'left');
+    };
+
+    window.addEventListener('storage', syncSidebarPosition);
+    window.addEventListener('sidebar-position-changed', syncSidebarPosition);
+    return () => {
+      window.removeEventListener('storage', syncSidebarPosition);
+      window.removeEventListener('sidebar-position-changed', syncSidebarPosition);
     };
   }, []);
 
@@ -439,9 +455,13 @@ const AppLayout = ({ session, onSignOut }) => {
     left: 'pl-20',
     right: 'pr-20',
   };
+  const sidebarPaddingClass = {
+    left: 'pl-16 sm:pl-56',
+    right: 'pr-16 sm:pr-56',
+  };
   const navigationPaddingClass = navigationStyle === 'sidebar'
-    ? 'pl-16 sm:pl-56'
-    : dockPaddingClass[dockPosition];
+    ? sidebarPaddingClass[sidebarPosition] || sidebarPaddingClass.left
+    : dockPaddingClass[dockPosition] || dockPaddingClass.bottom;
 
   // Normal dashboard when user has workspaces
   return (

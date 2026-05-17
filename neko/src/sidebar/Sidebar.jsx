@@ -189,21 +189,30 @@ const SidebarNavItem = memo(({ icon, label, shortcut, onClick, isActive }) => (
     onClick={onClick}
     title={shortcut ? `${label} ${shortcut}` : label}
     className={`
-      w-full h-10 flex items-center gap-3 rounded-lg px-3 transition-colors
+      group w-full h-10 flex items-center gap-3 rounded-lg px-3
+      transition-colors duration-150
       ${isActive
-        ? "bg-gray-100 text-gray-950 dark:bg-gray-800 dark:text-white"
-        : "text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+        ? "bg-gray-100/80 text-gray-950 dark:bg-white/[0.06] dark:text-white midnight:bg-white/[0.05] midnight:text-white"
+        : "text-gray-500 hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.045] dark:hover:text-gray-100 midnight:text-gray-500 midnight:hover:bg-white/[0.045] midnight:hover:text-gray-100"
       }
     `}
   >
-    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
+    <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors ${
+      isActive
+        ? 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
+        : 'text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-gray-500 midnight:group-hover:text-gray-300'
+    }`}>
       {icon}
     </span>
     <span className="hidden min-w-0 flex-1 truncate text-left text-sm font-medium sm:block">
       {label}
     </span>
     {shortcut ? (
-      <span className="hidden flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500 sm:block">
+      <span className={`hidden flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:block ${
+        isActive
+          ? 'text-gray-400 dark:text-gray-500 midnight:text-gray-600'
+          : 'text-gray-400 dark:text-gray-600 midnight:text-gray-600'
+      }`}>
         {shortcut}
       </span>
     ) : null}
@@ -238,6 +247,9 @@ const DynamicSidebar = ({
   });
   const [dockPosition, setDockPosition] = useState(() => {
     return localStorage.getItem('dockPosition') || 'bottom';
+  });
+  const [sidebarPosition, setSidebarPosition] = useState(() => {
+    return localStorage.getItem('sidebarPosition') || 'left';
   });
   const [topBarVisible, setTopBarVisible] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
@@ -276,6 +288,7 @@ const DynamicSidebar = ({
       setNavigationStyle(localStorage.getItem('navigationStyle') || 'dock');
       setDockVisibility(nextDockVisibility);
       setDockPosition(localStorage.getItem('dockPosition') || 'bottom');
+      setSidebarPosition(localStorage.getItem('sidebarPosition') || 'left');
       setTopBarVisible(localStorage.getItem('topMenuBarVisibility') !== 'hidden');
       setIsDockVisible(nextDockVisibility !== 'hover');
     };
@@ -283,12 +296,14 @@ const DynamicSidebar = ({
     window.addEventListener('navigation-style-changed', syncNavigationPreferences);
     window.addEventListener('dock-visibility-changed', syncNavigationPreferences);
     window.addEventListener('dock-position-changed', syncNavigationPreferences);
+    window.addEventListener('sidebar-position-changed', syncNavigationPreferences);
     window.addEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
     return () => {
       window.removeEventListener('storage', syncNavigationPreferences);
       window.removeEventListener('navigation-style-changed', syncNavigationPreferences);
       window.removeEventListener('dock-visibility-changed', syncNavigationPreferences);
       window.removeEventListener('dock-position-changed', syncNavigationPreferences);
+      window.removeEventListener('sidebar-position-changed', syncNavigationPreferences);
       window.removeEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
     };
   }, []);
@@ -485,22 +500,27 @@ const DynamicSidebar = ({
   );
 
   if (navigationStyle === 'sidebar') {
+    const sidebarEdgeClasses = sidebarPosition === 'right'
+      ? 'right-0'
+      : 'left-0';
+
     return (
       <>
         <aside
           className={`
-            fixed left-0 ${topBarVisible ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}
-            z-50 flex w-16 flex-col border-r border-gray-200/80 bg-white/95 shadow-sm backdrop-blur-xl
-            dark:border-gray-800 dark:bg-gray-950/95 sm:w-56
+            fixed ${sidebarEdgeClasses} ${topBarVisible ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}
+            z-50 flex w-16 flex-col bg-white/70 backdrop-blur-xl
+            dark:bg-gray-950/55 midnight:bg-gray-950/55
+            sm:w-56
           `}
         >
           <button
             type="button"
             onClick={openCommandCenter}
-            className="flex h-14 items-center gap-3 border-b border-gray-200/80 px-4 text-left dark:border-gray-800"
+            className="group flex h-16 items-center gap-3 px-3 text-left transition-colors hover:bg-gray-100/60 dark:hover:bg-white/[0.04] midnight:hover:bg-white/[0.04] sm:px-4"
             title={labelWithShortcut("Command Center", "navHome")}
           >
-            <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-900">
+            <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100/80 transition-colors group-hover:bg-gray-100 dark:bg-white/[0.045] dark:group-hover:bg-white/[0.07] midnight:bg-white/[0.045] midnight:group-hover:bg-white/[0.07]">
               <img src="/cat.svg" alt="Asyncat" className="h-5 w-5" />
               {hasActiveRuns && (
                 <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
@@ -516,7 +536,7 @@ const DynamicSidebar = ({
             </span>
           </button>
 
-          <nav className="flex-1 overflow-y-auto px-2 py-3">
+          <nav className="flex-1 overflow-y-auto px-2.5 py-3">
             <div className="space-y-1">
               {primaryItems.map((item) => (
                 <SidebarNavItem
@@ -530,7 +550,7 @@ const DynamicSidebar = ({
               ))}
             </div>
 
-            <div className="my-3 h-px bg-gray-200 dark:bg-gray-800" />
+            <div className="my-3 h-px bg-gray-200/50 dark:bg-white/[0.045] midnight:bg-white/[0.035]" />
 
             <div className="space-y-1">
               {appItems.map((item) => (
@@ -552,7 +572,7 @@ const DynamicSidebar = ({
             </div>
           </nav>
 
-          <div className="border-t border-gray-200/80 p-2 dark:border-gray-800">
+          <div className="p-2.5">
             <SidebarNavItem
               icon={settingsIcon}
               label="Settings"
