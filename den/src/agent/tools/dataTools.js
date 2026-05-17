@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
+import { hasBin, missingDepError } from './shared.js';
 import { getStatus as getWhisperStatus, transcribe } from '../../ai/controllers/ai/whisperServerManager.js';
 
 const PLATFORM = os.platform();
@@ -16,9 +17,7 @@ const TEXT_EXTS = new Set(['txt', 'md', 'mdx', 'json', 'csv', 'tsv', 'xml', 'htm
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
 const AUDIO_EXTS = new Set(['wav', 'mp3', 'ogg', 'flac', 'm4a', 'webm']);
 
-function hasBin(bin) {
-  try { execSync(IS_WIN ? `where ${bin} 2>nul` : `which ${bin} 2>/dev/null`); return true; } catch { return false; }
-}
+
 
 function safePath(filePath, workingDir) {
   const resolved = path.resolve(workingDir, filePath);
@@ -75,7 +74,7 @@ export const readPdfTool = {
     if (!hasBin('pdftotext')) {
       return {
         success: false,
-        error: 'pdftotext not found.',
+        error: missingDepError('pdftotext', 'macOS: brew install poppler | Linux: sudo apt install poppler-utils | Windows: install poppler from https://github.com/oschwartz10612/poppler-windows/releases'),
         install: IS_WIN ? 'Download poppler for Windows: https://github.com/oschwartz10612/poppler-windows/releases'
           : PLATFORM === 'darwin' ? 'brew install poppler'
           : 'sudo apt install poppler-utils',
@@ -374,7 +373,7 @@ export const diffApplyTool = {
     if (!hasBin('patch')) {
       return {
         success: false,
-        error: 'patch command not found.',
+        error: missingDepError('patch', 'macOS: xcode-select --install | Linux: sudo apt install patch | Windows: built-in via Git Bash'),
         install: IS_WIN ? 'Install Git for Windows (includes patch) or GNU patch for Windows.'
           : PLATFORM === 'darwin' ? 'patch is built-in on macOS. Try: xcode-select --install'
           : 'sudo apt install patch',
@@ -432,7 +431,7 @@ export const sshExecTool = {
   },
   execute: async (args, context) => {
     if (!hasBin('ssh')) {
-      return { success: false, error: IS_WIN ? 'ssh not found. Enable OpenSSH Client in Windows Features or install Git for Windows.' : 'ssh not found. Install openssh-client.' };
+      return missingDepError('ssh', IS_WIN ? 'Enable OpenSSH Client in Windows Features or install Git for Windows' : 'sudo apt install openssh-client (Linux) / brew install openssh (macOS)');
     }
 
     const user    = args.user ? `${args.user}@` : '';

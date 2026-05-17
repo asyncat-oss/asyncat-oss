@@ -7,21 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { PermissionLevel } from './toolRegistry.js';
-
-/** Resolve a path safely within the working directory. Prevents path traversal. */
-function safePath(filePath, workingDir) {
-  const resolved = path.resolve(workingDir, filePath);
-  if (!resolved.startsWith(path.resolve(workingDir))) {
-    throw new Error(`Path "${filePath}" is outside the working directory`);
-  }
-  return resolved;
-}
-
-/** Truncate content for display in tool results. */
-function truncate(str, maxLen = 8000) {
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen) + `\n\n... [truncated, ${str.length - maxLen} more chars]`;
-}
+import { safePath, truncate } from './shared.js';
 
 // ── Tool definitions ─────────────────────────────────────────────────────────
 

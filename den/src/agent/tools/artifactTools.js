@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
+import { missingDepError, safePath, formatSize } from './shared.js';
 
 const ARTIFACTS_DIR_NAME = '.asyncat-artifacts';
 
@@ -17,15 +18,6 @@ function ensureArtifactsDir(workingDir) {
     fs.mkdirSync(dir, { recursive: true });
   }
   return dir;
-}
-
-/** Resolve safe path within working directory. */
-function safePath(filePath, workingDir) {
-  const resolved = path.resolve(workingDir, filePath);
-  if (!resolved.startsWith(path.resolve(workingDir))) {
-    throw new Error(`Path "${filePath}" is outside the working directory`);
-  }
-  return resolved;
 }
 
 // ── create_artifact ─────────────────────────────────────────────────────────
@@ -412,12 +404,6 @@ function slugify(text) {
     .slice(0, 48) || 'artifact';
 }
 
-function formatSize(bytes) {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / 1048576).toFixed(1)}MB`;
-}
-
 function escapeCsvField(value) {
   const str = String(value);
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
@@ -505,9 +491,150 @@ ${content}
 `;
 }
 
+// ── generate_pdf ─────────────────────────────────────────────────────────────
+
+export const generatePdfTool = {
+  name: 'generate_pdf',
+  description:
+    'Generate a PDF document from HTML content or markdown. Uses Puppeteer to render HTML to PDF. ' +
+    'The HTML content is wrapped in a styled template if no doctype/html tags are provided. ' +
+    'Returns the file path of the generated PDF.',
+  category: 'artifact',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Document title (used in PDF metadata and heading)' },
+      content: { type: 'string', description: 'HTML or Markdown content to render as PDF' },
+      filename: { type: 'string', description: 'Output filename (default: generated from title, ends in .pdf)' },
+      format: { type: 'string', enum: ['A4', 'Letter', 'Legal'], description: 'Page format (default: A4)' },
+      landscape: { type: 'boolean', description: 'Use landscape orientation (default: false)' },
+      margin: { type: 'string', description: 'Page margin, e.g. "20mm" or "1in" (default: "15mm")' },
+      path: { type: 'string', description: 'Optional: save to a specific path instead of artifacts folder' },
+    },
+    required: ['title', 'content'],
+  },
+  execute: async (args, context) => {
+    const ARTIFACTS_DIR = path.join(context.workingDir, ARTIFACTS_DIR_NAME);
+    if (!fs.existsSync(ARTIFACTS_DIR)) {
+      fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
+    }
+
+    let puppeteer;
+    try {
+      puppeteer = (await import('puppeteer')).default;
+    } catch {
+      return {
+        success: false,
+        error: missingDepError('puppeteer', 'npm install puppeteer'),
+        install: 'npm install puppeteer',
+      };
+    }
+
+    try {
+      const id = randomUUID().slice(0, 12);
+      const filename = args.filename || `${slugify(args.title)}_${id}.pdf`;
+      const filePath = args.path
+        ? safePath(args.path, context.workingDir)
+        : path.join(ARTIFACTS_DIR, filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
+
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+
+      let htmlContent = args.content;
+
+      // If content looks like markdown, convert basic formatting
+      if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && !htmlContent.trim().toLowerCase().startsWith('<html')) {
+        // Check if it's markdown-ish (has #, **, -, etc. but no HTML tags)
+        const hasMarkdown = /^[#*_\-\d]\s/m.test(htmlContent) && /<\w/m.test(htmlContent) === false;
+        if (hasMarkdown || args.content.includes('\n#')) {
+          // Basic markdown-to-HTML conversion for headings, bold, italic, lists, code blocks
+          htmlContent = htmlContent
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+            .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+            .replace(/\n{2,}/g, '</p><p>')
+            .replace(/^(?!<[huplo])/gm, (args.content.trim().startsWith('#') ? '' : '<p>'));
+        }
+
+        // Wrap in full HTML document
+        htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(args.title)}</title>
+  <style>
+    @page { size: ${(args.format || 'A4')}${args.landscape ? ' landscape' : ''}; margin: ${args.margin || '15mm'}; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11pt; line-height: 1.6; color: #1a1a2e; max-width: 100%; }
+    h1 { font-size: 1.6rem; margin-top: 0; color: #1a1a2e; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+    h2 { font-size: 1.3rem; color: #2d3748; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3rem; }
+    h3 { font-size: 1.1rem; color: #4a5568; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #e2e8f0; padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: #f7fafc; font-weight: 600; }
+    code { background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+    pre { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+    pre code { background: none; padding: 0; color: inherit; }
+    blockquote { border-left: 3px solid #e2e8f0; padding-left: 1rem; color: #718096; margin-left: 0; }
+    img { max-width: 100%; }
+  </style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`;
+      }
+
+      let browser;
+      try {
+        browser = await puppeteer.launch({
+          headless: 'new',
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        });
+
+        const page = await browser.newPage();
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 30000 });
+
+        await page.pdf({
+          path: filePath,
+          format: args.format || 'A4',
+          landscape: args.landscape || false,
+          margin: args.margin ? { top: args.margin, bottom: args.margin, left: args.margin, right: args.margin } : { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
+          printBackground: true,
+        });
+
+        const stat = fs.statSync(filePath);
+        const relativePath = path.relative(context.workingDir, filePath);
+        return {
+          success: true,
+          artifact: {
+            title: args.title,
+            filename: path.basename(filePath),
+            path: relativePath,
+            absolutePath: filePath,
+            type: 'pdf',
+            size: stat.size,
+            createdAt: new Date().toISOString(),
+          },
+          message: `PDF "${args.title}" created: ${relativePath} (${formatSize(stat.size)})`,
+        };
+      } finally {
+        if (browser) await browser.close().catch(() => {});
+      }
+    } catch (err) {
+      return { success: false, error: `PDF generation failed: ${err.message}` };
+    }
+  },
+};
+
 // ── Export all tools ────────────────────────────────────────────────────────
 
 export const artifactTools = [
+  generatePdfTool,
   createArtifactTool,
   createMarkdownTool,
   createDiagramTool,
@@ -516,3 +643,4 @@ export const artifactTools = [
   listArtifactsTool,
 ];
 export default artifactTools;
+

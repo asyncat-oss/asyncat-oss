@@ -3,51 +3,14 @@
 // Run commands in Docker containers, build images, manage containers.
 
 import { spawn } from 'child_process';
-import { execSync } from 'child_process';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
+import { hasBin, IS_WIN, runProcess, missingDepError } from './shared.js';
 
 const MAX_OUTPUT = 16000;
-const IS_WIN = process.platform === 'win32';
 
-function runProcess(cmd, args, options = {}) {
-  return new Promise((resolve) => {
-    const timeout = options.timeout || 30000;
-    let stdout = '', stderr = '';
-    let killed = false;
-    const proc = spawn(cmd, args, {
-      cwd: options.cwd || process.cwd(),
-      shell: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const timer = setTimeout(() => { killed = true; proc.kill('SIGKILL'); }, timeout);
-    proc.stdout?.on('data', d => { stdout += d.toString(); });
-    proc.stderr?.on('data', d => { stderr += d.toString(); });
-    proc.on('close', code => {
-      clearTimeout(timer);
-      if (stdout.length > MAX_OUTPUT) stdout = stdout.slice(0, MAX_OUTPUT) + '\n... [output truncated]';
-      if (stderr.length > MAX_OUTPUT) stderr = stderr.slice(0, MAX_OUTPUT) + '\n... [output truncated]';
-      resolve({ success: code === 0, exit_code: code, stdout: stdout.trim(), stderr: stderr.trim(), killed });
-    });
-    proc.on('error', err => resolve({ success: false, exit_code: -1, stdout: '', stderr: err.message, killed: false }));
-  });
-}
-
-function hasDocker() {
-  try { 
-    const cmd = IS_WIN ? 'where docker 2>nul' : 'which docker 2>/dev/null';
-    execSync(cmd); 
-    return true; 
-  } catch { return false; }
-}
-
-function hasDockerCompose() {
-  try { 
-    const cmd = IS_WIN ? 'where docker-compose 2>nul' : 'which docker-compose 2>/dev/null';
-    execSync(cmd); 
-    return true; 
-  } catch { return false; }
-}
+function hasDocker() { return hasBin('docker'); }
+function hasDockerCompose() { return hasBin('docker-compose') || hasBin('docker'); }
 
 export const dockerRunTool = {
   name: 'docker_run',
@@ -69,7 +32,7 @@ export const dockerRunTool = {
   },
   execute: async (args, context) => {
     if (!hasDocker()) {
-      return { success: false, error: 'Docker is not installed or not in PATH. Install Docker to use this tool.' };
+      return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
     const workDir = args.cwd || '/workspace';
@@ -115,7 +78,7 @@ export const dockerBuildTool = {
   },
   execute: async (args, context) => {
     if (!hasDocker()) {
-      return { success: false, error: 'Docker is not installed.' };
+      return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
     const dockerfilePath = args.path || context.workingDir;
@@ -152,7 +115,7 @@ export const dockerPsTool = {
   },
   execute: async (args) => {
     if (!hasDocker()) {
-      return { success: false, error: 'Docker is not installed.' };
+      return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
     const cmd = args.all ? 'docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}\t{{.Names}}"' : 'docker ps --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}\t{{.Names}}"';
@@ -188,7 +151,7 @@ export const dockerStopTool = {
   },
   execute: async (args) => {
     if (!hasDocker()) {
-      return { success: false, error: 'Docker is not installed.' };
+      return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
     const timeout = args.timeout || 10;

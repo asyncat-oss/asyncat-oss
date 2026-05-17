@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Bookmark, Brain, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, Mic, Paperclip, Plug, Rss, Send, SlidersHorizontal, Square, Wrench, X, Zap } from "lucide-react";
+import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, Mic, Paperclip, Rss, Send, SlidersHorizontal, Square, Wrench, X, Zap } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
@@ -9,7 +9,7 @@ import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi, audioApi } from "../../../Settings/settingApi.js";
 import { profilesApi, filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
-import { attachmentKind, attachmentBadge, badgeToneClass, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
+import { AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -215,7 +215,6 @@ export const MessageInputV2 = ({
   voiceMode = false,
   onToggleVoiceMode,
   autoRecordPrompt = false,
-  voiceTtsState = 'idle',
   multimodalCapabilities = null,
 }) => {
   const [value, setValue] = useState("");
@@ -405,7 +404,6 @@ export const MessageInputV2 = ({
         const workspaceRoot = (res.roots || []).find(root => root.id === "workspace") || res.roots?.[0] || null;
         setFileRoots(res.roots || []);
         setFileRoot(workspaceRoot);
-        setContextBrowseRootId(workspaceRoot?.id || "workspace");
       })
       .catch(() => {
         if (!cancelled) setFileRoot(null);
@@ -876,7 +874,7 @@ export const MessageInputV2 = ({
   }, []);
 
   const getBorderColor = () => {
-    return "border-gray-200 dark:border-gray-800 midnight:border-gray-800 focus-within:border-gray-300 dark:focus-within:border-gray-700";
+    return "border-gray-200/90 dark:border-gray-800 midnight:border-slate-800 focus-within:border-gray-300 dark:focus-within:border-gray-700 midnight:focus-within:border-slate-700";
   };
 
   return (
@@ -891,7 +889,7 @@ export const MessageInputV2 = ({
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
         <form onSubmit={handleSubmit}>
             <div
-              className={`p-4 bg-transparent border rounded-xl transition-colors ${getBorderColor()}`}
+              className={`bg-white px-4 pt-4 pb-0 rounded-[1.35rem] border transition-colors dark:bg-[#262626] midnight:bg-slate-900 ${getBorderColor()}`}
             >
               {(error || modelSwitchError) && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
@@ -1059,8 +1057,8 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-                            <div ref={toolbarRef} className="mt-2 flex items-center justify-between gap-1">
-                <div className="flex min-w-0 items-center gap-1">
+                            <div ref={toolbarRef} className="-mx-4 mt-3 flex min-h-11 flex-col items-stretch gap-2 rounded-b-[1.25rem] border-t border-gray-100 bg-gray-50/95 px-3 py-2 dark:border-gray-800 dark:bg-[#202020] midnight:border-slate-800 midnight:bg-slate-950/70 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
                   {activeWorkingContext && (
                     <div className="relative">
                       <button

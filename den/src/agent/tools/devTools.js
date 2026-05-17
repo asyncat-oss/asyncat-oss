@@ -2,29 +2,11 @@
 // ─── Development Workflow Tools ───────────────────────────────────────────────
 // Linters, build runners, package managers, code fixers, log readers.
 
-import { spawn } from 'child_process';
 import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { PermissionLevel } from './toolRegistry.js';
-
-const IS_WIN = process.platform === 'win32';
-
-function runProc(cmd, cwd, timeout = 60000) {
-  return new Promise((resolve) => {
-    let stdout = '', stderr = '';
-    const [sh, shFlag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
-    const proc = spawn(sh, [shFlag, cmd], { cwd, shell: false });
-    const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${timeout / 1000}s`, stdout, stderr }); }, timeout);
-    proc.stdout?.on('data', d => { stdout += d.toString(); });
-    proc.stderr?.on('data', d => { stderr += d.toString(); });
-    proc.on('close', code => {
-      clearTimeout(timer);
-      resolve({ success: code === 0, exit_code: code, stdout: stdout.trim(), stderr: stderr.trim() });
-    });
-    proc.on('error', err => resolve({ success: false, error: err.message }));
-  });
-}
+import { runProcess } from './shared.js';
 
 function detectPackageManager(cwd) {
   try {
@@ -89,7 +71,7 @@ export const linterRunTool = {
       return { success: false, error: 'Could not detect package manager or linter.' };
     }
 
-    const result = await runProc(cmd, cwd, timeout);
+    const result = await runProcess(cmd, [], { cwd, timeout });
     return { ...result, linter, auto_fix: args.fix || false };
   },
 };
@@ -128,7 +110,7 @@ export const codeFixTool = {
       } catch { return { success: false, error: 'Could not detect project linter.' }; }
     }
 
-    const result = await runProc(cmd, cwd, timeout);
+    const result = await runProcess(cmd, [], { cwd, timeout });
     return { ...result, action: 'code_fix', auto_fixed: result.success };
   },
 };
@@ -216,7 +198,7 @@ export const packageManagerTool = {
       return { success: false, error: `Package manager "${pm}" not supported yet.` };
     }
 
-    const result = await runProc(cmd, cwd, timeout);
+    const result = await runProcess(cmd, [], { cwd, timeout });
     return { ...result, package_manager: pm, command: cmd };
   },
 };
@@ -268,7 +250,7 @@ export const buildRunnerTool = {
       return { success: false, error: err.message };
     }
 
-    const result = await runProc(cmd, cwd, timeout);
+    const result = await runProcess(cmd, [], { cwd, timeout });
     return { ...result, builder, path: cwd };
   },
 };

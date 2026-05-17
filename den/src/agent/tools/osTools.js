@@ -6,9 +6,7 @@ import { spawn, execSync, exec } from 'child_process';
 import net from 'net';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
-
-const PLATFORM = os.platform();
-const IS_WIN   = PLATFORM === 'win32';
+import { IS_WIN, PLATFORM } from './shared.js';
 
 const execAsync = (cmd, cwd, timeout = 10000) => {
   return new Promise((resolve) => {

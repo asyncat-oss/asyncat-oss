@@ -7,8 +7,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
 import { branchGit, commitGit, getGitDiff, getGitState, pullGit, pushGit, stashGit } from '../gitService.js';
-
-const IS_WIN = process.platform === 'win32';
+import { IS_WIN } from './shared.js';
 
 function runGit(cmd, cwd, timeout = 30000) {
   try {

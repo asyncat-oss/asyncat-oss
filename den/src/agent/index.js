@@ -25,6 +25,8 @@ import { audioTools } from './tools/audioTools.js';
 import { visualTools } from './tools/visualTools.js';
 import { installTools } from './tools/installTools.js';
 import { integrationTools } from './tools/integrationTools.js';
+import { dbQueryTools } from './tools/dbQueryTools.js';
+import { codeSearchTools } from './tools/codeSearchTools.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -70,6 +72,8 @@ export async function initializeAgent() {
   toolRegistry.registerAll(visualTools);
   toolRegistry.registerAll(installTools);
   toolRegistry.registerAll(integrationTools);
+  toolRegistry.registerAll(dbQueryTools);
+  toolRegistry.registerAll(codeSearchTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

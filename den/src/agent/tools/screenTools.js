@@ -17,25 +17,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
+import { hasBin, IS_WIN, PLATFORM, shellQuote, missingDepError } from './shared.js';
 
 const TMP_DIR = path.join(os.tmpdir(), 'asyncat-screen');
 fs.mkdirSync(TMP_DIR, { recursive: true });
-
-const PLATFORM = os.platform();
-const IS_WIN = PLATFORM === 'win32';
-
-// ── Helper: check if a binary is available ───────────────────────────────────
-function hasBin(bin) {
-  try { 
-    const cmd = IS_WIN ? `where ${bin} 2>nul` : `which ${bin} 2>/dev/null`;
-    execSync(cmd); 
-    return true; 
-  } catch { return false; }
-}
-
-function shellQuote(str) {
-  return `'${String(str).replace(/'/g, "'\\''")}'`;
-}
 
 // ── take_screenshot ───────────────────────────────────────────────────────────
 export const takeScreenshotTool = {
@@ -79,12 +64,15 @@ export const takeScreenshotTool = {
         }
       } else if (PLATFORM === 'darwin') {
         execSync(`screencapture -x "${outPath}" 2>/dev/null`, { timeout: 8000 });
+      } else if (IS_WIN) {
+        const psCmd = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::PrimaryBounds; $bmp = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryBounds.Width, [System.Windows.Forms.Screen]::PrimaryBounds.Height); $gfx = [System.Drawing.Graphics]::FromImage($bmp); $gfx.CopyFromScreen([System.Drawing.Point]::Empty, [System.Drawing.Point]::Empty, $bmp.Size); $bmp.Save('${outPath.replace(/\\/g, '\\\\')}'); $gfx.Dispose(); $bmp.Dispose(); Write-Output 'ok'`;
+        execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 15000 });
       } else {
-        return { success: false, error: `Platform "${PLATFORM}" not yet supported for screenshots.` };
+        return missingDepError('screenshot tool', 'Linux: sudo apt install scrot | macOS: built-in screencapture | Windows: built-in PowerShell');
       }
 
       if (!fs.existsSync(outPath)) {
-        return { success: false, error: 'Screenshot file not created. Check display environment (DISPLAY variable).' };
+        return { success: false, error: 'Screenshot file not created. ' + (IS_WIN ? 'Check that PowerShell and .NET are available.' : 'Check display environment (DISPLAY variable on Linux).') };
       }
 
       const stat = fs.statSync(outPath);
@@ -120,7 +108,7 @@ export const screenReadTool = {
       return { success: false, error: `File not found: ${imgPath}` };
     }
     if (!hasBin('tesseract')) {
-      return { success: false, error: 'tesseract not found. Install: sudo apt install tesseract-ocr' };
+      return missingDepError('tesseract', 'macOS: brew install tesseract | Linux: sudo apt install tesseract-ocr | Windows: Install from https://github.com/UB-Mannheim/tesseract/wiki');
     }
     try {
       const outBase = path.join(TMP_DIR, `ocr_${Date.now()}`);
@@ -173,8 +161,15 @@ export const screenClickTool = {
         }
         const action = button === 'double' ? 'dc' : button === 'right' ? 'rc' : 'c';
         execSync(`cliclick ${action}:${x},${y}`, { timeout: 5000 });
+      } else if (IS_WIN) {
+        const btn = button === 'right' ? 'RightClick' : 'LeftClick';
+        const clickCmd = button === 'double'
+          ? `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y}); Start-Sleep -Milliseconds 50; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep -Milliseconds 50; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')`
+          : `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y}); Start-Sleep -Milliseconds 50; $wshell = New-Object -ComObject WScript.Shell; $wshell.SendKeys('{ENTER}')`;
+        const ps = `Add-Type -AssemblyName System.Windows.Forms; ${clickCmd}`;
+        execSync(`powershell -NoProfile -Command "${ps}"`, { timeout: 10000 });
       } else {
-        return { success: false, error: `Platform "${PLATFORM}" not supported for screen control.` };
+        return missingDepError('screen click tool', 'Linux: sudo apt install xdotool | macOS: brew install cliclick | Windows: built-in PowerShell');
       }
       return { success: true, x, y, button };
     } catch (err) {
@@ -227,8 +222,18 @@ export const screenTypeTool = {
         if (args.press_enter) {
           execSync(`osascript -e 'tell application "System Events" to key code 36'`, { timeout: 2000 });
         }
+      } else if (IS_WIN) {
+        if (args.click_x !== undefined && args.click_y !== undefined) {
+          const posCmd = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${Math.round(args.click_x)},${Math.round(args.click_y)})`;
+          execSync(`powershell -NoProfile -Command "${posCmd}"`, { timeout: 3000 });
+        }
+        const ps = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${args.text.replace(/'/g, "''")}')`;
+        execSync(`powershell -NoProfile -Command "${ps}"`, { timeout: 10000 });
+        if (args.press_enter) {
+          execSync(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')"`, { timeout: 3000 });
+        }
       } else {
-        return { success: false, error: `Platform "${PLATFORM}" not supported.` };
+        return missingDepError('screen type', 'Linux: sudo apt install xdotool | macOS: built-in | Windows: built-in PowerShell');
       }
       return { success: true, typed: args.text.slice(0, 100) + (args.text.length > 100 ? '...' : ''), pressed_enter: !!args.press_enter };
     } catch (err) {
@@ -284,7 +289,7 @@ export const screenFindWindowTool = {
   execute: async (args) => {
     try {
       if (PLATFORM === 'linux') {
-        if (!hasBin('xdotool')) return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
+        if (!hasBin('xdotool')) return missingDepError('xdotool', 'sudo apt install xdotool');
         const out = execSync(`xdotool search --name "${args.pattern}" 2>/dev/null || true`, { encoding: 'utf8', timeout: 3000 });
         const ids = out.trim().split('\n').filter(Boolean);
         const windows = ids.map(id => {
@@ -294,9 +299,20 @@ export const screenFindWindowTool = {
           } catch { return { id, title: '(unknown)' }; }
         });
         return { success: true, count: windows.length, windows };
-      } else {
-        return { success: false, error: `Window search not yet supported on ${PLATFORM}` };
+      } else if (PLATFORM === 'darwin') {
+        const script = `tell application "System Events" to get name of every process whose background only is false`;
+        const out = execSync(`osascript -e ${shellQuote(script)}`, { encoding: 'utf8', timeout: 3000 });
+        const windows = out.split(',').map(s => s.trim()).filter(Boolean).filter(s => s.toLowerCase().includes(args.pattern.toLowerCase())).map(title => ({ title }));
+        return { success: true, count: windows.length, windows };
+      } else if (IS_WIN) {
+        const cmd = 'Get-Process | Where-Object {$_.MainWindowTitle} | Select-Object Id,MainWindowTitle | ConvertTo-Json';
+        const out = execSync(`powershell -NoProfile -Command ${JSON.stringify(cmd)}`, { encoding: 'utf8', timeout: 5000 });
+        const parsed = JSON.parse(out || '[]');
+        const rows = Array.isArray(parsed) ? parsed : [parsed];
+        const windows = rows.filter(r => (r.MainWindowTitle || '').toLowerCase().includes(args.pattern.toLowerCase())).map(r => ({ id: r.Id, title: r.MainWindowTitle }));
+        return { success: true, count: windows.length, windows };
       }
+      return missingDepError('window search', 'Linux: xdotool | macOS: osascript | Windows: PowerShell');
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -343,7 +359,7 @@ export const windowListTool = {
         const rows = Array.isArray(parsed) ? parsed : [parsed];
         return { success: true, count: rows.length, windows: rows.map(r => ({ id: r.Id, title: r.MainWindowTitle })) };
       }
-      return { success: false, error: `Platform "${PLATFORM}" not supported.` };
+      return missingDepError('window list', 'Linux: xdotool | macOS: osascript | Windows: PowerShell');
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -379,9 +395,16 @@ export const windowFocusTool = {
         return { success: true, title: args.title };
       }
       if (IS_WIN) {
-        return { success: false, error: 'window_focus is not yet reliable on Windows without an additional helper.' };
+        if (!args.title) return { success: false, error: 'title is required on Windows' };
+        const psCmd = `(New-Object -ComObject WScript.Shell).AppActivate('${String(args.title).replace(/'/g, "''")}'); Start-Sleep -Milliseconds 200`;
+        try {
+          execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 5000 });
+          return { success: true, title: args.title };
+        } catch (err) {
+          return { success: false, error: `Could not focus window "${args.title}" on Windows: ${err.message}` };
+        }
       }
-      return { success: false, error: `Platform "${PLATFORM}" not supported.` };
+      return missingDepError('window focus', 'Linux: xdotool | macOS: osascript | Windows: built-in PowerShell');
     } catch (err) {
       return { success: false, error: err.message };
     }

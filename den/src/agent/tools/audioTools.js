@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
+import { safePath } from './shared.js';
 import {
   getStatus as getWhisperStatus,
   transcribe,
@@ -14,15 +15,6 @@ import {
   getStatus as getTtsStatus,
   synthesize,
 } from '../../ai/controllers/ai/ttsServerManager.js';
-
-/** Resolve a path safely within the working directory. */
-function safePath(filePath, workingDir) {
-  const resolved = path.resolve(workingDir, filePath);
-  if (!resolved.startsWith(path.resolve(workingDir))) {
-    throw new Error(`Path "${filePath}" is outside the working directory`);
-  }
-  return resolved;
-}
 
 // ── transcribe_audio ─────────────────────────────────────────────────────────
 

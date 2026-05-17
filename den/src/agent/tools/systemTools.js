@@ -7,10 +7,8 @@ import os from 'os';
 import { execSync, spawn } from 'child_process';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { IS_WIN, PLATFORM, truncate } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
-
-const PLATFORM = os.platform();
-const IS_WIN = PLATFORM === 'win32';
 
 function shell(cmd, opts = {}) {
   if (IS_WIN) {
@@ -281,7 +279,7 @@ export const testRunnerTool = {
       proc.stderr?.on('data', d => { output += d.toString(); });
       proc.on('close', code => {
         clearTimeout(timer);
-        if (output.length > 8000) output = output.slice(0, 8000) + '\n... [truncated]';
+        output = truncate(output, 8000);
         const passMatch = output.match(/(\d+)\s+(?:passing|passed|tests? passed)/i);
         const failMatch = output.match(/(\d+)\s+(?:failing|failed|tests? failed)/i);
         resolve({

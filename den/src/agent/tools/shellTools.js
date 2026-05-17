@@ -7,10 +7,8 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { IS_WIN } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
-
-const IS_WIN = os.platform() === 'win32';
 const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '30000', 10); // 30s
 const MAX_OUTPUT = 16000; // chars
 const STREAM_INTERVAL_MS = 250; // how often to flush streaming progress
