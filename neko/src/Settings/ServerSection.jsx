@@ -1,7 +1,7 @@
 // Settings/ServerSection.jsx — server config and secrets management
-import { useState, useEffect, useCallback } from 'react';
-import { Server, Eye, EyeOff, Loader2, RotateCcw } from 'lucide-react';
-import { configApi, apiUtils } from './settingApi';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Server, Eye, EyeOff, Loader2, RotateCcw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { configApi, updateApi, apiUtils } from './settingApi';
 
 const soraFontBase = 'font-sora';
 
@@ -26,6 +26,10 @@ const ServerSection = () => {
 
   const [editValues, setEditValues] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
+
+  // Restart state
+  const [restartPhase, setRestartPhase] = useState(null); // null | 'restarting' | 'waiting' | 'done' | 'timeout'
+  const restartCleanupRef = useRef(null);
 
   const flash = useCallback((msg, ms = 3000) => {
     setMessage(msg);
@@ -97,6 +101,19 @@ const ServerSection = () => {
 
   const toggleShow = (key) => {
     setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleRestart = () => {
+    restartCleanupRef.current?.();
+    setRestartPhase('restarting');
+    restartCleanupRef.current = updateApi.restart(
+      () => setRestartPhase('waiting'),
+      () => {
+        setRestartPhase('done');
+        setTimeout(() => window.location.reload(), 800);
+      },
+      () => setRestartPhase('timeout'),
+    );
   };
 
   const editableSecrets = [
@@ -293,14 +310,58 @@ const ServerSection = () => {
         </div>
       </div>
 
-      {/* Restart Hint */}
+      {/* Restart */}
       <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
-        <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/20 border border-amber-200 dark:border-amber-800 midnight:border-amber-800">
-          <p className="text-sm text-amber-800 dark:text-amber-200 midnight:text-amber-200">
-            <strong>Note:</strong> After saving a server secret, Asyncat usually applies it automatically.
-            If it does not take effect after a minute, run
-            <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-800 midnight:bg-amber-800">asyncat restart</code>.
-          </p>
+        <div className="flex items-center gap-2 mb-2">
+          <RotateCcw size={18} className="text-gray-500 dark:text-gray-400" />
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
+            Restart Server
+          </h3>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Sends a graceful shutdown signal to the backend. With a process manager (pm2, the{' '}
+          <code className="font-mono px-1">asyncat</code> CLI) the server restarts automatically and
+          this page reloads. In <code className="font-mono px-1">npm run dev</code> mode it will not
+          come back on its own — restart the backend terminal manually after clicking.
+        </p>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={handleRestart}
+            disabled={restartPhase === 'restarting' || restartPhase === 'waiting' || restartPhase === 'done'}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+              bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white
+              midnight:bg-gray-100 midnight:hover:bg-white
+              text-white dark:text-gray-900 midnight:text-gray-900
+              disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {(restartPhase === 'restarting' || restartPhase === 'waiting') ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RotateCcw size={14} />
+            )}
+            {restartPhase === 'restarting' ? 'Restarting…'
+              : restartPhase === 'waiting' ? 'Waiting for server…'
+              : restartPhase === 'done' ? 'Reloading…'
+              : 'Restart server'}
+          </button>
+
+          {restartPhase === 'done' && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400">
+              <CheckCircle2 size={14} />
+              Server is back — reloading page
+            </span>
+          )}
+
+          {restartPhase === 'timeout' && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 flex-wrap">
+              <AlertTriangle size={14} className="flex-shrink-0" />
+              Server did not restart automatically. In dev mode, run{' '}
+              <code className="px-1 rounded bg-amber-100 dark:bg-amber-900/40 font-mono text-xs">npm run dev</code>
+              {' '}again in your backend terminal.
+            </span>
+          )}
         </div>
       </div>
     </div>

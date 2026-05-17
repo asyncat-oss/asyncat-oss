@@ -2,7 +2,7 @@ import express from 'express';
 import { execFileSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { auth } from '../users/middleware/auth.js';
 
 const router = express.Router();
@@ -126,6 +126,21 @@ router.post('/apply', (req, res) => {
     }
     res.end();
   })();
+});
+
+// POST /api/update/restart — graceful self-restart.
+// Touches den/.restart so nodemon (dev mode) detects a file change and restarts.
+// Also sends SIGTERM directly as a fallback for pm2/launchd/asyncat-CLI deployments.
+// The frontend polls /health to detect when the server is back up.
+const RESTART_SENTINEL = join(ROOT, 'den', '.restart');
+router.post('/restart', (req, res) => {
+  res.json({ success: true, message: 'Server is restarting...' });
+  setTimeout(() => {
+    // Touch the sentinel file so nodemon sees a watched-file change and restarts.
+    try { writeFileSync(RESTART_SENTINEL, Date.now().toString()); } catch { /* ignore */ }
+    // Send SIGTERM directly as well — handles pm2/launchd/CLI deployments that don't use nodemon.
+    process.kill(process.pid, 'SIGTERM');
+  }, 150);
 });
 
 // POST /api/update/uninstall — schedule local uninstall after responding.

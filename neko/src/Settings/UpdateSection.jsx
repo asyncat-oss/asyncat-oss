@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal, Trash2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
 import { updateApi } from './settingApi';
 
 const soraFontBase = 'font-sora';
@@ -12,6 +12,8 @@ const UpdateSection = () => {
   const [updateDone, setUpdateDone] = useState(null); // 'success' | 'error'
   const [logs, setLogs] = useState([]);
   const [statusError, setStatusError] = useState(null);
+  const [restartPhase, setRestartPhase] = useState(null); // null | 'restarting' | 'waiting' | 'done' | 'timeout'
+  const restartCleanupRef = useRef(null);
   const [purgeInstall, setPurgeInstall] = useState(false);
   const [uninstallConfirm, setUninstallConfirm] = useState('');
   const [uninstalling, setUninstalling] = useState(false);
@@ -22,7 +24,10 @@ const UpdateSection = () => {
 
   useEffect(() => {
     loadLocalInfo();
-    return () => cleanupRef.current?.();
+    return () => {
+      cleanupRef.current?.();
+      restartCleanupRef.current?.();
+    };
   }, []);
 
   // Auto-scroll log box
@@ -99,6 +104,19 @@ const UpdateSection = () => {
       setUninstallError(e.message || 'Uninstall failed');
       setUninstalling(false);
     }
+  };
+
+  const handleRestart = () => {
+    restartCleanupRef.current?.();
+    setRestartPhase('restarting');
+    restartCleanupRef.current = updateApi.restart(
+      () => setRestartPhase('waiting'),
+      () => {
+        setRestartPhase('done');
+        setTimeout(() => window.location.reload(), 800);
+      },
+      () => setRestartPhase('timeout'),
+    );
   };
 
   const upToDate = checkResult && checkResult.behind === 0;
@@ -282,8 +300,42 @@ const UpdateSection = () => {
           </div>
 
           {updateDone === 'success' && (
-            <div className="mt-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-300">
-              Update applied. Run <code className="px-1 py-0.5 rounded bg-green-100 dark:bg-green-800 midnight:bg-green-800 text-xs">asyncat restart</code> in your terminal to reload.
+            <div className="mt-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/20 border border-green-200 dark:border-green-800 space-y-3">
+              <p className="text-sm text-green-700 dark:text-green-300">
+                Update applied. Restart the server to load the new backend code.
+              </p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleRestart}
+                  disabled={restartPhase === 'restarting' || restartPhase === 'waiting' || restartPhase === 'done'}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium
+                    bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-500
+                    text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {(restartPhase === 'restarting' || restartPhase === 'waiting') ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <RotateCcw size={12} />
+                  )}
+                  {restartPhase === 'restarting' ? 'Restarting…'
+                    : restartPhase === 'waiting' ? 'Waiting for server…'
+                    : restartPhase === 'done' ? 'Reloading…'
+                    : 'Restart server now'}
+                </button>
+                {restartPhase === 'done' && (
+                  <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <CheckCircle2 size={12} /> Server is back — reloading
+                  </span>
+                )}
+                {restartPhase === 'timeout' && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 flex-wrap">
+                    <AlertTriangle size={12} className="flex-shrink-0" />
+                    Did not restart automatically — in dev mode, restart your backend terminal with{' '}
+                    <code className="font-mono px-1 rounded bg-amber-100 dark:bg-amber-900/40">npm run dev</code>
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>

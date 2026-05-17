@@ -735,6 +735,40 @@ export const updateApi = {
       body: JSON.stringify({ purge, confirm }),
     });
   },
+
+  // Trigger a graceful SIGTERM restart on the backend.
+  // Returns a cleanup fn that stops the health-poll loop.
+  // onWaiting() — called when server is down and we're polling
+  // onBack()    — called when /health responds 200 again
+  // onTimeout() — called if server never comes back within timeoutMs
+  restart: (onWaiting, onBack, onTimeout, timeoutMs = 30000) => {
+    let stopped = false;
+
+    (async () => {
+      // Fire-and-forget — the connection may close before the response arrives.
+      try { await apiCall(`${UPDATE_API_BASE}/restart`, { method: 'POST' }); } catch { /* expected */ }
+
+      if (stopped) return;
+      onWaiting?.();
+
+      const deadline = Date.now() + timeoutMs;
+      // Give the process a moment to actually shut down before polling.
+      await new Promise(r => setTimeout(r, 2000));
+
+      const poll = async () => {
+        if (stopped) return;
+        if (Date.now() > deadline) { onTimeout?.(); return; }
+        try {
+          const res = await fetch(`${MAIN_URL}/health`, { cache: 'no-store' });
+          if (res.ok) { onBack?.(); return; }
+        } catch { /* server not up yet */ }
+        if (!stopped) setTimeout(poll, 1500);
+      };
+      poll();
+    })();
+
+    return () => { stopped = true; };
+  },
 };
 
 // ===========================================

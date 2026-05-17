@@ -136,7 +136,11 @@ export const httpLogger = winston.createLogger({
 
 export const morganStream = {
   write(message) {
-    httpLogger.info(message.trim());
+    try {
+      httpLogger.info(message.trim());
+    } catch {
+      // Logger already closed (e.g. during graceful shutdown) — discard.
+    }
   },
 };
 
