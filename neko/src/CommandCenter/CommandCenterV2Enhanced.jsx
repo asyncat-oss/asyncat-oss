@@ -299,6 +299,15 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
+  const [enabledIntegrationTools, setEnabledIntegrationTools] = useState(() => {
+    try {
+      const stored = localStorage.getItem('asyncat_enabled_integration_tools');
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedProfileId, setSelectedProfileId] = useState(null);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
   const [editGoalText, setEditGoalText] = useState('');
@@ -848,6 +857,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const submittedGoal = goal.trim();
     const agentMentions = Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : [];
     const fileAttachments = Array.isArray(messageObj?.fileAttachments) ? messageObj.fileAttachments : [];
+    const runEnabledIntegrationTools = Array.isArray(runOptions.enabledIntegrationTools)
+      ? runOptions.enabledIntegrationTools
+      : Array.isArray(messageObj?.enabledIntegrationTools)
+        ? messageObj.enabledIntegrationTools
+        : enabledIntegrationTools;
     const selectedReasoningEffort = runOptions.reasoningEffort || messageObj?.reasoningEffort || reasoningEffort || 'auto';
     const leadingProfileMention = getLeadingProfileMention(submittedGoal, agentMentions);
     const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
@@ -880,6 +894,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       toolsEnabled: effectiveToolsEnabled,
       agentMode: effectiveAgentMode,
       reasoningEffort: selectedReasoningEffort,
+      enabledIntegrationTools: runEnabledIntegrationTools,
       agentMentions,
       fileAttachments,
       workingContext: activeWorkingContext,
@@ -896,6 +911,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       toolsEnabled: effectiveToolsEnabled,
       agentMode: effectiveAgentMode,
       reasoningEffort: selectedReasoningEffort,
+      enabledIntegrationTools: runEnabledIntegrationTools,
       agentMentions,
       fileAttachments,
       profileId: effectiveProfileId || null,
@@ -913,6 +929,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         toolsEnabled: effectiveToolsEnabled,
         agentMode: effectiveAgentMode,
         reasoningEffort: selectedReasoningEffort,
+        enabledIntegrationTools: runEnabledIntegrationTools,
         agentMentions,
         fileAttachments,
         workingContext: activeWorkingContext,
@@ -1002,6 +1019,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         enableTools: effectiveToolsEnabled,
         agentMode: effectiveAgentMode,
         reasoningEffort: selectedReasoningEffort,
+        enabledIntegrationTools: runEnabledIntegrationTools,
       })) {
         if (controller.signal.aborted) break;
         if (event.type === 'session_start') {
@@ -1284,6 +1302,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     agentAutoApprove,
     reasoningEffort,
     alwaysAllowedTools,
+    enabledIntegrationTools,
     selectedProfileId,
     agentMode,
     activeBranchId,
@@ -1709,6 +1728,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return next;
     });
   }, []);
+
+  const handleEnabledIntegrationToolsChange = useCallback((nextTools) => {
+    const next = Array.isArray(nextTools) ? [...new Set(nextTools.filter(Boolean))] : [];
+    setEnabledIntegrationTools(next);
+    try { localStorage.setItem('asyncat_enabled_integration_tools', JSON.stringify(next)); } catch { /* localStorage may be unavailable */ }
+  }, []);
+
   const handleReasoningEffortChange = useCallback((next) => {
     const value = ['auto', 'low', 'medium', 'high', 'xhigh'].includes(next) ? next : 'auto';
     setReasoningEffort(value);
@@ -2073,6 +2099,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
               autoApprove={agentAutoApprove}
               onToggleAutoApprove={handleToggleAgentAutoApprove}
+              enabledIntegrationTools={enabledIntegrationTools}
+              onEnabledIntegrationToolsChange={handleEnabledIntegrationToolsChange}
               reasoningEffort={reasoningEffort}
               onReasoningEffortChange={handleReasoningEffortChange}
                 externalFileAttachment={externalFileAttachment}
@@ -2553,6 +2581,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
                 autoApprove={agentAutoApprove}
                 onToggleAutoApprove={handleToggleAgentAutoApprove}
+                enabledIntegrationTools={enabledIntegrationTools}
+                onEnabledIntegrationToolsChange={handleEnabledIntegrationToolsChange}
                 reasoningEffort={reasoningEffort}
                 onReasoningEffortChange={handleReasoningEffortChange}
                 isRunning={agentRunning}

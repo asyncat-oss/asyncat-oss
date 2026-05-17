@@ -132,6 +132,29 @@ export const integrationsApi = {
 		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/obsidian/status`),
 		listVault: async () => apiCall(`${MAIN_URL}/api/integrations/obsidian/vault`),
 	},
+	rss: {
+		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/rss/status`),
+		listFeeds: async () => apiCall(`${MAIN_URL}/api/integrations/rss/feeds`),
+		addFeed: async (url) => apiCall(`${MAIN_URL}/api/integrations/rss/feeds`, {
+			method: 'POST',
+			body: JSON.stringify({ url }),
+		}),
+		deleteFeed: async (feedId) => apiCall(`${MAIN_URL}/api/integrations/rss/feeds/${encodeURIComponent(feedId)}`, {
+			method: 'DELETE',
+		}),
+		refreshAll: async () => apiCall(`${MAIN_URL}/api/integrations/rss/refresh`, { method: 'POST' }),
+		listReadLater: async (limit = 5) => apiCall(`${MAIN_URL}/api/integrations/rss/read-later?limit=${encodeURIComponent(String(limit))}`),
+		addReadLater: async ({ url, title = '', notes = '' }) => apiCall(`${MAIN_URL}/api/integrations/rss/read-later`, {
+			method: 'POST',
+			body: JSON.stringify({ url, title, notes }),
+		}),
+	},
+	mail: {
+		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/mail/status`),
+		testImap: async () => apiCall(`${MAIN_URL}/api/integrations/mail/test-imap`, { method: 'POST' }),
+		testSmtp: async () => apiCall(`${MAIN_URL}/api/integrations/mail/test-smtp`, { method: 'POST' }),
+		listMessages: async (limit = 5) => apiCall(`${MAIN_URL}/api/integrations/mail/messages?limit=${encodeURIComponent(String(limit))}`),
+	},
 };
 
 // ===========================================

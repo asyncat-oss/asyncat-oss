@@ -1411,7 +1411,7 @@ router.post('/run', authenticate, async (req, res) => {
     abortController.abort();
   });
   try {
-    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, workingContext, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMode, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto' } = req.body;
+    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, workingContext, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMode, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto', enabledIntegrationTools = null } = req.body;
     const resolvedAgentMode = agentMode === 'plan' || enableTools === false ? 'plan' : 'action';
     const baseGoal = (rawGoal || rawMessage || '').trim();
 
@@ -1493,6 +1493,7 @@ router.post('/run', authenticate, async (req, res) => {
       providerInfo,
       reasoningEffort,
       agentMode: resolvedAgentMode,
+      enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : null,
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,
       abortSignal: abortController.signal,

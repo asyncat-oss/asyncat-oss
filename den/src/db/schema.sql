@@ -493,3 +493,58 @@ CREATE TABLE IF NOT EXISTS user_integrations (
   UNIQUE(user_id, provider)
 );
 CREATE INDEX IF NOT EXISTS idx_user_integrations_user ON user_integrations(user_id, provider);
+
+-- ─── RSS / Read Later ─────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS rss_feeds (
+  id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  url             TEXT NOT NULL,
+  title           TEXT,
+  site_url        TEXT,
+  description     TEXT,
+  last_checked_at TEXT,
+  last_error      TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, url)
+);
+CREATE INDEX IF NOT EXISTS idx_rss_feeds_user ON rss_feeds(user_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS rss_items (
+  id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  feed_id      TEXT NOT NULL REFERENCES rss_feeds(id) ON DELETE CASCADE,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  guid         TEXT NOT NULL,
+  url          TEXT,
+  title        TEXT NOT NULL,
+  author       TEXT,
+  summary      TEXT,
+  content      TEXT,
+  published_at TEXT,
+  read_at      TEXT,
+  saved        INTEGER NOT NULL DEFAULT 0,
+  metadata     TEXT NOT NULL DEFAULT '{}',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(feed_id, guid)
+);
+CREATE INDEX IF NOT EXISTS idx_rss_items_user_published ON rss_items(user_id, published_at);
+CREATE INDEX IF NOT EXISTS idx_rss_items_feed           ON rss_items(feed_id, published_at);
+CREATE INDEX IF NOT EXISTS idx_rss_items_saved          ON rss_items(user_id, saved, updated_at);
+
+CREATE TABLE IF NOT EXISTS read_later_items (
+  id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  url         TEXT NOT NULL,
+  title       TEXT,
+  excerpt     TEXT,
+  notes       TEXT,
+  tags        TEXT NOT NULL DEFAULT '[]',
+  read_at     TEXT,
+  archived_at TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, url)
+);
+CREATE INDEX IF NOT EXISTS idx_read_later_user ON read_later_items(user_id, archived_at, updated_at);

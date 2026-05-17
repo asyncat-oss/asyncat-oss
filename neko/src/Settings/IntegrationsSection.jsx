@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2, ExternalLink, Loader2, Plug, Unplug,
   AlertTriangle, ChevronDown, ChevronUp, Save, Github,
+  Rss, Mail, Bookmark, RefreshCw, Plus, Trash2,
 } from 'lucide-react';
 import { integrationsApi, configApi, apiUtils } from './settingApi';
 
@@ -113,6 +114,7 @@ function IntegrationCard({
   onCredsSaved,
   // When true: configured == connected, no separate OAuth step needed
   noOAuth = false,
+  children,
 }) {
   const [setupOpen, setSetupOpen] = useState(false);
   const connected = noOAuth ? configured : status?.connected;
@@ -214,7 +216,7 @@ function IntegrationCard({
             </button>
           )}
 
-          {connected ? (
+          {connected && onDisconnect ? (
             <button
               type="button"
               onClick={onDisconnect}
@@ -246,6 +248,12 @@ function IntegrationCard({
           helpText={setupHelpText}
           onSaved={handleCredsSaved}
         />
+      )}
+
+      {children && (
+        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-5 py-4">
+          {children}
+        </div>
       )}
     </div>
   );
@@ -289,6 +297,198 @@ const ObsidianLogo = () => (
   </svg>
 );
 
+const RssLogo = () => (
+  <Rss size={22} className="text-orange-500 dark:text-orange-400 midnight:text-orange-400" />
+);
+
+const MailLogo = () => (
+  <Mail size={22} className="text-sky-600 dark:text-sky-400 midnight:text-sky-400" />
+);
+
+function RssReadLaterManager({ onChanged, flash }) {
+  const [feeds, setFeeds] = useState([]);
+  const [savedLinks, setSavedLinks] = useState([]);
+  const [feedUrl, setFeedUrl] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkNotes, setLinkNotes] = useState('');
+  const [busy, setBusy] = useState(null);
+
+  const load = useCallback(async () => {
+    const [feedsRes, linksRes] = await Promise.all([
+      integrationsApi.rss.listFeeds(),
+      integrationsApi.rss.listReadLater(5),
+    ]);
+    setFeeds(feedsRes.feeds || []);
+    setSavedLinks(linksRes.items || []);
+  }, []);
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, [load]);
+
+  const addFeed = async () => {
+    if (!feedUrl.trim()) return;
+    setBusy('feed');
+    try {
+      const res = await integrationsApi.rss.addFeed(feedUrl.trim());
+      setFeedUrl('');
+      await load();
+      await onChanged?.();
+      flash?.({ type: 'success', text: `Added feed${res.imported ? ` with ${res.imported} item${res.imported === 1 ? '' : 's'}` : ''}.` });
+    } catch (err) {
+      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to add RSS feed') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const refreshFeeds = async () => {
+    setBusy('refresh');
+    try {
+      const res = await integrationsApi.rss.refreshAll();
+      await load();
+      await onChanged?.();
+      flash?.({ type: 'success', text: `RSS refresh complete: ${res.refreshed || 0} ok, ${res.failed || 0} failed.` });
+    } catch (err) {
+      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to refresh feeds') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const removeFeed = async (id) => {
+    setBusy(`delete-${id}`);
+    try {
+      await integrationsApi.rss.deleteFeed(id);
+      await load();
+      await onChanged?.();
+    } catch (err) {
+      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to remove feed') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const addReadLater = async () => {
+    if (!linkUrl.trim()) return;
+    setBusy('link');
+    try {
+      await integrationsApi.rss.addReadLater({ url: linkUrl.trim(), notes: linkNotes.trim() });
+      setLinkUrl('');
+      setLinkNotes('');
+      await load();
+      await onChanged?.();
+      flash?.({ type: 'success', text: 'Saved link to read later.' });
+    } catch (err) {
+      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to save link') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">Feeds</p>
+            <button
+              type="button"
+              onClick={refreshFeeds}
+              disabled={busy === 'refresh' || feeds.length === 0}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            >
+              {busy === 'refresh' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Refresh
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={feedUrl}
+              onChange={(e) => setFeedUrl(e.target.value)}
+              placeholder="https://example.com/feed.xml"
+              className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-100"
+            />
+            <button
+              type="button"
+              onClick={addFeed}
+              disabled={busy === 'feed' || !feedUrl.trim()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-45 dark:bg-gray-100 dark:text-gray-900 midnight:bg-gray-100 midnight:text-gray-900"
+            >
+              {busy === 'feed' ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+              Add
+            </button>
+          </div>
+          <div className="max-h-36 overflow-auto rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+            {feeds.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-gray-400">No feeds yet.</p>
+            ) : feeds.map(feed => (
+              <div key={feed.id} className="flex items-center gap-2 border-b border-gray-100 px-3 py-2 last:border-b-0 dark:border-gray-800 midnight:border-gray-800">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200">{feed.title}</p>
+                  <p className="truncate text-[10px] text-gray-400">{feed.unreadCount || 0} unread · {feed.url}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeFeed(feed.id)}
+                  disabled={busy === `delete-${feed.id}`}
+                  className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-800"
+                  aria-label="Remove feed"
+                >
+                  {busy === `delete-${feed.id}` ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">Read Later</p>
+          <div className="flex gap-2">
+            <input
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://article.example.com"
+              className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-100"
+            />
+            <button
+              type="button"
+              onClick={addReadLater}
+              disabled={busy === 'link' || !linkUrl.trim()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-45 dark:bg-gray-100 dark:text-gray-900 midnight:bg-gray-100 midnight:text-gray-900"
+            >
+              {busy === 'link' ? <Loader2 size={12} className="animate-spin" /> : <Bookmark size={12} />}
+              Save
+            </button>
+          </div>
+          <input
+            value={linkNotes}
+            onChange={(e) => setLinkNotes(e.target.value)}
+            placeholder="Optional note"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-100"
+          />
+          <div className="max-h-36 overflow-auto rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+            {savedLinks.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-gray-400">No saved links yet.</p>
+            ) : savedLinks.map(item => (
+              <a
+                key={item.id}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block border-b border-gray-100 px-3 py-2 last:border-b-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/70 midnight:border-gray-800 midnight:hover:bg-gray-900"
+              >
+                <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200">{item.title}</p>
+                <p className="truncate text-[10px] text-gray-400">{item.url}</p>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main section ──────────────────────────────────────────────────────────────
 
 export default function IntegrationsSection() {
@@ -317,6 +517,16 @@ export default function IntegrationsSection() {
   const [obStatus,        setObStatus]        = useState(null);
   const [obLoading,       setObLoading]       = useState(true);
   const [obDisconnecting, setObDisconnecting] = useState(false);
+
+  // ── RSS / Read Later ───────────────────────────────────────────────────────
+  const [rssStatus,       setRssStatus]       = useState(null);
+  const [rssLoading,      setRssLoading]      = useState(true);
+
+  // ── Generic Mail ───────────────────────────────────────────────────────────
+  const [mailStatus,        setMailStatus]        = useState(null);
+  const [mailLoading,       setMailLoading]       = useState(true);
+  const [mailDisconnecting, setMailDisconnecting] = useState(false);
+  const [mailTesting,       setMailTesting]       = useState(null);
 
   const flash = useCallback((msg, ms = 4000) => {
     setMessage(msg);
@@ -349,12 +559,26 @@ export default function IntegrationsSection() {
     finally { setObLoading(false); }
   }, []);
 
+  const loadRssStatus = useCallback(async () => {
+    try { setRssStatus(await integrationsApi.rss.fetchStatus()); }
+    catch { setRssStatus({ connected: false, configured: false }); }
+    finally { setRssLoading(false); }
+  }, []);
+
+  const loadMailStatus = useCallback(async () => {
+    try { setMailStatus(await integrationsApi.mail.fetchStatus()); }
+    catch { setMailStatus({ connected: false, configured: false }); }
+    finally { setMailLoading(false); }
+  }, []);
+
   useEffect(() => {
     loadGcStatus();
     loadGhStatus();
     loadOlStatus();
     loadObStatus();
-  }, [loadGcStatus, loadGhStatus, loadOlStatus, loadObStatus]);
+    loadRssStatus();
+    loadMailStatus();
+  }, [loadGcStatus, loadGhStatus, loadOlStatus, loadObStatus, loadRssStatus, loadMailStatus]);
 
   // ── Handle OAuth redirect-back params ───────────────────────────────────────
 
@@ -485,6 +709,41 @@ export default function IntegrationsSection() {
       flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect') });
     } finally {
       setObDisconnecting(false);
+    }
+  };
+
+  // ── Mail actions ────────────────────────────────────────────────────────────
+
+  const handleMailDisconnect = async () => {
+    setMailDisconnecting(true);
+    try {
+      const keys = [
+        'MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_IMAP_SECURE', 'MAIL_IMAP_USER', 'MAIL_IMAP_PASSWORD',
+        'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_SMTP_SECURE', 'MAIL_SMTP_USER', 'MAIL_SMTP_PASSWORD',
+        'MAIL_FROM_EMAIL', 'MAIL_FROM_NAME',
+      ];
+      for (const key of keys) {
+        await configApi.updateConfig(key, '');
+      }
+      await loadMailStatus();
+      flash({ type: 'success', text: 'Mail integration disconnected.' });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect mail') });
+    } finally {
+      setMailDisconnecting(false);
+    }
+  };
+
+  const handleMailTest = async (kind) => {
+    setMailTesting(kind);
+    try {
+      if (kind === 'imap') await integrationsApi.mail.testImap();
+      else await integrationsApi.mail.testSmtp();
+      flash({ type: 'success', text: `${kind === 'imap' ? 'IMAP' : 'SMTP'} connection works.` });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, `${kind === 'imap' ? 'IMAP' : 'SMTP'} test failed`) });
+    } finally {
+      setMailTesting(null);
     }
   };
 
@@ -620,6 +879,91 @@ export default function IntegrationsSection() {
             },
           ]}
         />
+
+        {/* RSS / Read Later */}
+        <IntegrationCard
+          logo={<RssLogo />}
+          name="RSS & Read Later"
+          description="Follow RSS/Atom feeds and save links for later reading. Command Center tools can list feeds, refresh items, and save links."
+          status={rssStatus}
+          configured={rssStatus?.configured ?? false}
+          loading={rssLoading}
+          onCredsSaved={loadRssStatus}
+          noOAuth
+        >
+          <div className="mb-3 flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">
+            <span>{rssStatus?.feeds || 0} feeds</span>
+            <span>{rssStatus?.unread || 0} unread feed items</span>
+            <span>{rssStatus?.readLater || 0} saved links</span>
+          </div>
+          <RssReadLaterManager onChanged={loadRssStatus} flash={flash} />
+        </IntegrationCard>
+
+        {/* Generic IMAP / SMTP */}
+        <IntegrationCard
+          logo={<MailLogo />}
+          name="Generic Mail"
+          description="Connect any IMAP/SMTP mailbox for recent mail lookup and approval-gated email sending."
+          status={mailStatus}
+          configured={mailStatus?.configured ?? false}
+          loading={mailLoading}
+          onDisconnect={handleMailDisconnect}
+          disconnecting={mailDisconnecting}
+          onCredsSaved={loadMailStatus}
+          noOAuth
+          setupFields={[
+            { key: 'MAIL_IMAP_HOST', label: 'IMAP host', configType: 'config', placeholder: 'imap.gmail.com' },
+            { key: 'MAIL_IMAP_PORT', label: 'IMAP port', configType: 'config', placeholder: '993' },
+            { key: 'MAIL_IMAP_SECURE', label: 'IMAP TLS', configType: 'config', placeholder: 'true' },
+            { key: 'MAIL_IMAP_USER', label: 'IMAP username', configType: 'config', placeholder: 'you@example.com' },
+            { key: 'MAIL_IMAP_PASSWORD', label: 'IMAP password / app password', configType: 'secret', placeholder: '••••••••' },
+            { key: 'MAIL_SMTP_HOST', label: 'SMTP host', configType: 'config', placeholder: 'smtp.gmail.com' },
+            { key: 'MAIL_SMTP_PORT', label: 'SMTP port', configType: 'config', placeholder: '465' },
+            { key: 'MAIL_SMTP_SECURE', label: 'SMTP TLS', configType: 'config', placeholder: 'true' },
+            { key: 'MAIL_SMTP_USER', label: 'SMTP username', configType: 'config', placeholder: 'you@example.com' },
+            { key: 'MAIL_SMTP_PASSWORD', label: 'SMTP password / app password', configType: 'secret', placeholder: '••••••••' },
+            { key: 'MAIL_FROM_EMAIL', label: 'From email', configType: 'config', placeholder: 'you@example.com' },
+            { key: 'MAIL_FROM_NAME', label: 'From name', configType: 'config', placeholder: 'Your Name' },
+          ]}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              mailStatus?.imapConfigured
+                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300'
+                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
+            }`}>
+              IMAP {mailStatus?.imapConfigured ? 'configured' : 'not configured'}
+            </span>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              mailStatus?.smtpConfigured
+                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300'
+                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
+            }`}>
+              SMTP {mailStatus?.smtpConfigured ? 'configured' : 'not configured'}
+            </span>
+            {mailStatus?.email && (
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">{mailStatus.email}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => handleMailTest('imap')}
+              disabled={!mailStatus?.imapConfigured || mailTesting === 'imap'}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              {mailTesting === 'imap' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+              Test IMAP
+            </button>
+            <button
+              type="button"
+              onClick={() => handleMailTest('smtp')}
+              disabled={!mailStatus?.smtpConfigured || mailTesting === 'smtp'}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              {mailTesting === 'smtp' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+              Test SMTP
+            </button>
+          </div>
+        </IntegrationCard>
       </div>
     </div>
   );

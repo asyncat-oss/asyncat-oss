@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic, Paperclip } from "lucide-react";
+import { Bookmark, Brain, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, Mic, Paperclip, Plug, Rss, Send, SlidersHorizontal, Square, Wrench, X, Zap } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
@@ -113,6 +113,30 @@ const suggestionPanelClass =
 const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
 const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:hover:bg-[#242424]";
 
+const INTEGRATION_TOOL_PACKS = [
+  {
+    id: "rss",
+    label: "RSS",
+    description: "Feeds and latest items",
+    icon: Rss,
+    tools: ["rss_status", "rss_list_feeds", "rss_add_feed", "rss_latest_items"],
+  },
+  {
+    id: "read_later",
+    label: "Read later",
+    description: "Saved links",
+    icon: Bookmark,
+    tools: ["read_later_add", "read_later_list"],
+  },
+  {
+    id: "mail",
+    label: "Mail",
+    description: "Inbox headers and send",
+    icon: Mail,
+    tools: ["mail_status", "mail_list_messages", "mail_send_message"],
+  },
+];
+
 function TokenBar({ usage }) {
   const ctx = usage.contextWindow || 128000;
   const pct = Math.min((usage.totalTokens / ctx) * 100, 100);
@@ -176,6 +200,8 @@ export const MessageInputV2 = ({
   onToggleAgentMode,
   autoApprove = false,
   onToggleAutoApprove,
+  enabledIntegrationTools = [],
+  onEnabledIntegrationToolsChange,
   isRunning = false,
   onStop,
   externalFileAttachment = null,
@@ -579,6 +605,7 @@ export const MessageInputV2 = ({
           agentMentions: detectedAgentMentions,
           fileAttachments: fileAttachments.length > 0 ? fileAttachments : undefined,
           reasoningEffort: activeBrain.supportsReasoning ? reasoningEffort : "auto",
+          enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : [],
         };
 
         await onSubmit(messageToSend, []);
@@ -591,7 +618,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, localModelSendBlockReason, onSubmit, detectedAgentMentions, fileAttachments, activeBrain.supportsReasoning, reasoningEffort],
+    [value, disabled, localModelSendBlockReason, onSubmit, detectedAgentMentions, fileAttachments, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
   );
 
   const handleKeyDown = useCallback(
@@ -660,6 +687,25 @@ export const MessageInputV2 = ({
   const isActionMode = agentMode === 'action';
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
   const currentReasoningOption = currentReasoningOptions.find(option => option.value === reasoningEffort) || currentReasoningOptions[0] || { label: "Auto", short: "Think auto" };
+  const enabledIntegrationSet = useMemo(
+    () => new Set(Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : []),
+    [enabledIntegrationTools],
+  );
+  const enabledIntegrationPacks = useMemo(
+    () => INTEGRATION_TOOL_PACKS.filter(pack => pack.tools.some(tool => enabledIntegrationSet.has(tool))),
+    [enabledIntegrationSet],
+  );
+  const enabledIntegrationCount = enabledIntegrationPacks.length;
+  const toggleIntegrationPack = useCallback((pack) => {
+    if (!onEnabledIntegrationToolsChange) return;
+    const next = new Set(enabledIntegrationSet);
+    const isEnabled = pack.tools.some(tool => next.has(tool));
+    for (const tool of pack.tools) {
+      if (isEnabled) next.delete(tool);
+      else next.add(tool);
+    }
+    onEnabledIntegrationToolsChange([...next]);
+  }, [enabledIntegrationSet, onEnabledIntegrationToolsChange]);
   const modelLabel = activeBrain.isLoadingModel
     ? "Loading"
     : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
@@ -1013,8 +1059,8 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              <div ref={toolbarRef} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <div ref={toolbarRef} className="mt-2 flex items-center justify-between gap-1">
+                <div className="flex min-w-0 items-center gap-1">
                   {activeWorkingContext && (
                     <div className="relative">
                       <button
@@ -1022,7 +1068,7 @@ export const MessageInputV2 = ({
                         onClick={openWorkingContextMenu}
                         disabled={disabled || !onWorkingContextChange}
                         title={`Agent working directory: ${activeWorkingContext.workingDir}`}
-                        className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-gray-500 transition-all duration-200 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                        className="inline-flex max-w-[10rem] items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-gray-500 transition-all duration-200 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
                       >
                         {(() => {
                           const RootIcon = rootIcon(activeRoot?.kind);
@@ -1041,7 +1087,7 @@ export const MessageInputV2 = ({
                       type="button"
                       onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
                       disabled={disabled || activeBrain.loading || isSwitchingModel}
-                      title={`${activeBrain.label}${activeBrain.supportsTools ? " · native tools enabled" : ""}`}
+                      title={`${activeBrain.label}${activeBrain.supportsTools ? " \u00b7 native tools enabled" : ""}`}
                       className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         activeBrain.isLoadingModel
                           ? "text-amber-500 dark:text-amber-400"
@@ -1057,7 +1103,7 @@ export const MessageInputV2 = ({
                       ) : (
                         <BrainIcon className="w-3.5 h-3.5" />
                       )}
-                      <span className="truncate max-w-[8rem] sm:max-w-[10rem]">{modelLabel}</span>
+                      <span className="hidden sm:inline"><span className="truncate max-w-[10rem]">{modelLabel}</span></span>
                       <ChevronDown className="w-3 h-3 opacity-40" />
                     </button>
                     {openMenu === "model" && (
@@ -1092,55 +1138,12 @@ export const MessageInputV2 = ({
                     )}
                   </div>
 
-                  {onReasoningEffortChange && supportsReasoningControl && (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setOpenMenu((current) => (current === "reasoning" ? null : "reasoning"))}
-                        disabled={disabled}
-                        title={`Reasoning effort: ${currentReasoningOption.label}`}
-                        className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                          reasoningEffort === "auto"
-                            ? "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                            : "text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300"
-                        }`}
-                      >
-                        <Brain className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{currentReasoningOption.short}</span>
-                        <ChevronDown className="w-3 h-3 opacity-40" />
-                      </button>
-                      {openMenu === "reasoning" && (
-                        <div className="absolute left-0 bottom-full z-30 mb-1.5 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                          <div className="p-1">
-                            {currentReasoningOptions.map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => {
-                                  onReasoningEffortChange(option.value);
-                                  setOpenMenu(null);
-                                }}
-                                className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
-                                  option.value === reasoningEffort
-                                    ? "bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300"
-                                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                }`}
-                              >
-                                <span className="block font-medium">{option.label}</span>
-                                <span className="block text-[11px] text-gray-400 dark:text-gray-500">{option.description}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                   {(onToggleAgentMode || onToggleTools) && (
                     <button
                       type="button"
                       onClick={onToggleAgentMode || onToggleTools}
                       disabled={disabled}
-                      title={isActionMode ? "Action mode — can execute approved changes" : "Plan mode — safe inspection and answers only"}
+                      title={isActionMode ? "Action mode \u2014 can execute approved changes" : "Plan mode \u2014 safe inspection and answers only"}
                       className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         isActionMode
                           ? "text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
@@ -1152,25 +1155,199 @@ export const MessageInputV2 = ({
                     </button>
                   )}
 
-                  {onToggleAutoApprove && isActionMode && (
-                    <button
-                      type="button"
-                      onClick={onToggleAutoApprove}
-                      disabled={disabled}
-                      title={autoApprove ? "Auto-approve enabled — click to ask before risky tools" : "Ask before risky tools — click to auto-approve"}
-                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                        autoApprove
-                          ? "text-amber-500 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
-                          : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                      }`}
-                    >
-                      <Zap className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">{autoApprove ? 'Auto' : 'Ask'}</span>
-                    </button>
-                  )}
+                  {(() => {
+                    const hasOverflowItems =
+                      (onReasoningEffortChange && supportsReasoningControl) ||
+                      onEnabledIntegrationToolsChange ||
+                      (onToggleAutoApprove && isActionMode) ||
+                      (voiceConversationAvailable && onToggleVoiceMode);
+                    if (!hasOverflowItems) return null;
+                    const activeOverflowCount = [
+                      reasoningEffort !== "auto" && onReasoningEffortChange && supportsReasoningControl,
+                      enabledIntegrationCount > 0,
+                      autoApprove && onToggleAutoApprove && isActionMode,
+                      voiceConversationActive && voiceConversationAvailable && onToggleVoiceMode,
+                    ].filter(Boolean).length;
+                    return (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setOpenMenu((current) => (current === "settings" ? null : "settings"))}
+                          disabled={disabled}
+                          title="Settings"
+                          className={`inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
+                            activeOverflowCount > 0
+                              ? "text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300"
+                              : "text-gray-400 dark:text-gray-500 hover:bg-gray-50 hover:text-gray-600 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
+                          }`}
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                          {activeOverflowCount > 0 && (
+                            <span className="hidden sm:inline text-[10px] font-medium tabular-nums">{activeOverflowCount}</span>
+                          )}
+                          <ChevronDown className="w-3 h-3 opacity-40" />
+                        </button>
+                        {openMenu === "settings" && (
+                          <div className="absolute left-0 bottom-full z-30 mb-1.5 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+                            <div className="max-h-80 overflow-y-auto">
+
+                              {onReasoningEffortChange && supportsReasoningControl && (
+                                <>
+                                  <div className="px-3 pt-2 pb-1">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Reasoning</span>
+                                      <span className={`text-xs font-medium ${
+                                        reasoningEffort === "auto"
+                                          ? "text-gray-400 dark:text-gray-500"
+                                          : "text-violet-600 dark:text-violet-400"
+                                      }`}>{currentReasoningOption.label}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {currentReasoningOptions.map((option) => (
+                                        <button
+                                          key={option.value}
+                                          type="button"
+                                          onClick={() => onReasoningEffortChange(option.value)}
+                                          className={`rounded px-2 py-1 text-xs transition-colors ${
+                                            option.value === reasoningEffort
+                                              ? "bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300"
+                                              : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                          }`}
+                                        >
+                                          {option.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
+                                </>
+                              )}
+
+                              {onEnabledIntegrationToolsChange && (
+                                <>
+                                  <div className="px-3 pt-2 pb-1">
+                                    <div className="mb-1">
+                                      <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Apps</span>
+                                    </div>
+                                    {INTEGRATION_TOOL_PACKS.map((pack) => {
+                                      const PackIcon = pack.icon;
+                                      const isEnabled = pack.tools.some(tool => enabledIntegrationSet.has(tool));
+                                      return (
+                                        <button
+                                          key={pack.id}
+                                          type="button"
+                                          aria-pressed={isEnabled}
+                                          onClick={() => toggleIntegrationPack(pack)}
+                                          className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                                            isEnabled
+                                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                                              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                          }`}
+                                        >
+                                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
+                                            isEnabled
+                                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                              : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                          }`}>
+                                            <PackIcon className="h-3.5 w-3.5" />
+                                          </span>
+                                          <span className="min-w-0 flex-1">
+                                            <span className="block truncate font-medium">{pack.label}</span>
+                                            <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500">{pack.description}</span>
+                                          </span>
+                                          <span className={`h-3.5 w-3.5 shrink-0 rounded-full border ${
+                                            isEnabled
+                                              ? "border-emerald-500 bg-emerald-500 shadow-[inset_0_0_0_3px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_3px_rgba(17,24,39,0.95)]"
+                                              : "border-gray-300 dark:border-gray-600"
+                                          }`} />
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
+                                </>
+                              )}
+
+                              {onToggleAutoApprove && isActionMode && (
+                                <>
+                                  <div className="px-3 pt-2 pb-1">
+                                    <button
+                                      type="button"
+                                      onClick={onToggleAutoApprove}
+                                      disabled={disabled}
+                                      className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                                        autoApprove
+                                          ? "text-amber-600 dark:text-amber-400"
+                                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                      }`}
+                                    >
+                                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
+                                        autoApprove
+                                          ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                          : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                      }`}>
+                                        <Zap className="h-3.5 w-3.5" />
+                                      </span>
+                                      <span className="flex-1">
+                                        <span className="block font-medium">Auto-approve</span>
+                                        <span className="block text-[11px] text-gray-400 dark:text-gray-500">
+                                          {autoApprove ? "Approve tools automatically" : "Ask before risky tools"}
+                                        </span>
+                                      </span>
+                                      <span className={`h-3.5 w-3.5 shrink-0 rounded-full border ${
+                                        autoApprove
+                                          ? "border-amber-500 bg-amber-500 shadow-[inset_0_0_0_3px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_3px_rgba(17,24,39,0.95)]"
+                                          : "border-gray-300 dark:border-gray-600"
+                                      }`} />
+                                    </button>
+                                  </div>
+                                  <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
+                                </>
+                              )}
+
+                              {voiceConversationAvailable && onToggleVoiceMode && (
+                                <div className="px-3 pt-2 pb-1">
+                                  <button
+                                    type="button"
+                                    onClick={onToggleVoiceMode}
+                                    disabled={disabled}
+                                    className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                                      voiceConversationActive
+                                        ? "text-violet-600 dark:text-violet-400"
+                                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                    }`}
+                                  >
+                                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
+                                      voiceConversationActive
+                                        ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                    }`}>
+                                      <Headphones className="h-3.5 w-3.5" />
+                                    </span>
+                                    <span className="flex-1">
+                                      <span className="block font-medium">Voice mode</span>
+                                      <span className="block text-[11px] text-gray-400 dark:text-gray-500">
+                                        {voiceConversationActive ? "Hands-free conversation" : "Enable hands-free conversation"}
+                                      </span>
+                                    </span>
+                                    <span className={`h-3.5 w-3.5 shrink-0 rounded-full border ${
+                                      voiceConversationActive
+                                        ? "border-violet-500 bg-violet-500 shadow-[inset_0_0_0_3px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_3px_rgba(17,24,39,0.95)]"
+                                        : "border-gray-300 dark:border-gray-600"
+                                    }`} />
+                                  </button>
+                                </div>
+                              )}
+
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2 dark:border-gray-800 midnight:border-slate-800 sm:flex-nowrap sm:border-t-0 sm:pt-0">
+                <div className="flex shrink-0 items-center justify-end gap-1.5">
                   <input
                     ref={filePickerRef}
                     type="file"
@@ -1192,29 +1369,12 @@ export const MessageInputV2 = ({
                     {uploadingAttachment ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
                   </button>
 
-                  {voiceConversationAvailable && onToggleVoiceMode && (
-                    <button
-                      type="button"
-                      onClick={onToggleVoiceMode}
-                      disabled={disabled}
-                      title={voiceConversationActive ? "Voice mode ON - click to disable" : "Voice mode - hands-free conversation"}
-                      className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs transition-all duration-200 ${
-                        voiceConversationActive
-                          ? "bg-violet-50 text-violet-600 ring-1 ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-800"
-                          : "text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
-                      }`}
-                    >
-                      <Headphones className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Voice</span>
-                    </button>
-                  )}
-
                   {sttReady && (
                     <button
                       type="button"
                       onClick={isRecording ? stopRecording : startRecording}
                       disabled={disabled && !isRecording}
-                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice conversation - click to speak" : "Record voice input"}
+                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode active \u00b7 Click to record" : "Record voice input"}
                       className={`inline-flex h-8 min-w-8 items-center justify-center gap-2 rounded-lg px-2.5 text-xs font-medium transition-all duration-200 ${
                         isRecording
                           ? "bg-red-50 text-red-500 ring-1 ring-red-200 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-800/70 midnight:bg-red-900/20"
@@ -1243,7 +1403,7 @@ export const MessageInputV2 = ({
                   <div className="inline-flex items-center gap-1.5">
                     {tokenUsage?.totalTokens > 0 && (
                       <>
-                        <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
+                        <span className="text-[10px] text-gray-300 dark:text-gray-700">\u00b7</span>
                         <TokenBar usage={tokenUsage} />
                       </>
                     )}
@@ -1278,7 +1438,7 @@ export const MessageInputV2 = ({
                 )}
               </div>
             </div>
-          </div>
+            </div>
           </form>
 
         {hasMessages && (

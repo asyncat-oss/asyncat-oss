@@ -33,6 +33,7 @@ export const agentApi = {
         enableTools: opts.enableTools !== false,
         agentMode: opts.agentMode || (opts.enableTools === false ? 'plan' : 'action'),
         reasoningEffort: opts.reasoningEffort || 'auto',
+        enabledIntegrationTools: Array.isArray(opts.enabledIntegrationTools) ? opts.enabledIntegrationTools : null,
       })
     });
 

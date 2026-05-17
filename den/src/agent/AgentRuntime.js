@@ -181,6 +181,9 @@ export class AgentRuntime {
     this.reasoningEffort = opts.reasoningEffort || 'auto';
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
     this.agentMode = opts.agentMode === 'plan' ? 'plan' : 'action';
+    this.enabledIntegrationTools = Array.isArray(opts.enabledIntegrationTools)
+      ? new Set(opts.enabledIntegrationTools.filter(Boolean).map(String))
+      : null;
     this.abortSignal = opts.abortSignal || null;
     this.capabilitiesSection = opts.capabilitiesSection || '';
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -1429,13 +1432,20 @@ export class AgentRuntime {
   }
 
   _toolDefinitionsForMode() {
-    if (this.agentMode !== 'plan') return toolRegistry.all();
-    return toolRegistry.all().filter(tool => {
+    const modeTools = this.agentMode !== 'plan'
+      ? toolRegistry.all()
+      : toolRegistry.all().filter(tool => {
       if (PLAN_BLOCKED_SAFE_TOOLS.has(tool.name)) return false;
       if (tool.permission === 'safe') return true;
       if (PLAN_DYNAMIC_SAFE_TOOLS.has(tool.name)) return true;
       if (tool.name?.startsWith('git_')) return true;
       return false;
+    });
+
+    if (!this.enabledIntegrationTools) return modeTools;
+    return modeTools.filter(tool => {
+      if (tool.category !== 'integrations') return true;
+      return this.enabledIntegrationTools.has(tool.name);
     });
   }
 
