@@ -473,3 +473,23 @@ CREATE TABLE IF NOT EXISTS custom_model_paths (
   type        TEXT NOT NULL CHECK (type IN ('gguf', 'mlx', 'whisper', 'tts', 'vision', 'image')),
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ─── Integrations ─────────────────────────────────────────────────────────────
+-- One row per user per provider. Tokens are encrypted at rest by the OS keychain
+-- for production; for local OSS they live in the DB (same threat model as JWT_SECRET).
+
+CREATE TABLE IF NOT EXISTS user_integrations (
+  id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider      TEXT NOT NULL,
+  access_token  TEXT,
+  refresh_token TEXT,
+  expires_at    TEXT,
+  scope         TEXT,
+  email         TEXT,
+  metadata      TEXT NOT NULL DEFAULT '{}',
+  connected_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, provider)
+);
+CREATE INDEX IF NOT EXISTS idx_user_integrations_user ON user_integrations(user_id, provider);

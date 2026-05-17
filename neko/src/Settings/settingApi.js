@@ -113,24 +113,24 @@ export const profileApi = {
 // ===========================================
 
 export const integrationsApi = {
-	// Google Calendar API functions
 	googleCalendar: {
-		// Fetch Google Calendar status
-		fetchStatus: async () => {
-			return apiCall(`${CALENDAR_URL}/api/google/status`);
-		},
-
-		// Get Google Calendar connect URL
-		getConnectUrl: async () => {
-			return apiCall(`${CALENDAR_URL}/api/google/connect`);
-		},
-
-		// Disconnect Google Calendar
-		disconnect: async () => {
-			return apiCall(`${CALENDAR_URL}/api/google/disconnect`, {
-				method: "DELETE",
-			});
-		},
+		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/google/status`),
+		getConnectUrl: async () => apiCall(`${MAIN_URL}/api/integrations/google/connect`),
+		disconnect: async () => apiCall(`${MAIN_URL}/api/integrations/google/disconnect`, { method: 'DELETE' }),
+	},
+	github: {
+		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/github/status`),
+		getConnectUrl: async () => apiCall(`${MAIN_URL}/api/integrations/github/connect`),
+		disconnect: async () => apiCall(`${MAIN_URL}/api/integrations/github/disconnect`, { method: 'DELETE' }),
+	},
+	outlook: {
+		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/outlook/status`),
+		getConnectUrl: async () => apiCall(`${MAIN_URL}/api/integrations/outlook/connect`),
+		disconnect: async () => apiCall(`${MAIN_URL}/api/integrations/outlook/disconnect`, { method: 'DELETE' }),
+	},
+	obsidian: {
+		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/obsidian/status`),
+		listVault: async () => apiCall(`${MAIN_URL}/api/integrations/obsidian/vault`),
 	},
 };
 

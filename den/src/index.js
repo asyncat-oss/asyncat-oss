@@ -44,6 +44,9 @@ import updateRouter from './update/updateRouter.js';
 // ─── Install / Runtime Readiness ─────────────────────────────────────────────
 import installRouter from './install/installRouter.js';
 
+// ─── Integrations ─────────────────────────────────────────────────────────────
+import integrationsRouter from './integrations/integrationsRouter.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
@@ -135,6 +138,9 @@ app.use('/api/update', updateRouter);
 
 // ─── Routes: Install / Runtime Readiness ─────────────────────────────────────
 app.use('/api/install', installRouter);
+
+// ─── Routes: Integrations ─────────────────────────────────────────────────────
+app.use('/api/integrations', integrationsRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
