@@ -41,6 +41,12 @@ const AppLayout = ({ session, onSignOut }) => {
   const [sidebarPosition, setSidebarPosition] = useState(() => {
     return localStorage.getItem('sidebarPosition') || 'left';
   });
+  const [sidebarState, setSidebarState] = useState(() => {
+    return localStorage.getItem('sidebarState') || 'expanded';
+  });
+  const [sidebarVisibility, setSidebarVisibility] = useState(() => {
+    return localStorage.getItem('sidebarVisibility') || 'always';
+  });
   const [navigationStyle, setNavigationStyle] = useState(() => {
     return localStorage.getItem('navigationStyle') || 'dock';
   });
@@ -222,15 +228,21 @@ const AppLayout = ({ session, onSignOut }) => {
   }, []);
 
   useEffect(() => {
-    const syncSidebarPosition = () => {
+    const syncSidebarPreferences = () => {
       setSidebarPosition(localStorage.getItem('sidebarPosition') || 'left');
+      setSidebarState(localStorage.getItem('sidebarState') || 'expanded');
+      setSidebarVisibility(localStorage.getItem('sidebarVisibility') || 'always');
     };
 
-    window.addEventListener('storage', syncSidebarPosition);
-    window.addEventListener('sidebar-position-changed', syncSidebarPosition);
+    window.addEventListener('storage', syncSidebarPreferences);
+    window.addEventListener('sidebar-position-changed', syncSidebarPreferences);
+    window.addEventListener('sidebar-state-changed', syncSidebarPreferences);
+    window.addEventListener('sidebar-visibility-changed', syncSidebarPreferences);
     return () => {
-      window.removeEventListener('storage', syncSidebarPosition);
-      window.removeEventListener('sidebar-position-changed', syncSidebarPosition);
+      window.removeEventListener('storage', syncSidebarPreferences);
+      window.removeEventListener('sidebar-position-changed', syncSidebarPreferences);
+      window.removeEventListener('sidebar-state-changed', syncSidebarPreferences);
+      window.removeEventListener('sidebar-visibility-changed', syncSidebarPreferences);
     };
   }, []);
 
@@ -456,11 +468,19 @@ const AppLayout = ({ session, onSignOut }) => {
     right: 'pr-20',
   };
   const sidebarPaddingClass = {
-    left: 'pl-16 sm:pl-56',
-    right: 'pr-16 sm:pr-56',
+    left: {
+      collapsed: 'pl-16',
+      expanded: 'pl-16 sm:pl-56',
+    },
+    right: {
+      collapsed: 'pr-16',
+      expanded: 'pr-16 sm:pr-56',
+    },
   };
   const navigationPaddingClass = navigationStyle === 'sidebar'
-    ? sidebarPaddingClass[sidebarPosition] || sidebarPaddingClass.left
+    ? sidebarVisibility === 'hover'
+      ? ''
+      : sidebarPaddingClass[sidebarPosition]?.[sidebarState] || sidebarPaddingClass.left.expanded
     : dockPaddingClass[dockPosition] || dockPaddingClass.bottom;
 
   // Normal dashboard when user has workspaces

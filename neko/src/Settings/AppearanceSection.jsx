@@ -66,6 +66,12 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
   const [sidebarPosition, setSidebarPosition] = useState(() => {
     return localStorage.getItem('sidebarPosition') || 'left';
   });
+  const [sidebarState, setSidebarState] = useState(() => {
+    return localStorage.getItem('sidebarState') || 'expanded';
+  });
+  const [sidebarVisibility, setSidebarVisibility] = useState(() => {
+    return localStorage.getItem('sidebarVisibility') || 'always';
+  });
   const [topMenuBarVisibility, setTopMenuBarVisibility] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') || 'always';
   });
@@ -95,6 +101,18 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
     setSidebarPosition(value);
     localStorage.setItem('sidebarPosition', value);
     dispatchPreferenceChange('sidebar-position-changed');
+  };
+
+  const handleSidebarStateChange = (value) => {
+    setSidebarState(value);
+    localStorage.setItem('sidebarState', value);
+    dispatchPreferenceChange('sidebar-state-changed');
+  };
+
+  const handleSidebarVisibilityChange = (value) => {
+    setSidebarVisibility(value);
+    localStorage.setItem('sidebarVisibility', value);
+    dispatchPreferenceChange('sidebar-visibility-changed');
   };
 
   const handleTopMenuBarVisibilityChange = (value) => {
@@ -161,26 +179,66 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
       </PreferenceCard>
 
       {navigationStyle === 'sidebar' && (
-        <PreferenceCard
-          icon={Layout}
-          title="Sidebar Position"
-          description="Choose which edge the persistent sidebar uses."
-        >
-          <RadioRow
-            name="sidebarPosition"
+        <>
+          <PreferenceCard
+            icon={Layout}
+            title="Sidebar Position"
+            description="Choose which edge the persistent sidebar uses."
+          >
+            <RadioRow
+              name="sidebarPosition"
+              icon={PanelLeft}
+              label="Left"
+              checked={sidebarPosition === 'left'}
+              onChange={() => handleSidebarPositionChange('left')}
+            />
+            <RadioRow
+              name="sidebarPosition"
+              icon={PanelRight}
+              label="Right"
+              checked={sidebarPosition === 'right'}
+              onChange={() => handleSidebarPositionChange('right')}
+            />
+          </PreferenceCard>
+
+          <PreferenceCard
             icon={PanelLeft}
-            label="Left"
-            checked={sidebarPosition === 'left'}
-            onChange={() => handleSidebarPositionChange('left')}
-          />
-          <RadioRow
-            name="sidebarPosition"
-            icon={PanelRight}
-            label="Right"
-            checked={sidebarPosition === 'right'}
-            onChange={() => handleSidebarPositionChange('right')}
-          />
-        </PreferenceCard>
+            title="Sidebar Size"
+            description="Keep labels visible or collapse the sidebar to icons."
+          >
+            <RadioRow
+              name="sidebarState"
+              label="Expanded"
+              checked={sidebarState === 'expanded'}
+              onChange={() => handleSidebarStateChange('expanded')}
+            />
+            <RadioRow
+              name="sidebarState"
+              label="Collapsed"
+              checked={sidebarState === 'collapsed'}
+              onChange={() => handleSidebarStateChange('collapsed')}
+            />
+          </PreferenceCard>
+
+          <PreferenceCard
+            icon={MousePointer}
+            title="Sidebar Visibility"
+            description="Choose whether the sidebar stays open or appears near the screen edge."
+          >
+            <RadioRow
+              name="sidebarVisibility"
+              label="Always Visible"
+              checked={sidebarVisibility === 'always'}
+              onChange={() => handleSidebarVisibilityChange('always')}
+            />
+            <RadioRow
+              name="sidebarVisibility"
+              label="Show on Hover"
+              checked={sidebarVisibility === 'hover'}
+              onChange={() => handleSidebarVisibilityChange('hover')}
+            />
+          </PreferenceCard>
+        </>
       )}
 
       <PreferenceCard

@@ -183,7 +183,7 @@ const formatShortcut = (shortcut) => {
   return parts.join(shortcut.meta ? "" : "+");
 };
 
-const SidebarNavItem = memo(({ icon, label, shortcut, onClick, isActive }) => (
+const SidebarNavItem = memo(({ icon, label, shortcut, onClick, isActive, collapsed = false }) => (
   <button
     type="button"
     onClick={onClick}
@@ -204,10 +204,10 @@ const SidebarNavItem = memo(({ icon, label, shortcut, onClick, isActive }) => (
     }`}>
       {icon}
     </span>
-    <span className="hidden min-w-0 flex-1 truncate text-left text-sm font-medium sm:block">
+    <span className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${collapsed ? 'hidden' : 'hidden sm:block'}`}>
       {label}
     </span>
-    {shortcut ? (
+    {shortcut && !collapsed ? (
       <span className={`hidden flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:block ${
         isActive
           ? 'text-gray-400 dark:text-gray-500 midnight:text-gray-600'
@@ -225,6 +225,7 @@ SidebarNavItem.propTypes = {
   shortcut: PropTypes.string,
   onClick: PropTypes.func,
   isActive: PropTypes.bool,
+  collapsed: PropTypes.bool,
 };
 
 // ── Main Dock Component ───────────────────────────────────────────────────────
@@ -251,11 +252,20 @@ const DynamicSidebar = ({
   const [sidebarPosition, setSidebarPosition] = useState(() => {
     return localStorage.getItem('sidebarPosition') || 'left';
   });
+  const [sidebarState, setSidebarState] = useState(() => {
+    return localStorage.getItem('sidebarState') || 'expanded';
+  });
+  const [sidebarVisibility, setSidebarVisibility] = useState(() => {
+    return localStorage.getItem('sidebarVisibility') || 'always';
+  });
   const [topBarVisible, setTopBarVisible] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
   });
   const [isDockVisible, setIsDockVisible] = useState(() => {
     return localStorage.getItem('dockVisibility') !== 'hover';
+  });
+  const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
+    return localStorage.getItem('sidebarVisibility') !== 'hover';
   });
   const [shortcuts, setShortcuts] = useState(loadKeyboardShortcuts);
 
@@ -289,14 +299,20 @@ const DynamicSidebar = ({
       setDockVisibility(nextDockVisibility);
       setDockPosition(localStorage.getItem('dockPosition') || 'bottom');
       setSidebarPosition(localStorage.getItem('sidebarPosition') || 'left');
+      setSidebarState(localStorage.getItem('sidebarState') || 'expanded');
+      const nextSidebarVisibility = localStorage.getItem('sidebarVisibility') || 'always';
+      setSidebarVisibility(nextSidebarVisibility);
       setTopBarVisible(localStorage.getItem('topMenuBarVisibility') !== 'hidden');
       setIsDockVisible(nextDockVisibility !== 'hover');
+      setIsSidebarVisible(nextSidebarVisibility !== 'hover');
     };
     window.addEventListener('storage', syncNavigationPreferences);
     window.addEventListener('navigation-style-changed', syncNavigationPreferences);
     window.addEventListener('dock-visibility-changed', syncNavigationPreferences);
     window.addEventListener('dock-position-changed', syncNavigationPreferences);
     window.addEventListener('sidebar-position-changed', syncNavigationPreferences);
+    window.addEventListener('sidebar-state-changed', syncNavigationPreferences);
+    window.addEventListener('sidebar-visibility-changed', syncNavigationPreferences);
     window.addEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
     return () => {
       window.removeEventListener('storage', syncNavigationPreferences);
@@ -304,6 +320,8 @@ const DynamicSidebar = ({
       window.removeEventListener('dock-visibility-changed', syncNavigationPreferences);
       window.removeEventListener('dock-position-changed', syncNavigationPreferences);
       window.removeEventListener('sidebar-position-changed', syncNavigationPreferences);
+      window.removeEventListener('sidebar-state-changed', syncNavigationPreferences);
+      window.removeEventListener('sidebar-visibility-changed', syncNavigationPreferences);
       window.removeEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
     };
   }, []);
@@ -333,6 +351,23 @@ const DynamicSidebar = ({
       document.removeEventListener('mouseleave', handleMouseLeave);
     };
   }, [dockPosition, dockVisibility]);
+
+  useEffect(() => {
+    if (navigationStyle !== 'sidebar' || sidebarVisibility !== 'hover') return;
+
+    const handleMouseMove = (e) => {
+      if (sidebarPosition === 'left' && e.clientX < 88) {
+        setIsSidebarVisible(true);
+      } else if (sidebarPosition === 'right' && e.clientX > window.innerWidth - 88) {
+        setIsSidebarVisible(true);
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [navigationStyle, sidebarPosition, sidebarVisibility]);
 
   // Fetch profile data (for dock avatar)
   const userId = useMemo(() => session?.user?.id, [session?.user?.id]);
@@ -503,16 +538,37 @@ const DynamicSidebar = ({
     const sidebarEdgeClasses = sidebarPosition === 'right'
       ? 'right-0'
       : 'left-0';
+    const sidebarWidthClass = sidebarState === 'collapsed'
+      ? 'w-16'
+      : 'w-16 sm:w-56';
+    const sidebarVisibilityClass = sidebarVisibility === 'hover' && !isSidebarVisible
+      ? `opacity-0 pointer-events-none ${sidebarPosition === 'right' ? 'translate-x-2' : '-translate-x-2'}`
+      : 'opacity-100 translate-x-0';
+    const sidebarTriggerClass = sidebarPosition === 'right'
+      ? 'fixed right-0 top-0 bottom-0 w-20 z-40'
+      : 'fixed left-0 top-0 bottom-0 w-20 z-40';
 
     return (
       <>
+        {sidebarVisibility === 'hover' && !isSidebarVisible && (
+          <div
+            className={sidebarTriggerClass}
+            onMouseEnter={() => setIsSidebarVisible(true)}
+          />
+        )}
         <aside
           className={`
             fixed ${sidebarEdgeClasses} ${topBarVisible ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}
-            z-50 flex w-16 flex-col bg-white/70 backdrop-blur-xl
+            z-50 flex ${sidebarWidthClass} flex-col bg-white/70 backdrop-blur-xl
             dark:bg-gray-950/55 midnight:bg-gray-950/55
-            sm:w-56
+            transition-[opacity,transform] duration-150
+            ${sidebarVisibilityClass}
           `}
+          onMouseLeave={() => {
+            if (sidebarVisibility === 'hover') {
+              setIsSidebarVisible(false);
+            }
+          }}
         >
           <button
             type="button"
@@ -526,7 +582,7 @@ const DynamicSidebar = ({
                 <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
               )}
             </span>
-            <span className="hidden min-w-0 sm:block">
+            <span className={`min-w-0 ${sidebarState === 'collapsed' ? 'hidden' : 'hidden sm:block'}`}>
               <span className="block truncate text-sm font-semibold text-gray-950 dark:text-white">
                 Asyncat
               </span>
@@ -546,6 +602,7 @@ const DynamicSidebar = ({
                   shortcut={shortcutByAction[item.action]}
                   onClick={item.onClick}
                   isActive={item.active}
+                  collapsed={sidebarState === 'collapsed'}
                 />
               ))}
             </div>
@@ -561,6 +618,7 @@ const DynamicSidebar = ({
                   shortcut={shortcutByAction[item.action]}
                   onClick={item.onClick}
                   isActive={item.active}
+                  collapsed={sidebarState === 'collapsed'}
                 />
               ))}
               <SidebarNavItem
@@ -568,6 +626,7 @@ const DynamicSidebar = ({
                 label="Trash"
                 onClick={() => navigate("/trash")}
                 isActive={isOnTrash}
+                collapsed={sidebarState === 'collapsed'}
               />
             </div>
           </nav>
@@ -579,6 +638,7 @@ const DynamicSidebar = ({
               shortcut={shortcutByAction.openSettings}
               onClick={() => navigate("/settings/general")}
               isActive={isOnSettings}
+              collapsed={sidebarState === 'collapsed'}
             />
           </div>
         </aside>
