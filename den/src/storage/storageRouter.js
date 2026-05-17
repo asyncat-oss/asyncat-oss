@@ -14,7 +14,7 @@ const STORAGE_ROOT = process.env.STORAGE_PATH
   ? path.resolve(process.env.STORAGE_PATH)
   : path.resolve('data', 'uploads');
 
-const ALLOWED_CONTAINERS = ['notes', 'kanban-attachments'];
+const ALLOWED_CONTAINERS = ['notes', 'kanban-attachments', 'profile-pictures'];
 
 const sanitizePath = (inputPath) => {
   return path.normalize(inputPath).replace(/^(\.\.(\/|\\|$))+/, '');

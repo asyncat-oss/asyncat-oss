@@ -1,4 +1,13 @@
 import { sqliteDb } from "../../db/sqlite.js";
+import path from 'path';
+import fsp from 'fs/promises';
+import crypto from 'crypto';
+
+const STORAGE_ROOT = process.env.STORAGE_PATH
+  ? path.resolve(process.env.STORAGE_PATH)
+  : path.resolve('data', 'uploads');
+const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://localhost:8716';
+const PROFILE_PICTURES_DIR = path.join(STORAGE_ROOT, 'profile-pictures');
 
 /**
  * Get current user's profile
@@ -102,6 +111,79 @@ export async function updateUserProfile(req, res) {
       success: false,
       error: error.message || "Failed to update user profile",
     });
+  }
+}
+
+/**
+ * Upload a custom profile picture
+ */
+export async function uploadProfilePicture(req, res) {
+  try {
+    const { user, db } = req;
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No image file provided' });
+    }
+
+    await fsp.mkdir(PROFILE_PICTURES_DIR, { recursive: true });
+
+    const ext = path.extname(req.file.originalname || '').toLowerCase() || '.jpg';
+    const filename = `${user.id}_${crypto.randomBytes(8).toString('hex')}${ext}`;
+    const filePath = path.join(PROFILE_PICTURES_DIR, filename);
+    await fsp.writeFile(filePath, req.file.buffer);
+
+    const imageUrl = `${PUBLIC_URL_BASE}/files/profile-pictures/${filename}`;
+
+    // Delete previous custom profile picture if it was a stored file
+    const { data: current } = await db.from('users').select('profile_picture').eq('id', user.id).single();
+    if (current?.profile_picture && /\/files\/profile-pictures\//.test(current.profile_picture)) {
+      const oldFilename = path.basename(current.profile_picture);
+      const oldPath = path.join(PROFILE_PICTURES_DIR, oldFilename);
+      fsp.unlink(oldPath).catch(() => {});
+    }
+
+    const { data: updated, error } = await db
+      .from('users')
+      .update({ profile_picture: imageUrl, updated_at: new Date() })
+      .eq('id', user.id)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+
+    res.json({ success: true, data: updated, url: imageUrl });
+  } catch (error) {
+    console.error('Upload profile picture error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to upload profile picture' });
+  }
+}
+
+/**
+ * Delete custom profile picture and revert to default avatar
+ */
+export async function deleteProfilePicture(req, res) {
+  try {
+    const { user, db } = req;
+
+    const { data: current } = await db.from('users').select('profile_picture').eq('id', user.id).single();
+    if (current?.profile_picture && /\/files\/profile-pictures\//.test(current.profile_picture)) {
+      const oldFilename = path.basename(current.profile_picture);
+      const oldPath = path.join(PROFILE_PICTURES_DIR, oldFilename);
+      fsp.unlink(oldPath).catch(() => {});
+    }
+
+    const { data: updated, error } = await db
+      .from('users')
+      .update({ profile_picture: 'CAT', updated_at: new Date() })
+      .eq('id', user.id)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Delete profile picture error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete profile picture' });
   }
 }
 
