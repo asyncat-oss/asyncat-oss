@@ -212,6 +212,10 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/souls`);
   },
 
+  getBrainStats: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/brain-stats`);
+  },
+
   getMemories: async ({ q = '', kind = 'all', limit = 50 } = {}) => {
     const params = new URLSearchParams({ kind, limit: String(limit) });
     if (q) params.set('q', q);

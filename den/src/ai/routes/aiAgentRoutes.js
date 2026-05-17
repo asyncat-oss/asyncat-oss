@@ -2139,6 +2139,36 @@ router.post('/ask/:requestId', authenticate, (req, res) => {
   res.json({ success: true });
 });
 
+// ── Brain stats (memory + skill counts for UI indicators) ─────────────────────
+
+router.get('/brain-stats', authenticate, async (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+
+    const memoryCount = workspaceId
+      ? (db.prepare('SELECT COUNT(*) AS c FROM agent_memory WHERE user_id = ? AND workspace_id = ?').get(req.user.id, workspaceId)?.c ?? 0)
+      : 0;
+
+    const skills = listSkills();
+    const skillCount = skills.length;
+    const autoSkillCount = skills.filter(s => {
+      const tags = Array.isArray(s.tags) ? s.tags : [];
+      return (
+        s.created_by === 'basal-ganglia' ||
+        s.created_by === 'skill-synthesizer' ||
+        tags.includes('auto-generated') ||
+        tags.includes('auto-synthesized') ||
+        tags.includes('learned')
+      );
+    }).length;
+
+    res.json({ success: true, memoryCount: Number(memoryCount), skillCount, autoSkillCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Agent memory ──────────────────────────────────────────────────────────────
 
 router.get('/memory', authenticate, async (req, res) => {

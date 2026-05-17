@@ -49,6 +49,7 @@ import {
   GitBranch,
   BookMarked,
   Headphones,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -156,6 +157,76 @@ function buildConversationHighlights(messages = []) {
   };
 }
 
+// ── Skill-learned toast ───────────────────────────────────────────────────────
+
+function SkillLearnedToast({ toast, onDismiss }) {
+  if (!toast) return null;
+  return (
+    <div
+      className="fixed bottom-20 left-1/2 z-[200] -translate-x-1/2 animate-in fade-in zoom-in-95 duration-200"
+      style={{ maxWidth: '22rem', width: 'max-content' }}
+    >
+      <div
+        className="flex items-start gap-3 rounded-2xl border border-emerald-200/60 bg-white/90 px-4 py-3 shadow-xl backdrop-blur-sm dark:border-emerald-800/40 dark:bg-gray-900/90 midnight:border-emerald-800/30 midnight:bg-slate-900/90"
+        style={{ boxShadow: '0 8px 32px -4px rgba(16,185,129,0.15), 0 2px 8px -2px rgba(0,0,0,0.12)' }}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950/60">
+          <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        </span>
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Skill learned</p>
+          <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium truncate">{toast.name}</p>
+          {toast.summary && (
+            <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed">{toast.summary}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="ml-1 shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          aria-label="Dismiss"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Multi-agent parallel run banner ───────────────────────────────────────────
+
+function MultiAgentRunBanner({ chatRunPreviews = [], currentRunKey, onSwitch }) {
+  const otherRuns = chatRunPreviews.filter(r => r.running && r.key !== currentRunKey);
+  if (otherRuns.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-20 right-4 z-[190] flex flex-col gap-1.5" style={{ maxWidth: '16rem' }}>
+      {otherRuns.slice(0, 3).map(run => (
+        <button
+          key={run.key}
+          type="button"
+          onClick={() => onSwitch?.(run.key)}
+          className="flex items-center gap-2.5 rounded-xl border border-blue-200/60 bg-white/90 px-3 py-2.5 text-left shadow-lg backdrop-blur-sm transition-all hover:shadow-xl dark:border-blue-800/40 dark:bg-gray-900/90 midnight:border-blue-900/40 midnight:bg-slate-900/90"
+          title={`Switch to: ${run.title}`}
+        >
+          <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-30" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-blue-500" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[11px] font-semibold text-gray-800 dark:text-gray-100">
+              {run.title.length > 32 ? `${run.title.slice(0, 32)}…` : run.title}
+            </span>
+            <span className="block text-[10px] text-blue-500 dark:text-blue-400">Running…</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
   const navigate = useNavigate();
@@ -189,6 +260,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     chatRuns = {},
     setChatRuns = () => {},
     updateChatRun = () => {},
+    chatRunPreviews = [],
     activeConversationIds = new Set(),
     hasActiveRuns = false,
     agentAbortControllersRef = fallbackAgentAbortControllersRef,
@@ -265,6 +337,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [editGoalText, setEditGoalText] = useState('');
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
+  // Skill-learned toast
+  const [skillToast, setSkillToast] = useState(null);
+  const skillToastTimerRef = useRef(null);
+  // Brain stats (welcome screen ambient indicator)
+  const [brainStats, setBrainStats] = useState(null);
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
   const agentMode = toolsEnabled ? 'action' : 'plan';
@@ -333,6 +410,30 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       clearInterval(interval);
       window.removeEventListener('asyncat-visual-models-updated', loadCapabilities);
       window.removeEventListener('asyncat-audio-models-updated', loadCapabilities);
+    };
+  }, []);
+
+  // Brain stats — fetch counts, refresh after each run completes
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStats = () => {
+      agentApi.getBrainStats()
+        .then(res => { if (!cancelled && res?.success) setBrainStats(res); })
+        .catch(() => {});
+    };
+    fetchStats();
+    const handler = () => { if (!cancelled) fetchStats(); };
+    window.addEventListener('agent-run-complete', handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('agent-run-complete', handler);
+    };
+  }, []);
+
+  // Clean up skill toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (skillToastTimerRef.current) clearTimeout(skillToastTimerRef.current);
     };
   }, []);
 
@@ -968,6 +1069,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           });
           continue;
         }
+        // Skill learned — fire the in-app toast
+        if (event.type === 'skill_suggested') {
+          const toast = {
+            id: Date.now(),
+            name: event.data?.skillName || event.data?.name || 'Skill',
+            summary: event.data?.summary || event.data?.description || '',
+          };
+          setSkillToast(toast);
+          if (skillToastTimerRef.current) clearTimeout(skillToastTimerRef.current);
+          skillToastTimerRef.current = setTimeout(() => setSkillToast(null), 5000);
+        }
+
         const eventWithMode = event.type === 'answer'
           ? { ...event, data: { ...event.data, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode } }
           : event;
@@ -1888,6 +2001,28 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               </div>
             )}
 
+            {!isGhostMode && brainStats && (brainStats.memoryCount > 0 || brainStats.skillCount > 0) && (
+              <div className="flex justify-center mb-5">
+                <div className="inline-flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                  {brainStats.memoryCount > 0 && (
+                    <span>{brainStats.memoryCount} {brainStats.memoryCount === 1 ? 'memory' : 'memories'}</span>
+                  )}
+                  {brainStats.memoryCount > 0 && brainStats.skillCount > 0 && (
+                    <span className="text-gray-200 dark:text-gray-700">·</span>
+                  )}
+                  {brainStats.skillCount > 0 && (
+                    <span>{brainStats.skillCount} skill{brainStats.skillCount !== 1 ? 's' : ''}</span>
+                  )}
+                  {brainStats.autoSkillCount > 0 && (
+                    <>
+                      <span className="text-gray-200 dark:text-gray-700">·</span>
+                      <span className="text-emerald-500 dark:text-emerald-500">{brainStats.autoSkillCount} auto-learned</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             <MessageInputV2
               key={`welcome-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
               onSubmit={handleAgentRun}
@@ -2462,6 +2597,24 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         onClose={() => setShowDeleteAgentConfirm(false)}
         onConfirm={handleAgentDelete}
         title={agentCurrentGoal}
+      />
+
+      {/* ── Skill-learned floating toast ── */}
+      <SkillLearnedToast
+        toast={skillToast}
+        onDismiss={() => {
+          if (skillToastTimerRef.current) clearTimeout(skillToastTimerRef.current);
+          setSkillToast(null);
+        }}
+      />
+
+      {/* ── Multi-agent parallel run indicators ── */}
+      <MultiAgentRunBanner
+        chatRunPreviews={chatRunPreviews}
+        currentRunKey={currentRunKey}
+        onSwitch={(key) => {
+          if (key && key !== '__draft__') handleOpenConversation(key);
+        }}
       />
 
     </div>

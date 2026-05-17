@@ -1897,6 +1897,170 @@ function GeneratedMediaLibrary({ events }) {
   );
 }
 
+// ── Post-run summary card ─────────────────────────────────────────────────────
+
+const WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_file', 'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file']);
+
+function buildRunStats(events = []) {
+  let rounds = 0;
+  let toolCount = 0;
+  let memoriesSaved = 0;
+  let skillsLearned = 0;
+  const filesChanged = new Set();
+  const toolsSeen = {};
+  let completedAt = 0;
+
+  for (const ev of events) {
+    if (!ev) continue;
+    if (ev.type === 'answer') {
+      if (ev.data?.round > rounds) rounds = ev.data.round;
+      if (ev.arrivedAt > completedAt) completedAt = ev.arrivedAt;
+    }
+    if (ev.type === 'tool_start') {
+      const tool = ev.data?.tool;
+      if (!tool) continue;
+      const isSuccess = ev.result?.success !== false;
+      if (!isSuccess) continue;
+      toolCount++;
+      toolsSeen[tool] = (toolsSeen[tool] || 0) + 1;
+      const args = ev.data?.args || {};
+      if (WRITE_TOOLS.has(tool) && args.path) filesChanged.add(args.path);
+      if (tool === 'save_memory' && ev.result?.success) memoriesSaved++;
+    }
+    if (ev.type === 'skill_suggested') skillsLearned++;
+    if (ev.arrivedAt > completedAt) completedAt = ev.arrivedAt;
+  }
+
+  return { rounds, toolCount, memoriesSaved, skillsLearned, filesChanged: [...filesChanged], toolsSeen, completedAt };
+}
+
+function RunSummaryCard({ events, runStartedAt }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const hasAnswer = (events || []).some(ev => ev.type === 'answer');
+  if (!hasAnswer) return null;
+
+  const { rounds, toolCount, memoriesSaved, skillsLearned, filesChanged, toolsSeen, completedAt } = buildRunStats(events);
+
+  // Only show the card if there's at least something meaningful to report
+  const hasToolActivity = toolCount > 0;
+  const hasMemoryActivity = memoriesSaved > 0;
+  const hasSkillActivity = skillsLearned > 0;
+  const hasFileActivity = filesChanged.length > 0;
+  if (!hasToolActivity && !hasMemoryActivity && !hasSkillActivity) return null;
+
+  const elapsedMs = runStartedAt && completedAt > runStartedAt ? completedAt - runStartedAt : 0;
+  const topTools = Object.entries(toolsSeen)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([name, count]) => ({ name, count }));
+
+  return (
+    <FeedFrame className="mb-4 mt-2">
+      <div className="overflow-hidden rounded-xl border border-gray-200/70 bg-gradient-to-br from-white to-gray-50/50 dark:border-gray-800/60 dark:from-gray-900 dark:to-gray-900/80 midnight:border-slate-800/60 midnight:from-slate-900 midnight:to-slate-900/80 shadow-sm">
+        {/* Header row */}
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-colors"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/50">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            </span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">
+              Run complete
+            </span>
+            {elapsedMs > 0 && (
+              <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">
+                {formatElapsed(elapsedMs)}
+              </span>
+            )}
+          </div>
+
+          {/* Compact stat pills */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {hasFileActivity && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                <Pencil className="h-2.5 w-2.5" />
+                {filesChanged.length} file{filesChanged.length !== 1 ? 's' : ''}
+              </span>
+            )}
+            {hasToolActivity && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                <Zap className="h-2.5 w-2.5" />
+                {toolCount} tool{toolCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {hasMemoryActivity && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:bg-violet-950/40 dark:text-violet-400">
+                <BookMarked className="h-2.5 w-2.5" />
+                {memoriesSaved} mem
+              </span>
+            )}
+            {hasSkillActivity && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <Brain className="h-2.5 w-2.5" />
+                {skillsLearned} skill{skillsLearned !== 1 ? 's' : ''}
+              </span>
+            )}
+            {expanded
+              ? <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 ml-0.5" />
+              : <ChevronRight className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 ml-0.5" />}
+          </div>
+        </button>
+
+        {/* Expanded detail */}
+        {expanded && (
+          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-3 space-y-3">
+            {hasFileActivity && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Files changed</p>
+                <div className="space-y-0.5">
+                  {filesChanged.slice(0, 8).map(f => (
+                    <div key={f} className="flex items-center gap-1.5">
+                      <Pencil className="h-2.5 w-2.5 shrink-0 text-blue-400" />
+                      <span className="truncate text-[11px] text-gray-600 dark:text-gray-300 font-mono">{f}</span>
+                    </div>
+                  ))}
+                  {filesChanged.length > 8 && (
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 pl-4">+{filesChanged.length - 8} more</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {topTools.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Tools used</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {topTools.map(({ name, count }) => (
+                    <span key={name} className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] text-gray-600 dark:text-gray-300">
+                      {count > 1 && <span className="font-semibold text-gray-400 dark:text-gray-500">{count}×</span>}
+                      {name.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-4 pt-0.5">
+              {rounds > 0 && (
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">
+                  {rounds} round{rounds !== 1 ? 's' : ''}
+                </span>
+              )}
+              {elapsedMs > 0 && (
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">
+                  {formatElapsed(elapsedMs)} elapsed
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </FeedFrame>
+  );
+}
+
 // ── Main feed component ───────────────────────────────────────────────────────
 
 export default function AgentRunFeed({
@@ -2039,6 +2203,7 @@ export default function AgentRunFeed({
 
       {isRunning && <StreamingPreview text={streamingText} />}
       {isRunning && !streamingText && <RunningIndicator runStartedAt={runStartedAt} />}
+      {!isRunning && <RunSummaryCard events={events} runStartedAt={runStartedAt} />}
     </div>
   );
 }
