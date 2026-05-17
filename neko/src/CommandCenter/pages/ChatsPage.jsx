@@ -6,7 +6,7 @@ import { agentTaskRunsApi, chatApi, chatFoldersApi } from '../api';
 import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
 import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked } from 'lucide-react';
 
-import { getRelativeTime, cleanTaskAgentTitle } from '../utils/conversationUtils.js';
+import { getRelativeTime, cleanTaskAgentTitle, parseConversationDate } from '../utils/conversationUtils.js';
 
 function basenamePath(value = '') {
   const parts = String(value || '').split(/[\\/]/).filter(Boolean);
@@ -79,7 +79,11 @@ const ChatsPage = () => {
       ]);
 
       const convs = convRes?.conversations || [];
-      convs.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      convs.sort((a, b) => {
+        const bTime = parseConversationDate(b.last_message_at || b.updated_at || b.created_at)?.getTime() || 0;
+        const aTime = parseConversationDate(a.last_message_at || a.updated_at || a.created_at)?.getTime() || 0;
+        return bTime - aTime;
+      });
       setConversations(convs);
       const runs = (agentRes?.tasks || [])
         .filter(task => task?.agentRun)
@@ -260,7 +264,7 @@ const ChatsPage = () => {
     const actionModeUsed = messages.some(msg => msg.agentMode === 'action' || msg.toolsEnabled === true);
     const planModeUsed = messages.some(msg => msg.agentMode === 'plan' || msg.agentSessionId);
     const toolsUsed = isTaskAgent || running || actionModeUsed || planModeUsed;
-    const updatedAt = chat.updated_at || chat.updatedAt;
+    const updatedAt = chat.last_message_at || chat.updated_at || chat.updatedAt || chat.created_at;
     const itemTitle = chat.title || (isTaskAgent ? 'Task agent run' : 'Untitled conversation');
     const selectionItem = { id: chat.id, type: chat.type, title: itemTitle };
     const isSelected = Boolean(selectedItems[getSelectionKey(selectionItem)]);

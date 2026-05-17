@@ -1,7 +1,18 @@
+const SQLITE_UTC_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+
+const parseConversationDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = SQLITE_UTC_TIMESTAMP_RE.test(raw) ? `${raw.replace(' ', 'T')}Z` : raw;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const getRelativeConversationTime = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseConversationDate(dateString);
+  if (!date) return '';
   const diffH = Math.floor((Date.now() - date.getTime()) / 3_600_000);
   if (diffH < 1) return 'Just now';
   if (diffH < 24) return `${diffH}h ago`;
@@ -11,8 +22,8 @@ const getRelativeConversationTime = (dateString) => {
 };
 
 const getRelativeTime = (dateString) => {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseConversationDate(dateString);
+  if (!date) return '';
   const now = new Date();
   const diffH = Math.floor((now - date) / 3_600_000);
   if (diffH < 1) return 'Just now';
@@ -131,6 +142,7 @@ function buildConversationSourceCatalog(messages = [], events = []) {
 }
 
 export {
+  parseConversationDate,
   getRelativeConversationTime,
   getRelativeTime,
   cleanTaskAgentTitle,

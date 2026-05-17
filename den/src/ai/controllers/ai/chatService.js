@@ -3,10 +3,41 @@ import { sqliteDb as db } from '../../../db/sqlite.js';
 import rawDb from '../../../db/client.js';
 import { v4 as uuidv4 } from 'uuid';
 
+const SQLITE_UTC_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+
 class ChatService {
   constructor() {
     this.cache = new Map();
     this.defaultTTL = 5 * 60 * 1000; // 5 minutes
+  }
+
+  normalizeTimestamp(value, fallback = null) {
+    if (!value) return fallback;
+    const raw = String(value).trim();
+    if (!raw) return fallback;
+    const normalized = SQLITE_UTC_TIMESTAMP_RE.test(raw) ? `${raw.replace(' ', 'T')}Z` : raw;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return fallback;
+    return date.toISOString();
+  }
+
+  normalizeConversationTimestamps(conversation) {
+    if (!conversation || typeof conversation !== 'object') return conversation;
+    return {
+      ...conversation,
+      last_message_at: this.normalizeTimestamp(conversation.last_message_at, conversation.last_message_at),
+      created_at: this.normalizeTimestamp(conversation.created_at, conversation.created_at),
+      updated_at: this.normalizeTimestamp(conversation.updated_at, conversation.updated_at),
+      deleted_at: this.normalizeTimestamp(conversation.deleted_at, conversation.deleted_at),
+    };
+  }
+
+  getLastMessageTimestamp(messages = [], fallback = new Date().toISOString()) {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const timestamp = this.normalizeTimestamp(messages[i]?.timestamp);
+      if (timestamp) return timestamp;
+    }
+    return fallback;
   }
 
   // Helper to set RLS context for user
@@ -354,8 +385,8 @@ class ChatService {
         is_active               INTEGER NOT NULL DEFAULT 0,
         sort_order              INTEGER NOT NULL DEFAULT 0,
         metadata                TEXT NOT NULL DEFAULT '{}',
-        created_at              TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
       );
       CREATE TABLE IF NOT EXISTS conversation_messages (
         id                TEXT PRIMARY KEY,
@@ -369,8 +400,8 @@ class ChatService {
         content           TEXT NOT NULL DEFAULT '',
         message_index     INTEGER NOT NULL DEFAULT 0,
         payload           TEXT NOT NULL DEFAULT '{}',
-        created_at        TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
         UNIQUE(conversation_id, branch_id, message_id)
       );
       CREATE INDEX IF NOT EXISTS idx_conversation_branches_conversation ON conversation_branches(conversation_id, updated_at);
@@ -522,6 +553,8 @@ class ChatService {
 
       // Convert messages to simple JSONB format
       const jsonbMessages = this.convertToJsonbFormat(messages);
+      const nowIso = new Date().toISOString();
+      const lastMessageAt = this.getLastMessageTimestamp(jsonbMessages, nowIso);
 
       // Prepare metadata with file attachments
       const enhancedMetadata = { ...metadata };
@@ -536,8 +569,10 @@ class ChatService {
         // UPDATE existing conversation
         const updateData = {
           messages: jsonbMessages,
+          message_count: jsonbMessages.length,
+          last_message_at: lastMessageAt,
           has_attachments: hasAttachments,
-          updated_at: new Date().toISOString()
+          updated_at: nowIso
         };
 
         if (title !== null) updateData.title = title;
@@ -576,8 +611,11 @@ class ChatService {
             project_ids: projectIds,
             metadata: enhancedMetadata,
             messages: jsonbMessages,
+            message_count: jsonbMessages.length,
             has_attachments: hasAttachments,
-            last_message_at: new Date().toISOString()
+            last_message_at: lastMessageAt,
+            created_at: nowIso,
+            updated_at: nowIso
           });
 
         if (error) throw error;
@@ -643,7 +681,7 @@ class ChatService {
       const messages = this.convertFromJsonbFormat(conversation.messages || []);
 
       const data = {
-        ...conversation,
+        ...this.normalizeConversationTimestamps(conversation),
         messages,
         metadata: conversation.metadata || {}
       };
@@ -729,12 +767,15 @@ class ChatService {
       if (error) throw error;
 
       // Process conversations to extract first/last messages
-      const processedConversations = (conversations || []).map(conv => ({
-        ...conv,
-        first_message: conv.messages?.[0] || null,
-        last_message: conv.messages?.[conv.messages?.length - 1] || null,
-        messages: undefined // Remove full messages from list view
-      }));
+      const processedConversations = (conversations || []).map(conv => {
+        const normalized = this.normalizeConversationTimestamps(conv);
+        return {
+          ...normalized,
+          first_message: conv.messages?.[0] || null,
+          last_message: conv.messages?.[conv.messages?.length - 1] || null,
+          messages: undefined // Remove full messages from list view
+        };
+      });
 
       // Get total count using the same client
       let countQuery = dbClient

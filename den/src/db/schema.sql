@@ -172,8 +172,8 @@ CREATE TABLE IF NOT EXISTS chat_folders (
   name         TEXT NOT NULL,
   color        TEXT,
   sort_order   INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -193,8 +193,8 @@ CREATE TABLE IF NOT EXISTS conversations (
   metadata          TEXT NOT NULL DEFAULT '{}',
   project_ids       TEXT NOT NULL DEFAULT '[]',   -- JSON array of UUIDs
   deleted_at        TEXT,
-  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE TABLE IF NOT EXISTS conversation_branches (
@@ -208,8 +208,8 @@ CREATE TABLE IF NOT EXISTS conversation_branches (
   is_active               INTEGER NOT NULL DEFAULT 0,
   sort_order              INTEGER NOT NULL DEFAULT 0,
   metadata                TEXT NOT NULL DEFAULT '{}',
-  created_at              TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -224,8 +224,8 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   content           TEXT NOT NULL DEFAULT '',
   message_index     INTEGER NOT NULL DEFAULT 0,
   payload           TEXT NOT NULL DEFAULT '{}',
-  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   UNIQUE(conversation_id, branch_id, message_id)
 );
 
