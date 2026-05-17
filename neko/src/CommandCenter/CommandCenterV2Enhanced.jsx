@@ -194,38 +194,6 @@ function SkillLearnedToast({ toast, onDismiss }) {
   );
 }
 
-// ── Multi-agent parallel run banner ───────────────────────────────────────────
-
-function MultiAgentRunBanner({ chatRunPreviews = [], currentRunKey, onSwitch }) {
-  const otherRuns = chatRunPreviews.filter(r => r.running && r.key !== currentRunKey);
-  if (otherRuns.length === 0) return null;
-
-  return (
-    <div className="fixed bottom-20 right-4 z-[190] flex flex-col gap-1.5" style={{ maxWidth: '16rem' }}>
-      {otherRuns.slice(0, 3).map(run => (
-        <button
-          key={run.key}
-          type="button"
-          onClick={() => onSwitch?.(run.key)}
-          className="flex items-center gap-2.5 rounded-xl border border-blue-200/60 bg-white/90 px-3 py-2.5 text-left shadow-lg backdrop-blur-sm transition-all hover:shadow-xl dark:border-blue-800/40 dark:bg-gray-900/90 midnight:border-blue-900/40 midnight:bg-slate-900/90"
-          title={`Switch to: ${run.title}`}
-        >
-          <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-30" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-blue-500" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11px] font-semibold text-gray-800 dark:text-gray-100">
-              {run.title.length > 32 ? `${run.title.slice(0, 32)}…` : run.title}
-            </span>
-            <span className="block text-[10px] text-blue-500 dark:text-blue-400">Running…</span>
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
@@ -259,9 +227,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setCurrentConversationId,
     onProjectsChange,
     chatRuns = {},
-    setChatRuns = () => {},
     updateChatRun = () => {},
-    chatRunPreviews = [],
     activeConversationIds = new Set(),
     hasActiveRuns = false,
     agentAbortControllersRef = fallbackAgentAbortControllersRef,
@@ -885,8 +851,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const selectedReasoningEffort = runOptions.reasoningEffort || messageObj?.reasoningEffort || reasoningEffort || 'auto';
     const leadingProfileMention = getLeadingProfileMention(submittedGoal, agentMentions);
     const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
-    const runKey = currentRunKey;
-    const runConversationId = currentConversationId;
+    let runKey = currentRunKey;
+    let runConversationId = currentConversationId;
     const runMessages = Array.isArray(runOptions.baseMessages) ? runOptions.baseMessages : messages;
     const effectiveAgentMode = runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
     const effectiveToolsEnabled = effectiveAgentMode === 'action';
@@ -905,6 +871,54 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const userMessageId = runOptions.userMessageId || messageObj?.id || `msg_${Date.now()}_user_${Math.random().toString(36).substr(2, 9)}`;
     const assistantMessageId = runOptions.assistantMessageId || runOptions.regenerateAssistantMessageId || `msg_${Date.now()}_assistant_${Math.random().toString(36).substr(2, 9)}`;
     const regeneratingAssistant = runOptions.regenerateAssistantMessage || null;
+    const submittedAt = new Date().toISOString();
+    const userMsg = {
+      id: userMessageId,
+      content: submittedGoal,
+      type: 'user',
+      timestamp: submittedAt,
+      toolsEnabled: effectiveToolsEnabled,
+      agentMode: effectiveAgentMode,
+      reasoningEffort: selectedReasoningEffort,
+      agentMentions,
+      fileAttachments,
+      workingContext: activeWorkingContext,
+      branchId: runBranchId,
+      parentBranchId: runParentBranchId,
+      branchPointMessageId: runBranchPointMessageId,
+      editedFromMessageId,
+      editedFromContent,
+    };
+    const userGoalEventData = {
+      goal: submittedGoal,
+      messageId: userMessageId,
+      timestamp: submittedAt,
+      toolsEnabled: effectiveToolsEnabled,
+      agentMode: effectiveAgentMode,
+      reasoningEffort: selectedReasoningEffort,
+      agentMentions,
+      fileAttachments,
+      profileId: effectiveProfileId || null,
+      workingContext: activeWorkingContext,
+      branchId: runBranchId,
+      parentBranchId: runParentBranchId,
+      branchPointMessageId: runBranchPointMessageId,
+    };
+    const optimisticMessages = [...runMessages, userMsg];
+    const optimisticConversationHistory = [
+      ...activeConversationHistory,
+      {
+        role: 'user',
+        content: submittedGoal,
+        toolsEnabled: effectiveToolsEnabled,
+        agentMode: effectiveAgentMode,
+        reasoningEffort: selectedReasoningEffort,
+        agentMentions,
+        fileAttachments,
+        workingContext: activeWorkingContext,
+        branchId: runBranchId,
+      },
+    ];
 
     if (!currentConversationId && messages.length === 0) {
       generateAndSetTitle(submittedGoal);
@@ -912,6 +926,40 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
     setError(null);
     runStartedAtRef.current = Date.now();
+    if (runConversationId === currentConversationIdRef.current) {
+      setMessages(optimisticMessages);
+      setConversationHistory(optimisticConversationHistory);
+    }
+
+    if (!isGhostMode) {
+      try {
+        const saveResult = await saveCurrentConversation({
+          messages: optimisticMessages,
+          conversationId: runConversationId,
+          metadata: {
+            ...(runMetadata || {}),
+            activeBranchId: runBranchId,
+          },
+        });
+
+        if (!runConversationId && saveResult?.conversationId) {
+          const persistedRunKey = saveResult.conversationId;
+          runKey = persistedRunKey;
+          runConversationId = persistedRunKey;
+          currentConversationIdRef.current = persistedRunKey;
+          setCurrentConversationId(persistedRunKey);
+          if (saveResult.title) setConversationTitle(saveResult.title);
+          setTimeout(() => triggerConversationRefresh(), 50);
+        }
+      } catch (saveError) {
+        console.error('Failed to save submitted message before agent run:', saveError);
+        setError('Failed to save message');
+        setMessages(runMessages);
+        setConversationHistory(activeConversationHistory);
+        return;
+      }
+    }
+
     updateChatRun(runKey, prev => {
       const baseEvents = prev.events?.length ? prev.events : buildEventsFromMessages(runMessages);
       return {
@@ -923,9 +971,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         selectedProfileId: effectiveProfileId || null,
         agentMentions,
         fileAttachments,
+        conversationHistory: optimisticConversationHistory,
         events: [
           ...baseEvents,
-          { type: 'user_goal', data: { goal: submittedGoal, messageId: userMessageId, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext, branchId: runBranchId, parentBranchId: runParentBranchId, branchPointMessageId: runBranchPointMessageId }, arrivedAt: Date.now() },
+          { type: 'user_goal', data: userGoalEventData, arrivedAt: Date.now() },
         ],
       };
     });
@@ -939,7 +988,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let sawDoneWithoutAnswer = false;
     let runSessionId = agentCurrentSessionId;
     const runEvents = [
-      { type: 'user_goal', data: { goal: submittedGoal, messageId: userMessageId, timestamp: new Date().toISOString(), toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, profileId: effectiveProfileId || null, workingContext: activeWorkingContext, branchId: runBranchId, parentBranchId: runParentBranchId, branchPointMessageId: runBranchPointMessageId } },
+      { type: 'user_goal', data: userGoalEventData },
     ];
 
     try {
@@ -1116,8 +1165,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       }
       if (capturedFinalAnswer) {
         const nextHistory = [
-          ...activeConversationHistory,
-          { role: 'user', content: submittedGoal, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentMentions, fileAttachments, workingContext: activeWorkingContext, branchId: runBranchId },
+          ...optimisticConversationHistory,
           { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId, branchId: runBranchId },
         ];
         const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
@@ -1126,23 +1174,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           setConversationHistory(nextHistory);
         }
 
-        const userMsg = {
-          id: userMessageId,
-          content: submittedGoal,
-          type: 'user',
-          timestamp: new Date().toISOString(),
-          toolsEnabled: effectiveToolsEnabled,
-          agentMode: effectiveAgentMode,
-          reasoningEffort: selectedReasoningEffort,
-          agentMentions,
-          fileAttachments,
-          workingContext: activeWorkingContext,
-          branchId: runBranchId,
-          parentBranchId: runParentBranchId,
-          branchPointMessageId: runBranchPointMessageId,
-          editedFromMessageId,
-          editedFromContent,
-        };
         const runEventsForMsg = runEvents;
         const searchEvent = buildSearchEvent(runEventsForMsg);
 
@@ -1188,7 +1219,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             regeneratedAt: new Date().toISOString(),
           };
         }
-        const finalMessages = [...runMessages, userMsg, assistantMsg];
+        const finalMessages = [...optimisticMessages, assistantMsg];
         if (runConversationId === currentConversationIdRef.current) {
           setMessages(finalMessages);
         }
@@ -1199,7 +1230,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         }));
 
         if (!isGhostMode) {
-          const saveResult = await saveCurrentConversation({
+          await saveCurrentConversation({
             messages: finalMessages,
             conversationId: runConversationId,
             metadata: {
@@ -1208,30 +1239,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               ...(shouldPersistCompactedHistory ? { compactedConversationHistory: nextHistory } : {}),
             },
           });
-          if (!runConversationId && saveResult?.conversationId) {
-            setChatRuns(prev => {
-              const draftRun = prev[runKey];
-              if (!draftRun) return prev;
-              const next = {
-                ...prev,
-                [saveResult.conversationId]: { ...draftRun, running: false, streamingText: '' },
-              };
-              delete next[runKey];
-              return next;
-            });
-          }
-          if (!runConversationId && currentConversationIdRef.current === runConversationId && saveResult?.conversationId) {
-            setCurrentConversationId(saveResult.conversationId);
-            if (saveResult.title) setConversationTitle(saveResult.title);
-            setTimeout(() => triggerConversationRefresh(), 50);
-          }
-          if (!runConversationId && runMessages.length === 0) {
-            chatApi.generateTitle(submittedGoal, capturedFinalAnswer).then(result => {
-              if (currentConversationIdRef.current === runConversationId && result?.success && result.title) {
-                setConversationTitle(result.title);
-              }
-            }).catch(() => {});
-          }
         }
 
         if (effectiveAgentMode === 'plan' && isLikelyToolActionRequest(submittedGoal)) {
@@ -2054,7 +2061,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               disabled={isProcessing || agentRunning}
               autoFocus={true}
               placeholder={
-                isGhostMode
+                agentRunning
+                  ? "Agent is working..."
+                  : isGhostMode
                   ? "👻 Ghost Mode — messages won't be saved..."
                   : getVoicePlaceholder(sttReady, ttsReady, "Ask anything, or create tasks, events, notes...")
               }
@@ -2530,7 +2539,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 autoFocus={!isProcessing && !agentRunning}
                 onReset={handleClearConversation}
                 placeholder={
-                  agentTaskRun
+                  agentRunning
+                    ? "Agent is working..."
+                    : agentTaskRun
                     ? `Reply to the task agent about "${agentTaskRun.cardTitle || 'this task'}"...`
                     : isGhostMode
                     ? "👻 Ghost Mode - Messages won't be saved..."
@@ -2645,15 +2656,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         onDismiss={() => {
           if (skillToastTimerRef.current) clearTimeout(skillToastTimerRef.current);
           setSkillToast(null);
-        }}
-      />
-
-      {/* ── Multi-agent parallel run indicators ── */}
-      <MultiAgentRunBanner
-        chatRunPreviews={chatRunPreviews}
-        currentRunKey={currentRunKey}
-        onSwitch={(key) => {
-          if (key && key !== '__draft__') handleOpenConversation(key);
         }}
       />
 
