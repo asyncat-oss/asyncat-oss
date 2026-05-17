@@ -1259,6 +1259,7 @@ function AnswerEvent({
   onToggleMessageFlag,
   isRunning,
   highlighted = false,
+  tokensPerSecond = null,
 }) {
   const raw = data?.answer || '';
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
@@ -1313,6 +1314,11 @@ function AnswerEvent({
             <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            {tokensPerSecond > 0 && (
+              <span className="mr-1 text-[10px] tabular-nums text-gray-300 dark:text-gray-600">
+                {tokensPerSecond} tok/s
+              </span>
+            )}
             {variants.length > 1 && (
               <div className="mr-1 inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1 py-0.5 text-[11px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
                 <button
@@ -2105,6 +2111,13 @@ export default function AgentRunFeed({
   const renderedEvents = [];
   let toolEvents = [];
 
+  const evList = events || [];
+  const lastAnswerIdx = evList.reduce((acc, ev, i) => ev.type === 'answer' ? i : acc, -1);
+  const latestUsageTps = evList.reduceRight(
+    (acc, ev) => acc !== null ? acc : (ev.type === 'usage_update' && ev.data?.tokensPerSecond > 0 ? ev.data.tokensPerSecond : null),
+    null,
+  );
+
   const flushTools = () => {
     if (!toolEvents.length) return;
     const key = `tools_${renderedEvents.length}`;
@@ -2169,6 +2182,7 @@ export default function AgentRunFeed({
             onToggleMessageFlag={onToggleMessageFlag}
             isRunning={isRunning}
             highlighted={Boolean(ev.data?.messageId && ev.data.messageId === highlightedMessageId)}
+            tokensPerSecond={!isRunning && i === lastAnswerIdx ? latestUsageTps : null}
           />
         );
         break;

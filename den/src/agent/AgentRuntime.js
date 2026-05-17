@@ -588,7 +588,10 @@ export class AgentRuntime {
 
         if (!answer) {
           answer = cleanReasoningAnswer(finalAnswer || responseText);
-          if (!answer) answer = responseText; // fallback if stripping removes everything
+          // If the model wrapped its entire response in <think> tags and produced no
+          // separate answer, surface the thinking content rather than showing nothing.
+          if (!answer && thinking) answer = thinking;
+          if (!answer) answer = responseText;
         }
         // Same plan-driven continuation check for implicit answers
         if (!this.session.isPlanComplete() && planContinuationNudges < MAX_PLAN_NUDGES) {

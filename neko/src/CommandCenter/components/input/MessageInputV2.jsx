@@ -1,7 +1,8 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Brain, Check, ChevronDown, ClipboardPen, Cloud, Cpu, FolderOpen, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic, Paperclip } from "lucide-react";
+import { Brain, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Send, Square, Wrench, X, Zap, Mic, Paperclip } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
+import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
@@ -106,43 +107,6 @@ function relativeToContext(entryPath, contextPath = ".") {
     : entryPath;
 }
 
-function normalizeFsPath(value = "") {
-  return String(value || "").trim().replace(/\\/g, "/").replace(/\/+$/, "") || "/";
-}
-
-function contextFromAbsolutePath(rawPath, roots = []) {
-  const target = normalizeFsPath(rawPath);
-  const matches = roots
-    .map(root => ({ root, rootPath: normalizeFsPath(root.path || "") }))
-    .filter(item => item.rootPath && (target === item.rootPath || target.startsWith(`${item.rootPath}/`)))
-    .sort((a, b) => b.rootPath.length - a.rootPath.length);
-  const match = matches[0];
-  if (!match) return null;
-  const relativePath = target === match.rootPath
-    ? "."
-    : target.slice(match.rootPath.length + 1) || ".";
-  return {
-    rootId: match.root.id,
-    rootLabel: match.root.label,
-    rootKind: match.root.kind,
-    rootPath: match.root.path,
-    relativePath,
-    workingDir: absoluteFromRoot(match.root.path, relativePath),
-  };
-}
-
-function buildBreadcrumbs(relativePath = ".") {
-  if (!relativePath || relativePath === ".") return [{ label: "Root", path: "." }];
-  const segments = String(relativePath).split("/").filter(Boolean);
-  const crumbs = [{ label: "Root", path: "." }];
-  segments.forEach((segment, index) => {
-    crumbs.push({
-      label: segment,
-      path: segments.slice(0, index + 1).join("/"),
-    });
-  });
-  return crumbs;
-}
 
 const suggestionPanelClass =
   "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1a1a1a] midnight:border-[#2a2a2a] midnight:bg-[#1a1a1a]";
@@ -254,12 +218,7 @@ export const MessageInputV2 = ({
   const [fileSearchLoaded, setFileSearchLoaded] = useState(false);
   const [fileRoot, setFileRoot] = useState(null);
   const [fileRoots, setFileRoots] = useState([]);
-  const [contextBrowseRootId, setContextBrowseRootId] = useState("workspace");
-  const [contextBrowsePath, setContextBrowsePath] = useState(".");
-  const [manualContextPath, setManualContextPath] = useState("");
-  const [manualContextError, setManualContextError] = useState(null);
-  const [contextBrowseEntries, setContextBrowseEntries] = useState([]);
-  const [contextBrowseLoading, setContextBrowseLoading] = useState(false);
+  const [contextModalOpen, setContextModalOpen] = useState(false);
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [pendingContextSwitch, setPendingContextSwitch] = useState(null);
@@ -323,22 +282,6 @@ export const MessageInputV2 = ({
     };
   }, [activeRoot, workingContext?.relativePath, workingContext?.workingDir]);
   const activeContextLabel = labelForWorkingContext(activeWorkingContext, activeRoot);
-  const contextBrowseRoot = useMemo(
-    () => fileRoots.find(root => root.id === contextBrowseRootId) || activeRoot,
-    [activeRoot, contextBrowseRootId, fileRoots],
-  );
-  const contextBrowseWorkingDir = useMemo(
-    () => contextBrowseRoot ? absoluteFromRoot(contextBrowseRoot.path, contextBrowsePath || ".") : "",
-    [contextBrowsePath, contextBrowseRoot],
-  );
-  const contextBrowseLabel = contextBrowsePath === "."
-    ? (contextBrowseRoot?.label || "Root")
-    : basename(contextBrowsePath);
-  const contextBreadcrumbs = useMemo(
-    () => buildBreadcrumbs(contextBrowsePath),
-    [contextBrowsePath],
-  );
-  
   const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {
     if (!supportsReasoningControl) return [];
@@ -789,17 +732,8 @@ export const MessageInputV2 = ({
   );
 
   const openWorkingContextMenu = useCallback(() => {
-    setOpenMenu((current) => {
-      const next = current === "context" ? null : "context";
-      if (next === "context") {
-        setContextBrowseRootId(activeWorkingContext?.rootId || "workspace");
-        setContextBrowsePath(activeWorkingContext?.relativePath || ".");
-        setManualContextPath(activeWorkingContext?.workingDir || "");
-        setManualContextError(null);
-      }
-      return next;
-    });
-  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId]);
+    setContextModalOpen(true);
+  }, []);
 
   const selectWorkingContext = useCallback((rootId, relativePath = ".") => {
     const root = fileRoots.find(item => item.id === rootId) || activeRoot;
@@ -819,52 +753,21 @@ export const MessageInputV2 = ({
       return;
     }
     onWorkingContextChange(nextContext);
-    setOpenMenu(null);
+    setContextModalOpen(false);
   }, [activeRoot, activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileRoots, hasMessages, onWorkingContextChange]);
 
   const confirmContextSwitch = useCallback(() => {
     if (!pendingContextSwitch) return;
     onWorkingContextChange(pendingContextSwitch);
     setPendingContextSwitch(null);
-    setOpenMenu(null);
+    setContextModalOpen(false);
   }, [pendingContextSwitch, onWorkingContextChange]);
 
   const cancelContextSwitch = useCallback(() => {
     setPendingContextSwitch(null);
   }, []);
 
-  const applyManualContextPath = useCallback(() => {
-    const context = contextFromAbsolutePath(manualContextPath, fileRoots);
-    if (!context) {
-      setManualContextError("Path must be inside one of the listed roots.");
-      return;
-    }
-    setManualContextError(null);
-    setContextBrowseRootId(context.rootId);
-    setContextBrowsePath(context.relativePath);
-    selectWorkingContext(context.rootId, context.relativePath);
-  }, [fileRoots, manualContextPath, selectWorkingContext]);
 
-  useEffect(() => {
-    if (openMenu !== "context") return;
-    let cancelled = false;
-    setContextBrowseLoading(true);
-    filesApi
-      .listDirectory(contextBrowseRootId, contextBrowsePath || ".", false, { limit: 240 })
-      .then((res) => {
-        if (cancelled) return;
-        setContextBrowseEntries((res.entries || []).filter(entry => entry.type === "dir"));
-      })
-      .catch(() => {
-        if (!cancelled) setContextBrowseEntries([]);
-      })
-      .finally(() => {
-        if (!cancelled) setContextBrowseLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [contextBrowsePath, contextBrowseRootId, openMenu]);
 
   const startRecording = async () => {
     try {
@@ -1130,163 +1033,6 @@ export const MessageInputV2 = ({
                         <ChevronDown className="h-3 w-3 shrink-0 opacity-40" />
                       </button>
 
-	                      {openMenu === "context" && (
-	                        <div className="absolute left-0 bottom-full z-30 mb-1.5 w-[24rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-	                          <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
-	                            <div className="flex items-start justify-between gap-3">
-	                              <div className="min-w-0">
-	                                <div className="truncate text-xs font-medium text-gray-800 dark:text-gray-100">
-	                                  {contextBrowseWorkingDir}
-	                                </div>
-	                                <div className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
-	                                  Browsing folders. The selected folder becomes the agent workspace.
-	                                </div>
-	                              </div>
-	                              <button
-	                                type="button"
-	                                onClick={() => selectWorkingContext(contextBrowseRootId, contextBrowsePath)}
-	                                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
-	                                title={`Use ${contextBrowseWorkingDir} as the working directory`}
-	                              >
-	                                <Check className="h-3.5 w-3.5" />
-	                                Use this folder
-	                              </button>
-	                            </div>
-	                          </div>
-
-                          <div className="grid grid-cols-[8rem_1fr] divide-x divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
-                            <div className="max-h-72 overflow-y-auto p-1">
-                              {fileRoots.map((root) => {
-                                const RootIcon = rootIcon(root.kind);
-                                const active = root.id === contextBrowseRootId;
-                                return (
-                                  <button
-                                    key={root.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setContextBrowseRootId(root.id);
-                                      setContextBrowsePath(".");
-                                      setManualContextPath(root.path || "");
-                                      setManualContextError(null);
-                                    }}
-                                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-                                      active
-                                        ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800"
-                                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                    }`}
-                                  >
-                                    <RootIcon className="h-3.5 w-3.5 shrink-0" />
-                                    <span className="truncate">{root.label}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-	                            <div className="min-w-0">
-	                              <div className="border-b border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
-	                                <div className="mb-1 flex min-w-0 items-center gap-1 overflow-hidden px-1">
-	                                  {contextBreadcrumbs.map((crumb, index) => (
-	                                    <span key={crumb.path} className="inline-flex min-w-0 items-center gap-1">
-	                                      {index > 0 && <ChevronDown className="h-3 w-3 -rotate-90 text-gray-300 dark:text-gray-600" />}
-	                                      <button
-	                                        type="button"
-	                                        onClick={() => {
-	                                          setContextBrowsePath(crumb.path);
-	                                          setManualContextPath(absoluteFromRoot(contextBrowseRoot?.path || "", crumb.path));
-	                                          setManualContextError(null);
-	                                        }}
-	                                        className={`max-w-[7rem] truncate rounded px-1.5 py-1 text-[11px] transition-colors ${
-	                                          index === contextBreadcrumbs.length - 1
-	                                            ? "bg-gray-100 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-200"
-	                                            : "text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-	                                        }`}
-	                                      >
-	                                        {crumb.label}
-	                                      </button>
-	                                    </span>
-	                                  ))}
-	                                </div>
-	                                <div className="flex items-center gap-1">
-	                                  <div className="min-w-0 flex-1 px-2 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">
-	                                    <span className="block truncate">{contextBrowseLabel}</span>
-	                                  </div>
-	                                {contextBrowsePath !== "." && (
-	                                  <button
-	                                    type="button"
-	                                    onClick={() => {
-	                                      const parent = dirname(contextBrowsePath);
-	                                      setContextBrowsePath(parent);
-	                                      setManualContextPath(absoluteFromRoot(contextBrowseRoot?.path || "", parent));
-	                                      setManualContextError(null);
-	                                    }}
-	                                    className="rounded-md px-2 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-	                                  >
-	                                    Up
-	                                  </button>
-	                                )}
-	                                </div>
-	                                <div className="mt-1 flex items-center gap-1 px-1">
-	                                  <input
-	                                    value={manualContextPath}
-	                                    onChange={(event) => {
-	                                      setManualContextPath(event.target.value);
-	                                      setManualContextError(null);
-	                                    }}
-	                                    onKeyDown={(event) => {
-	                                      if (event.key === "Enter") {
-	                                        event.preventDefault();
-	                                        applyManualContextPath();
-	                                      }
-	                                    }}
-	                                    placeholder="/path/to/project"
-	                                    className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 outline-none transition-colors placeholder:text-gray-300 focus:border-gray-300 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:placeholder:text-gray-600 dark:focus:border-gray-600"
-	                                  />
-	                                  <button
-	                                    type="button"
-	                                    onClick={applyManualContextPath}
-	                                    className="rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-	                                  >
-	                                    Go
-	                                  </button>
-	                                </div>
-	                                {manualContextError && (
-	                                  <div className="px-2 pb-1 pt-1 text-[11px] text-red-500 dark:text-red-400">
-	                                    {manualContextError}
-	                                  </div>
-	                                )}
-	                              </div>
-                              <div className="max-h-60 overflow-y-auto p-1">
-                                {contextBrowseLoading ? (
-                                  <div className="flex items-center gap-2 px-2 py-2 text-xs text-gray-400 dark:text-gray-500">
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    Loading folders...
-                                  </div>
-                                ) : contextBrowseEntries.length > 0 ? (
-                                  contextBrowseEntries.map((entry) => (
-                                    <button
-                                      key={entry.path}
-                                      type="button"
-                                      onClick={() => {
-                                        setContextBrowsePath(entry.path);
-                                        setManualContextPath(absoluteFromRoot(contextBrowseRoot?.path || "", entry.path));
-                                        setManualContextError(null);
-                                      }}
-                                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                    >
-                                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                                      <span className="truncate">{entry.name}</span>
-                                    </button>
-                                  ))
-                                ) : (
-                                  <div className="px-2 py-2 text-xs text-gray-400 dark:text-gray-500">
-                                    No folders here.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -1499,14 +1245,6 @@ export const MessageInputV2 = ({
                       <>
                         <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
                         <TokenBar usage={tokenUsage} />
-                        {tokenUsage.tokensPerSecond > 0 && (
-                          <>
-                            <span className="text-[10px] text-gray-300 dark:text-gray-700">·</span>
-                            <span className="text-[10px] tabular-nums text-indigo-400 dark:text-indigo-500">
-                              {tokenUsage.tokensPerSecond} tok/s
-                            </span>
-                          </>
-                        )}
                       </>
                     )}
                     <button
@@ -1559,6 +1297,16 @@ export const MessageInputV2 = ({
           onClose={() => setLightbox(null)}
         />
       )}
+
+      <WorkingContextModal
+        isOpen={contextModalOpen}
+        onClose={() => setContextModalOpen(false)}
+        onSelect={selectWorkingContext}
+        fileRoots={fileRoots}
+        initialRootId={activeWorkingContext?.rootId || "workspace"}
+        initialRelativePath={activeWorkingContext?.relativePath || "."}
+        activeWorkingDir={activeWorkingContext?.workingDir || ""}
+      />
 
       <ConfirmModal
         isOpen={!!pendingContextSwitch}
