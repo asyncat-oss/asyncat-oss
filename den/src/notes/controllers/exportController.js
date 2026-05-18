@@ -15,9 +15,6 @@ export async function exportDocx(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    console.log(`[ExportController] Exporting note ${id} as DOCX for user ${userId}`);
-
-    // Generate DOCX
     const docxBuffer = await exportNoteAsDocx(id, userId, db);
 
     // Get note title for filename
@@ -34,10 +31,7 @@ export async function exportDocx(req, res) {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', docxBuffer.length);
 
-    // Send file
     res.send(docxBuffer);
-
-    console.log(`[ExportController] Successfully exported DOCX: ${filename}`);
   } catch (error) {
     console.error('[ExportController] DOCX export error:', error);
 
@@ -57,22 +51,14 @@ export async function exportDocx(req, res) {
  * POST /api/notes/:id/export/pdf
  */
 export async function exportPdf(req, res) {
-  console.log('\n\n========== PDF EXPORT STARTED ==========');
-  console.log('[ExportController] PDF export route hit');
-
   try {
     const { id } = req.params;
     const userId = req.user?.id;
     const db = req.db;
 
-    console.log('[ExportController] Request params:', { id, userId: userId ? 'present' : 'missing' });
-
     if (!userId) {
-      console.error('[ExportController] No user ID found');
       return res.status(401).json({ error: 'Unauthorized' });
     }
-
-    console.log(`[ExportController] Exporting note ${id} as PDF for user ${userId}`);
 
     const forwardedProtoHeader = req.headers["x-forwarded-proto"];
     const forwardedProto = Array.isArray(forwardedProtoHeader)
@@ -89,7 +75,6 @@ export async function exportPdf(req, res) {
       ""
     ).replace(/\/$/, "");
 
-    // Generate PDF
     const pdfBuffer = await exportNoteAsPdf(
       id,
       userId,
@@ -97,9 +82,6 @@ export async function exportPdf(req, res) {
       { attachmentBaseUrl }
     );
 
-    console.log('[ExportController] PDF buffer received, size:', pdfBuffer.length);
-
-    // Verify the buffer has data
     if (!pdfBuffer || pdfBuffer.length === 0) {
       throw new Error('PDF buffer is empty');
     }
@@ -119,17 +101,9 @@ export async function exportPdf(req, res) {
     res.setHeader('Content-Length', pdfBuffer.length);
     res.setHeader('Cache-Control', 'no-cache');
 
-    // Send file as buffer
     res.send(pdfBuffer);
-
-    console.log(`[ExportController] Successfully exported PDF: ${filename}`);
   } catch (error) {
-    console.error('\n\n========== PDF EXPORT ERROR ==========');
-    console.error('[ExportController] PDF export error - Full details:');
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    console.error('Error object:', error);
-    console.error('========== END ERROR ==========\n\n');
+    console.error('[ExportController] PDF export error:', error);
 
     if (error.message === 'Note not found or access denied') {
       return res.status(404).json({ error: error.message });

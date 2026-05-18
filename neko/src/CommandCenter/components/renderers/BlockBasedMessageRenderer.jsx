@@ -654,6 +654,10 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
   return result.length > 0 ? result : [text];
 };
 
+export function headingId(text) {
+  return (text || '').replace(/[*_`[\]()#]/g, '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+}
+
 export const BlockRenderer = ({ block, onTermClick }) => {
   const baseStyles = "leading-relaxed text-gray-900 dark:text-gray-100 midnight:text-slate-100";
 
@@ -665,21 +669,21 @@ export const BlockRenderer = ({ block, onTermClick }) => {
   switch (block.type) {
     case 'heading1':
       return (
-        <h1 className={`text-3xl font-bold mb-5 mt-8 first:mt-0 ${baseStyles}`}>
+        <h1 id={headingId(block.content)} className={`text-3xl font-bold mb-5 mt-8 first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h1>
       );
 
     case 'heading2':
       return (
-        <h2 className={`text-2xl font-bold mb-4 mt-6 first:mt-0 ${baseStyles}`}>
+        <h2 id={headingId(block.content)} className={`text-2xl font-bold mb-4 mt-6 first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h2>
       );
 
     case 'heading3':
       return (
-        <h3 className={`text-xl font-bold mb-3 mt-5 first:mt-0 ${baseStyles}`}>
+        <h3 id={headingId(block.content)} className={`text-xl font-bold mb-3 mt-5 first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h3>
       );

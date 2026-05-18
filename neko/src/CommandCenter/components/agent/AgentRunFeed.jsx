@@ -1848,9 +1848,8 @@ function collectGeneratedMedia(events = []) {
       items.push({ type: 'image', tool, result: ev.result, id: `${tool}:${ev.result.media?.path || ev.result.seed || items.length}` });
     } else if (tool === 'speak_text' && ev.result.path) {
       items.push({ type: 'audio', tool, result: ev.result, id: `audio:${ev.result.path}` });
-    } else if (ARTIFACT_TOOLS.has(tool) && ev.result.artifact) {
-      items.push({ type: 'artifact', tool, result: ev.result, id: `artifact:${ev.result.artifact.path || ev.result.artifact.filename}` });
     }
+    // artifacts have their own inline cards — not duplicated here
   }
   return items;
 }
@@ -2310,7 +2309,7 @@ function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryT
 // Groups events into conversation turns: [user goal → work events → answer].
 // Each segment is rendered as: UserGoalEvent + AgentWorkDrawer + AnswerEvent.
 
-function buildEventSegments(evList) {
+export function buildEventSegments(evList) {
   const segments = [];
   let current = null;
 
@@ -2397,7 +2396,7 @@ export default function AgentRunFeed({
         );
 
         return (
-          <div key={si}>
+          <div key={si} id={`chat-seg-${si}`}>
             {seg.goalEvent && (
               <UserGoalEvent
                 data={seg.goalEvent.data}

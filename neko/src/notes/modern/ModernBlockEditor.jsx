@@ -34,7 +34,6 @@ import ConfirmationModal from "./ConfirmationModal";
 import { debounce } from "../utils/autoSaveUtils";
 import { DeltaTracker } from "../utils/deltaSystem";
 import { sanitizeHtmlContent } from "../../utils/sanitizer";
-// import { versionHistoryApi } from "../noteApi";
 
 // Global persistent storage for block histories keyed by note ID
 const globalBlockHistories = new Map();
@@ -1731,203 +1730,15 @@ const ModernBlockEditor = forwardRef(
     }, []);
 
     const createAutoVersionIfNeeded = useCallback(async () => {
-      // Version history temporarily disabled
       return;
-      /*
-      if (!noteId || !enableDeltaTracking) {
-        return;
-      }
-
-      if (blockCreationInProgressRef.current) {
-        setTimeout(() => createAutoVersionIfNeeded(), 100);
-        return;
-      }
-
-      const now = Date.now();
-      const timeSinceLastVersion = now - lastVersionTimestampRef.current;
-      const changeCount = changeCountRef.current;
-
-      // Check if enough time has passed (2 minutes) or enough changes accumulated
-      if (timeSinceLastVersion < TWO_MINUTES && changeCount < 10) {
-        return;
-      }
-
-      try {
-        // Fetch the latest version to compare with current state
-        const versionsResponse = await versionHistoryApi.getVersionHistory(
-          noteId,
-          { limit: 1 }
-        );
-        const latestVersion = versionsResponse?.versions?.[0];
-
-        let hasChanges = false;
-
-        if (!latestVersion) {
-          // No versions exist yet, check if there's any actual content
-          hasChanges = hasAnyContent(latestBlocksRef.current, title);
-        } else {
-          // Compare current state with the latest version
-          const currentBlocks = latestBlocksRef.current;
-          const currentTitle = title || "";
-          const versionBlocks =
-            latestVersion.blocks?.blocks || latestVersion.blocks || [];
-          const versionTitle = latestVersion.title || "";
-
-          // Check for title changes
-          const titleChanged = currentTitle.trim() !== versionTitle.trim();
-
-          // Check for block changes
-          const blocksChanged =
-            JSON.stringify(currentBlocks) !== JSON.stringify(versionBlocks);
-
-          hasChanges = titleChanged || blocksChanged;
-        }
-
-        // Only create version if there are actual changes
-        if (hasChanges) {
-          const triggerType = changeCount >= 10 ? "changes" : "time";
-
-          await versionHistoryApi.createAutoVersion(noteId, {
-            triggerType,
-          });
-
-          console.log(
-            `[Version] Created auto-version (${triggerType}): detected changes via comparison`
-          );
-
-          // Dispatch event to notify version history panel
-          window.dispatchEvent(
-            new CustomEvent("version-created", { detail: { noteId } })
-          );
-
-          lastVersionTimestampRef.current = now;
-          changeCountRef.current = 0;
-          shouldCreateVersionRef.current = false;
-
-          if (autoVersionTimeoutRef.current) {
-            clearTimeout(autoVersionTimeoutRef.current);
-            autoVersionTimeoutRef.current = null;
-          }
-        } else {
-          console.log(
-            "[Version] No changes detected, skipping version creation"
-          );
-        }
-      } catch (error) {
-        console.error("[Version] Failed to create auto-version:", error);
-      }
-      */
-    }, [noteId, enableDeltaTracking, title, hasAnyContent]);
+    }, []);
 
     // Create version if there are ANY changes (for screen wake and navigation scenarios)
     const createVersionIfHasChanges = useCallback(
-      async (forceCreate = false) => {
-        // Version history temporarily disabled
+      async () => {
         return false;
-        /*
-        if (!noteId || !enableDeltaTracking) {
-          return false;
-        }
-
-        if (blockCreationInProgressRef.current) {
-          // Wait for block creation to complete
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          if (blockCreationInProgressRef.current) {
-            return false;
-          }
-        }
-
-        try {
-          // Fetch the latest version to compare with current state
-          const versionsResponse = await versionHistoryApi.getVersionHistory(
-            noteId,
-            { limit: 1 }
-          );
-          const latestVersion = versionsResponse?.versions?.[0];
-
-          let hasChanges = false;
-
-          if (!latestVersion) {
-            // No versions exist yet, check if there's any actual content
-            hasChanges = hasAnyContent(latestBlocksRef.current, title);
-          } else {
-            // Compare current state with the latest version
-            const currentBlocks = latestBlocksRef.current;
-            const currentTitle = title || "";
-            const versionBlocks =
-              latestVersion.blocks?.blocks || latestVersion.blocks || [];
-            const versionTitle = latestVersion.title || "";
-
-            // Check for title changes
-            const titleChanged = currentTitle.trim() !== versionTitle.trim();
-
-            // Check for block changes (this includes formatting changes)
-            const currentBlocksStr = JSON.stringify(currentBlocks);
-            const versionBlocksStr = JSON.stringify(versionBlocks);
-            const blocksChanged = currentBlocksStr !== versionBlocksStr;
-
-            // Debug: Log if only formatting changed
-            if (blocksChanged && !titleChanged) {
-              const currentTexts = currentBlocks.map((b) =>
-                (b.content || "").replace(/<[^>]*>/g, "")
-              );
-              const versionTexts = versionBlocks.map((b) =>
-                (b.content || "").replace(/<[^>]*>/g, "")
-              );
-              const textsIdentical =
-                JSON.stringify(currentTexts) === JSON.stringify(versionTexts);
-              if (textsIdentical) {
-                console.log("[Version] Formatting-only change detected");
-              }
-            }
-
-            hasChanges = titleChanged || blocksChanged;
-          }
-
-          // Only create version if there are actual changes
-          if (!hasChanges) {
-            console.log(
-              "[Version] No changes detected, skipping version creation"
-            );
-            return false;
-          }
-
-          // Log whether this is a forced creation (e.g., on navigation) or regular
-          if (forceCreate) {
-            console.log(
-              "[Version] Force creating version on navigation (has changes)"
-            );
-          } else {
-            console.log("[Version] Creating version on demand (has changes)");
-          }
-
-          await versionHistoryApi.createAutoVersion(noteId, {
-            triggerType: "manual",
-            forceCreate: forceCreate,
-          });
-
-          // Dispatch event to notify version history panel
-          window.dispatchEvent(
-            new CustomEvent("version-created", { detail: { noteId } })
-          );
-
-          lastVersionTimestampRef.current = Date.now();
-          changeCountRef.current = 0;
-          shouldCreateVersionRef.current = false;
-
-          if (autoVersionTimeoutRef.current) {
-            clearTimeout(autoVersionTimeoutRef.current);
-            autoVersionTimeoutRef.current = null;
-          }
-
-          return true;
-        } catch (error) {
-          console.error("[Version] Failed to create version on demand:", error);
-          return false;
-        }
-        */
       },
-      [noteId, enableDeltaTracking, title, hasAnyContent]
+      []
     );
 
     const scheduleAutoVersionTimer = useCallback(() => {
@@ -2286,63 +2097,12 @@ const ModernBlockEditor = forwardRef(
     }, [clipboard, pasteClipboardBlocks]);
 
     useEffect(() => {
-      // Version history temporarily disabled
       return undefined;
-      /*
-      if (!noteId || !enableDeltaTracking) {
-        return undefined;
-      }
-
-      let isMounted = true;
-
-      if (autoVersionTimeoutRef.current) {
-        clearTimeout(autoVersionTimeoutRef.current);
-        autoVersionTimeoutRef.current = null;
-      }
-
-      versionHistoryApi
-        .getVersionHistory(noteId, { limit: 1, includeOperations: false })
-        .then(({ versions }) => {
-          if (!isMounted) return;
-          if (Array.isArray(versions) && versions.length > 0) {
-            const timestamp = Date.parse(versions[0].created_at);
-            lastVersionTimestampRef.current = Number.isNaN(timestamp)
-              ? Date.now()
-              : timestamp;
-          } else {
-            lastVersionTimestampRef.current = Date.now();
-          }
-        })
-        .catch(() => {
-          if (isMounted) {
-            lastVersionTimestampRef.current = Date.now();
-          }
-        });
-
-      changeCountRef.current = 0;
-      shouldCreateVersionRef.current = false;
-
-      return () => {
-        isMounted = false;
-      };
-      */
-    }, [noteId, enableDeltaTracking]);
+    }, []);
 
     useEffect(() => {
-      // Version history temporarily disabled
       return undefined;
-      /*
-      if (!noteId || !enableDeltaTracking) {
-        return undefined;
-      }
-
-      const intervalId = setInterval(() => {
-        createAutoVersionIfNeeded();
-      }, TWO_MINUTES);
-
-      return () => clearInterval(intervalId);
-      */
-    }, [noteId, enableDeltaTracking, createAutoVersionIfNeeded]);
+    }, []);
 
     // Refs
     const editorRef = useRef(null);

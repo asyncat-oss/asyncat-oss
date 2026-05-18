@@ -4,7 +4,6 @@ import {
   useEffect,
   useRef,
   useCallback,
-  useLayoutEffect,
 } from "react";
 import ReactDOM from "react-dom";
 import {
@@ -23,15 +22,12 @@ import {
 } from "lucide-react";
 import { useNoteContext } from "../context/NoteContext";
 import { useUser } from "../../contexts/UserContext";
-import { notesApi } from "../noteApi";
+import { attachmentsApi, notesApi } from "../noteApi";
 import ModernBlockEditor from "./ModernBlockEditor";
 import NoteBanner from "./components/NoteBanner";
 import KeyboardShortcutsDropdown from "./components/KeyboardShortcutsDropdown";
-// import VersionHistoryPanel from "./components/VersionHistory/VersionHistoryPanel";
-// import DiffViewer from "./components/VersionHistory/DiffViewer";
 import { blocksToHtml, htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
-// import { versionHistoryApi } from "../noteApi";
 import authService from "../../services/authService";
 
 const ModernNoteEditor = ({ note, onBack }) => {
@@ -68,9 +64,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
     useState(false);
   const [shouldRenderDownloadDropdown, setShouldRenderDownloadDropdown] =
     useState(false);
-  // const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
-  // const [diffViewerData, setDiffViewerData] = useState(null);
-  // const [restoringVersionId, setRestoringVersionId] = useState(null);
   const [isVisibilitySaving, setIsVisibilitySaving] = useState(false);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
 
@@ -84,9 +77,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
   const lastRemoteUpdateRef = useRef(0);
   const shortcutsTriggerRef = useRef(null);
   const downloadTriggerRef = useRef(null);
-  const headerRef = useRef(null);
   const getEditorIsTypingRef = useRef(() => false);
-  const [headerHeight, setHeaderHeight] = useState(96);
 
   // Update the typing getter function when editor ref is ready
   useEffect(() => {
@@ -94,138 +85,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
       getEditorIsTypingRef.current = () => editorRef.current.getIsTyping();
     }
   }, [editorRef.current]);
-  const [availablePanelHeight, setAvailablePanelHeight] = useState(() => {
-    if (typeof window !== "undefined") {
-      return Math.max(window.innerHeight - 96, 0);
-    }
-    return 0;
-  });
-
-  const noteId = note?.id || null;
-  const hasBanner = Boolean(note?.metadata?.banner);
-
-  const measureHeader = useCallback(() => {
-    if (typeof window === "undefined") return;
-
-    const headerElement = headerRef.current;
-    let offset = 96;
-
-    if (headerElement) {
-      const rect = headerElement.getBoundingClientRect();
-      offset = rect.top + rect.height;
-    }
-
-    setHeaderHeight((prev) => (Math.abs(prev - offset) > 0.5 ? offset : prev));
-
-    const available = Math.max(window.innerHeight - offset, 0);
-    setAvailablePanelHeight((prev) =>
-      Math.abs(prev - available) > 0.5 ? available : prev
-    );
-  }, []);
-
-  useLayoutEffect(() => {
-    measureHeader();
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-
-    const handleResize = () => {
-      measureHeader();
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [measureHeader]);
-
-  useEffect(() => {
-    const headerElement = headerRef.current;
-    if (!headerElement || typeof ResizeObserver !== "function") {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(() => {
-      measureHeader();
-    });
-
-    observer.observe(headerElement);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [measureHeader, noteId]);
-
-  // useEffect(() => {
-  //   setVersionHistoryOpen(false);
-  //   setDiffViewerData(null);
-  // }, [noteId]);
-
-
-
-  /*
-  const handleShowDiff = useCallback((diffPayload) => {
-    setDiffViewerData(diffPayload);
-  }, []);
-
-  const handleDiffClose = useCallback(() => {
-    setDiffViewerData(null);
-
-    // Force chart re-rendering with multiple strategies
-    // Wait for DOM to update after state change
-    setTimeout(() => {
-      // Strategy 1: Dispatch custom event immediately
-      window.dispatchEvent(
-        new CustomEvent("editor-visible", { detail: { timestamp: Date.now() } })
-      );
-      window.dispatchEvent(new Event("resize"));
-
-      // Strategy 2: Use animation frames for smoother rendering
-      requestAnimationFrame(() => {
-        window.dispatchEvent(
-          new CustomEvent("editor-visible", {
-            detail: { timestamp: Date.now() },
-          })
-        );
-        window.dispatchEvent(new Event("resize"));
-
-        requestAnimationFrame(() => {
-          // Strategy 3: Force reflow on all canvases
-          const canvases = document.querySelectorAll(
-            ".editor-fullscreen canvas"
-          );
-          canvases.forEach((canvas) => {
-            // Trigger reflow by accessing dimensions
-            canvas.offsetHeight;
-            if (canvas.parentElement) {
-              canvas.parentElement.offsetHeight;
-            }
-          });
-
-          // Strategy 4: Dispatch events again after reflow
-          window.dispatchEvent(
-            new CustomEvent("editor-visible", {
-              detail: { timestamp: Date.now() },
-            })
-          );
-          window.dispatchEvent(new Event("resize"));
-        });
-      });
-
-      // Strategy 5: Final check after longer delay
-      setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent("editor-visible", {
-            detail: { timestamp: Date.now() },
-          })
-        );
-        window.dispatchEvent(new Event("resize"));
-      }, 100);
-    }, 0);
-  }, []);
-  */
 
   // Enhanced auto-save with delta support and broadcasting - less aggressive
   const { scheduleAutoSave, saveNow, cancelAutoSave } = useAutoSave(
@@ -336,85 +195,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
       getIsTyping: () => getEditorIsTypingRef.current(),
     }
   );
-
-  /*
-  const handleVersionRestore = useCallback(
-    async ({
-      title: restoredTitle = "",
-      content = [],
-      versionId,
-      versionNumber,
-    }) => {
-      if (!noteId) return;
-
-      // Set restoring state
-      setRestoringVersionId(versionId);
-
-      const normalizedTitle = restoredTitle || "Untitled Note";
-      const normalizedBlocks = Array.isArray(content) ? content : [];
-
-      editorRef.current?.setContent(normalizedBlocks);
-      setTitle(normalizedTitle);
-      setBlocks(normalizedBlocks);
-      blocksRef.current = normalizedBlocks;
-      initialStateRef.current = {
-        title: normalizedTitle,
-        blocks: [...normalizedBlocks],
-      };
-      if (editorRef.current?.resetDeltaBaseline) {
-        editorRef.current.resetDeltaBaseline();
-      }
-
-      try {
-        if (cancelAutoSave) {
-          cancelAutoSave();
-        }
-        if (saveNow) {
-          await saveNow({
-            title: normalizedTitle,
-            blocks: normalizedBlocks,
-          });
-        }
-
-        const restoredFrom = {};
-        if (versionId) {
-          restoredFrom.versionId = versionId;
-        }
-        if (versionNumber !== undefined && versionNumber !== null) {
-          restoredFrom.versionNumber = versionNumber;
-        }
-
-        await versionHistoryApi.createAutoVersion(noteId, {
-          triggerType: "restore",
-          forceCreate: true,
-          timestamp: new Date().toISOString(),
-          restoredFrom: Object.keys(restoredFrom).length
-            ? restoredFrom
-            : undefined,
-        });
-
-        setNotification({
-          message: "Version restored successfully",
-          type: "success",
-        });
-      } catch (error) {
-        console.error(
-          "[VersionRestore] Failed to save restored version:",
-          error
-        );
-        setNotification({
-          message: "Failed to restore version",
-          type: "error",
-        });
-      } finally {
-        setRestoringVersionId(null);
-        setDiffViewerData(null);
-        setVersionHistoryOpen(false);
-      }
-    },
-    [noteId, saveNow, cancelAutoSave]
-  );
-  */
 
   // Handle delta changes from editor with broadcasting - with typing detection
   const handleDeltaChange = useCallback(
@@ -784,37 +564,12 @@ const ModernNoteEditor = ({ note, onBack }) => {
         }
       }
 
-      // Cmd+Option+Shift+H or Ctrl+Alt+Shift+H to toggle version history
-      // Temporarily disabled version history toggle
-      // if (
-      //   (e.metaKey || e.ctrlKey) &&
-      //   e.altKey &&
-      //   e.shiftKey &&
-      //   e.code === "KeyH"
-      // ) {
-      //   e.preventDefault();
-      //   e.stopPropagation();
-      //   setVersionHistoryOpen((prev) => !prev);
-      // }
     };
 
-    // Listen for custom event dispatched by ModernBlockEditor
-    // const handleToggleVersionHistory = () => {
-    //   setVersionHistoryOpen((prev) => !prev);
-    // };
-
     document.addEventListener("keydown", handleKeyDown, true);
-    // window.addEventListener(
-    //   "toggle-version-history",
-    //   handleToggleVersionHistory
-    // );
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
-      // window.removeEventListener(
-      //   "toggle-version-history",
-      //   handleToggleVersionHistory
-      // );
     };
   }, []); // Empty dependencies - handlers use refs and closures
 
@@ -908,14 +663,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
 
       const updatedBlocks = [...blocks];
       let hasChanges = false;
-      let attachmentsApi = null;
-
-      const ensureAttachmentsApi = async () => {
-        if (!attachmentsApi) {
-          ({ attachmentsApi } = await import("../noteApi"));
-        }
-        return attachmentsApi;
-      };
 
       const normalizeWithoutCacheBuster = (rawUrl) => {
         if (!rawUrl) return "";
@@ -955,8 +702,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
         if (!isImage && !isVideo && !isAudio) continue;
 
         try {
-          const api = await ensureAttachmentsApi();
-          const freshBaseUrl = api.getAttachmentUrl(note.id, filename);
+          const freshBaseUrl = attachmentsApi.getAttachmentUrl(note.id, filename);
           const shouldCacheBust = isVideo || isAudio;
           const nextUrl = shouldCacheBust
             ? appendCacheBuster(freshBaseUrl)
@@ -1390,7 +1136,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-gray-950 transition-colors duration-200">
       {/* Header - Full Width */}
       <div
-        ref={headerRef}
         className="flex-shrink-0 z-50 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 midnight:border-gray-900 bg-white dark:bg-gray-900 midnight:bg-gray-950"
         style={{ userSelect: "none" }}
       >
@@ -1558,23 +1303,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
               />
             </div>
 
-            {/* Version History toggle temporarily disabled */}
-            {/*
-            <button
-              onClick={() => {
-                setVersionHistoryOpen((prev) => !prev);
-              }}
-              className={`p-2 rounded-lg transition-colors ${
-                versionHistoryOpen
-                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200 midnight:bg-blue-900/40 midnight:text-blue-200"
-                  : "text-gray-600 dark:text-gray-400 midnight:text-slate-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-700"
-              }`}
-              aria-pressed={versionHistoryOpen}
-              title="Version History"
-            >
-              <History className="w-4 h-4" />
-            </button>
-            */}
           </div>
         </div>
       </div>
@@ -1586,7 +1314,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
           className="flex-1 overflow-y-auto editor-fullscreen"
           style={{
             transition: "margin 350ms cubic-bezier(0.4, 0.0, 0.2, 1)",
-            // marginRight: versionHistoryOpen ? "0px" : "0px",
             marginRight: "0px",
           }}
         >
@@ -1617,15 +1344,11 @@ const ModernNoteEditor = ({ note, onBack }) => {
                 });
               }
             }}
-            // isEditable={!diffViewerData}
             isEditable={true}
           />
 
           <div className="relative">
-            <div
-              // className={diffViewerData ? "hidden" : "block"}
-              className="block"
-            >
+            <div className="block">
               <ModernBlockEditor
                 ref={editorRef}
                 title={title}
@@ -1637,46 +1360,8 @@ const ModernNoteEditor = ({ note, onBack }) => {
                 noteId={note?.id}
               />
             </div>
-            {/* Diff viewer temporarily disabled */}
-            {/*
-            {diffViewerData && (
-              <div
-                className={`max-w-5xl mx-auto px-6 ${
-                  hasBanner ? "mt-6" : "mt-6 sm:mt-8 md:mt-10"
-                }`}
-              >
-                <DiffViewer
-                  noteId={noteId}
-                  oldBlocks={diffViewerData.oldBlocks}
-                  newBlocks={diffViewerData.newBlocks}
-                  oldTitle={diffViewerData.oldTitle}
-                  newTitle={diffViewerData.newTitle}
-                  versionId={diffViewerData.versionId}
-                  versionData={diffViewerData.versionData}
-                  versionUser={diffViewerData.versionUser}
-                  isLoading={diffViewerData.isLoading}
-                  onClose={handleDiffClose}
-                  onRestore={handleVersionRestore}
-                  restoringVersionId={restoringVersionId}
-                />
-              </div>
-            )}
-            */}
           </div>
         </div>
-
-        {/* Version History Panel temporarily disabled */}
-        {/*
-        <VersionHistoryPanel
-          noteId={noteId}
-          isOpen={versionHistoryOpen}
-          onVersionRestore={handleVersionRestore}
-          onShowDiff={handleShowDiff}
-          headerHeight={headerHeight}
-          availableHeight={availablePanelHeight}
-          restoringVersionId={restoringVersionId}
-        />
-        */}
       </div>
 
       {/* Visibility-triggered Autosave Overlay - using portal to render above everything */}

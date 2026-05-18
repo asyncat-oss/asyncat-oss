@@ -1,6 +1,6 @@
 import express from "express";
 import * as attachmentController from "../controllers/attachmentController.js";
-import { verifyUserMiddleware, auth } from "../middleware/auth.js";
+import { auth } from "../middleware/auth.js";
 import { verifyAttachmentAccess } from "../middleware/attachmentAuth.js";
 import { handleFileUpload } from "../middleware/fileUpload.js";
 

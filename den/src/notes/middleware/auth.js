@@ -1,4 +1,3 @@
-export { verifyUser, verifyUserMiddleware } from '../../auth/authMiddleware.js';
 import { verifyUser } from '../../auth/authMiddleware.js';
 import { attachDb } from '../../db/sqlite.js';
 
@@ -8,6 +7,3 @@ export const auth = (req, res, next) => {
     attachDb(req, res, next);
   });
 };
-
-// verifyUserMiddleware alias with db client attached
-export const verifyUserWithCompat = auth;

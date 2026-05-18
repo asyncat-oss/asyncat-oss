@@ -9,7 +9,7 @@ import {
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
   X, Maximize2, Copy, Check, FileDown, PanelRight,
 } from 'lucide-react';
-import { parseAIResponseToBlocks, BlockRenderer } from './BlockBasedMessageRenderer';
+import { parseAIResponseToBlocks, BlockRenderer, headingId } from './BlockBasedMessageRenderer';
 import { agentApi } from '../../api';
 
 // ── Type config ─────────────────────────────────────────────────────────────
@@ -214,6 +214,18 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, filename]);
 
+  const tocItems = useMemo(() => {
+    if (!fullHeight || !content || (type !== 'markdown' && type !== 'pdf_source')) return [];
+    const re = /^(#{1,3})\s+(.+)$/gm;
+    const items = [];
+    let m;
+    while ((m = re.exec(content)) !== null) {
+      const text = m[2].replace(/[*_`[\]()]/g, '').trim();
+      items.push({ level: m[1].length, text, id: headingId(text) });
+    }
+    return items;
+  }, [fullHeight, content, type]);
+
   if (!artifact) return null;
 
   const handleToggle = async (e) => {
@@ -386,6 +398,30 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         <p className="px-3 pb-2 -mt-0.5 text-[10px] text-gray-400 dark:text-gray-600 italic pl-[2.25rem]">
           {artifactData.description}
         </p>
+      )}
+
+      {/* TOC navigation — only in full-height (side panel) mode with headings */}
+      {expanded && !onOpen && fullHeight && tocItems.length > 0 && (
+        <div className="shrink-0 overflow-x-auto border-t border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 px-3 py-1.5">
+          <div className="flex items-center gap-x-1 min-w-max">
+            {tocItems.map((item, i) => (
+              <button
+                key={`${item.id}-${i}`}
+                type="button"
+                onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-gray-200/70 hover:text-indigo-600 dark:hover:bg-gray-800 dark:hover:text-indigo-400 ${
+                  item.level === 1
+                    ? 'font-semibold text-gray-600 dark:text-gray-300'
+                    : item.level === 2
+                    ? 'font-medium text-gray-500 dark:text-gray-400 pl-3'
+                    : 'text-gray-400 dark:text-gray-500 pl-5'
+                }`}
+              >
+                {item.text}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Expandable preview */}

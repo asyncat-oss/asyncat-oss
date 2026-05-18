@@ -1,6 +1,7 @@
 import authService from "../services/authService";
 import { secureLogger } from "../utils/secureLogger";
 import { sanitizeNoteContent, sanitizeToText } from "../utils/sanitizer";
+import { attachmentApi } from "./attachmentApi";
 
 const sanitizeChangeset = (changeset) => {
   if (!changeset?.operations) return changeset;
@@ -165,26 +166,12 @@ export const notesApi = {
   },
 };
 
-// Stub — version history is disabled in local mode
-export const versionHistoryApi = {
-  getVersionHistory: async () => ({ versions: [], totalCount: 0, hasMore: false }),
-  getVersion: async () => null,
-  createAutoVersion: async () => null,
-  updateVersionName: async () => null,
-  getGroupNames: async () => ({}),
-  updateGroupName: async () => null,
-  deleteGroupName: async () => null,
-  getOperations: async () => [],
-};
-
 export const attachmentsApi = {
   uploadAttachment: async (noteId, file, onProgress = null) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.uploadAttachment(noteId, file, onProgress);
   },
 
   listAttachments: async (noteId) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.listAttachments(noteId);
   },
 
@@ -196,102 +183,50 @@ export const attachmentsApi = {
   },
 
   deleteAttachment: async (noteId, filename) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.deleteAttachment(noteId, filename);
   },
 
   getAttachmentMetadata: async (noteId, filename) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.getAttachmentMetadata(noteId, filename);
   },
 
   updateAttachmentMetadata: async (noteId, filename, metadata) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.updateAttachmentMetadata(noteId, filename, metadata);
   },
 
   validateFile: async (file, options = {}) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.validateFile(file, options);
   },
 
   validateImageFile: (file) => {
-    const maxSize = 5 * 1024 * 1024;
-    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/svg+xml"];
-    const errors = [];
-    if (!file.type.startsWith("image/")) return { isValid: false, errors: ["File must be an image"] };
-    if (!allowed.includes(file.type.toLowerCase())) errors.push(`Image type "${file.type}" is not allowed`);
-    if (file.size > maxSize) errors.push(`Image exceeds 5MB limit`);
-    return { isValid: errors.length === 0, errors };
+    return attachmentApi.validateImageFile(file);
   },
 
   validateVideoFile: (file) => {
-    const maxSize = 5 * 1024 * 1024;
-    const allowedMime = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-matroska", "application/x-matroska"];
-    const allowedExt = ["mp4", "webm", "ogg", "mov", "qt", "mkv"];
-    const errors = [];
-    const mimeType = file.type?.toLowerCase() ?? "";
-    const ext = (file.name?.toLowerCase() ?? "").split(".").pop();
-    if (!mimeType.startsWith("video/") && !allowedExt.includes(ext)) {
-      return { isValid: false, errors: ["File must be a video"] };
-    }
-    if (!allowedMime.includes(mimeType) && !allowedExt.includes(ext)) {
-      errors.push(`Video format "${mimeType || ext}" is not allowed`);
-    }
-    if (file.size > maxSize) errors.push("Video exceeds 5MB limit");
-    return { isValid: errors.length === 0, errors };
+    return attachmentApi.validateVideoFile(file);
   },
 
   validateAudioFile: (file) => {
-    const maxSize = 5 * 1024 * 1024;
-    const allowedMime = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/webm", "audio/aac", "audio/m4a", "audio/flac", "audio/x-m4a"];
-    const allowedExt = ["mp3", "wav", "ogg", "webm", "aac", "m4a", "flac"];
-    const errors = [];
-    const mimeType = file.type?.toLowerCase() ?? "";
-    const ext = (file.name?.toLowerCase() ?? "").split(".").pop();
-    if (!mimeType.startsWith("audio/") && !allowedExt.includes(ext)) {
-      return { isValid: false, errors: ["File must be an audio file"] };
-    }
-    if (!allowedMime.includes(mimeType) && !allowedExt.includes(ext)) {
-      errors.push(`Audio format "${mimeType || ext}" is not allowed`);
-    }
-    if (file.size > maxSize) errors.push("Audio exceeds 5MB limit");
-    return { isValid: errors.length === 0, errors };
+    return attachmentApi.validateAudioFile(file);
   },
 
-  getFileIcon: (filename) => {
-    const ext = filename?.split(".").pop()?.toLowerCase() || "";
-    const iconMap = {
-      pdf: "📄", doc: "📄", docx: "📄", txt: "📄",
-      jpg: "🖼️", jpeg: "🖼️", png: "🖼️", gif: "🖼️", svg: "🖼️",
-      mp4: "🎥", avi: "🎥", mov: "🎥",
-      mp3: "🎵", wav: "🎵", flac: "🎵",
-      zip: "🗜️", rar: "🗜️",
-      js: "📜", ts: "📜", json: "📜", html: "📜", css: "📜",
-    };
-    return iconMap[ext] || "📁";
+  getFileIcon: (filename, mimeType = "") => {
+    return attachmentApi.getFileIcon(filename, mimeType);
   },
 
   formatFileSize: (bytes) => {
-    if (!bytes) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+    return attachmentApi.formatFileSize(bytes);
   },
 
   setBanner: async (noteId, bannerType, options = {}) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.setBanner(noteId, bannerType, options);
   },
 
   removeBanner: async (noteId) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.removeBanner(noteId);
   },
 
   uploadBannerImage: async (noteId, file, onProgress = null) => {
-    const { attachmentApi } = await import("./attachmentApi");
     return attachmentApi.uploadBannerImage(noteId, file, onProgress);
   },
 };

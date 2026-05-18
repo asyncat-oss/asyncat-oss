@@ -2,7 +2,7 @@
 import express from "express";
 import * as noteController from "../controllers/noteController.js";
 import * as exportController from "../controllers/exportController.js";
-import { verifyUserMiddleware, auth } from "../middleware/auth.js";
+import { auth } from "../middleware/auth.js";
 import {
   sanitizeNoteInput,
   sanitizeChangesetInput,

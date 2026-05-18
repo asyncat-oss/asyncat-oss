@@ -18,7 +18,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
-import AgentRunFeed, { CurrentPlanPanel, extractLocalhostUrl } from './components/agent/AgentRunFeed';
+import AgentRunFeed, { CurrentPlanPanel, extractLocalhostUrl, buildEventSegments } from './components/agent/AgentRunFeed';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
@@ -1909,6 +1909,19 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       });
   }, [persistedAgentEvents]);
 
+  const chatNavItems = useMemo(() => {
+    if (!persistedAgentEvents?.length) return [];
+    const segs = buildEventSegments(persistedAgentEvents);
+    return segs
+      .map((seg, i) => {
+        if (seg.divider || (!seg.goalEvent && !seg.answerEvent)) return null;
+        const goal = seg.goalEvent?.data?.goal || seg.goalEvent?.data?.content || '';
+        const answer = (seg.answerEvent?.data?.content || '').replace(/\n+/g, ' ').trim();
+        return { domId: `chat-seg-${i}`, goal, answerPreview: answer.slice(0, 90) };
+      })
+      .filter(Boolean);
+  }, [persistedAgentEvents]);
+
   // Export handlers
   const exportEntries = useMemo(
     () => buildConversationExportEntries(messages, persistedAgentEvents, agentStreamingText),
@@ -2667,6 +2680,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
               selectedArtifact={selectedArtifact}
+              chatNavItems={chatNavItems}
             />
           </div>
         </aside>
@@ -2707,6 +2721,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
               selectedArtifact={selectedArtifact}
+              chatNavItems={chatNavItems}
             />
           </div>
         </div>

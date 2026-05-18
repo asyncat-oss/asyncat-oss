@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect } from 'react';
-import { Activity, GitBranch, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft } from 'lucide-react';
+import { Activity, GitBranch, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import GitPanel from '../git/GitPanel';
@@ -15,6 +15,7 @@ const panelMeta = {
   saved: { label: 'Saved', icon: BookMarked },
   preview: { label: 'Preview', icon: Globe },
   artifact: { label: 'Artifact', icon: FilePlus },
+  nav: { label: 'Jump to', icon: List },
 };
 
 // ── Preview panel ─────────────────────────────────────────────────────────────
@@ -179,6 +180,46 @@ function ArtifactPanel({ artifact }) {
   );
 }
 
+function ChatNavPanel({ items = [] }) {
+  if (!items.length) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="text-center">
+          <List className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-600" />
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No messages yet</p>
+          <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Messages will appear here as you chat.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="h-full overflow-y-auto p-2 space-y-0.5">
+      {items.map((item, i) => (
+        <button
+          key={item.domId}
+          type="button"
+          onClick={() => document.getElementById(item.domId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-gray-100 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900/50"
+        >
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 text-[10px] font-semibold text-gray-400 dark:text-slate-500 tabular-nums w-4 shrink-0">{i + 1}</span>
+            <div className="min-w-0 flex-1">
+              {item.goal ? (
+                <p className="text-xs font-medium text-gray-700 dark:text-slate-200 line-clamp-2 leading-snug">{item.goal}</p>
+              ) : (
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500 italic">Agent message</p>
+              )}
+              {item.answerPreview && (
+                <p className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500 line-clamp-1">{item.answerPreview}</p>
+              )}
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function SavedMessagesPanel({ highlights = null, onOpenMessage }) {
   const bookmarked = Array.isArray(highlights?.bookmarkedMessages) ? highlights.bookmarkedMessages : [];
 
@@ -249,6 +290,7 @@ export default function CommandCenterSidePanel({
   onOpenSavedMessage,
   previewUrl = null,
   selectedArtifact = null,
+  chatNavItems = [],
 }) {
   const currentTab = activeTab || 'steps';
   const meta = panelMeta[currentTab] || panelMeta.steps;
@@ -321,6 +363,9 @@ export default function CommandCenterSidePanel({
         )}
         {currentTab === 'artifact' && (
           <ArtifactPanel artifact={selectedArtifact} />
+        )}
+        {currentTab === 'nav' && (
+          <ChatNavPanel items={chatNavItems} />
         )}
       </div>
     </div>
