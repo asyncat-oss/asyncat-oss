@@ -50,6 +50,14 @@ function blocksToHtml(blocks) {
   }).join('');
 }
 
+// Apply inline markdown to any string (bold, italic, code, links)
+function inlineMd(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+}
+
 // Parse markdown/text into a native blocks array (fallback when no blocks param provided)
 function textToBlocks(text) {
   if (!text) return [{ id: generateId(), type: 'text', content: '', properties: {} }];
@@ -58,19 +66,13 @@ function textToBlocks(text) {
   for (const para of paragraphs) {
     for (const line of para.split('\n')) {
       if (!line.trim()) continue;
-      if (/^### /.test(line))       blocks.push({ id: generateId(), type: 'heading3',      content: line.slice(4).trim(), properties: {} });
-      else if (/^## /.test(line))   blocks.push({ id: generateId(), type: 'heading2',      content: line.slice(3).trim(), properties: {} });
-      else if (/^# /.test(line))    blocks.push({ id: generateId(), type: 'heading1',      content: line.slice(2).trim(), properties: {} });
-      else if (/^[-*] /.test(line)) blocks.push({ id: generateId(), type: 'bulletList',    content: line.slice(2), properties: {} });
-      else if (/^\d+\. /.test(line))blocks.push({ id: generateId(), type: 'numberedList',  content: line.replace(/^\d+\. /, ''), properties: {} });
+      if (/^### /.test(line))        blocks.push({ id: generateId(), type: 'heading3',     content: inlineMd(line.slice(4).trim()), properties: {} });
+      else if (/^## /.test(line))    blocks.push({ id: generateId(), type: 'heading2',     content: inlineMd(line.slice(3).trim()), properties: {} });
+      else if (/^# /.test(line))     blocks.push({ id: generateId(), type: 'heading1',     content: inlineMd(line.slice(2).trim()), properties: {} });
+      else if (/^[-*] /.test(line))  blocks.push({ id: generateId(), type: 'bulletList',   content: inlineMd(line.slice(2)), properties: {} });
+      else if (/^\d+\. /.test(line)) blocks.push({ id: generateId(), type: 'numberedList', content: inlineMd(line.replace(/^\d+\. /, '')), properties: {} });
       else if (/^---+$/.test(line.trim())) blocks.push({ id: generateId(), type: 'divider', content: '', properties: { style: 'line' } });
-      else {
-        const formatted = line
-          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*(.+?)\*/g, '<em>$1</em>')
-          .replace(/`(.+?)`/g, '<code>$1</code>');
-        blocks.push({ id: generateId(), type: 'text', content: formatted, properties: {} });
-      }
+      else blocks.push({ id: generateId(), type: 'text', content: inlineMd(line), properties: {} });
     }
   }
   return blocks.length ? blocks : [{ id: generateId(), type: 'text', content: '', properties: {} }];
@@ -87,66 +89,45 @@ function noteArtifact(note) {
   };
 }
 
-// ── Shared tool description for block schema ─────────────────────────────────
+// ── Shared block schema reference (injected into tool descriptions) ───────────
 const BLOCK_SCHEMA_DESC = `
-Blocks are objects: { "type": "<type>", "content": "<text>", "properties": { ... } }
+Each block: { "type": string, "content": string, "properties": {} }
+Content supports inline HTML: <strong>bold</strong>, <em>italic</em>, <code>code</code>.
 
-CONTENT BLOCKS:
-- text          — paragraph. content supports inline HTML: <strong>, <em>, <code>, <a href="">
-- heading1/2/3  — h1/h2/h3 headings
-- bulletList    — bullet list item
-- numberedList  — numbered list item
-- todo          — checklist item. properties: { "checked": false }
-- quote         — blockquote
-- divider       — horizontal rule. properties: { "style": "line"|"dashed"|"dotted"|"double" }
+Block types:
+  text, heading1, heading2, heading3, bulletList, numberedList, quote
+  todo          → properties: { checked: false }
+  divider       → properties: { style: "line"|"dashed"|"dotted"|"double" }
+  code          → properties: { language: "javascript"|"python"|"bash"|"sql"|"typescript"|... }
+  callout       → properties: { type: "info"|"warning"|"error"|"success"|"tip"|"note", title: "..." }
+  toggle        → properties: { title: "Section label", isOpen: false }
+  table         → properties: { tableData: [["H1","H2"],["val","val"]], hasHeader: true }
+  math          → content is LaTeX, e.g. "E = mc^2"
+  barChart/lineChart/areaChart → properties: { data: { labels: ["A","B","C"], datasets: [{ label: "S1", data: [10,20,30] }] } }
+  pieChart/donutChart          → properties: { data: { labels: ["A","B"], datasets: [{ label: "S", data: [60,40] }] } }
 
-RICH BLOCKS:
-- code          — code block. properties: { "language": "javascript"|"python"|"bash"|"sql"|"json"|"typescript"|"rust"|"go"|"css"|"html"|"text"|... }
-- callout       — highlighted callout box. properties: { "type": "info"|"warning"|"error"|"success"|"tip"|"note", "title": "optional heading" }
-- toggle        — collapsible section. properties: { "title": "Toggle label", "isOpen": false }
-- table         — table. properties: { "tableData": [["H1","H2","H3"],["r1c1","r1c2","r1c3"],["r2c1","r2c2","r2c3"]], "hasHeader": true }
-- math          — LaTeX expression. content: the LaTeX (e.g. "E = mc^2")
-
-CHART BLOCKS (content = chart title):
-- barChart      — bar chart.    properties: { "data": { "labels": ["A","B","C"], "datasets": [{ "label": "Series 1", "data": [10,20,30] }] } }
-- lineChart     — line chart.   same data shape as barChart
-- pieChart      — pie chart.    properties: { "data": { "labels": ["A","B"], "datasets": [{ "label": "Series", "data": [60,40] }] } }
-- areaChart     — area chart.   same as lineChart
-- donutChart    — donut chart.  same as pieChart
-- scatterChart  — scatter.      properties: { "data": { "datasets": [{ "label": "Points", "data": [{"x":1,"y":2},{"x":3,"y":4}] }] } }
-
-BANNER (optional, top of note):
-{ "type": "gradient", "gradient": "linear-gradient(45deg, #667eea, #764ba2)" }
-{ "type": "color",    "color": "#4f46e5" }
-Preset gradients — Sunset: "linear-gradient(45deg, #FF6B6B, #FFE66D)" · Ocean: "linear-gradient(45deg, #667eea, #764ba2)" · Forest: "linear-gradient(45deg, #11998e, #38ef7d)" · Lavender: "linear-gradient(45deg, #a8edea, #fed6e3)" · Fire: "linear-gradient(45deg, #ff9a9e, #fecfef)" · Sky: "linear-gradient(45deg, #a1c4fd, #c2e9fb)" · Cosmic: "linear-gradient(45deg, #2E3192, #1BFFFF)" · Peach: "linear-gradient(45deg, #ffecd2, #fcb69f)"
+Banner (top of note): { type: "gradient", gradient: "linear-gradient(45deg, #667eea, #764ba2)" }
+  or: { type: "color", color: "#4f46e5" }
+  Presets: Ocean "linear-gradient(45deg,#667eea,#764ba2)" · Sunset "linear-gradient(45deg,#FF6B6B,#FFE66D)" · Forest "linear-gradient(45deg,#11998e,#38ef7d)" · Cosmic "linear-gradient(45deg,#2E3192,#1BFFFF)"
 `.trim();
 
 // ── create_note ──────────────────────────────────────────────────────────────
 
 export const createNoteTool = {
   name: 'create_note',
-  description: `Create a rich note saved to the user's Notes library. The note appears as a note artifact in the chat panel with the full block editor experience.
-
-Prefer using the "blocks" parameter for rich formatting — it unlocks headings, callouts, code blocks, tables, charts, toggles, and banners. If you only pass "content" (markdown text), it will be parsed into blocks automatically but will be less rich.
+  description: `Create a rich note saved to the user's Notes library. Always use the "blocks" array for rich formatting — it supports headings, callouts, code, tables, charts, banners, and more. The note opens as a full block editor in the chat side panel.
 
 ${BLOCK_SCHEMA_DESC}
 
-EXAMPLE — a beautiful structured note:
-{
-  "title": "Project Plan",
-  "banner": { "type": "gradient", "gradient": "linear-gradient(45deg, #667eea, #764ba2)" },
-  "blocks": [
-    { "type": "heading1", "content": "Project Plan" },
-    { "type": "callout", "content": "This doc tracks the Q3 roadmap.", "properties": { "type": "info", "title": "Overview" } },
-    { "type": "heading2", "content": "Goals" },
-    { "type": "bulletList", "content": "Launch new onboarding flow" },
-    { "type": "bulletList", "content": "Reduce churn by 10%" },
-    { "type": "divider", "content": "", "properties": { "style": "line" } },
-    { "type": "heading2", "content": "Timeline" },
-    { "type": "table", "content": "", "properties": { "hasHeader": true, "tableData": [["Phase","Owner","Due"],["Design","Alice","Jun 15"],["Dev","Bob","Jul 1"],["Launch","Team","Jul 15"]] } },
-    { "type": "callout", "content": "Flag blockers in the weekly sync.", "properties": { "type": "warning", "title": "Reminder" } }
-  ]
-}`,
+Example:
+{ "title": "Plan", "banner": { "type": "gradient", "gradient": "linear-gradient(45deg, #667eea, #764ba2)" }, "blocks": [
+  { "type": "heading1", "content": "Project Plan" },
+  { "type": "callout", "content": "Q3 roadmap tracker.", "properties": { "type": "info", "title": "Overview" } },
+  { "type": "heading2", "content": "Goals" },
+  { "type": "bulletList", "content": "<strong>Launch</strong> new onboarding flow" },
+  { "type": "divider", "content": "", "properties": { "style": "line" } },
+  { "type": "table", "content": "", "properties": { "hasHeader": true, "tableData": [["Phase","Owner","Due"],["Design","Alice","Jun 15"],["Dev","Bob","Jul 1"]] } }
+]}`,
   category: 'notes',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -209,9 +190,7 @@ EXAMPLE — a beautiful structured note:
 
 export const updateNoteTool = {
   name: 'update_note',
-  description: `Update the title and/or content of an existing note. Replaces all blocks.
-
-Use the "blocks" parameter for rich formatting. See create_note for the full block schema including callouts, code, tables, charts, banners, etc.`,
+  description: 'Update the title and/or content of an existing note. Use "blocks" array to set rich content (same schema as create_note). Pass "banner" to add/change the banner, or null to remove it.',
   category: 'notes',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -284,9 +263,7 @@ Use the "blocks" parameter for rich formatting. See create_note for the full blo
 
 export const appendToNoteTool = {
   name: 'append_to_note',
-  description: `Append blocks to the end of an existing note without replacing existing content.
-
-Pass "blocks" for rich formatting (callouts, headings, code, etc.) or "content" for plain text/markdown fallback. See create_note for the full block schema.`,
+  description: 'Append content to the end of an existing note. Use "blocks" array for rich formatting (same schema as create_note), or "content" for plain text/markdown.',
   category: 'notes',
   permission: PermissionLevel.SAFE,
   parameters: {
