@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
-import { Grid, List, Star, Filter, ChevronDown, Search, Folder, FolderOpen, Plus } from 'lucide-react';
+import { useState, useMemo } from "react";
+import { Grid, List, Search, Plus } from 'lucide-react';
 import ProjectCard from "../projectCard/ProjectCard";
 import ProjectListView from "./ProjectListView";
 
@@ -119,7 +119,6 @@ const ProjectSkeleton = ({ viewMode = 'grid' }) => {
 
 const ProjectGrid = ({
   projects,
-  projectFolders = [],
   loading,
   error,
   selectedProject,
@@ -130,79 +129,20 @@ const ProjectGrid = ({
   workspaceName = "Projects",
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [starFilter, setStarFilter] = useState("all");
-  const [showStarFilterDropdown, setShowStarFilterDropdown] = useState(false);
-  const [expandedFolders, setExpandedFolders] = useState({});
-
-  useEffect(() => {
-    // Initialize expandedFolders when projectFolders are loaded
-    if (projectFolders && projectFolders.length > 0) {
-      setExpandedFolders(prev => {
-        const next = { ...prev };
-        let changed = false;
-        projectFolders.forEach(f => {
-          if (next[f.id] === undefined) {
-            next[f.id] = true;
-            changed = true;
-          }
-        });
-        return changed ? next : prev;
-      });
-    }
-  }, [projectFolders]);
-
-  const toggleFolder = (folderId) => {
-    setExpandedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
-  };
 
   const filteredProjects = useMemo(() => {
-    let filtered = projects;
-
-    if (starFilter === "starred") {
-      filtered = filtered.filter(p => p.starred);
-    } else if (starFilter === "unstarred") {
-      filtered = filtered.filter(p => !p.starred);
-    }
-
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
+      return projects.filter(
         p =>
           p.name?.toLowerCase().includes(query) ||
           p.description?.toLowerCase().includes(query)
       );
     }
 
-    return filtered;
-  }, [projects, searchQuery, starFilter]);
+    return projects;
+  }, [projects, searchQuery]);
 
-  const starredCount = useMemo(() => projects.filter(p => p.starred).length, [projects]);
-
-  const { folderMap, unfiledProjects } = useMemo(() => {
-    const map = {};
-    const projectFolderLookup = {};
-    
-    // Initialize map with empty arrays for every folder
-    projectFolders.forEach(f => {
-      map[f.id] = [];
-      // Record which folder each project belongs to
-      (f.project_folder_items || []).forEach(item => {
-        projectFolderLookup[item.project_id] = f.id;
-      });
-    });
-
-    const unfiled = [];
-    filteredProjects.forEach(p => {
-      const folderId = projectFolderLookup[p.id];
-      if (folderId && map[folderId]) {
-        map[folderId].push(p);
-      } else {
-        unfiled.push(p);
-      }
-    });
-
-    return { folderMap: map, unfiledProjects: unfiled };
-  }, [filteredProjects, projectFolders]);
   const renderProjectGroup = (projectsList) => {
     if (projectsList.length === 0) return null;
     return viewMode === 'grid' ? (
@@ -259,7 +199,7 @@ const ProjectGrid = ({
           )}
         </div>
 
-        {/* Toolbar: Search & Filters */}
+        {/* Toolbar */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center mb-8 flex-shrink-0 relative z-30">
           
           {/* Search bar */}
@@ -275,67 +215,6 @@ const ProjectGrid = ({
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* Star Filter Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowStarFilterDropdown(!showStarFilterDropdown)}
-                className={`flex items-center justify-between gap-2 px-4 py-2.5 min-w-[130px] rounded-xl transition-all border shadow-sm ${
-                  starFilter !== "all"
-                    ? 'bg-yellow-50 dark:bg-yellow-900/30 midnight:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 midnight:text-yellow-300 border-yellow-200 dark:border-yellow-800/50'
-                    : 'bg-white dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Star className={`w-4 h-4 ${starFilter === "starred" ? 'fill-current' : 'text-gray-400'}`} />
-                  <span className="text-sm font-medium">
-                    {starFilter === "all" ? "All" : starFilter === "starred" ? "Starred" : "Unstarred"}
-                  </span>
-                </div>
-                <ChevronDown className="w-3 h-3 text-gray-400" />
-              </button>
-              
-              {showStarFilterDropdown && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setShowStarFilterDropdown(false)}
-                  />
-                  <div className="absolute top-full right-0 mt-1.5 w-40 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden py-1">
-                    <button
-                      onClick={() => { setStarFilter("all"); setShowStarFilterDropdown(false); }}
-                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        starFilter === "all" ? 'bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      <Filter className="w-4 h-4 text-gray-400" />
-                      <span className="flex-1 font-medium">All Projects</span>
-                      <span className="text-xs text-gray-400">{projects.length}</span>
-                    </button>
-                    <button
-                      onClick={() => { setStarFilter("starred"); setShowStarFilterDropdown(false); }}
-                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        starFilter === "starred" ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400' : 'text-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                      <span className="flex-1 font-medium">Starred</span>
-                      <span className="text-xs text-gray-400">{starredCount}</span>
-                    </button>
-                    <button
-                      onClick={() => { setStarFilter("unstarred"); setShowStarFilterDropdown(false); }}
-                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        starFilter === "unstarred" ? 'bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      <Star className="w-4 h-4 text-gray-400" />
-                      <span className="flex-1 font-medium">Unstarred</span>
-                      <span className="text-xs text-gray-400">{projects.length - starredCount}</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
             {/* View Mode Toggle */}
             <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1 shadow-sm border border-gray-200 dark:border-gray-700/50">
               <button
@@ -369,38 +248,7 @@ const ProjectGrid = ({
         {/* Main content area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar pb-6 pr-2 text-left">
           {filteredProjects.length > 0 ? (
-            <div className="space-y-6">
-              {projectFolders.map(folder => {
-                const folderProjects = folderMap[folder.id] || [];
-                if (folderProjects.length === 0) return null;
-                const isExpanded = expandedFolders[folder.id];
-                
-                return (
-                  <div key={folder.id} className="mb-8">
-                    <button 
-                      onClick={() => toggleFolder(folder.id)}
-                      className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-                    >
-                      {isExpanded ? <FolderOpen className="w-5 h-5 text-indigo-500" /> : <Folder className="w-5 h-5 text-indigo-500" />}
-                      <span className="text-base">{folder.name}</span>
-                      <span className="text-xs font-normal text-gray-400">({folderProjects.length})</span>
-                    </button>
-                    {isExpanded && renderProjectGroup(folderProjects)}
-                  </div>
-                );
-              })}
-
-              {unfiledProjects.length > 0 && (
-                <div className="mb-6">
-                  {projectFolders.length > 0 && (
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 px-1">
-                      Unfiled
-                    </h3>
-                  )}
-                  {renderProjectGroup(unfiledProjects)}
-                </div>
-              )}
-            </div>
+            renderProjectGroup(filteredProjects)
           ) : (
             <EmptyState workspaceName={workspaceName} onCreateClick={onCreateClick} />
           )}

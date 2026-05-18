@@ -1,28 +1,12 @@
-// projectController.js — single-user OSS version
-// Removed: project_members queries, team member management, invitation emails
-// Access check: project.owner_id === req.user.id
-
 import { randomUUID } from 'crypto';
-import {
-	sanitizeEmoji,
-	sanitizeWorkspaceEmoji,
-	OWNER_PERMISSIONS,
-	getDefaultEnabledViews,
-	normalizeProjectViews,
-	validateProjectEnabledViews,
-	getDefaultViewPermissions,
-} from "./projectPermissionHelpers.js";
+import { sanitizeEmoji } from "./projectPermissionHelpers.js";
 
-// Helper: fetch workspace by id
-async function getWorkspace(db, workspaceId) {
-	if (!workspaceId) return null;
-	const { data } = await db
-		.from("workspaces")
-		.select("id, name, owner_id, emoji")
-		.eq("id", workspaceId)
-		.single();
-	return data || null;
-}
+const PROJECT_FIELDS = "id, name, description, due_date, created_by, owner_id, created_at, updated_at, is_archived, team_id, emoji";
+
+const presentProject = (project) => ({
+	...project,
+	emoji: sanitizeEmoji(project.emoji),
+});
 
 /**
  * GET /api/projects
@@ -34,49 +18,13 @@ async function getProjects(req, res) {
 
 		const { data: projects, error } = await db
 			.from("projects")
-			.select("id, name, description, due_date, created_by, owner_id, created_at, updated_at, is_archived, team_id, enabled_views, emoji")
+			.select(PROJECT_FIELDS)
 			.eq("owner_id", user.id)
 			.eq("is_archived", false);
 
 		if (error) throw error;
 
-		if (!projects || projects.length === 0) {
-			return res.json({ success: true, data: [] });
-		}
-
-		// Fetch unique workspaces
-		const workspaceIds = [...new Set(projects.map(p => p.team_id).filter(Boolean))];
-		const workspaceList = await Promise.all(workspaceIds.map(id => getWorkspace(db, id)));
-		const workspaceMap = workspaceList.reduce((acc, w) => { if (w) acc[w.id] = w; return acc; }, {});
-
-		const processedProjects = projects.map((project) => {
-			const availableViews = normalizeProjectViews(project.enabled_views);
-			const sanitizedEmoji = sanitizeEmoji(project.emoji);
-
-			const rawWorkspace = workspaceMap[project.team_id] || null;
-			const sanitizedWorkspace = rawWorkspace?.emoji
-				? { ...rawWorkspace, emoji: sanitizeWorkspaceEmoji(rawWorkspace.emoji) }
-				: rawWorkspace;
-
-			return {
-				...project,
-				emoji: sanitizedEmoji,
-				teams: sanitizedWorkspace,
-				project_members: [],
-				user_role: "owner",
-				user_permissions: OWNER_PERMISSIONS,
-				available_views: availableViews,
-				accessible_views: availableViews,
-				user_visible_views: availableViews,
-				user_view_preferences: null,
-				user_view_permissions: getDefaultViewPermissions("owner", availableViews),
-				guest_count: 0,
-				starred: false,
-				is_owner: true,
-			};
-		});
-
-		res.json({ success: true, data: processedProjects });
+		res.json({ success: true, data: (projects || []).map(presentProject) });
 	} catch (error) {
 		console.error("Project fetch error:", error);
 		res.status(500).json({ success: false, error: error.message || "Failed to fetch projects" });
@@ -95,7 +43,7 @@ async function getTeamProjects(req, res) {
 		// Verify user owns this workspace
 		const { data: workspace, error: wsError } = await db
 			.from("workspaces")
-			.select("id, name, owner_id, emoji")
+			.select("id, owner_id")
 			.eq("id", teamId)
 			.single();
 
@@ -105,45 +53,15 @@ async function getTeamProjects(req, res) {
 
 		const { data: projects, error } = await db
 			.from("projects")
-			.select("id, name, description, due_date, created_by, owner_id, created_at, updated_at, is_archived, team_id, enabled_views, emoji")
+			.select(PROJECT_FIELDS)
 			.eq("team_id", teamId)
 			.eq("owner_id", user.id)
+			.eq("is_archived", false)
 			.order("created_at", { ascending: false });
 
 		if (error) throw error;
 
-		const sanitizedWorkspace = workspace.emoji
-			? { ...workspace, emoji: sanitizeWorkspaceEmoji(workspace.emoji) }
-			: workspace;
-
-		const processedProjects = (projects || []).map((project) => {
-			const availableViews = normalizeProjectViews(project.enabled_views);
-			return {
-				id: project.id,
-				name: project.name,
-				description: project.description,
-				emoji: sanitizeEmoji(project.emoji),
-				created_at: project.created_at,
-				updated_at: project.updated_at,
-				due_date: project.due_date,
-				starred: false,
-				user_role: "owner",
-				user_status: "active",
-				permissions: OWNER_PERMISSIONS,
-				enabled_views: availableViews,
-				accessible_views: availableViews,
-				user_visible_views: availableViews,
-				user_view_permissions: getDefaultViewPermissions("owner", availableViews),
-				teams: sanitizedWorkspace,
-				member_count: 1,
-				guest_count: 0,
-				total_members: 1,
-				is_owner: true,
-				owner_id: project.owner_id,
-			};
-		});
-
-		res.json({ success: true, data: processedProjects });
+		res.json({ success: true, data: (projects || []).map(presentProject) });
 	} catch (error) {
 		console.error("Workspace projects fetch error:", error);
 		res.status(500).json({ success: false, error: error.message || "Failed to fetch workspace projects" });
@@ -161,12 +79,6 @@ async function createProject(req, res) {
 		const userId = user.id;
 
 		const validatedEmoji = sanitizeEmoji(emoji);
-		const finalEnabledViews = getDefaultEnabledViews();
-		const viewValidation = validateProjectEnabledViews(finalEnabledViews);
-
-		if (!viewValidation.isValid) {
-			return res.status(400).json({ success: false, error: viewValidation.error });
-		}
 
 		if (!team_id) {
 			return res.status(400).json({ success: false, error: "Workspace ID is required" });
@@ -195,35 +107,20 @@ async function createProject(req, res) {
 			created_at: new Date().toISOString(),
 			updated_at: new Date().toISOString(),
 			is_archived: false,
-			enabled_views: finalEnabledViews,
 			emoji: validatedEmoji,
 		};
 
 		const { data: project, error: projectError } = await db
 			.from("projects")
 			.insert([projectData])
-			.select()
+			.select(PROJECT_FIELDS)
 			.single();
 
 		if (projectError) throw projectError;
 
 		res.status(201).json({
 			success: true,
-			data: {
-				...project,
-				emoji: validatedEmoji,
-				user_role: "owner",
-				user_permissions: OWNER_PERMISSIONS,
-				available_views: finalEnabledViews,
-				accessible_views: finalEnabledViews,
-				user_visible_views: finalEnabledViews,
-				user_view_preferences: null,
-				user_view_permissions: getDefaultViewPermissions("owner", finalEnabledViews),
-				guest_count: 0,
-				starred: false,
-				is_owner: true,
-				project_members: [],
-			},
+			data: presentProject(project),
 		});
 	} catch (error) {
 		console.error("Project creation error:", error);
@@ -237,15 +134,14 @@ async function createProject(req, res) {
 async function updateProject(req, res) {
 	try {
 		const { id } = req.params;
-		const { name, description, due_date, enabled_views, emoji, ...otherUpdates } = req.body;
-		delete otherUpdates.starred;
+		const { name, description, due_date, emoji } = req.body;
 
 		const { user, db } = req;
 
 		// Single-user: only owner can update
 		const { data: existingProject, error: fetchError } = await db
 			.from("projects")
-			.select("owner_id, team_id, enabled_views, emoji")
+			.select("owner_id, emoji")
 			.eq("id", id)
 			.single();
 
@@ -260,67 +156,24 @@ async function updateProject(req, res) {
 		let validatedEmoji = existingProject.emoji;
 		if (emoji !== undefined) validatedEmoji = sanitizeEmoji(emoji);
 
-		let finalEnabledViews = enabled_views;
-		if (enabled_views !== undefined) {
-			if (!Array.isArray(enabled_views)) {
-				return res.status(400).json({ success: false, error: "Enabled views must be an array" });
-			}
-			finalEnabledViews = enabled_views.filter(view => view !== "timeline");
-			if (finalEnabledViews.length === 0) {
-				finalEnabledViews = getDefaultEnabledViews();
-			}
-			const validation = validateProjectEnabledViews(finalEnabledViews);
-			if (!validation.isValid) {
-				return res.status(400).json({ success: false, error: validation.error });
-			}
-		}
-
-		const validUpdates = {
-			name,
-			description,
-			due_date,
-			updated_at: new Date().toISOString(),
-			...otherUpdates,
-		};
-
-		if (finalEnabledViews) validUpdates.enabled_views = finalEnabledViews;
+		const validUpdates = { updated_at: new Date().toISOString() };
+		if (name !== undefined) validUpdates.name = name;
+		if (description !== undefined) validUpdates.description = description;
+		if (due_date !== undefined) validUpdates.due_date = due_date;
 		if (emoji !== undefined) validUpdates.emoji = validatedEmoji;
 
 		const { data: updatedProject, error: updateError } = await db
 			.from("projects")
 			.update(validUpdates)
 			.eq("id", id)
-			.select()
+			.select(PROJECT_FIELDS)
 			.single();
 
 		if (updateError) throw updateError;
 
-		// Fetch workspace info
-		const workspace = await getWorkspace(db, updatedProject.team_id);
-		const sanitizedWorkspace = workspace?.emoji
-			? { ...workspace, emoji: sanitizeWorkspaceEmoji(workspace.emoji) }
-			: workspace;
-
-		const availableViews = normalizeProjectViews(updatedProject.enabled_views);
-
 		res.json({
 			success: true,
-			data: {
-				...updatedProject,
-				emoji: sanitizeEmoji(updatedProject.emoji),
-				teams: sanitizedWorkspace,
-				project_members: [],
-				user_role: "owner",
-				user_permissions: OWNER_PERMISSIONS,
-				available_views: availableViews,
-				accessible_views: availableViews,
-				user_visible_views: availableViews,
-				user_view_preferences: null,
-				user_view_permissions: getDefaultViewPermissions("owner", availableViews),
-				guest_count: 0,
-				starred: false,
-				is_owner: true,
-			},
+			data: presentProject(updatedProject),
 		});
 	} catch (error) {
 		console.error("Project update error:", error);
@@ -339,7 +192,7 @@ async function deleteProject(req, res) {
 		// Single-user: only owner can delete
 		const { data: project, error: projectError } = await db
 			.from("projects")
-			.select("owner_id, team_id, name, emoji")
+			.select("owner_id")
 			.eq("id", id)
 			.single();
 

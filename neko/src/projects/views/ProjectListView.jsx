@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Star, LayoutGrid, CheckCircle, Pencil } from 'lucide-react';
+import { Calendar, LayoutGrid, CheckCircle, Pencil } from 'lucide-react';
 import ProjectEditModal from "../components/ProjectEditModal";
 
 const soraFontBase = "font-sora";
@@ -105,7 +105,6 @@ const ProjectListView = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    {project.starred && <Star className="w-4 h-4 text-yellow-500 fill-yellow-400 flex-shrink-0" />}
                     <h3 className="font-medium text-gray-900 dark:text-white midnight:text-indigo-50 truncate">
                       {project.name || 'Untitled Project'}
                     </h3>

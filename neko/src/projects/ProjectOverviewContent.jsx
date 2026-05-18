@@ -161,12 +161,9 @@ const ProjectOverview = React.memo(({
 				setMasterLoading(true);
 				setLoading(true);
 
-				// CRITICAL: Preserve owner_id and user_role from selectedProject
-				// These are set immediately after project creation and must not be lost
 				let projectData = { 
 					...selectedProject,
 					owner_id: selectedProject.owner_id,
-					user_role: selectedProject.user_role
 				};
 
 				setProjectInfo(projectData);
@@ -211,9 +208,7 @@ const ProjectOverview = React.memo(({
 
 
 	const renderViewContent = () => {
-		// CRITICAL: Prefer selectedProject when it has fresh metadata (user_role, owner_id)
-		// This prevents losing permission data during the initial load after project creation
-		const projectData = (selectedProject?.user_role || selectedProject?.owner_id) 
+		const projectData = selectedProject?.owner_id
 			? selectedProject 
 			: (projectInfo || selectedProject);
 

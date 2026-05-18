@@ -80,11 +80,11 @@ const AppLayout = ({ session, onSignOut }) => {
     const projectId = params.projectId;
 
     if (projectId) {
-      // If we already have selectedProject with matching ID and it has role/owner metadata, keep it
+      // If we already have selectedProject with matching ID and owner metadata, keep it
       if (selectedProject && 
           String(selectedProject.id) === String(projectId) && 
-          (selectedProject.user_role || selectedProject.owner_id)) {
-        // Already have the correct project with metadata, no need to refetch
+          selectedProject.owner_id) {
+        // Already have the correct project, no need to refetch
         return;
       }
       
@@ -520,7 +520,6 @@ const AppLayout = ({ session, onSignOut }) => {
         isOpen={isCreateProjectModalOpen}
         onClose={() => setIsCreateProjectModalOpen(false)}
         onProjectCreate={handleProjectCreated}
-        session={session}
       />
     </div>
   );

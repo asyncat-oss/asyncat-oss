@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, CheckCircle, Pencil, Star } from "lucide-react";
+import { Calendar, CheckCircle, Pencil } from "lucide-react";
 import ProjectEditModal from "../components/ProjectEditModal";
 
 const soraFontBase = "font-sora";
@@ -20,7 +20,7 @@ const ProjectCard = ({
     );
   }
 
-  const { name, description, due_date, starred, created_at, updated_at, emoji = '📁' } = project;
+  const { name, description, due_date, created_at, updated_at, emoji = '📁' } = project;
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Not set';
@@ -60,7 +60,6 @@ const ProjectCard = ({
             <div className="flex-1">
               <div className="flex items-center space-x-2">
                 {isSelected && <CheckCircle className="w-4 h-4 text-gray-900 dark:text-white midnight:text-slate-100" />}
-                {starred && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />}
                 <span className="text-lg mr-2 flex-shrink-0" role="img" aria-label="Project icon">{emoji}</span>
                 <h3 className="font-medium text-lg text-gray-900 dark:text-white midnight:text-slate-100">{name || 'Untitled Project'}</h3>
               </div>

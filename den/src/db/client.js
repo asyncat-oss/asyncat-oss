@@ -237,6 +237,8 @@ function ensureAgentMemorySchema() {
 
 function cleanupDeadTables() {
   db.exec(`
+    DROP TABLE IF EXISTS project_folder_items;
+    DROP TABLE IF EXISTS project_folders;
     DROP TABLE IF EXISTS project_members;
     DROP TABLE IF EXISTS note_versions;
     DROP TABLE IF EXISTS note_operations;
@@ -246,20 +248,25 @@ function cleanupDeadTables() {
   `);
 }
 
-function ensureKanbanSchema() {
-  const dropColumn = (table, column) => {
-    const columns = tableColumns(table);
-    if (!columns.has(column)) return;
-    try {
-      db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
-    } catch (err) {
-      logger.warn(`Database: could not drop ${table}.${column}: ${err.message}`);
-    }
-  };
+function dropColumnIfPresent(table, column) {
+  const columns = tableColumns(table);
+  if (!columns.has(column)) return;
+  try {
+    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+  } catch (err) {
+    logger.warn(`Database: could not drop ${table}.${column}: ${err.message}`);
+  }
+}
 
-  dropColumn('Columns', 'isCompletionColumn');
-  dropColumn('Cards', 'dependencies');
-  dropColumn('Cards', 'completedAt');
+function ensureProjectSchema() {
+  dropColumnIfPresent('projects', 'enabled_views');
+  dropColumnIfPresent('projects', 'enabled_widgets');
+}
+
+function ensureKanbanSchema() {
+  dropColumnIfPresent('Columns', 'isCompletionColumn');
+  dropColumnIfPresent('Cards', 'dependencies');
+  dropColumnIfPresent('Cards', 'completedAt');
 }
 
 function ensureModelPathsSchema() {
@@ -294,6 +301,7 @@ function ensureModelPathsSchema() {
 }
 
 cleanupDeadTables();
+ensureProjectSchema();
 ensureKanbanSchema();
 ensureCalendarSchema();
 ensureNotesSchema();

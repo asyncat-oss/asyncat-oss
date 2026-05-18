@@ -1,5 +1,5 @@
 export { chatApi, chatFoldersApi } from './chatApi.js';
-export { projectsApi, projectFoldersApi } from './projectsApi.js';
+export { projectsApi } from './projectsApi.js';
 export { trashApi } from './trashApi.js';
 export { agentApi, agentTaskRunsApi, profilesApi } from './agentApi.js';
 export { gitApi } from './gitApi.js';
@@ -21,7 +21,6 @@ import { cachedProjectsApi } from './apiUtils.js';
 import { bulkApi } from './bulkApi.js';
 import { workspaceUtils } from './bulkApi.js';
 import { chatFoldersApi } from './chatApi.js';
-import { projectFoldersApi } from './projectsApi.js';
 import { installApi } from './installApi.js';
 
 export default {
@@ -30,7 +29,6 @@ export default {
   cachedProjects: cachedProjectsApi,
   bulk: bulkApi,
   chatFolders: chatFoldersApi,
-  projectFolders: projectFoldersApi,
   trash: trashApi,
   agent: agentApi,
   git: gitApi,

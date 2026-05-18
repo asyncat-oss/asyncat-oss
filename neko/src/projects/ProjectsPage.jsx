@@ -2,15 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ProjectGrid from "./views/ProjectGrid";
 import { useWorkspace } from "../contexts/WorkspaceContext";
-import { projectFoldersApi } from "../CommandCenter/api";
 import eventBus from "../utils/eventBus.js";
 
 const soraFontBase = "font-sora";
 
 const sortProjects = (projects) =>
   [...projects].sort((a, b) => {
-    if (a.starred && !b.starred) return -1;
-    if (!a.starred && b.starred) return 1;
     if (a.is_archived && !b.is_archived) return 1;
     if (!a.is_archived && b.is_archived) return -1;
     return new Date(b.created_at) - new Date(a.created_at);
@@ -24,7 +21,6 @@ const ProjectsPage = ({
   const navigate = useNavigate();
 
   const [projects, setProjects] = useState([]);
-  const [projectFolders, setProjectFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [projectViewMode, setProjectViewMode] = useState(() => {
@@ -39,10 +35,6 @@ const ProjectsPage = ({
       setError(null);
       const workspaceProjects = await getWorkspaceProjects();
       setProjects(sortProjects(workspaceProjects));
-
-      projectFoldersApi.getFolders()
-        .then(res => { if (res?.folders) setProjectFolders(res.folders); })
-        .catch(console.error);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -95,7 +87,6 @@ const ProjectsPage = ({
     <div className={soraFontBase}>
       <ProjectGrid
         projects={projects}
-        projectFolders={projectFolders}
         loading={loading}
         error={error}
         selectedProject={selectedProject}

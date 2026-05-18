@@ -12,7 +12,7 @@ import { projectApi } from "../projectApi";
 
 const today = new Date().toISOString().split("T")[0];
 
-const CreateProjectFlow = ({ isOpen, onClose, onProjectCreate, session }) => {
+const CreateProjectFlow = ({ isOpen, onClose, onProjectCreate }) => {
   const [projectData, setProjectData] = useState({
     name: "",
     description: "",
@@ -55,14 +55,8 @@ const CreateProjectFlow = ({ isOpen, onClose, onProjectCreate, session }) => {
       const result = await projectApi.createProject(formattedData);
 
       if (result && result.data) {
-        const projectWithRole = {
-          ...result.data,
-          user_role: 'owner',
-          owner_id: session?.user?.id || result.data.owner_id
-        };
-
         eventBus.emit('projectsUpdated');
-        onProjectCreate(projectWithRole);
+        onProjectCreate(result.data);
         onClose();
       } else {
         throw new Error("Invalid response format from server");
