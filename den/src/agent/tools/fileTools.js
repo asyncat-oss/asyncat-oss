@@ -9,6 +9,50 @@ import { execSync } from 'child_process';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, truncate } from './shared.js';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Find the closest matching lines in file content when exact match fails.
+ * Returns the top N candidate line ranges that partially match the search text.
+ * This helps the agent self-correct by seeing what the file actually contains.
+ */
+function _findClosestLines(content, searchText, maxCandidates = 3) {
+  if (!content || !searchText) return [];
+  const contentLines = content.split('\n');
+  const searchLines = searchText.split('\n').map(l => l.trim()).filter(Boolean);
+  if (searchLines.length === 0 || contentLines.length === 0) return [];
+
+  const firstSearchLine = searchLines[0].toLowerCase();
+  const candidates = [];
+
+  for (let i = 0; i < contentLines.length; i++) {
+    const line = contentLines[i].trim().toLowerCase();
+    if (!line) continue;
+
+    // Score: how many characters from the first search line appear in this line
+    let matchChars = 0;
+    const words = firstSearchLine.split(/\s+/).filter(w => w.length > 2);
+    for (const word of words) {
+      if (line.includes(word)) matchChars += word.length;
+    }
+
+    if (matchChars > firstSearchLine.length * 0.3) {
+      const contextEnd = Math.min(i + searchLines.length + 1, contentLines.length);
+      const snippet = contentLines.slice(i, contextEnd).join('\n').slice(0, 300);
+      candidates.push({
+        line_number: i + 1,
+        score: matchChars / firstSearchLine.length,
+        content: snippet,
+      });
+    }
+  }
+
+  return candidates
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxCandidates)
+    .map(c => `Line ${c.line_number} (${Math.round(c.score * 100)}% match):\n${c.content}`);
+}
+
 // ── Tool definitions ─────────────────────────────────────────────────────────
 
 export const readFileTool = {
@@ -113,7 +157,7 @@ export const createDirectoryTool = {
 
 export const editFileTool = {
   name: 'edit_file',
-  description: 'Replace specific content in a file. Provide the exact text to find and its replacement. Use read_file first to see the current content.',
+  description: 'Replace specific content in a file. Provide the exact text to find and its replacement. Use read_file first to see the current content. Optionally provide start_line/end_line to restrict the search to a line range (1-indexed, inclusive) — useful when the find text appears multiple times.',
   category: 'file',
   permission: PermissionLevel.MODERATE,
   parameters: {
@@ -122,6 +166,8 @@ export const editFileTool = {
       path: { type: 'string', description: 'File path relative to working directory' },
       find: { type: 'string', description: 'Exact text to find (must match exactly including whitespace)' },
       replace: { type: 'string', description: 'Replacement text' },
+      start_line: { type: 'number', description: 'Optional: restrict search to lines starting from this line (1-indexed)' },
+      end_line: { type: 'number', description: 'Optional: restrict search to lines ending at this line (1-indexed, inclusive)' },
     },
     required: ['path', 'find', 'replace'],
   },
@@ -131,18 +177,91 @@ export const editFileTool = {
       return { success: false, error: `File not found: ${args.path}` };
     }
     const content = fs.readFileSync(filePath, 'utf8');
-    if (!content.includes(args.find)) {
-      return { success: false, error: 'The "find" text was not found in the file. Make sure it matches exactly (including whitespace and newlines).' };
+
+    // Line-range mode: if start_line/end_line provided, search within that range
+    if (args.start_line || args.end_line) {
+      const lines = content.split('\n');
+      const startLine = Math.max(1, args.start_line || 1);
+      const endLine = Math.min(lines.length, args.end_line || lines.length);
+      const rangeContent = lines.slice(startLine - 1, endLine).join('\n');
+      if (!rangeContent.includes(args.find)) {
+        return {
+          success: false,
+          error: `The "find" text was not found in lines ${startLine}-${endLine}.`,
+          actual_content_in_range: rangeContent.slice(0, 500),
+          suggestion: 'Re-read the file and check the exact content within the specified line range.',
+        };
+      }
+      const newRange = rangeContent.replace(args.find, args.replace);
+      const newLines = [...lines.slice(0, startLine - 1), ...newRange.split('\n'), ...lines.slice(endLine)];
+      fs.writeFileSync(filePath, newLines.join('\n'), 'utf8');
+      return {
+        success: true,
+        path: args.path,
+        message: `Replacement applied within lines ${startLine}-${endLine}.`,
+        mode: 'line_range',
+      };
     }
-    const count = content.split(args.find).length - 1;
-    const newContent = content.replace(args.find, args.replace);
-    fs.writeFileSync(filePath, newContent, 'utf8');
+
+    // Standard exact-match mode
+    if (content.includes(args.find)) {
+      const count = content.split(args.find).length - 1;
+      const newContent = content.replace(args.find, args.replace);
+      fs.writeFileSync(filePath, newContent, 'utf8');
+      return {
+        success: true,
+        path: args.path,
+        occurrences_found: count,
+        occurrences_replaced: 1,
+        message: count > 1 ? `Replaced first occurrence (${count} total found). Call again to replace more.` : 'Replacement applied.',
+      };
+    }
+
+    // Fuzzy fallback: try whitespace-normalized matching
+    const normalizeWS = s => s.replace(/[ \t]+/g, ' ').replace(/\r\n/g, '\n').trim();
+    const normalizedContent = normalizeWS(content);
+    const normalizedFind = normalizeWS(args.find);
+    if (normalizedFind.length > 0 && normalizedContent.includes(normalizedFind)) {
+      // Find the original substring that matches after normalization
+      const lines = content.split('\n');
+      const findLines = args.find.split('\n').map(l => l.trim()).filter(Boolean);
+      if (findLines.length > 0) {
+        // Find the first line in the file that matches the first find line
+        let matchStart = -1;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].trim() === findLines[0]) {
+            // Check if subsequent lines also match
+            let allMatch = true;
+            for (let j = 1; j < findLines.length && i + j < lines.length; j++) {
+              if (lines[i + j].trim() !== findLines[j]) { allMatch = false; break; }
+            }
+            if (allMatch) { matchStart = i; break; }
+          }
+        }
+        if (matchStart >= 0) {
+          const originalBlock = lines.slice(matchStart, matchStart + findLines.length).join('\n');
+          const newContent = content.replace(originalBlock, args.replace);
+          fs.writeFileSync(filePath, newContent, 'utf8');
+          return {
+            success: true,
+            path: args.path,
+            message: 'Replacement applied (fuzzy whitespace match).',
+            mode: 'fuzzy_whitespace',
+            warning: 'The exact text was not found but a whitespace-normalized match was. Verify the result with read_file.',
+          };
+        }
+      }
+    }
+
+    // Find closest matching lines for the error message
+    const closestMatches = _findClosestLines(content, args.find, 3);
     return {
-      success: true,
-      path: args.path,
-      occurrences_found: count,
-      occurrences_replaced: 1,
-      message: count > 1 ? `Replaced first occurrence (${count} total found). Call again to replace more.` : 'Replacement applied.',
+      success: false,
+      error: 'The "find" text was not found in the file. Make sure it matches exactly (including whitespace and newlines).',
+      closest_matches: closestMatches.length > 0 ? closestMatches : undefined,
+      suggestion: closestMatches.length > 0
+        ? 'The closest matching content is shown above. Re-read the file with read_file and use the exact content.'
+        : 'Re-read the file with read_file to see its current content.',
     };
   },
 };
@@ -169,9 +288,52 @@ export const patchFileTool = {
     const content = fs.readFileSync(filePath, 'utf8');
     const count = content.split(args.old_string).length - 1;
     if (count === 0) {
+      // Try fuzzy whitespace-normalized match before failing
+      const normalizeWS = s => s.replace(/[ \t]+/g, ' ').replace(/\r\n/g, '\n').trim();
+      const normalizedContent = normalizeWS(content);
+      const normalizedOld = normalizeWS(args.old_string);
+      if (normalizedOld.length > 0 && normalizedContent.includes(normalizedOld)) {
+        const lines = content.split('\n');
+        const oldLines = args.old_string.split('\n').map(l => l.trim()).filter(Boolean);
+        if (oldLines.length > 0) {
+          let matchStart = -1;
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].trim() === oldLines[0]) {
+              let allMatch = true;
+              for (let j = 1; j < oldLines.length && i + j < lines.length; j++) {
+                if (lines[i + j].trim() !== oldLines[j]) { allMatch = false; break; }
+              }
+              if (allMatch) { matchStart = i; break; }
+            }
+          }
+          if (matchStart >= 0) {
+            const originalBlock = lines.slice(matchStart, matchStart + oldLines.length).join('\n');
+            // Check uniqueness of the fuzzy match
+            const fuzzyCount = content.split(originalBlock).length - 1;
+            if (fuzzyCount === 1) {
+              const newContent = content.replace(originalBlock, args.new_string);
+              fs.writeFileSync(filePath, newContent, 'utf8');
+              return {
+                success: true,
+                path: args.path,
+                message: 'Replacement applied (fuzzy whitespace match).',
+                mode: 'fuzzy_whitespace',
+                warning: 'Exact match failed but whitespace-normalized match succeeded. Verify with read_file.',
+              };
+            }
+          }
+        }
+      }
+
+      // Find closest matches for helpful error
+      const closestMatches = _findClosestLines(content, args.old_string, 3);
       return {
         success: false,
         error: `old_string not found in file. It may have changed since you last read it — call read_file first to see the current content.`,
+        closest_matches: closestMatches.length > 0 ? closestMatches : undefined,
+        suggestion: closestMatches.length > 0
+          ? 'The closest matching content is shown above. Use the exact text from the file.'
+          : undefined,
       };
     }
     if (count > 1) {

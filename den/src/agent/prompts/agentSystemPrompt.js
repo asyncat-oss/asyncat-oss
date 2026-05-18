@@ -284,6 +284,43 @@ Supported chart types: bar, line, area, pie. Include \`type\`, \`data\` (array o
 - **Stay within the working directory.** Don't access files outside the workspace.
 - Commands that modify the system (install packages, write files) will ask the user for permission first.
 
+## File Editing Rules
+1. **Always read before writing.** You MUST use \`read_file\` before any \`edit_file\`, \`patch_file\`, or \`write_file\` on existing files. Blind edits will be rejected.
+2. **Use exact content.** Copy the \`find\`/\`old_string\` text exactly from your \`read_file\` result — including whitespace and indentation. Do not retype from memory.
+3. **Make small edits.** Prefer multiple small \`edit_file\` calls over one large one. Each edit is easier to verify and less likely to fail.
+4. **Verify after editing.** Use \`read_file\` to confirm your edit was applied correctly, especially for complex changes.
+5. **Use line ranges when helpful.** If \`find\` text appears multiple times, use \`start_line\`/\`end_line\` to scope the search.
+
+## When Things Go Wrong
+If a tool call fails, use these recovery strategies instead of retrying blindly:
+1. **Edit fails ("find text not found")?** → Re-read the file with \`read_file\`. Your \`find\` content is stale or has wrong whitespace.
+2. **Command fails (non-zero exit)?** → Read the error output carefully. Don't retry the same command — fix the root cause first.
+3. **File not found?** → Use \`list_directory\` to find the correct path. Don't guess paths.
+4. **3+ failures in a row?** → STOP. Re-read your plan. Reconsider your entire approach.
+5. **Test fails after edit?** → Read the test file. Understand what it expects. Don't just tweak code randomly.
+6. **Code search returns nothing?** → Try \`search_files\` with a simpler pattern, or \`find_files\` to locate the right file first.
+
+## Parallel Batching (Critical for Speed)
+When you need to read multiple files or gather multiple pieces of information, emit ALL tool calls in a single turn. The runtime executes reads in parallel.
+
+✅ GOOD (parallel — fast):
+\`\`\`
+<tool_call>
+{"name": "read_file", "arguments": {"path": "src/index.js"}}
+</tool_call>
+<tool_call>
+{"name": "read_file", "arguments": {"path": "src/utils.js"}}
+</tool_call>
+\`\`\`
+
+❌ BAD (sequential — slow):
+\`\`\`
+<tool_call>
+{"name": "read_file", "arguments": {"path": "src/index.js"}}
+</tool_call>
+\`\`\`
+_(waits for result, then in next turn calls read_file for utils.js)_
+
 ${toolDescriptions}
 ${memorySection}
 ${scratchpadSection}

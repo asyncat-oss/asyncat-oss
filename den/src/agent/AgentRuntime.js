@@ -198,6 +198,15 @@ export class AgentRuntime {
     this.capabilitiesSection = opts.capabilitiesSection || '';
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
+    // ── Phase 1: Read-before-write guard ─────────────────────────────────
+    // Track which files the agent has read this session so we can soft-block
+    // blind edits (writing to files not yet read). Prevents the #1 cause of
+    // edit_file failures: stale or imagined file content.
+    this.filesReadInSession = new Set();
+
+    // Track whether we've already sent a loop-nudge (strategy change before stopping)
+    this._loopNudgeSent = false;
+
     // Wire BasalGanglia events (skill auto-discovery) to the runtime event stream
     basalGanglia.onEvent = (event) => this.onEvent(event);
 
@@ -239,10 +248,18 @@ export class AgentRuntime {
       this.session = AgentSession.load(this.continueSessionId);
       if (this.session && this.session.userId === this.userId) {
         // Reuse existing session — update goal and reset to active
-        this.session.goal = goal;
         this.session.workingDir = this.workingDir;
         this.session.status = 'active';
         this.session.updatedAt = new Date().toISOString();
+
+        // ── Smart continue: enrich goal with incomplete plan context ──────
+        // When user says "continue" and the previous session had an incomplete
+        // plan, auto-enrich the goal so the agent picks up where it left off
+        // instead of starting fresh.
+        const enrichedGoal = this._enrichContinueGoal(goal, this.session);
+        this.session.goal = enrichedGoal;
+        goal = enrichedGoal;
+
         // Track conversation rounds for UI reconstruction after refresh
         const rounds = this.session.scratchpad.conversationRounds || [];
         this.session.setScratchpad('conversationRounds', rounds);
@@ -379,11 +396,23 @@ export class AgentRuntime {
       _historyTokens += _hTokens;
       if (historyPrefix.length >= 12) break; // hard cap
     }
+    // ── Phase 4b: Inject plan state at fixed position ──────────────────
+    // Like SWE-Agent's PlanMessage pattern, inject the current plan right
+    // before the goal so the agent never "forgets" its plan as context grows.
+    const planStateMsg = (this.session?.plan?.length > 0)
+      ? [{
+          role: 'user',
+          content: `<current_plan>\n${this.session.plan.map(i =>
+            `${i.status === 'completed' ? '✔' : i.status === 'in_progress' ? '◉' : '○'} ${i.content}`
+          ).join('\n')}\n</current_plan>\nContinue working on the plan below.`,
+        }]
+      : [];
     const messages = [
       ...historyPrefix,
+      ...planStateMsg,
       { role: 'user', content: goal },
     ];
-    const goalIndex = historyPrefix.length; // position of the original goal user message
+    const goalIndex = historyPrefix.length + planStateMsg.length; // position of the original goal user message
 
     const toolContext = {
       userId: this.userId,
@@ -843,7 +872,30 @@ export class AgentRuntime {
         for (let i = 0; i < permitted.length; i++) {
           const item = permitted[i];
           const tc = item.toolCall;
-          const result = execResults[i];
+          let result = execResults[i];
+
+          // ── Phase 1a: Track file reads for read-before-write guard ──────
+          if ((tc.tool_name === 'read_file' || tc.tool_name === 'list_definitions') && result?.success !== false) {
+            const readPath = tc.arguments?.path;
+            if (readPath) this.filesReadInSession.add(path.resolve(this.workingDir, readPath));
+          }
+          // Read-before-write soft-block: prevent editing files the agent hasn't read
+          if (['write_file', 'edit_file', 'patch_file'].includes(tc.tool_name) && result?.success !== false) {
+            const targetFile = tc.arguments?.path;
+            if (targetFile) {
+              const absTarget = path.resolve(this.workingDir, targetFile);
+              if (fs.existsSync(absTarget) && !this.filesReadInSession.has(absTarget)) {
+                // Override result — soft-block with helpful error
+                result = {
+                  success: false,
+                  error: `You must read_file("${targetFile}") before editing it. This ensures your edits match the current file content and prevents failures from stale content.`,
+                  hint: 'read_first',
+                };
+                execResults[i] = result;
+              }
+            }
+          }
+
           this.session.recordToolCall(tc.tool_name, tc.arguments, result, {
             permissionLevel: item.permission,
             permissionDecision: item.permissionDecision,
@@ -858,7 +910,7 @@ export class AgentRuntime {
             Boolean(nativeToolCallsForThread),
           ));
 
-          // ── Consecutive failure tracking ────────────────────────────────
+          // ── Consecutive failure tracking with structured error recovery ──
           if (result?.success === false || result?.error) {
             consecutiveFailures++;
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
@@ -874,10 +926,22 @@ export class AgentRuntime {
               this.onEvent({ type: 'answer', data: { answer, round } });
               break;
             }
+            // Phase 3b: Smart retry with classified error and specific recovery guidance
             if (consecutiveFailures >= FAILURE_STRATEGY_THRESHOLD) {
+              const errorCategory = this._classifyToolError(tc.tool_name, result);
+              const recentFailures = this.session.toolHistory.slice(-3)
+                .filter(t => t.result?.success === false)
+                .map(t => `  ${t.tool}: ${String(t.result?.error || 'failed').slice(0, 100)}`);
               messages.push({
                 role: 'user',
-                content: 'You have had several consecutive tool failures. Step back, reconsider your approach, and try a completely different strategy. Do not repeat the same failing calls.',
+                content: [
+                  `⚠️ ${consecutiveFailures} consecutive tool failures detected.`,
+                  `Error pattern: ${errorCategory.name}`,
+                  recentFailures.length > 0 ? `Recent failures:\n${recentFailures.join('\n')}` : '',
+                  `Recommended recovery: ${errorCategory.recovery}`,
+                  '',
+                  'Do NOT repeat the same approach. Use a completely different strategy.',
+                ].filter(Boolean).join('\n'),
               });
             }
           } else {
@@ -909,13 +973,31 @@ export class AgentRuntime {
             else break;
           }
           if (consecutiveCount >= maxDups) {
-            const repeatedToolThought = `Detected repeated tool call (${tc.tool_name}) — stopping loop.`;
-            reasoningEvents.push({ thought: repeatedToolThought, round, timestamp: new Date().toISOString() });
-            this.onEvent({ type: 'thinking', data: { thought: repeatedToolThought, round } });
-            answer = this._formatRepeatedToolAnswer(tc, result);
-            stopReason = 'loop_detected';
-            this.onEvent({ type: 'answer', data: { answer, round } });
-            break;
+            // Instead of immediately stopping, try a strategy-change nudge first
+            if (!this._loopNudgeSent) {
+              this._loopNudgeSent = true;
+              const errorCategory = this._classifyToolError(tc.tool_name, result);
+              messages.push({
+                role: 'user',
+                content: [
+                  `⚠️ You are calling ${tc.tool_name} repeatedly with the same arguments. This is not making progress.`,
+                  `Error pattern: ${errorCategory.name}`,
+                  `Recovery: ${errorCategory.recovery}`,
+                  '',
+                  'You MUST try a completely different approach NOW. Do not call the same tool again.',
+                ].join('\n'),
+              });
+              this.onEvent({ type: 'thinking', data: { thought: `Detected repeated ${tc.tool_name} — sending strategy change nudge before stopping.`, round } });
+              // Don't break yet — give one more chance
+            } else {
+              const repeatedToolThought = `Detected repeated tool call (${tc.tool_name}) — stopping loop.`;
+              reasoningEvents.push({ thought: repeatedToolThought, round, timestamp: new Date().toISOString() });
+              this.onEvent({ type: 'thinking', data: { thought: repeatedToolThought, round } });
+              answer = this._formatRepeatedToolAnswer(tc, result);
+              stopReason = 'loop_detected';
+              this.onEvent({ type: 'answer', data: { answer, round } });
+              break;
+            }
           }
 
           // Detect cycles of length 2-3 (A→B→A→B or A→B→C→A→B→C)
@@ -973,8 +1055,13 @@ export class AgentRuntime {
       if (!answer) {
         const reflection = await this._selfReflect(goal, messages, round, this.session.toolHistory);
         if (reflection?.abort) {
+          const remaining = (this.session.plan || []).filter(i => i.status !== 'completed');
+          const remainingSection = remaining.length > 0
+            ? `\n\nRemaining plan items:\n${remaining.map(i => `- [ ] ${i.content}`).join('\n')}\n\nYou can type "continue" to resume from where I left off.`
+            : '';
           answer = `I've been reflecting on my progress and determined I'm stuck: ${reflection.reason}\n\nHere's what I accomplished:\n` +
-            this.session.toolHistory.slice(-5).map(t => `- ${t.tool}: ${t.result?.message || (t.result?.success ? 'success' : 'failed')}`).join('\n');
+            this.session.toolHistory.slice(-5).map(t => `- ${t.tool}: ${t.result?.message || (t.result?.success ? 'success' : 'failed')}`).join('\n') +
+            remainingSection;
           stopReason = 'reflection_abort';
           this.onEvent({ type: 'answer', data: { answer, round } });
           break;
@@ -1333,9 +1420,72 @@ export class AgentRuntime {
     this.onEvent({ type: 'plan_update', data: { plan, round, automatic: true } });
   }
 
+  // ── Smart "continue" goal enrichment ──────────────────────────────────────
+  // When the user types "continue" (or similar short continuation phrases)
+  // and there's an incomplete plan from a previous run, auto-enrich the goal
+  // with the remaining plan context. This lets the agent pick up exactly
+  // where it left off instead of starting fresh or asking "what do you want?"
+  _enrichContinueGoal(goal, session) {
+    const normalizedGoal = String(goal || '').trim().toLowerCase();
+
+    // Detect "continue" intent — short messages that signal continuation
+    const CONTINUE_PATTERNS = [
+      /^continue$/i,
+      /^continue\s+(from|where|with|the|working|please)/i,
+      /^keep\s+going/i,
+      /^go\s+on/i,
+      /^carry\s+on/i,
+      /^proceed/i,
+      /^resume/i,
+      /^finish\s+(it|this|the|up)/i,
+      /^complete\s+(it|this|the|remaining)/i,
+      /^do\s+the\s+rest/i,
+      /^next\s*(step)?$/i,
+    ];
+
+    const isContinue = CONTINUE_PATTERNS.some(p => p.test(normalizedGoal));
+    if (!isContinue) return goal;
+
+    // Check for incomplete plan
+    const plan = session?.plan;
+    if (!Array.isArray(plan) || plan.length === 0) return goal;
+    if (session.isPlanComplete()) return goal;
+
+    const completed = plan.filter(i => i.status === 'completed');
+    const remaining = plan.filter(i => i.status !== 'completed');
+
+    // Build enriched goal with full context
+    const parts = [goal];
+    parts.push('');
+
+    if (completed.length > 0) {
+      parts.push('## Already Completed');
+      completed.forEach(i => parts.push(`✔ ${i.content}`));
+      parts.push('');
+    }
+
+    parts.push('## Remaining Items (pick up from here)');
+    remaining.forEach(i => parts.push(`- [ ] ${i.content}`));
+    parts.push('');
+
+    // Include the last tool result if there was a failure
+    const lastTools = session.toolHistory?.slice(-3) || [];
+    const lastFailure = lastTools.reverse().find(t => t.result?.success === false);
+    if (lastFailure) {
+      parts.push(`## Previous Failure (avoid repeating)`);
+      parts.push(`Tool: ${lastFailure.tool}`);
+      parts.push(`Error: ${String(lastFailure.result?.error || 'unknown').slice(0, 200)}`);
+      parts.push('');
+    }
+
+    parts.push('Continue working on the remaining plan items. Update each item status as you complete it using todo_write.');
+
+    return parts.join('\n');
+  }
+
   _shouldPrimePlan(goal, round) {
     if (!this.supportsNativeTools) return false;
-    if (round > 1) return false;
+    if (round > 2) return false;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return false;
     if (!toolRegistry.has('todo_write')) return false;
     const goalStr = String(goal || '');
@@ -1343,13 +1493,18 @@ export class AgentRuntime {
     const wordCount = goalStr.split(/\s+/).filter(Boolean).length;
     if (wordCount < 15 && !MULTI_STEP_GOAL_RE.test(goalStr)) return false;
 
-    // Phase 1 (round 0): Don't force the plan yet — let the agent read context first.
-    // Blind planning before reading any files produces low-quality plans.
-    if (round === 0) return false;
+    // Phase 1 (round 0-1): Don't force the plan yet — let the agent read context first.
+    // Blind planning before reading any files produces low-quality, generic plans.
+    if (round <= 1) return false;
 
-    // Phase 2 (round 1): Force plan creation now that the agent has gathered context.
-    // Only prime if the agent actually made at least one tool call in round 0.
-    return round === 1 && (this.session?.toolHistory?.length || 0) >= 1;
+    // Phase 2 (round 2): Force plan creation now that the agent has gathered context.
+    // Only prime if the agent made at least 2 context-gathering tool calls (reads,
+    // directory listings, or code searches) so the plan is grounded in actual code.
+    const contextGatheringCalls = (this.session?.toolHistory || []).filter(t =>
+      t.tool === 'read_file' || t.tool === 'list_directory' || t.tool === 'code_search'
+      || t.tool === 'list_definitions' || t.tool === 'search_files' || t.tool === 'find_files'
+    );
+    return round === 2 && contextGatheringCalls.length >= 2;
   }
 
   _throwIfAborted() {
@@ -1611,9 +1766,23 @@ export class AgentRuntime {
     );
   }
 
+  // ── Phase 4a: Adaptive tool result truncation ────────────────────────────
+  // Different tool outputs have different signal density. File contents need
+  // more space; directory listings and command output can be shorter.
   _compactToolResultForContext(toolName, result) {
     if (!result || typeof result !== 'object') return result;
-    const maxString = toolName === 'list_directory' ? 1800 : 3000;
+    const TOOL_CONTEXT_LIMITS = {
+      list_directory: 1800,
+      find_files: 2000,
+      read_file: 4000,       // File contents are high-signal for edits
+      code_search: 3500,     // Search results are high-signal
+      list_definitions: 3000,
+      run_command: 2500,     // Command output is informational
+      web_search: 2500,
+      browse_website: 2000,
+      search_files: 3000,
+    };
+    const maxString = TOOL_CONTEXT_LIMITS[toolName] || 3000;
     const compact = Array.isArray(result) ? [...result] : { ...result };
     for (const [key, value] of Object.entries(compact)) {
       if (typeof value === 'string' && value.length > maxString) {
@@ -1942,19 +2111,59 @@ export class AgentRuntime {
     return false;
   }
 
+  // ── Phase 3a: Structured error classification ────────────────────────────
+  // Classifies tool failures into actionable categories so the recovery nudge
+  // tells the agent *specifically* what to do differently, not just "try again".
+
+  _classifyToolError(toolName, result) {
+    const error = String(result?.error || result?.message || '').toLowerCase();
+
+    // Ordered by specificity — first match wins
+    const CATEGORIES = [
+      { name: 'READ_BEFORE_WRITE', pattern: /must read_file|read_first/i,
+        recovery: 'Read the target file with read_file first, then retry the edit using the exact content from the file.' },
+      { name: 'FILE_NOT_FOUND', pattern: /not found|enoent|no such file|does not exist/i,
+        recovery: 'Use list_directory to find the correct file path, then retry with the right path.' },
+      { name: 'EDIT_MISMATCH', pattern: /not found in the file|no match|find.*not found|old_string not found/i,
+        recovery: 'The file content has changed or differs from what you expected. Call read_file to see the current content, then retry edit_file with the exact text from the file.' },
+      { name: 'PERMISSION_DENIED', pattern: /eacces|permission denied|eperm/i,
+        recovery: 'Check file permissions with ls -la or try a different approach.' },
+      { name: 'COMMAND_FAILED', pattern: /exit code|non-zero|command failed|exited with/i,
+        recovery: 'Read the error output carefully. Fix the underlying issue (missing dependency, wrong syntax, etc.) before retrying.' },
+      { name: 'SYNTAX_ERROR', pattern: /syntaxerror|parse error|unexpected token|unterminated/i,
+        recovery: 'Review your code for syntax errors. Read the file back with read_file to see the current state.' },
+      { name: 'AMBIGUOUS_EDIT', pattern: /appears \d+ times|must be unique|multiple occurrences/i,
+        recovery: 'Include more surrounding context in old_string/find to make the match unique.' },
+      { name: 'TIMEOUT', pattern: /timeout|timed out|etimedout/i,
+        recovery: 'The operation timed out. Try a simpler/faster alternative or break the task into smaller pieces.' },
+    ];
+
+    for (const cat of CATEGORIES) {
+      if (cat.pattern.test(error)) return cat;
+    }
+    return { name: 'UNKNOWN', recovery: 'Step back and try a completely different approach. Read relevant files and reconsider your strategy.' };
+  }
+
   // ── Reflection / Self-Critique (3.3) ─────────────────────────────────────
   // Runs every REFLECTION_INTERVAL rounds to check if the agent is making
   // progress or stuck. Returns a guidance string to inject into context.
 
   async _selfReflect(goal, messages, round, toolHistory) {
-    const REFLECTION_INTERVAL = 3;
+    // Phase 5b: Dynamic reflection interval — reflect more often when there
+    // are recent failures or when the plan is large (>5 items).
+    const hasRecentFailures = (toolHistory || []).slice(-4).some(t => t.result?.success === false);
+    const planSize = this.session?.plan?.length || 0;
+    const REFLECTION_INTERVAL = (planSize > 5 || hasRecentFailures) ? 2 : 3;
     if (round < REFLECTION_INTERVAL || round % REFLECTION_INTERVAL !== 0) return null;
     if (!this.aiClient?.client?.chat?.completions?.create) return null;
 
     try {
       const recentTools = (toolHistory || []).slice(-8).map(t => {
         const status = t.result?.success === false ? 'FAILED' : 'ok';
-        return `  ${t.tool}(${Object.keys(t.args || {}).join(', ')}) → ${status}`;
+        const errorHint = (t.result?.success === false && t.result?.error)
+          ? ` (${String(t.result.error).slice(0, 60)})`
+          : '';
+        return `  ${t.tool}(${Object.keys(t.args || {}).join(', ')}) → ${status}${errorHint}`;
       }).join('\n');
 
       // Plan-aware context: include plan progress so the reflector can
@@ -1964,6 +2173,7 @@ export class AgentRuntime {
         ? `\nPlan progress: ${planProgress.completed}/${planProgress.total} items completed (${planProgress.percentage}%)`
         : '';
 
+      // Phase 5a: Plan-aware, action-specific reflection prompt
       const reflectionPrompt = [
         'You are evaluating an AI agent\'s progress on a task.',
         'Analyze the recent tool calls and determine:',
@@ -1971,9 +2181,12 @@ export class AgentRuntime {
         '2. Is it going in circles or repeating similar actions?',
         '3. Should it change its approach?',
         '4. If there is a plan with items being completed, that indicates progress even if tool calls look similar.',
+        '5. If a tool has FAILED 2+ times with the same error, recommend a SPECIFIC alternative tool or strategy.',
+        '6. If edit_file/patch_file failed, suggest reading the file first with read_file.',
+        '7. If code_search found nothing, suggest trying search_files with a simpler pattern.',
         '',
-        'Return JSON: {"progress": "good|slow|stuck", "suggestion": "brief guidance or null", "should_continue": true/false}',
-        'Be concise. Return null suggestion if progress is good.',
+        'Return JSON: {"progress": "good|slow|stuck", "suggestion": "brief SPECIFIC guidance or null", "should_continue": true/false}',
+        'Be concise and actionable. Return null suggestion if progress is good.',
       ].join('\n');
 
       const context = `Goal: ${String(goal).slice(0, 300)}\nRound: ${round}${planContext}\nRecent tools (last 8):\n${recentTools}`;
