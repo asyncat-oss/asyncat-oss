@@ -147,6 +147,50 @@ export const editFileTool = {
   },
 };
 
+export const patchFileTool = {
+  name: 'patch_file',
+  description: 'Precisely replace an exact string in a file using old_string → new_string semantics. old_string must match exactly (including whitespace and newlines) and must appear exactly once in the file — this prevents ambiguous replacements. If old_string appears more than once, provide more surrounding context to make it unique. Prefer this over edit_file for reliable, targeted edits.',
+  category: 'file',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'File path relative to working directory' },
+      old_string: { type: 'string', description: 'Exact text to find — must appear exactly once in the file' },
+      new_string: { type: 'string', description: 'Text to replace it with' },
+    },
+    required: ['path', 'old_string', 'new_string'],
+  },
+  execute: async (args, context) => {
+    const filePath = safePath(args.path, context.workingDir);
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: `File not found: ${args.path}` };
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    const count = content.split(args.old_string).length - 1;
+    if (count === 0) {
+      return {
+        success: false,
+        error: `old_string not found in file. It may have changed since you last read it — call read_file first to see the current content.`,
+      };
+    }
+    if (count > 1) {
+      return {
+        success: false,
+        error: `old_string appears ${count} times in the file — it must be unique. Add more surrounding lines to make it unambiguous.`,
+        occurrences: count,
+      };
+    }
+    const newContent = content.replace(args.old_string, args.new_string);
+    fs.writeFileSync(filePath, newContent, 'utf8');
+    return {
+      success: true,
+      path: args.path,
+      message: 'Replacement applied.',
+    };
+  },
+};
+
 export const searchFilesTool = {
   name: 'search_files',
   description: 'Search for text or regex patterns across files in the working directory. Similar to grep. Returns matching lines with file paths and line numbers.',
@@ -514,7 +558,7 @@ export const fileWatchTool = {
 
 /** All file tools for batch registration. */
 export const fileTools = [
-  readFileTool, writeFileTool, createDirectoryTool, editFileTool, searchFilesTool,
+  readFileTool, writeFileTool, createDirectoryTool, editFileTool, patchFileTool, searchFilesTool,
   listDirectoryTool, findFilesTool, fileDiffTool, globFindTool,
   fileCopyTool, fileMoveTool, fileDeleteTool, fileWatchTool,
 ];

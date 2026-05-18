@@ -2085,6 +2085,181 @@ function RunSummaryCard({ events, runStartedAt }) {
   );
 }
 
+// ── Collapsible agent work drawer ─────────────────────────────────────────────
+// Wraps all thinking/tool/status events between a user goal and its answer into
+// a single toggleable section. Keeps the Q→A flow clean while preserving access
+// to every detail.
+
+function buildWorkSummary(workEvents) {
+  const toolStarts = workEvents.filter(ev => ev.type === 'tool_start');
+  const toolCount = toolStarts.length;
+  const failedCount = toolStarts.filter(ev => ev.result?.success === false || ev.result?.error).length;
+  const hasThinking = workEvents.some(ev => ev.type === 'thinking');
+  const uniqueTools = [...new Set(toolStarts.map(ev => ev.data?.tool).filter(Boolean))];
+  const topLabels = uniqueTools.slice(0, 3).map(t => getToolMeta(t).label);
+
+  const parts = [];
+  if (hasThinking) parts.push('Reasoned');
+  if (toolCount > 0) parts.push(`${toolCount} tool${toolCount !== 1 ? 's' : ''}`);
+  if (topLabels.length) parts.push(topLabels.join(', '));
+  if (failedCount > 0) parts.push(`${failedCount} failed`);
+  return parts.join(' · ') || null;
+}
+
+function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction }) {
+  const rendered = [];
+  let toolBuf = [];
+
+  const flushTools = () => {
+    if (!toolBuf.length) return;
+    rendered.push(
+      <ToolsSection
+        key={`tools_${rendered.length}`}
+        events={toolBuf}
+        onPermissionDecision={onPermissionDecision}
+        onRetryTool={onRetryTool}
+      />
+    );
+    toolBuf = [];
+  };
+
+  workEvents.forEach((ev, i) => {
+    if (ev.type === 'permission_request' || ev.type === 'tool_start') {
+      toolBuf.push(ev);
+      if (ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact) {
+        flushTools();
+        rendered.push(<ArtifactResultCard key={`artifact_${i}`} result={ev.result} prominent />);
+      }
+      return;
+    }
+    flushTools();
+
+    switch (ev.type) {
+      case 'thinking':
+        rendered.push(<ThinkingEvent key={i} data={ev.data} />);
+        break;
+      case 'ask_user':
+        rendered.push(<AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />);
+        break;
+      case 'error':
+        rendered.push(<ErrorEvent key={i} data={ev.data} onRetryGoal={onRetryGoal} onRunWithAction={onRunWithAction} />);
+        break;
+      case 'status':
+        rendered.push(<StatusEvent key={i} data={ev.data} onRunWithAction={onRunWithAction} />);
+        break;
+      case 'stop_reason':
+        rendered.push(<StopReasonBanner key={i} data={ev.data} />);
+        break;
+      case 'agent_delegate_start':
+        rendered.push(<AgentDelegateEvent key={i} data={ev.data} pending />);
+        break;
+      case 'agent_delegate_result':
+        rendered.push(<AgentDelegateEvent key={i} data={ev.data} result={ev.data} />);
+        break;
+      case 'skills_loaded':
+        rendered.push(<SkillsLoadedEvent key={i} data={ev.data} />);
+        break;
+      case 'compaction':
+        rendered.push(<CompactionEvent key={i} data={ev.data} />);
+        break;
+      case 'correction_learned':
+        rendered.push(<CorrectionLearnedEvent key={i} data={ev.data} />);
+        break;
+      case 'skill_suggested':
+        rendered.push(<SkillSuggestedEvent key={i} data={ev.data} />);
+        break;
+      default:
+        break;
+    }
+  });
+
+  flushTools();
+  return rendered;
+}
+
+function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction }) {
+  const hasPendingPermission = workEvents.some(ev => ev.type === 'permission_request' && !ev.data?.resolved);
+  const hasPendingQuestion = workEvents.some(ev => ev.type === 'ask_user' && !ev.data?.answered);
+  const hasBlocker = hasPendingPermission || hasPendingQuestion;
+  const hasError = workEvents.some(ev => ev.type === 'error' || ev.type === 'stop_reason');
+
+  const [open, setOpen] = useState(isRunning || hasBlocker || hasError);
+
+  // Force open when the agent needs user input or starts running
+  useEffect(() => {
+    if (isRunning || hasBlocker) setOpen(true);
+  }, [isRunning, hasBlocker]);
+
+  if (!workEvents.length) return null;
+
+  const content = renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction });
+  if (!content.length) return null;
+
+  const summary = buildWorkSummary(workEvents);
+
+  return (
+    <FeedFrame className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center gap-2 py-0.5 text-left group"
+        aria-expanded={open}
+      >
+        {open
+          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-300 dark:text-gray-700 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors" />
+          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-300 dark:text-gray-700 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors" />}
+        <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
+        {isRunning ? (
+          <span className="flex-shrink-0 ml-1.5 flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            Working
+          </span>
+        ) : summary ? (
+          <span className="flex-shrink-0 ml-1.5 text-[11px] text-gray-300 dark:text-gray-700 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors truncate max-w-[60%]">
+            {summary}
+          </span>
+        ) : null}
+      </button>
+      {open && (
+        <div className="mt-1 space-y-0">
+          {content}
+        </div>
+      )}
+    </FeedFrame>
+  );
+}
+
+// ── Event segmentation ────────────────────────────────────────────────────────
+// Groups events into conversation turns: [user goal → work events → answer].
+// Each segment is rendered as: UserGoalEvent + AgentWorkDrawer + AnswerEvent.
+
+function buildEventSegments(evList) {
+  const segments = [];
+  let current = null;
+
+  for (const ev of evList) {
+    if (ev.type === 'run_start') {
+      if (current) segments.push(current);
+      segments.push({ divider: ev });
+      current = null;
+    } else if (ev.type === 'user_goal') {
+      if (current) segments.push(current);
+      current = { goalEvent: ev, workEvents: [], answerEvent: null };
+    } else if (ev.type === 'answer') {
+      if (!current) current = { goalEvent: null, workEvents: [], answerEvent: null };
+      current.answerEvent = ev;
+      segments.push(current);
+      current = null;
+    } else {
+      if (!current) current = { goalEvent: null, workEvents: [], answerEvent: null };
+      current.workEvents.push(ev);
+    }
+  }
+
+  if (current) segments.push(current);
+  return segments;
+}
+
 // ── Main feed component ───────────────────────────────────────────────────────
 
 export default function AgentRunFeed({
@@ -2107,135 +2282,68 @@ export default function AgentRunFeed({
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
-  let hasThinkingSinceLastGoal = false;
-  const renderedEvents = [];
-  let toolEvents = [];
-
   const evList = events || [];
+  const segments = buildEventSegments(evList);
   const lastAnswerIdx = evList.reduce((acc, ev, i) => ev.type === 'answer' ? i : acc, -1);
   const latestUsageTps = evList.reduceRight(
     (acc, ev) => acc !== null ? acc : (ev.type === 'usage_update' && ev.data?.tokensPerSecond > 0 ? ev.data.tokensPerSecond : null),
     null,
   );
 
-  const flushTools = () => {
-    if (!toolEvents.length) return;
-    const key = `tools_${renderedEvents.length}`;
-    renderedEvents.push(
-      <ToolsSection
-        key={key}
-        events={toolEvents}
-        onPermissionDecision={onPermissionDecision}
-        onRetryTool={onRetryTool}
-      />
-    );
-    toolEvents = [];
-  };
-
-  (events || []).forEach((ev, i) => {
-    if (ev.type === 'permission_request' || ev.type === 'tool_start') {
-      toolEvents.push(ev);
-      if (
-        ev.type === 'tool_start'
-        && ARTIFACT_TOOLS.has(ev.data?.tool)
-        && ev.result?.success
-        && ev.result?.artifact
-      ) {
-        flushTools();
-        renderedEvents.push(<ArtifactResultCard key={`artifact_${i}`} result={ev.result} prominent />);
-      }
-      return;
-    }
-
-    flushTools();
-
-    switch (ev.type) {
-      case 'user_goal':
-        hasThinkingSinceLastGoal = false;
-        renderedEvents.push(
-          <UserGoalEvent
-            key={i}
-            data={ev.data}
-            onEditMessage={onEditMessage}
-            onToggleMessageFlag={onToggleMessageFlag}
-            isRunning={isRunning}
-            highlighted={Boolean(ev.data?.messageId && ev.data.messageId === highlightedMessageId)}
-          />
-        );
-        break;
-      case 'thinking':
-        hasThinkingSinceLastGoal = true;
-        renderedEvents.push(<ThinkingEvent key={i} data={ev.data} />);
-        break;
-      case 'ask_user':
-        renderedEvents.push(<AskUserEvent key={i} data={ev.data} onAnswer={onAskUserAnswer} />);
-        break;
-      case 'answer':
-        renderedEvents.push(
-          <AnswerEvent
-            key={i}
-            data={ev.data}
-            suppressThinkFallback={hasThinkingSinceLastGoal}
-            ttsReady={ttsReady}
-            onRegenerateAnswer={onRegenerateAnswer}
-            onSelectAnswerVariant={onSelectAnswerVariant}
-            onToggleMessageFlag={onToggleMessageFlag}
-            isRunning={isRunning}
-            highlighted={Boolean(ev.data?.messageId && ev.data.messageId === highlightedMessageId)}
-            tokensPerSecond={!isRunning && i === lastAnswerIdx ? latestUsageTps : null}
-          />
-        );
-        break;
-      case 'error':
-        renderedEvents.push(<ErrorEvent key={i} data={ev.data} onRetryGoal={onRetryGoal} onRunWithAction={onRunWithAction} />);
-        break;
-      case 'status':
-        renderedEvents.push(<StatusEvent key={i} data={ev.data} onRunWithAction={onRunWithAction} />);
-        break;
-      case 'stop_reason':
-        renderedEvents.push(<StopReasonBanner key={i} data={ev.data} />);
-        break;
-      case 'agent_delegate_start':
-        renderedEvents.push(<AgentDelegateEvent key={i} data={ev.data} pending />);
-        break;
-      case 'agent_delegate_result':
-        renderedEvents.push(<AgentDelegateEvent key={i} data={ev.data} result={ev.data} />);
-        break;
-      case 'run_start':
-        renderedEvents.push(<RunDivider key={i} data={ev.data} />);
-        break;
-      case 'skills_loaded':
-        renderedEvents.push(<SkillsLoadedEvent key={i} data={ev.data} />);
-        break;
-      case 'plan_update':
-        break;
-      case 'usage_update':
-        // Token usage is shown in the input toolbar — don't duplicate in the feed
-        break;
-      case 'compaction':
-        renderedEvents.push(<CompactionEvent key={i} data={ev.data} />);
-        break;
-      case 'correction_learned':
-        renderedEvents.push(<CorrectionLearnedEvent key={i} data={ev.data} />);
-        break;
-      case 'skill_suggested':
-        renderedEvents.push(<SkillSuggestedEvent key={i} data={ev.data} />);
-        break;
-      default:
-        break;
-    }
-  });
-
-  flushTools();
-
   return (
     <div className="space-y-0">
-      <GeneratedMediaLibrary events={events || []} />
-      {renderedEvents}
+      <GeneratedMediaLibrary events={evList} />
+
+      {segments.map((seg, si) => {
+        if (seg.divider) {
+          return <RunDivider key={`divider_${si}`} data={seg.divider.data} />;
+        }
+
+        const isLastSeg = si === segments.length - 1;
+        const segIsRunning = isLastSeg && isRunning;
+        const answerIdx = seg.answerEvent ? evList.indexOf(seg.answerEvent) : -1;
+        const hasThinkingInSeg = seg.workEvents.some(ev => ev.type === 'thinking');
+
+        return (
+          <div key={si}>
+            {seg.goalEvent && (
+              <UserGoalEvent
+                data={seg.goalEvent.data}
+                onEditMessage={onEditMessage}
+                onToggleMessageFlag={onToggleMessageFlag}
+                isRunning={isRunning}
+                highlighted={Boolean(seg.goalEvent.data?.messageId && seg.goalEvent.data.messageId === highlightedMessageId)}
+              />
+            )}
+            <AgentWorkDrawer
+              workEvents={seg.workEvents}
+              isRunning={segIsRunning}
+              onPermissionDecision={onPermissionDecision}
+              onRetryTool={onRetryTool}
+              onAskUserAnswer={onAskUserAnswer}
+              onRetryGoal={onRetryGoal}
+              onRunWithAction={onRunWithAction}
+            />
+            {seg.answerEvent && (
+              <AnswerEvent
+                data={seg.answerEvent.data}
+                suppressThinkFallback={hasThinkingInSeg}
+                ttsReady={ttsReady}
+                onRegenerateAnswer={onRegenerateAnswer}
+                onSelectAnswerVariant={onSelectAnswerVariant}
+                onToggleMessageFlag={onToggleMessageFlag}
+                isRunning={isRunning}
+                highlighted={Boolean(seg.answerEvent.data?.messageId && seg.answerEvent.data.messageId === highlightedMessageId)}
+                tokensPerSecond={!isRunning && answerIdx === lastAnswerIdx ? latestUsageTps : null}
+              />
+            )}
+          </div>
+        );
+      })}
 
       {isRunning && <StreamingPreview text={streamingText} />}
       {isRunning && !streamingText && <RunningIndicator runStartedAt={runStartedAt} />}
-      {!isRunning && <RunSummaryCard events={events} runStartedAt={runStartedAt} />}
+      {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} />}
     </div>
   );
 }

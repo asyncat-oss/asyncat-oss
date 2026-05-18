@@ -33,7 +33,7 @@ const MAX_ROUNDS_DEFAULT = 25;
 const CHECKPOINTS = new Map();
 const SNAPSHOT_SKIP = new Set(['.git', 'node_modules', 'dist', 'build', 'data', 'logs']);
 const MUTATING_FILE_TOOLS = new Set([
-  'write_file', 'create_file', 'edit_file', 'create_directory',
+  'write_file', 'create_file', 'edit_file', 'patch_file', 'create_directory',
   'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
 ]);
 const MUTATING_SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
@@ -103,7 +103,9 @@ function stringifyToolArguments(value) {
         JSON.parse(repaired);
         return repaired;
       } catch {
-        return '{}';
+        // Return null to signal unparseable args — callers must handle this explicitly
+        // rather than silently calling tools with empty arguments
+        return null;
       }
     }
   }
@@ -111,10 +113,10 @@ function stringifyToolArguments(value) {
     try {
       return JSON.stringify(value);
     } catch {
-      return '{}';
+      return null;
     }
   }
-  return '{}';
+  return null;
 }
 
 function normalizeNativeToolCalls(toolCalls) {
@@ -123,13 +125,16 @@ function normalizeNativeToolCalls(toolCalls) {
     .map(tc => {
       const name = tc?.function?.name || tc?.name || '';
       if (!name) return null;
+      const argsStr = stringifyToolArguments(tc.function?.arguments ?? tc.arguments);
+      if (argsStr === null) {
+        // Unparseable arguments — drop this call rather than silently using {}
+        console.warn(`[agent] Dropping tool call "${name}": could not parse arguments`);
+        return null;
+      }
       return {
         id: tc.id || `tc_${Math.random().toString(16).slice(2, 10)}`,
         type: tc.type || 'function',
-        function: {
-          name,
-          arguments: stringifyToolArguments(tc.function?.arguments ?? tc.arguments),
-        },
+        function: { name, arguments: argsStr },
       };
     })
     .filter(Boolean);
@@ -261,6 +266,20 @@ export class AgentRuntime {
 
     conversationRoundStart = this.session.totalRounds || 0;
     conversationToolStart = this.session.toolHistory?.length || 0;
+
+    // On resume: if the caller has no conversation history, rebuild it from saved rounds.
+    // This restores context when the browser was refreshed or the session was resumed
+    // from a fresh page load where the in-memory history is gone.
+    if (this.continueSessionId && this.session) {
+      const savedRounds = this.session.scratchpad.conversationRounds || [];
+      const hasHistory = (conversationHistory || []).filter(m => m.role === 'user' || m.role === 'assistant').length > 0;
+      if (!hasHistory && savedRounds.length > 0) {
+        conversationHistory = savedRounds.slice(-3).flatMap(r => [
+          { role: 'user', content: String(r.goal || '').slice(0, 2000) },
+          { role: 'assistant', content: String(r.answer || '').slice(0, 3000) },
+        ]);
+      }
+    }
     this.session.setScratchpad('providerInfo', {
       ...(this.providerInfo || {}),
       model: this.model,
@@ -341,10 +360,10 @@ export class AgentRuntime {
 
     // Build conversation thread (filter out UI system messages)
     const validHistory = conversationHistory.filter(m => m.role === 'user' || m.role === 'assistant');
-    // Token-aware history prefix: walk backwards until we hit 4000 token budget
-    // or 12 messages (hard cap). Short conversations get more context, long ones
-    // are capped by tokens rather than by a fixed message count.
-    const HISTORY_TOKEN_BUDGET = 4000;
+    // Token-aware history prefix: walk backwards until we hit the budget or 12 messages.
+    // Budget scales with the model's context window — larger models keep more history.
+    // Capped at 8000 tokens to avoid spending too much of the context on history.
+    const HISTORY_TOKEN_BUDGET = Math.min(Math.floor(this.modelContextWindow * 0.1), 8000);
     const historyPrefix = [];
     let _historyTokens = 0;
     for (let _hi = validHistory.length - 1; _hi >= 0; _hi--) {
@@ -1180,9 +1199,12 @@ export class AgentRuntime {
           if (tc.id) toolCalls[tc.index].id = tc.id;
           if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
           if (tc.function?.arguments) {
-            toolCalls[tc.index].function.arguments += typeof tc.function.arguments === 'string'
+            const fragment = typeof tc.function.arguments === 'string'
               ? tc.function.arguments
               : stringifyToolArguments(tc.function.arguments);
+            if (fragment !== null) {
+              toolCalls[tc.index].function.arguments += fragment;
+            }
           }
         }
       }
@@ -1307,16 +1329,21 @@ export class AgentRuntime {
 
   _shouldPrimePlan(goal, round) {
     if (!this.supportsNativeTools) return false;
-    if (round !== 0) return false;
+    if (round > 1) return false;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return false;
     if (!toolRegistry.has('todo_write')) return false;
-    // Only force plan for goals that look multi-step
     const goalStr = String(goal || '');
     if (!ACTION_GOAL_RE.test(goalStr)) return false;
-    // Skip plan priming for short/simple goals (less than 15 words or no multi-step indicators)
     const wordCount = goalStr.split(/\s+/).filter(Boolean).length;
     if (wordCount < 15 && !MULTI_STEP_GOAL_RE.test(goalStr)) return false;
-    return true;
+
+    // Phase 1 (round 0): Don't force the plan yet — let the agent read context first.
+    // Blind planning before reading any files produces low-quality plans.
+    if (round === 0) return false;
+
+    // Phase 2 (round 1): Force plan creation now that the agent has gathered context.
+    // Only prime if the agent actually made at least one tool call in round 0.
+    return round === 1 && (this.session?.toolHistory?.length || 0) >= 1;
   }
 
   _throwIfAborted() {
@@ -1914,7 +1941,7 @@ export class AgentRuntime {
   // progress or stuck. Returns a guidance string to inject into context.
 
   async _selfReflect(goal, messages, round, toolHistory) {
-    const REFLECTION_INTERVAL = 5;
+    const REFLECTION_INTERVAL = 3;
     if (round < REFLECTION_INTERVAL || round % REFLECTION_INTERVAL !== 0) return null;
     if (!this.aiClient?.client?.chat?.completions?.create) return null;
 
