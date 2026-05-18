@@ -21,6 +21,23 @@ function formatWorkingContextLabel(context) {
   return context.rootLabel || null;
 }
 
+function getWorkingContext(item) {
+  return item?.metadata?.workingContext || item?.workingContext || null;
+}
+
+function getWorkingContextFilterKey(context) {
+  if (!context || typeof context !== 'object') return null;
+  const root = context.rootId || context.rootPath || context.rootLabel || '';
+  const relative = context.relativePath || context.workingDir || context.rootPath || '';
+  if (!root && !relative) return null;
+  return `${root}:${relative}`;
+}
+
+function getItemUpdatedMs(item) {
+  const value = item?.last_message_at || item?.updated_at || item?.updatedAt || item?.created_at;
+  return value ? new Date(value).getTime() || 0 : 0;
+}
+
 const ChatsPage = () => {
   const navigate = useNavigate();
   const { currentWorkspace } = useWorkspace();
@@ -177,6 +194,19 @@ const ChatsPage = () => {
 
   const q = searchQuery.toLowerCase();
 
+  const activeChatRuns = chatRunPreviews
+    .filter(run => run.running)
+    .map(run => ({
+      id: run.conversationId || run.key,
+      type: 'active-run',
+      runKey: run.key,
+      conversationId: run.conversationId,
+      title: run.title || 'New conversation',
+      preview: run.preview || 'Generating',
+      updated_at: run.updatedAtMs ? new Date(run.updatedAtMs).toISOString() : new Date().toISOString(),
+      workingContext: run.workingContext || run.metadata?.workingContext || null,
+    }));
+
   const filteredConversations = conversations.filter(c =>
     (c.title || '').toLowerCase().includes(q) ||
     (c.preview || '').toLowerCase().includes(q)
@@ -190,24 +220,50 @@ const ChatsPage = () => {
       (run.profile?.name || '').toLowerCase().includes(q)
     );
 
-  const activeChatRuns = chatRunPreviews
-    .filter(run => run.running)
+  const filteredActiveChatRuns = activeChatRuns
     .filter(run => !run.conversationId || !filteredConversations.some(c => c.id === run.conversationId))
-    .filter(run => !q || (run.title || '').toLowerCase().includes(q) || (run.preview || '').toLowerCase().includes(q))
-    .map(run => ({
-      id: run.conversationId || run.key,
-      type: 'active-run',
-      runKey: run.key,
-      conversationId: run.conversationId,
-      title: run.title || 'New conversation',
-      preview: run.preview || 'Generating',
-      updated_at: run.updatedAtMs ? new Date(run.updatedAtMs).toISOString() : new Date().toISOString(),
-    }));
+    .filter(run => !q || (run.title || '').toLowerCase().includes(q) || (run.preview || '').toLowerCase().includes(q));
+
+  const workedFolderGroupMap = new Map();
+  const addWorkedFolderItem = (item) => {
+    const context = getWorkingContext(item);
+    const key = getWorkingContextFilterKey(context);
+    const label = formatWorkingContextLabel(context);
+    if (!key || !label) return false;
+    const updatedAtMs = getItemUpdatedMs(item);
+    if (!workedFolderGroupMap.has(key)) {
+      workedFolderGroupMap.set(key, {
+        key,
+        expandedKey: `worked:${key}`,
+        label,
+        title: context.workingDir || context.rootPath || label,
+        updatedAtMs,
+        items: [],
+      });
+    }
+    const group = workedFolderGroupMap.get(key);
+    group.items.push(item);
+    group.updatedAtMs = Math.max(group.updatedAtMs, updatedAtMs);
+    return true;
+  };
+
+  [...filteredActiveChatRuns, ...filteredConversations, ...filteredTaskAgentRuns].forEach(addWorkedFolderItem);
+
+  const workedFolderGroups = [...workedFolderGroupMap.values()]
+    .map(group => ({
+      ...group,
+      items: group.items.sort((a, b) => getItemUpdatedMs(b) - getItemUpdatedMs(a)),
+    }))
+    .sort((a, b) => b.updatedAtMs - a.updatedAtMs || a.label.localeCompare(b.label));
+
+  const conversationsWithoutWorkedFolder = filteredConversations.filter(c => !getWorkingContextFilterKey(getWorkingContext(c)));
+  const taskAgentRunsWithoutWorkedFolder = filteredTaskAgentRuns.filter(run => !getWorkingContextFilterKey(getWorkingContext(run)));
+  const activeRunsWithoutWorkedFolder = filteredActiveChatRuns.filter(run => !getWorkingContextFilterKey(getWorkingContext(run)));
 
   const folderMap = {};
   folders.forEach(f => { folderMap[f.id] = []; });
   const unfiledConversations = [];
-  filteredConversations.forEach(c => {
+  conversationsWithoutWorkedFolder.forEach(c => {
     if (c.folder_id && folderMap[c.folder_id]) folderMap[c.folder_id].push(c);
     else unfiledConversations.push(c);
   });
@@ -271,7 +327,8 @@ const ChatsPage = () => {
     const hasSelection = selectedCount > 0;
     const canSelect = !isTaskAgent && !isActiveRun;
     const canOpen = isActiveRun || !isTaskAgent || chat.sessionId;
-    const workingContextLabel = formatWorkingContextLabel(chat.metadata?.workingContext || chat.workingContext);
+    const workingContext = getWorkingContext(chat);
+    const workingContextLabel = formatWorkingContextLabel(workingContext);
     const bookmarkCount = Array.isArray(chat.metadata?.highlights?.bookmarkedMessages)
       ? chat.metadata.highlights.bookmarkedMessages.length
       : messages.filter(msg => msg.bookmarked).length;
@@ -289,12 +346,12 @@ const ChatsPage = () => {
               : isTaskAgent ? `/agents/${chat.sessionId}` : `/conversations/${chat.id}`);
           }
         }}
-        className={`flex items-center gap-3 px-3 py-3 border-b transition-colors group ${
+        className={`flex items-center gap-2 px-3 py-2.5 border-b transition-colors group ${
           canOpen ? 'cursor-pointer' : 'cursor-default'
         } ${
           isSelected
-            ? 'bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/60 border-gray-300 dark:border-gray-600 midnight:border-slate-700'
-            : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:bg-gray-50/70 dark:hover:bg-gray-800/35 midnight:hover:bg-slate-900/45'
+            ? 'rounded-lg bg-gray-100/80 dark:bg-gray-800/50 midnight:bg-slate-900/60 border-transparent'
+            : 'rounded-lg border-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/35 midnight:hover:bg-slate-900/45'
         }`}
       >
         {canSelect && (
@@ -310,16 +367,6 @@ const ChatsPage = () => {
           {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
         </button>
         )}
-        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border transition-colors ${
-          running
-            ? 'border-gray-300 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200'
-            : 'border-gray-200 bg-white text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-400'
-        }`}>
-          {isTaskAgent
-            ? <Bot className="w-3.5 h-3.5" />
-            : <MessageSquare className="w-3.5 h-3.5" />
-          }
-        </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 truncate">
             {itemTitle}
@@ -345,7 +392,7 @@ const ChatsPage = () => {
                 <span>•</span>
                 <span
                   className="inline-flex min-w-0 items-center gap-0.5 truncate text-gray-500 dark:text-gray-400 midnight:text-slate-400"
-                  title={chat.metadata?.workingContext?.workingDir || chat.workingContext?.workingDir || ''}
+                  title={workingContext?.workingDir || ''}
                 >
                   <FolderOpen className="h-3 w-3 flex-shrink-0" />
                   <span className="truncate">Worked in {workingContextLabel}</span>
@@ -484,7 +531,7 @@ const ChatsPage = () => {
             </div>
           ) : error ? (
             <div className="text-red-500 text-center py-10 font-medium">{error}</div>
-          ) : filteredConversations.length === 0 && filteredTaskAgentRuns.length === 0 && activeChatRuns.length === 0 ? (
+          ) : filteredConversations.length === 0 && filteredTaskAgentRuns.length === 0 && filteredActiveChatRuns.length === 0 ? (
             <div className="text-center py-20">
               <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-400 dark:border-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:text-slate-500">
                 <MessageSquare className="w-4 h-4" />
@@ -493,45 +540,84 @@ const ChatsPage = () => {
             </div>
           ) : (
             <div className="space-y-4 text-left">
-              {activeChatRuns.length > 0 && (
+              {workedFolderGroups.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300 mb-3 px-1">Active</h3>
-                  {renderChatList(activeChatRuns)}
-                </div>
-              )}
-              {folders.map(folder => {
-                const folderChats = folderMap[folder.id];
-                if (!folderChats || folderChats.length === 0) return null;
-                const isExpanded = expandedFolders[folder.id];
-                return (
-                  <div key={folder.id} className="mb-6">
-                    <button
-                      onClick={() => toggleFolder(folder.id)}
-                      className="flex items-center gap-2 mb-3 text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-                    >
-                      {isExpanded
-                        ? <FolderOpen className="w-4 h-4 text-gray-500" />
-                        : <Folder className="w-4 h-4 text-gray-500" />
-                      }
-                      {folder.name}
-                      <span className="text-xs font-normal text-gray-400">({folderChats.length})</span>
-                    </button>
-                    {isExpanded && renderChatList(folderChats)}
+                  <h3 className="mb-3 px-1 text-xs font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">Projects</h3>
+                  <div className="space-y-5">
+                    {workedFolderGroups.map(group => {
+                      const isExpanded = expandedFolders[group.expandedKey] ?? true;
+                      return (
+                        <div key={group.key}>
+                          <button
+                            type="button"
+                            onClick={() => toggleFolder(group.expandedKey)}
+                            className="mb-1.5 flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
+                            title={group.title}
+                          >
+                            {isExpanded
+                              ? <FolderOpen className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                              : <Folder className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                            }
+                            <span className="truncate">{group.label}</span>
+                          </button>
+                          {isExpanded && renderChatList(group.items)}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-              {unfiledConversations.length > 0 && (
-                <div className="mb-6">
-                  {folders.length > 0 && (
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300 mb-3 px-1">Unfiled</h3>
-                  )}
-                  {renderChatList(unfiledConversations)}
                 </div>
               )}
-              {filteredTaskAgentRuns.length > 0 && (
+              {(workedFolderGroups.length > 0 || activeRunsWithoutWorkedFolder.length > 0 || conversationsWithoutWorkedFolder.length > 0 || taskAgentRunsWithoutWorkedFolder.length > 0) && (
                 <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300 mb-3 px-1">Task agent runs</h3>
-                  {renderChatList(filteredTaskAgentRuns)}
+                  <h3 className="mb-3 px-1 text-xs font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">Chats</h3>
+                  {activeRunsWithoutWorkedFolder.length === 0 && conversationsWithoutWorkedFolder.length === 0 && taskAgentRunsWithoutWorkedFolder.length === 0 ? (
+                    <p className="px-1 text-sm text-gray-400 dark:text-gray-500 midnight:text-slate-500">No chats</p>
+                  ) : (
+                    <>
+                      {activeRunsWithoutWorkedFolder.length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="mb-3 px-1 text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300">Active</h4>
+                          {renderChatList(activeRunsWithoutWorkedFolder)}
+                        </div>
+                      )}
+                      {folders.map(folder => {
+                        const folderChats = folderMap[folder.id];
+                        if (!folderChats || folderChats.length === 0) return null;
+                        const isExpanded = expandedFolders[folder.id];
+                        return (
+                          <div key={folder.id} className="mb-6">
+                            <button
+                              type="button"
+                              onClick={() => toggleFolder(folder.id)}
+                              className="mb-1.5 flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
+                            >
+                              {isExpanded
+                                ? <FolderOpen className="h-4 w-4 text-gray-500" />
+                                : <Folder className="h-4 w-4 text-gray-500" />
+                              }
+                              {folder.name}
+                              <span className="text-xs font-normal text-gray-400">({folderChats.length})</span>
+                            </button>
+                            {isExpanded && renderChatList(folderChats)}
+                          </div>
+                        );
+                      })}
+                      {unfiledConversations.length > 0 && (
+                        <div className="mb-6">
+                          {folders.length > 0 && (
+                            <h4 className="mb-3 px-1 text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300">Unfiled</h4>
+                          )}
+                          {renderChatList(unfiledConversations)}
+                        </div>
+                      )}
+                      {taskAgentRunsWithoutWorkedFolder.length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="mb-3 px-1 text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300">Task agent runs</h4>
+                          {renderChatList(taskAgentRunsWithoutWorkedFolder)}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>

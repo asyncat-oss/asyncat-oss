@@ -50,7 +50,7 @@ const STATE_META = {
   unknown: { label: 'Unknown', text: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800' },
 };
 
-function extractChanges(events) {
+export function extractChanges(events) {
   const seen = new Map(); // path → last change
   const commands = [];
 
@@ -165,7 +165,7 @@ function StateBadge({ state }) {
   );
 }
 
-function FileChangeRow({ change, state }) {
+export function FileChangeRow({ change, state }) {
   const [open, setOpen] = useState(false);
   const meta = TYPE_META[change.type] || TYPE_META.written;
   const Icon = meta.icon;
@@ -205,7 +205,7 @@ function FileChangeRow({ change, state }) {
   );
 }
 
-function CommandRow({ change }) {
+export function CommandRow({ change }) {
   const [open, setOpen] = useState(false);
   const truncated = change.command.length > 80 ? change.command.slice(0, 80) + '…' : change.command;
   const hasOutput = Boolean(change.output?.trim());
@@ -238,7 +238,7 @@ function CommandRow({ change }) {
   );
 }
 
-function RevertRunModal({ open, goal, total, checkpoint, reverting, onCancel, onConfirm }) {
+export function RevertRunModal({ open, goal, total, checkpoint, reverting, onCancel, onConfirm }) {
   if (!open) return null;
 
   return (

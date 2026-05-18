@@ -5,10 +5,11 @@ import {
   Search, Pencil, Trash2, List, Zap, FilePlus,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
-  AlertTriangle, RefreshCw, TimerOff
+  AlertTriangle, RefreshCw, TimerOff, AlertCircle
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
-import { filesApi } from '../../api';
+import { filesApi, agentApi } from '../../api';
+import { extractChanges, FileChangeRow, CommandRow, RevertRunModal } from './AgentChangesPanel';
 import { parseAIResponseToBlocks, BlockRenderer } from '../renderers/BlockBasedMessageRenderer';
 import { extractReasoningFromText } from '../../utils/reasoningParser.js';
 import ArtifactCard from '../renderers/ArtifactRenderer';
@@ -1064,8 +1065,8 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
 
 function AskUserEvent({ data, onAnswer }) {
   const [inputValue, setInputValue] = useState('');
-  const [answered, setAnswered] = useState(false);
-  const [chosenAnswer, setChosenAnswer] = useState('');
+  const [answered, setAnswered] = useState(Boolean(data?._inferred_answered));
+  const [chosenAnswer, setChosenAnswer] = useState(data?._inferred_answered ? '(answered)' : '');
   const inputRef = useRef(null);
 
   const submit = (answer) => {
@@ -1921,16 +1922,15 @@ function GeneratedMediaLibrary({ events }) {
   );
 }
 
-// ── Post-run summary card ─────────────────────────────────────────────────────
-
-const WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_file', 'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file']);
+// ── Post-run unified card ─────────────────────────────────────────────────────
+// Merges "Run complete" stats with "Changes from this run" file/command list
+// and optional revert controls — all in one collapsible card.
 
 function buildRunStats(events = []) {
   let rounds = 0;
   let toolCount = 0;
   let memoriesSaved = 0;
   let skillsLearned = 0;
-  const filesChanged = new Set();
   const toolsSeen = {};
   let completedAt = 0;
 
@@ -1943,89 +1943,131 @@ function buildRunStats(events = []) {
     if (ev.type === 'tool_start') {
       const tool = ev.data?.tool;
       if (!tool) continue;
-      const isSuccess = ev.result?.success !== false;
-      if (!isSuccess) continue;
+      if (ev.result?.success === false) continue;
       toolCount++;
       toolsSeen[tool] = (toolsSeen[tool] || 0) + 1;
-      const args = ev.data?.args || {};
-      if (WRITE_TOOLS.has(tool) && args.path) filesChanged.add(args.path);
       if (tool === 'save_memory' && ev.result?.success) memoriesSaved++;
     }
     if (ev.type === 'skill_suggested') skillsLearned++;
     if (ev.arrivedAt > completedAt) completedAt = ev.arrivedAt;
   }
 
-  return { rounds, toolCount, memoriesSaved, skillsLearned, filesChanged: [...filesChanged], toolsSeen, completedAt };
+  return { rounds, toolCount, memoriesSaved, skillsLearned, toolsSeen, completedAt };
 }
 
-function RunSummaryCard({ events, runStartedAt }) {
+function RunSummaryCard({ events, runStartedAt, sessionId, session }) {
   const [expanded, setExpanded] = useState(false);
+  const [stateData, setStateData] = useState(null);
+  const [stateLoading, setStateLoading] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const [revertMessage, setRevertMessage] = useState(null);
+  const [showRevertConfirm, setShowRevertConfirm] = useState(false);
 
   const hasAnswer = (events || []).some(ev => ev.type === 'answer');
-  if (!hasAnswer) return null;
-
-  const { rounds, toolCount, memoriesSaved, skillsLearned, filesChanged, toolsSeen, completedAt } = buildRunStats(events);
-
-  // Only show the card if there's at least something meaningful to report
+  const { rounds, toolCount, memoriesSaved, skillsLearned, toolsSeen, completedAt } = buildRunStats(events || []);
   const hasToolActivity = toolCount > 0;
   const hasMemoryActivity = memoriesSaved > 0;
   const hasSkillActivity = skillsLearned > 0;
-  const hasFileActivity = filesChanged.length > 0;
+
+  const fallbackChanges = useMemo(() => extractChanges(events || []), [events]);
+  const files = stateData?.changes?.files || fallbackChanges.files;
+  const commands = stateData?.changes?.commands || fallbackChanges.commands;
+  const hasFiles = files.length > 0;
+  const hasCommands = commands.length > 0;
+  const checkpoint = stateData?.checkpoint || session?.scratchpad?.baselineCheckpoint || null;
+  const revert = stateData?.revert || null;
+
+  const previewUrl = useMemo(() => {
+    for (let i = (events || []).length - 1; i >= 0; i--) {
+      const ev = events[i];
+      if (ev?.type === 'tool_start' && ev.data?.tool === 'run_command' && ev.result) {
+        const out = ev.result?.output || ev.result?.stdout;
+        if (typeof out === 'string') { const u = extractLocalhostUrl(out); if (u) return u; }
+      }
+    }
+    return null;
+  }, [events]);
+
+  const refreshState = useCallback(() => {
+    if (!sessionId) return;
+    setStateLoading(true);
+    agentApi.getSessionChangesState(sessionId)
+      .then(res => { if (res.success) setStateData(res); })
+      .catch(() => {})
+      .finally(() => setStateLoading(false));
+  }, [sessionId]);
+
+  useEffect(() => { refreshState(); }, [refreshState]);
+
+  if (!hasAnswer) return null;
   if (!hasToolActivity && !hasMemoryActivity && !hasSkillActivity) return null;
 
   const elapsedMs = runStartedAt && completedAt > runStartedAt ? completedAt - runStartedAt : 0;
-  const topTools = Object.entries(toolsSeen)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([name, count]) => ({ name, count }));
+  const topTools = Object.entries(toolsSeen).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name, count]) => ({ name, count }));
+
+  // Collect artifacts created in this run
+  const runArtifacts = useMemo(() =>
+    (events || []).filter(ev =>
+      ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact
+    ),
+    [events]
+  );
+  const hasArtifacts = runArtifacts.length > 0;
+
+  const handleRevert = async () => {
+    if (!sessionId || !revert?.available) return;
+    setReverting(true);
+    try {
+      const res = await agentApi.revertSession(sessionId);
+      if (!res.success) throw new Error(res.error || 'Revert failed');
+      setRevertMessage({ type: 'success', text: res.message || 'Run reverted.' });
+      setShowRevertConfirm(false);
+      refreshState();
+    } catch (err) {
+      setRevertMessage({ type: 'error', text: err.message || 'Revert failed' });
+    } finally {
+      setReverting(false);
+    }
+  };
 
   return (
     <FeedFrame className="mb-4 mt-2">
-      <div className="overflow-hidden rounded-xl border border-gray-200/70 bg-gradient-to-br from-white to-gray-50/50 dark:border-gray-800/60 dark:from-gray-900 dark:to-gray-900/80 midnight:border-slate-800/60 midnight:from-slate-900 midnight:to-slate-900/80 shadow-sm">
-        {/* Header row */}
+      <div className="overflow-hidden rounded-xl border border-gray-200/60 dark:border-gray-800/60 midnight:border-slate-800/60 shadow-sm">
+        {/* Header — thin emerald left accent signals completion */}
         <button
           type="button"
           onClick={() => setExpanded(v => !v)}
-          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-colors"
+          className="flex w-full items-center gap-2.5 pl-3 pr-4 py-2.5 text-left bg-white dark:bg-gray-900 midnight:bg-slate-950 hover:bg-gray-50/70 dark:hover:bg-gray-800/30 transition-colors border-l-2 border-emerald-400 dark:border-emerald-600"
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/50">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            </span>
-            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">
-              Run complete
-            </span>
-            {elapsedMs > 0 && (
-              <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">
-                {formatElapsed(elapsedMs)}
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
+          <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">Run complete</span>
+          {elapsedMs > 0 && (
+            <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{formatElapsed(elapsedMs)}</span>
+          )}
+          <div className="ml-auto flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+            {hasArtifacts && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2 py-0.5 text-[10px] font-medium text-fuchsia-600 dark:bg-fuchsia-950/40 dark:text-fuchsia-400">
+                <FilePlus className="h-2.5 w-2.5" />{runArtifacts.length} artifact{runArtifacts.length !== 1 ? 's' : ''}
               </span>
             )}
-          </div>
-
-          {/* Compact stat pills */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {hasFileActivity && (
+            {hasFiles && (
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
-                <Pencil className="h-2.5 w-2.5" />
-                {filesChanged.length} file{filesChanged.length !== 1 ? 's' : ''}
+                <Pencil className="h-2.5 w-2.5" />{files.length} file{files.length !== 1 ? 's' : ''}
               </span>
             )}
             {hasToolActivity && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                <Zap className="h-2.5 w-2.5" />
-                {toolCount} tool{toolCount !== 1 ? 's' : ''}
+              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                <Zap className="h-2.5 w-2.5" />{toolCount} tool{toolCount !== 1 ? 's' : ''}
               </span>
             )}
             {hasMemoryActivity && (
               <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:bg-violet-950/40 dark:text-violet-400">
-                <BookMarked className="h-2.5 w-2.5" />
-                {memoriesSaved} mem
+                <BookMarked className="h-2.5 w-2.5" />{memoriesSaved} mem
               </span>
             )}
             {hasSkillActivity && (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                <Brain className="h-2.5 w-2.5" />
-                {skillsLearned} skill{skillsLearned !== 1 ? 's' : ''}
+                <Brain className="h-2.5 w-2.5" />{skillsLearned} skill
               </span>
             )}
             {expanded
@@ -2034,53 +2076,130 @@ function RunSummaryCard({ events, runStartedAt }) {
           </div>
         </button>
 
-        {/* Expanded detail */}
+        {/* Expanded */}
         {expanded && (
-          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-3 space-y-3">
-            {hasFileActivity && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Files changed</p>
-                <div className="space-y-0.5">
-                  {filesChanged.slice(0, 8).map(f => (
-                    <div key={f} className="flex items-center gap-1.5">
-                      <Pencil className="h-2.5 w-2.5 shrink-0 text-blue-400" />
-                      <span className="truncate text-[11px] text-gray-600 dark:text-gray-300 font-mono">{f}</span>
-                    </div>
-                  ))}
-                  {filesChanged.length > 8 && (
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 pl-4">+{filesChanged.length - 8} more</p>
-                  )}
+          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/30 dark:bg-gray-900/40 midnight:bg-slate-950/60 border-l-2 border-l-emerald-400/30 dark:border-l-emerald-600/30">
+            {/* Dev server hint */}
+            {previewUrl && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-emerald-100 dark:border-emerald-900/30">
+                <Globe className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-300 flex-1 min-w-0">
+                  Dev server at <code className="font-mono">{previewUrl}</code> — click <strong>Preview</strong> in the toolbar to open it.
+                </span>
+              </div>
+            )}
+
+            {/* Artifacts created */}
+            {hasArtifacts && (
+              <div className="px-4 pt-2.5 pb-2 border-b border-gray-100 dark:border-gray-800">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-fuchsia-500 dark:text-fuchsia-400 mb-2">
+                  Artifact{runArtifacts.length !== 1 ? 's' : ''} created
+                </p>
+                <div className="space-y-1.5">
+                  {runArtifacts.map((ev, i) => {
+                    const art = ev.result.artifact;
+                    return (
+                      <ArtifactResultCard key={`run_art_${i}`} result={ev.result} />
+                    );
+                  })}
                 </div>
               </div>
             )}
+
+            {/* File + command changes */}
+            {(hasFiles || hasCommands) && (
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
+                <div className="px-4 pt-2 pb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    {[hasFiles && `${files.length} file${files.length !== 1 ? 's' : ''}`, hasCommands && `${commands.length} command${commands.length !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+                {files.map((change, i) => (
+                  <FileChangeRow
+                    key={`${change.path}-${i}`}
+                    change={change}
+                    state={stateData?.fileStates?.[change.path] || { state: 'unknown' }}
+                  />
+                ))}
+                {commands.map((change, i) => (
+                  <CommandRow key={`cmd-${i}`} change={change} />
+                ))}
+              </div>
+            )}
+
+            {/* Tools used */}
             {topTools.length > 0 && (
-              <div>
+              <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Tools used</p>
                 <div className="flex flex-wrap gap-1.5">
                   {topTools.map(({ name, count }) => (
-                    <span key={name} className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] text-gray-600 dark:text-gray-300">
-                      {count > 1 && <span className="font-semibold text-gray-400 dark:text-gray-500">{count}×</span>}
+                    <span key={name} className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+                      {count > 1 && <span className="font-semibold text-gray-400">{count}×</span>}
                       {name.replace(/_/g, ' ')}
                     </span>
                   ))}
                 </div>
               </div>
             )}
-            <div className="flex items-center gap-4 pt-0.5">
-              {rounds > 0 && (
-                <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">
-                  {rounds} round{rounds !== 1 ? 's' : ''}
-                </span>
-              )}
-              {elapsedMs > 0 && (
-                <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">
-                  {formatElapsed(elapsedMs)} elapsed
-                </span>
-              )}
+
+            {/* Footer: rounds + revert controls */}
+            <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+              <div className="flex items-center gap-3">
+                {rounds > 0 && (
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{rounds} round{rounds !== 1 ? 's' : ''}</span>
+                )}
+                {elapsedMs > 0 && (
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{formatElapsed(elapsedMs)}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {sessionId && (
+                  <button
+                    type="button"
+                    onClick={refreshState}
+                    disabled={stateLoading}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-[10px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${stateLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                )}
+                {hasFiles && checkpoint && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRevertConfirm(true)}
+                    disabled={!revert?.available || reverting}
+                    title={revert?.available ? 'Revert this run' : (revert?.reason || 'Revert unavailable')}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-red-200 dark:border-red-800 text-[10px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
+                  >
+                    {reverting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                    {revert?.available ? 'Revert run' : 'Revert unavailable'}
+                  </button>
+                )}
+              </div>
             </div>
+
+            {revertMessage && (
+              <div className={`px-4 py-2 text-[11px] flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 ${revertMessage.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                {revertMessage.type === 'success'
+                  ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                  : <AlertCircle className="w-3 h-3 flex-shrink-0" />}
+                {revertMessage.text}
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      <RevertRunModal
+        open={showRevertConfirm}
+        goal={session?.goal || stateData?.goal}
+        total={files.length + commands.length}
+        checkpoint={checkpoint}
+        reverting={reverting}
+        onCancel={() => !reverting && setShowRevertConfirm(false)}
+        onConfirm={handleRevert}
+      />
     </FeedFrame>
   );
 }
@@ -2126,10 +2245,6 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
   workEvents.forEach((ev, i) => {
     if (ev.type === 'permission_request' || ev.type === 'tool_start') {
       toolBuf.push(ev);
-      if (ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact) {
-        flushTools();
-        rendered.push(<ArtifactResultCard key={`artifact_${i}`} result={ev.result} prominent />);
-      }
       return;
     }
     flushTools();
@@ -2202,23 +2317,23 @@ function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryT
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center gap-2 py-0.5 text-left group"
+        className="flex w-full items-center gap-1.5 py-0.5 text-left group"
         aria-expanded={open}
       >
         {open
-          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-300 dark:text-gray-700 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors" />
-          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-300 dark:text-gray-700 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors" />}
-        <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
+          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />
+          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />}
         {isRunning ? (
-          <span className="flex-shrink-0 ml-1.5 flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500">
+          <span className="flex-shrink-0 flex items-center gap-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
             <Loader2 className="h-2.5 w-2.5 animate-spin" />
-            Working
+            Working…
           </span>
         ) : summary ? (
-          <span className="flex-shrink-0 ml-1.5 text-[11px] text-gray-300 dark:text-gray-700 group-hover:text-gray-400 dark:group-hover:text-gray-500 transition-colors truncate max-w-[60%]">
+          <span className="flex-shrink-0 text-[11px] font-medium text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors truncate max-w-[72%]">
             {summary}
           </span>
         ) : null}
+        <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
       </button>
       {open && (
         <div className="mt-1 space-y-0">
@@ -2247,6 +2362,10 @@ function buildEventSegments(evList) {
       current = { goalEvent: ev, workEvents: [], answerEvent: null };
     } else if (ev.type === 'answer') {
       if (!current) current = { goalEvent: null, workEvents: [], answerEvent: null };
+      // Mark ask_user events as inferred-answered since agent produced a final answer
+      current.workEvents = current.workEvents.map(we =>
+        we.type === 'ask_user' ? { ...we, data: { ...we.data, _inferred_answered: true } } : we
+      );
       current.answerEvent = ev;
       segments.push(current);
       current = null;
@@ -2267,6 +2386,8 @@ export default function AgentRunFeed({
   isRunning,
   streamingText,
   runStartedAt,
+  sessionId = null,
+  session = null,
   onPermissionDecision,
   onAskUserAnswer,
   onRetryTool,
@@ -2304,6 +2425,14 @@ export default function AgentRunFeed({
         const answerIdx = seg.answerEvent ? evList.indexOf(seg.answerEvent) : -1;
         const hasThinkingInSeg = seg.workEvents.some(ev => ev.type === 'thinking');
 
+        // Artifacts always surface outside the collapsed drawer
+        const segArtifacts = seg.workEvents.filter(ev =>
+          ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact
+        );
+        const drawerEvents = seg.workEvents.filter(ev =>
+          !(ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact)
+        );
+
         return (
           <div key={si}>
             {seg.goalEvent && (
@@ -2316,7 +2445,7 @@ export default function AgentRunFeed({
               />
             )}
             <AgentWorkDrawer
-              workEvents={seg.workEvents}
+              workEvents={drawerEvents}
               isRunning={segIsRunning}
               onPermissionDecision={onPermissionDecision}
               onRetryTool={onRetryTool}
@@ -2324,6 +2453,9 @@ export default function AgentRunFeed({
               onRetryGoal={onRetryGoal}
               onRunWithAction={onRunWithAction}
             />
+            {segArtifacts.map((ev, ai) => (
+              <ArtifactResultCard key={`artifact_${si}_${ai}`} result={ev.result} prominent />
+            ))}
             {seg.answerEvent && (
               <AnswerEvent
                 data={seg.answerEvent.data}
@@ -2343,7 +2475,7 @@ export default function AgentRunFeed({
 
       {isRunning && <StreamingPreview text={streamingText} />}
       {isRunning && !streamingText && <RunningIndicator runStartedAt={runStartedAt} />}
-      {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} />}
+      {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} sessionId={sessionId} session={session} />}
     </div>
   );
 }

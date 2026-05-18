@@ -19,7 +19,6 @@ import {
 import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel, extractLocalhostUrl } from './components/agent/AgentRunFeed';
-import AgentChangesPanel from './components/agent/AgentChangesPanel';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
@@ -2519,6 +2518,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     isRunning={agentRunning}
                     streamingText={agentStreamingText}
                     runStartedAt={runStartedAtRef.current}
+                    sessionId={agentCurrentSessionId}
+                    session={agentCurrentSession}
                     onPermissionDecision={handleAgentPermission}
                     onAskUserAnswer={handleAgentAskUser}
                     onRetryTool={handleRetryTool}
@@ -2531,15 +2532,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     highlightedMessageId={highlightedMessageId}
                     ttsReady={ttsReady}
                   />
-                  {!agentRunning && (
-                    <>
-                      <AgentChangesPanel
-                        events={persistedAgentEvents}
-                        sessionId={agentCurrentSessionId}
-                        session={agentCurrentSession}
-                      />
-                    </>
-                  )}
                   <div ref={messagesEndRef} className="h-4" />
                 </div>
               </div>
