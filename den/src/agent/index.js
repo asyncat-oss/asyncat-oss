@@ -21,6 +21,7 @@ import { planTools } from './tools/planTools.js';
 import { askUserTools } from './tools/askUserTool.js';
 import { skillTools } from './tools/skillTools.js';
 import { artifactTools } from './tools/artifactTools.js';
+import { noteTools } from './tools/noteTools.js';
 import { audioTools } from './tools/audioTools.js';
 import { visualTools } from './tools/visualTools.js';
 import { installTools } from './tools/installTools.js';
@@ -68,6 +69,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(askUserTools);
   toolRegistry.registerAll(skillTools);
   toolRegistry.registerAll(artifactTools);
+  toolRegistry.registerAll(noteTools);
   toolRegistry.registerAll(audioTools);
   toolRegistry.registerAll(visualTools);
   toolRegistry.registerAll(installTools);

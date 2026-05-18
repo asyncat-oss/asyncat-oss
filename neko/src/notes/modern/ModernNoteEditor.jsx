@@ -30,7 +30,7 @@ import { blocksToHtml, htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
 import authService from "../../services/authService";
 
-const ModernNoteEditor = ({ note, onBack }) => {
+const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
   const {
     applyDeltaChanges,
     deleteNote,
@@ -1140,24 +1140,26 @@ const ModernNoteEditor = ({ note, onBack }) => {
         style={{ userSelect: "none" }}
       >
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleBack}
-            disabled={isNavigatingBack}
-            className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${
-              isNavigatingBack
-                ? "cursor-not-allowed"
-                : "hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900"
-            } text-gray-600 dark:text-gray-500 midnight:text-slate-400`}
-          >
-            <ArrowLeft className="w-5 h-5" />
-            {isNavigatingBack &&
-              (saveStatus === "saved" || saveStatus === null) && (
-                <>
-                  <Loader className="w-4 h-4 animate-spin" />
-                  <span className="text-sm font-medium">Exiting Note...</span>
-                </>
-              )}
-          </button>
+          {!embedded && (
+            <button
+              onClick={handleBack}
+              disabled={isNavigatingBack}
+              className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${
+                isNavigatingBack
+                  ? "cursor-not-allowed"
+                  : "hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900"
+              } text-gray-600 dark:text-gray-500 midnight:text-slate-400`}
+            >
+              <ArrowLeft className="w-5 h-5" />
+              {isNavigatingBack &&
+                (saveStatus === "saved" || saveStatus === null) && (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    <span className="text-sm font-medium">Exiting Note...</span>
+                  </>
+                )}
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-4">

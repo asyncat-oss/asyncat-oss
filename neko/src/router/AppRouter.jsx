@@ -18,7 +18,6 @@ import ChatsPage from '../CommandCenter/pages/ChatsPage';
 import TrashPage from '../CommandCenter/pages/TrashPage';
 import ProjectsPage from '../projects/ProjectsPage';
 import ProjectOverview from '../projects/ProjectOverview';
-import NotesIndex from '../notes/NotesIndex';
 import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
@@ -200,11 +199,6 @@ const createRouter = () => createBrowserRouter([
       {
         path: "projects/:projectId/:tab",
         element: <ProjectOverview />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "notes",
-        element: <NotesIndex />,
         errorElement: <RouteErrorElement />
       },
       {

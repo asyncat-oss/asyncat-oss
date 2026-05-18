@@ -494,8 +494,8 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
 }
 
 // ── Artifact tool result inline card ────────────────────────────────────────
-const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page']);
-const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'mermaid']);
+const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page', 'create_note', 'update_note', 'append_to_note']);
+const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'mermaid', 'note']);
 
 function ArtifactResultCard({ result, prominent = false, onViewInPanel }) {
   if (!result?.artifact) return null;

@@ -7,10 +7,13 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Download, FileText, Table2, Code2,
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
-  X, Maximize2, Copy, Check, FileDown, PanelRight,
+  X, Maximize2, Copy, Check, FileDown, PanelRight, BookOpen,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer, headingId } from './BlockBasedMessageRenderer';
 import { agentApi } from '../../api';
+import { notesApi } from '../../../notes/noteApi';
+import { NoteProvider } from '../../../notes/context/NoteProvider';
+import ModernNoteEditor from '../../../notes/modern/ModernNoteEditor';
 
 // ── Type config ─────────────────────────────────────────────────────────────
 const TYPE_META = {
@@ -22,6 +25,7 @@ const TYPE_META = {
   code:     { icon: Code2,     label: 'Code',        accent: 'bg-cyan-500' },
   svg:      { icon: Image,     label: 'SVG',         accent: 'bg-pink-500' },
   text:     { icon: FileText,  label: 'Text',        accent: 'bg-gray-500' },
+  note:     { icon: BookOpen,  label: 'Note',        accent: 'bg-indigo-500' },
 };
 
 function getTypeMeta(type) {
@@ -172,6 +176,21 @@ function HtmlPreview({ content, title }) {
   );
 }
 
+// ── Note panel — always the full rich editor, embedded in the side panel ─────
+function NotePanel({ html, noteId, title, fullHeight }) {
+  return (
+    <div className={`flex flex-col ${fullHeight ? 'h-full' : 'h-[640px]'} -mx-3 -my-2.5`}>
+      <NoteProvider>
+        <ModernNoteEditor
+          note={{ id: noteId, title: title || 'Untitled Note', content: html || '' }}
+          onBack={() => {}}
+          embedded
+        />
+      </NoteProvider>
+    </div>
+  );
+}
+
 // ── Main ArtifactCard ───────────────────────────────────────────────────────
 // Uses a <div> wrapper with onClick for toggle instead of nested buttons.
 export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen = null, fullHeight = false }) {
@@ -197,6 +216,9 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
     try {
       if (artifactData.content) {
         setContent(artifactData.content);
+      } else if (type === 'note' && artifactData.noteId) {
+        const note = await notesApi.fetchNoteWithContent(artifactData.noteId);
+        if (note) setContent(note.content || '');
       } else if (filename) {
         const data = await agentApi.getArtifact(filename);
         if (data.success) setContent(data.content);
@@ -304,6 +326,8 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
       );
     }
     switch (type) {
+      case 'note':
+        return <NotePanel html={content} noteId={artifactData.noteId} title={title} fullHeight={fullHeight} />;
       case 'markdown':
       case 'pdf_source':
         return <MarkdownPreview content={content} />;
@@ -358,22 +382,26 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
             </span>
           </div>
           <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-600 font-mono">
-            {artifactPath || filename}
+            {type === 'note'
+              ? (artifactData.noteId ? `note:${artifactData.noteId.slice(0, 8)}…` : 'saved note')
+              : (artifactPath || filename)}
             {size && <span className="ml-1.5">· {size}</span>}
           </p>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={downloading}
-            className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-            title={downloading ? 'Downloading…' : `Download ${filename}`}
-          >
-            {downloading ? <span className="block h-3.5 w-3.5 animate-pulse rounded-full bg-current opacity-50" /> : <Download className="h-3.5 w-3.5" />}
-          </button>
+          {type !== 'note' && (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              title={downloading ? 'Downloading…' : `Download ${filename}`}
+            >
+              {downloading ? <span className="block h-3.5 w-3.5 animate-pulse rounded-full bg-current opacity-50" /> : <Download className="h-3.5 w-3.5" />}
+            </button>
+          )}
           {onOpen ? (
             <button
               type="button"

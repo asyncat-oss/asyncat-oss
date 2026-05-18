@@ -17,7 +17,6 @@ import {
   Clock,
   Layers,
   Trash2,
-  FileText,
 } from "lucide-react";
 
 import UniversalSearch from "./UniversalSearch";
@@ -458,7 +457,6 @@ const DynamicSidebar = ({
   const isOnHome = basePage === "home";
   const isOnConversations = basePage === "all-chats";
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
-  const isOnNotes = basePage === "notes";
   const isOnCalendar = basePage === "calendar";
   const isOnFiles = basePage === "files";
   const isOnModels = basePage === "models";
@@ -720,16 +718,6 @@ const DynamicSidebar = ({
           dockPosition={dockPosition}
         >
           {workspaceIcon}
-        </DockItem>
-
-        {/* Notes — standalone app */}
-        <DockItem
-          label="Notes"
-          onClick={() => navigate("/notes")}
-          isActive={isOnNotes}
-          dockPosition={dockPosition}
-        >
-          <FileText className="w-5 h-5" />
         </DockItem>
 
         {/* Calendar — direct navigate */}
