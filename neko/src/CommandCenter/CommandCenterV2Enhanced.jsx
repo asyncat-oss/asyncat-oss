@@ -575,7 +575,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
 
   const handleStartNewConversation = useCallback(async () => {
-
+    setShowActivitySidebar(false);
+    setSidePanelTab('steps');
+    setSelectedArtifact(null);
     setMessageInputResetKey(prev => prev + 1);
     navigate('/home');
     await handleNewConversation();
@@ -2070,17 +2072,20 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             <button
               type="button"
               onClick={() => toggleSidePanelTab('git')}
-              className={`relative p-2 rounded-lg transition-colors ${
+              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
                 showActivitySidebar && sidePanelTab === 'git'
                   ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                   : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
               }`}
               title="Git status"
             >
-              <GitBranch className="w-5 h-5" />
-              {gitState && gitState.staged?.length > 0 && (
-                <span className="absolute top-1 right-1 inline-flex items-center justify-center bg-blue-500 text-white text-[9px] font-bold px-1 rounded-full min-w-[14px] h-3.5 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-900">
-                  {gitState.staged.length}
+              <GitBranch className="w-4 h-4" />
+              {gitState?.detected && (
+                <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                  {gitState.changedCount || 0}
+                  {(gitState.ahead || gitState.behind)
+                    ? ` · ↑${gitState.ahead || 0} ↓${gitState.behind || 0}`
+                    : ''}
                 </span>
               )}
             </button>
