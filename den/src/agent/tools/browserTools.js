@@ -117,7 +117,10 @@ export const screenshotTool = {
       await page.screenshot({ path: filePath, fullPage: args.full_page || false });
       await page.close();
 
-      return { success: true, url: args.url, screenshot_path: filePath };
+      const imageData = fs.default.readFileSync(filePath);
+      const imageBase64 = `data:image/png;base64,${imageData.toString('base64')}`;
+
+      return { success: true, url: args.url, screenshot_path: filePath, image: imageBase64 };
     } catch (err) {
       return { success: false, error: err.message };
     }

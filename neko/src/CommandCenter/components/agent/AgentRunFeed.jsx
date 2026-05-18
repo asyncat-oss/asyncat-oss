@@ -832,6 +832,45 @@ function ImageResultCard({ result }) {
   );
 }
 
+function ScreenshotResultCard({ result }) {
+  const src = result?.image;
+  const url = result?.url;
+  if (!result?.success || !src) return null;
+
+  return (
+    <div className="mt-1.5 mb-3 ml-7 max-w-xl">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900/50">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+          <div className="min-w-0">
+            <div className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200">
+              Screenshot
+            </div>
+            {url && (
+              <div className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500 truncate">{url}</div>
+            )}
+          </div>
+          <a
+            href={src}
+            download="screenshot.png"
+            className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            title="Download screenshot"
+          >
+            <Download className="h-4 w-4" />
+          </a>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
+          className="block w-full bg-gray-50 p-2 dark:bg-gray-950/60"
+          title="Open screenshot"
+        >
+          <img src={src} alt="Page screenshot" className="max-h-96 w-full rounded-lg object-contain" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CompactPermissionEvent({ data, onDecision }) {
   const [showDetails, setShowDetails] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -1054,11 +1093,13 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
               if (ev.type === 'tool_start') {
                 const hasAudioResult = ev.data?.tool === 'speak_text' && ev.result?.success && ev.result?.path;
                 const hasImageResult = (ev.data?.tool === 'generate_image' || ev.data?.tool === 'edit_image') && ev.result?.success && (ev.result?.media || ev.result?.image);
+                const hasScreenshotResult = (ev.data?.tool === 'screenshot_page' || ev.data?.tool === 'take_screenshot') && ev.result?.success && ev.result?.image;
                 return (
                   <div key={i}>
                     <ToolEvent data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} progress={ev.progress} />
                     {hasAudioResult && <AudioResultCard result={ev.result} />}
                     {hasImageResult && <ImageResultCard result={ev.result} />}
+                    {hasScreenshotResult && <ScreenshotResultCard result={ev.result} />}
                   </div>
                 );
               }

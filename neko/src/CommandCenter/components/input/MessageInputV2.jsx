@@ -888,7 +888,7 @@ export const MessageInputV2 = ({
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
         <form onSubmit={handleSubmit}>
             <div
-              className={`bg-white px-4 pt-4 pb-0 rounded-[1.35rem] border transition-colors dark:bg-[#262626] midnight:bg-slate-900 ${getBorderColor()}`}
+              className={`bg-white px-4 pt-4 pb-0 rounded-[1.35rem] border transition-colors dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()}`}
             >
               {(error || modelSwitchError) && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
@@ -1056,7 +1056,7 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-                            <div ref={toolbarRef} className="-mx-4 mt-3 flex min-h-11 flex-col items-stretch gap-2 rounded-b-[1.25rem] border-t border-gray-100 bg-gray-50/95 px-3 py-2 dark:border-gray-800 dark:bg-[#202020] midnight:border-slate-800 midnight:bg-slate-950/70 sm:flex-row sm:items-center sm:justify-between">
+                            <div ref={toolbarRef} className="-mx-4 mt-3 flex min-h-11 flex-col items-stretch gap-2 rounded-b-[1.25rem] border-t border-gray-100 bg-gray-50/95 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/40 midnight:border-slate-800 midnight:bg-slate-950/70 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
                   {activeWorkingContext && (
                     <div className="relative">
