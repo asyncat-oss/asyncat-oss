@@ -1,5 +1,5 @@
 import authService from "../services/authService";
-import { secureLogger, getConnectionStatusMessage } from "../utils/secureLogger";
+import { secureLogger } from "../utils/secureLogger";
 import { sanitizeNoteContent, sanitizeToText } from "../utils/sanitizer";
 
 const sanitizeChangeset = (changeset) => {
@@ -29,7 +29,6 @@ const sanitizeResponseData = (data) => {
 };
 
 const API_URL = import.meta.env.VITE_NOTES_URL;
-const MAIN_API_URL = import.meta.env.VITE_USER_URL;
 
 export const apiRequest = async (url, options = {}) => {
   try {
@@ -50,34 +49,9 @@ export const apiRequest = async (url, options = {}) => {
   }
 };
 
-export const projectsApi = {
-  loadProjects: async () => {
-    try {
-      const { data } = await apiRequest(`${MAIN_API_URL}/api/projects`);
-      if (Array.isArray(data)) {
-        return data.reduce((acc, project) => {
-          acc[project.id] = {
-            id: project.id,
-            name: project.name,
-            teamId: project.team_id,
-            type: project.type || "team",
-            hasNotes: project.has_notes !== false,
-          };
-          return acc;
-        }, {});
-      }
-      return {};
-    } catch (err) {
-      secureLogger.error("Error loading projects");
-      return {};
-    }
-  },
-};
-
 export const notesApi = {
-  loadNotes: async (projectId) => {
-    let queryParams = projectId ? `?projectId=${projectId}` : "";
-    queryParams += (queryParams ? "&" : "?") + "excludeContent=true";
+  loadNotes: async () => {
+    const queryParams = "?excludeContent=true";
 
     const response = await apiRequest(`${API_URL}/api/notes${queryParams}`);
     let data = response.data || response;
@@ -110,19 +84,20 @@ export const notesApi = {
       try {
         const meta = typeof data.metadata === "string" ? JSON.parse(data.metadata) : data.metadata;
         version = meta.version;
-      } catch {}
+      } catch {
+        version = null;
+      }
     }
 
     return sanitizeResponseData({ ...data, version });
   },
 
-  createNote: async (title, content, projectId) => {
+  createNote: async (title, content) => {
     const { data } = await apiRequest(`${API_URL}/api/notes`, {
       method: "POST",
       body: JSON.stringify({
         title: sanitizeToText(title || "Untitled Note"),
         content: sanitizeNoteContent(content || ""),
-        projectId,
       }),
     });
     return data;
@@ -284,7 +259,7 @@ export const attachmentsApi = {
     return { isValid: errors.length === 0, errors };
   },
 
-  getFileIcon: (filename, mimeType = "") => {
+  getFileIcon: (filename) => {
     const ext = filename?.split(".").pop()?.toLowerCase() || "";
     const iconMap = {
       pdf: "📄", doc: "📄", docx: "📄", txt: "📄",

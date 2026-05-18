@@ -96,6 +96,54 @@ function ensureCalendarSchema() {
   }
 }
 
+function ensureNotesSchema() {
+  const notesTable = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notes'").get();
+  if (!notesTable) return;
+
+  const createSql = notesTable.sql || '';
+  const isProjectLinked =
+    createSql.includes('projectid   TEXT NOT NULL') ||
+    createSql.includes('projectid TEXT NOT NULL') ||
+    createSql.includes('REFERENCES projects');
+
+  if (isProjectLinked) {
+    db.exec(`
+      DROP INDEX IF EXISTS idx_notes_projectid;
+
+      CREATE TABLE IF NOT EXISTS notes_next (
+        id          TEXT PRIMARY KEY,
+        title       TEXT NOT NULL DEFAULT 'Untitled Note',
+        content     TEXT,
+        projectid   TEXT,
+        createdby   TEXT REFERENCES users(id),
+        updated_by  TEXT REFERENCES users(id),
+        createdat   TEXT NOT NULL DEFAULT (datetime('now')),
+        updatedat   TEXT NOT NULL DEFAULT (datetime('now')),
+        isarchived  INTEGER NOT NULL DEFAULT 0,
+        isstarred   INTEGER NOT NULL DEFAULT 0,
+        metadata    TEXT NOT NULL DEFAULT '{}'
+      );
+
+      INSERT OR REPLACE INTO notes_next (
+        id, title, content, projectid, createdby, updated_by, createdat,
+        updatedat, isarchived, isstarred, metadata
+      )
+      SELECT
+        id, title, content, projectid, createdby, updated_by, createdat,
+        updatedat, isarchived, isstarred, COALESCE(metadata, '{}')
+      FROM notes;
+
+      DROP TABLE notes;
+      ALTER TABLE notes_next RENAME TO notes;
+    `);
+  }
+
+  db.exec(`
+    DROP INDEX IF EXISTS idx_notes_projectid;
+    CREATE INDEX IF NOT EXISTS idx_notes_createdby ON notes(createdby);
+  `);
+}
+
 function ensureAgentMemorySchema() {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_memory'").get();
   if (!table) return;
@@ -248,6 +296,7 @@ function ensureModelPathsSchema() {
 cleanupDeadTables();
 ensureKanbanSchema();
 ensureCalendarSchema();
+ensureNotesSchema();
 ensureAgentMemorySchema();
 ensureModelPathsSchema();
 

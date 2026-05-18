@@ -6,7 +6,7 @@ import EmptyState from "./components/EmptyState";
 import AlertModal from "./modern/AlertModal";
 import { FileWarning, WifiOff, RefreshCw } from "lucide-react";
 
-const Layout = ({ selectedProject }) => {
+const Layout = () => {
   const {
     notes,
     loadNotes,
@@ -50,10 +50,7 @@ const Layout = ({ selectedProject }) => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const projectId = selectedProject?.id;
-        if (projectId) {
-          await loadNotes(projectId);
-        }
+        await loadNotes();
         setLastRefresh(new Date());
       } catch {
         // Error handled by context
@@ -61,7 +58,7 @@ const Layout = ({ selectedProject }) => {
     };
 
     loadData();
-  }, [selectedProject, loadNotes]);
+  }, [loadNotes]);
 
   // Check for note to open from Universal Search
   useEffect(() => {
@@ -85,19 +82,6 @@ const Layout = ({ selectedProject }) => {
   // Enhanced create note handler
   const handleCreateNew = useCallback(async () => {
     try {
-      const projectId = selectedProject?.id;
-
-      // Validate that we have a project ID
-      if (!projectId) {
-        setAlertModal({
-          isOpen: true,
-          title: "No Project Selected",
-          message: "Please select a project before creating a note",
-          type: "warning",
-        });
-        return;
-      }
-
       // Check for unsaved changes in current note
       if (selectedNote && hasUnsavedChanges(selectedNote.id)) {
         if (selectedNote.showSaveModalBeforeNavigating) {
@@ -105,7 +89,6 @@ const Layout = ({ selectedProject }) => {
             const newNote = await createNote({
               title: "Untitled Note",
               content: "<p><br></p>",
-              projectId: projectId,
             });
             if (newNote) {
               setSelectedNote(newNote);
@@ -119,7 +102,6 @@ const Layout = ({ selectedProject }) => {
       const newNote = await createNote({
         title: "Untitled Note",
         content: "<p><br></p>",
-        projectId: projectId,
       });
       if (newNote) {
         setSelectedNote(newNote);
@@ -130,7 +112,6 @@ const Layout = ({ selectedProject }) => {
   }, [
     selectedNote,
     hasUnsavedChanges,
-    selectedProject,
     createNote,
     setSelectedNote,
   ]);
@@ -193,17 +174,14 @@ const Layout = ({ selectedProject }) => {
     clearError();
 
     try {
-      const projectId = selectedProject?.id;
-      if (projectId) {
-        await loadNotes(projectId);
-      }
+      await loadNotes();
       setLastRefresh(new Date());
     } catch {
       // Error handled by context
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing, selectedProject, loadNotes, clearError]);
+  }, [isRefreshing, loadNotes, clearError]);
 
   // Handle batch delete
   const handleDeleteNotes = useCallback(
@@ -214,15 +192,12 @@ const Layout = ({ selectedProject }) => {
         }
 
         // Refresh the notes list
-        const projectId = selectedProject?.id;
-        if (projectId) {
-          loadNotes(projectId);
-        }
+        loadNotes();
       } catch {
         // Error handled by context
       }
     },
-    [deleteNote, selectedProject, loadNotes]
+    [deleteNote, loadNotes]
   );
 
   // Error state

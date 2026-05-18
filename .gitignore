@@ -30,6 +30,7 @@ data/asyncat.db-shm
 data/asyncat.db-wal
 .asyncat/snapshots/
 .asyncat-attachments/
+.asyncat-artifacts/
 den/.asyncat/snapshots/
 *.db
 *.db-shm
@@ -57,6 +58,3 @@ Thumbs.db
 # Misc
 *.swp
 *.swo
-
-# AI Coding Docs
-mlx_integration_summary.txt

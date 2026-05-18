@@ -51,7 +51,6 @@ const NoteGrid = ({
   searchQuery,
   setSearchQuery,
   onDeleteNotes,
-  getProjectNameForNote,
   isLoading = false,
 }) => {
   const [selectedNotes, setSelectedNotes] = useState([]);
@@ -296,9 +295,6 @@ const NoteGrid = ({
                 onClick={onSelectNote}
                 isSelected={selectedNotes.some((n) => n.id === note.id)}
                 onToggleSelect={toggleNoteSelection}
-                projectName={
-                  getProjectNameForNote ? getProjectNameForNote(note) : null
-                }
                 userData={note.users}
                 getProfilePicture={getProfilePicture}
               />
@@ -311,7 +307,6 @@ const NoteGrid = ({
               onSelectNote={onSelectNote}
               selectedNotes={selectedNotes}
               onToggleSelect={toggleNoteSelection}
-              getProjectNameForNote={getProjectNameForNote}
             />
           </div>
         )

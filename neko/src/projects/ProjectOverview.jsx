@@ -6,8 +6,6 @@ const VALID_PROJECT_TABS = [
   'kanban',
   'list',
   'gantt',
-  'notes',
-  'settings',
 ];
 
 const ProjectOverview = () => {

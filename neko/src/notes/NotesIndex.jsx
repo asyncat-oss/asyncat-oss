@@ -1,10 +1,10 @@
 import NotesLayout from "./Layout";
 import { NoteProvider } from "./context/NoteProvider";
 
-function NotesIndex({ session, selectedProject }) {
+function NotesIndex() {
   return (
-    <NoteProvider session={session}>
-      <NotesLayout selectedProject={selectedProject}/>
+    <NoteProvider>
+      <NotesLayout />
     </NoteProvider>
   );
 }

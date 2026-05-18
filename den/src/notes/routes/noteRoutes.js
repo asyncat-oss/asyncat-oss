@@ -17,7 +17,6 @@ router.use(securityMiddleware);
 
 // Protected routes with sanitization
 router.get("/", noteController.getNotes);
-router.get("/project/:projectId", noteController.getNotesByProject);
 router.post("/:id/delta", sanitizeChangesetInput, noteController.applyDeltaChanges);
 router.get("/:id", noteController.getNoteById);
 router.post("/", sanitizeNoteInput, noteController.createNote);

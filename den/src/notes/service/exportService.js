@@ -109,7 +109,7 @@ async function exportNoteAsPdf(
       title,
       blocks,
       noteId,
-      projectId: note.projectid,
+      projectId: null,
       db,
       attachmentBaseUrl: options.attachmentBaseUrl
     });

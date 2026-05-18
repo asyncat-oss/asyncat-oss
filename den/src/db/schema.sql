@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS projects (
   -- References workspaces instead of the old teams table.
   team_id         TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   is_archived     INTEGER NOT NULL DEFAULT 0,
-  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","gantt","notes"]',
-  enabled_widgets TEXT NOT NULL DEFAULT '["metrics","progress","description","quick-stats","deadlines","team-members","features","project-details"]',
+  enabled_views   TEXT NOT NULL DEFAULT '["kanban","list","gantt"]',
+  enabled_widgets TEXT NOT NULL DEFAULT '[]',
   emoji           TEXT NOT NULL DEFAULT '📁',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS notes (
   id          TEXT PRIMARY KEY,
   title       TEXT NOT NULL DEFAULT 'Untitled Note',
   content     TEXT,
-  projectid   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  projectid   TEXT,
   createdby   TEXT REFERENCES users(id),
   updated_by  TEXT REFERENCES users(id),
   createdat   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 
 CREATE INDEX IF NOT EXISTS idx_projects_team_id         ON projects(team_id);
 CREATE INDEX IF NOT EXISTS idx_projects_owner_id        ON projects(owner_id);
-CREATE INDEX IF NOT EXISTS idx_notes_projectid          ON notes(projectid);
+CREATE INDEX IF NOT EXISTS idx_notes_createdby          ON notes(createdby);
 CREATE INDEX IF NOT EXISTS idx_events_createdBy         ON Events(createdBy);
 CREATE INDEX IF NOT EXISTS idx_Columns_projectId        ON Columns(projectId);
 CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);

@@ -868,23 +868,23 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       );
 
       return (
-        <div className="mb-7 max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+        <div className="mb-6 max-w-full overflow-hidden rounded-xl border border-gray-200/80 dark:border-gray-700/60 midnight:border-slate-700/60">
           <div className="overflow-x-auto">
-            <table className="min-w-full table-auto border-collapse text-sm">
+            <table className="min-w-full border-collapse text-[13px]">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800/80 midnight:bg-slate-800">
+                <tr className="border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50/80 dark:bg-gray-800/60 midnight:bg-slate-800/60">
                   {normalizedRows[0]?.map((header, i) => (
-                    <th key={i} className={`min-w-[10rem] border-b border-r border-gray-200 px-3.5 py-3 text-left align-top text-xs font-semibold [overflow-wrap:anywhere] last:border-r-0 dark:border-gray-700 midnight:border-slate-700 ${baseStyles}`}>
+                    <th key={i} className={`px-4 py-2.5 text-left align-top text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 midnight:text-slate-400 [overflow-wrap:anywhere] whitespace-nowrap ${baseStyles}`}>
                       {renderContent(header, { linkVariant: 'chip' })}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
                 {normalizedRows.slice(1).map((row, i) => (
-                  <tr key={i} className="transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-800/55 [&:last-child_td]:border-b-0">
+                  <tr key={i} className="transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/30 midnight:hover:bg-slate-800/40">
                     {row.map((cell, j) => (
-                      <td key={j} className={`min-w-[10rem] border-b border-r border-gray-200 px-3.5 py-3 align-top [overflow-wrap:anywhere] last:border-r-0 dark:border-gray-700 midnight:border-slate-700 ${baseStyles}`}>
+                      <td key={j} className={`px-4 py-2.5 align-top [overflow-wrap:anywhere] ${baseStyles}`}>
                         {renderContent(cell, { linkVariant: 'chip' })}
                       </td>
                     ))}

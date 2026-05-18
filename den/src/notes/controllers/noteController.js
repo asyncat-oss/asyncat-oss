@@ -312,10 +312,9 @@ export const applyDeltaChanges = async (req, res) => {
 
 export const getNotes = async (req, res) => {
   try {
-    const { projectId, excludeContent } = req.query;
+    const { excludeContent } = req.query;
     const notes = await noteService.getNotes(
       req.user.id,
-      projectId,
       excludeContent === "true",
       req.db
     );
@@ -359,16 +358,6 @@ export const deleteNote = async (req, res) => {
     const statusCode = error.message === "Note not found" ? 404
       : error.message.includes("permission") ? 403 : 500;
     res.status(statusCode).json({ success: false, error: error.message || "Failed to delete note" });
-  }
-};
-
-export const getNotesByProject = async (req, res) => {
-  try {
-    const notes = await noteService.getNotes(req.user.id, req.params.projectId, false, req.db);
-    res.json({ success: true, data: notes });
-  } catch (error) {
-    console.error("Project notes fetch error:", error);
-    res.status(500).json({ success: false, error: error.message || "Failed to fetch project notes" });
   }
 };
 

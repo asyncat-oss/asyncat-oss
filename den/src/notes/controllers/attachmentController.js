@@ -8,13 +8,17 @@ import localStorageService from "../../storage/localStorageService.js";
 
 const ATTACHMENTS_CONTAINER = "notes";
 
-// Helper to get attachment path
-const getAttachmentPath = (projectId, noteId, filename) => {
-  return `project-${projectId}/note-${noteId}/${filename}`;
+// Helper to get local file path for an attachment
+const getLocalFilePath = (noteId, filename) => {
+  return path.join(
+    localStorageService.getContainerDirPath(ATTACHMENTS_CONTAINER),
+    `note-${noteId}`,
+    filename
+  );
 };
 
-// Helper to get local file path for an attachment
-const getLocalFilePath = (projectId, noteId, filename) => {
+const getLegacyLocalFilePath = (projectId, noteId, filename) => {
+  if (!projectId) return null;
   return path.join(
     localStorageService.getContainerDirPath(ATTACHMENTS_CONTAINER),
     `project-${projectId}`,
@@ -23,21 +27,37 @@ const getLocalFilePath = (projectId, noteId, filename) => {
   );
 };
 
+const resolveAttachmentFilePath = async (note, noteId, filename) => {
+  const filePath = getLocalFilePath(noteId, filename);
+  try {
+    await fsp.access(filePath);
+    return filePath;
+  } catch {
+    const legacyPath = getLegacyLocalFilePath(note.projectid, noteId, filename);
+    if (!legacyPath) return filePath;
+    try {
+      await fsp.access(legacyPath);
+      return legacyPath;
+    } catch {
+      return filePath;
+    }
+  }
+};
+
 // Helper to get container dir
 const getContainerDir = () => {
   return localStorageService.getContainerDirPath(ATTACHMENTS_CONTAINER);
 };
 
 // Helper to ensure attachment directory exists
-const ensureAttachmentDir = async (projectId, noteId) => {
-  const dir = path.join(getContainerDir(), `project-${projectId}`, `note-${noteId}`);
+const ensureAttachmentDir = async (noteId) => {
+  const dir = path.join(getContainerDir(), `note-${noteId}`);
   await fsp.mkdir(dir, { recursive: true });
   return dir;
 };
 
 // Helper to list attachments in a directory
-const listLocalAttachments = async (projectId, noteId) => {
-  const dir = path.join(getContainerDir(), `project-${projectId}`, `note-${noteId}`);
+const listAttachmentsInDir = async (dir) => {
   try {
     const files = await fsp.readdir(dir);
     const attachments = [];
@@ -59,6 +79,19 @@ const listLocalAttachments = async (projectId, noteId) => {
     if (err.code === "ENOENT") return [];
     throw err;
   }
+};
+
+const listLocalAttachments = async (note, noteId) => {
+  const current = await listAttachmentsInDir(path.join(getContainerDir(), `note-${noteId}`));
+  const legacy = note.projectid
+    ? await listAttachmentsInDir(path.join(getContainerDir(), `project-${note.projectid}`, `note-${noteId}`))
+    : [];
+
+  const byFilename = new Map();
+  [...legacy, ...current].forEach((attachment) => {
+    byFilename.set(attachment.filename, attachment);
+  });
+  return [...byFilename.values()];
 };
 
 // Helper to verify note access
@@ -132,8 +165,8 @@ export const uploadAttachment = async (req, res) => {
     const filename = req.file.originalname;
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 
-    const subPath = `project-${note.projectid}/note-${noteId}`;
-    await ensureAttachmentDir(note.projectid, noteId);
+    const subPath = `note-${noteId}`;
+    await ensureAttachmentDir(noteId);
 
     let resultFilename;
     let blobName;
@@ -201,7 +234,6 @@ export const uploadAttachment = async (req, res) => {
         contentType: req.file.mimetype,
         size: req.file.size,
         noteId,
-        projectId: note.projectid,
         isBanner: isBanner === "true",
       },
     });
@@ -227,12 +259,12 @@ export const listAttachments = async (req, res) => {
 
     const note = await verifyNoteAccess(noteId, userId, req.db);
 
-    const attachments = await listLocalAttachments(note.projectid, noteId);
+    const attachments = await listLocalAttachments(note, noteId);
 
     const result = attachments.map((att) => ({
       filename: att.filename,
-      blobName: `project-${note.projectid}/note-${noteId}/${att.filename}`,
-      url: localStorageService.fileUrl(ATTACHMENTS_CONTAINER, `project-${note.projectid}/note-${noteId}/${att.filename}`),
+      blobName: `note-${noteId}/${att.filename}`,
+      url: localStorageService.fileUrl(ATTACHMENTS_CONTAINER, `note-${noteId}/${att.filename}`),
       contentType: getMimeType(att.filename),
       size: att.size,
       lastModified: att.lastModified,
@@ -267,7 +299,7 @@ export const downloadAttachment = async (req, res) => {
 
     const note = await verifyNoteAccess(noteId, userId, req.db);
 
-    const filePath = getLocalFilePath(note.projectid, noteId, filename);
+    const filePath = await resolveAttachmentFilePath(note, noteId, filename);
 
     let stats;
     try {
@@ -358,13 +390,15 @@ export const deleteAttachment = async (req, res) => {
 
     const note = await verifyNoteAccess(noteId, userId, req.db);
 
-    const blobName = `project-${note.projectid}/note-${noteId}/${filename}`;
+    const blobName = `note-${noteId}/${filename}`;
 
     try {
       await localStorageService.deleteFile(blobName, ATTACHMENTS_CONTAINER);
     } catch (err) {
       if (err.code !== "ENOENT") throw err;
     }
+    const legacyPath = getLegacyLocalFilePath(note.projectid, noteId, filename);
+    if (legacyPath) await fsp.rm(legacyPath, { force: true });
 
     res.json({
       success: true,
@@ -396,7 +430,7 @@ export const getAttachmentMetadata = async (req, res) => {
 
     const note = await verifyNoteAccess(noteId, userId, req.db);
 
-    const filePath = getLocalFilePath(note.projectid, noteId, filename);
+    const filePath = await resolveAttachmentFilePath(note, noteId, filename);
 
     let stats;
     try {
@@ -412,13 +446,12 @@ export const getAttachmentMetadata = async (req, res) => {
       success: true,
       data: {
         filename,
-        blobName: `project-${note.projectid}/note-${noteId}/${filename}`,
-        url: localStorageService.fileUrl(ATTACHMENTS_CONTAINER, `project-${note.projectid}/note-${noteId}/${filename}`),
+        blobName: `note-${noteId}/${filename}`,
+        url: localStorageService.fileUrl(ATTACHMENTS_CONTAINER, `note-${noteId}/${filename}`),
         contentType: getMimeType(filename),
         size: stats.size,
         lastModified: stats.mtime,
         noteId,
-        projectId: note.projectid,
       },
     });
   } catch (error) {
@@ -450,7 +483,7 @@ export const updateAttachmentMetadata = async (req, res) => {
 
     const note = await verifyNoteAccess(noteId, userId, req.db);
 
-    const filePath = getLocalFilePath(note.projectid, noteId, filename);
+    const filePath = await resolveAttachmentFilePath(note, noteId, filename);
 
     try {
       await fsp.access(filePath);

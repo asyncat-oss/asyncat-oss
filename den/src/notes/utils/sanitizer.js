@@ -293,7 +293,6 @@ export const noteValidationSchema = Joi.object({
   content: Joi.alternatives()
     .try(Joi.string(), Joi.object(), Joi.array())
     .optional(),
-  projectId: Joi.string().uuid().optional(),
   blocks: Joi.array()
     .items(
       Joi.object({

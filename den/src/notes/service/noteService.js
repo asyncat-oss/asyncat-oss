@@ -10,47 +10,6 @@ const isValidUUID = (uuid) => {
   );
 };
 
-/**
- * Single-user access check: verify the project belongs to the requesting user.
- * Replaces the old project_members-based checkProjectAccess.
- */
-const checkProjectAccess = async (projectId, userId, _role = null, db = null) => {
-  try {
-    const dbClient = db || getSupabase();
-    const { data: project, error } = await dbClient
-      .from("projects")
-      .select("owner_id")
-      .eq("id", projectId)
-      .single();
-
-    if (error || !project) return false;
-    return project.owner_id === userId;
-  } catch (err) {
-    console.error("Project access check error:", err);
-    return false;
-  }
-};
-
-// Helper to get user's project IDs (projects owned by the user)
-const getUserProjectIds = async (userId, db = null) => {
-  try {
-    const dbClient = db || getSupabase();
-    const { data, error } = await dbClient
-      .from("projects")
-      .select("id")
-      .eq("owner_id", userId);
-
-    if (error) {
-      console.error("Error getting user project IDs:", error);
-      return [];
-    }
-    return (data || []).map((row) => row.id);
-  } catch (error) {
-    console.error("Error getting user project IDs:", error);
-    return [];
-  }
-};
-
 // Helper to fetch user info by id (replaces Supabase join syntax)
 const getUserById = async (userId, db = null) => {
   if (!userId) return null;
@@ -91,46 +50,18 @@ const attachCreators = async (notes, db) => {
   return notes.map((n) => ({ ...n, users: userMap[n.createdby] || null }));
 };
 
-// Enhanced get notes with proper project handling
-const getNotes = async (
-  userId,
-  projectId = null,
-  excludeContent = false,
-  db = null
-) => {
+const getNotes = async (userId, excludeContent = false, db = null) => {
   try {
     const dbClient = db || getSupabase();
 
     // Build select columns (no join syntax — compat layer doesn't support it)
     const cols = excludeContent
-      ? "id, title, projectid, createdby, createdat, updatedat, isstarred, isarchived, metadata"
+      ? "id, title, createdby, createdat, updatedat, isstarred, isarchived, metadata"
       : "*";
 
     let query = dbClient.from("notes").select(cols);
 
-    if (projectId === "all") {
-      const userProjectIds = await getUserProjectIds(userId, dbClient);
-      if (userProjectIds.length === 0) {
-        query = query.eq("createdby", userId);
-      } else {
-        query = query.or(
-          `createdby.eq.${userId},projectid.in.(${userProjectIds.join(",")})`
-        );
-      }
-    } else if (!projectId) {
-      query = query.eq("createdby", userId);
-    } else {
-      if (!isValidUUID(projectId)) {
-        throw new Error("Invalid project ID format");
-      }
-
-      const hasAccess = await checkProjectAccess(projectId, userId, null, dbClient);
-      if (!hasAccess) {
-        throw new Error("You do not have permission to access notes for this project");
-      }
-
-      query = query.eq("projectid", projectId);
-    }
+    query = query.eq("createdby", userId);
 
     const { data: notes, error } = await query.order("updatedat", { ascending: false });
 
@@ -145,30 +76,17 @@ const getNotes = async (
   }
 };
 
-// Enhanced create note with proper project handling
+// Create a standalone user-owned note.
 const createNote = async (noteData, userId, db = null) => {
   try {
-    const { title, content, projectId, metadata } = noteData;
-
-    if (!projectId) {
-      throw new Error("Project ID is required");
-    }
-
-    if (!isValidUUID(projectId)) {
-      throw new Error("Invalid project ID format");
-    }
-
+    const { title, content, metadata } = noteData;
     const dbClient = db || getSupabase();
-    const hasAccess = await checkProjectAccess(projectId, userId, null, dbClient);
-    if (!hasAccess) {
-      throw new Error("You do not have permission to create notes in this project");
-    }
 
     const noteToCreate = {
       id: randomUUID(),
       title: title || "Untitled Note",
       content: content || "",
-      projectid: projectId,
+      projectid: null,
       createdby: userId,
       metadata: metadata || {},
       createdat: new Date().toISOString(),
@@ -216,9 +134,7 @@ const getNoteById = async (id, userId, db = null) => {
       throw new Error("Note not found");
     }
 
-    // Single-user: check project ownership
-    const hasAccess = await checkProjectAccess(note.projectid, userId, null, dbClient);
-    if (!hasAccess) {
+    if (note.createdby !== userId) {
       throw new Error("You do not have permission to access this note");
     }
 
@@ -256,27 +172,12 @@ const updateNote = async (
 
     if (!note) throw new Error("Note not found");
 
-    // Single-user: check project ownership
-    const hasAccess = await checkProjectAccess(note.projectid, userId, null, dbClient);
-    if (!hasAccess) {
+    if (note.createdby !== userId) {
       throw new Error("You do not have permission to update this note");
     }
 
-    // Handle projectId updates
-    if ("projectId" in updates) {
-      if (!updates.projectId) {
-        throw new Error("Project ID is required and cannot be empty");
-      } else if (isValidUUID(updates.projectId)) {
-        const targetAccess = await checkProjectAccess(updates.projectId, userId, null, dbClient);
-        if (!targetAccess) {
-          throw new Error("You do not have permission to move note to this project");
-        }
-        updates.projectid = updates.projectId;
-      } else {
-        throw new Error("Invalid project ID format");
-      }
-      delete updates.projectId;
-    }
+    delete updates.projectId;
+    delete updates.projectid;
 
     // Handle camelCase to snake_case conversions
     if ("isStarred" in updates) {
@@ -359,9 +260,7 @@ const deleteNote = async (
 
     if (!note) throw new Error("Note not found");
 
-    // Single-user: check project ownership
-    const hasAccess = await checkProjectAccess(note.projectid, userId, null, dbClient);
-    if (!hasAccess) {
+    if (note.createdby !== userId) {
       throw new Error("You do not have permission to delete this note");
     }
 
@@ -378,12 +277,6 @@ const deleteNote = async (
   } catch (error) {
     throw error;
   }
-};
-
-const calculateWordCount = (content) => {
-  if (!content) return 0;
-  const plainText = content.replace(/<[^>]*>/g, "");
-  return plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
 };
 
 export {

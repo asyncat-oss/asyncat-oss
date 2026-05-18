@@ -497,7 +497,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
 const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page']);
 const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'mermaid']);
 
-function ArtifactResultCard({ result, prominent = false }) {
+function ArtifactResultCard({ result, prominent = false, onViewInPanel }) {
   if (!result?.artifact) return null;
   const artifact = result.artifact;
   const shouldAutoExpand = AUTO_EXPAND_ARTIFACT_TYPES.has(artifact.type || artifact.originalType);
@@ -506,20 +506,28 @@ function ArtifactResultCard({ result, prominent = false }) {
     return (
       <FeedFrame className="mb-4">
         <div className="mb-1.5 flex items-center gap-2 px-0.5">
-          <FilePlus className="h-3.5 w-3.5 text-fuchsia-500" />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Artifact created</span>
-          <span className="min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-600">
+          <FilePlus className="h-3.5 w-3.5 text-fuchsia-500 flex-shrink-0" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 flex-shrink-0">Artifact created</span>
+          <span className="min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-600 flex-1">
             {artifact.path || artifact.filename}
           </span>
         </div>
-        <ArtifactCard artifact={artifact} defaultExpanded={shouldAutoExpand} />
+        <ArtifactCard
+          artifact={artifact}
+          defaultExpanded={shouldAutoExpand && !onViewInPanel}
+          onOpen={onViewInPanel ? () => onViewInPanel(artifact) : null}
+        />
       </FeedFrame>
     );
   }
 
   return (
     <div className="mt-1 mb-2">
-      <ArtifactCard artifact={artifact} defaultExpanded={shouldAutoExpand} />
+      <ArtifactCard
+        artifact={artifact}
+        defaultExpanded={shouldAutoExpand && !onViewInPanel}
+        onOpen={onViewInPanel ? () => onViewInPanel(artifact) : null}
+      />
     </div>
   );
 }
@@ -1955,7 +1963,7 @@ function buildRunStats(events = []) {
   return { rounds, toolCount, memoriesSaved, skillsLearned, toolsSeen, completedAt };
 }
 
-function RunSummaryCard({ events, runStartedAt, sessionId, session }) {
+function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifactInPanel }) {
   const [expanded, setExpanded] = useState(false);
   const [stateData, setStateData] = useState(null);
   const [stateLoading, setStateLoading] = useState(false);
@@ -2030,166 +2038,120 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session }) {
     }
   };
 
+  // Build summary line for the collapsed header
+  const summaryParts = [];
+  if (hasArtifacts) summaryParts.push(`${runArtifacts.length} artifact${runArtifacts.length !== 1 ? 's' : ''}`);
+  if (hasFiles) summaryParts.push(`${files.length} file${files.length !== 1 ? 's' : ''}`);
+  if (hasToolActivity) summaryParts.push(`${toolCount} tool${toolCount !== 1 ? 's' : ''}`);
+  if (hasMemoryActivity) summaryParts.push(`${memoriesSaved} mem`);
+  if (hasSkillActivity) summaryParts.push(`${skillsLearned} skill`);
+  if (elapsedMs > 0) summaryParts.push(formatElapsed(elapsedMs));
+  const summaryLine = summaryParts.join(' · ');
+
   return (
-    <FeedFrame className="mb-4 mt-2">
-      <div className="overflow-hidden rounded-xl border border-gray-200/60 dark:border-gray-800/60 midnight:border-slate-800/60 shadow-sm">
-        {/* Header — thin emerald left accent signals completion */}
-        <button
-          type="button"
-          onClick={() => setExpanded(v => !v)}
-          className="flex w-full items-center gap-2.5 pl-3 pr-4 py-2.5 text-left bg-white dark:bg-gray-900 midnight:bg-slate-950 hover:bg-gray-50/70 dark:hover:bg-gray-800/30 transition-colors border-l-2 border-emerald-400 dark:border-emerald-600"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
-          <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">Run complete</span>
-          {elapsedMs > 0 && (
-            <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{formatElapsed(elapsedMs)}</span>
+    <FeedFrame className="mb-3 mt-1">
+      {/* Header — same style as ThinkingEvent / AgentWorkDrawer */}
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="flex w-full items-center gap-1.5 py-0.5 text-left group"
+      >
+        {expanded
+          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />
+          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />}
+        <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500 dark:text-emerald-400" />
+        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors truncate">
+          Run complete{summaryLine ? ` · ${summaryLine}` : ''}
+        </span>
+        <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 ml-1" />
+      </button>
+
+      {/* Expanded detail — no card border, just indented sections */}
+      {expanded && (
+        <div className="mt-2 pl-4 space-y-0 border-l-2 border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+          {/* Dev server hint */}
+          {previewUrl && (
+            <div className="flex items-center gap-2 py-1.5">
+              <Globe className="h-3 w-3 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                Dev server at <code className="font-mono text-[10px]">{previewUrl}</code> — click <strong>Preview</strong> in the toolbar.
+              </span>
+            </div>
           )}
-          <div className="ml-auto flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-            {hasArtifacts && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2 py-0.5 text-[10px] font-medium text-fuchsia-600 dark:bg-fuchsia-950/40 dark:text-fuchsia-400">
-                <FilePlus className="h-2.5 w-2.5" />{runArtifacts.length} artifact{runArtifacts.length !== 1 ? 's' : ''}
-              </span>
-            )}
-            {hasFiles && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
-                <Pencil className="h-2.5 w-2.5" />{files.length} file{files.length !== 1 ? 's' : ''}
-              </span>
-            )}
-            {hasToolActivity && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                <Zap className="h-2.5 w-2.5" />{toolCount} tool{toolCount !== 1 ? 's' : ''}
-              </span>
-            )}
-            {hasMemoryActivity && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:bg-violet-950/40 dark:text-violet-400">
-                <BookMarked className="h-2.5 w-2.5" />{memoriesSaved} mem
-              </span>
-            )}
-            {hasSkillActivity && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                <Brain className="h-2.5 w-2.5" />{skillsLearned} skill
-              </span>
-            )}
-            {expanded
-              ? <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 ml-0.5" />
-              : <ChevronRight className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 ml-0.5" />}
-          </div>
-        </button>
 
-        {/* Expanded */}
-        {expanded && (
-          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/30 dark:bg-gray-900/40 midnight:bg-slate-950/60 border-l-2 border-l-emerald-400/30 dark:border-l-emerald-600/30">
-            {/* Dev server hint */}
-            {previewUrl && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-emerald-100 dark:border-emerald-900/30">
-                <Globe className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <span className="text-[11px] text-emerald-700 dark:text-emerald-300 flex-1 min-w-0">
-                  Dev server at <code className="font-mono">{previewUrl}</code> — click <strong>Preview</strong> in the toolbar to open it.
-                </span>
-              </div>
-            )}
+          {/* Artifacts */}
+          {hasArtifacts && (
+            <div className="py-1.5 space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Artifacts</p>
+              {runArtifacts.map((ev, i) => (
+                <ArtifactResultCard key={`run_art_${i}`} result={ev.result} onViewInPanel={onViewArtifactInPanel} />
+              ))}
+            </div>
+          )}
 
-            {/* Artifacts created */}
-            {hasArtifacts && (
-              <div className="px-4 pt-2.5 pb-2 border-b border-gray-100 dark:border-gray-800">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-fuchsia-500 dark:text-fuchsia-400 mb-2">
-                  Artifact{runArtifacts.length !== 1 ? 's' : ''} created
-                </p>
-                <div className="space-y-1.5">
-                  {runArtifacts.map((ev, i) => {
-                    const art = ev.result.artifact;
-                    return (
-                      <ArtifactResultCard key={`run_art_${i}`} result={ev.result} />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* File + command changes */}
-            {(hasFiles || hasCommands) && (
-              <div className="divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
-                <div className="px-4 pt-2 pb-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    {[hasFiles && `${files.length} file${files.length !== 1 ? 's' : ''}`, hasCommands && `${commands.length} command${commands.length !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
-                  </span>
-                </div>
+          {/* Files + commands */}
+          {(hasFiles || hasCommands) && (
+            <div className="py-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
+                {[hasFiles && `${files.length} file${files.length !== 1 ? 's' : ''}`, hasCommands && `${commands.length} command${commands.length !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
+              </p>
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
                 {files.map((change, i) => (
-                  <FileChangeRow
-                    key={`${change.path}-${i}`}
-                    change={change}
-                    state={stateData?.fileStates?.[change.path] || { state: 'unknown' }}
-                  />
+                  <FileChangeRow key={`${change.path}-${i}`} change={change} state={stateData?.fileStates?.[change.path] || { state: 'unknown' }} />
                 ))}
                 {commands.map((change, i) => (
                   <CommandRow key={`cmd-${i}`} change={change} />
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Tools used */}
-            {topTools.length > 0 && (
-              <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Tools used</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {topTools.map(({ name, count }) => (
-                    <span key={name} className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-                      {count > 1 && <span className="font-semibold text-gray-400">{count}×</span>}
-                      {name.replace(/_/g, ' ')}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Footer: rounds + revert controls */}
-            <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-              <div className="flex items-center gap-3">
-                {rounds > 0 && (
-                  <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{rounds} round{rounds !== 1 ? 's' : ''}</span>
-                )}
-                {elapsedMs > 0 && (
-                  <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{formatElapsed(elapsedMs)}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {sessionId && (
-                  <button
-                    type="button"
-                    onClick={refreshState}
-                    disabled={stateLoading}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-[10px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50 transition-colors"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${stateLoading ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </button>
-                )}
-                {hasFiles && checkpoint && (
-                  <button
-                    type="button"
-                    onClick={() => setShowRevertConfirm(true)}
-                    disabled={!revert?.available || reverting}
-                    title={revert?.available ? 'Revert this run' : (revert?.reason || 'Revert unavailable')}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-red-200 dark:border-red-800 text-[10px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
-                  >
-                    {reverting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                    {revert?.available ? 'Revert run' : 'Revert unavailable'}
-                  </button>
-                )}
+          {/* Tools used */}
+          {topTools.length > 0 && (
+            <div className="py-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Tools used</p>
+              <div className="flex flex-wrap gap-1.5">
+                {topTools.map(({ name, count }) => (
+                  <span key={name} className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+                    {count > 1 && <span className="font-semibold">{count}×</span>}
+                    {name.replace(/_/g, ' ')}
+                  </span>
+                ))}
               </div>
             </div>
+          )}
 
-            {revertMessage && (
-              <div className={`px-4 py-2 text-[11px] flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 ${revertMessage.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                {revertMessage.type === 'success'
-                  ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-                  : <AlertCircle className="w-3 h-3 flex-shrink-0" />}
-                {revertMessage.text}
-              </div>
-            )}
+          {/* Footer controls */}
+          <div className="flex items-center justify-between gap-3 pt-1 pb-0.5">
+            <div className="flex items-center gap-3">
+              {rounds > 0 && <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{rounds} round{rounds !== 1 ? 's' : ''}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              {sessionId && (
+                <button type="button" onClick={refreshState} disabled={stateLoading}
+                  className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 transition-colors">
+                  <RefreshCw className={`w-3 h-3 ${stateLoading ? 'animate-spin' : ''}`} />Refresh
+                </button>
+              )}
+              {hasFiles && checkpoint && (
+                <button type="button" onClick={() => setShowRevertConfirm(true)} disabled={!revert?.available || reverting}
+                  title={revert?.available ? 'Revert this run' : (revert?.reason || 'Revert unavailable')}
+                  className="inline-flex items-center gap-1 text-[10px] text-red-500 dark:text-red-400 hover:text-red-700 disabled:opacity-50 transition-colors">
+                  {reverting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                  {revert?.available ? 'Revert run' : 'Revert unavailable'}
+                </button>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+
+          {revertMessage && (
+            <div className={`py-1.5 text-[11px] flex items-center gap-2 ${revertMessage.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+              {revertMessage.type === 'success' ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : <AlertCircle className="w-3 h-3 flex-shrink-0" />}
+              {revertMessage.text}
+            </div>
+          )}
+        </div>
+      )}
 
       <RevertRunModal
         open={showRevertConfirm}
@@ -2388,6 +2350,7 @@ export default function AgentRunFeed({
   runStartedAt,
   sessionId = null,
   session = null,
+  onViewArtifactInPanel = null,
   onPermissionDecision,
   onAskUserAnswer,
   onRetryTool,
@@ -2454,7 +2417,7 @@ export default function AgentRunFeed({
               onRunWithAction={onRunWithAction}
             />
             {segArtifacts.map((ev, ai) => (
-              <ArtifactResultCard key={`artifact_${si}_${ai}`} result={ev.result} prominent />
+              <ArtifactResultCard key={`artifact_${si}_${ai}`} result={ev.result} prominent onViewInPanel={onViewArtifactInPanel} />
             ))}
             {seg.answerEvent && (
               <AnswerEvent
@@ -2475,7 +2438,7 @@ export default function AgentRunFeed({
 
       {isRunning && <StreamingPreview text={streamingText} />}
       {isRunning && !streamingText && <RunningIndicator runStartedAt={runStartedAt} />}
-      {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} sessionId={sessionId} session={session} />}
+      {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} sessionId={sessionId} session={session} onViewArtifactInPanel={onViewArtifactInPanel} />}
     </div>
   );
 }

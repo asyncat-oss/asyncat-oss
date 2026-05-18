@@ -264,6 +264,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
   });
   const [sidePanelTab, setSidePanelTab] = useState('steps');
+  const [prevSidePanelTab, setPrevSidePanelTab] = useState('steps');
+  const [sidePanelWidth, setSidePanelWidth] = useState(384);
+  const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const panelDragRef = useRef({ active: false, startX: 0, startW: 0 });
   const [gitState, setGitState] = useState(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitError, setGitError] = useState(null);
@@ -615,6 +619,38 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return next;
     });
   }, [sidePanelTab]);
+
+  // Drag-to-resize side panel
+  useEffect(() => {
+    const onMove = (e) => {
+      const d = panelDragRef.current;
+      if (!d.active) return;
+      const dx = d.startX - e.clientX;
+      const w = Math.max(280, Math.min(window.innerWidth * 0.5, d.startW + dx));
+      setSidePanelWidth(w);
+    };
+    const onUp = () => { panelDragRef.current.active = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
+
+  const handlePanelDragStart = useCallback((e) => {
+    panelDragRef.current = { active: true, startX: e.clientX, startW: sidePanelWidth };
+    e.preventDefault();
+  }, [sidePanelWidth]);
+
+  const handleViewArtifactInPanel = useCallback((artifact) => {
+    setSelectedArtifact(artifact);
+    setShowActivitySidebar(true);
+    setPrevSidePanelTab(tab => tab === 'artifact' ? 'steps' : tab);
+    setSidePanelTab('artifact');
+    try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* noop */ }
+  }, []);
+
+  const handleArtifactPanelBack = useCallback(() => {
+    setSidePanelTab(prev => prev === 'artifact' ? prevSidePanelTab : prev);
+  }, [prevSidePanelTab]);
 
   const handleGitChanged = useCallback(() => {
     refreshGitState();
@@ -2520,6 +2556,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     runStartedAt={runStartedAtRef.current}
                     sessionId={agentCurrentSessionId}
                     session={agentCurrentSession}
+                    onViewArtifactInPanel={handleViewArtifactInPanel}
                     onPermissionDecision={handleAgentPermission}
                     onAskUserAnswer={handleAgentAskUser}
                     onRetryTool={handleRetryTool}
@@ -2591,47 +2628,23 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
-        <aside className="hidden xl:block w-96 shrink-0 border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700">
-          <CommandCenterSidePanel
-            activeTab={sidePanelTab}
-            stepsItems={agentActivityItems}
-            stepsLoading={agentLoadingSession}
-            isRunning={agentRunning}
-            sourceCatalog={sourceCatalog}
-            gitState={gitState}
-            gitLoading={gitLoading}
-            gitError={gitError}
-            onGitRefresh={refreshGitState}
-            onGitChanged={handleGitChanged}
-            onAttachGitFile={handleAttachGitFile}
-            workingDir={workingContext?.workingDir || null}
-            recentConversations={recentConversations}
-            recentConversationsLoading={recentConversationsLoading}
-            recentConversationsError={recentConversationsError}
-            activeConversationIds={activeConversationIds}
-            currentConversationId={currentConversationId}
-            onOpenConversation={handleOpenConversation}
-            navigate={navigate}
-            highlights={conversationHighlights}
-            onOpenSavedMessage={handleOpenSavedMessage}
-            previewUrl={effectivePreviewUrl}
-          />
-        </aside>
-      )}
-
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
-        <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
-          <button
-            type="button"
-            className="flex-1"
-            onClick={() => setShowActivitySidebar(false)}
-            aria-label="Close side panel"
-          />
-          <div className="h-full w-[min(24rem,92vw)] border-l border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950">
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+        <aside
+          style={{ width: sidePanelWidth }}
+          className="hidden xl:flex xl:shrink-0 relative border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700"
+        >
+          {/* Drag handle — hover shows a subtle line, cursor changes to resize */}
+          <div
+            onMouseDown={handlePanelDragStart}
+            className="absolute left-0 top-0 bottom-0 w-1.5 z-10 cursor-col-resize group hover:bg-indigo-400/20 transition-colors"
+            title="Drag to resize"
+          >
+            <div className="absolute left-0.5 top-1/2 -translate-y-1/2 h-10 w-0.5 rounded-full bg-transparent group-hover:bg-indigo-400 transition-colors" />
+          </div>
+          <div className="flex-1 min-w-0">
             <CommandCenterSidePanel
               activeTab={sidePanelTab}
-              onClose={() => setShowActivitySidebar(false)}
+              onBack={handleArtifactPanelBack}
               stepsItems={agentActivityItems}
               stepsLoading={agentLoadingSession}
               isRunning={agentRunning}
@@ -2653,6 +2666,47 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
+              selectedArtifact={selectedArtifact}
+            />
+          </div>
+        </aside>
+      )}
+
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+        <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
+          <button
+            type="button"
+            className="flex-1"
+            onClick={() => setShowActivitySidebar(false)}
+            aria-label="Close side panel"
+          />
+          <div className="h-full w-[min(24rem,92vw)] border-l border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950">
+            <CommandCenterSidePanel
+              activeTab={sidePanelTab}
+              onClose={() => setShowActivitySidebar(false)}
+              onBack={handleArtifactPanelBack}
+              stepsItems={agentActivityItems}
+              stepsLoading={agentLoadingSession}
+              isRunning={agentRunning}
+              sourceCatalog={sourceCatalog}
+              gitState={gitState}
+              gitLoading={gitLoading}
+              gitError={gitError}
+              onGitRefresh={refreshGitState}
+              onGitChanged={handleGitChanged}
+              onAttachGitFile={handleAttachGitFile}
+              workingDir={workingContext?.workingDir || null}
+              recentConversations={recentConversations}
+              recentConversationsLoading={recentConversationsLoading}
+              recentConversationsError={recentConversationsError}
+              activeConversationIds={activeConversationIds}
+              currentConversationId={currentConversationId}
+              onOpenConversation={handleOpenConversation}
+              navigate={navigate}
+              highlights={conversationHighlights}
+              onOpenSavedMessage={handleOpenSavedMessage}
+              previewUrl={effectivePreviewUrl}
+              selectedArtifact={selectedArtifact}
             />
           </div>
         </div>

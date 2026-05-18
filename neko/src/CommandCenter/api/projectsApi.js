@@ -26,25 +26,6 @@ export const projectsApi = {
       data: filteredProjects,
       projects: filteredProjects
     };
-  },
-
-  getNotesEnabledProjects: async () => {
-    const result = await apiRequest(ENDPOINTS.PROJECTS);
-    const allProjects = result.data || result.projects || result;
-
-    if (!Array.isArray(allProjects)) {
-      throw new Error('Invalid projects response format');
-    }
-
-    const notesEnabledProjects = allProjects.filter(project =>
-      project.has_notes !== false
-    );
-
-    return {
-      ...result,
-      data: notesEnabledProjects,
-      projects: notesEnabledProjects
-    };
   }
 };
 

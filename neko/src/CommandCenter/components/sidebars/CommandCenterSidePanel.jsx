@@ -1,10 +1,11 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect } from 'react';
-import { Activity, GitBranch, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Activity, GitBranch, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import GitPanel from '../git/GitPanel';
 import HistoryPanel from './HistoryPanel';
+import ArtifactCard from '../renderers/ArtifactRenderer';
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
@@ -13,6 +14,7 @@ const panelMeta = {
   history: { label: 'History', icon: History },
   saved: { label: 'Saved', icon: BookMarked },
   preview: { label: 'Preview', icon: Globe },
+  artifact: { label: 'Artifact', icon: FilePlus },
 };
 
 // ── Preview panel ─────────────────────────────────────────────────────────────
@@ -158,6 +160,25 @@ function PreviewPanel({ initialUrl }) {
   );
 }
 
+function ArtifactPanel({ artifact }) {
+  if (!artifact) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="text-center">
+          <FilePlus className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-600" />
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No artifact selected</p>
+          <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Click Open on any artifact to view it here.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col h-full p-3">
+      <ArtifactCard artifact={artifact} defaultExpanded fullHeight />
+    </div>
+  );
+}
+
 function SavedMessagesPanel({ highlights = null, onOpenMessage }) {
   const bookmarked = Array.isArray(highlights?.bookmarkedMessages) ? highlights.bookmarkedMessages : [];
 
@@ -205,6 +226,7 @@ function SavedMessagesPanel({ highlights = null, onOpenMessage }) {
 export default function CommandCenterSidePanel({
   activeTab,
   onClose,
+  onBack,
   stepsItems = [],
   stepsLoading = false,
   isRunning = false,
@@ -226,6 +248,7 @@ export default function CommandCenterSidePanel({
   highlights = null,
   onOpenSavedMessage,
   previewUrl = null,
+  selectedArtifact = null,
 }) {
   const currentTab = activeTab || 'steps';
   const meta = panelMeta[currentTab] || panelMeta.steps;
@@ -234,7 +257,18 @@ export default function CommandCenterSidePanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-[#0f1724] midnight:bg-[#0f1724]">
       <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-slate-800 midnight:border-slate-800">
-        <Icon className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+        {currentTab === 'artifact' && onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            title="Back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        ) : (
+          <Icon className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+        )}
         <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-slate-400">
           {meta.label}
         </span>
@@ -284,6 +318,9 @@ export default function CommandCenterSidePanel({
         )}
         {currentTab === 'preview' && (
           <PreviewPanel initialUrl={previewUrl} />
+        )}
+        {currentTab === 'artifact' && (
+          <ArtifactPanel artifact={selectedArtifact} />
         )}
       </div>
     </div>

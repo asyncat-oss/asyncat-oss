@@ -72,15 +72,11 @@ const OWNER_PERMISSIONS = {
 // =====================================================
 
 const VALID_PROJECT_VIEW_KEYS = [
-  'storage', 'kanban', 'list', 'gantt',
-  'notes', 'activity',
+  'kanban', 'list', 'gantt',
 ];
 
 const getDefaultEnabledViews = () => {
-  return [
-    'kanban', 'list',
-    'gantt', 'notes', 'activity', 'storage',
-  ];
+  return ['kanban', 'list', 'gantt'];
 };
 
 const normalizeProjectViews = (views) => {

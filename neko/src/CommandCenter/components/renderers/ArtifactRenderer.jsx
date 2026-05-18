@@ -7,7 +7,7 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Download, FileText, Table2, Code2,
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
-  X, Maximize2, Copy, Check, FileDown,
+  X, Maximize2, Copy, Check, FileDown, PanelRight,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer } from './BlockBasedMessageRenderer';
 import { agentApi } from '../../api';
@@ -174,9 +174,9 @@ function HtmlPreview({ content, title }) {
 
 // ── Main ArtifactCard ───────────────────────────────────────────────────────
 // Uses a <div> wrapper with onClick for toggle instead of nested buttons.
-export default function ArtifactCard({ artifact, defaultExpanded = false }) {
+export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen = null, fullHeight = false }) {
   const artifactData = artifact || {};
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(defaultExpanded && !onOpen);
   const [content, setContent] = useState(artifactData.content || null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
@@ -216,7 +216,8 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
 
   if (!artifact) return null;
 
-  const handleToggle = async () => {
+  const handleToggle = async (e) => {
+    if (onOpen) { e?.stopPropagation(); onOpen(); return; }
     if (!expanded) loadContent();
     setExpanded(v => !v);
   };
@@ -315,14 +316,18 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-100 bg-white/80 dark:border-gray-800 dark:bg-gray-950/30">
-      {/* Header — uses <div> with role="button" to avoid nested button issue */}
+    <div className={`overflow-hidden rounded-lg border border-gray-100 bg-white/80 dark:border-gray-800 dark:bg-gray-950/30 ${fullHeight ? 'flex flex-col h-full' : ''}`}>
+      {/* Header — interactive only when inline toggle is active */}
       <div
-        role="button"
-        tabIndex={0}
-        onClick={handleToggle}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleToggle()}
-        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left cursor-pointer select-none transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40"
+        {...((!onOpen && !fullHeight) ? {
+          role: 'button',
+          tabIndex: 0,
+          onClick: handleToggle,
+          onKeyDown: (e) => (e.key === 'Enter' || e.key === ' ') && handleToggle(),
+          className: 'flex w-full items-center gap-2.5 px-3 py-2.5 text-left cursor-pointer select-none transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40',
+        } : {
+          className: 'flex w-full items-center gap-2.5 px-3 py-2.5',
+        })}
       >
         {/* Accent dot */}
         <div className={`h-2 w-2 rounded-full flex-shrink-0 ${meta.accent}`} />
@@ -357,12 +362,22 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
           >
             {downloading ? <span className="block h-3.5 w-3.5 animate-pulse rounded-full bg-current opacity-50" /> : <Download className="h-3.5 w-3.5" />}
           </button>
-          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300">
-            {expanded ? 'Hide' : 'Preview'}
-            {expanded
-              ? <ChevronDown className="h-3.5 w-3.5" />
-              : <ChevronRight className="h-3.5 w-3.5" />}
-          </span>
+          {onOpen ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpen(); }}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-indigo-500 dark:hover:bg-gray-800 dark:hover:text-indigo-400"
+            >
+              Open <PanelRight className="h-3 w-3" />
+            </button>
+          ) : !fullHeight && (
+            <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300">
+              {expanded ? 'Hide' : 'View'}
+              {expanded
+                ? <ChevronDown className="h-3.5 w-3.5" />
+                : <ChevronRight className="h-3.5 w-3.5" />}
+            </span>
+          )}
         </div>
       </div>
 
@@ -374,8 +389,8 @@ export default function ArtifactCard({ artifact, defaultExpanded = false }) {
       )}
 
       {/* Expandable preview */}
-      {expanded && (
-        <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 max-h-80 overflow-y-auto">
+      {expanded && !onOpen && (
+        <div className={`border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 overflow-y-auto ${fullHeight ? 'flex-1 min-h-0' : 'max-h-80'}`}>
           {renderPreview()}
         </div>
       )}

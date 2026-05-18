@@ -6,14 +6,12 @@ import {
 	KanbanSquare,
 	List,
 	GanttChartSquare,
-	FileText,
 } from "lucide-react";
 
 // Import view components directly here
 import KanIndex from "../views/kanban/KanIndex";
 import ListView from "../views/list/ListView";
 import GanttView from "../views/gantt/GanttView";
-import NotesIndex from "../notes/NotesIndex";
 
 // Import context providers
 import { ColumnProvider } from "../views/context/ColumnProvider";
@@ -28,7 +26,6 @@ const PROJECT_VIEWS = [
 	{ key: 'kanban',   label: 'Board',    Icon: KanbanSquare },
 	{ key: 'list',     label: 'List',     Icon: List },
 	{ key: 'gantt',    label: 'Plan',     Icon: GanttChartSquare },
-	{ key: 'notes',    label: 'Notes',    Icon: FileText },
 ];
 
 const TASK_VIEW_COMPONENTS = {
@@ -205,12 +202,11 @@ const ProjectOverview = React.memo(({
 		}
 	};
 	useEffect(() => {
-		if (currentTab !== 'settings' && selectedProject?.id) {
-			const timeoutId = setTimeout(() => {
-				refreshProjectData();
-			}, 100);
-			return () => clearTimeout(timeoutId);
-		}
+		if (!selectedProject?.id) return;
+		const timeoutId = setTimeout(() => {
+			refreshProjectData();
+		}, 100);
+		return () => clearTimeout(timeoutId);
 	}, [currentTab, selectedProject?.id]);
 
 
@@ -220,15 +216,6 @@ const ProjectOverview = React.memo(({
 		const projectData = (selectedProject?.user_role || selectedProject?.owner_id) 
 			? selectedProject 
 			: (projectInfo || selectedProject);
-
-		if (currentTab === "notes") {
-			return (
-				<NotesIndex
-					selectedProject={projectData}
-					session={session}
-				/>
-			);
-		}
 
 		const ViewComponent = TASK_VIEW_COMPONENTS[currentTab];
 		if (!ViewComponent) return <div>No content available</div>;

@@ -99,8 +99,7 @@ export const NoteProvider = ({ children }) => {
           case "create":
             await notesApi.createNote(
               operation.noteData.title,
-              operation.noteData.content,
-              operation.noteData.projectId
+              operation.noteData.content
             );
             break;
           case "delete":
@@ -125,12 +124,12 @@ export const NoteProvider = ({ children }) => {
 
   // Load notes
   const loadNotes = useCallback(
-    async (projectId) => {
+    async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        const fetchedNotes = await notesApi.loadNotes(projectId);
+        const fetchedNotes = await notesApi.loadNotes();
         setNotes(fetchedNotes);
 
         return fetchedNotes;
@@ -220,8 +219,7 @@ export const NoteProvider = ({ children }) => {
 
         const newNote = await notesApi.createNote(
           noteData.title,
-          noteData.content,
-          noteData.projectId
+          noteData.content
         );
         setNotes((prev) => [newNote, ...prev]);
 
