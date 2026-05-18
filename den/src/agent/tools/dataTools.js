@@ -19,9 +19,19 @@ const AUDIO_EXTS = new Set(['wav', 'mp3', 'ogg', 'flac', 'm4a', 'webm']);
 
 
 
-function safePath(filePath, workingDir) {
-  const resolved = path.resolve(workingDir, filePath);
-  if (!resolved.startsWith(path.resolve(workingDir))) {
+function safePath(filePath, workingDir, workspaceRoot = workingDir) {
+  const roots = [workingDir, workspaceRoot]
+    .filter(Boolean)
+    .map(root => path.resolve(root));
+  const candidates = path.isAbsolute(filePath)
+    ? [path.resolve(filePath)]
+    : roots.map(root => path.resolve(root, filePath));
+  const resolved = candidates.find(candidate =>
+    roots.some(root => candidate === root || candidate.startsWith(root + path.sep)) &&
+    fs.existsSync(candidate)
+  ) || candidates[0];
+  const allowed = roots.some(root => resolved === root || resolved.startsWith(root + path.sep));
+  if (!allowed) {
     throw new Error(`Path "${filePath}" is outside the working directory`);
   }
   return resolved;
@@ -65,7 +75,7 @@ export const readPdfTool = {
     required: ['path'],
   },
   execute: async (args, context) => {
-    const filePath = path.resolve(context.workingDir, args.path);
+    const filePath = safePath(args.path, context.workingDir, context.workspaceRoot);
     if (!fs.existsSync(filePath)) return { success: false, error: `File not found: ${args.path}` };
     if (!filePath.endsWith('.pdf') && !filePath.toLowerCase().endsWith('.pdf')) {
       return { success: false, error: 'File does not appear to be a PDF.' };
@@ -112,7 +122,7 @@ export const readCsvTool = {
     required: ['path'],
   },
   execute: async (args, context) => {
-    const filePath = path.resolve(context.workingDir, args.path);
+    const filePath = safePath(args.path, context.workingDir, context.workspaceRoot);
     if (!fs.existsSync(filePath)) return { success: false, error: `File not found: ${args.path}` };
 
     try {
@@ -525,7 +535,7 @@ export const inspectAttachmentTool = {
     required: ['path'],
   },
   execute: async (args, context) => {
-    const filePath = safePath(args.path, context.workingDir);
+    const filePath = safePath(args.path, context.workingDir, context.workspaceRoot);
     if (!fs.existsSync(filePath)) return { success: false, error: `File not found: ${args.path}` };
     const stat = fs.statSync(filePath);
     if (stat.isDirectory()) return { success: false, error: `"${args.path}" is a directory, not a file.` };

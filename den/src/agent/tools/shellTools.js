@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { IS_WIN } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
+import { getTmpDir } from '../workspacePaths.js';
 const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '30000', 10); // 30s
 const MAX_OUTPUT = 16000; // chars
 const STREAM_INTERVAL_MS = 250; // how often to flush streaming progress
@@ -147,7 +148,7 @@ export const runPythonTool = {
     required: ['code'],
   },
   execute: async (args, context) => {
-    const tmpDir = path.join(context.workingDir, '.agent_tmp');
+    const tmpDir = getTmpDir(context.workingDir);
     fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = path.join(tmpDir, `script_${Date.now()}.py`);
     try {
@@ -181,7 +182,7 @@ export const runNodeTool = {
     required: ['code'],
   },
   execute: async (args, context) => {
-    const tmpDir = path.join(context.workingDir, '.agent_tmp');
+    const tmpDir = getTmpDir(context.workingDir);
     fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = path.join(tmpDir, `script_${Date.now()}.mjs`);
     try {

@@ -8,12 +8,11 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
 import { missingDepError, safePath, formatSize } from './shared.js';
-
-const ARTIFACTS_DIR_NAME = '.asyncat-artifacts';
+import { getArtifactsDir, getLegacyArtifactsDir } from '../workspacePaths.js';
 
 /** Ensure artifacts directory exists and return its path. */
 function ensureArtifactsDir(workingDir) {
-  const dir = path.join(workingDir, ARTIFACTS_DIR_NAME);
+  const dir = getArtifactsDir(workingDir);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -363,14 +362,20 @@ export const listArtifactsTool = {
   },
   execute: async (_args, context) => {
     try {
-      const artifactsDir = path.join(context.workingDir, ARTIFACTS_DIR_NAME);
-      if (!fs.existsSync(artifactsDir)) {
+      const artifactsDir = getArtifactsDir(context.workingDir);
+      const legacyArtifactsDir = getLegacyArtifactsDir(context.workingDir);
+      if (!fs.existsSync(artifactsDir) && !fs.existsSync(legacyArtifactsDir)) {
         return { success: true, count: 0, artifacts: [], message: 'No artifacts found.' };
       }
 
-      const files = fs.readdirSync(artifactsDir).filter(f => !f.startsWith('.'));
-      const artifacts = files.map(f => {
-        const filePath = path.join(artifactsDir, f);
+      const seen = new Set();
+      const artifacts = [artifactsDir, legacyArtifactsDir]
+        .filter(dir => fs.existsSync(dir))
+        .flatMap(dir => fs.readdirSync(dir)
+          .filter(f => !f.startsWith('.') && !seen.has(f))
+          .map(f => {
+        seen.add(f);
+        const filePath = path.join(dir, f);
         const stat = fs.statSync(filePath);
         const ext = path.extname(f).toLowerCase();
         return {
@@ -381,7 +386,7 @@ export const listArtifactsTool = {
           sizeBytes: stat.size,
           modified: stat.mtime.toISOString(),
         };
-      }).sort((a, b) => b.modified.localeCompare(a.modified));
+      })).sort((a, b) => b.modified.localeCompare(a.modified));
 
       return {
         success: true,
@@ -515,7 +520,7 @@ export const generatePdfTool = {
     required: ['title', 'content'],
   },
   execute: async (args, context) => {
-    const ARTIFACTS_DIR = path.join(context.workingDir, ARTIFACTS_DIR_NAME);
+    const ARTIFACTS_DIR = getArtifactsDir(context.workingDir);
     if (!fs.existsSync(ARTIFACTS_DIR)) {
       fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
     }
@@ -643,4 +648,3 @@ export const artifactTools = [
   listArtifactsTool,
 ];
 export default artifactTools;
-

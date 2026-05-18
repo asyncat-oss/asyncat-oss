@@ -177,7 +177,8 @@ class BasalGanglia {
     if (!skillName || !skillBody) return;
 
     try {
-      const userSkillsDir = path.join(process.env.HOME || process.env.USERPROFILE, '.asyncat', 'skills');
+      const asyncatHome = process.env.ASYNCAT_HOME || path.join(process.env.HOME || process.env.USERPROFILE, '.asyncat');
+      const userSkillsDir = path.join(asyncatHome, 'skills');
       if (!fs.existsSync(userSkillsDir)) {
         fs.mkdirSync(userSkillsDir, { recursive: true });
       }

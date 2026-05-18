@@ -548,8 +548,7 @@ export const MessageInputV2 = ({
     if (!picked.length || disabled) return;
 
     const rootId = activeWorkingContext?.rootId || "workspace";
-    const basePath = activeWorkingContext?.relativePath || ".";
-    const uploadDir = joinRelativePath(basePath, ".asyncat-attachments");
+    const uploadDir = ".asyncat/attachments";
     setUploadingAttachment(true);
     setError(null);
 

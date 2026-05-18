@@ -1,6 +1,7 @@
 // chatService.js - Simplified with SQLite client
 import { sqliteDb as db } from '../../../db/sqlite.js';
 import rawDb from '../../../db/client.js';
+import { deleteCheckpoint } from '../../../agent/AgentRuntime.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const SQLITE_UTC_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
@@ -9,6 +10,52 @@ class ChatService {
   constructor() {
     this.cache = new Map();
     this.defaultTTL = 5 * 60 * 1000; // 5 minutes
+  }
+
+  collectAgentSessionIds(value, out = new Set()) {
+    if (!value) return out;
+    if (Array.isArray(value)) {
+      value.forEach(item => this.collectAgentSessionIds(item, out));
+      return out;
+    }
+    if (typeof value !== 'object') return out;
+
+    for (const [key, item] of Object.entries(value)) {
+      if ((key === 'agentSessionId' || key === 'sessionId') && typeof item === 'string' && item.trim()) {
+        out.add(item.trim());
+      } else if (item && typeof item === 'object') {
+        this.collectAgentSessionIds(item, out);
+      }
+    }
+    return out;
+  }
+
+  cleanupAgentCheckpointsForMessages(userId, messages = []) {
+    const sessionIds = [...this.collectAgentSessionIds(messages)];
+    if (!sessionIds.length) return { sessions: 0, checkpoints: 0 };
+
+    const placeholders = sessionIds.map(() => '?').join(',');
+    const rows = rawDb.prepare(`
+      SELECT id, scratchpad
+      FROM agent_sessions
+      WHERE user_id = ? AND id IN (${placeholders})
+    `).all(userId, ...sessionIds);
+
+    let checkpoints = 0;
+    const update = rawDb.prepare('UPDATE agent_sessions SET scratchpad = ?, updated_at = ? WHERE id = ?');
+    for (const row of rows) {
+      try {
+        const scratchpad = JSON.parse(row.scratchpad || '{}');
+        if (!scratchpad?.baselineCheckpoint) continue;
+        deleteCheckpoint(scratchpad.baselineCheckpoint);
+        delete scratchpad.baselineCheckpoint;
+        update.run(JSON.stringify(scratchpad), new Date().toISOString(), row.id);
+        checkpoints += 1;
+      } catch (err) {
+        console.warn(`[chat] Failed to clean checkpoints for agent session ${row.id}:`, err.message);
+      }
+    }
+    return { sessions: rows.length, checkpoints };
   }
 
   normalizeTimestamp(value, fallback = null) {
@@ -866,7 +913,7 @@ class ChatService {
       // because the WHERE deleted_at IS NULL condition no longer matches).
       const { data: existing } = await dbClient
         .from('conversations')
-        .select('id')
+        .select('id, messages')
         .eq('id', conversationId)
         .eq('user_id', userId)
         .eq('workspace_id', effectiveWorkspaceId)
@@ -876,6 +923,8 @@ class ChatService {
       if (!existing) {
         throw new Error('Conversation not found or access denied');
       }
+
+      this.cleanupAgentCheckpointsForMessages(userId, existing.messages || []);
 
       // Soft-delete: set deleted_at without trying to SELECT back
       await dbClient
@@ -936,6 +985,22 @@ class ChatService {
       const dbClient = authenticatedDb || db;
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
 
+      const { data: existing } = await dbClient
+        .schema('aichats')
+        .from('conversations')
+        .select('id, messages')
+        .eq('id', conversationId)
+        .eq('user_id', userId)
+        .eq('workspace_id', effectiveWorkspaceId)
+        .not('deleted_at', 'is', null)
+        .single();
+
+      if (!existing) {
+        throw new Error('Conversation not found in trash');
+      }
+
+      this.cleanupAgentCheckpointsForMessages(userId, existing.messages || []);
+
       const { data, error } = await dbClient
         .schema('aichats')
         .from('conversations')
@@ -989,6 +1054,20 @@ class ChatService {
       const dbClient = authenticatedDb || db;
       await this.setUserContext(userId);
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+
+      const { data: trashed, error: listError } = await dbClient
+        .schema('aichats')
+        .from('conversations')
+        .select('id, messages')
+        .eq('user_id', userId)
+        .eq('workspace_id', effectiveWorkspaceId)
+        .not('deleted_at', 'is', null);
+
+      if (listError) throw listError;
+
+      for (const conversation of trashed || []) {
+        this.cleanupAgentCheckpointsForMessages(userId, conversation.messages || []);
+      }
 
       const { error } = await dbClient
         .schema('aichats')

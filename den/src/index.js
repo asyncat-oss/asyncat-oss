@@ -53,13 +53,15 @@ import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
 
 // ─── Machine token ────────────────────────────────────────────────────────────
 import { randomUUID } from 'crypto';
-import { writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-const MACHINE_TOKEN_PATH = join(homedir(), '.asyncat_machine_token');
+const ASYNCAT_HOME = process.env.ASYNCAT_HOME || join(homedir(), '.asyncat');
+const MACHINE_TOKEN_PATH = join(ASYNCAT_HOME, 'machine_token');
 const MACHINE_TOKEN = randomUUID();
 try {
+  mkdirSync(ASYNCAT_HOME, { recursive: true });
   writeFileSync(MACHINE_TOKEN_PATH, MACHINE_TOKEN, { mode: 0o600 });
 } catch (e) {
   logger.warn('Could not write machine token:', e.message);

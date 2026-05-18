@@ -8,10 +8,13 @@ import { join } from 'path';
 import db from '../db/client.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
-const MACHINE_TOKEN_PATH = join(homedir(), '.asyncat_machine_token');
+const ASYNCAT_HOME = process.env.ASYNCAT_HOME || join(homedir(), '.asyncat');
+const MACHINE_TOKEN_PATH = join(ASYNCAT_HOME, 'machine_token');
+const LEGACY_MACHINE_TOKEN_PATH = join(homedir(), '.asyncat_machine_token');
 
 function getMachineToken() {
-  try { return readFileSync(MACHINE_TOKEN_PATH, 'utf8').trim(); } catch { return null; }
+  try { return readFileSync(MACHINE_TOKEN_PATH, 'utf8').trim(); } catch {}
+  try { return readFileSync(LEGACY_MACHINE_TOKEN_PATH, 'utf8').trim(); } catch { return null; }
 }
 
 /**

@@ -7,7 +7,7 @@ import { attachDb } from '../../db/sqlite.js';
 import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
-import { listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
+import { deleteCheckpoint, listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
@@ -23,6 +23,7 @@ import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
+import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -1484,6 +1485,7 @@ router.post('/run', authenticate, async (req, res) => {
       userId: req.user.id,
       workspaceId: req.workspaceId,
       workingDir: resolvedWorkingDir,
+      workspaceRoot: resolvedWorkingContext.rootPath || resolvedWorkingDir,
       maxRounds: resolvedMaxRounds,
       autoApprove: resolvedAutoApprove,
       requestPermission: createPermissionRequest(req, res),
@@ -1923,6 +1925,16 @@ router.patch('/sessions/:id', authenticate, async (req, res) => {
 
 router.delete('/sessions/:id', authenticate, async (req, res) => {
   try {
+    const sessionRow = db.prepare(
+      'SELECT scratchpad FROM agent_sessions WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id);
+    try {
+      const scratchpad = JSON.parse(sessionRow?.scratchpad || '{}');
+      if (scratchpad?.baselineCheckpoint) deleteCheckpoint(scratchpad.baselineCheckpoint);
+    } catch {
+      // Keep deletion resilient even if old scratchpad JSON is malformed.
+    }
+
     const result = db.prepare(
       'DELETE FROM agent_sessions WHERE id = ? AND user_id = ?'
     ).run(req.params.id, req.user.id);
@@ -2531,21 +2543,36 @@ router.post('/multi', authenticate, async (req, res) => {
 
 // ─── Artifact Routes ────────────────────────────────────────────────────────
 
-const ARTIFACTS_DIR_NAME = '.asyncat-artifacts';
+function findArtifactFile(workingDir, filename) {
+  const roots = [getArtifactsDir(workingDir), getLegacyArtifactsDir(workingDir)];
+  for (const root of roots) {
+    const filePath = path.join(root, filename);
+    if (filePath.startsWith(root) && fs.existsSync(filePath)) {
+      return { artifactsDir: root, filePath };
+    }
+  }
+  return null;
+}
 
 /** List all artifacts in the workspace. */
 router.get('/artifacts', jwtVerify, (req, res) => {
   try {
     const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
-    const artifactsDir = path.join(workingDir, ARTIFACTS_DIR_NAME);
+    const artifactsDir = getArtifactsDir(workingDir);
+    const legacyArtifactsDir = getLegacyArtifactsDir(workingDir);
 
-    if (!fs.existsSync(artifactsDir)) {
+    if (!fs.existsSync(artifactsDir) && !fs.existsSync(legacyArtifactsDir)) {
       return res.json({ success: true, count: 0, artifacts: [] });
     }
 
-    const files = fs.readdirSync(artifactsDir).filter(f => !f.startsWith('.'));
-    const artifacts = files.map(f => {
-      const filePath = path.join(artifactsDir, f);
+    const seen = new Set();
+    const artifacts = [artifactsDir, legacyArtifactsDir]
+      .filter(dir => fs.existsSync(dir))
+      .flatMap(dir => fs.readdirSync(dir)
+        .filter(f => !f.startsWith('.') && !seen.has(f))
+        .map(f => {
+      seen.add(f);
+      const filePath = path.join(dir, f);
       const stat = fs.statSync(filePath);
       const ext = path.extname(f).toLowerCase();
       const typeMap = {
@@ -2561,7 +2588,7 @@ router.get('/artifacts', jwtVerify, (req, res) => {
         size: stat.size,
         modified: stat.mtime.toISOString(),
       };
-    }).sort((a, b) => b.modified.localeCompare(a.modified));
+    })).sort((a, b) => b.modified.localeCompare(a.modified));
 
     res.json({ success: true, count: artifacts.length, artifacts });
   } catch (err) {
@@ -2573,13 +2600,13 @@ router.get('/artifacts', jwtVerify, (req, res) => {
 router.get('/artifacts/:filename', jwtVerify, (req, res) => {
   try {
     const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
-    const artifactsDir = path.join(workingDir, ARTIFACTS_DIR_NAME);
     const filename = path.basename(req.params.filename);
-    const filePath = path.join(artifactsDir, filename);
+    const found = findArtifactFile(workingDir, filename);
 
-    if (!filePath.startsWith(artifactsDir) || !fs.existsSync(filePath)) {
+    if (!found) {
       return res.status(404).json({ success: false, error: 'Artifact not found' });
     }
+    const { filePath } = found;
 
     const ext = path.extname(filename).toLowerCase();
     const mimeMap = {
@@ -2615,13 +2642,13 @@ router.get('/artifacts/:filename', jwtVerify, (req, res) => {
 router.delete('/artifacts/:filename', jwtVerify, (req, res) => {
   try {
     const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
-    const artifactsDir = path.join(workingDir, ARTIFACTS_DIR_NAME);
     const filename = path.basename(req.params.filename);
-    const filePath = path.join(artifactsDir, filename);
+    const found = findArtifactFile(workingDir, filename);
 
-    if (!filePath.startsWith(artifactsDir) || !fs.existsSync(filePath)) {
+    if (!found) {
       return res.status(404).json({ success: false, error: 'Artifact not found' });
     }
+    const { filePath } = found;
 
     fs.unlinkSync(filePath);
     res.json({ success: true, deleted: filename });

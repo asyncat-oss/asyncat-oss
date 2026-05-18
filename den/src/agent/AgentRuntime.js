@@ -23,6 +23,7 @@ import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
+import { getSnapshotsDir } from './workspacePaths.js';
 import db from '../db/client.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
@@ -31,7 +32,10 @@ import { execSync } from 'child_process';
 
 const MAX_ROUNDS_DEFAULT = 25;
 const CHECKPOINTS = new Map();
-const SNAPSHOT_SKIP = new Set(['.git', 'node_modules', 'dist', 'build', 'data', 'logs']);
+const SNAPSHOT_SKIP = new Set([
+  '.git', 'node_modules', 'dist', 'build', 'data', 'logs',
+  '.asyncat', '.asyncat-attachments', '.asyncat-artifacts', '.agent_tmp',
+]);
 const MUTATING_FILE_TOOLS = new Set([
   'write_file', 'create_file', 'edit_file', 'patch_file', 'create_directory',
   'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
@@ -173,6 +177,7 @@ export class AgentRuntime {
     this.userId = opts.userId;
     this.workspaceId = opts.workspaceId;
     this.workingDir = opts.workingDir || process.cwd();
+    this.workspaceRoot = opts.workspaceRoot || opts.rootPath || this.workingDir;
     this.maxRounds = opts.maxRounds || MAX_ROUNDS_DEFAULT;
     this.onEvent = opts.onEvent || (() => {});
     this.autoApprove = opts.autoApprove === true || opts.autoApprove === 'all';
@@ -384,6 +389,7 @@ export class AgentRuntime {
       userId: this.userId,
       workspaceId: this.workspaceId,
       workingDir: this.workingDir,
+      workspaceRoot: this.workspaceRoot,
       session: this.session,
       emitEvent: (event) => this.onEvent(event),
       requestPermission: this.requestPermission
@@ -1540,7 +1546,7 @@ export class AgentRuntime {
           baseline,
         };
       } catch {
-        const snapRoot = path.join(workspace, '.asyncat', 'snapshots');
+        const snapRoot = getSnapshotsDir(workspace);
         const dir = path.join(snapRoot, id);
         fs.mkdirSync(dir, { recursive: true });
         this._copySnapshot(workspace, dir, workspace);
@@ -2119,6 +2125,36 @@ export class AgentRuntime {
 
 export function listCheckpoints() {
   return [...CHECKPOINTS.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+function isCheckpointSnapshotPath(snapshotDir, workspace) {
+  if (!snapshotDir || !workspace) return false;
+  const snapRoot = getSnapshotsDir(workspace);
+  const resolvedDir = path.resolve(snapshotDir);
+  const resolvedRoot = path.resolve(snapRoot);
+  const rel = path.relative(resolvedRoot, resolvedDir);
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+export function deleteCheckpoint(checkpoint) {
+  const cp = typeof checkpoint === 'object' && checkpoint !== null
+    ? checkpoint
+    : CHECKPOINTS.get(checkpoint);
+  if (!cp) return { success: true, deleted: false };
+
+  try {
+    if (cp.kind === 'dir_snapshot' && isCheckpointSnapshotPath(cp.dir, cp.workspace)) {
+      if (fs.existsSync(cp.dir)) {
+        fs.rmSync(cp.dir, { recursive: true, force: true });
+      }
+    } else if (cp.kind === 'git_stash' && /^stash@\{\d+\}$/.test(cp.ref)) {
+      try { execSync(`git stash drop ${cp.ref}`, { cwd: cp.workspace, stdio: 'ignore', timeout: 15000 }); } catch {}
+    }
+    CHECKPOINTS.delete(cp.id);
+    return { success: true, deleted: true, checkpoint: cp };
+  } catch (err) {
+    return { success: false, error: err.message, checkpoint: cp };
+  }
 }
 
 export function restoreCheckpoint(id) {

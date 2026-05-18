@@ -7,6 +7,7 @@
 
 import { PermissionLevel } from './toolRegistry.js';
 import { truncate, missingDepError } from './shared.js';
+import { getTmpDir } from '../workspacePaths.js';
 
 let browserInstance = null;
 let activePage = null;
@@ -110,7 +111,7 @@ export const screenshotTool = {
 
       const fs = await import('fs');
       const path = await import('path');
-      const dir = path.default.join(context.workingDir, '.agent_tmp');
+      const dir = getTmpDir(context.workingDir);
       fs.default.mkdirSync(dir, { recursive: true });
       const filePath = path.default.join(dir, `screenshot_${Date.now()}.png`);
       await page.screenshot({ path: filePath, fullPage: args.full_page || false });
