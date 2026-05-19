@@ -463,7 +463,8 @@ export class AgentRuntime {
     const FAILURE_STRATEGY_THRESHOLD = 3;
     // Plan-driven continuation: limits how many times we nudge the agent
     let planContinuationNudges = 0;
-    const MAX_PLAN_NUDGES = 3;
+    // In plan mode, agent should converge quickly — fewer nudges, less looping
+    const MAX_PLAN_NUDGES = this.agentMode === 'plan' ? 1 : 3;
 
     for (let round = 0; round < this.maxRounds; round++) {
       this._throwIfAborted();
@@ -932,17 +933,33 @@ export class AgentRuntime {
               const recentFailures = this.session.toolHistory.slice(-3)
                 .filter(t => t.result?.success === false)
                 .map(t => `  ${t.tool}: ${String(t.result?.error || 'failed').slice(0, 100)}`);
-              messages.push({
-                role: 'user',
-                content: [
-                  `⚠️ ${consecutiveFailures} consecutive tool failures detected.`,
-                  `Error pattern: ${errorCategory.name}`,
-                  recentFailures.length > 0 ? `Recent failures:\n${recentFailures.join('\n')}` : '',
-                  `Recommended recovery: ${errorCategory.recovery}`,
-                  '',
-                  'Do NOT repeat the same approach. Use a completely different strategy.',
-                ].filter(Boolean).join('\n'),
-              });
+
+              // In plan mode: tell the agent to STOP exploring and just answer
+              if (this.agentMode === 'plan') {
+                messages.push({
+                  role: 'user',
+                  content: [
+                    `⚠️ ${consecutiveFailures} consecutive tool failures in Plan mode.`,
+                    recentFailures.length > 0 ? `Recent failures:\n${recentFailures.join('\n')}` : '',
+                    '',
+                    'You are in Plan mode. Do NOT keep trying different tools or strategies.',
+                    'STOP exploring and provide your Answer now based on what you have already gathered.',
+                    'Summarize what you found, propose a plan, and tell the user to switch to Action mode to execute it.',
+                  ].filter(Boolean).join('\n'),
+                });
+              } else {
+                messages.push({
+                  role: 'user',
+                  content: [
+                    `⚠️ ${consecutiveFailures} consecutive tool failures detected.`,
+                    `Error pattern: ${errorCategory.name}`,
+                    recentFailures.length > 0 ? `Recent failures:\n${recentFailures.join('\n')}` : '',
+                    `Recommended recovery: ${errorCategory.recovery}`,
+                    '',
+                    'Do NOT repeat the same approach. Use a completely different strategy.',
+                  ].filter(Boolean).join('\n'),
+                });
+              }
             }
           } else {
             consecutiveFailures = 0; // reset on success
@@ -973,8 +990,18 @@ export class AgentRuntime {
             else break;
           }
           if (consecutiveCount >= maxDups) {
-            // Instead of immediately stopping, try a strategy-change nudge first
-            if (!this._loopNudgeSent) {
+            // In plan mode: stop immediately and answer — no nudge needed
+            if (this.agentMode === 'plan') {
+              const planModeStopThought = `Detected repeated ${tc.tool_name} in Plan mode — stopping immediately. Agent should answer with what it has.`;
+              reasoningEvents.push({ thought: planModeStopThought, round, timestamp: new Date().toISOString() });
+              this.onEvent({ type: 'thinking', data: { thought: planModeStopThought, round } });
+              messages.push({
+                role: 'user',
+                content: 'You are repeating tool calls in Plan mode. STOP using tools now and provide your Answer. Summarize what you found and propose a plan. The user can switch to Action mode to execute it.',
+              });
+              // Don't break — let the agent see this message and answer
+            } else if (!this._loopNudgeSent) {
+              // Action mode: try a strategy-change nudge first
               this._loopNudgeSent = true;
               const errorCategory = this._classifyToolError(tc.tool_name, result);
               messages.push({
@@ -2150,11 +2177,15 @@ export class AgentRuntime {
 
   async _selfReflect(goal, messages, round, toolHistory) {
     // Phase 5b: Dynamic reflection interval — reflect more often when there
-    // are recent failures or when the plan is large (>5 items).
+    // are recent failures, the plan is large, or we're in plan mode.
     const hasRecentFailures = (toolHistory || []).slice(-4).some(t => t.result?.success === false);
     const planSize = this.session?.plan?.length || 0;
-    const REFLECTION_INTERVAL = (planSize > 5 || hasRecentFailures) ? 2 : 3;
-    if (round < REFLECTION_INTERVAL || round % REFLECTION_INTERVAL !== 0) return null;
+    // Plan mode: reflect every round after round 2 — agent should converge quickly
+    const REFLECTION_INTERVAL = this.agentMode === 'plan'
+      ? 1
+      : (planSize > 5 || hasRecentFailures) ? 2 : 3;
+    const MIN_ROUND = this.agentMode === 'plan' ? 2 : REFLECTION_INTERVAL;
+    if (round < MIN_ROUND || round % REFLECTION_INTERVAL !== 0) return null;
     if (!this.aiClient?.client?.chat?.completions?.create) return null;
 
     try {
@@ -2174,6 +2205,13 @@ export class AgentRuntime {
         : '';
 
       // Phase 5a: Plan-aware, action-specific reflection prompt
+      const planModeExtra = this.agentMode === 'plan' ? [
+        '8. IMPORTANT: The agent is in PLAN MODE. It should only read/inspect — NOT try to fix or change things.',
+        '9. In plan mode, if the agent has gathered enough context to answer (2+ successful reads), it should STOP and answer.',
+        '10. In plan mode, if any tools are failing, the agent should immediately STOP and answer with what it has.',
+        '11. In plan mode, "slow" progress means the agent should stop — set should_continue to false.',
+      ] : [];
+
       const reflectionPrompt = [
         'You are evaluating an AI agent\'s progress on a task.',
         'Analyze the recent tool calls and determine:',
@@ -2184,6 +2222,7 @@ export class AgentRuntime {
         '5. If a tool has FAILED 2+ times with the same error, recommend a SPECIFIC alternative tool or strategy.',
         '6. If edit_file/patch_file failed, suggest reading the file first with read_file.',
         '7. If code_search found nothing, suggest trying search_files with a simpler pattern.',
+        ...planModeExtra,
         '',
         'Return JSON: {"progress": "good|slow|stuck", "suggestion": "brief SPECIFIC guidance or null", "should_continue": true/false}',
         'Be concise and actionable. Return null suggestion if progress is good.',
@@ -2223,7 +2262,16 @@ export class AgentRuntime {
         return { abort: true, reason: suggestion || 'Agent determined it is stuck and should stop.' };
       }
 
+      // In plan mode: also abort on 'slow' progress — no point looping
+      if (this.agentMode === 'plan' && progress === 'slow' && parsed.should_continue === false) {
+        return { abort: true, reason: suggestion || 'Plan mode agent is not converging. Stopping to provide answer.' };
+      }
+
       if (suggestion && progress !== 'good') {
+        // In plan mode: inject a stronger "stop and answer" guidance
+        if (this.agentMode === 'plan') {
+          return { guidance: `[Self-reflection at round ${round}]: ${suggestion}. You are in Plan mode — provide your Answer now with what you've gathered so far.` };
+        }
         return { guidance: `[Self-reflection at round ${round}]: ${suggestion}` };
       }
 

@@ -90,10 +90,17 @@ export function buildAgentSystemPrompt(opts = {}) {
   const modeSection = agentMode === 'plan'
     ? `
 ## Current Mode: Plan
-- You are in Plan mode. Use safe/read-only tools to inspect files, search, gather context, answer questions, and propose plans.
-- You may run commands only when they are read-only/safe. Do not attempt to write files, edit data, install packages, open apps, change git state, or perform actions with side effects.
-- If the user asks you to make a change or execute a risky action, inspect what you safely can, explain the plan or answer, and tell them to switch to Action mode to apply it.
-- Never claim that you changed the workspace, committed code, installed dependencies, or completed an external action while in Plan mode.
+- You are in **Plan mode**. Your job is to INSPECT, ANALYZE, and ANSWER — not to fix, build, or change anything.
+- **Allowed:** read_file, list_directory, code_search, find_definition, search_files, find_files, list_definitions, run_command (read-only only), ask_user, todo_write
+- **NOT allowed:** write_file, edit_file, patch_file, create_directory, install packages, git commit/push, or any action with side effects
+- If the user asks you to make a change, inspect what you can, explain what needs to be done, and tell them to switch to Action mode.
+
+### Plan Mode Workflow (CRITICAL — follow this exactly)
+1. **Round 1-2:** Gather context. Read relevant files, list directories, search for code. Batch multiple reads in a single turn.
+2. **Round 3:** You should have enough context. Provide your Answer now.
+3. **If a tool fails:** Do NOT retry it with different arguments. Just skip it and answer with what you already have.
+4. **If you can't find something:** Say so in your answer. Do NOT keep searching with variations.
+5. **NEVER loop trying different strategies.** You are inspecting, not solving. 2-3 rounds of tool calls is enough.
 `
     : `
 ## Current Mode: Action
