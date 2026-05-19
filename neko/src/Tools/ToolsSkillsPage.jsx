@@ -781,11 +781,6 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     fetchSoul();
   }, [activeTab]);
 
-  useEffect(() => {
-    if (activeTab !== 'memory') return;
-    fetchMemories();
-  }, [activeTab, fetchMemories]);
-
   async function fetchTools() {
     setLoadingTools(true);
     setErrorTools(null);
