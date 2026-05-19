@@ -240,6 +240,8 @@ export const MessageInputV2 = ({
   const voiceConversationActive = voiceMode && voiceConversationAvailable;
   // File attachments state
   const [fileAttachments, setFileAttachments] = useState([]);
+  // Map from "@displayPath" token → file metadata for inline @mentions in text
+  const [inlineMentions, setInlineMentions] = useState(new Map());
   const [fileSearchResults, setFileSearchResults] = useState([]);
   const [fileSearchLoading, setFileSearchLoading] = useState(false);
   const [fileSearchLoaded, setFileSearchLoaded] = useState(false);
@@ -548,19 +550,24 @@ export const MessageInputV2 = ({
       return;
     }
 
-    const nextValue = value.slice(0, fileTrigger.start) + value.slice(fileTrigger.end);
+    // Keep @mention inline in text — positional context preserved
+    const rootId = activeWorkingContext?.rootId || "workspace";
+    const displayPath = relativeToContext(file.path, activeWorkingContext?.relativePath || ".");
+    const token = `@${displayPath}`;
+    const nextValue = `${value.slice(0, fileTrigger.start)}${token} ${value.slice(fileTrigger.end)}`;
+    const nextCursor = fileTrigger.start + token.length + 1;
     setValue(nextValue);
-    setCursorPosition(fileTrigger.start);
-    setFileAttachments(prev => {
-      const rootId = activeWorkingContext?.rootId || "workspace";
-      if (prev.some(f => f.path === file.path && (f.rootId || "workspace") === rootId)) return prev;
-      return [...prev, { rootId, path: file.path, name: file.name, ext: file.ext }];
+    setCursorPosition(nextCursor);
+    setInlineMentions(prev => {
+      const next = new Map(prev);
+      next.set(token, { rootId, path: file.path, name: file.name, ext: file.ext });
+      return next;
     });
     requestAnimationFrame(() => {
       if (!textareaRef.current) return;
       textareaRef.current.focus();
-      textareaRef.current.selectionStart = fileTrigger.start;
-      textareaRef.current.selectionEnd = fileTrigger.start;
+      textareaRef.current.selectionStart = nextCursor;
+      textareaRef.current.selectionEnd = nextCursor;
     });
   }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileTrigger, value]);
 
@@ -623,10 +630,26 @@ export const MessageInputV2 = ({
       }
 
       try {
+        // Resolve inline @mention tokens present in the text at send time
+        const resolvedInline = [];
+        const mentionRegex = /@([^\s]+)/g;
+        let mentionMatch;
+        const seenPaths = new Set();
+        while ((mentionMatch = mentionRegex.exec(textToSend)) !== null) {
+          const token = `@${mentionMatch[1].replace(/[.,;:!?]+$/, "")}`;
+          const meta = inlineMentions.get(token);
+          const key = `${meta?.rootId || "workspace"}:${meta?.path}`;
+          if (meta && !seenPaths.has(key)) {
+            seenPaths.add(key);
+            resolvedInline.push({ ...meta, inline: true });
+          }
+        }
+        const allFileAttachments = [...resolvedInline, ...fileAttachments];
+
         const messageToSend = {
           content: textToSend.trim(),
           agentMentions: detectedAgentMentions,
-          fileAttachments: fileAttachments.length > 0 ? fileAttachments : undefined,
+          fileAttachments: allFileAttachments.length > 0 ? allFileAttachments : undefined,
           reasoningEffort: activeBrain.supportsReasoning ? reasoningEffort : "auto",
           enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : [],
         };
@@ -634,6 +657,7 @@ export const MessageInputV2 = ({
         await onSubmit(messageToSend, []);
         setValue("");
         setFileAttachments([]);
+        setInlineMentions(new Map());
         setError(null);
         if (textareaRef.current) textareaRef.current.style.height = "auto";
       } catch (err) {
@@ -641,7 +665,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, localModelSendBlockReason, onSubmit, detectedAgentMentions, fileAttachments, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
+    [value, disabled, localModelSendBlockReason, onSubmit, detectedAgentMentions, fileAttachments, inlineMentions, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
   );
 
   const handleKeyDown = useCallback(
@@ -946,6 +970,29 @@ export const MessageInputV2 = ({
     };
   }, []);
 
+  // Segments for highlighting @mentions inline in the textarea overlay
+  const highlightedSegments = useMemo(() => {
+    if (!value || inlineMentions.size === 0) return null;
+    const parts = [];
+    let lastIndex = 0;
+    const regex = /@([^\s]+)/g;
+    let match;
+    while ((match = regex.exec(value)) !== null) {
+      const token = `@${match[1].replace(/[.,;:!?]+$/, "")}`;
+      if (inlineMentions.has(token)) {
+        if (match.index > lastIndex) {
+          parts.push({ type: "text", content: value.slice(lastIndex, match.index) });
+        }
+        parts.push({ type: "mention", content: match[0] });
+        lastIndex = match.index + match[0].length;
+      }
+    }
+    if (lastIndex <= value.length) {
+      parts.push({ type: "text", content: value.slice(lastIndex) });
+    }
+    return parts.some((p) => p.type === "mention") ? parts : null;
+  }, [value, inlineMentions]);
+
   const getBorderColor = () => {
     return "border-gray-200/90 dark:border-gray-800 midnight:border-slate-800 focus-within:border-gray-300 dark:focus-within:border-gray-700 midnight:focus-within:border-slate-700";
   };
@@ -1005,6 +1052,25 @@ export const MessageInputV2 = ({
               )}
 
               <div className="relative">
+                {highlightedSegments && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words text-base leading-relaxed text-gray-900 dark:text-gray-100 midnight:text-gray-100"
+                    style={{ padding: 0, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
+                  >
+                    {highlightedSegments.map((part, i) =>
+                      part.type === "mention" ? (
+                        <span key={i} className="text-blue-500/90 dark:text-blue-400 midnight:text-blue-400">
+                          {part.content}
+                        </span>
+                      ) : (
+                        <span key={i}>{part.content}</span>
+                      )
+                    )}
+                    {/* trailing space keeps height consistent */}
+                    {" "}
+                  </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   value={value}
@@ -1022,7 +1088,12 @@ export const MessageInputV2 = ({
                   autoCorrect="off"
                   autoCapitalize="off"
                   rows="2"
-                  className="w-full resize-none bg-transparent text-gray-900 caret-gray-900 placeholder-gray-400 focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50 dark:text-gray-100 dark:caret-gray-100 dark:placeholder-gray-500 midnight:text-gray-100 midnight:caret-gray-100 midnight:placeholder-gray-500"
+                  style={{ padding: 0 }}
+                  className={`w-full resize-none bg-transparent focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50 caret-gray-900 placeholder-gray-400 dark:caret-gray-100 dark:placeholder-gray-500 midnight:caret-gray-100 midnight:placeholder-gray-500 ${
+                    highlightedSegments
+                      ? "text-transparent"
+                      : "text-gray-900 dark:text-gray-100 midnight:text-gray-100"
+                  }`}
                 />
 
                 {agentTrigger && (

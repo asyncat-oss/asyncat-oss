@@ -16,6 +16,28 @@ import ArtifactCard from '../renderers/ArtifactRenderer';
 import { fileIconMeta } from '../../../files/fileUtils.js';
 import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.jsx';
 
+// ── Inline @mention rendering ─────────────────────────────────────────────────
+function renderGoalWithMentions(goal = "", fileAttachments = []) {
+  if (!(fileAttachments || []).some(f => f.inline)) return goal;
+  const parts = [];
+  let lastIndex = 0;
+  const regex = /@([^\s]+)/g;
+  let match;
+  while ((match = regex.exec(goal)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<span key={`t${lastIndex}`}>{goal.slice(lastIndex, match.index)}</span>);
+    }
+    parts.push(
+      <span key={`m${match.index}`} className="rounded px-0.5 font-medium text-blue-500 bg-blue-50/80 dark:text-blue-400 dark:bg-blue-900/20 midnight:text-blue-400 midnight:bg-blue-900/20">
+        {match[0]}
+      </span>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < goal.length) parts.push(<span key={`t${lastIndex}`}>{goal.slice(lastIndex)}</span>);
+  return parts.length > 0 ? parts : goal;
+}
+
 // ── Localhost URL detection ───────────────────────────────────────────────────
 
 export function extractLocalhostUrl(text = '') {
@@ -324,7 +346,7 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
             </div>
           ) : (
             <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
-              {goal}
+              {renderGoalWithMentions(goal, data?.fileAttachments)}
             </div>
           )}
           {Array.isArray(data?.agentMentions) && data.agentMentions.length > 0 && (
@@ -337,9 +359,9 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
               ))}
             </div>
           )}
-          {Array.isArray(data?.fileAttachments) && data.fileAttachments.length > 0 && (
+          {Array.isArray(data?.fileAttachments) && data.fileAttachments.some(f => !f.inline) && (
             <div className="mt-2 flex flex-wrap justify-end gap-2">
-              {data.fileAttachments.map(file => (
+              {data.fileAttachments.filter(f => !f.inline).map(file => (
                 <AttachmentChip
                   key={file.path || file.name}
                   file={file}
