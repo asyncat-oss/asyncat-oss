@@ -6,7 +6,7 @@ import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
-import { localModelsApi, llamaServerApi, audioApi } from "../../../Settings/settingApi.js";
+import { localModelsApi, llamaServerApi, audioApi, aiProviderApi } from "../../../Settings/settingApi.js";
 import { profilesApi, filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 import { AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
@@ -228,6 +228,8 @@ export const MessageInputV2 = ({
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isSwitchingModel, setIsSwitchingModel] = useState(false);
   const [modelSwitchError, setModelSwitchError] = useState(null);
+  const [providerProfiles, setProviderProfiles] = useState([]);
+  const [activeProfileId, setActiveProfileId] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [agentProfiles, setAgentProfiles] = useState([]);
   const [profilesLoaded, setProfilesLoaded] = useState(false);
@@ -411,6 +413,30 @@ export const MessageInputV2 = ({
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  // Provider profiles + active config
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [profilesRes, configRes] = await Promise.all([
+          aiProviderApi.listProfiles().catch(() => ({ profiles: [] })),
+          aiProviderApi.getConfig().catch(() => null),
+        ]);
+        if (cancelled) return;
+        setProviderProfiles(profilesRes.profiles || []);
+        setActiveProfileId(configRes?.profile_id || null);
+      } catch {
+        if (!cancelled) setProviderProfiles([]);
+      }
+    };
+    load();
+    window.addEventListener('asyncat-model-runtime-updated', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('asyncat-model-runtime-updated', load);
     };
   }, []);
 
@@ -706,22 +732,52 @@ export const MessageInputV2 = ({
   const modelLabel = activeBrain.isLoadingModel
     ? "Loading"
     : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
-  const modelOptions = activeBrain.isBuiltin
-    ? [
-        ...(localModel.model
-          ? [{ value: localModel.model, label: `${activeBrain.mode} · ${activeBrain.providerName} · ${activeBrain.model || localModel.model}`, active: true }]
-          : [{ value: "", label: "No model loaded", active: true, disabled: true }]),
-        ...localModels
-          .filter((model) => model.filename && model.filename !== localModel.model)
-          .map((model) => ({
-            value: model.filename,
-            label: model.filename.replace(/\.(gguf|bin)$/i, ""),
-          })),
-      ]
-    : [{ value: "__current__", label: modelLabel, active: true, disabled: true }];
+
+  const allModelOptions = useMemo(() => {
+    const opts = [];
+    const cloudProfiles = providerProfiles.filter(p => p.provider_id !== "llamacpp-builtin");
+
+    if (cloudProfiles.length > 0) {
+      opts.push({ type: "section", label: "Providers" });
+      for (const profile of cloudProfiles) {
+        const isActive = profile.id === activeProfileId;
+        opts.push({
+          type: "option",
+          value: `provider:${profile.id}`,
+          label: profile.name,
+          detail: profile.model || profile.provider_id || "",
+          active: isActive,
+        });
+      }
+    }
+
+    if (localModels.length > 0 || (activeBrain.isBuiltin && localModel.model)) {
+      if (opts.length > 0) opts.push({ type: "divider" });
+      opts.push({ type: "section", label: "Local LLMs" });
+      const localFilenames = new Set(localModels.map(m => m.filename));
+      const allLocal = [
+        ...(activeBrain.isBuiltin && localModel.model && !localFilenames.has(localModel.model)
+          ? [{ filename: localModel.model, name: localModel.model }]
+          : []),
+        ...localModels,
+      ];
+      for (const m of allLocal) {
+        const isActive = activeBrain.isBuiltin && m.filename === localModel.model;
+        opts.push({
+          type: "option",
+          value: m.filename,
+          label: (m.name || m.filename).replace(/\.(gguf|bin)$/i, ""),
+          detail: isActive ? "Loaded" : "GGUF",
+          active: isActive,
+        });
+      }
+    }
+
+    return opts;
+  }, [providerProfiles, activeProfileId, localModels, localModel.model, activeBrain.isBuiltin]);
 
   useEffect(() => {
-    if (!activeBrain.isBuiltin || modelsLoaded) return;
+    if (modelsLoaded) return;
     let cancelled = false;
 
     localModelsApi
@@ -739,7 +795,7 @@ export const MessageInputV2 = ({
     return () => {
       cancelled = true;
     };
-  }, [activeBrain.isBuiltin, modelsLoaded]);
+  }, [modelsLoaded]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -759,8 +815,26 @@ export const MessageInputV2 = ({
         return;
       }
 
-      if (!nextModel || nextModel === localModel.model || isSwitchingModel) return;
+      if (!nextModel || isSwitchingModel) return;
 
+      if (nextModel.startsWith("provider:")) {
+        const profileId = nextModel.slice("provider:".length);
+        if (profileId === activeProfileId) return;
+        setModelSwitchError(null);
+        setIsSwitchingModel(true);
+        try {
+          await aiProviderApi.activateProfile(profileId);
+          setActiveProfileId(profileId);
+          window.dispatchEvent(new CustomEvent("asyncat-model-runtime-updated"));
+        } catch (err) {
+          setModelSwitchError(err.message || "Could not switch provider.");
+        } finally {
+          setIsSwitchingModel(false);
+        }
+        return;
+      }
+
+      if (nextModel === localModel.model) return;
       setModelSwitchError(null);
       setIsSwitchingModel(true);
       try {
@@ -771,7 +845,7 @@ export const MessageInputV2 = ({
         setIsSwitchingModel(false);
       }
     },
-    [ctxSize, isSwitchingModel, localModel.model],
+    [ctxSize, isSwitchingModel, localModel.model, activeProfileId],
   );
 
   const openWorkingContextMenu = useCallback(() => {
@@ -1104,23 +1178,50 @@ export const MessageInputV2 = ({
                       <ChevronDown className="w-3 h-3 opacity-40" />
                     </button>
                     {openMenu === "model" && (
-                      <div className="absolute left-0 bottom-full z-30 mb-1.5 w-72 max-w-[calc(100vw-3rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                        <div className="max-h-60 overflow-y-auto p-1">
-                          {modelOptions.map((option) => (
-                            <button
-                              key={option.value || option.label}
-                              type="button"
-                              disabled={option.disabled || option.value === localModel.model}
-                              onClick={() => handleModelSelect(option.value)}
-                              className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
-                                option.active
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                              } disabled:cursor-default`}
-                            >
-                              <span className="block truncate font-medium">{option.label}</span>
-                            </button>
-                          ))}
+                      <div className="absolute left-0 bottom-full z-30 mb-1.5 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+                        <div className="max-h-72 overflow-y-auto p-1">
+                          {allModelOptions.length === 0 ? (
+                            <div className="px-2.5 py-4 text-center text-xs text-gray-400 dark:text-gray-500">
+                              No models configured
+                            </div>
+                          ) : allModelOptions.map((item, i) => {
+                            if (item.type === "section") {
+                              return (
+                                <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                                  {item.label}
+                                </div>
+                              );
+                            }
+                            if (item.type === "divider") {
+                              return <div key={`d-${i}`} className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />;
+                            }
+                            return (
+                              <button
+                                key={item.value}
+                                type="button"
+                                disabled={item.active}
+                                onClick={() => handleModelSelect(item.value)}
+                                className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-default ${
+                                  item.active
+                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
+                                }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span className="block truncate font-medium flex-1">{item.label}</span>
+                                  {item.active && (
+                                    <span className="flex h-2 w-2 shrink-0 relative">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                    </span>
+                                  )}
+                                </span>
+                                {item.detail && (
+                                  <span className="block truncate text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{item.detail}</span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                         <div className="border-t border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
                           <button
@@ -1128,7 +1229,7 @@ export const MessageInputV2 = ({
                             onClick={() => handleModelSelect("__manage__")}
                             className="w-full rounded-md px-2.5 py-2 text-left text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800"
                           >
-                            Manage models
+                            Manage models →
                           </button>
                         </div>
                       </div>
