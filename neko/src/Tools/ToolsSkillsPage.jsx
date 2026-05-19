@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import {
   Search, Wrench, File,
@@ -576,6 +576,7 @@ SkillInspector.propTypes = {
     tags: PropTypes.arrayOf(PropTypes.string),
     when_to_use: PropTypes.string,
     body: PropTypes.string,
+    updatedAt: PropTypes.string,
   }),
   onRequestDelete: PropTypes.func,
   isDeleting: PropTypes.bool,
@@ -783,7 +784,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   useEffect(() => {
     if (activeTab !== 'memory') return;
     fetchMemories();
-  }, [activeTab, memorySearch, memoryKind]);
+  }, [activeTab, fetchMemories]);
 
   async function fetchTools() {
     setLoadingTools(true);
@@ -882,7 +883,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     }
   }
 
-  async function fetchMemories() {
+  const fetchMemories = useCallback(async () => {
     setLoadingMemory(true);
     setErrorMemory(null);
     try {
@@ -893,7 +894,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     } finally {
       setLoadingMemory(false);
     }
-  }
+  }, [memorySearch, memoryKind]);
 
   async function deleteMemory(key) {
     setDeletingKey(key);
