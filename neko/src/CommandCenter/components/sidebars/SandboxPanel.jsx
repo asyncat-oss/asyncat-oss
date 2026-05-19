@@ -313,7 +313,7 @@ export default function SandboxPanel() {
                   </button>
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-700 dark:text-slate-200">{openFile.path?.replace(`${sandboxRelativePath}/`, '')}</span>
                 </div>
-                <pre className="max-h-80 overflow-auto rounded-md bg-slate-950 p-3 text-[10px] leading-relaxed text-slate-100">
+                <pre className="max-h-80 overflow-auto rounded-md border border-gray-200 bg-gray-50 p-3 text-[10px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                   {openFile.tooLarge ? 'File is too large to preview.' : openFile.binary ? 'Binary file preview is not available.' : openFile.content || ''}
                 </pre>
               </div>
@@ -386,7 +386,7 @@ export default function SandboxPanel() {
                   <XCircle className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <pre className="max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-[10px] leading-relaxed text-slate-100">
+              <pre className="max-h-72 overflow-auto rounded-md border border-gray-200 bg-gray-50 p-3 text-[10px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                 {selectedPatch || 'No text diff'}
               </pre>
             </section>
@@ -489,7 +489,7 @@ export default function SandboxPanel() {
                       <span className="text-[10px] text-gray-400">{job.exitCode ?? '-'}</span>
                     </div>
                   </summary>
-                  <pre className="mt-2 max-h-48 overflow-auto rounded bg-slate-950 p-2 text-[10px] leading-relaxed text-slate-100">
+                  <pre className="mt-2 max-h-48 overflow-auto rounded border border-gray-200 bg-gray-50 p-2 text-[10px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                     {[job.stdout, job.stderr].filter(Boolean).join('\n') || 'No output'}
                   </pre>
                 </details>

@@ -34,9 +34,9 @@ function WorkspaceFilesBrowser() {
   const parts = entryPath === '.' ? [] : entryPath.split('/').filter(Boolean);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-slate-800">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md bg-gray-50 px-2 py-1 text-[11px] text-gray-500 dark:bg-slate-900 dark:text-slate-400">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950">
+      <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md bg-gray-50 px-2 py-1 text-[11px] text-gray-500 dark:bg-slate-800/60 dark:text-slate-400">
           <button type="button" onClick={() => setEntryPath('.')} className="shrink-0 hover:text-gray-900 dark:hover:text-slate-100">
             workspace
           </button>
@@ -44,7 +44,7 @@ function WorkspaceFilesBrowser() {
             const nextPath = parts.slice(0, index + 1).join('/');
             return (
               <span key={nextPath} className="flex min-w-0 items-center gap-1">
-                <ChevronRight className="h-3 w-3 shrink-0" />
+                <ChevronRight className="h-3 w-3 shrink-0 text-gray-300 dark:text-slate-600" />
                 <button type="button" onClick={() => setEntryPath(nextPath)} className="truncate hover:text-gray-900 dark:hover:text-slate-100">
                   {part}
                 </button>
@@ -55,7 +55,7 @@ function WorkspaceFilesBrowser() {
         <button
           type="button"
           onClick={() => load(entryPath)}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           title="Refresh"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -78,18 +78,18 @@ function WorkspaceFilesBrowser() {
                   const parent = entryPath.split('/').slice(0, -1).join('/');
                   setEntryPath(parent || '.');
                 }}
-                className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
+                className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Back
               </button>
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-700 dark:text-slate-200">{openFile.path}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-600 dark:text-slate-300">{openFile.path}</span>
             </div>
-            <pre className="max-h-[calc(100vh-260px)] overflow-auto rounded-md bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">
+            <pre className="max-h-[calc(100vh-260px)] overflow-auto rounded-md border border-gray-200 bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
               {openFile.tooLarge ? 'File is too large to preview.' : openFile.binary ? 'Binary file preview is not available.' : openFile.content || ''}
             </pre>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-md border border-gray-100 dark:border-slate-800">
+          <div className="overflow-hidden rounded-md border border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900/40">
             {entryPath !== '.' && (
               <button
                 type="button"
@@ -97,7 +97,7 @@ function WorkspaceFilesBrowser() {
                   const parent = parts.slice(0, -1).join('/');
                   setEntryPath(parent || '.');
                 }}
-                className="flex w-full items-center gap-2 border-b border-gray-50 px-2 py-1.5 text-left text-xs text-gray-500 hover:bg-gray-50 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-900"
+                className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs text-gray-400 hover:bg-gray-50 dark:border-slate-800 dark:text-slate-500 dark:hover:bg-slate-800/60"
               >
                 ..
               </button>
@@ -107,13 +107,13 @@ function WorkspaceFilesBrowser() {
                 key={item.path}
                 type="button"
                 onClick={() => setEntryPath(item.path)}
-                className="flex w-full items-center gap-2 border-b border-gray-50 px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-900"
+                className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
               >
                 {item.type === 'dir'
-                  ? <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                  : <File className="h-3.5 w-3.5 shrink-0 text-gray-400" />}
+                  ? <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
+                  : <File className="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-slate-600" />}
                 <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-slate-200">{item.name}</span>
-                {item.type === 'file' && <span className="text-[10px] text-gray-400">{item.ext || 'file'}</span>}
+                {item.type === 'file' && <span className="text-[10px] text-gray-300 dark:text-slate-600">{item.ext || 'file'}</span>}
               </button>
             ))}
             {!entries.length && !loading && (
@@ -152,8 +152,8 @@ export default function CodePanel({
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="grid shrink-0 grid-cols-3 gap-1 border-b border-gray-100 p-2 dark:border-slate-800">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950">
+      <div className="grid shrink-0 grid-cols-3 gap-1 border-b border-gray-100 bg-white p-2 dark:border-slate-800 dark:bg-slate-950">
         {buttons.map(item => {
           const Icon = item.icon;
           const active = section === item.id;
@@ -164,13 +164,17 @@ export default function CodePanel({
               onClick={() => selectSection(item.id)}
               className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
                 active
-                  ? 'bg-gray-900 text-white dark:bg-slate-100 dark:text-slate-950'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100'
+                  : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800/60 dark:hover:text-slate-300'
               }`}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className={`h-3.5 w-3.5 ${active ? 'text-indigo-500 dark:text-indigo-400' : ''}`} />
               {item.label}
-              {item.count > 0 && <span className="rounded-full bg-white/20 px-1 text-[10px]">{item.count}</span>}
+              {item.count > 0 && (
+                <span className="rounded-full bg-indigo-100 px-1.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300">
+                  {item.count}
+                </span>
+              )}
             </button>
           );
         })}
