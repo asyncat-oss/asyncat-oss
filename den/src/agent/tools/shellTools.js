@@ -10,6 +10,7 @@ import path from 'path';
 import { IS_WIN } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { getTmpDir } from '../workspacePaths.js';
+import { shellSessionManager } from '../ShellSessionManager.js';
 const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '120000', 10); // 120s (was 30s — too short for npm install/build)
 const MAX_OUTPUT = 32000; // chars (was 16000 — too small for test/build output)
 const STREAM_INTERVAL_MS = 250; // how often to flush streaming progress
@@ -213,5 +214,86 @@ export const runNodeTool = {
   },
 };
 
-export const shellTools = [runCommandTool, runPythonTool, runNodeTool];
+// ─── Persistent Shell Session Tools ──────────────────────────────────────────
+
+export const shellSessionStartTool = {
+  name: 'shell_session_start',
+  description: 'Start a persistent shell session that remembers working directory and environment across commands. Use this when you need to cd into a directory and run multiple commands there, run a long-lived process (dev server, REPL), or maintain state between commands. Returns a session name to use with shell_session_run.',
+  category: 'shell',
+  permission: PermissionLevel.DANGEROUS,
+  parameters: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Session name (default: "default"). Use different names for independent workflows.' },
+      cwd: { type: 'string', description: 'Starting working directory (default: workspace root).' },
+    },
+    required: [],
+  },
+  execute: async (args, context) => {
+    const agentSessionId = context.session?.id || 'anon';
+    const name = args.name || 'default';
+    const cwd = args.cwd ? path.resolve(context.workingDir, args.cwd) : context.workingDir;
+    const { id, reused } = shellSessionManager.create({ agentSessionId, name, cwd });
+    return { success: true, session_name: name, reused, cwd, message: reused ? `Reused existing session "${name}".` : `Started shell session "${name}" in ${cwd}.` };
+  },
+};
+
+export const shellSessionRunTool = {
+  name: 'shell_session_run',
+  description: 'Run a command in a persistent shell session. The session remembers cd, exports, and other state. Great for multi-step workflows in the same directory, REPL interaction, or long-running processes. Start a session first with shell_session_start.',
+  category: 'shell',
+  permission: PermissionLevel.DANGEROUS,
+  parameters: {
+    type: 'object',
+    properties: {
+      command: { type: 'string', description: 'Shell command to run in the session.' },
+      name: { type: 'string', description: 'Session name (default: "default").' },
+      timeout: { type: 'number', description: 'Timeout in seconds (default: 120).' },
+    },
+    required: ['command'],
+  },
+  execute: async (args, context) => {
+    const agentSessionId = context.session?.id || 'anon';
+    const name = args.name || 'default';
+    let session = shellSessionManager.get(agentSessionId, name);
+    if (!session || !session.alive) {
+      // Auto-create if not started
+      shellSessionManager.create({ agentSessionId, name, cwd: context.workingDir });
+      session = shellSessionManager.get(agentSessionId, name);
+    }
+    const timeout = (args.timeout || 120) * 1000;
+    const result = await session.run(args.command, { timeout, emitEvent: context.emitEvent || null });
+    return {
+      success: result.success,
+      output: result.output,
+      exit_code: result.exitCode,
+      ...(result.error ? { error: result.error } : {}),
+    };
+  },
+};
+
+export const shellSessionCloseTool = {
+  name: 'shell_session_close',
+  description: 'Close a persistent shell session and free its resources. Call this when you are done with a dev server or REPL session.',
+  category: 'shell',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Session name to close (default: "default").' },
+    },
+    required: [],
+  },
+  execute: async (args, context) => {
+    const agentSessionId = context.session?.id || 'anon';
+    const name = args.name || 'default';
+    shellSessionManager.close(agentSessionId, name);
+    return { success: true, message: `Session "${name}" closed.` };
+  },
+};
+
+export const shellTools = [
+  runCommandTool, runPythonTool, runNodeTool,
+  shellSessionStartTool, shellSessionRunTool, shellSessionCloseTool,
+];
 export default shellTools;

@@ -4,7 +4,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import eventBus from '../../utils/eventBus.js';
 import { agentTaskRunsApi, chatApi, chatFoldersApi } from '../api';
 import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
-import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked } from 'lucide-react';
+import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
 
 import { getRelativeTime, cleanTaskAgentTitle, parseConversationDate } from '../utils/conversationUtils.js';
 
@@ -59,6 +59,9 @@ const ChatsPage = () => {
   const [error, setError] = useState(null);
   const [expandedFolders, setExpandedFolders] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [serverSearchResults, setServerSearchResults] = useState(null); // null = use local, array = server results
+  const [serverSearching, setServerSearching] = useState(false);
+  const serverSearchTimer = useRef(null);
   const [selectedItems, setSelectedItems] = useState({});
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -144,6 +147,28 @@ const ChatsPage = () => {
     return () => unsub();
   }, [loadAll]);
 
+  // Debounced server-side FTS search — fires 400ms after user stops typing
+  useEffect(() => {
+    clearTimeout(serverSearchTimer.current);
+    if (searchQuery.trim().length < 3) {
+      setServerSearchResults(null);
+      setServerSearching(false);
+      return;
+    }
+    setServerSearching(true);
+    serverSearchTimer.current = setTimeout(async () => {
+      try {
+        const res = await chatApi.searchConversations(searchQuery.trim(), 50);
+        setServerSearchResults(res?.conversations || []);
+      } catch {
+        setServerSearchResults(null);
+      } finally {
+        setServerSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(serverSearchTimer.current);
+  }, [searchQuery]);
+
   const toggleFolder = (folderId) => {
     setExpandedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
   };
@@ -193,6 +218,10 @@ const ChatsPage = () => {
   };
 
   const q = searchQuery.toLowerCase();
+  // Use server FTS results when available (query ≥ 3 chars), else local filter
+  const conversationPool = serverSearchResults !== null
+    ? serverSearchResults.map(c => ({ ...c, type: 'chat', title: c.title || 'Untitled conversation' }))
+    : null;
 
   const activeChatRuns = chatRunPreviews
     .filter(run => run.running)
@@ -207,10 +236,11 @@ const ChatsPage = () => {
       workingContext: run.workingContext || run.metadata?.workingContext || null,
     }));
 
-  const filteredConversations = conversations.filter(c =>
-    (c.title || '').toLowerCase().includes(q) ||
-    (c.preview || '').toLowerCase().includes(q)
-  ).map(c => ({ ...c, type: 'chat', title: c.title || 'Untitled conversation' }));
+  const filteredConversations = conversationPool !== null
+    ? conversationPool
+    : conversations.filter(c =>
+        !q || (c.title || '').toLowerCase().includes(q) || (c.preview || '').toLowerCase().includes(q)
+      ).map(c => ({ ...c, type: 'chat', title: c.title || 'Untitled conversation' }));
 
   const filteredTaskAgentRuns = taskAgentRuns
     .filter(run =>
@@ -483,7 +513,10 @@ const ChatsPage = () => {
 
         {/* Search */}
         <div className="relative mb-5 flex-shrink-0">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          {serverSearching
+            ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />
+            : <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          }
           <input
             type="text"
             placeholder="Search conversations..."
@@ -491,6 +524,11 @@ const ChatsPage = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-lg border border-gray-200 bg-white/40 py-2 pl-10 pr-4 text-sm text-gray-900 transition-all placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-100 dark:focus:border-gray-700 dark:focus:ring-gray-700 midnight:border-slate-800 midnight:bg-slate-950/30 midnight:text-slate-100"
           />
+          {serverSearchResults !== null && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+              {filteredConversations.length} found
+            </span>
+          )}
         </div>
 
         {selectedCount > 0 && (

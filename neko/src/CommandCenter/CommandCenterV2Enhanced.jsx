@@ -2606,6 +2606,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                   <CurrentPlanPanel
                     data={currentPlanEvent.data}
                     isRunning={agentRunning}
+                    sessionId={agentCurrentSessionId}
                   />
                 </div>
               )}

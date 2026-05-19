@@ -688,6 +688,53 @@ router.get('/chats/workspaces', authenticate, async (req, res) => {
   }
 });
 
+// ── Conversation full-text search ─────────────────────────────────────────────
+router.get('/chats/search', authenticate, (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.status(400).json({ success: false, error: 'q parameter required' });
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+
+    // Title search via FTS5 (fast, ranked)
+    let titleRows = [];
+    try {
+      const ftsTerms = q.split(/\s+/).filter(Boolean).map(t => `${t.replace(/[^a-zA-Z0-9_]/g, '')}*`).join(' OR ');
+      if (ftsTerms) {
+        titleRows = db.prepare(`
+          SELECT c.id, c.title, c.mode, c.message_count, c.last_message_at, c.created_at,
+                 c.is_pinned, c.is_archived, bm25(conversations_fts) AS rank
+          FROM conversations_fts fts
+          JOIN conversations c ON c.id = fts.conversation_id
+          WHERE fts.conversations_fts MATCH ? AND c.user_id = ? AND c.deleted_at IS NULL
+          ORDER BY rank
+          LIMIT ?
+        `).all(ftsTerms, req.user.id, limit);
+      }
+    } catch { /* FTS table may not exist on older DBs */ }
+
+    // Content search via LIKE on messages blob (slower but catches message text)
+    const seen = new Set(titleRows.map(r => r.id));
+    const remaining = limit - titleRows.length;
+    let contentRows = [];
+    if (remaining > 0) {
+      contentRows = db.prepare(`
+        SELECT id, title, mode, message_count, last_message_at, created_at, is_pinned, is_archived
+        FROM conversations
+        WHERE user_id = ? AND deleted_at IS NULL AND messages LIKE ?
+        ORDER BY last_message_at DESC
+        LIMIT ?
+      `).all(req.user.id, `%${q}%`, remaining + seen.size)
+        .filter(r => !seen.has(r.id))
+        .slice(0, remaining);
+    }
+
+    const conversations = [...titleRows, ...contentRows];
+    res.json({ success: true, count: conversations.length, query: q, conversations });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/chats/trash', authenticate, async (req, res) => {
   try {
     const conversations = await chatService.getTrashConversations(req.user.id, req.workspaceId, req.db);
@@ -2090,6 +2137,35 @@ router.patch('/sessions/:id', authenticate, async (req, res) => {
     } else {
       res.status(404).json({ success: false, error: 'Session not found or access denied' });
     }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Mid-run plan editing ───────────────────────────────────────────────────────
+// Allows the UI to inject or replace the plan of a running (or paused) session.
+// Each plan item: { id, content, status: 'pending'|'in_progress'|'completed' }
+router.patch('/sessions/:id/plan', authenticate, async (req, res) => {
+  try {
+    const { plan } = req.body;
+    if (!Array.isArray(plan)) {
+      return res.status(400).json({ success: false, error: 'plan must be an array of items' });
+    }
+    const normalized = plan.map((item, idx) => ({
+      id: String(item.id || `plan_${idx}`),
+      content: String(item.content || '').trim(),
+      status: ['pending', 'in_progress', 'completed'].includes(item.status) ? item.status : 'pending',
+    })).filter(item => item.content);
+
+    // Update in-memory session if currently active
+    const session = AgentSession.load(req.params.id);
+    if (!session || session.userId !== req.user.id) {
+      return res.status(404).json({ success: false, error: 'Session not found or access denied' });
+    }
+    session.plan = normalized;
+    session.save();
+
+    res.json({ success: true, plan: normalized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

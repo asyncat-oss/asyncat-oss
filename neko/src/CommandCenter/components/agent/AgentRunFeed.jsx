@@ -1899,8 +1899,34 @@ function StreamingPreview({ text }) {
   );
 }
 
-export function CurrentPlanPanel({ data, isRunning, className = '' }) {
+export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' }) {
   const plan = Array.isArray(data?.plan) ? data.plan : [];
+  const [editing, setEditing] = useState(false);
+  const [editLines, setEditLines] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const openEditor = () => {
+    setEditLines(plan.map(i => i.content).join('\n'));
+    setEditing(true);
+  };
+
+  const savePlan = async () => {
+    if (!sessionId) return;
+    setSaving(true);
+    try {
+      const lines = editLines.split('\n').map(l => l.trim()).filter(Boolean);
+      const updated = lines.map((content, idx) => ({
+        id: plan[idx]?.id || `plan_edit_${idx}`,
+        content,
+        status: plan[idx]?.status || 'pending',
+      }));
+      await agentApi.updatePlan(sessionId, updated);
+      setEditing(false);
+    } catch { /* ignore */ } finally {
+      setSaving(false);
+    }
+  };
+
   if (!plan.length) return null;
 
   const completed = plan.filter(i => i.status === 'completed').length;
@@ -1909,6 +1935,42 @@ export function CurrentPlanPanel({ data, isRunning, className = '' }) {
   const isStaleActivePlan = hasActiveItem && !isRunning && completed < total;
   const isDone = completed === total && total > 0;
   const pct = Math.round((completed / total) * 100);
+
+  if (editing) {
+    return (
+      <div className={className}>
+        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Edit Plan</span>
+            <span className="text-[10px] text-gray-400">One step per line</span>
+          </div>
+          <textarea
+            className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100 p-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+            rows={Math.max(3, editLines.split('\n').length + 1)}
+            value={editLines}
+            onChange={e => setEditLines(e.target.value)}
+            autoFocus
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={savePlan}
+              disabled={saving}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? <Spinner className="w-3 h-3 animate-spin" /> : null}
+              Save
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isDone && !isRunning) {
     return (
@@ -1950,6 +2012,15 @@ export function CurrentPlanPanel({ data, isRunning, className = '' }) {
             <span className="ml-auto text-[10px] tabular-nums font-medium text-gray-400 dark:text-gray-500">
               {pct}%
             </span>
+          )}
+          {sessionId && (
+            <button
+              onClick={openEditor}
+              title="Edit plan"
+              className="ml-1 rounded p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
           )}
         </div>
         {/* Progress bar */}

@@ -15,6 +15,8 @@ class BasalGanglia {
   constructor() {
     this.initialized = false;
     this.onEvent = null; // Callback for emitting events to the UI
+    this.aiClient = null; // Injected by AgentRuntime for LLM-generated skill bodies
+    this.model = null;
   }
 
   async initialize() {
@@ -172,7 +174,7 @@ class BasalGanglia {
 
   async maybeCreateSkill({ userId, workspaceId, patternHash, patternSummary, tools }) {
     const skillName = this.generateSkillName(patternSummary);
-    const skillBody = this.generateSkillBody(patternSummary, tools);
+    const skillBody = await this.generateSkillBody(patternSummary, tools);
 
     if (!skillName || !skillBody) return;
 
@@ -234,7 +236,25 @@ ${skillBody}
     return `auto-${words.join('-')}`;
   }
 
-  generateSkillBody(summary, tools) {
+  async generateSkillBody(summary, tools) {
+    // Attempt LLM-generated body when a client is available
+    if (this.aiClient && this.model) {
+      try {
+        const toolList = tools.slice(0, 8).join(', ');
+        const prompt = `You are writing a skill guide for an AI agent. Based on this repeated workflow pattern, write a concise skill body in markdown (no frontmatter). Include: a brief description, when to use it, numbered steps with the specific tools listed, and any gotchas. Keep it under 300 words.\n\nWorkflow summary: ${summary}\nTools used: ${toolList}`;
+        const response = await this.aiClient.chat({
+          model: this.model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 400,
+          temperature: 0.3,
+        });
+        const text = response?.choices?.[0]?.message?.content?.trim();
+        if (text && text.length > 50) return text;
+      } catch {
+        // Fall through to static template
+      }
+    }
+
     return `# Auto-Learned Workflow
 
 This skill was auto-generated from ${MIN_PATTERN_COUNT}+ successful uses.
@@ -243,7 +263,7 @@ This skill was auto-generated from ${MIN_PATTERN_COUNT}+ successful uses.
 - ${summary}
 
 ## Steps
-${tools.map((t, i) => `${i + 1}. Use tool: ${t}`).join('\n')}
+${tools.map((t, i) => `${i + 1}. Use \`${t}\``).join('\n')}
 
 ## Notes
 - Learned from repeated successful workflows

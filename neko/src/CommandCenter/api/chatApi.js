@@ -62,6 +62,11 @@ export const chatApi = {
     return await apiRequest(`${ENDPOINTS.CHATS}/workspaces`);
   },
 
+  searchConversations: async (query, limit = 20) => {
+    const params = new URLSearchParams({ q: query, limit: limit.toString() });
+    return await apiRequest(`${ENDPOINTS.CHATS}/search?${params}`);
+  },
+
   updateConversation: async (conversationId, updates) => {
     return await apiRequest(`${ENDPOINTS.CHATS}/${conversationId}`, {
       method: 'PATCH',

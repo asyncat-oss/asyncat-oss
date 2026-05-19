@@ -201,11 +201,13 @@ function ensureAgentMemorySchema() {
   addColumn('last_accessed_at', 'TEXT');
   addColumn('access_count', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('embedding', 'TEXT'); // JSON float array for vector similarity search
+  addColumn('profile_id', 'TEXT'); // agent profile namespace — NULL means shared across all profiles
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_agent_memory_user       ON agent_memory(user_id);
     CREATE INDEX IF NOT EXISTS idx_agent_memory_workspace  ON agent_memory(workspace_id);
     CREATE INDEX IF NOT EXISTS idx_agent_memory_key        ON agent_memory(user_id, workspace_id, key);
+    CREATE INDEX IF NOT EXISTS idx_agent_memory_profile    ON agent_memory(user_id, workspace_id, profile_id);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_fts USING fts5(
       memory_id UNINDEXED,
@@ -307,6 +309,53 @@ ensureCalendarSchema();
 ensureNotesSchema();
 ensureAgentMemorySchema();
 ensureModelPathsSchema();
+ensureCheckpointSchema();
+ensureConversationFts();
+
+function ensureCheckpointSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_checkpoints (
+      id          TEXT PRIMARY KEY,
+      kind        TEXT NOT NULL,
+      workspace   TEXT NOT NULL,
+      message     TEXT,
+      ref         TEXT,
+      dir         TEXT,
+      baseline    INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_checkpoints_workspace ON agent_checkpoints(workspace);
+  `);
+}
+
+function ensureConversationFts() {
+  const hasFts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='conversations_fts'").get();
+  if (hasFts) return;
+
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
+      conversation_id UNINDEXED,
+      title,
+      tokenize='unicode61'
+    );
+
+    INSERT INTO conversations_fts(conversation_id, title)
+    SELECT id, title FROM conversations WHERE deleted_at IS NULL;
+
+    CREATE TRIGGER IF NOT EXISTS conversations_fts_ai AFTER INSERT ON conversations BEGIN
+      INSERT INTO conversations_fts(conversation_id, title) VALUES (new.id, new.title);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS conversations_fts_ad AFTER DELETE ON conversations BEGIN
+      DELETE FROM conversations_fts WHERE conversation_id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS conversations_fts_au AFTER UPDATE OF title ON conversations BEGIN
+      DELETE FROM conversations_fts WHERE conversation_id = old.id;
+      INSERT INTO conversations_fts(conversation_id, title) VALUES (new.id, new.title);
+    END;
+  `);
+}
 
 logger.info(`Database: SQLite at ${DB_PATH}`);
 

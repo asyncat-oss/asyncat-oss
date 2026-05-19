@@ -168,11 +168,15 @@ function _getCachedSkills(goal) {
     _skillCache.delete(key);
     return null;
   }
+  // LRU: move to end on access
+  _skillCache.delete(key);
+  _skillCache.set(key, entry);
   return entry.result;
 }
 
 function _setCachedSkills(goal, result) {
   const key = _cacheKey(goal);
+  // LRU eviction: remove least-recently-used (first entry in insertion order)
   if (_skillCache.size >= SKILL_CACHE_MAX) {
     _skillCache.delete(_skillCache.keys().next().value);
   }

@@ -108,6 +108,13 @@ export const agentApi = {
     return res.json();
   },
 
+  updatePlan: async (sessionId, plan) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/plan`, {
+      method: 'PATCH',
+      body: JSON.stringify({ plan }),
+    });
+  },
+
   getSessionAudit: async (sessionId) => {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/audit`);
   },

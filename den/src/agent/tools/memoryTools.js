@@ -117,8 +117,13 @@ function cosineSim(a, b) {
  * In-process vector search over all memories that have embeddings.
  * Safe for up to ~50,000 memories (O(n) cosine pass, well under 10ms at that scale).
  */
-function _vectorSearch({ userId, workspaceId, queryVec, kind, limit = 10 }) {
+function _vectorSearch({ userId, workspaceId, profileId, queryVec, kind, limit = 10 }) {
   const params = [userId, workspaceId];
+  let profileClause = '';
+  if (profileId) {
+    profileClause = 'AND (profile_id = ? OR profile_id IS NULL)';
+    params.push(profileId);
+  }
   let kindClause = '';
   if (kind && kind !== 'all') {
     kindClause = 'AND memory_type = ?';
@@ -129,7 +134,7 @@ function _vectorSearch({ userId, workspaceId, queryVec, kind, limit = 10 }) {
   const rows = db.prepare(`
     SELECT ${memoryColumns}, embedding
     FROM agent_memory
-    WHERE user_id = ? AND workspace_id = ? ${kindClause} AND embedding IS NOT NULL
+    WHERE user_id = ? AND workspace_id = ? ${profileClause} ${kindClause} AND embedding IS NOT NULL
     LIMIT 2000
   `).all(...params);
 
@@ -161,15 +166,17 @@ export function bumpMemoryAccess(rows) {
   tx();
 }
 
-export function searchMemories({ userId, workspaceId, query, kind = 'all', limit = 10, bumpAccess = false }) {
+export function searchMemories({ userId, workspaceId, profileId, query, kind = 'all', limit = 10, bumpAccess = false }) {
   const ftsQuery = buildFtsQuery(query);
-  const params = [ftsQuery, userId, workspaceId];
+  const profileClause = profileId ? 'AND (m.profile_id = ? OR m.profile_id IS NULL)' : '';
+  const ftsParams = ftsQuery ? [ftsQuery, userId, workspaceId] : [];
+  if (ftsQuery && profileId) ftsParams.push(profileId);
   let kindClause = '';
   if (kind && kind !== 'all') {
     kindClause = 'AND m.memory_type = ?';
-    params.push(kind);
+    if (ftsQuery) ftsParams.push(kind);
   }
-  params.push(limit);
+  if (ftsQuery) ftsParams.push(limit);
 
   let rows = [];
   if (ftsQuery) {
@@ -178,10 +185,10 @@ export function searchMemories({ userId, workspaceId, query, kind = 'all', limit
         SELECT ${prefixedMemoryColumns}, bm25(agent_memory_fts) AS rank
         FROM agent_memory_fts fts
         JOIN agent_memory m ON m.id = fts.memory_id
-        WHERE fts.agent_memory_fts MATCH ? AND m.user_id = ? AND m.workspace_id = ? ${kindClause}
+        WHERE fts.agent_memory_fts MATCH ? AND m.user_id = ? AND m.workspace_id = ? ${profileClause} ${kindClause}
         ORDER BY rank
         LIMIT ?
-      `).all(...params);
+      `).all(...ftsParams);
     } catch {
       rows = [];
     }
@@ -190,6 +197,8 @@ export function searchMemories({ userId, workspaceId, query, kind = 'all', limit
   if (rows.length === 0) {
     const like = `%${query || ''}%`;
     const fallbackParams = [userId, workspaceId];
+    const fallbackProfileClause = profileId ? 'AND (profile_id = ? OR profile_id IS NULL)' : '';
+    if (profileId) fallbackParams.push(profileId);
     let fallbackKind = '';
     if (kind && kind !== 'all') {
       fallbackKind = 'AND memory_type = ?';
@@ -199,7 +208,7 @@ export function searchMemories({ userId, workspaceId, query, kind = 'all', limit
     rows = db.prepare(`
       SELECT ${memoryColumns}
       FROM agent_memory
-      WHERE user_id = ? AND workspace_id = ? ${fallbackKind}
+      WHERE user_id = ? AND workspace_id = ? ${fallbackProfileClause} ${fallbackKind}
         AND (key LIKE ? OR content LIKE ?)
       LIMIT ?
     `).all(...fallbackParams);
@@ -218,8 +227,13 @@ export function searchMemories({ userId, workspaceId, query, kind = 'all', limit
   return scored.map(normalizeMemoryRow);
 }
 
-export function listMemories({ userId, workspaceId, limit = 50, kind = 'all' }) {
+export function listMemories({ userId, workspaceId, profileId, limit = 50, kind = 'all' }) {
   const params = [userId, workspaceId];
+  let profileClause = '';
+  if (profileId) {
+    profileClause = 'AND (profile_id = ? OR profile_id IS NULL)';
+    params.push(profileId);
+  }
   let kindClause = '';
   if (kind && kind !== 'all') {
     kindClause = 'AND memory_type = ?';
@@ -229,7 +243,7 @@ export function listMemories({ userId, workspaceId, limit = 50, kind = 'all' }) 
   return db.prepare(`
     SELECT ${memoryColumns}
     FROM agent_memory
-    WHERE user_id = ? AND workspace_id = ? ${kindClause}
+    WHERE user_id = ? AND workspace_id = ? ${profileClause} ${kindClause}
     ORDER BY importance DESC, COALESCE(last_accessed_at, updated_at) DESC
     LIMIT ?
   `).all(...params).map(normalizeMemoryRow);
@@ -258,9 +272,11 @@ export const saveMemoryTool = {
       const tags = normalizeTags(args.tags);
       const importance = normalizeImportance(args.importance);
 
+      const profileId = context.profileId || null;
+
       const existing = db.prepare(
-        'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
-      ).get(context.userId, context.workspaceId, key);
+        'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND (profile_id = ? OR (profile_id IS NULL AND ? IS NULL))'
+      ).get(context.userId, context.workspaceId, key, profileId, profileId);
 
       let memoryId;
       let action;
@@ -277,9 +293,9 @@ export const saveMemoryTool = {
         memoryId = randomUUID();
         db.prepare(`
           INSERT INTO agent_memory
-            (id, user_id, workspace_id, memory_type, key, content, tags, importance)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance);
+            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId);
         action = 'stored';
       }
 
@@ -321,10 +337,13 @@ export const recallMemoryTool = {
       const kind = args.kind || args.memory_type || 'all';
       const limit = Math.max(1, Math.min(25, Number(args.limit || 10)));
 
+      const profileId = context.profileId || null;
+
       // Primary: BM25 full-text search (fast, keyword-accurate)
       const bm25Results = searchMemories({
         userId: context.userId,
         workspaceId: context.workspaceId,
+        profileId,
         query: args.query,
         kind,
         limit,
@@ -340,6 +359,7 @@ export const recallMemoryTool = {
             const vectorResults = _vectorSearch({
               userId: context.userId,
               workspaceId: context.workspaceId,
+              profileId,
               queryVec,
               kind,
               limit,
@@ -378,6 +398,7 @@ export const listMemoryTool = {
       const memories = listMemories({
         userId: context.userId,
         workspaceId: context.workspaceId,
+        profileId: context.profileId || null,
         kind: args.kind || args.memory_type || 'all',
         limit: Math.max(1, Math.min(100, Number(args.limit || 50))),
       });
@@ -402,9 +423,10 @@ export const forgetMemoryTool = {
   },
   execute: async (args, context) => {
     try {
+      const profileId = context.profileId || null;
       const result = db.prepare(
-        'DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
-      ).run(context.userId, context.workspaceId, args.key);
+        'DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND (profile_id = ? OR (profile_id IS NULL AND ? IS NULL))'
+      ).run(context.userId, context.workspaceId, args.key, profileId, profileId);
       return result.changes > 0
         ? { success: true, key: args.key, action: 'deleted' }
         : { success: false, error: `No memory found with key: ${args.key}` };

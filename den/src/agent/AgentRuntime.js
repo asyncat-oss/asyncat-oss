@@ -32,7 +32,44 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 const MAX_ROUNDS_DEFAULT = 25;
+
+// ── Checkpoint store (DB-backed, survives restarts) ───────────────────────────
 const CHECKPOINTS = new Map();
+
+function _loadCheckpointsFromDb() {
+  try {
+    const rows = db.prepare('SELECT * FROM agent_checkpoints ORDER BY created_at DESC LIMIT 200').all();
+    for (const row of rows) {
+      CHECKPOINTS.set(row.id, {
+        id: row.id,
+        kind: row.kind,
+        workspace: row.workspace,
+        message: row.message || undefined,
+        ref: row.ref || undefined,
+        dir: row.dir || undefined,
+        baseline: Boolean(row.baseline),
+        createdAt: row.created_at,
+      });
+    }
+  } catch { /* DB not ready yet on first boot */ }
+}
+
+function _persistCheckpoint(cp) {
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO agent_checkpoints (id, kind, workspace, message, ref, dir, baseline, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(cp.id, cp.kind, cp.workspace, cp.message ?? null, cp.ref ?? null, cp.dir ?? null, cp.baseline ? 1 : 0, cp.createdAt || new Date().toISOString());
+  } catch { /* non-critical */ }
+}
+
+function _deletePersistedCheckpoint(id) {
+  try {
+    db.prepare('DELETE FROM agent_checkpoints WHERE id = ?').run(id);
+  } catch { /* non-critical */ }
+}
+
+_loadCheckpointsFromDb();
 const SNAPSHOT_SKIP = new Set([
   '.git', 'node_modules', 'dist', 'build', 'data', 'logs',
   '.asyncat', '.asyncat-attachments', '.asyncat-artifacts', '.agent_tmp',
@@ -198,6 +235,7 @@ export class AgentRuntime {
     this.abortSignal = opts.abortSignal || null;
     this.capabilitiesSection = opts.capabilitiesSection || '';
     this.usageContext = opts.usageContext || {};
+    this.agentProfileId = opts.agentProfileId || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // ── Phase 1: Read-before-write guard ─────────────────────────────────
@@ -209,8 +247,10 @@ export class AgentRuntime {
     // Track whether we've already sent a loop-nudge (strategy change before stopping)
     this._loopNudgeSent = false;
 
-    // Wire BasalGanglia events (skill auto-discovery) to the runtime event stream
+    // Wire BasalGanglia events and LLM client (skill auto-discovery + LLM-generated bodies)
     basalGanglia.onEvent = (event) => this.onEvent(event);
+    basalGanglia.aiClient = this.aiClient;
+    basalGanglia.model = this.model;
 
     // ── Compaction budget ──────────────────────────────────────────────────
     // Use the model's real context window from the existing resolver system.
@@ -219,7 +259,7 @@ export class AgentRuntime {
     const modelContextWindow = resolvedCtx.contextWindow;
     const defaultBudget = this.isLocal
       ? Math.min(modelContextWindow * 0.75, opts.tokenBudget ?? 6000)  // local: 75% or user-set
-      : Math.floor(modelContextWindow * 0.5);  // cloud: 50% of context
+      : Math.floor(modelContextWindow * 0.7);  // cloud: 70% of context
 
     this.modelContextWindow = modelContextWindow; // expose for usage events
     this.contextWindowSource = resolvedCtx.source;
@@ -328,21 +368,21 @@ export class AgentRuntime {
     // Load relevant memories
     const memories = this._loadMemories(goal);
 
-    // Build system prompt
+    // Build tool descriptions and select skills in parallel — both are independent.
     const toolDefs = this._toolDefinitionsForMode();
-    const toolDescriptions = ToolCallFormatter.formatToolsForPrompt(
-      toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
-    );
-
-    // Let the model choose which skills are worth injecting for this run.
-    const skillSelection = await selectRelevantSkillsWithLlm({
-      aiClient: this.aiClient,
-      model: this.model,
-      goal,
-      conversationHistory,
-      workingDir: this.workingDir,
-      limit: 5,
-    });
+    const [toolDescriptions, skillSelection] = await Promise.all([
+      Promise.resolve(ToolCallFormatter.formatToolsForPrompt(
+        toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
+      )),
+      selectRelevantSkillsWithLlm({
+        aiClient: this.aiClient,
+        model: this.model,
+        goal,
+        conversationHistory,
+        workingDir: this.workingDir,
+        limit: 5,
+      }),
+    ]);
     const relevantSkills = skillSelection.skills || [];
 
     if (relevantSkills.length > 0) {
@@ -419,6 +459,7 @@ export class AgentRuntime {
     const toolContext = {
       userId: this.userId,
       workspaceId: this.workspaceId,
+      profileId: this.agentProfileId,
       workingDir: this.workingDir,
       workspaceRoot: this.workspaceRoot,
       session: this.session,
@@ -1826,6 +1867,7 @@ export class AgentRuntime {
         };
       }
       CHECKPOINTS.set(id, checkpoint);
+      _persistCheckpoint(checkpoint);
       return checkpoint;
     } catch (err) {
       this.onEvent({ type: 'error', data: { message: `Checkpoint failed: ${err.message}` } });
@@ -2496,6 +2538,7 @@ export function deleteCheckpoint(checkpoint) {
       try { execSync(`git stash drop ${cp.ref}`, { cwd: cp.workspace, stdio: 'ignore', timeout: 15000 }); } catch {}
     }
     CHECKPOINTS.delete(cp.id);
+    _deletePersistedCheckpoint(cp.id);
     return { success: true, deleted: true, checkpoint: cp };
   } catch (err) {
     return { success: false, error: err.message, checkpoint: cp };
