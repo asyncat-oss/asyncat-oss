@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X, ChevronDown,
-  Mic, Volume2, Cpu, Eye, Image, MessageSquare
+  Mic, Volume2, Cpu, Eye, Image, MessageSquare, BarChart3
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import EngineRuntimeSection from './EngineRuntimeSection.jsx';
@@ -11,6 +11,7 @@ import LocalModelsPane from './LocalModelsPane.jsx';
 import AudioModelsSection from './AudioModelsSection.jsx';
 import VisualModelsSection from './VisualModelsSection.jsx';
 import CapabilityProvidersSection from './CapabilityProvidersSection.jsx';
+import ModelUsageSection from './ModelUsageSection.jsx';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
 import {
@@ -18,7 +19,7 @@ import {
   providerLabel, capabilityBadgeColor
 } from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
-import { audioApi, visualModelsApi } from '../Settings/settingApi.js';
+import { audioApi, visualModelsApi, aiProviderApi } from '../Settings/settingApi.js';
 import { installApi } from '../CommandCenter/api/installApi.js';
 
 // ── Status dot ────────────────────────────────────────────────────────────────
@@ -165,6 +166,10 @@ const ModelsPage = () => {
   const [visualModels, setVisualModels] = useState({ vision: [], image: [] });
   const [installReadiness, setInstallReadiness] = useState(null);
   const [highlightedItem, setHighlightedItem] = useState(null);
+  const [usageRange, setUsageRange] = useState('30d');
+  const [modelUsage, setModelUsage] = useState(null);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+  const [usageError, setUsageError] = useState('');
 
   const refreshVoiceData = useCallback(() => {
     Promise.all([
@@ -197,10 +202,23 @@ const ModelsPage = () => {
       .catch(() => setVisualModels({ vision: [], image: [] }));
   }, []);
 
+  const refreshUsageData = useCallback(() => {
+    setLoadingUsage(true);
+    setUsageError('');
+    aiProviderApi.getUsage({ range: usageRange, limit: 12 })
+      .then(setModelUsage)
+      .catch(err => setUsageError(err.message || 'Failed to load model usage.'))
+      .finally(() => setLoadingUsage(false));
+  }, [usageRange]);
+
   useEffect(() => {
     refreshVoiceData();
     refreshVisualData();
   }, [refreshVoiceData, refreshVisualData]);
+
+  useEffect(() => {
+    refreshUsageData();
+  }, [refreshUsageData]);
 
   useEffect(() => {
     installApi.getReadiness()
@@ -215,6 +233,7 @@ const ModelsPage = () => {
   const [expandedImage, setExpandedImage] = useState(false);
   const [expandedEngine, setExpandedEngine] = useState(false);
   const [expandedChat, setExpandedChat] = useState(true);
+  const [expandedUsage, setExpandedUsage] = useState(true);
 
   // ── Unified search ─────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -336,6 +355,7 @@ const ModelsPage = () => {
     loadModelList();
     refreshVoiceData();
     refreshVisualData();
+    refreshUsageData();
     loadEngineData({ clearActions: true });
     loadEngineCatalog(true);
     loadProviderData();
@@ -438,6 +458,30 @@ const ModelsPage = () => {
             onAudioRefresh={refreshVoiceData}
             onVisualRefresh={refreshVisualData}
           />
+
+          {/* ── Usage ──────────────────────────────────────────────────────── */}
+          <CollapsibleSection
+            icon={BarChart3}
+            title="Usage"
+            subtitle={modelUsage?.totals?.request_count
+              ? `${modelUsage.totals.request_count} request${modelUsage.totals.request_count === 1 ? '' : 's'} · ${Math.round((modelUsage.totals.total_tokens || 0) / 1000)}k tokens`
+              : 'Track exact and estimated model usage'}
+            badge={<Badge color={modelUsage?.totals?.request_count ? 'blue' : 'gray'}>{usageRange}</Badge>}
+            expanded={expandedUsage}
+            onToggle={() => setExpandedUsage(v => !v)}
+          >
+            <div className="pt-5">
+              <ModelUsageSection
+                usage={modelUsage}
+                loading={loadingUsage}
+                error={usageError}
+                range={usageRange}
+                onRangeChange={setUsageRange}
+                onRefresh={refreshUsageData}
+                catalog={providerCatalog}
+              />
+            </div>
+          </CollapsibleSection>
 
           {/* ── Chat & Agent Models ──────────────────────────────────────── */}
           <CollapsibleSection

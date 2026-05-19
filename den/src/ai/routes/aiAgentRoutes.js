@@ -450,6 +450,7 @@ initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId, provide
     }),
     soul: resolvedSoul,
     providerInfo,
+    usageContext: { operation: 'scheduled' },
   });
   if (Array.isArray(profile?.always_allowed_tools)) {
     profile.always_allowed_tools.forEach(tool => {
@@ -508,6 +509,7 @@ async function runAgentTaskInBackground(runId) {
       },
       soul: resolvedSoul,
       providerInfo,
+      usageContext: { operation: 'task-run' },
       onEvent: (event) => {
         if (event?.type === 'session_start' && event?.data?.sessionId) {
           updateTaskRun(runId, { sessionId: event.data.sessionId });
@@ -1412,7 +1414,27 @@ router.post('/run', authenticate, async (req, res) => {
     abortController.abort();
   });
   try {
-    const { goal: rawGoal, message: rawMessage, conversationHistory = [], workingDir, workingContext, maxRounds, autoApprove, continueSessionId, preApprovedTools = [], profileId, enableTools = true, agentMode, agentMentions = [], fileAttachments = [], reasoningEffort = 'auto', enabledIntegrationTools = null } = req.body;
+    const {
+      goal: rawGoal,
+      message: rawMessage,
+      conversationHistory = [],
+      workingDir,
+      workingContext,
+      maxRounds,
+      autoApprove,
+      continueSessionId,
+      preApprovedTools = [],
+      profileId,
+      enableTools = true,
+      agentMode,
+      agentMentions = [],
+      fileAttachments = [],
+      reasoningEffort = 'auto',
+      enabledIntegrationTools = null,
+      conversationId = null,
+      userMessageId = null,
+      assistantMessageId = null,
+    } = req.body;
     const resolvedAgentMode = agentMode === 'plan' || enableTools === false ? 'plan' : 'action';
     const baseGoal = (rawGoal || rawMessage || '').trim();
 
@@ -1499,6 +1521,12 @@ router.post('/run', authenticate, async (req, res) => {
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,
       abortSignal: abortController.signal,
+      usageContext: {
+        operation: 'agent',
+        conversationId,
+        userMessageId,
+        assistantMessageId,
+      },
       onEvent: continuedTaskRun ? (event) => {
         updateTaskRun(continuedTaskRun.id, {
           ...(event?.type === 'session_start' ? { status: 'running' } : {}),
@@ -2523,6 +2551,7 @@ router.post('/multi', authenticate, async (req, res) => {
             workingDir: task.workingDir || defaultAgentWorkingDir(),
             maxRounds: 15,
             providerInfo,
+            usageContext: { operation: 'multi-agent' },
           });
           const answer = await agent.run(task.goal);
           return { name: task.name || task.goal.slice(0, 40), goal: task.goal, answer, success: true };

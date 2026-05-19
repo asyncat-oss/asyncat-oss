@@ -261,6 +261,49 @@ CREATE TABLE IF NOT EXISTS ai_provider_profiles (
 CREATE INDEX IF NOT EXISTS idx_ai_provider_profiles_user ON ai_provider_profiles(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_ai_provider_profiles_provider ON ai_provider_profiles(user_id, provider_id);
 
+CREATE TABLE IF NOT EXISTS ai_model_usage_events (
+  id                         TEXT PRIMARY KEY,
+  user_id                    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id               TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  conversation_id            TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+  message_id                 TEXT,
+  assistant_message_id       TEXT,
+  agent_session_id           TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL,
+  provider_profile_id        TEXT,
+  provider_id                TEXT,
+  provider_type              TEXT,
+  provider_name              TEXT,
+  model                      TEXT NOT NULL,
+  operation                  TEXT NOT NULL DEFAULT 'agent',
+  input_tokens               INTEGER NOT NULL DEFAULT 0,
+  output_tokens              INTEGER NOT NULL DEFAULT 0,
+  total_tokens               INTEGER NOT NULL DEFAULT 0,
+  current_context_tokens     INTEGER NOT NULL DEFAULT 0,
+  cached_tokens              INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens           INTEGER NOT NULL DEFAULT 0,
+  audio_tokens               INTEGER NOT NULL DEFAULT 0,
+  image_tokens               INTEGER NOT NULL DEFAULT 0,
+  estimated                  INTEGER NOT NULL DEFAULT 0,
+  usage_source               TEXT NOT NULL DEFAULT 'estimated',
+  context_window             INTEGER,
+  context_window_source      TEXT,
+  context_window_confidence  TEXT,
+  latency_ms                 INTEGER,
+  tokens_per_second          REAL,
+  round                      INTEGER,
+  metadata                   TEXT NOT NULL DEFAULT '{}',
+  created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_model_usage_user_created
+  ON ai_model_usage_events(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_model_usage_workspace_created
+  ON ai_model_usage_events(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_model_usage_model
+  ON ai_model_usage_events(user_id, provider_id, model, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_model_usage_conversation
+  ON ai_model_usage_events(conversation_id, created_at);
+
 -- ─── Agent Memory & Sessions ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agent_memory (

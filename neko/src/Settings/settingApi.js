@@ -22,6 +22,27 @@ const apiCall = async (url, options = {}) => {
 	return handleResponse(response);
 };
 
+const getCurrentWorkspaceId = () => {
+	try {
+		const savedWorkspace = sessionStorage.getItem('currentWorkspace');
+		if (savedWorkspace) {
+			const workspace = JSON.parse(savedWorkspace);
+			return workspace?.id || null;
+		}
+		return window.__CURRENT_WORKSPACE_ID__ || null;
+	} catch {
+		return null;
+	}
+};
+
+const withWorkspaceParam = (url) => {
+	const workspaceId = getCurrentWorkspaceId();
+	if (!workspaceId) return url;
+	const parsed = new URL(url, window.location.origin);
+	parsed.searchParams.set('workspaceId', workspaceId);
+	return parsed.toString();
+};
+
 // ===========================================
 // WORKSPACE SETTINGS API FUNCTIONS
 // ===========================================
@@ -237,6 +258,11 @@ export const aiProviderApi = {
   listProviderModels: async (profileId) => {
     const suffix = profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
     return apiCall(`${AI_API_BASE}/models${suffix}`);
+  },
+
+  getUsage: async ({ range = '30d', limit = 12 } = {}) => {
+    const params = new URLSearchParams({ range, limit: String(limit) });
+    return apiCall(withWorkspaceParam(`${AI_API_BASE}/usage?${params.toString()}`));
   },
 
   streamStatus: (onStatus, onError) => {

@@ -34,6 +34,9 @@ export const agentApi = {
         agentMode: opts.agentMode || (opts.enableTools === false ? 'plan' : 'action'),
         reasoningEffort: opts.reasoningEffort || 'auto',
         enabledIntegrationTools: Array.isArray(opts.enabledIntegrationTools) ? opts.enabledIntegrationTools : null,
+        conversationId: opts.conversationId || null,
+        userMessageId: opts.userMessageId || null,
+        assistantMessageId: opts.assistantMessageId || null,
       })
     });
 

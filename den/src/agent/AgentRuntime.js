@@ -23,6 +23,7 @@ import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
+import { normalizeUsage, recordModelUsage } from '../ai/controllers/ai/modelUsageService.js';
 import { getSnapshotsDir } from './workspacePaths.js';
 import db from '../db/client.js';
 import { randomUUID } from 'crypto';
@@ -196,6 +197,7 @@ export class AgentRuntime {
       : null;
     this.abortSignal = opts.abortSignal || null;
     this.capabilitiesSection = opts.capabilitiesSection || '';
+    this.usageContext = opts.usageContext || {};
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // ── Phase 1: Read-before-write guard ─────────────────────────────────
@@ -513,27 +515,61 @@ export class AgentRuntime {
           responseText = result.text;
           apiToolCalls = result.toolCalls;
           streamedReasoning = result.reasoning || '';
-          const hasRealUsage = Boolean(result.usage?.prompt_tokens || result.usage?.completion_tokens);
-          const inputTokens = result.usage?.prompt_tokens || promptTokens;
-          const outputTokens = result.usage?.completion_tokens || this._estimateTokens(responseText);
+          const estimatedInputTokens = promptTokens;
+          const estimatedOutputTokens = this._estimateTokens(responseText);
+          const hasRealUsage = Boolean(
+            result.usage?.prompt_tokens ||
+            result.usage?.completion_tokens ||
+            result.usage?.input_tokens ||
+            result.usage?.output_tokens ||
+            result.usage?.total_tokens
+          );
+          const normalizedUsage = normalizeUsage(result.usage || {}, {
+            inputTokens: estimatedInputTokens,
+            outputTokens: estimatedOutputTokens,
+          });
+          const inputTokens = normalizedUsage.inputTokens;
+          const outputTokens = normalizedUsage.outputTokens;
+          const totalTokens = normalizedUsage.totalTokens || (inputTokens + outputTokens);
           this.usage.inputTokens += inputTokens;
           this.usage.outputTokens += outputTokens;
           this.usage.totalTokens = this.usage.inputTokens + this.usage.outputTokens;
+          this.usage.cumulativeInputTokens = this.usage.inputTokens;
+          this.usage.cumulativeOutputTokens = this.usage.outputTokens;
+          this.usage.cumulativeTotalTokens = this.usage.totalTokens;
           // Token generation speed (tokens/sec)
           const tokensPerSecond = llmCallDurationMs > 0 ? Math.round((outputTokens / llmCallDurationMs) * 1000) : null;
-          this.onEvent({
+          const usageEvent = {
             type: 'usage_update',
             data: {
               ...this.usage,
+              lastInputTokens: inputTokens,
+              lastOutputTokens: outputTokens,
+              lastTotalTokens: totalTokens,
+              currentContextTokens: inputTokens,
               round,
               model: this.model,
               isLocal: this.isLocal,
+              providerId: this.providerInfo?.providerId || this.providerInfo?.provider_id || null,
+              providerType: this.providerInfo?.type || this.providerInfo?.provider_type || null,
+              providerProfileId: this.providerInfo?.profileId || this.providerInfo?.profile_id || null,
               estimated: !hasRealUsage,
+              usageSource: hasRealUsage ? 'provider' : 'estimated',
               tokensPerSecond,
               contextWindow: this.modelContextWindow,
               contextWindowSource: this.contextWindowSource,
               contextWindowConfidence: this.contextWindowConfidence,
             },
+          };
+          this.onEvent(usageEvent);
+          this._recordUsageEvent({
+            ...usageEvent.data,
+            rawUsage: normalizedUsage.raw,
+            cachedTokens: normalizedUsage.cachedTokens,
+            reasoningTokens: normalizedUsage.reasoningTokens,
+            audioTokens: normalizedUsage.audioTokens,
+            imageTokens: normalizedUsage.imageTokens,
+            latencyMs: llmCallDurationMs,
           });
           llmSuccess = true;
           break;
@@ -1289,13 +1325,15 @@ export class AgentRuntime {
           prompt_tokens: chunk.usage.prompt_tokens ?? chunk.usage.input_tokens ?? 0,
           completion_tokens: chunk.usage.completion_tokens ?? chunk.usage.output_tokens ?? 0,
           total_tokens: chunk.usage.total_tokens ?? 0,
+          prompt_tokens_details: chunk.usage.prompt_tokens_details ?? chunk.usage.input_tokens_details ?? undefined,
+          completion_tokens_details: chunk.usage.completion_tokens_details ?? chunk.usage.output_tokens_details ?? undefined,
         };
         if (!streamUsage.total_tokens) {
           streamUsage.total_tokens = streamUsage.prompt_tokens + streamUsage.completion_tokens;
         }
       }
 
-      const delta = chunk.choices[0]?.delta;
+      const delta = chunk.choices?.[0]?.delta;
       if (!delta) continue;
 
       finishReason = chunk.choices[0]?.finish_reason || finishReason;
@@ -1610,6 +1648,52 @@ export class AgentRuntime {
       });
     } catch {
       return { contextWindow: this.isLocal ? 8192 : 128000, source: 'fallback', confidence: 'conservative' };
+    }
+  }
+
+  _recordUsageEvent(data = {}) {
+    try {
+      recordModelUsage({
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        conversationId: this.usageContext.conversationId || null,
+        messageId: this.usageContext.userMessageId || this.usageContext.messageId || null,
+        assistantMessageId: this.usageContext.assistantMessageId || null,
+        agentSessionId: this.session?.id || null,
+        providerProfileId: data.providerProfileId || null,
+        providerId: data.providerId || null,
+        providerType: data.providerType || null,
+        providerName: this.providerInfo?.name || null,
+        model: data.model || this.model,
+        operation: this.usageContext.operation || 'agent',
+        inputTokens: data.lastInputTokens,
+        outputTokens: data.lastOutputTokens,
+        totalTokens: data.lastTotalTokens,
+        currentContextTokens: data.currentContextTokens,
+        cachedTokens: data.cachedTokens,
+        reasoningTokens: data.reasoningTokens,
+        audioTokens: data.audioTokens,
+        imageTokens: data.imageTokens,
+        estimated: data.estimated,
+        usageSource: data.usageSource,
+        contextWindow: data.contextWindow,
+        contextWindowSource: data.contextWindowSource,
+        contextWindowConfidence: data.contextWindowConfidence,
+        latencyMs: data.latencyMs,
+        tokensPerSecond: data.tokensPerSecond,
+        round: data.round,
+        rawUsage: data.rawUsage,
+        metadata: {
+          cumulativeInputTokens: data.cumulativeInputTokens,
+          cumulativeOutputTokens: data.cumulativeOutputTokens,
+          cumulativeTotalTokens: data.cumulativeTotalTokens,
+          isLocal: data.isLocal,
+          agentMode: this.agentMode,
+          reasoningEffort: this.reasoningEffort,
+        },
+      });
+    } catch (err) {
+      console.warn('[agent] Failed to record model usage:', err.message);
     }
   }
 

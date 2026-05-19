@@ -139,11 +139,13 @@ const INTEGRATION_TOOL_PACKS = [
 
 function TokenBar({ usage }) {
   const ctx = usage.contextWindow || 128000;
-  const pct = Math.min((usage.totalTokens / ctx) * 100, 100);
+  const contextTokens = usage.currentContextTokens || usage.lastInputTokens || usage.inputTokens || 0;
+  const totalTokens = usage.cumulativeTotalTokens || usage.totalTokens || usage.lastTotalTokens || 0;
+  const pct = Math.min((contextTokens / ctx) * 100, 100);
   const color = pct >= 90 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : pct >= 70 ? 'bg-yellow-300' : 'bg-emerald-400';
   const textColor = pct >= 90 ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500';
-  const label = `${usage.estimated ? '~' : ''}${(usage.totalTokens / 1000).toFixed(1)}k`;
-  const tooltip = `${usage.estimated ? 'Estimated — ' : ''}${(usage.inputTokens / 1000).toFixed(1)}k in + ${(usage.outputTokens / 1000).toFixed(1)}k out · ${pct.toFixed(0)}% of ${(ctx / 1000).toFixed(0)}k context (${usage.contextWindowSource || 'unknown'})`;
+  const label = `${usage.estimated ? '~' : ''}${(contextTokens / 1000).toFixed(1)}k`;
+  const tooltip = `${usage.estimated ? 'Estimated — ' : ''}${(contextTokens / 1000).toFixed(1)}k current context · ${(totalTokens / 1000).toFixed(1)}k total used · ${pct.toFixed(0)}% of ${(ctx / 1000).toFixed(0)}k context (${usage.contextWindowSource || 'unknown'})`;
 
   return (
     <span className="inline-flex items-center gap-1" title={tooltip}>

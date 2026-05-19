@@ -38,6 +38,8 @@ export const agentTools = [
         maxRounds: 15, // Cap sub-agents at 15 rounds
         requestPermission: context.requestPermission,
         askUser: context.askUser,
+        providerInfo: providerInfo.providerInfo,
+        usageContext: { operation: 'delegated-agent' },
       });
 
       try {
@@ -124,6 +126,7 @@ export const agentTools = [
         askUser: context.askUser,
         soul: resolvedSoul,
         providerInfo: providerInfo.providerInfo,
+        usageContext: { operation: 'delegated-agent' },
       });
 
       if (Array.isArray(profile.always_allowed_tools)) {

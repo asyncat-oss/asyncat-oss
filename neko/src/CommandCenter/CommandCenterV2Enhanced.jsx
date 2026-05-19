@@ -1059,6 +1059,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         agentMode: effectiveAgentMode,
         reasoningEffort: selectedReasoningEffort,
         enabledIntegrationTools: runEnabledIntegrationTools,
+        conversationId: runConversationId,
+        userMessageId,
+        assistantMessageId,
       })) {
         if (controller.signal.aborted) break;
         if (event.type === 'session_start') {

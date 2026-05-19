@@ -90,7 +90,20 @@ function extractText(response) {
   return chunks.join('');
 }
 
-function completionFromText(text, model) {
+function normalizeResponseUsage(usage = {}) {
+  const inputTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0;
+  const outputTokens = usage.output_tokens ?? usage.completion_tokens ?? 0;
+  const totalTokens = usage.total_tokens ?? (inputTokens + outputTokens);
+  return {
+    prompt_tokens: inputTokens,
+    completion_tokens: outputTokens,
+    total_tokens: totalTokens,
+    prompt_tokens_details: usage.input_tokens_details || usage.prompt_tokens_details || undefined,
+    completion_tokens_details: usage.output_tokens_details || usage.completion_tokens_details || undefined,
+  };
+}
+
+function completionFromText(text, model, usage = null) {
   return {
     id: `codex-${Date.now()}`,
     object: 'chat.completion',
@@ -101,7 +114,7 @@ function completionFromText(text, model) {
       message: { role: 'assistant', content: text },
       finish_reason: 'stop',
     }],
-    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    usage: usage ? normalizeResponseUsage(usage) : { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
   };
 }
 
@@ -125,6 +138,7 @@ async function* streamText(text, model) {
 }
 
 async function* streamCodexResponse(responseStream, model) {
+  let finalUsage = null;
   for await (const event of responseStream) {
     if (event?.type === 'response.output_text.delta' && event.delta) {
       yield {
@@ -139,6 +153,19 @@ async function* streamCodexResponse(responseStream, model) {
       const message = event?.response?.error?.message || 'Codex response failed.';
       throw new Error(message);
     }
+    if (event?.type === 'response.completed' && event?.response?.usage) {
+      finalUsage = normalizeResponseUsage(event.response.usage);
+    }
+  }
+  if (finalUsage) {
+    yield {
+      id: `codex-${Date.now()}`,
+      object: 'chat.completion.chunk',
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [],
+      usage: finalUsage,
+    };
   }
   yield {
     id: `codex-${Date.now()}`,
@@ -151,6 +178,7 @@ async function* streamCodexResponse(responseStream, model) {
 
 async function collectCodexStream(responseStream) {
   let text = '';
+  let usage = null;
   for await (const event of responseStream) {
     if (event?.type === 'response.output_text.delta' && event.delta) {
       text += event.delta;
@@ -159,8 +187,11 @@ async function collectCodexStream(responseStream) {
       const message = event?.response?.error?.message || 'Codex response failed.';
       throw new Error(message);
     }
+    if (event?.type === 'response.completed' && event?.response?.usage) {
+      usage = normalizeResponseUsage(event.response.usage);
+    }
   }
-  return text;
+  return { text, usage };
 }
 
 export class CodexDirectClient {
@@ -269,8 +300,8 @@ export class CodexDirectClient {
     };
     const responseStream = await this.openai.responses.create({ ...payload, stream: true }, requestOptions);
     if (options.stream) return streamCodexResponse(responseStream, model);
-    const text = await collectCodexStream(responseStream);
-    return completionFromText(text, model);
+    const { text, usage } = await collectCodexStream(responseStream);
+    return completionFromText(text, model, usage);
   }
 }
 

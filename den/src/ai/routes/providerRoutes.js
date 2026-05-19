@@ -51,6 +51,7 @@ import {
   publicProvider,
 } from '../controllers/ai/providerCatalog.js';
 import { resolveContextWindow } from '../controllers/ai/modelContextResolver.js';
+import { getModelUsageSummary } from '../controllers/ai/modelUsageService.js';
 import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
 import {
   listMlxModels,
@@ -747,6 +748,18 @@ router.delete('/config', verifyUser, (req, res) => {
       success: true,
       active: { profile_id: null, provider_type: 'local', provider_id: LLAMA_PROVIDER_ID, base_url: LLAMA_BASE_URL, model: '', settings: {}, supports_tools: false },
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /usage — per-user model usage analytics ─────────────────────────────
+router.get('/usage', verifyUser, (req, res) => {
+  try {
+    const workspaceId = req.query.workspaceId || req.body?.workspaceId || null;
+    const range = req.query.range || '30d';
+    const limit = req.query.limit || 12;
+    res.json(getModelUsageSummary(req.user.id, { workspaceId, range, limit }));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
