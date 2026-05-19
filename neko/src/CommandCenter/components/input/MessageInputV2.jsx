@@ -1231,7 +1231,7 @@ export const MessageInputV2 = ({
                       type="button"
                       onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
                       disabled={disabled || activeBrain.loading || isSwitchingModel}
-                      title={`${activeBrain.label}${activeBrain.supportsTools ? " \u00b7 native tools enabled" : ""}`}
+                      title={`${activeBrain.label}${activeBrain.supportsTools ? " native tools enabled" : ""}`}
                       className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
                         activeBrain.isLoadingModel
                           ? "text-amber-500 dark:text-amber-400"
@@ -1545,7 +1545,7 @@ export const MessageInputV2 = ({
                       type="button"
                       onClick={isRecording ? stopRecording : startRecording}
                       disabled={disabled && !isRecording}
-                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode active \u00b7 Click to record" : "Record voice input"}
+                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode active" : "Record voice input"}
                       className={`inline-flex h-8 min-w-8 items-center justify-center gap-2 rounded-lg px-2.5 text-xs font-medium transition-all duration-200 ${
                         isRecording
                           ? "bg-red-50 text-red-500 ring-1 ring-red-200 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-800/70 midnight:bg-red-900/20"
@@ -1574,7 +1574,6 @@ export const MessageInputV2 = ({
                   <div className="inline-flex items-center gap-1.5">
                     {tokenUsage?.totalTokens > 0 && (
                       <>
-                        <span className="text-[10px] text-gray-300 dark:text-gray-700">\u00b7</span>
                         <TokenBar usage={tokenUsage} />
                       </>
                     )}
