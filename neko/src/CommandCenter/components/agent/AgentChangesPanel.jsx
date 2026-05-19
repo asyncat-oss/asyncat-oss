@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   Pencil, Trash2, FilePlus, Terminal, FolderPlus, File,
   ChevronDown, ChevronRight, X, Loader2, AlertCircle,
-  RefreshCw, RotateCcw, CheckCircle2, ShieldAlert,
+  RefreshCw, RotateCcw, CheckCircle2, ShieldAlert, GitCompare,
 } from 'lucide-react';
-import { agentApi } from '../../api';
+import { agentApi, gitApi } from '../../api';
 import Portal from '../../../components/Portal';
+import UnifiedDiffViewer from '../code/UnifiedDiffViewer';
 
 const FILE_WRITE_TOOLS  = new Set(['write_file', 'create_file']);
 const FILE_EDIT_TOOLS   = new Set(['edit_file']);
@@ -101,6 +102,57 @@ export function extractChanges(events) {
   return { files: [...seen.values()], commands };
 }
 
+function InlineDiffViewer({ path, workingDir, onClose }) {
+  const [diffText, setDiffText] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    gitApi.getDiff({ file: path, staged: false, path: workingDir })
+      .then(res => {
+        if (cancelled) return;
+        setDiffText(res?.diff || '');
+      })
+      .catch(err => { if (!cancelled) setError(err.message || 'Could not load diff'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [path, workingDir]);
+
+  return (
+    <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <div className="flex items-center gap-1.5">
+          <GitCompare className="w-3 h-3 text-gray-400" />
+          <span className="text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate">{path}</span>
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-2">
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+      {loading && (
+        <div className="flex items-center justify-center py-6 gap-2 text-gray-400 bg-white dark:bg-gray-900">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-xs">Loading diff…</span>
+        </div>
+      )}
+      {error && (
+        <div className="flex items-center gap-2 px-3 py-3 text-xs text-red-600 dark:text-red-400 bg-white dark:bg-gray-900">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+      {!loading && !error && (
+        diffText
+          ? <UnifiedDiffViewer diff={diffText} filePath={path} className="rounded-none border-0 max-h-64 overflow-y-auto" />
+          : <div className="px-3 py-4 text-center text-xs text-gray-400 dark:text-slate-600 bg-white dark:bg-gray-900">No uncommitted changes found.</div>
+      )}
+    </div>
+  );
+}
+
 function FileViewer({ path, onClose }) {
   const [entry, setEntry] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -167,9 +219,11 @@ function StateBadge({ state }) {
 
 export function FileChangeRow({ change, state }) {
   const [open, setOpen] = useState(false);
+  const [viewMode, setViewMode] = useState('diff'); // 'diff' | 'content'
   const meta = TYPE_META[change.type] || TYPE_META.written;
   const Icon = meta.icon;
   const canView = state?.exists !== false && change.type !== 'deleted';
+  const showsDiff = change.type === 'edited' || change.type === 'written';
   const displayPath = change.source ? `${change.source} -> ${change.path}` : change.path;
 
   return (
@@ -193,7 +247,26 @@ export function FileChangeRow({ change, state }) {
       </button>
       {open && canView && (
         <div className="px-3 pb-2">
-          <FileViewer path={change.path} onClose={() => setOpen(false)} />
+          {showsDiff && (
+            <div className="flex gap-1 mb-1.5">
+              <button
+                onClick={() => setViewMode('diff')}
+                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${viewMode === 'diff' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-500 hover:border-gray-300'}`}
+              >
+                Diff
+              </button>
+              <button
+                onClick={() => setViewMode('content')}
+                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${viewMode === 'content' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-500 hover:border-gray-300'}`}
+              >
+                Content
+              </button>
+            </div>
+          )}
+          {showsDiff && viewMode === 'diff'
+            ? <InlineDiffViewer path={change.path} workingDir={change.workingDir} onClose={() => setOpen(false)} />
+            : <FileViewer path={change.path} onClose={() => setOpen(false)} />
+          }
         </div>
       )}
       {!canView && state?.exists === false && (

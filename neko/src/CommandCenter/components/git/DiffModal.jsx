@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle, X, Copy, Check, FileCode } from 'lucide-react';
 import { gitApi } from '../../api';
 import Portal from '../../../components/Portal';
+import UnifiedDiffViewer from '../code/UnifiedDiffViewer';
 
 export default function DiffModal({ file, staged = false, compare = null, workingDir = null, onClose }) {
   const [diff, setDiff] = useState(null);
@@ -107,26 +108,9 @@ export default function DiffModal({ file, staged = false, compare = null, workin
               </div>
             )}
             {!loading && !error && (
-              <pre className="px-4 py-3 text-[12px] leading-relaxed text-gray-800 dark:text-gray-200">
-                {(diff?.diff || 'No diff available for this file.').split('\n').map((line, index) => {
-                  let bgClass = '';
-                  let textClass = '';
-                  if (line.startsWith('+') && !line.startsWith('+++')) {
-                    bgClass = 'bg-emerald-500/5';
-                    textClass = 'text-emerald-700 dark:text-emerald-300';
-                  } else if (line.startsWith('-') && !line.startsWith('---')) {
-                    bgClass = 'bg-red-500/5';
-                    textClass = 'text-red-700 dark:text-red-300';
-                  } else if (line.startsWith('@@')) {
-                    textClass = 'text-sky-700 dark:text-sky-300';
-                  }
-                  return (
-                    <div key={`${index}-${line.slice(0, 20)}`} className={`${bgClass} px-1`}>
-                      <span className={`font-mono ${textClass}`}>{line || ' '}</span>
-                    </div>
-                  );
-                })}
-              </pre>
+              diff?.diff
+                ? <UnifiedDiffViewer diff={diff.diff} filePath={file.path} className="rounded-none border-0" />
+                : <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-slate-600">No diff available for this file.</div>
             )}
           </div>
         </div>

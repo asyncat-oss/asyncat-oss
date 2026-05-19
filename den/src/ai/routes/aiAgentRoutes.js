@@ -27,6 +27,7 @@ import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
+import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool, renameSymbolTool } from '../../agent/tools/codeSearchTools.js';
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
@@ -2904,6 +2905,68 @@ router.delete('/artifacts/:filename', jwtVerify, (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// ── Code intelligence endpoints ───────────────────────────────────────────────
+
+function codeWorkingDir(req) {
+  return req.query?.path || req.body?.path || defaultAgentWorkingDir();
+}
+
+const codeContext = (req) => ({ workingDir: codeWorkingDir(req) });
+
+router.get('/code/search', authenticate, async (req, res) => {
+  try {
+    const result = await codeSearchTool.execute({
+      symbol: req.query.q || '',
+      kind: req.query.kind || 'any',
+      language: req.query.language || undefined,
+      max_results: parseInt(req.query.limit || '30'),
+    }, codeContext(req));
+    res.json(result);
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/code/definitions', authenticate, async (req, res) => {
+  try {
+    const result = await listDefinitionsTool.execute({
+      path: req.query.file,
+    }, codeContext(req));
+    res.json(result);
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/code/find-definition', authenticate, async (req, res) => {
+  try {
+    const result = await findDefinitionTool.execute({
+      symbol: req.query.symbol,
+      language: req.query.language,
+    }, codeContext(req));
+    res.json(result);
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/code/references', authenticate, async (req, res) => {
+  try {
+    const result = await findReferencesTool.execute({
+      symbol: req.query.symbol,
+      language: req.query.language,
+      max_results: parseInt(req.query.limit || '50'),
+    }, codeContext(req));
+    res.json(result);
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.post('/code/rename', authenticate, async (req, res) => {
+  try {
+    const result = await renameSymbolTool.execute({
+      old_name: req.body.old_name,
+      new_name: req.body.new_name,
+      language: req.body.language,
+      preview: req.body.preview !== false,
+    }, codeContext(req));
+    res.json(result);
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

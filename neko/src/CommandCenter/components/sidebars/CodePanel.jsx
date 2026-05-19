@@ -1,11 +1,38 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useState } from 'react';
-import { ChevronRight, Code2, File, Folder, GitBranch, Loader2, RefreshCw } from 'lucide-react';
+import { useEffect, useState, Suspense, lazy } from 'react';
+import {
+  ChevronRight, Code2, File, Folder, GitBranch, Loader2, RefreshCw,
+  Search, List, FileCode
+} from 'lucide-react';
 import { filesApi } from '../../api';
 import GitPanel from '../git/GitPanel';
 import SandboxPanel from './SandboxPanel';
+import CodeSearchPanel from '../code/CodeSearchPanel';
+import SymbolOutlinePanel from '../code/SymbolOutlinePanel';
 
-function WorkspaceFilesBrowser() {
+// Lazy-load Monaco viewer to keep initial bundle smaller
+const SyntaxFileViewer = lazy(() => import('../code/SyntaxFileViewer'));
+
+// ── File-type icon helpers ────────────────────────────────────────────────────
+
+const EXT_COLOR = {
+  js: 'text-yellow-400', jsx: 'text-sky-400', ts: 'text-blue-500', tsx: 'text-blue-400',
+  py: 'text-green-500', rs: 'text-orange-500', go: 'text-cyan-500', java: 'text-red-500',
+  css: 'text-pink-400', scss: 'text-pink-500', html: 'text-orange-400', json: 'text-gray-400',
+  md: 'text-gray-500', yml: 'text-purple-400', yaml: 'text-purple-400',
+  sh: 'text-gray-600', sql: 'text-teal-500', svg: 'text-green-400',
+};
+
+function FileIcon({ name, isDir }) {
+  if (isDir) return <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400 dark:text-amber-300" />;
+  const ext = name?.split('.').pop()?.toLowerCase();
+  const color = EXT_COLOR[ext] || 'text-gray-300 dark:text-slate-600';
+  return <FileCode className={`h-3.5 w-3.5 shrink-0 ${color}`} />;
+}
+
+// ── Workspace file browser ────────────────────────────────────────────────────
+
+function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
   const [entryPath, setEntryPath] = useState('.');
   const [entry, setEntry] = useState(null);
   const [openFile, setOpenFile] = useState(null);
@@ -18,7 +45,12 @@ function WorkspaceFilesBrowser() {
     try {
       const res = await filesApi.loadEntry('workspace', pathValue || '.', false, { limit: 800 });
       setEntry(res);
-      setOpenFile(res.type === 'file' ? res : null);
+      if (res.type === 'file') {
+        setOpenFile(res);
+        onFileOpen?.(res);
+      } else {
+        setOpenFile(null);
+      }
     } catch (err) {
       setError(err.message || 'Could not load files');
     } finally {
@@ -26,15 +58,24 @@ function WorkspaceFilesBrowser() {
     }
   }
 
+  useEffect(() => { load(entryPath); }, [entryPath]);
+
   useEffect(() => {
-    load(entryPath);
-  }, [entryPath]);
+    if (navigateTo) setEntryPath(navigateTo);
+  }, [navigateTo]);
 
   const entries = entry?.type === 'dir' ? (entry.entries || []) : [];
   const parts = entryPath === '.' ? [] : entryPath.split('/').filter(Boolean);
 
+  // Sort: dirs first, then files, both alphabetically
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950">
+      {/* Breadcrumb */}
       <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md bg-gray-50 px-2 py-1 text-[11px] text-gray-500 dark:bg-slate-800/60 dark:text-slate-400">
           <button type="button" onClick={() => setEntryPath('.')} className="shrink-0 hover:text-gray-900 dark:hover:text-slate-100">
@@ -68,10 +109,10 @@ function WorkspaceFilesBrowser() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {openFile ? (
-          <div>
-            <div className="mb-2 flex items-center gap-2">
+          <div className="flex h-full min-h-0 flex-col gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -80,13 +121,22 @@ function WorkspaceFilesBrowser() {
                 }}
                 className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Back
+                ← Back
               </button>
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-600 dark:text-slate-300">{openFile.path}</span>
             </div>
-            <pre className="max-h-[calc(100vh-260px)] overflow-auto rounded-md border border-gray-200 bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
-              {openFile.tooLarge ? 'File is too large to preview.' : openFile.binary ? 'Binary file preview is not available.' : openFile.content || ''}
-            </pre>
+            <Suspense fallback={
+              <div className="flex items-center justify-center py-12 text-xs text-gray-400">
+                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading editor…
+              </div>
+            }>
+              <SyntaxFileViewer
+                filePath={openFile.path}
+                content={openFile.content || ''}
+                tooLarge={openFile.tooLarge}
+                binary={openFile.binary}
+                maxHeight="calc(100vh - 280px)"
+              />
+            </Suspense>
           </div>
         ) : (
           <div className="overflow-hidden rounded-md border border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900/40">
@@ -102,22 +152,32 @@ function WorkspaceFilesBrowser() {
                 ..
               </button>
             )}
-            {entries.map(item => (
+            {sortedEntries.map(item => (
               <button
                 key={item.path}
                 type="button"
                 onClick={() => setEntryPath(item.path)}
                 className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
               >
-                {item.type === 'dir'
-                  ? <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
-                  : <File className="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-slate-600" />}
+                <FileIcon name={item.name} isDir={item.type === 'dir'} />
                 <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-slate-200">{item.name}</span>
-                {item.type === 'file' && <span className="text-[10px] text-gray-300 dark:text-slate-600">{item.ext || 'file'}</span>}
+                {item.type === 'file' && (
+                  <span className="text-[10px] text-gray-300 dark:text-slate-700">{item.ext || ''}</span>
+                )}
+                {item.type === 'file' && item.size > 0 && (
+                  <span className="text-[10px] text-gray-300 dark:text-slate-700 tabular-nums">
+                    {item.size > 1024 * 1024
+                      ? `${(item.size / (1024 * 1024)).toFixed(1)}MB`
+                      : item.size > 1024
+                        ? `${(item.size / 1024).toFixed(0)}KB`
+                        : `${item.size}B`
+                    }
+                  </span>
+                )}
               </button>
             ))}
             {!entries.length && !loading && (
-              <div className="px-3 py-4 text-center text-xs text-gray-400 dark:text-slate-500">No files</div>
+              <div className="px-3 py-4 text-center text-xs text-gray-400 dark:text-slate-500">Empty directory</div>
             )}
           </div>
         )}
@@ -125,6 +185,8 @@ function WorkspaceFilesBrowser() {
     </div>
   );
 }
+
+// ── Main CodePanel ─────────────────────────────────────────────────────────────
 
 export default function CodePanel({
   gitState,
@@ -139,6 +201,8 @@ export default function CodePanel({
     try { return localStorage.getItem('asyncat_code_panel_section') || 'files'; }
     catch { return 'files'; }
   });
+  const [openFilePath, setOpenFilePath] = useState(null);
+  const [navigateTarget, setNavigateTarget] = useState(null);
 
   const selectSection = (next) => {
     setSection(next);
@@ -147,13 +211,16 @@ export default function CodePanel({
 
   const buttons = [
     { id: 'files', label: 'Files', icon: Code2 },
+    { id: 'search', label: 'Search', icon: Search },
+    { id: 'outline', label: 'Outline', icon: List },
     { id: 'git', label: 'Git', icon: GitBranch, count: gitState?.changedCount || 0 },
-    { id: 'sandboxes', label: 'Sandboxes', icon: Folder },
+    { id: 'sandboxes', label: 'Boxes', icon: Folder },
   ];
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950">
-      <div className="grid shrink-0 grid-cols-3 gap-1 border-b border-gray-100 bg-white p-2 dark:border-slate-800 dark:bg-slate-950">
+      {/* Tab bar — 5 columns */}
+      <div className="grid shrink-0 grid-cols-5 gap-0.5 border-b border-gray-100 bg-white p-1.5 dark:border-slate-800 dark:bg-slate-950">
         {buttons.map(item => {
           const Icon = item.icon;
           const active = section === item.id;
@@ -162,17 +229,18 @@ export default function CodePanel({
               key={item.id}
               type="button"
               onClick={() => selectSection(item.id)}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+              title={item.label}
+              className={`inline-flex flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[9px] font-medium transition-colors ${
                 active
                   ? 'bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100'
                   : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800/60 dark:hover:text-slate-300'
               }`}
             >
               <Icon className={`h-3.5 w-3.5 ${active ? 'text-indigo-500 dark:text-indigo-400' : ''}`} />
-              {item.label}
+              <span className="leading-none">{item.label}</span>
               {item.count > 0 && (
-                <span className="rounded-full bg-indigo-100 px-1.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300">
-                  {item.count}
+                <span className="rounded-full bg-indigo-500 px-1 py-0 text-[8px] font-semibold text-white leading-none">
+                  {item.count > 99 ? '99+' : item.count}
                 </span>
               )}
             </button>
@@ -180,8 +248,24 @@ export default function CodePanel({
         })}
       </div>
 
-      <div className="min-h-0 flex-1">
-        {section === 'files' && <WorkspaceFilesBrowser />}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {section === 'files' && (
+          <WorkspaceFilesBrowser
+            onFileOpen={(f) => setOpenFilePath(f.path)}
+            navigateTo={navigateTarget}
+          />
+        )}
+        {section === 'search' && (
+          <CodeSearchPanel
+            onLocateResult={(r) => {
+              setNavigateTarget(r.file);
+              selectSection('files');
+            }}
+          />
+        )}
+        {section === 'outline' && (
+          <SymbolOutlinePanel filePath={openFilePath} />
+        )}
         {section === 'git' && (
           <GitPanel
             state={gitState}

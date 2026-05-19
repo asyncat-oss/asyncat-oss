@@ -8,6 +8,7 @@ export { schedulerApi } from './schedulerApi.js';
 export { bulkApi, workspaceUtils } from './bulkApi.js';
 export { apiUtils, cacheUtils, cachedProjectsApi } from './apiUtils.js';
 export { installApi } from './installApi.js';
+export { codeApi } from './codeApi.js';
 
 import { chatApi } from './chatApi.js';
 import { projectsApi } from './projectsApi.js';

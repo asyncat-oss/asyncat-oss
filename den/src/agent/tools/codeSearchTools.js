@@ -537,6 +537,154 @@ export const findDefinitionTool = {
   },
 };
 
-export const codeSearchTools = [codeSearchTool, listDefinitionsTool, findDefinitionTool];
+// ── find_references ──────────────────────────────────────────────────────────
+
+export const findReferencesTool = {
+  name: 'find_references',
+  description: 'Find all usages of a symbol (function, variable, class, constant) across the codebase. Returns file paths, line numbers, and context lines.',
+  category: 'code',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      symbol: { type: 'string', description: 'Symbol name to find all references to.' },
+      language: { type: 'string', description: 'Optional language filter (javascript, typescript, python, etc.).' },
+      max_results: { type: 'number', description: 'Max results to return (default 50, max 200).' },
+    },
+    required: ['symbol'],
+  },
+  execute: async (args, context) => {
+    const symbol = String(args.symbol || '').trim();
+    if (!symbol) return { success: false, error: 'symbol is required' };
+    const limit = Math.min(200, Math.max(1, Number(args.max_results || 50)));
+    const rootDir = findCodeRoot(context.workingDir);
+
+    // Try ripgrep first (fast), fall back to manual scan
+    if (hasBin('rg')) {
+      try {
+        const langFlag = args.language ? `--type=${args.language}` : '';
+        const out = execSync(
+          `rg --json -n --word-regexp ${langFlag} ${JSON.stringify(symbol)}`,
+          { cwd: rootDir, encoding: 'utf8', timeout: 15000, maxBuffer: 4 * 1024 * 1024 }
+        );
+        const results = out.trim().split('\n')
+          .filter(Boolean)
+          .map(line => { try { return JSON.parse(line); } catch { return null; } })
+          .filter(obj => obj?.type === 'match')
+          .slice(0, limit)
+          .map(obj => ({
+            file: path.relative(rootDir, obj.data.path.text),
+            line: obj.data.line_number,
+            text: (obj.data.lines.text || '').trimEnd().slice(0, 200),
+          }));
+        return { success: true, symbol, total: results.length, results, method: 'ripgrep' };
+      } catch { /* fall through */ }
+    }
+
+    // Manual scan with word-boundary regex
+    const langFilter = args.language?.toLowerCase();
+    let allExtensions = new Set();
+    if (langFilter && LANG_PATTERNS[langFilter]) {
+      for (const ext of LANG_PATTERNS[langFilter].extensions) allExtensions.add(ext);
+    } else {
+      for (const config of Object.values(LANG_PATTERNS)) {
+        for (const ext of config.extensions) allExtensions.add(ext);
+      }
+    }
+
+    const files = collectFiles(rootDir, allExtensions, 500);
+    const wordRe = new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gm');
+    const results = [];
+
+    for (const file of files) {
+      if (results.length >= limit) break;
+      let content;
+      try { content = fs.readFileSync(file, 'utf8'); } catch { continue; }
+      const lines = content.split('\n');
+      wordRe.lastIndex = 0;
+      let match;
+      while ((match = wordRe.exec(content)) !== null && results.length < limit) {
+        const lineNum = content.substring(0, match.index).split('\n').length;
+        results.push({
+          file: path.relative(rootDir, file),
+          line: lineNum,
+          text: (lines[lineNum - 1] || '').trim().slice(0, 200),
+        });
+      }
+    }
+
+    return { success: true, symbol, total: results.length, results, method: 'scan' };
+  },
+};
+
+// ── rename_symbol ─────────────────────────────────────────────────────────────
+
+export const renameSymbolTool = {
+  name: 'rename_symbol',
+  description: 'Rename a symbol (function, variable, class) across all matching files in the workspace. Performs word-boundary replacement to avoid partial matches. Preview mode shows what would change without writing.',
+  category: 'code',
+  permission: PermissionLevel.DANGEROUS,
+  parameters: {
+    type: 'object',
+    properties: {
+      old_name: { type: 'string', description: 'Current symbol name.' },
+      new_name: { type: 'string', description: 'Replacement symbol name.' },
+      language: { type: 'string', description: 'Optional language filter to narrow scope.' },
+      preview: { type: 'boolean', description: 'If true, return affected files without writing. Default false.' },
+    },
+    required: ['old_name', 'new_name'],
+  },
+  execute: async (args, context) => {
+    const oldName = String(args.old_name || '').trim();
+    const newName = String(args.new_name || '').trim();
+    if (!oldName || !newName) return { success: false, error: 'old_name and new_name are required' };
+    if (!/^\w+$/.test(oldName) || !/^\w+$/.test(newName)) {
+      return { success: false, error: 'Symbol names must be simple identifiers (word characters only).' };
+    }
+
+    const rootDir = findCodeRoot(context.workingDir);
+    const langFilter = args.language?.toLowerCase();
+    let allExtensions = new Set();
+    if (langFilter && LANG_PATTERNS[langFilter]) {
+      for (const ext of LANG_PATTERNS[langFilter].extensions) allExtensions.add(ext);
+    } else {
+      for (const config of Object.values(LANG_PATTERNS)) {
+        for (const ext of config.extensions) allExtensions.add(ext);
+      }
+    }
+
+    const files = collectFiles(rootDir, allExtensions, 500);
+    const wordRe = new RegExp(`\\b${oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+    const affected = [];
+
+    for (const file of files) {
+      let content;
+      try { content = fs.readFileSync(file, 'utf8'); } catch { continue; }
+      const count = (content.match(wordRe) || []).length;
+      if (count === 0) continue;
+
+      const relPath = path.relative(rootDir, file);
+      affected.push({ file: relPath, replacements: count });
+
+      if (!args.preview) {
+        const updated = content.replace(wordRe, newName);
+        try { fs.writeFileSync(file, updated, 'utf8'); } catch { /* skip unwritable */ }
+      }
+    }
+
+    return {
+      success: true,
+      old_name: oldName,
+      new_name: newName,
+      preview: Boolean(args.preview),
+      files_affected: affected.length,
+      total_replacements: affected.reduce((s, f) => s + f.replacements, 0),
+      affected,
+      ...(args.preview ? { message: 'Preview only — no files were modified.' } : {}),
+    };
+  },
+};
+
+export const codeSearchTools = [codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool, renameSymbolTool];
 export default codeSearchTools;
 
