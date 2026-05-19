@@ -50,6 +50,7 @@ import integrationsRouter from './integrations/integrationsRouter.js';
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
+import { recoverSandboxJobs } from './agent/SandboxManager.js';
 
 // ─── Machine token ────────────────────────────────────────────────────────────
 import { randomUUID } from 'crypto';
@@ -67,6 +68,15 @@ try {
   logger.warn('Could not write machine token:', e.message);
 }
 export { MACHINE_TOKEN };
+
+try {
+  const recoveredSandboxJobs = recoverSandboxJobs();
+  if (recoveredSandboxJobs > 0) {
+    logger.info(`Marked ${recoveredSandboxJobs} interrupted sandbox job(s) as failed`);
+  }
+} catch (e) {
+  logger.warn('Could not recover sandbox jobs:', e.message);
+}
 
 // ─── App setup ────────────────────────────────────────────────────────────────
 const app = express();

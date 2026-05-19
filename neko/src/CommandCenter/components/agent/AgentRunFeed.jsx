@@ -1332,7 +1332,10 @@ function AnswerEvent({
   isRunning,
   highlighted = false,
   tokensPerSecond = null,
+  elapsedMs = null,
+  isStoppedRun = false,
 }) {
+  const [notesExpanded, setNotesExpanded] = useState(false);
   const raw = data?.answer || '';
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
   const variants = Array.isArray(data?.variants) ? data.variants : [];
@@ -1347,6 +1350,14 @@ function AnswerEvent({
     blocks = parseAIResponseToBlocks(displayAnswer);
   } catch { blocks = []; }
 
+  const answerBody = (
+    <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+      {blocks.length > 0
+        ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
+        : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
+    </div>
+  );
+
   return (
     <>
       {!suppressThinkFallback && thinkFallback && <ThinkingEvent data={{ thought: thinkFallback }} />}
@@ -1358,18 +1369,40 @@ function AnswerEvent({
         }`}
       >
         <div className="max-w-4xl mx-auto">
-          <div className="mb-2">
-            <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
-            {data?.bookmarked && <BookMarked className="ml-1 inline h-3.5 w-3.5 text-amber-500" />}
-          </div>
-          <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
-            {blocks.length > 0
-              ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
-              : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
-          </div>
+          {/* Badge row — only show when not a stopped run (stop banner owns the visual) */}
+          {!isStoppedRun && (
+            <div className="mb-2">
+              <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
+              {data?.bookmarked && <BookMarked className="ml-1 inline h-3.5 w-3.5 text-amber-500" />}
+            </div>
+          )}
+
+          {/* Answer body — collapsed behind a disclosure when the run was stopped */}
+          {isStoppedRun ? (
+            <div className="mb-2">
+              <button
+                type="button"
+                onClick={() => setNotesExpanded(v => !v)}
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+              >
+                {notesExpanded
+                  ? <ChevronDown className="w-3 h-3" />
+                  : <ChevronRight className="w-3 h-3" />}
+                Agent notes
+                {data?.bookmarked && <BookMarked className="ml-0.5 h-3 w-3 text-amber-500" />}
+              </button>
+              {notesExpanded && (
+                <div className="mt-2 pl-4 border-l-2 border-gray-100 dark:border-gray-800">
+                  {answerBody}
+                </div>
+              )}
+            </div>
+          ) : (
+            answerBody
+          )}
 
           {/* Read Aloud Action */}
-          {ttsReady && displayAnswer && (
+          {ttsReady && displayAnswer && !isStoppedRun && (
             <div className="mt-3 max-w-xl">
               <InlineAudioPlayer
                 loadSrc={() => audioApi.tts.speak(displayAnswer)}
@@ -1382,13 +1415,15 @@ function AnswerEvent({
           )}
 
           <SourcesPanel searchEvent={data?.searchEvent} />
-          {data?.round > 1 && (
+          {!isStoppedRun && data?.round > 1 && (
             <p className="text-[10px] text-gray-300 dark:text-gray-700 mt-2">{data.round} rounds</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-            {tokensPerSecond > 0 && (
-              <span className="mr-1 text-[10px] tabular-nums text-gray-300 dark:text-gray-600">
-                {tokensPerSecond} tok/s
+            {(tokensPerSecond > 0 || elapsedMs > 0) && (
+              <span className="mr-1 flex items-center gap-1.5 text-[10px] tabular-nums text-gray-300 dark:text-gray-600">
+                {tokensPerSecond > 0 && <span>{tokensPerSecond} tok/s</span>}
+                {tokensPerSecond > 0 && elapsedMs > 0 && <span className="opacity-40">·</span>}
+                {elapsedMs > 0 && <span>{formatElapsed(elapsedMs)}</span>}
               </span>
             )}
             {variants.length > 1 && (
@@ -1528,28 +1563,108 @@ const STOP_REASON_CONFIG = {
   },
 };
 
-function StopReasonBanner({ data }) {
+function StopReasonBanner({ data, toolResults = [] }) {
+  const [expanded, setExpanded] = useState(false);
   const cfg = STOP_REASON_CONFIG[data?.stopReason] || null;
   if (!cfg) return null;
   const Icon = cfg.icon;
+
+  const succeeded = toolResults.filter(ev => ev.result?.success !== false).length;
+  const failed = toolResults.filter(ev => ev.result?.success === false).length;
+  const hasStats = toolResults.length > 0;
+
   const colorMap = {
-    amber: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-950/20 dark:text-amber-400',
-    red:   'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-950/20 dark:text-red-400',
-    gray:  'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
+    amber: {
+      wrap: 'border-amber-200/70 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-950/15',
+      header: 'text-amber-700 dark:text-amber-400',
+      icon: 'text-amber-500 dark:text-amber-400',
+      pill: 'bg-amber-100/80 dark:bg-amber-900/30',
+    },
+    red: {
+      wrap: 'border-red-200/70 bg-red-50/60 dark:border-red-800/40 dark:bg-red-950/15',
+      header: 'text-red-700 dark:text-red-400',
+      icon: 'text-red-500 dark:text-red-400',
+      pill: 'bg-red-100/80 dark:bg-red-900/30',
+    },
+    gray: {
+      wrap: 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40',
+      header: 'text-gray-600 dark:text-gray-400',
+      icon: 'text-gray-400 dark:text-gray-500',
+      pill: 'bg-gray-100 dark:bg-gray-800',
+    },
   };
-  const iconColorMap = {
-    amber: 'text-amber-500 dark:text-amber-400',
-    red:   'text-red-500 dark:text-red-400',
-    gray:  'text-gray-400 dark:text-gray-500',
-  };
+  const c = colorMap[cfg.color];
+
   return (
     <FeedFrame className="mb-4">
-      <div className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 ${colorMap[cfg.color]}`}>
-        <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${iconColorMap[cfg.color]}`} />
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold leading-none mb-0.5">{cfg.label}</p>
-          <p className="text-[11px] opacity-80 leading-relaxed">{cfg.detail(data)}</p>
+      <div className={`rounded-xl border ${c.wrap} overflow-hidden`}>
+        {/* Header row */}
+        <div className={`flex items-center gap-2.5 px-3.5 py-2.5 ${c.header}`}>
+          <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${c.icon}`} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-semibold leading-tight">{cfg.label}</p>
+            <p className="mt-0.5 text-[11px] opacity-75 leading-relaxed">{cfg.detail(data)}</p>
+          </div>
+          {hasStats && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {succeeded > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  {succeeded}
+                </span>
+              )}
+              {failed > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-100/80 dark:bg-red-950/40 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400">
+                  <XCircle className="w-2.5 h-2.5" />
+                  {failed}
+                </span>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Tool result grid — show if there's any tool history */}
+        {hasStats && (
+          <>
+            <div className={`border-t ${cfg.color === 'gray' ? 'border-gray-200 dark:border-gray-700' : cfg.color === 'red' ? 'border-red-200/50 dark:border-red-800/30' : 'border-amber-200/50 dark:border-amber-800/30'}`}>
+              <button
+                type="button"
+                onClick={() => setExpanded(v => !v)}
+                className={`flex w-full items-center gap-1.5 px-3.5 py-1.5 text-left text-[10px] font-medium opacity-60 hover:opacity-90 transition-opacity ${c.header}`}
+              >
+                {expanded
+                  ? <ChevronDown className="w-3 h-3" />
+                  : <ChevronRight className="w-3 h-3" />}
+                {expanded ? 'Hide' : 'Show'} {toolResults.length} operation{toolResults.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+
+            {expanded && (
+              <div className={`border-t ${cfg.color === 'gray' ? 'border-gray-100 dark:border-gray-800' : cfg.color === 'red' ? 'border-red-100/40 dark:border-red-900/20' : 'border-amber-100/40 dark:border-amber-900/20'} px-3.5 py-2 space-y-0.5 max-h-48 overflow-y-auto`}>
+                {toolResults.map((ev, i) => {
+                  const ok = ev.result?.success !== false;
+                  const name = ev.data?.tool || '?';
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-0.5">
+                      {ok
+                        ? <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-500 dark:text-emerald-400" />
+                        : <XCircle className="w-3 h-3 shrink-0 text-red-500 dark:text-red-400" />
+                      }
+                      <span className={`text-[11px] font-mono truncate ${ok ? 'text-gray-600 dark:text-gray-300' : 'text-red-600 dark:text-red-400 font-medium'}`}>
+                        {name}
+                      </span>
+                      {!ok && ev.result?.error && (
+                        <span className="truncate text-[10px] text-red-500/70 dark:text-red-500/60 ml-auto max-w-[40%]">
+                          {ev.result.error}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </FeedFrame>
   );
@@ -2252,6 +2367,8 @@ function buildWorkSummary(workEvents) {
 function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction }) {
   const rendered = [];
   let toolBuf = [];
+  // All tool_start events seen so far — for StopReasonBanner breakdown
+  const allToolsSeen = [];
 
   const flushTools = () => {
     if (!toolBuf.length) return;
@@ -2269,6 +2386,7 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
   workEvents.forEach((ev, i) => {
     if (ev.type === 'permission_request' || ev.type === 'tool_start') {
       toolBuf.push(ev);
+      if (ev.type === 'tool_start') allToolsSeen.push(ev);
       return;
     }
     flushTools();
@@ -2287,7 +2405,7 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
         rendered.push(<StatusEvent key={i} data={ev.data} onRunWithAction={onRunWithAction} />);
         break;
       case 'stop_reason':
-        rendered.push(<StopReasonBanner key={i} data={ev.data} />);
+        rendered.push(<StopReasonBanner key={i} data={ev.data} toolResults={[...allToolsSeen]} />);
         break;
       case 'agent_delegate_start':
         rendered.push(<AgentDelegateEvent key={i} data={ev.data} pending />);
@@ -2449,6 +2567,15 @@ export default function AgentRunFeed({
         const segIsRunning = isLastSeg && isRunning;
         const answerIdx = seg.answerEvent ? evList.indexOf(seg.answerEvent) : -1;
         const hasThinkingInSeg = seg.workEvents.some(ev => ev.type === 'thinking');
+        const hasStopReason = seg.workEvents.some(ev => ev.type === 'stop_reason');
+
+        // Per-segment elapsed time: from first event in segment → answer arrival
+        const segStartMs = seg.goalEvent?.arrivedAt
+          || seg.workEvents[0]?.arrivedAt
+          || (si === 0 ? runStartedAt : null);
+        const segEndMs = seg.answerEvent?.arrivedAt;
+        const segElapsedMs = segStartMs && segEndMs && segEndMs > segStartMs
+          ? segEndMs - segStartMs : 0;
 
         // Artifacts always surface outside the collapsed drawer
         const segArtifacts = seg.workEvents.filter(ev =>
@@ -2492,6 +2619,8 @@ export default function AgentRunFeed({
                 isRunning={isRunning}
                 highlighted={Boolean(seg.answerEvent.data?.messageId && seg.answerEvent.data.messageId === highlightedMessageId)}
                 tokensPerSecond={!isRunning && answerIdx === lastAnswerIdx ? latestUsageTps : null}
+                elapsedMs={!isRunning && segElapsedMs > 0 ? segElapsedMs : null}
+                isStoppedRun={hasStopReason}
               />
             )}
           </div>

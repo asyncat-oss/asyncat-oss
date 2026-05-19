@@ -8,6 +8,20 @@ import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { deleteCheckpoint, listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
+import {
+  applySandboxPatch,
+  commitSandboxBranch,
+  createSandbox,
+  createSandboxPatch,
+  deleteSandbox,
+  getSandboxJob,
+  getSandboxStatus,
+  getSandboxDiff,
+  listSandboxJobs,
+  listSandboxes,
+  runSandboxCommand,
+  sandboxRoot,
+} from '../../agent/SandboxManager.js';
 import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
@@ -1571,6 +1585,136 @@ router.post('/run', authenticate, async (req, res) => {
     }
   } finally {
     if (heartbeatInterval) clearInterval(heartbeatInterval);
+  }
+});
+
+// ── Sandboxes ────────────────────────────────────────────────────────────────
+
+router.get('/sandboxes', authenticate, (req, res) => {
+  try {
+    res.json({
+      success: true,
+      root: sandboxRoot(),
+      sandboxes: listSandboxes(req.user.id, {
+        workspaceId: req.query.workspaceId || req.workspaceId || null,
+        includeDeleted: req.query.includeDeleted === 'true',
+      }),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/sandboxes', authenticate, (req, res) => {
+  try {
+    const result = createSandbox({
+      userId: req.user.id,
+      workspaceId: req.body.workspaceId || req.workspaceId || null,
+      name: req.body.name || 'Sandbox',
+      sourcePath: req.body.sourcePath || req.body.source_path || null,
+      strategy: req.body.strategy || 'auto',
+      baseRef: req.body.baseRef || req.body.base_ref || 'HEAD',
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/sandboxes/:id', authenticate, (req, res) => {
+  try {
+    const sandbox = getSandboxStatus(req.user.id, req.params.id);
+    if (!sandbox) return res.status(404).json({ success: false, error: 'Sandbox not found.' });
+    res.json({ success: true, sandbox });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/sandboxes/:id/diff', authenticate, (req, res) => {
+  try {
+    res.json(getSandboxDiff(req.user.id, req.params.id, {
+      filePath: req.query.file || null,
+      includePatch: req.query.includePatch === 'true',
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/sandboxes/:id/patch', authenticate, (req, res) => {
+  try {
+    res.json(createSandboxPatch(req.user.id, req.params.id, {
+      filePaths: req.body?.filePaths || req.body?.files || [],
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/sandboxes/:id/apply', authenticate, (req, res) => {
+  try {
+    res.json(applySandboxPatch(req.user.id, req.params.id, {
+      filePaths: req.body?.filePaths || req.body?.files || [],
+      dryRun: req.body?.dryRun === true,
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/sandboxes/:id/commit-branch', authenticate, (req, res) => {
+  try {
+    res.json(commitSandboxBranch(req.user.id, req.params.id, {
+      message: req.body?.message || 'Asyncat sandbox changes',
+      filePaths: req.body?.filePaths || req.body?.files || [],
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/sandboxes/:id/jobs', authenticate, (req, res) => {
+  try {
+    res.json({
+      success: true,
+      jobs: listSandboxJobs(req.user.id, req.params.id, { limit: req.query.limit }),
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/sandboxes/:id/jobs/:jobId', authenticate, (req, res) => {
+  try {
+    const job = getSandboxJob(req.user.id, req.params.id, req.params.jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Sandbox job not found.' });
+    res.json({ success: true, job });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/sandboxes/:id/jobs', authenticate, (req, res) => {
+  try {
+    res.status(201).json(runSandboxCommand(req.user.id, req.params.id, {
+      command: req.body?.command,
+      cwd: req.body?.cwd || '.',
+      kind: req.body?.kind || 'command',
+      timeoutMs: req.body?.timeoutMs,
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/sandboxes/:id', authenticate, (req, res) => {
+  try {
+    res.json(deleteSandbox(req.user.id, req.params.id, {
+      force: req.body?.force === true || req.query.force === 'true',
+    }));
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 

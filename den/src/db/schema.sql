@@ -348,6 +348,57 @@ CREATE INDEX IF NOT EXISTS idx_agent_memory_workspace  ON agent_memory(workspace
 CREATE INDEX IF NOT EXISTS idx_agent_memory_key        ON agent_memory(user_id, workspace_id, key);
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_user     ON agent_sessions(user_id);
 
+CREATE TABLE IF NOT EXISTS agent_sandboxes (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id  TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  name          TEXT NOT NULL,
+  source_path   TEXT NOT NULL,
+  sandbox_path  TEXT NOT NULL UNIQUE,
+  strategy      TEXT NOT NULL DEFAULT 'worktree'
+                  CHECK (strategy IN ('worktree','copy')),
+  branch_name   TEXT,
+  base_ref      TEXT,
+  status        TEXT NOT NULL DEFAULT 'ready'
+                  CHECK (status IN ('ready','failed','deleted')),
+  error         TEXT,
+  metadata      TEXT NOT NULL DEFAULT '{}',
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sandboxes_user
+  ON agent_sandboxes(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_agent_sandboxes_workspace
+  ON agent_sandboxes(workspace_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS agent_sandbox_jobs (
+  id             TEXT PRIMARY KEY,
+  sandbox_id     TEXT NOT NULL REFERENCES agent_sandboxes(id) ON DELETE CASCADE,
+  user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id   TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  kind           TEXT NOT NULL DEFAULT 'command'
+                   CHECK (kind IN ('command','test','promote')),
+  command        TEXT NOT NULL,
+  cwd            TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'queued'
+                   CHECK (status IN ('queued','running','succeeded','failed','cancelled')),
+  exit_code      INTEGER,
+  stdout         TEXT NOT NULL DEFAULT '',
+  stderr         TEXT NOT NULL DEFAULT '',
+  duration_ms    INTEGER,
+  metadata       TEXT NOT NULL DEFAULT '{}',
+  created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  started_at     TEXT,
+  completed_at   TEXT,
+  updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sandbox_jobs_sandbox
+  ON agent_sandbox_jobs(sandbox_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_agent_sandbox_jobs_user
+  ON agent_sandbox_jobs(user_id, updated_at);
+
 CREATE TABLE IF NOT EXISTS agent_profiles (
   id                   TEXT PRIMARY KEY,
   user_id              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,5 +1,5 @@
-import React from 'react';
-import { FolderOpen, Loader2, MessageSquare } from 'lucide-react';
+import React, { useState } from 'react';
+import { Folder, FolderOpen, Loader2, MessageSquare } from 'lucide-react';
 
 const getRelativeConversationTime = (dateString) => {
   if (!dateString) return '';
@@ -26,6 +26,68 @@ function formatWorkingContextLabel(context) {
   return context.rootLabel || null;
 }
 
+function getWorkingContext(item) {
+  return item?.metadata?.workingContext || item?.workingContext || null;
+}
+
+function getWorkingContextFilterKey(context) {
+  if (!context || typeof context !== 'object') return null;
+  const root = context.rootId || context.rootPath || context.rootLabel || '';
+  const relative = context.relativePath || context.workingDir || context.rootPath || '';
+  if (!root && !relative) return null;
+  return `${root}:${relative}`;
+}
+
+function getItemUpdatedMs(item) {
+  const value = item?.last_message_at || item?.updated_at || item?.updatedAt || item?.created_at;
+  return value ? new Date(value).getTime() || 0 : 0;
+}
+
+function ConversationButton({ conversation, active, running, handleOpenConversation }) {
+  return (
+    <button
+      key={conversation.id}
+      type="button"
+      onClick={() => handleOpenConversation(conversation.id)}
+      className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${
+        active
+          ? 'bg-indigo-50/70 dark:bg-indigo-950/30 midnight:bg-indigo-950/30'
+          : 'hover:bg-gray-100/60 dark:hover:bg-gray-800/40 midnight:hover:bg-slate-800/40'
+      }`}
+    >
+      <div className="flex items-start gap-2 min-w-0">
+        <div className="mt-1 flex shrink-0 items-center justify-center w-2 h-2">
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              running
+                ? 'bg-blue-400 animate-pulse shadow-[0_0_0_3px_rgba(96,165,250,0.15)]'
+                : active
+                ? 'bg-indigo-400 dark:bg-indigo-500'
+                : 'bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600'
+            }`}
+            title={running ? 'Generating' : ''}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 truncate leading-none">
+              {conversation.title || 'Untitled conversation'}
+            </span>
+            <span className="shrink-0 text-[10px] tabular-nums text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+              · {running ? 'Generating' : getRelativeConversationTime(conversation.updated_at)}
+            </span>
+          </div>
+          {(conversation.preview || conversation.messages?.[0]?.content) && (
+            <p className="mt-1 text-[10px] leading-snug text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2 break-all">
+              {conversation.preview || conversation.messages?.[0]?.content}
+            </p>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function HistoryPanel({
   recentConversations = [],
   recentConversationsLoading = false,
@@ -35,6 +97,46 @@ export default function HistoryPanel({
   handleOpenConversation,
   navigate
 }) {
+  const [expandedFolders, setExpandedFolders] = useState({});
+
+  const toggleFolder = (key) => {
+    setExpandedFolders(prev => ({ ...prev, [key]: !(prev[key] ?? true) }));
+  };
+
+  // Build project folder groups from working context
+  const workedFolderGroupMap = new Map();
+  recentConversations.forEach(conv => {
+    const context = getWorkingContext(conv);
+    const key = getWorkingContextFilterKey(context);
+    const label = formatWorkingContextLabel(context);
+    if (!key || !label) return;
+    const updatedAtMs = getItemUpdatedMs(conv);
+    if (!workedFolderGroupMap.has(key)) {
+      workedFolderGroupMap.set(key, {
+        key,
+        expandedKey: `worked:${key}`,
+        label,
+        title: context.workingDir || context.rootPath || label,
+        updatedAtMs,
+        items: [],
+      });
+    }
+    const group = workedFolderGroupMap.get(key);
+    group.items.push(conv);
+    group.updatedAtMs = Math.max(group.updatedAtMs, updatedAtMs);
+  });
+
+  const workedFolderGroups = [...workedFolderGroupMap.values()]
+    .map(group => ({
+      ...group,
+      items: group.items.sort((a, b) => getItemUpdatedMs(b) - getItemUpdatedMs(a)),
+    }))
+    .sort((a, b) => b.updatedAtMs - a.updatedAtMs || a.label.localeCompare(b.label));
+
+  const conversationsWithoutFolder = recentConversations.filter(
+    c => !getWorkingContextFilterKey(getWorkingContext(c))
+  );
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto py-1">
@@ -53,70 +155,79 @@ export default function HistoryPanel({
             <p className="text-xs text-gray-400 dark:text-slate-500">No saved conversations yet</p>
           </div>
         ) : (
-          <div className="px-1.5 py-1.5 space-y-px">
-            <div className="mb-2 mt-1 flex items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-500">
-              Recent
-              <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">
-                {recentConversations.length}
-              </span>
-            </div>
-	            {recentConversations.map((conversation) => {
-	              const active = conversation.id === currentConversationId;
-	              const running = activeConversationIds.has(conversation.id);
-	              const workingContext = conversation.metadata?.workingContext || conversation.workingContext;
-	              const workingContextLabel = formatWorkingContextLabel(workingContext);
-	              return (
-                <button
-                  key={conversation.id}
-                  type="button"
-                  onClick={() => handleOpenConversation(conversation.id)}
-                  className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${
-                    active
-                      ? 'bg-indigo-50/70 dark:bg-indigo-950/30 midnight:bg-indigo-950/30'
-                      : 'hover:bg-gray-100/60 dark:hover:bg-gray-800/40 midnight:hover:bg-slate-800/40'
-                  }`}
-                >
-                  <div className="flex items-start gap-2 min-w-0">
-                    <div className="mt-1 flex shrink-0 items-center justify-center w-2 h-2">
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          running
-                            ? 'bg-blue-400 animate-pulse shadow-[0_0_0_3px_rgba(96,165,250,0.15)]'
-                            : active
-                            ? 'bg-indigo-400 dark:bg-indigo-500'
-                            : 'bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600'
-                        }`}
-                        title={running ? 'Generating' : ''}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 truncate leading-none">
-                          {conversation.title || 'Untitled conversation'}
-                        </span>
-                        <span className="shrink-0 text-[10px] tabular-nums text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                          · {running ? 'Generating' : getRelativeConversationTime(conversation.updated_at)}
-                        </span>
+          <div className="px-1.5 py-1.5">
+            {/* Projects section */}
+            {workedFolderGroups.length > 0 && (
+              <div className="mb-3">
+                <div className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-slate-500">
+                  Projects
+                </div>
+                <div className="space-y-1">
+                  {workedFolderGroups.map(group => {
+                    const isExpanded = expandedFolders[group.expandedKey] ?? true;
+                    return (
+                      <div key={group.key}>
+                        <button
+                          type="button"
+                          onClick={() => toggleFolder(group.expandedKey)}
+                          className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-gray-100/60 dark:hover:bg-gray-800/40"
+                          title={group.title}
+                        >
+                          {isExpanded
+                            ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-slate-500" />
+                            : <Folder className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-slate-500" />
+                          }
+                          <span className="truncate text-[11px] font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
+                            {group.label}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[10px] text-gray-400 dark:text-slate-500">
+                            {group.items.length}
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="ml-3 space-y-px border-l border-gray-100 pl-2 dark:border-slate-800">
+                            {group.items.map(conversation => (
+                              <ConversationButton
+                                key={conversation.id}
+                                conversation={conversation}
+                                active={conversation.id === currentConversationId}
+                                running={activeConversationIds.has(conversation.id)}
+                                handleOpenConversation={handleOpenConversation}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
-	                      {(conversation.preview || conversation.messages?.[0]?.content) && (
-	                        <p className="mt-1 text-[10px] leading-snug text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2 break-all">
-	                          {conversation.preview || conversation.messages?.[0]?.content}
-	                        </p>
-	                      )}
-	                      {workingContextLabel && (
-	                        <div
-	                          className="mt-1 inline-flex max-w-full items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500"
-	                          title={workingContext?.workingDir || ''}
-	                        >
-	                          <FolderOpen className="h-3 w-3 shrink-0" />
-	                          <span className="truncate">Worked in {workingContextLabel}</span>
-	                        </div>
-	                      )}
-	                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Ungrouped chats */}
+            {conversationsWithoutFolder.length > 0 && (
+              <div>
+                <div className="mb-1.5 flex items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-slate-500">
+                  Chats
+                  {workedFolderGroups.length === 0 && (
+                    <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">
+                      {conversationsWithoutFolder.length}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-px">
+                  {conversationsWithoutFolder.map(conversation => (
+                    <ConversationButton
+                      key={conversation.id}
+                      conversation={conversation}
+                      active={conversation.id === currentConversationId}
+                      running={activeConversationIds.has(conversation.id)}
+                      handleOpenConversation={handleOpenConversation}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -34,6 +34,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Bot,
+  Code2,
   Edit2,
   Trash2,
   Check,
@@ -2074,15 +2075,15 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             <ConversationSwitcher compact />
             <button
               type="button"
-              onClick={() => toggleSidePanelTab('git')}
+              onClick={() => toggleSidePanelTab('code')}
               className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
-                showActivitySidebar && sidePanelTab === 'git'
+                showActivitySidebar && sidePanelTab === 'code'
                   ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                   : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
               }`}
-              title="Git status"
+              title="Code"
             >
-              <GitBranch className="w-4 h-4" />
+              <Code2 className="w-4 h-4" />
               {gitState?.detected && (
                 <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                   {gitState.changedCount || 0}
@@ -2328,25 +2329,25 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       </>
                     )}
 
-                    {gitState?.detected && (
-                      <button
-                        type="button"
-                        onClick={() => toggleSidePanelTab('git')}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                          showActivitySidebar && sidePanelTab === 'git'
-                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
-                        title="Show Git changes"
-                      >
-                        <GitBranch className="h-4 w-4" />
-                        Git
+                    <button
+                      type="button"
+                      onClick={() => toggleSidePanelTab('code')}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                        showActivitySidebar && sidePanelTab === 'code'
+                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                      }`}
+                      title="Show code files, Git, and sandboxes"
+                    >
+                      <Code2 className="h-4 w-4" />
+                      Code
+                      {gitState?.detected && (
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {gitState.changedCount || 0}
                           {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
                         </span>
-                      </button>
-                    )}
+                      )}
+                    </button>
 
                     {sourceCatalog.totalCount > 0 && (
                       <button
@@ -2653,7 +2654,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside
           style={{ width: sidePanelWidth }}
           className="hidden xl:flex xl:shrink-0 relative border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700"
@@ -2698,7 +2699,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"

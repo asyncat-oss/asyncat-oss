@@ -301,6 +301,72 @@ export const agentTaskRunsApi = {
   },
 };
 
+export const sandboxesApi = {
+  list: async ({ includeDeleted = false } = {}) => {
+    const params = new URLSearchParams();
+    if (includeDeleted) params.set('includeDeleted', 'true');
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes${suffix}`);
+  },
+
+  create: async ({ name = 'Sandbox', sourcePath = null, strategy = 'auto', baseRef = 'HEAD' } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes`, {
+      method: 'POST',
+      body: JSON.stringify({ name, sourcePath, strategy, baseRef }),
+    });
+  },
+
+  get: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}`);
+  },
+
+  diff: async (id, { file = null, includePatch = false } = {}) => {
+    const params = new URLSearchParams();
+    if (file) params.set('file', file);
+    if (includePatch) params.set('includePatch', 'true');
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}/diff${suffix}`);
+  },
+
+  createPatch: async (id, { filePaths = [] } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}/patch`, {
+      method: 'POST',
+      body: JSON.stringify({ filePaths }),
+    });
+  },
+
+  apply: async (id, { filePaths = [], dryRun = false } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ filePaths, dryRun }),
+    });
+  },
+
+  commitBranch: async (id, { message = 'Asyncat sandbox changes', filePaths = [] } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}/commit-branch`, {
+      method: 'POST',
+      body: JSON.stringify({ message, filePaths }),
+    });
+  },
+
+  listJobs: async (id, { limit = 50 } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}/jobs?limit=${encodeURIComponent(String(limit))}`);
+  },
+
+  runJob: async (id, { command, cwd = '.', kind = 'command', timeoutMs = 120000 } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}/jobs`, {
+      method: 'POST',
+      body: JSON.stringify({ command, cwd, kind, timeoutMs }),
+    });
+  },
+
+  delete: async (id, { force = true } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}?force=${force ? 'true' : 'false'}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 export const profilesApi = {
   listProfiles: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/profiles`);

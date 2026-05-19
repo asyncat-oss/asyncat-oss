@@ -1,7 +1,7 @@
 export { chatApi, chatFoldersApi } from './chatApi.js';
 export { projectsApi } from './projectsApi.js';
 export { trashApi } from './trashApi.js';
-export { agentApi, agentTaskRunsApi, profilesApi } from './agentApi.js';
+export { agentApi, agentTaskRunsApi, profilesApi, sandboxesApi } from './agentApi.js';
 export { gitApi } from './gitApi.js';
 export { filesApi } from './filesApi.js';
 export { schedulerApi } from './schedulerApi.js';
@@ -12,7 +12,7 @@ export { installApi } from './installApi.js';
 import { chatApi } from './chatApi.js';
 import { projectsApi } from './projectsApi.js';
 import { trashApi } from './trashApi.js';
-import { agentApi } from './agentApi.js';
+import { agentApi, sandboxesApi } from './agentApi.js';
 import { gitApi } from './gitApi.js';
 import { filesApi } from './filesApi.js';
 import { apiUtils } from './apiUtils.js';
@@ -31,6 +31,7 @@ export default {
   chatFolders: chatFoldersApi,
   trash: trashApi,
   agent: agentApi,
+  sandboxes: sandboxesApi,
   git: gitApi,
   utils: apiUtils,
   cache: cacheUtils,

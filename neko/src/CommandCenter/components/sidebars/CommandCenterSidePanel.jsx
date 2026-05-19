@@ -1,15 +1,15 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect } from 'react';
-import { Activity, GitBranch, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List } from 'lucide-react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
-import GitPanel from '../git/GitPanel';
 import HistoryPanel from './HistoryPanel';
 import ArtifactCard from '../renderers/ArtifactRenderer';
+import CodePanel from './CodePanel';
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
-  git: { label: 'Git', icon: GitBranch },
+  code: { label: 'Code', icon: Code2 },
   media: { label: 'Media', icon: Image },
   history: { label: 'History', icon: History },
   saved: { label: 'Saved', icon: BookMarked },
@@ -292,7 +292,7 @@ export default function CommandCenterSidePanel({
   selectedArtifact = null,
   chatNavItems = [],
 }) {
-  const currentTab = activeTab || 'steps';
+  const currentTab = activeTab === 'git' || activeTab === 'sandboxes' ? 'code' : (activeTab || 'steps');
   const meta = panelMeta[currentTab] || panelMeta.steps;
   const Icon = meta.icon;
 
@@ -330,14 +330,14 @@ export default function CommandCenterSidePanel({
         {currentTab === 'steps' && (
           <AgentActivitySidebar items={stepsItems} isLoading={stepsLoading} isRunning={isRunning} />
         )}
-        {currentTab === 'git' && (
-          <GitPanel
-            state={gitState}
-            loading={gitLoading}
-            error={gitError}
-            onRefresh={onGitRefresh}
-            onChanged={onGitChanged}
-            onAttachFile={onAttachGitFile}
+        {currentTab === 'code' && (
+          <CodePanel
+            gitState={gitState}
+            gitLoading={gitLoading}
+            gitError={gitError}
+            onGitRefresh={onGitRefresh}
+            onGitChanged={onGitChanged}
+            onAttachGitFile={onAttachGitFile}
             workingDir={workingDir}
           />
         )}
