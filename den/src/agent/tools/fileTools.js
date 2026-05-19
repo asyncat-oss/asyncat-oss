@@ -775,7 +775,7 @@ export const fileWatchTool = {
 
 /** All file tools for batch registration. */
 export const fileTools = [
-  readFileTool, writeFileTool, createDirectoryTool, editFileTool, patchFileTool, searchFilesTool,
+  readFileTool, writeFileTool, createDirectoryTool, editFileTool, searchFilesTool,
   listDirectoryTool, findFilesTool, fileDiffTool, globFindTool,
   fileCopyTool, fileMoveTool, fileDeleteTool, fileWatchTool,
 ];

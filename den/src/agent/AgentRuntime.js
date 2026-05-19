@@ -30,6 +30,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { lspManager } from './LspManager.js';
 
 const MAX_ROUNDS_DEFAULT = 25;
 
@@ -236,6 +237,7 @@ export class AgentRuntime {
     this.capabilitiesSection = opts.capabilitiesSection || '';
     this.usageContext = opts.usageContext || {};
     this.agentProfileId = opts.agentProfileId || null;
+    this.sessionIdOverride = opts.sessionIdOverride || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // ── Phase 1: Read-before-write guard ─────────────────────────────────
@@ -310,6 +312,7 @@ export class AgentRuntime {
         // Session not found or access denied — create new
         this.continueSessionId = null;
         this.session = new AgentSession({
+          id: this.sessionIdOverride || undefined,
           userId: this.userId,
           workspaceId: this.workspaceId,
           goal,
@@ -320,6 +323,7 @@ export class AgentRuntime {
     } else {
       // Create new session
       this.session = new AgentSession({
+        id: this.sessionIdOverride || undefined,
         userId: this.userId,
         workspaceId: this.workspaceId,
         goal,
@@ -2424,6 +2428,52 @@ export class AgentRuntime {
     const workDir = this.workingDir;
 
     try {
+      // 1. LSP Diagnostics Check (Compiler-in-the-Loop)
+      for (const pf of codeFiles) {
+        const ext = path.extname(pf).toLowerCase();
+        let lang = null;
+        if (['.js', '.jsx', '.ts', '.tsx'].includes(ext)) lang = 'typescript';
+        else if (['.py'].includes(ext)) lang = 'python';
+
+        if (lang) {
+          try {
+            const workspacePath = toolContext?.workspaceRoot || workDir;
+            const client = await lspManager.getClient(lang, workspacePath);
+            if (client && client.initialized) {
+              const fileContent = fs.readFileSync(pf, 'utf8');
+              client.notifyDidOpen(pf, fileContent);
+              
+              // Wait 300ms for LSP to parse and publish diagnostics
+              await new Promise(r => setTimeout(r, 300));
+              
+              const diagnostics = client.getDiagnostics(pf);
+              const errors = diagnostics.filter(d => d.severity === 1);
+              const warnings = diagnostics.filter(d => d.severity === 2);
+              
+              if (errors.length > 0) {
+                const formatted = errors.map(e => `[Line ${e.range.start.line + 1}:${e.range.start.character + 1}] ${e.message}`).join(' | ');
+                checks.push({
+                  check: `${lang}_lsp_errors`,
+                  status: 'errors',
+                  output: `LSP Errors in ${path.basename(pf)}:\n${formatted}`
+                });
+              } else if (warnings.length > 0) {
+                const formatted = warnings.map(e => `[Line ${e.range.start.line + 1}:${e.range.start.character + 1}] ${e.message}`).join(' | ');
+                checks.push({
+                  check: `${lang}_lsp_warnings`,
+                  status: 'warnings',
+                  output: `LSP Warnings in ${path.basename(pf)}:\n${formatted}`
+                });
+              } else {
+                checks.push({ check: `${lang}_lsp`, status: 'clean' });
+              }
+            }
+          } catch (err) {
+            // Ignore if LSP servers aren't globally installed or running
+          }
+        }
+      }
+
       // Detect project type and available checks
       const hasPkgJson = fs.existsSync(path.join(workDir, 'package.json'));
       const hasPyproject = fs.existsSync(path.join(workDir, 'pyproject.toml'));

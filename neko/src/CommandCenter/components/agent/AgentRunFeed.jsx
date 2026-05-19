@@ -1670,47 +1670,7 @@ function StopReasonBanner({ data, toolResults = [] }) {
   );
 }
 
-function AgentDelegateEvent({ data, result, pending = false }) {
-  const profile = result?.profile || data?.profile || {};
-  const handle = profile.handle || data?.profileHandle;
-  const name = profile.name || data?.profileName || handle || 'agent';
-  const icon = profile.icon || data?.profileIcon || '🤖';
-  const answer = result?.answer || data?.answer || '';
-  const isError = result?.success === false || data?.success === false;
-
-  return (
-    <FeedFrame className="mb-2">
-      <div className="flex items-start gap-3 text-xs">
-        <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${isError ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}>
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-500 dark:text-gray-400" /> : <span className="text-sm">{icon}</span>}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-medium text-gray-700 dark:text-gray-300">
-              {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
-            </span>
-            {handle && <code className="text-[10px] text-gray-400">@{handle}</code>}
-          </div>
-          {data?.task && (
-            <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 dark:text-gray-500">
-              {data.task}
-            </p>
-          )}
-          {answer && (
-            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-              {answer.length > 260 ? `${answer.slice(0, 260)}...` : answer}
-            </p>
-          )}
-          {(result?.sessionId || data?.sessionId) && (
-            <p className="mt-1 text-[10px] text-gray-300 dark:text-gray-700">
-              Session {result?.sessionId || data?.sessionId}
-            </p>
-          )}
-        </div>
-      </div>
-    </FeedFrame>
-  );
-}
+// AgentDelegateEvent has been moved below renderWorkContent to avoid circular dependency
 
 // Visual separator between consecutive goals in a single session
 function RunDivider({ data }) {
@@ -2454,8 +2414,21 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
     toolBuf = [];
   };
 
+  const getSubEvents = (sessionId) => {
+    if (!sessionId) return [];
+    return workEvents
+      .filter(ev => ev.type === 'subagent_event' && ev.data?.subagentSessionId === sessionId)
+      .map(ev => ev.data.event);
+  };
+
   workEvents.forEach((ev, i) => {
+    if (ev.type === 'subagent_event') {
+      return;
+    }
     if (ev.type === 'permission_request' || ev.type === 'tool_start') {
+      if (ev.type === 'tool_start' && (ev.data?.tool === 'delegate_task' || ev.data?.tool === 'delegate_to_profile')) {
+        return;
+      }
       toolBuf.push(ev);
       if (ev.type === 'tool_start') allToolsSeen.push(ev);
       return;
@@ -2478,12 +2451,20 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
       case 'stop_reason':
         rendered.push(<StopReasonBanner key={i} data={ev.data} toolResults={[...allToolsSeen]} />);
         break;
-      case 'agent_delegate_start':
-        rendered.push(<AgentDelegateEvent key={i} data={ev.data} pending />);
+      case 'agent_delegate_start': {
+        const hasResult = workEvents.some(other => other.type === 'agent_delegate_result' && (other.data?.sessionId === ev.data?.sessionId || other.data?.result?.sessionId === ev.data?.sessionId));
+        if (hasResult) {
+          break;
+        }
+        rendered.push(<AgentDelegateEvent key={i} data={ev.data} events={getSubEvents(ev.data?.sessionId)} pending />);
         break;
-      case 'agent_delegate_result':
-        rendered.push(<AgentDelegateEvent key={i} data={ev.data} result={ev.data} />);
+      }
+      case 'agent_delegate_result': {
+        const startEv = workEvents.find(other => other.type === 'agent_delegate_start' && other.data?.sessionId === (ev.data?.sessionId || ev.data?.result?.sessionId));
+        const mergedData = { ...startEv?.data, ...ev.data };
+        rendered.push(<AgentDelegateEvent key={i} data={mergedData} result={ev.data} events={getSubEvents(ev.data?.sessionId || ev.data?.result?.sessionId)} />);
         break;
+      }
       case 'skills_loaded':
         rendered.push(<SkillsLoadedEvent key={i} data={ev.data} />);
         break;
@@ -2503,6 +2484,67 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
 
   flushTools();
   return rendered;
+}
+
+function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
+  const profile = result?.profile || data?.profile || {};
+  const handle = profile.handle || data?.profileHandle;
+  const name = profile.name || data?.profileName || handle || 'agent';
+  const icon = profile.icon || data?.profileIcon || '🤖';
+  const answer = result?.answer || data?.answer || '';
+  const isError = result?.success === false || data?.success === false;
+  const sessionId = result?.sessionId || data?.sessionId;
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <FeedFrame className="mb-2">
+      <div className="flex items-start gap-3 text-xs">
+        <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${isError ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}>
+          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-500 dark:text-gray-400" /> : <span className="text-sm">{icon}</span>}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium text-gray-700 dark:text-gray-300">
+              {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
+            </span>
+            {handle && <code className="text-[10px] text-gray-400">@{handle}</code>}
+          </div>
+          {data?.task && (
+            <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 dark:text-gray-500">
+              {data.task}
+            </p>
+          )}
+          {answer && (
+            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+              {answer.length > 260 ? `${answer.slice(0, 260)}...` : answer}
+            </p>
+          )}
+          {sessionId && (
+            <p className="mt-1 text-[10px] text-gray-300 dark:text-gray-700">
+              Session {sessionId}
+            </p>
+          )}
+          {events.length > 0 && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setExpanded(v => !v)}
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+              >
+                {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                {expanded ? 'Hide sub-agent steps' : `Show sub-agent steps (${events.length})`}
+              </button>
+              {expanded && (
+                <div className="mt-2 pl-3 border-l-2 border-indigo-100 dark:border-indigo-900/60 space-y-1.5 bg-indigo-50/5 dark:bg-indigo-950/5 p-2 rounded-lg">
+                  {renderWorkContent(events, {})}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </FeedFrame>
+  );
 }
 
 function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction }) {

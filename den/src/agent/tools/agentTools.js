@@ -1,5 +1,6 @@
 // den/src/agent/tools/agentTools.js
 import { PermissionLevel } from './toolRegistry.js';
+import { randomUUID } from 'crypto';
 
 export const agentTools = [
   {
@@ -24,8 +25,22 @@ export const agentTools = [
         return { success: false, error: 'Could not initialize AI client for sub-agent.' };
       }
 
+      const subagentSessionId = randomUUID();
+
       // We give the sub-agent a modified goal so it adopts its role
       const subGoal = `You are a specialized sub-agent with the role: ${args.role}.\nYour specific task is: ${args.task}\n\nDo not ask the user for permission or clarification, just do the task to the best of your ability and return the final answer.`;
+
+      context.emitEvent?.({
+        type: 'agent_delegate_start',
+        data: {
+          profileId: 'default',
+          profileHandle: args.role.toLowerCase().replace(/\s+/g, '-'),
+          profileName: args.role,
+          profileIcon: '🤖',
+          task: args.task,
+          sessionId: subagentSessionId,
+        },
+      });
 
       const subAgent = new AgentRuntime({
         aiClient: providerInfo.client,
@@ -40,13 +55,52 @@ export const agentTools = [
         askUser: context.askUser,
         providerInfo: providerInfo.providerInfo,
         usageContext: { operation: 'delegated-agent' },
+        sessionIdOverride: subagentSessionId,
+        onEvent: (event) => {
+          context.emitEvent?.({
+            type: 'subagent_event',
+            data: {
+              parentSessionId: context.session?.id,
+              subagentSessionId,
+              role: args.role,
+              task: args.task,
+              event,
+            }
+          });
+        }
       });
 
       try {
         const result = await subAgent.run(subGoal);
-        return { success: true, answer: result.answer, rounds_taken: result.session.totalRounds };
+        const payload = {
+          success: true,
+          profile: {
+            id: 'default',
+            handle: args.role.toLowerCase().replace(/\s+/g, '-'),
+            name: args.role,
+            icon: '🤖',
+          },
+          answer: result.answer,
+          sessionId: subagentSessionId,
+          roundsTaken: result.session.totalRounds,
+          status: result.session.status,
+        };
+        context.emitEvent?.({ type: 'agent_delegate_result', data: payload });
+        return payload;
       } catch (err) {
-        return { success: false, error: err.message };
+        const payload = {
+          success: false,
+          profile: {
+            id: 'default',
+            handle: args.role.toLowerCase().replace(/\s+/g, '-'),
+            name: args.role,
+            icon: '🤖',
+          },
+          error: err.message,
+          sessionId: subagentSessionId,
+        };
+        context.emitEvent?.({ type: 'agent_delegate_result', data: payload });
+        return payload;
       }
     }
   },
@@ -101,6 +155,8 @@ export const agentTools = [
         'Complete only this delegated task and return a concise final answer for the parent agent.',
       ].filter(Boolean).join('\n\n');
 
+      const subagentSessionId = randomUUID();
+
       context.emitEvent?.({
         type: 'agent_delegate_start',
         data: {
@@ -109,6 +165,7 @@ export const agentTools = [
           profileName: profile.name,
           profileIcon: profile.icon,
           task: args.task,
+          sessionId: subagentSessionId,
         },
       });
 
@@ -127,6 +184,19 @@ export const agentTools = [
         soul: resolvedSoul,
         providerInfo: providerInfo.providerInfo,
         usageContext: { operation: 'delegated-agent' },
+        sessionIdOverride: subagentSessionId,
+        onEvent: (event) => {
+          context.emitEvent?.({
+            type: 'subagent_event',
+            data: {
+              parentSessionId: context.session?.id,
+              subagentSessionId,
+              role: profile.name,
+              task: args.task,
+              event,
+            }
+          });
+        }
       });
 
       if (Array.isArray(profile.always_allowed_tools)) {
@@ -148,7 +218,7 @@ export const agentTools = [
             icon: profile.icon,
           },
           answer: result.answer,
-          sessionId: result.session.id,
+          sessionId: subagentSessionId,
           roundsTaken: result.session.totalRounds,
           status: result.session.status,
         };
@@ -164,6 +234,7 @@ export const agentTools = [
             icon: profile.icon,
           },
           error: err.message,
+          sessionId: subagentSessionId,
         };
         context.emitEvent?.({ type: 'agent_delegate_result', data: payload });
         return payload;
