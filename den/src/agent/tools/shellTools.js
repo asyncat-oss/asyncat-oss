@@ -10,9 +10,21 @@ import path from 'path';
 import { IS_WIN } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { getTmpDir } from '../workspacePaths.js';
-const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '30000', 10); // 30s
-const MAX_OUTPUT = 16000; // chars
+const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '120000', 10); // 120s (was 30s — too short for npm install/build)
+const MAX_OUTPUT = 32000; // chars (was 16000 — too small for test/build output)
 const STREAM_INTERVAL_MS = 250; // how often to flush streaming progress
+
+// Smart timeout defaults based on command content
+function getSmartTimeout(command, userTimeout) {
+  if (userTimeout) return userTimeout * 1000;
+  const cmd = String(command || '').toLowerCase();
+  // Install/build commands need more time
+  if (/\b(npm\s+install|yarn\s+(install|add)|pip\s+install|cargo\s+build|make\b|cmake|gradle|mvn)/.test(cmd)) return 180000;
+  if (/\b(npm\s+run\s+build|npm\s+run\s+dev|next\s+build|tsc|webpack|vite\s+build)/.test(cmd)) return 180000;
+  // Test commands get moderate time
+  if (/\b(npm\s+test|jest|pytest|cargo\s+test|go\s+test|mocha|vitest)/.test(cmd)) return 120000;
+  return DEFAULT_TIMEOUT;
+}
 
 /** Run a command and capture output — cross-platform, with optional streaming. */
 function runProcess(cmd, args, options = {}) {
@@ -123,7 +135,7 @@ export const runCommandTool = {
     if (!cwd.startsWith(path.resolve(context.workingDir))) {
       return { success: false, error: 'Working directory must be within the workspace.' };
     }
-    const timeout = (args.timeout || 30) * 1000;
+    const timeout = getSmartTimeout(args.command, args.timeout);
     const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
     return await runProcess(sh, [flag, args.command], {
       cwd,

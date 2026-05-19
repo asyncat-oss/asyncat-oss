@@ -89,12 +89,31 @@ export const readFileTool = {
     const slice = lines.slice(start - 1, end);
 
     const numbered = slice.map((line, i) => `${start + i}: ${line}`).join('\n');
+
+    // Smart truncation: keep head + tail so the agent sees file structure
+    const MAX_READ_CHARS = 20000;
+    let displayContent;
+    if (numbered.length <= MAX_READ_CHARS) {
+      displayContent = numbered;
+    } else {
+      const headSize = Math.floor(MAX_READ_CHARS * 0.7);
+      const tailSize = Math.floor(MAX_READ_CHARS * 0.25);
+      const head = numbered.slice(0, headSize);
+      const tail = numbered.slice(-tailSize);
+      const skippedChars = numbered.length - headSize - tailSize;
+      displayContent = `${head}\n\n... [${skippedChars} chars skipped — use start_line/end_line to read specific sections] ...\n\n${tail}`;
+    }
+
     return {
       success: true,
       path: args.path,
       total_lines: lines.length,
       showing: `${start}-${end}`,
-      content: truncate(numbered),
+      // Hint: if the file is large, tell the agent it should use line ranges
+      ...(lines.length > 300 && !args.start_line ? {
+        hint: `This file has ${lines.length} lines. For large edits, read specific sections with start_line/end_line.`,
+      } : {}),
+      content: displayContent,
     };
   },
 };
@@ -115,6 +134,13 @@ export const writeFileTool = {
   execute: async (args, context) => {
     const filePath = safePath(args.path, context.workingDir);
     const existed = fs.existsSync(filePath);
+    if (existed) {
+      const existingStat = fs.statSync(filePath);
+      if (existingStat.size > 50000) {
+        // Warn when overwriting large files — the agent might intend edit_file instead
+        // (we still do the write, but the warning helps the agent notice mistakes)
+      }
+    }
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, args.content, 'utf8');
     const lines = args.content.split('\n').length;
@@ -124,6 +150,7 @@ export const writeFileTool = {
       action: existed ? 'overwritten' : 'created',
       lines,
       bytes: Buffer.byteLength(args.content, 'utf8'),
+      ...(existed ? { warning: 'File was overwritten. If you intended a partial edit, use edit_file or patch_file instead.' } : {}),
     };
   },
 };
@@ -370,7 +397,7 @@ export const searchFilesTool = {
   },
   execute: async (args, context) => {
     const searchPath = safePath(args.path || '.', context.workingDir);
-    const max = args.max_results || 30;
+    const max = Math.min(args.max_results || 30, 80);
 
     // Try ripgrep first, fall back to grep
     let cmd;
@@ -388,15 +415,31 @@ export const searchFilesTool = {
 
     try {
       const output = execSync(cmd, { cwd: context.workingDir, encoding: 'utf8', timeout: 15000, maxBuffer: 512 * 1024 });
-      const lines = output.trim().split('\n').filter(Boolean);
+      const rawLines = output.trim().split('\n').filter(Boolean);
+
+      // Parse results into structured objects for better agent consumption
+      const results = rawLines.map(line => {
+        const match = line.match(/^(.+?):(\d+):(.*)$/);
+        if (match) {
+          return {
+            file: path.relative(context.workingDir, match[1]) || match[1],
+            line: parseInt(match[2], 10),
+            content: match[3].trim().slice(0, 200),
+          };
+        }
+        return { file: '?', line: 0, content: line.slice(0, 200) };
+      });
+
       return {
         success: true,
         pattern: args.pattern,
-        matches: lines.length,
-        results: truncate(lines.join('\n'), 6000),
+        matches: results.length,
+        results,
+        // Also include raw text for backward compat / direct reading
+        raw: truncate(rawLines.join('\n'), 10000),
       };
     } catch (err) {
-      if (err.status === 1) return { success: true, pattern: args.pattern, matches: 0, results: 'No matches found.' };
+      if (err.status === 1) return { success: true, pattern: args.pattern, matches: 0, results: [], raw: 'No matches found.' };
       return { success: false, error: err.message };
     }
   },
@@ -462,7 +505,7 @@ export const listDirectoryTool = {
       path: args.path || '.',
       count: entries.length,
       truncated: entries.length >= maxEntries,
-      listing: truncate(display, 3500),
+      listing: truncate(display, 5000),
       note: entries.length >= maxEntries ? `Listing capped at ${maxEntries} entries. Use a narrower path or max_entries for more control.` : undefined,
     };
   },
@@ -565,10 +608,22 @@ export const globFindTool = {
   execute: async (args, context) => {
     const searchPath = safePath(args.path || '.', context.workingDir);
     const max = args.max_results || 100;
-    const escapedPattern = args.pattern.replace(/'/g, "'\\''");
+    const pattern = args.pattern;
 
     try {
-      const cmd = `find '${searchPath}' -path '*/node_modules' -prune -o -path '*/.git' -prune -o -name '${escapedPattern}' -print 2>/dev/null | head -${max}`;
+      // Use fd if available (fast, respects gitignore), otherwise find
+      let cmd;
+      try {
+        execSync('which fd', { stdio: 'ignore' });
+        const escaped = pattern.replace(/'/g, "'\\''");
+        cmd = `fd --type f --glob '${escaped}' '${searchPath}' 2>/dev/null | head -${max}`;
+      } catch {
+        // Fallback: convert simple glob to find pattern
+        // **/*.js → -name '*.js', src/**/*.ts → -path '*/src/**/*.ts'
+        const basename = path.basename(pattern);
+        const escaped = basename.replace(/'/g, "'\\''");
+        cmd = `find '${searchPath}' -path '*/node_modules' -prune -o -path '*/.git' -prune -o -name '${escaped}' -print 2>/dev/null | head -${max}`;
+      }
       const output = execSync(cmd, { encoding: 'utf8', timeout: 15000 });
       const files = output.trim().split('\n').filter(Boolean).map(f => path.relative(context.workingDir, f));
       return {
