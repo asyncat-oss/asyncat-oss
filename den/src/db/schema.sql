@@ -118,28 +118,21 @@ CREATE TABLE IF NOT EXISTS Columns (
 );
 
 CREATE TABLE IF NOT EXISTS Cards (
-  id               TEXT PRIMARY KEY,
-  title            TEXT NOT NULL,
-  description      TEXT,
-  priority         TEXT DEFAULT 'Medium'
-                     CHECK (priority IN ('high','medium','low','High','Medium','Low')),
-  dueDate          TEXT,
-  startDate        TEXT,
-  "order"          REAL NOT NULL DEFAULT 0,
-  columnId         TEXT NOT NULL REFERENCES Columns(id) ON DELETE CASCADE,
-  tasks            TEXT NOT NULL DEFAULT '{"total":0,"completed":0}',  -- JSON
-  progress         INTEGER NOT NULL DEFAULT 0,
-  checklist        TEXT NOT NULL DEFAULT '[]',   -- JSON
-  tags             TEXT NOT NULL DEFAULT '[]',   -- JSON array of strings
-  attachments      TEXT NOT NULL DEFAULT '[]',   -- JSON
-  predictedMinutes INTEGER,
-  commentCount     INTEGER NOT NULL DEFAULT 0,
-  startedAt        TEXT,
-  administrator_id TEXT REFERENCES users(id),
-  createdBy        TEXT NOT NULL REFERENCES users(id),
-  updatedBy        TEXT REFERENCES users(id),
-  createdAt        TEXT NOT NULL DEFAULT (datetime('now')),
-  updatedAt        TEXT NOT NULL DEFAULT (datetime('now'))
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL,
+  description TEXT,
+  priority    TEXT DEFAULT 'Medium'
+                CHECK (priority IN ('high','medium','low','High','Medium','Low')),
+  "order"     REAL NOT NULL DEFAULT 0,
+  columnId    TEXT NOT NULL REFERENCES Columns(id) ON DELETE CASCADE,
+  tasks       TEXT NOT NULL DEFAULT '{"total":0,"completed":0}',  -- JSON
+  progress    INTEGER NOT NULL DEFAULT 0,
+  checklist   TEXT NOT NULL DEFAULT '[]',   -- JSON
+  attachments TEXT NOT NULL DEFAULT '[]',   -- JSON
+  createdBy   TEXT NOT NULL REFERENCES users(id),
+  updatedBy   TEXT REFERENCES users(id),
+  createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ─── AI Chats ─────────────────────────────────────────────────────────────────
@@ -499,6 +492,7 @@ CREATE TABLE IF NOT EXISTS agent_tool_audit (
   user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   workspace_id        TEXT,
   tool_name           TEXT NOT NULL,
+  tool_call_id        TEXT,
   permission_level    TEXT NOT NULL,
   permission_decision TEXT NOT NULL,
   permission_reason   TEXT,

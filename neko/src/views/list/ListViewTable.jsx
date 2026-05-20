@@ -81,16 +81,6 @@ const ListViewTable = ({
               </th>
               <th
                 scope="col"
-                className="w-28 px-2 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-400 transition-colors"
-                onClick={() => handleSort("dueDate")}
-              >
-                <div className="flex items-center justify-center">
-                  Due Date
-                  {getSortIcon("dueDate")}
-                </div>
-              </th>
-              <th
-                scope="col"
                 className="w-56 px-2 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500 uppercase tracking-wider"
               >
                 <div className="flex items-center justify-end">Actions</div>
@@ -115,7 +105,7 @@ const ListViewTable = ({
               ))
             ) : (
               <tr>
-                <td colSpan="7" className="px-6 py-16 text-center">
+                <td colSpan="6" className="px-6 py-16 text-center">
                   <div className="flex flex-col items-center">
                     <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 flex items-center justify-center mb-4">
                       <Filter className="w-5 h-5 text-gray-400 dark:text-gray-500 midnight:text-gray-600" />

@@ -307,8 +307,8 @@ const WelcomePage = ({ session, onTeamCreated }) => {
           {step === 2 && (
             <PageWrapper 
               key="workspace"
-              title="Workspace"
-              subtitle="Choose a visual marker and title for your core environment."
+              title="Projects"
+              subtitle="Choose a visual marker and title for your project space."
             >
               <div className="space-y-8">
                 <div className="flex justify-center">
@@ -330,12 +330,12 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                 </div>
 
                 <div className="space-y-1.5 text-left">
-                  <label className={labelClassName}>Workspace Name</label>
+                  <label className={labelClassName}>Name</label>
                   <input
                     type="text"
                     value={workspaceName}
                     onChange={e => setWorkspaceName(e.target.value)}
-                    placeholder="My Workspace"
+                    placeholder="My Projects"
                     className={fieldClassName}
                     autoFocus
                   />
@@ -470,7 +470,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                     <span className="text-[13px] font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{accountName}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest">Workspace</span>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest">Projects</span>
                     <span className="text-[13px] font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{emoji} {workspaceName}</span>
                   </div>
                   <div className="flex justify-between items-center">

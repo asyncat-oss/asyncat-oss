@@ -7,7 +7,7 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { IS_WIN } from './shared.js';
+import { IS_WIN, isPathInside } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { getTmpDir } from '../workspacePaths.js';
 import { shellSessionManager } from '../ShellSessionManager.js';
@@ -61,6 +61,7 @@ function runProcess(cmd, args, options = {}) {
           type: 'tool_progress',
           data: {
             tool: options.toolName || 'run_command',
+            toolCallId: options.toolCallId || null,
             chunk: newContent,
             totalLength: currentOutput.length,
           },
@@ -93,6 +94,7 @@ function runProcess(cmd, args, options = {}) {
           type: 'tool_progress',
           data: {
             tool: options.toolName || 'run_command',
+            toolCallId: options.toolCallId || null,
             chunk: null,
             done: true,
             exitCode: code,
@@ -133,7 +135,7 @@ export const runCommandTool = {
   },
   execute: async (args, context) => {
     const cwd = args.cwd ? path.resolve(context.workingDir, args.cwd) : context.workingDir;
-    if (!cwd.startsWith(path.resolve(context.workingDir))) {
+    if (!isPathInside(cwd, context.workingDir)) {
       return { success: false, error: 'Working directory must be within the workspace.' };
     }
     const timeout = getSmartTimeout(args.command, args.timeout);
@@ -142,6 +144,7 @@ export const runCommandTool = {
       cwd,
       timeout,
       toolName: 'run_command',
+      toolCallId: context.toolCallId || null,
       emitEvent: context.emitEvent || null,
     });
   },
@@ -172,6 +175,7 @@ export const runPythonTool = {
         cwd: context.workingDir,
         timeout,
         toolName: 'run_python',
+        toolCallId: context.toolCallId || null,
         emitEvent: context.emitEvent || null,
       });
       return result;
@@ -205,6 +209,7 @@ export const runNodeTool = {
         cwd: context.workingDir,
         timeout,
         toolName: 'run_node',
+        toolCallId: context.toolCallId || null,
         emitEvent: context.emitEvent || null,
       });
       return result;
@@ -262,7 +267,18 @@ export const shellSessionRunTool = {
       session = shellSessionManager.get(agentSessionId, name);
     }
     const timeout = (args.timeout || 120) * 1000;
-    const result = await session.run(args.command, { timeout, emitEvent: context.emitEvent || null });
+    const result = await session.run(args.command, {
+      timeout,
+      emitEvent: context.emitEvent
+        ? (event) => context.emitEvent({
+            ...event,
+            data: {
+              ...(event.data || {}),
+              toolCallId: context.toolCallId || null,
+            },
+          })
+        : null,
+    });
     return {
       success: result.success,
       output: result.output,

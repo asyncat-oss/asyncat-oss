@@ -1,879 +1,320 @@
-// cardService.js - Updated to use Supabase
+// cardService.js — single-user SQLite kanban card service
 import { randomUUID } from "crypto";
-import axios from "axios";
 import storageService from "./storageService.js";
 
-// UUID validation helper
-const isValidUUID = (uuid) => {
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-		uuid
-	);
-};
+const isValidUUID = (uuid) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
 
-const normalizeChecklistItem = (item) => {
-	const normalized = { ...item };
-	delete normalized.assignees;
-	delete normalized.assigneeDetails;
-
-	return {
-		...normalized,
-		duration:
-			item.duration && parseInt(item.duration) > 0
-				? parseInt(item.duration)
-				: null,
-	};
-};
+const normalizeChecklistItem = (item) => ({
+  id: item.id,
+  text: item.text || item.title || "",
+  completed: Boolean(item.completed),
+});
 
 const normalizeChecklist = (checklist = []) => {
-	if (!Array.isArray(checklist)) return [];
-	return checklist.map(normalizeChecklistItem);
+  if (!Array.isArray(checklist)) return [];
+  return checklist.map(normalizeChecklistItem);
 };
 
+function computeProgress(checklist = []) {
+  if (!checklist.length) return { progress: 0, completed: 0, total: 0 };
+  const completed = checklist.filter((t) => t.completed).length;
+  return {
+    progress: Math.round((completed / checklist.length) * 100),
+    completed,
+    total: checklist.length,
+  };
+}
+
 const getCards = async (columnId, db) => {
-	try {
-		if (!isValidUUID(columnId)) {
-			throw new Error("Invalid column ID format");
-		}
-
-		const { data: cards, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.select("*")
-			.eq("columnId", columnId)
-			.order('"order"', { ascending: true });
-
-		if (error) throw error;
-
-		// Add dependency counts efficiently
-		await addDependencyCountsToCards(cards || [], db);
-
-		return cards || [];
-	} catch (error) {
-		console.error("Error getting cards:", error);
-		throw error;
-	}
+  if (!isValidUUID(columnId)) throw new Error("Invalid column ID format");
+  const { data: cards, error } = await db
+    .schema("kanban")
+    .from("Cards")
+    .select("*")
+    .eq("columnId", columnId)
+    .order('"order"', { ascending: true });
+  if (error) throw error;
+  return (cards || []).map(enrichCard);
 };
 
 const getCardById = async (id, db) => {
-	try {
-		if (!isValidUUID(id)) {
-			throw new Error("Invalid card ID format");
-		}
-
-		console.log("🔍 Fetching card by ID:", id);
-
-		const { data: card, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.select("*")
-			.eq("id", id)
-			.single();
-
-		if (error) {
-			if (error.code === "PGRST116") {
-				throw new Error("Card not found");
-			}
-			throw error;
-		}
-
-		if (card) {
-			console.log("📋 Card found with checklist:", card.checklist);
-			// Add dependency counts efficiently for single card
-			await addDependencyCountsToCards([card], db);
-			console.log(
-				"📋 Card after adding dependency counts:",
-				card.checklist
-			);
-		} else {
-			console.log("❌ Card not found for ID:", id);
-			throw new Error("Card not found");
-		}
-
-		return card;
-	} catch (error) {
-		console.error("Error getting card by ID:", error);
-		throw error;
-	}
+  if (!isValidUUID(id)) throw new Error("Invalid card ID format");
+  const { data: card, error } = await db
+    .schema("kanban")
+    .from("Cards")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error) {
+    if (error.code === "PGRST116") throw new Error("Card not found");
+    throw error;
+  }
+  if (!card) throw new Error("Card not found");
+  return enrichCard(card);
 };
 
 const createCard = async (cardData, db, files = []) => {
-	try {
-		const {
-			title,
-			description,
-			priority = "Medium",
-			columnId,
-			order,
-			startDate,
-			dueDate,
-			duration,
-			checklist = [],
-			createdBy,
-			administrator_id,
-			attachments = [],
-		} = cardData;
+  const {
+    title,
+    description,
+    priority = "Medium",
+    columnId,
+    order,
+    checklist = [],
+    createdBy,
+    attachments = [],
+  } = cardData;
 
-		if (!isValidUUID(columnId)) {
-			throw new Error("Invalid column ID format");
-		}
+  if (!isValidUUID(columnId)) throw new Error("Invalid column ID format");
+  if (!isValidUUID(createdBy)) throw new Error("Invalid user ID format");
 
-		if (!isValidUUID(createdBy)) {
-			throw new Error("Invalid user ID format");
-		}
+  const processedChecklist = normalizeChecklist(checklist);
+  const { progress, completed, total } = computeProgress(processedChecklist);
 
-		const processedChecklist = normalizeChecklist(checklist);
+  let uploadedAttachments = [];
+  if (files && files.length > 0) {
+    const tempCardId = `temp-${Date.now()}`;
+    try {
+      uploadedAttachments = await Promise.all(
+        files.map((file) => storageService.uploadFile(file, tempCardId))
+      );
+    } catch (uploadError) {
+      throw new Error(`File upload failed: ${uploadError.message}`);
+    }
+  }
 
-		// Calculate progress
-		const completedTasks = processedChecklist.filter(
-			(task) => task.completed
-		).length;
-		const progress =
-			processedChecklist.length > 0
-				? Math.round((completedTasks / processedChecklist.length) * 100)
-				: 0;
+  const allAttachments = [
+    ...(Array.isArray(attachments) ? attachments : []),
+    ...uploadedAttachments,
+  ];
 
-		// Generate a temporary card ID for file uploads (will be replaced with actual ID)
-		const tempCardId = `temp-${Date.now()}`;
+  const cardToCreate = {
+    id: randomUUID(),
+    title,
+    description,
+    priority,
+    columnId,
+    order: order || 0,
+    checklist: processedChecklist,
+    createdBy,
+    attachments: allAttachments,
+    progress,
+    tasks: { completed, total },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 
-		// Handle file uploads if files are provided
-		let uploadedAttachments = [];
-		if (files && files.length > 0) {
-			console.log(`Uploading ${files.length} files for card...`);
-
-			try {
-				// Upload all files to storage
-				const uploadPromises = files.map((file) =>
-					storageService.uploadFile(file, tempCardId)
-				);
-				uploadedAttachments = await Promise.all(uploadPromises);
-				console.log(
-					`Successfully uploaded ${uploadedAttachments.length} files`
-				);
-			} catch (uploadError) {
-				console.error("Error uploading files:", uploadError);
-				throw new Error(`File upload failed: ${uploadError.message}`);
-			}
-		}
-
-		// Merge uploaded attachments with any existing attachments
-		const allAttachments = [
-			...(Array.isArray(attachments) ? attachments : []),
-			...uploadedAttachments,
-		];
-
-		const cardToCreate = {
-			id: randomUUID(),
-			title,
-			description,
-			priority,
-			columnId,
-			order: order || 0,
-			startDate,
-			dueDate,
-			checklist: processedChecklist,
-			createdBy,
-			administrator_id:
-				typeof administrator_id === "object" &&
-				administrator_id !== null
-					? administrator_id.id
-					: administrator_id,
-			attachments: allAttachments,
-			progress,
-			tasks: {
-				completed: completedTasks,
-				total: processedChecklist.length,
-			},
-			createdAt: new Date().toISOString(),
-			updatedAt: new Date().toISOString(),
-		};
-
-		const { data: card, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.insert([cardToCreate])
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		// Add dependency counts to the newly created card
-		await addDependencyCountsToCards([card], db);
-
-		return card;
-	} catch (error) {
-		console.error("Error creating card:", error);
-		throw error;
-	}
+  const { data: card, error } = await db
+    .schema("kanban")
+    .from("Cards")
+    .insert([cardToCreate])
+    .select()
+    .single();
+  if (error) throw error;
+  return enrichCard(card);
 };
 
 const updateCard = async (id, cardData, db) => {
-	try {
-		if (!isValidUUID(id)) {
-			throw new Error("Invalid card ID format");
-		}
+  if (!isValidUUID(id)) throw new Error("Invalid card ID format");
 
-		// First get the existing card
-		const existingCard = await getCardById(id, db);
+  const updateData = { ...cardData };
+  // Strip team-only fields
+  delete updateData.assignees;
+  delete updateData.administrator_id;
+  delete updateData.startDate;
+  delete updateData.dueDate;
+  delete updateData.predictedMinutes;
 
-		// Keep old collaboration payloads from leaking into local-first card data.
-		const updateData = { ...cardData };
-		delete updateData.assignees;
+  if (updateData.checklist) {
+    updateData.checklist = normalizeChecklist(updateData.checklist);
+    const { progress, completed, total } = computeProgress(updateData.checklist);
+    updateData.progress = progress;
+    updateData.tasks = { completed, total };
+  }
 
-		// Process administrator_id if present (single administrator)
-		if (updateData.administrator_id !== undefined) {
-			updateData.administrator_id =
-				typeof updateData.administrator_id === "object" &&
-				updateData.administrator_id !== null
-					? updateData.administrator_id.id
-					: updateData.administrator_id;
-		}
+  updateData.updatedAt = new Date().toISOString();
 
-		// Process checklist if present for the local-first subtask shape.
-		if (updateData.checklist) {
-			updateData.checklist = normalizeChecklist(updateData.checklist);
-
-			// Calculate progress if checklist was updated
-			const completedTasks = updateData.checklist.filter(
-				(task) => task.completed
-			).length;
-			const progress =
-				updateData.checklist.length > 0
-					? Math.round(
-							(completedTasks / updateData.checklist.length) * 100
-						)
-					: 0;
-
-			updateData.progress = progress;
-			updateData.tasks = {
-				completed: completedTasks,
-				total: updateData.checklist.length,
-			};
-		}
-
-		updateData.updatedAt = new Date().toISOString();
-
-		console.log("💾 About to save card with updateData:", updateData);
-
-		const { data: updatedCard, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.update(updateData)
-			.eq("id", id)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		// Add dependency counts to the returned card
-		await addDependencyCountsToCards([updatedCard], db);
-
-		console.log(
-			"✅ Card updated successfully, returning card with checklist:",
-			updatedCard.checklist
-		);
-		return updatedCard;
-	} catch (error) {
-		console.error("Error updating card:", error);
-		throw error;
-	}
+  const { data: updatedCard, error } = await db
+    .schema("kanban")
+    .from("Cards")
+    .update(updateData)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return enrichCard(updatedCard);
 };
 
 const deleteCard = async (id, db) => {
-	try {
-		if (!isValidUUID(id)) {
-			throw new Error("Invalid card ID format");
-		}
+  if (!isValidUUID(id)) throw new Error("Invalid card ID format");
 
-		// First, get the card to retrieve its attachments
-		const card = await getCardById(id, db);
+  const card = await getCardById(id, db);
+  if (card.attachments && Array.isArray(card.attachments) && card.attachments.length > 0) {
+    await Promise.all(
+      card.attachments.map((att) =>
+        att.blobName
+          ? storageService.deleteFile(att.blobName).catch(() => {})
+          : Promise.resolve()
+      )
+    );
+  }
 
-		// Delete all attachments from Azure Storage if they exist
-		if (
-			card.attachments &&
-			Array.isArray(card.attachments) &&
-			card.attachments.length > 0
-		) {
-			console.log(
-				`Deleting ${card.attachments.length} attachments for card ${id}...`
-			);
-
-			const deletePromises = card.attachments.map((attachment) => {
-				if (attachment.blobName) {
-					return storageService
-						.deleteFile(attachment.blobName)
-						.catch((err) => {
-							// Log error but don't fail the card deletion
-							console.error(
-								`Failed to delete attachment ${attachment.blobName}:`,
-								err
-							);
-						});
-				}
-				return Promise.resolve();
-			});
-
-			await Promise.all(deletePromises);
-			console.log(`Successfully deleted attachments for card ${id}`);
-		}
-
-		// Now delete the card from the database
-		const { error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.delete()
-			.eq("id", id);
-
-		if (error) throw error;
-
-		return { message: "Card deleted successfully" };
-	} catch (error) {
-		console.error("Error deleting card:", error);
-		throw error;
-	}
+  const { error } = await db.schema("kanban").from("Cards").delete().eq("id", id);
+  if (error) throw error;
+  return { message: "Card deleted successfully" };
 };
 
-const moveCard = async (
-	cardId,
-	sourceColumnId,
-	destinationColumnId,
-	newOrder,
-	db
-) => {
-	try {
-		if (
-			!isValidUUID(cardId) ||
-			!isValidUUID(sourceColumnId) ||
-			!isValidUUID(destinationColumnId)
-		) {
-			throw new Error("Invalid ID format");
-		}
+const moveCard = async (cardId, sourceColumnId, destinationColumnId, newOrder, db) => {
+  if (!isValidUUID(cardId) || !isValidUUID(sourceColumnId) || !isValidUUID(destinationColumnId)) {
+    throw new Error("Invalid ID format");
+  }
 
-		// Get card and columns
-		const card = await getCardById(cardId, db);
+  const card = await getCardById(cardId, db);
 
-		const { data: sourceColumn, error: sourceError } = await db
-			.schema("kanban")
-			.from("Columns")
-			.select("*")
-			.eq("id", sourceColumnId)
-			.single();
+  const { data: sourceColumn, error: sourceError } = await db
+    .schema("kanban").from("Columns").select("*").eq("id", sourceColumnId).single();
+  if (sourceError) throw sourceError;
 
-		if (sourceError) throw sourceError;
+  const { data: destColumn, error: destError } = await db
+    .schema("kanban").from("Columns").select("*").eq("id", destinationColumnId).single();
+  if (destError) throw destError;
 
-		const { data: destColumn, error: destError } = await db
-			.schema("kanban")
-			.from("Columns")
-			.select("*")
-			.eq("id", destinationColumnId)
-			.single();
+  if (!sourceColumn || !destColumn) throw new Error("Source or destination column not found");
 
-		if (destError) throw destError;
+  const cardUpdates = {
+    columnId: destinationColumnId,
+    order: newOrder,
+    updatedAt: new Date().toISOString(),
+  };
 
-		if (!sourceColumn || !destColumn) {
-			throw new Error("Source or destination column not found");
-		}
+  const oldOrder = card.order;
 
-		// Prepare card updates
-		const cardUpdates = {
-			columnId: destinationColumnId,
-			order: newOrder,
-			updatedAt: new Date().toISOString(),
-		};
+  if (sourceColumnId === destinationColumnId) {
+    if (newOrder < oldOrder) {
+      const { data: toUpdate } = await db.schema("kanban").from("Cards").select("id, order")
+        .eq("columnId", sourceColumnId).gte("order", newOrder).lt("order", oldOrder);
+      for (const c of toUpdate || []) {
+        await db.schema("kanban").from("Cards").update({ order: c.order + 1, updatedAt: new Date().toISOString() }).eq("id", c.id);
+      }
+    } else if (newOrder > oldOrder) {
+      const { data: toUpdate } = await db.schema("kanban").from("Cards").select("id, order")
+        .eq("columnId", sourceColumnId).gt("order", oldOrder).lte("order", newOrder);
+      for (const c of toUpdate || []) {
+        await db.schema("kanban").from("Cards").update({ order: c.order - 1, updatedAt: new Date().toISOString() }).eq("id", c.id);
+      }
+    }
+  } else {
+    const { data: srcToUpdate } = await db.schema("kanban").from("Cards").select("id, order")
+      .eq("columnId", sourceColumnId).gt("order", oldOrder);
+    for (const c of srcToUpdate || []) {
+      await db.schema("kanban").from("Cards").update({ order: c.order - 1, updatedAt: new Date().toISOString() }).eq("id", c.id);
+    }
+    const { data: dstToUpdate } = await db.schema("kanban").from("Cards").select("id, order")
+      .eq("columnId", destinationColumnId).gte("order", newOrder);
+    for (const c of dstToUpdate || []) {
+      await db.schema("kanban").from("Cards").update({ order: c.order + 1, updatedAt: new Date().toISOString() }).eq("id", c.id);
+    }
+  }
 
-		if (!card.startedAt) {
-			cardUpdates.startedAt = new Date().toISOString();
-		}
+  const { data: updatedCard, error: updateError } = await db
+    .schema("kanban").from("Cards").update(cardUpdates).eq("id", cardId).select().single();
+  if (updateError) throw updateError;
 
-		// Update card order in columns
-		const oldOrder = card.order;
+  const { data: updSrc } = await db.schema("kanban").from("Columns").select("*").eq("id", sourceColumnId).single();
+  const { data: srcCards } = await db.schema("kanban").from("Cards").select("*").eq("columnId", sourceColumnId).order('"order"', { ascending: true });
+  updSrc.Cards = srcCards || [];
 
-		try {
-			// Moving within the same column
-			if (sourceColumnId === destinationColumnId) {
-				if (newOrder < oldOrder) {
-					// Get cards that need their order incremented
-					const { data: cardsToUpdate, error: fetchError } =
-						await db
-							.schema("kanban")
-							.from("Cards")
-							.select("id, order")
-							.eq("columnId", sourceColumnId)
-							.gte("order", newOrder)
-							.lt("order", oldOrder);
+  let updDst = updSrc;
+  if (sourceColumnId !== destinationColumnId) {
+    const { data: dstCol } = await db.schema("kanban").from("Columns").select("*").eq("id", destinationColumnId).single();
+    const { data: dstCards } = await db.schema("kanban").from("Cards").select("*").eq("columnId", destinationColumnId).order('"order"', { ascending: true });
+    dstCol.Cards = dstCards || [];
+    updDst = dstCol;
+  }
 
-					if (fetchError) throw fetchError;
-
-					// Update each card individually
-					for (const cardToUpdate of cardsToUpdate || []) {
-						const { error: updateError } = await db
-							.schema("kanban")
-							.from("Cards")
-							.update({
-								order: cardToUpdate.order + 1,
-								updatedAt: new Date().toISOString(),
-							})
-							.eq("id", cardToUpdate.id);
-
-						if (updateError) throw updateError;
-					}
-				} else if (newOrder > oldOrder) {
-					// Get cards that need their order decremented
-					const { data: cardsToUpdate, error: fetchError } =
-						await db
-							.schema("kanban")
-							.from("Cards")
-							.select("id, order")
-							.eq("columnId", sourceColumnId)
-							.gt("order", oldOrder)
-							.lte("order", newOrder);
-
-					if (fetchError) throw fetchError;
-
-					// Update each card individually
-					for (const cardToUpdate of cardsToUpdate || []) {
-						const { error: updateError } = await db
-							.schema("kanban")
-							.from("Cards")
-							.update({
-								order: cardToUpdate.order - 1,
-								updatedAt: new Date().toISOString(),
-							})
-							.eq("id", cardToUpdate.id);
-
-						if (updateError) throw updateError;
-					}
-				}
-			} else {
-				// Moving to a different column
-
-				// First, update cards in source column (decrement orders above moved card)
-				const { data: sourceCardsToUpdate, error: sourceFetchError } =
-					await db
-						.schema("kanban")
-						.from("Cards")
-						.select("id, order")
-						.eq("columnId", sourceColumnId)
-						.gt("order", oldOrder);
-
-				if (sourceFetchError) throw sourceFetchError;
-
-				for (const cardToUpdate of sourceCardsToUpdate || []) {
-					const { error: updateError } = await db
-						.schema("kanban")
-						.from("Cards")
-						.update({
-							order: cardToUpdate.order - 1,
-							updatedAt: new Date().toISOString(),
-						})
-						.eq("id", cardToUpdate.id);
-
-					if (updateError) throw updateError;
-				}
-
-				// Then, update cards in destination column (increment orders at/above new position)
-				const { data: destCardsToUpdate, error: destFetchError } =
-					await db
-						.schema("kanban")
-						.from("Cards")
-						.select("id, order")
-						.eq("columnId", destinationColumnId)
-						.gte("order", newOrder);
-
-				if (destFetchError) throw destFetchError;
-
-				for (const cardToUpdate of destCardsToUpdate || []) {
-					const { error: updateError } = await db
-						.schema("kanban")
-						.from("Cards")
-						.update({
-							order: cardToUpdate.order + 1,
-							updatedAt: new Date().toISOString(),
-						})
-						.eq("id", cardToUpdate.id);
-
-					if (updateError) throw updateError;
-				}
-			}
-		} catch (orderError) {
-			console.error("Error updating card orders:", orderError);
-			throw orderError;
-		}
-
-		// Update the card
-		const { data: updatedCard, error: updateError } = await db
-			.schema("kanban")
-			.from("Cards")
-			.update(cardUpdates)
-			.eq("id", cardId)
-			.select()
-			.single();
-
-		if (updateError) throw updateError;
-
-		// Get updated columns with cards
-		const { data: updatedSourceColumn, error: sourceColError } =
-			await db
-				.schema("kanban")
-				.from("Columns")
-				.select("*")
-				.eq("id", sourceColumnId)
-				.single();
-
-		if (sourceColError) throw sourceColError;
-
-		// Fetch cards for source column
-		const { data: sourceCards, error: sourceCardsError } = await db
-			.schema("kanban")
-			.from("Cards")
-			.select("*")
-			.eq("columnId", sourceColumnId)
-			.order('"order"', { ascending: true });
-
-		if (sourceCardsError) throw sourceCardsError;
-
-		updatedSourceColumn.Cards = sourceCards || [];
-
-		let updatedDestinationColumn = updatedSourceColumn;
-		if (sourceColumnId !== destinationColumnId) {
-			const { data: destCol, error: destColError } = await db
-				.schema("kanban")
-				.from("Columns")
-				.select("*")
-				.eq("id", destinationColumnId)
-				.single();
-
-			if (destColError) throw destColError;
-
-			// Fetch cards for destination column
-			const { data: destCards, error: destCardsError } = await db
-				.schema("kanban")
-				.from("Cards")
-				.select("*")
-				.eq("columnId", destinationColumnId)
-				.order('"order"', { ascending: true });
-
-			if (destCardsError) throw destCardsError;
-
-			destCol.Cards = destCards || [];
-			updatedDestinationColumn = destCol;
-		}
-
-		// Add dependency counts to the updated card
-		await addDependencyCountsToCards([updatedCard], db);
-
-		return {
-			sourceColumn: updatedSourceColumn,
-			destinationColumn: updatedDestinationColumn,
-			card: updatedCard,
-		};
-	} catch (error) {
-		console.error("Error moving card:", error);
-		throw error;
-	}
+  return { sourceColumn: updSrc, destinationColumn: updDst, card: enrichCard(updatedCard) };
 };
 
 const updateChecklist = async (id, checklist, db) => {
-	try {
-		if (!isValidUUID(id)) {
-			throw new Error("Invalid card ID format");
-		}
+  if (!isValidUUID(id)) throw new Error("Invalid card ID format");
 
-		const processedChecklist = normalizeChecklist(checklist);
+  const processedChecklist = normalizeChecklist(checklist);
+  const { progress, completed, total } = computeProgress(processedChecklist);
 
-		// Calculate progress
-		const completedTasks = processedChecklist.filter(
-			(task) => task.completed
-		).length;
-		const progress =
-			processedChecklist.length > 0
-				? Math.round((completedTasks / processedChecklist.length) * 100)
-				: 0;
-
-		const { data: updatedCard, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.update({
-				checklist: processedChecklist,
-				progress,
-				tasks: {
-					completed: completedTasks,
-					total: processedChecklist.length,
-				},
-				updatedAt: new Date().toISOString(),
-			})
-			.eq("id", id)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		// Add dependency counts to the returned card
-		await addDependencyCountsToCards([updatedCard], db);
-
-		// Calculate and add the duration field from incomplete items only
-		if (updatedCard.checklist && Array.isArray(updatedCard.checklist)) {
-			const computedDuration = updatedCard.checklist.reduce(
-				(total, item) => {
-					// Only include duration if the item is not completed
-					if (!item.completed) {
-						const itemDuration = parseInt(item.duration) || 0;
-						return total + itemDuration;
-					}
-					return total;
-				},
-				0
-			);
-			updatedCard.duration = computedDuration;
-		} else {
-			updatedCard.duration = 0;
-		}
-
-		return updatedCard;
-	} catch (error) {
-		console.error("Error updating checklist:", error);
-		throw error;
-	}
+  const { data: updatedCard, error } = await db
+    .schema("kanban")
+    .from("Cards")
+    .update({
+      checklist: processedChecklist,
+      progress,
+      tasks: { completed, total },
+      updatedAt: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return enrichCard(updatedCard);
 };
 
-// Helper function to fetch user details from the users service
-const fetchUserDetails = async (userIds, sessionToken = null) => {
-	if (!userIds || userIds.length === 0) return new Map();
-
-	const userDetailsMap = new Map();
-	const USER_URL = process.env.USER_URL || "http://localhost:6003";
-
-	try {
-		// Fetch user details for each unique user ID
-		const userPromises = Array.from(userIds).map(async (userId) => {
-			try {
-				const headers = {
-					"Content-Type": "application/json",
-				};
-
-				// Add authentication if session token is provided
-				if (sessionToken) {
-					headers["Cookie"] = `session_token=${sessionToken}`;
-				}
-
-				const response = await axios.get(
-					`${USER_URL}/api/users/${userId}`,
-					{
-						headers,
-					}
-				);
-
-				if (response.status === 200 && response.data) {
-					return { userId, userData: response.data.data };
-				} else {
-					console.warn(
-						`Failed to fetch user ${userId}: ${response.status}`
-					);
-					return { userId, userData: null };
-				}
-			} catch (error) {
-				console.warn(`Error fetching user ${userId}:`, error.message);
-				return { userId, userData: null };
-			}
-		});
-
-		const userResults = await Promise.all(userPromises);
-		userResults.forEach(({ userId, userData }) => {
-			if (userData) {
-				userDetailsMap.set(userId, userData);
-			}
-		});
-
-		console.log(
-			`Fetched details for ${userDetailsMap.size}/${userIds.size} users`
-		);
-	} catch (error) {
-		console.error("Error fetching user details:", error);
-	}
-
-	return userDetailsMap;
-};
-
-// Helper function to add computed fields and preload related user details.
-const addDependencyCountsToCards = async (cards, db) => {
-	if (!cards || cards.length === 0) return;
-
-	const allUserIds = new Set();
-
-	// Collect user IDs from cards
-	cards.forEach((card) => {
-		// Collect administrator ID
-		if (card.administrator_id) {
-			allUserIds.add(card.administrator_id);
-		}
-
-	});
-
-	try {
-		const userDetailsMap = await fetchUserDetails(allUserIds);
-
-		// Add counts and user details to cards
-		for (const card of cards) {
-			// Add preloaded administrator details
-			if (
-				card.administrator_id &&
-				userDetailsMap.has(card.administrator_id)
-			) {
-				card.administratorDetails = userDetailsMap.get(
-					card.administrator_id
-				);
-			}
-
-			if (card.checklist && Array.isArray(card.checklist)) {
-				card.checklist = normalizeChecklist(card.checklist);
-
-				// Calculate total estimated duration from incomplete checklist items only
-				const totalDuration = card.checklist.reduce((total, item) => {
-					// Only include duration if the item is not completed
-					if (!item.completed) {
-						const itemDuration = parseInt(item.duration) || 0;
-						return total + itemDuration;
-					}
-					return total;
-				}, 0);
-
-				// Add computed duration to card data
-				card.duration = totalDuration;
-			} else {
-				// If no checklist, duration is 0
-				card.duration = 0;
-			}
-		}
-	} catch (error) {
-		console.error("Error adding computed card fields:", error);
-	}
-};
-
-// Add attachments to a card
 const addAttachments = async (cardId, files, db) => {
-	try {
-		if (!isValidUUID(cardId)) {
-			throw new Error("Invalid card ID format");
-		}
-
-		// Get current card
-		const card = await getCardById(cardId, db);
-		if (!card) {
-			throw new Error("Card not found");
-		}
-
-		console.log(
-			`Uploading ${files.length} attachments for card ${cardId}...`
-		);
-
-		// Upload all files to storage
-		const uploadPromises = files.map((file) =>
-			storageService.uploadFile(file, cardId)
-		);
-		const uploadedAttachments = await Promise.all(uploadPromises);
-
-		console.log(
-			`Successfully uploaded ${uploadedAttachments.length} attachments`
-		);
-
-		// Merge with existing attachments
-		const allAttachments = [
-			...(Array.isArray(card.attachments) ? card.attachments : []),
-			...uploadedAttachments,
-		];
-
-		// Update card with new attachments
-		const { data: updatedCard, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.update({
-				attachments: allAttachments,
-				updatedAt: new Date().toISOString(),
-			})
-			.eq("id", cardId)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		// Add dependency counts to the updated card
-		await addDependencyCountsToCards([updatedCard], db);
-
-		return updatedCard;
-	} catch (error) {
-		console.error("Error adding attachments:", error);
-		throw error;
-	}
+  if (!isValidUUID(cardId)) throw new Error("Invalid card ID format");
+  const card = await getCardById(cardId, db);
+  const uploadedAttachments = await Promise.all(
+    files.map((file) => storageService.uploadFile(file, cardId))
+  );
+  const allAttachments = [...(Array.isArray(card.attachments) ? card.attachments : []), ...uploadedAttachments];
+  const { data: updatedCard, error } = await db.schema("kanban").from("Cards")
+    .update({ attachments: allAttachments, updatedAt: new Date().toISOString() })
+    .eq("id", cardId).select().single();
+  if (error) throw error;
+  return enrichCard(updatedCard);
 };
 
-// Remove an attachment from a card
 const removeAttachment = async (cardId, blobName, db) => {
-	try {
-		if (!isValidUUID(cardId)) {
-			throw new Error("Invalid card ID format");
-		}
-
-		// Get current card
-		const card = await getCardById(cardId, db);
-		if (!card) {
-			throw new Error("Card not found");
-		}
-
-		console.log(`Removing attachment ${blobName} from card ${cardId}...`);
-
-		// Find and remove the attachment from the list
-		const attachmentToRemove = card.attachments?.find(
-			(att) => att.blobName === blobName
-		);
-
-		if (!attachmentToRemove) {
-			throw new Error("Attachment not found");
-		}
-
-		// Delete from storage
-		await storageService.deleteFile(blobName);
-
-		// Remove from attachments array
-		const updatedAttachments = (card.attachments || []).filter(
-			(att) => att.blobName !== blobName
-		);
-
-		// Update card
-		const { data: updatedCard, error } = await db
-			.schema("kanban")
-			.from("Cards")
-			.update({
-				attachments: updatedAttachments,
-				updatedAt: new Date().toISOString(),
-			})
-			.eq("id", cardId)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		// Add dependency counts to the updated card
-		await addDependencyCountsToCards([updatedCard], db);
-
-		console.log(`Successfully removed attachment ${blobName}`);
-
-		return updatedCard;
-	} catch (error) {
-		console.error("Error removing attachment:", error);
-		throw error;
-	}
+  if (!isValidUUID(cardId)) throw new Error("Invalid card ID format");
+  const card = await getCardById(cardId, db);
+  const att = card.attachments?.find((a) => a.blobName === blobName);
+  if (!att) throw new Error("Attachment not found");
+  await storageService.deleteFile(blobName);
+  const updatedAttachments = (card.attachments || []).filter((a) => a.blobName !== blobName);
+  const { data: updatedCard, error } = await db.schema("kanban").from("Cards")
+    .update({ attachments: updatedAttachments, updatedAt: new Date().toISOString() })
+    .eq("id", cardId).select().single();
+  if (error) throw error;
+  return enrichCard(updatedCard);
 };
+
+// Enrich a card row: normalise checklist, strip dead fields
+function enrichCard(card) {
+  if (!card) return card;
+  const checklist = normalizeChecklist(
+    Array.isArray(card.checklist) ? card.checklist : parseJsonSafe(card.checklist, [])
+  );
+  const { progress, completed, total } = computeProgress(checklist);
+  return {
+    ...card,
+    checklist,
+    progress: card.progress ?? progress,
+    tasks: card.tasks ?? { completed, total },
+  };
+}
+
+function parseJsonSafe(value, fallback) {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value !== "string") return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
 
 export default {
-	getCards,
-	getCardById,
-	createCard,
-	updateCard,
-	deleteCard,
-	moveCard,
-	updateChecklist,
-	// Attachment management
-	addAttachments,
-	removeAttachment,
-	// Utility functions
-	addDependencyCountsToCards,
+  getCards,
+  getCardById,
+  createCard,
+  updateCard,
+  deleteCard,
+  moveCard,
+  updateChecklist,
+  addAttachments,
+  removeAttachment,
 };

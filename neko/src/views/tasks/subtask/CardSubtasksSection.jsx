@@ -9,17 +9,14 @@ const CardSubtasksSection = ({
   onUnsavedTextChange,
   shouldBounceSaveAll = false,
 }) => {
-  // Organize tasks by completion status
   const organizedTasks = useMemo(() => {
     const incomplete = checklist.filter((task) => !task.completed);
     const completed = checklist.filter((task) => task.completed);
-
     return { incomplete, completed };
   }, [checklist]);
 
   return (
     <div className="space-y-6 w-full">
-
       {checklist.length === 0 ? (
         <div className="text-center py-12">
           <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 flex items-center justify-center">
@@ -28,24 +25,13 @@ const CardSubtasksSection = ({
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
             No subtasks yet. Break this down into smaller steps.
           </p>
-
           <div className="max-w-md mx-auto">
             <TaskChecklist
               tasks={[]}
-              onUpdate={(newTasks, shouldImmediateSave = false) => {
-                const allTasks = [...checklist, ...newTasks];
-                onChecklistUpdate(allTasks, shouldImmediateSave);
-              }}
-              isCreating={true}
-              enableEditing={true}
+              onUpdate={(newTasks) => onChecklistUpdate([...checklist, ...newTasks])}
               showAddInput={true}
               onUnsavedTextChange={onUnsavedTextChange}
               shouldBounceSaveAll={shouldBounceSaveAll}
-              positioningConfig={{
-                preferredPosition: "bottom",
-                forcePosition: false,
-                offsetAdjustment: { top: 2, right: 0 },
-              }}
             />
           </div>
         </div>
@@ -59,19 +45,14 @@ const CardSubtasksSection = ({
                   {tasks.completed} of {tasks.total} completed
                 </span>
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-300">
-                  {Math.round(
-                    ((tasks.completed || 0) / (tasks.total || 1)) * 100
-                  )}
-                  %
+                  {Math.round(((tasks.completed || 0) / (tasks.total || 1)) * 100)}%
                 </span>
               </div>
               <div className="w-full h-1 bg-gray-200 dark:bg-gray-600 midnight:bg-gray-700 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gray-900 dark:bg-gray-500 midnight:bg-gray-400 rounded-full transition-all duration-500"
                   style={{
-                    width: `${Math.round(
-                      ((tasks.completed || 0) / (tasks.total || 1)) * 100
-                    )}%`,
+                    width: `${Math.round(((tasks.completed || 0) / (tasks.total || 1)) * 100)}%`,
                   }}
                 />
               </div>
@@ -90,22 +71,10 @@ const CardSubtasksSection = ({
               <div className="space-y-2">
                 <TaskChecklist
                   tasks={organizedTasks.incomplete}
-                  onUpdate={(updatedTasks, shouldImmediateSave = false) => {
-                    const allTasks = [
-                      ...updatedTasks,
-                      ...organizedTasks.completed,
-                    ];
-                    onChecklistUpdate(allTasks, shouldImmediateSave);
-                  }}
-                  enableEditing={true}
-                  isCreating={false}
+                  onUpdate={(updatedTasks) =>
+                    onChecklistUpdate([...updatedTasks, ...organizedTasks.completed])
+                  }
                   showAddInput={false}
-                  enhancedCreation={false}
-                  positioningConfig={{
-                    preferredPosition: "bottom",
-                    forcePosition: false,
-                    offsetAdjustment: { top: 2, right: 0 },
-                  }}
                 />
               </div>
             </div>
@@ -123,22 +92,10 @@ const CardSubtasksSection = ({
               <div className="space-y-2">
                 <TaskChecklist
                   tasks={organizedTasks.completed}
-                  onUpdate={(updatedTasks, shouldImmediateSave = false) => {
-                    const allTasks = [
-                      ...organizedTasks.incomplete,
-                      ...updatedTasks,
-                    ];
-                    onChecklistUpdate(allTasks, shouldImmediateSave);
-                  }}
-                  enableEditing={true}
-                  isCreating={false}
+                  onUpdate={(updatedTasks) =>
+                    onChecklistUpdate([...organizedTasks.incomplete, ...updatedTasks])
+                  }
                   showAddInput={false}
-                  enhancedCreation={false}
-                  positioningConfig={{
-                    preferredPosition: "bottom",
-                    forcePosition: false,
-                    offsetAdjustment: { top: 2, right: 0 },
-                  }}
                 />
               </div>
             </div>
@@ -154,20 +111,10 @@ const CardSubtasksSection = ({
             </div>
             <TaskChecklist
               tasks={[]}
-              onUpdate={(newTasks, shouldImmediateSave = false) => {
-                const allTasks = [...checklist, ...newTasks];
-                onChecklistUpdate(allTasks, shouldImmediateSave);
-              }}
-              isCreating={true}
-              enableEditing={true}
+              onUpdate={(newTasks) => onChecklistUpdate([...checklist, ...newTasks])}
               showAddInput={true}
               onUnsavedTextChange={onUnsavedTextChange}
               shouldBounceSaveAll={shouldBounceSaveAll}
-              positioningConfig={{
-                preferredPosition: "bottom",
-                forcePosition: false,
-                offsetAdjustment: { top: 2, right: 0 },
-              }}
             />
           </div>
         </div>

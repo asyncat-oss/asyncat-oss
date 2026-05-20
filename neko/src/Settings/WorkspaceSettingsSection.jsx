@@ -106,7 +106,7 @@ const EmojiPicker = ({ selectedEmoji, onEmojiSelect, disabled = false }) => {
 	return (
 		<div className="space-y-3">
 			<label className="block text-sm text-gray-700 dark:text-gray-300 midnight:text-gray-400">
-				Workspace Emoji
+				Icon
 			</label>
 
 			{/* Selected emoji display */}
@@ -207,7 +207,7 @@ const DeleteWorkspaceModal = ({ isOpen, onClose, onConfirm, workspaceName, isDel
 							<div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-full">
 								<AlertTriangle className="w-5 h-5" />
 							</div>
-							<h2 className="text-xl font-semibold">Delete Workspace</h2>
+							<h2 className="text-xl font-semibold">Delete Projects</h2>
 						</div>
 						{!isProcessing && (
 							<button
@@ -225,7 +225,7 @@ const DeleteWorkspaceModal = ({ isOpen, onClose, onConfirm, workspaceName, isDel
 							Are you sure you want to delete <span className="font-semibold text-gray-900 dark:text-white midnight:text-slate-100">"{workspaceName}"</span>?
 						</p>
 						<p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-							This action cannot be undone. All projects and data associated with this workspace will be permanently deleted.
+							This action cannot be undone. All projects and data will be permanently deleted.
 						</p>
 
 						{hasProjects && (
@@ -267,7 +267,7 @@ const DeleteWorkspaceModal = ({ isOpen, onClose, onConfirm, workspaceName, isDel
 							) : (
 								<>
 									<Trash2 className="w-4 h-4" />
-									<span>Delete Workspace</span>
+									<span>Delete</span>
 								</>
 							)}
 						</button>
@@ -328,7 +328,7 @@ const WorkspaceSettingsSection = ({
 
 			await workspaceApi.updateWorkspace(workspace.id, updatedData);
 			await onWorkspaceUpdated();
-			setSuccessMessage("Workspace updated successfully!");
+			setSuccessMessage("Projects updated successfully!");
 
 			// Clear success message after 3 seconds
 			setTimeout(() => setSuccessMessage(null), 3000);
@@ -354,7 +354,7 @@ const WorkspaceSettingsSection = ({
 				onWorkspaceDeleted(workspace);
 			}
 
-			setSuccessMessage("Workspace deleted successfully!");
+			setSuccessMessage("Projects deleted successfully!");
 			setPendingDelete(false);
 			setShowDeleteModal(false);
 		} catch (err) {
@@ -430,8 +430,8 @@ const WorkspaceSettingsSection = ({
 									<div className="text-center mb-4">
 										<div className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400 mb-2">
 											{workspace.is_personal
-												? "Personal Workspace"
-												: "Team Workspace"}
+												? "Personal Projects"
+												: "Team Projects"}
 										</div>
 									</div>
 
@@ -449,9 +449,9 @@ const WorkspaceSettingsSection = ({
 										<div className="text-center">
 											<h4 className="text-base font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 mb-2">
 												{workspace.is_personal
-													? "Personal Workspace"
+													? "Personal Projects"
 													: workspaceName ||
-													  "Unnamed Workspace"}
+													  "Unnamed"}
 											</h4>
 											<div className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500">
 												{workspace.is_personal
@@ -485,14 +485,10 @@ const WorkspaceSettingsSection = ({
 									/>
 
 									<InputField
-										label={
-											workspace.is_personal
-												? "Workspace Name"
-												: "Workspace Name"
-										}
+										label="Name"
 										value={
 											workspace.is_personal
-												? "Personal Workspace"
+												? "Personal Projects"
 												: workspaceName
 										}
 										onChange={(e) =>
@@ -505,12 +501,12 @@ const WorkspaceSettingsSection = ({
 										}
 										placeholder={
 											workspace.is_personal
-												? "Personal Workspace"
-												: "Enter workspace name"
+												? "Personal Projects"
+												: "Enter name"
 										}
 										disabledMessage={
 											workspace.is_personal
-												? "Personal workspace name cannot be changed"
+												? "Personal project space name cannot be changed"
 												: undefined
 										}
 									/>

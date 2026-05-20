@@ -2,11 +2,7 @@ import { useEffect } from "react";
 import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import ProjectOverviewOriginal from "../projects/ProjectOverviewContent.jsx";
 
-const VALID_PROJECT_TABS = [
-  'kanban',
-  'list',
-  'gantt',
-];
+const VALID_PROJECT_TABS = ['kanban', 'list'];
 
 const ProjectOverview = () => {
   const { selectedProject, session } = useOutletContext();

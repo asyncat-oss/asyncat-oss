@@ -4,8 +4,6 @@ import ProjectGrid from "./views/ProjectGrid";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import eventBus from "../utils/eventBus.js";
 
-const soraFontBase = "font-sora";
-
 const sortProjects = (projects) =>
   [...projects].sort((a, b) => {
     if (a.is_archived && !b.is_archived) return 1;
@@ -19,13 +17,9 @@ const ProjectsPage = ({
   onProjectSelect = () => {},
 }) => {
   const navigate = useNavigate();
-
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [projectViewMode, setProjectViewMode] = useState(() => {
-    return sessionStorage.getItem("projectViewMode") || "grid";
-  });
 
   const { currentWorkspace, getWorkspaceProjects, bustProjectsCache } = useWorkspace();
 
@@ -43,10 +37,6 @@ const ProjectsPage = ({
   }, [getWorkspaceProjects]);
 
   useEffect(() => {
-    sessionStorage.setItem("projectViewMode", projectViewMode);
-  }, [projectViewMode]);
-
-  useEffect(() => {
     if (currentWorkspace) fetchProjects();
   }, [currentWorkspace, fetchProjects]);
 
@@ -55,13 +45,8 @@ const ProjectsPage = ({
       bustProjectsCache();
       fetchProjects();
     };
-
-    return eventBus.on('projectsUpdated', handleProjectsUpdated);
+    return eventBus.on("projectsUpdated", handleProjectsUpdated);
   }, [bustProjectsCache, currentWorkspace, fetchProjects]);
-
-  const handleOpenCreateProject = () => {
-    eventBus.emit('openCreateProjectModal');
-  };
 
   useEffect(() => {
     const handleProjectCreated = (newProject) => {
@@ -70,7 +55,7 @@ const ProjectsPage = ({
       onProjectSelect(newProject);
       onProjectCreated();
     };
-    return eventBus.on('projectCreated', handleProjectCreated);
+    return eventBus.on("projectCreated", handleProjectCreated);
   }, [onProjectSelect, onProjectCreated]);
 
   const handleOpenProjectDetail = (project) => {
@@ -80,23 +65,19 @@ const ProjectsPage = ({
 
   const getWorkspaceName = () => {
     if (!currentWorkspace) return "Projects";
-    return currentWorkspace.is_personal ? "Personal" : currentWorkspace.name;
+    return currentWorkspace.is_personal ? "Personal Projects" : currentWorkspace.name;
   };
 
   return (
-    <div className={soraFontBase}>
-      <ProjectGrid
-        projects={projects}
-        loading={loading}
-        error={error}
-        selectedProject={selectedProject}
-        onOpenProjectDetail={handleOpenProjectDetail}
-        onCreateClick={handleOpenCreateProject}
-        viewMode={projectViewMode}
-        onViewModeChange={setProjectViewMode}
-        workspaceName={getWorkspaceName()}
-      />
-    </div>
+    <ProjectGrid
+      projects={projects}
+      loading={loading}
+      error={error}
+      selectedProject={selectedProject}
+      onOpenProjectDetail={handleOpenProjectDetail}
+      onCreateClick={() => eventBus.emit("openCreateProjectModal")}
+      workspaceName={getWorkspaceName()}
+    />
   );
 };
 

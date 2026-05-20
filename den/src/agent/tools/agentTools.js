@@ -1,17 +1,29 @@
 // den/src/agent/tools/agentTools.js
 import { PermissionLevel } from './toolRegistry.js';
+import { createSandbox } from '../SandboxManager.js';
 import { randomUUID } from 'crypto';
+
+function looksLikeCodingTask(task = '') {
+  return /\b(code|implement|fix|bug|refactor|test|build|component|route|api|schema|migration|file|repo|repository|frontend|backend|package|dependency)\b/i
+    .test(String(task || ''));
+}
+
+function isolationChoice(value) {
+  return ['auto', 'sandbox', 'same_workspace'].includes(value) ? value : 'auto';
+}
 
 export const agentTools = [
   {
     name: 'delegate_task',
     description: 'Delegate a complex sub-task to a specialized sub-agent. The sub-agent has the same capabilities but runs in isolation. Use this to break down huge tasks.',
+    category: 'agent',
     permission: PermissionLevel.MODERATE,
     parameters: {
       type: 'object',
       properties: {
         role: { type: 'string', description: 'The role of the sub-agent, e.g. "Web Scraper", "Code Reviewer"' },
-        task: { type: 'string', description: 'The specific task for the sub-agent to accomplish' }
+        task: { type: 'string', description: 'The specific task for the sub-agent to accomplish' },
+        isolation: { type: 'string', enum: ['auto', 'sandbox', 'same_workspace'], description: 'Where the sub-agent should work. auto creates a sandbox for coding tasks and otherwise uses the current workspace.' },
       },
       required: ['role', 'task']
     },
@@ -26,9 +38,41 @@ export const agentTools = [
       }
 
       const subagentSessionId = randomUUID();
+      const isolation = isolationChoice(args.isolation);
+      const wantsSandbox = isolation === 'sandbox' || (isolation === 'auto' && looksLikeCodingTask(args.task));
+      let sandbox = null;
+      let workingDir = context.workingDir;
+      let workspaceRoot = context.workspaceRoot || context.workingDir;
+
+      if (wantsSandbox) {
+        try {
+          const created = createSandbox({
+            userId: context.userId,
+            workspaceId: context.workspaceId,
+            name: `delegate-${args.role || 'agent'}`,
+            sourcePath: context.workspaceRoot || context.workingDir,
+            strategy: 'auto',
+            baseRef: 'HEAD',
+          });
+          sandbox = created?.sandbox || null;
+          if (sandbox?.sandboxPath) {
+            workingDir = sandbox.sandboxPath;
+            workspaceRoot = sandbox.sandboxPath;
+          }
+        } catch (err) {
+          if (isolation === 'sandbox') {
+            return { success: false, error: `Could not create sandbox for delegated task: ${err.message}` };
+          }
+        }
+      }
 
       // We give the sub-agent a modified goal so it adopts its role
-      const subGoal = `You are a specialized sub-agent with the role: ${args.role}.\nYour specific task is: ${args.task}\n\nDo not ask the user for permission or clarification, just do the task to the best of your ability and return the final answer.`;
+      const subGoal = [
+        `You are a specialized sub-agent with the role: ${args.role}.`,
+        sandbox ? `You are working in an isolated sandbox at ${sandbox.sandboxPath}. Do not apply changes back to the source workspace yourself; report what changed and how to review/apply it.` : null,
+        `Your specific task is: ${args.task}`,
+        'Do not ask the user for permission or clarification, just do the task to the best of your ability and return the final answer.',
+      ].filter(Boolean).join('\n\n');
 
       context.emitEvent?.({
         type: 'agent_delegate_start',
@@ -39,6 +83,7 @@ export const agentTools = [
           profileIcon: '🤖',
           task: args.task,
           sessionId: subagentSessionId,
+          sandbox,
         },
       });
 
@@ -49,7 +94,8 @@ export const agentTools = [
         supportsNativeTools: providerInfo.supportsNativeTools,
         userId: context.userId,
         workspaceId: context.workspaceId,
-        workingDir: context.workingDir,
+        workingDir,
+        workspaceRoot,
         maxRounds: 15, // Cap sub-agents at 15 rounds
         requestPermission: context.requestPermission,
         askUser: context.askUser,
@@ -82,6 +128,7 @@ export const agentTools = [
           },
           answer: result.answer,
           sessionId: subagentSessionId,
+          sandbox,
           roundsTaken: result.session.totalRounds,
           status: result.session.status,
         };

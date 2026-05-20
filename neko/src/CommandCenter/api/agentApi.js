@@ -127,6 +127,16 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/health?limit=${encodeURIComponent(String(limit))}`);
   },
 
+  getToolMetrics: async ({ days = 30, limit = 100 } = {}) => {
+    const params = new URLSearchParams({ days: String(days), limit: String(limit) });
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/tools?${params}`);
+  },
+
+  getMetricsSummary: async ({ days = 30 } = {}) => {
+    const params = new URLSearchParams({ days: String(days) });
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/summary?${params}`);
+  },
+
   revertSession: async (sessionId) => {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/revert`, {
       method: 'POST',

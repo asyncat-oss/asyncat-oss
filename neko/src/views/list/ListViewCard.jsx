@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-	Calendar,
 	CheckCircle,
 	ChevronDown,
 	ChevronRight,
@@ -11,7 +10,6 @@ import {
 	RotateCcw,
 	Square,
 } from "lucide-react";
-import { formatDate, getDueDateStyle } from "./ListViewUtils";
 import { useCardActions } from "../hooks/useCardActions";
 
 const statusStyles = {
@@ -318,20 +316,6 @@ const ListViewCard = ({
 				</td>
 				<td className="px-3 py-4 text-center">
 					<PriorityBadge priority={card.priority} />
-				</td>
-				<td className="px-3 py-4 text-center">
-					{card.dueDate ? (
-						<span
-							className={`inline-flex items-center justify-center whitespace-nowrap text-sm ${getDueDateStyle(
-								card.dueDate
-							)}`}
-						>
-							<Calendar className="mr-1.5 h-4 w-4" />
-							{formatDate(card.dueDate)}
-						</span>
-					) : (
-						<span className="text-sm text-gray-400">No date</span>
-					)}
 				</td>
 				<td className="px-3 py-4 text-right">
 					<div className="flex items-center justify-end gap-2">

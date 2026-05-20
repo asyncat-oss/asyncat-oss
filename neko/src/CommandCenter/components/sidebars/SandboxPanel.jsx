@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronRight, File, Folder, GitBranch, Loader2, Play, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CheckSquare, ChevronRight, File, Folder, GitBranch, Loader2, Play, Plus, RefreshCw, Square, Trash2, XCircle } from 'lucide-react';
 import { filesApi, sandboxesApi } from '../../api';
 
 function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', confirmClass, onConfirm, onCancel }) {
@@ -67,6 +67,7 @@ export default function SandboxPanel() {
   const [diff, setDiff] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedPaths, setSelectedPaths] = useState([]);
   const [sandboxRoot, setSandboxRoot] = useState('');
   const [browserPath, setBrowserPath] = useState('.');
   const [browserEntry, setBrowserEntry] = useState(null);
@@ -113,6 +114,7 @@ export default function SandboxPanel() {
 
   useEffect(() => {
     setSelectedFile(null);
+    setSelectedPaths([]);
     setBrowserPath('.');
     setOpenFile(null);
     setBrowserEntry(null);
@@ -180,6 +182,35 @@ export default function SandboxPanel() {
   const selectedPatch = diff?.patch || '';
   const currentEntries = browserEntry?.type === 'dir' ? (browserEntry.entries || []) : [];
   const pathParts = browserPath === '.' ? [] : browserPath.split('/').filter(Boolean);
+  const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const promoteFilePaths = selectedPaths.length > 0 ? selectedPaths : [];
+  const promoteScope = selectedPaths.length > 0
+    ? `${selectedPaths.length} selected file${selectedPaths.length === 1 ? '' : 's'}`
+    : 'all changes';
+
+  useEffect(() => {
+    if (!files.length || selectedPaths.length === 0) return;
+    const valid = new Set(files.map(file => file.path));
+    const next = selectedPaths.filter(filePath => valid.has(filePath));
+    if (next.length !== selectedPaths.length) setSelectedPaths(next);
+  }, [files, selectedPaths]);
+
+  function toggleSelectedPath(filePath) {
+    setSelectedPaths(prev => (
+      prev.includes(filePath)
+        ? prev.filter(item => item !== filePath)
+        : [...prev, filePath]
+    ));
+  }
+
+  function toggleAllChangedPaths() {
+    if (!files.length) return;
+    if (selectedPaths.length === files.length) {
+      setSelectedPaths([]);
+    } else {
+      setSelectedPaths(files.map(file => file.path));
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -347,7 +378,16 @@ export default function SandboxPanel() {
           <section className="mb-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Changes</h3>
-              <span className="text-[10px] text-gray-400 dark:text-slate-500">{diff?.summary?.changed || files.length} files</span>
+              <button
+                type="button"
+                onClick={toggleAllChangedPaths}
+                disabled={!files.length}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                title={selectedPaths.length === files.length ? 'Clear selected files' : 'Select all changed files'}
+              >
+                {selectedPaths.length === files.length && files.length > 0 ? <CheckSquare className="h-3 w-3" /> : <Square className="h-3 w-3" />}
+                {selectedPaths.length ? `${selectedPaths.length}/${files.length}` : `${diff?.summary?.changed || files.length} files`}
+              </button>
             </div>
             <div className="space-y-1">
               {files.map(file => (
@@ -361,6 +401,26 @@ export default function SandboxPanel() {
                       : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
                   }`}
                 >
+                  <span
+                    role="checkbox"
+                    aria-checked={selectedPathSet.has(file.path)}
+                    tabIndex={0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleSelectedPath(file.path);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleSelectedPath(file.path);
+                      }
+                    }}
+                    className="shrink-0 rounded p-0.5"
+                    title={selectedPathSet.has(file.path) ? 'Remove from apply set' : 'Add to apply set'}
+                  >
+                    {selectedPathSet.has(file.path) ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                  </span>
                   <span className="w-7 shrink-0 font-mono text-[10px]">{file.status.trim() || 'M'}</span>
                   <span className="min-w-0 flex-1 truncate font-mono">{file.path}</span>
                 </button>
@@ -414,11 +474,14 @@ export default function SandboxPanel() {
           </section>
 
           <section className="mb-4">
-            <h3 className="mb-2 text-xs font-semibold text-gray-700 dark:text-slate-200">Promote</h3>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Promote</h3>
+              <span className="truncate text-[10px] text-gray-400 dark:text-slate-500">{promoteScope}</span>
+            </div>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
-                onClick={() => runAction(id => sandboxesApi.apply(id, { dryRun: true }))}
+                onClick={() => runAction(id => sandboxesApi.apply(id, { filePaths: promoteFilePaths, dryRun: true }))}
                 disabled={busy || !files.length}
                 className="rounded-md border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
               >
@@ -426,7 +489,7 @@ export default function SandboxPanel() {
               </button>
               <button
                 type="button"
-                onClick={() => runAction(id => sandboxesApi.createPatch(id))}
+                onClick={() => runAction(id => sandboxesApi.createPatch(id, { filePaths: promoteFilePaths }))}
                 disabled={busy || !files.length}
                 className="rounded-md border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
               >
@@ -434,7 +497,7 @@ export default function SandboxPanel() {
               </button>
               <button
                 type="button"
-                onClick={() => runAction(id => sandboxesApi.commitBranch(id))}
+                onClick={() => runAction(id => sandboxesApi.commitBranch(id, { filePaths: promoteFilePaths }))}
                 disabled={busy || !files.length}
                 className="inline-flex items-center justify-center gap-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
               >
@@ -445,10 +508,10 @@ export default function SandboxPanel() {
                 type="button"
                 onClick={() => setModal({
                   title: 'Apply changes',
-                  message: 'Apply sandbox changes to the source workspace? This cannot be undone.',
+                  message: `Apply ${promoteScope} to the source workspace? This cannot be undone.`,
                   confirmLabel: 'Apply',
                   confirmClass: 'inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500',
-                  onConfirm: () => { setModal(null); runAction(id => sandboxesApi.apply(id)); },
+                  onConfirm: () => { setModal(null); runAction(id => sandboxesApi.apply(id, { filePaths: promoteFilePaths })); },
                 })}
                 disabled={busy || !files.length}
                 className="inline-flex items-center justify-center gap-1 rounded-md bg-emerald-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-60"

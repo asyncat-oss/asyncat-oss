@@ -22,6 +22,14 @@ if (tableExists('agent_sessions') && !columnExists('agent_sessions', 'working_di
   }
 }
 
+if (tableExists('agent_tool_audit') && !columnExists('agent_tool_audit', 'tool_call_id')) {
+  try {
+    db.prepare('ALTER TABLE agent_tool_audit ADD COLUMN tool_call_id TEXT').run();
+  } catch (err) {
+    console.warn('Failed to add agent_tool_audit.tool_call_id:', err.message);
+  }
+}
+
 function toJson(value, fallback = '{}') {
   try { return JSON.stringify(value ?? JSON.parse(fallback)); }
   catch { return fallback; }
@@ -57,6 +65,7 @@ export class AgentSession {
       result,
       timestamp: new Date().toISOString(),
       round: this.totalRounds,
+      toolCallId: meta.toolCallId || null,
       permission: meta.permissionLevel || 'safe',
       permissionDecision: meta.permissionDecision || 'unknown',
       permissionReason: meta.permissionReason || null,
@@ -147,17 +156,18 @@ export class AgentSession {
       const success = result?.success === undefined ? null : (result.success ? 1 : 0);
       db.prepare(`
         INSERT INTO agent_tool_audit (
-          id, session_id, user_id, workspace_id, tool_name,
+          id, session_id, user_id, workspace_id, tool_name, tool_call_id,
           permission_level, permission_decision, permission_reason,
           working_dir, args, result, success, round, started_at, completed_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         randomUUID(),
         this.id,
         this.userId,
         this.workspaceId,
         toolName,
+        entry.toolCallId || null,
         entry.permission,
         entry.permissionDecision,
         entry.permissionReason,

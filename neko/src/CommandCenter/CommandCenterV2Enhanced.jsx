@@ -1146,11 +1146,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           runEvents.push(event);
           updateChatRun(runKey, prev => {
             const updated = [...(prev.events || [])];
+            const incomingToolCallId = event.data?.toolCallId || null;
             for (let i = updated.length - 1; i >= 0; i--) {
-              if (updated[i].type === 'tool_start' && updated[i].data?.tool === event.data?.tool && updated[i].result === undefined) {
+              const sameToolCall = incomingToolCallId
+                ? updated[i].data?.toolCallId === incomingToolCallId
+                : updated[i].data?.tool === event.data?.tool;
+              if (updated[i].type === 'tool_start' && sameToolCall && updated[i].result === undefined) {
                 updated[i] = { ...updated[i], result: event.data?.result, completedAt };
                 for (let j = runEvents.length - 1; j >= 0; j--) {
-                  if (runEvents[j].type === 'tool_start' && runEvents[j].data?.tool === event.data?.tool && runEvents[j].result === undefined) {
+                  const sameRunEventToolCall = incomingToolCallId
+                    ? runEvents[j].data?.toolCallId === incomingToolCallId
+                    : runEvents[j].data?.tool === event.data?.tool;
+                  if (runEvents[j].type === 'tool_start' && sameRunEventToolCall && runEvents[j].result === undefined) {
                     runEvents[j] = { ...runEvents[j], result: event.data?.result, completedAt };
                     break;
                   }
@@ -1166,8 +1173,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         if (event.type === 'tool_progress') {
           updateChatRun(runKey, prev => {
             const updated = [...(prev.events || [])];
+            const incomingToolCallId = event.data?.toolCallId || null;
             for (let i = updated.length - 1; i >= 0; i--) {
-              if (updated[i].type === 'tool_start' && updated[i].data?.tool === event.data?.tool && updated[i].result === undefined) {
+              const sameToolCall = incomingToolCallId
+                ? updated[i].data?.toolCallId === incomingToolCallId
+                : updated[i].data?.tool === event.data?.tool;
+              if (updated[i].type === 'tool_start' && sameToolCall && updated[i].result === undefined) {
                 updated[i] = {
                   ...updated[i],
                   progress: (updated[i].progress || '') + (event.data?.chunk || ''),

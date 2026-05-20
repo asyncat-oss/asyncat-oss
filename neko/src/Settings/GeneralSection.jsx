@@ -140,7 +140,7 @@ const DeleteWorkspaceDialog = ({
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">
-              Delete workspace?
+              Delete projects?
             </h3>
             <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
               This permanently deletes <span className="font-semibold text-gray-900 dark:text-gray-200 midnight:text-slate-200">{workspaceName}</span> and cannot be undone.
@@ -189,7 +189,7 @@ const DeleteWorkspaceDialog = ({
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {dangerLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Delete workspace
+            Delete
           </button>
         </div>
       </div>
@@ -436,7 +436,7 @@ const GeneralSection = ({
         emoji: wsEmoji,
       });
       await onWorkspaceUpdated?.();
-      flash(setWsMsg, { type: 'success', text: 'Workspace saved.' });
+      flash(setWsMsg, { type: 'success', text: 'Projects saved.' });
     } catch (err) {
       flash(setWsMsg, { type: 'error', text: apiUtils.handleError(err, 'Failed to save workspace') });
     } finally {
@@ -626,10 +626,10 @@ const GeneralSection = ({
 
       {hasWorkspace && (
         <SectionPanel
-          title="Workspace"
-          description={canEditWorkspace ? 'Keep the workspace identity recognizable for everyone using it.' : 'Workspace details are managed by the owner.'}
+          title="Projects"
+          description={canEditWorkspace ? 'Customize the name and icon for your project space.' : 'Project space details are managed by the owner.'}
           message={wsMsg}
-          action={canEditWorkspace ? <PrimaryButton loading={wsSaving} onClick={saveWorkspace}>Save workspace</PrimaryButton> : null}
+          action={canEditWorkspace ? <PrimaryButton loading={wsSaving} onClick={saveWorkspace}>Save</PrimaryButton> : null}
         >
           <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
             <div>
@@ -672,13 +672,13 @@ const GeneralSection = ({
               <div>
                 <label className={fieldLabelCls}>Name</label>
                 {workspace.is_personal ? (
-                  <div className={readCls}>Personal Workspace</div>
+                  <div className={readCls}>Personal Projects</div>
                 ) : (
                   <input
                     type="text"
                     value={wsName}
                     onChange={e => canEditWorkspace && setWsName(e.target.value)}
-                    placeholder="Workspace name"
+                    placeholder="Project space name"
                     disabled={!canEditWorkspace}
                     className={canEditWorkspace ? inputCls : readCls}
                   />
@@ -690,7 +690,7 @@ const GeneralSection = ({
                 <textarea
                   value={wsDesc}
                   onChange={e => canEditWorkspace && setWsDesc(e.target.value)}
-                  placeholder={canEditWorkspace ? 'What is this workspace for?' : ''}
+                  placeholder={canEditWorkspace ? 'What are these projects for?' : ''}
                   disabled={!canEditWorkspace}
                   rows={4}
                   className={`${canEditWorkspace ? inputCls : readCls} resize-none`}

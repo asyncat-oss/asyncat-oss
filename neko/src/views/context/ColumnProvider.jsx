@@ -5,7 +5,6 @@ import { ColumnContext } from "./viewContexts";
 
 // Import view-specific skeletons
 import ListViewSkeleton from "../list/ListViewSkeleton";
-import GanttViewSkeleton from "../gantt/GanttViewSkeleton";
 
 const KanbanSkeleton = () => {
 	// Create skeleton columns
@@ -227,8 +226,6 @@ export const ColumnProvider = ({
 		switch (viewType) {
 			case "list":
 				return <ListViewSkeleton />;
-			case "gantt":
-				return <GanttViewSkeleton />;
 			case "kanban":
 			default:
 				return <KanbanSkeleton />;

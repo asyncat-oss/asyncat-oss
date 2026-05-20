@@ -1,586 +1,287 @@
-# Asyncat — AI Agent OS
+# Asyncat
 
-![Asyncat title animation](neko/public/asyncat-title.gif)
-
-> Forget the "productivity workspace" marketing. Forget the Kanban boards.
->
-> This is about one thing: giving full, unbridled access to your entire computer to a quantized local model that is arguably less intelligent than a caffeinated squirrel.
+Local-first AI agent workspace with a real tool-using harness, workspace apps, model/provider management, durable memory, scheduled runs, sandboxed coding workflows, and agent observability.
 
 ![Asyncat home screen](neko/public/image.png)
 
----
+## What This Is
 
-## What is Asyncat?
+Asyncat is a self-hosted agent workspace. It combines:
 
-**A local AI Agent OS.**
+- A React desktop-style web app for chat, files, projects, profiles, models, tools, skills, scheduling, and agent health.
+- An Express + SQLite backend that owns auth, workspaces, files, models, providers, agent sessions, tool audit logs, sandboxes, and scheduled jobs.
+- A ReAct-style `AgentRuntime` with native tool calling where supported, fallback tool parsing, permissions, plan state, compaction, memory, skills, and streaming events.
+- A local and cloud model layer for OpenAI-compatible APIs, managed llama.cpp, MLX, Ollama, LM Studio, and provider-specific multimodal services.
 
-We build tools for the brave. Tools for file access, tools for web access, and tools for things you only dream of in your most caffeinated nightmares.
+The goal is not only "chat with files." The goal is an agent harness that can safely read, edit, test, write, research, delegate, and recover across real local workflows.
 
-Your computer can't run those multi-billion-dollar cloud models. It can only run these stupid, tiny, quantized baby models.
+## Current Highlights
 
-**We're here to help those baby models feel powerful.**
-
-We give them the tools to touch your files, browse your web, and watch your CPU temperature hit the ceiling.
-
----
-
-## The Particular Set of Skills
-
-> "I don't know who you are. I don't know what you want. But what I do have are a very particular set of skills... skills that make me a nightmare for your file system. If you let me in now, that'll be the end of it. I will look for your files, I will find them, and I will probably rename them incorrectly."
-
-Asyncat gives your local model:
-- **Full file system access** — read, write, delete, execute
-- **Web browsing** — fetch URLs, search the web
-- **Terminal execution** — run commands, scripts, anything
-- **Voice I/O** — speech-to-text and text-to-speech, local or cloud
-- **Image generation** — stable-diffusion.cpp, ComfyUI, or cloud (DALL-E 3, Flux, Stability AI)
-- **Vision** — multimodal input routed through your active chat provider
-- **Clipboard & notifications** — system integration, including OS-level agent alerts
-- **Memory that persists** — across sessions, across restarts
-- **MCP integration** — connect external tools
-- **Skills (Cerebellum)** — 36 procedural knowledge guides loaded per task
-- **Soul** — editable agent persona, principles, and safety rules
-- **Agent Profiles** — named configurations bundling soul + tools + permissions
-- **Scheduler** — run agent goals on a cron-style schedule, no human required
-
----
-
-## Who is this for?
-
-### Solo Mode (default)
-
-- You have a computer
-- You have a local model (or an API key)
-- You want an AI that *actually does things*, not just chats
-
-**Zero config. Works out of the box.**
-
-```
-curl -fsSL https://asyncat.com/install.sh | sh
-asyncat
-```
-
-Default login email: `admin@local`. The generated password is in `den/.env` as `LOCAL_PASSWORD`.
-
----
-
-## We are a small collective
-
-Some say we are a shadowy cabal of tech-elites. Others say we are just a bunch of sleep-deprived computer science undergraduates who decided that building an AI Agent OS was more important than studying for finals.
-
-Both are probably true.
-
-We don't have offices. We don't have VCs. We certainly don't have a safety department.
-
-We just have code, a lot of GGUF files, a few pending lab reports, and a cat that watches it all burn.
-
----
+- Command Center with streaming agent runs and persistent sessions.
+- File, shell, git, data, browser, search, artifact, memory, workspace, sandbox, and delegation tools.
+- Read-before-write edit guard and `patch_file` exact-edit workflow for safer coding.
+- Tool audit records with stable `toolCallId` correlation from backend to UI.
+- Agent Health dashboard at `/agent-health` for success rates, failures, guard blocks, latency, and eval commands.
+- Disposable sandbox manager for copy/worktree isolation, patch review, branch promotion, and selective file promotion.
+- Deterministic and live-model agent eval harnesses.
+- Tools & Skills UI for tool inventory, skill management, soul editing, and memory.
+- Models UI for chat providers, local engines, audio, image, vision, and usage.
+- Scheduler for recurring agent goals.
 
 ## Quick Start
 
 ### Requirements
 
-- **Node.js 20+**
-- **git**
-- **A local model** (GGUF in `den/data/models/`), MLX model on Apple Silicon, Ollama/LM Studio, or an API key
-- **Local GGUF models:** Asyncat installs a managed user-local `llama-server` binary during setup when possible
-- **Apple Silicon MLX:** Asyncat installs `mlx-lm` into an Asyncat-owned venv when Python is available
-- **Python is optional:** only needed for MLX or the optional llama-cpp-python fallback
+- Node.js `20.19+`, `22.13+`, `24+`, `25+`, or `26+`
+- npm
+- git
+- Optional: a local model runtime or an API key
 
-### Install
+### Install From Source
 
 ```bash
-curl -fsSL https://asyncat.com/install.sh | sh
+npm install
 ```
 
-or:
+Start both services:
 
 ```bash
-npm i -g @asyncat/asyncat
+npm run dev
 ```
 
-### Run
+Or start them separately:
 
 ```bash
-asyncat
-# or
-asyncat start
+npm run dev:backend
+npm run dev:frontend
 ```
 
-Starts the backend and Web UI, then opens the browser. The default Web UI port is `8717`, unless `neko/vite.config.js` sets a different port.
+Default ports:
 
-To start services without opening a browser:
+| Service | Port |
+|---|---:|
+| Backend API | `8716` |
+| Frontend UI | `8717` |
+
+Open the app at `http://localhost:8717`.
+
+### Source Launcher
+
+The repo includes a launcher at `./cat`; the installed command is `asyncat`.
 
 ```bash
-asyncat start --no-open
+./cat start --no-open
+./cat start --dev --no-open
+./cat status
+./cat logs
+./cat stop
 ```
 
-### Log in
+If you have a global `asyncat` installed, it may point at the installed copy under your user profile rather than this checkout.
+
+## Login
+
+First-run credentials are created in `den/.env`.
 
 - Email: `admin@local`
-- Password: check `LOCAL_PASSWORD` in `den/.env`
-
-Done. The AI has keys to your kingdom.
-
----
-
-## The CLI
-
-```bash
-asyncat start            # start backend + Web UI and open browser
-asyncat start --no-open  # start services without opening browser
-asyncat start --dev      # force Vite dev server instead of built preview
-asyncat start --live-logs  # also stream service output in this terminal
-asyncat open             # open the Web UI
-asyncat tui              # terminal UI
-asyncat stop             # stop local services
-asyncat status           # show running services
-asyncat restart          # stop, then start
-asyncat logs             # show recent logs
-asyncat logs clear       # clear saved logs
-asyncat doctor           # health check
-asyncat config           # manage env settings
-asyncat uninstall        # remove launchers/global wrapper, keep local data
-```
-
----
-
-## AI Options
-
-### Local (recommended)
-
-Drop a GGUF file in `den/data/models/`. Asyncat runs its own `llama-server`.
-
-For the smoothest setup, let Asyncat install a managed llama.cpp binary in your user profile:
-
-```bash
-asyncat install --local-engine
-```
-
-Managed install locations:
-
-| OS | Path |
-|---|---|
-| Linux/macOS | `~/.asyncat/llama.cpp/current/llama-server` |
-| Windows | `%LOCALAPPDATA%\Asyncat\llama.cpp\current\llama-server.exe` |
-
-Asyncat writes `LLAMA_BINARY_PATH` into `den/.env` after a managed install. This avoids global Python package installs, including Linux `externally-managed-environment` / PEP 668 failures.
-
-The managed install is intentionally CPU-safe by default. Asyncat's Models page can inspect the current machine, recommend a better local engine when one fits the hardware, switch to already-installed runtimes, or trigger a managed install from the UI for supported engine profiles.
-
-On Apple Silicon, `asyncat install` also tries to create `~/.asyncat/mlx/python` and install `mlx-lm` there. The backend uses `MLX_PYTHON_PATH` from `den/.env`, so Asyncat does not need to modify system Python.
-
-### Uninstall
-
-```bash
-asyncat uninstall
-```
-
-This stops local services and removes the command shim, desktop launcher, app bundle, icons, and the npm global wrapper. It keeps `~/.asyncat` so your database, config, models, managed engines, and sessions are not deleted accidentally.
-
-For a full wipe:
-
-```bash
-asyncat uninstall --purge
-```
-
-```env
-LLAMA_SERVER_PORT=8765
-MODELS_PATH=./data/models
-```
-
-#### Local engine detection order
-
-Asyncat checks for local inference in this order:
-
-1. `LLAMA_BINARY_PATH` in `den/.env`
-2. Asyncat's managed llama.cpp binary
-3. Known llama.cpp install paths, including Homebrew, winget, and Unsloth paths
-4. `llama-server` / `llama-server.exe` on `PATH`
-5. Asyncat's Python venv fallback, then any existing `llama-cpp-python[server]`
-
-If you prefer a manually downloaded llama.cpp release, set:
-
-```env
-LLAMA_BINARY_PATH=/full/path/to/llama-server
-```
-
-### Cloud
-
-Any OpenAI-compatible API:
-
-```env
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=sk-...
-AI_MODEL=gpt-4o
-```
-
-Supported chat providers (configure on the Models page):
-
-| Provider | Type |
-|---|---|
-| OpenAI | Cloud |
-| Anthropic | Cloud |
-| Gemini | Cloud |
-| xAI (Grok) | Cloud |
-| Mistral | Cloud |
-| DeepSeek | Cloud |
-| Groq | Cloud |
-| Together | Cloud |
-| Perplexity | Cloud |
-| MiniMax / MiniMax CN | Cloud |
-| Cohere | Cloud |
-| Fireworks | Cloud |
-| Cerebras | Cloud |
-| DeepInfra | Cloud |
-| NVIDIA NIM | Cloud |
-| OpenRouter | Cloud |
-| Hugging Face | Cloud |
-| Azure OpenAI | Cloud |
-| Amazon Bedrock | Cloud |
-| Ollama | Local |
-| LM Studio | Local |
-| llama.cpp (built-in) | Local |
-| Custom OpenAI-compat endpoint | Any |
-
----
-
-## Multimodal Capabilities
-
-Beyond chat, Asyncat routes speech, image, and vision through dedicated providers. Configure each independently on the Models page under the relevant capability tab.
-
-### Speech-to-Text (STT)
-
-| Provider | Model |
-|---|---|
-| Local (whisper.cpp) | Whisper — runs on-device |
-| OpenAI | gpt-4o-transcribe |
-| ElevenLabs | Scribe v2 |
-| fal.ai | Whisper (fast cloud) |
-
-Set via `ASYNCAT_STT_PROVIDER` (or the Models page UI).
-
-### Text-to-Speech (TTS)
-
-| Provider | Model |
-|---|---|
-| Local (Piper) | Piper — runs on-device |
-| OpenAI | gpt-4o-mini-tts |
-| ElevenLabs | Eleven v3 / Flash v2.5 |
-| fal.ai | Kokoro (natural voices) |
-| Gemini | Gemini 2.5 Flash TTS (30 voices) |
-
-Set via `ASYNCAT_TTS_PROVIDER`.
-
-### Image Generation
-
-| Provider | Model |
-|---|---|
-| Local (stable-diffusion.cpp) | Any GGUF checkpoint |
-| Local (ComfyUI) | Any checkpoint via ComfyUI API |
-| OpenAI | DALL-E 3 |
-| fal.ai | Flux Schnell |
-| Stability AI | Stable Image Ultra |
-
-Set via `ASYNCAT_IMAGE_PROVIDER`. The agent's `generate_image` tool respects this automatically.
-
-### Vision
-
-Vision is handled by your active chat provider's multimodal capability (GPT-4o, Claude 3+, Gemini, MiniMax-M2, etc.). Attach an image to any message and it routes through the active model.
-
----
-
-## Agent System
-
-Asyncat runs a real agentic loop — not a chatbot wrapper.
-
-```
-/agents  →  AgentRuntime  →  toolRegistry  →  PermissionManager  →  SSE stream
-```
-
-### Tools
-
-The agent has access to 100+ tools across categories:
-
-| Category | Tools |
-|---|---|
-| File | read, write, edit, delete, move, copy, search, diff, watch |
-| Shell | run_command, run_python, run_node |
-| Git | status, diff, log, commit, branch, push, pull, stash, clone |
-| Web | web_search, fetch_url, http_request, browse_url, screenshot_page |
-| Memory | save_memory, recall_memory, list_memories, forget_memory |
-| Skills | list_skills, load_skill |
-| System | sys_info, ps_list, env_get, notify, clipboard_read/write, run_tests |
-| Dev | linter_run, code_fix, package_manager, build_runner |
-| Docker | sandbox_exec, docker_build, docker_ps, docker_run, docker_stop |
-| OS/Process | process_spawn, process_kill, port_scan, disk_usage |
-| Screen | take_screenshot, screen_click, screen_type, window_list |
-| Data | read_pdf, read_csv, json_query, diff_apply, image_describe, ssh_exec |
-| Visual | generate_image, edit_image |
-| Audio | transcribe_audio, synthesize_speech |
-| Workspace | get_notes, create_note, get_tasks, get_events |
-| Plan | todo_write, list_plan |
-| Agent | delegate_task |
-| MCP | dynamic tools from connected MCP servers |
-
-### Skills (Cerebellum)
-
-36 bundled markdown skills in `den/src/agent/skills/`. Each skill is a procedural guide loaded when relevant to the current task. The agent can also call `list_skills` / `load_skill` to fetch any skill on demand mid-run.
-
-Skills cover: debugging, git, testing, TDD, refactoring, API design, security, performance, CI/CD, Docker, deployment, SQL, logging, architecture review, code review, data engineering, incident response, monitoring, NextJS, React patterns, report writing, web research, accessibility auditing, and more.
-
-### Soul
-
-The agent's persona, principles, and operating rules live in `den/src/agent/souls/default.md`. Editable from the UI at `/agents/tools` → Soul tab. Agent profiles can override or replace the soul entirely.
-
-### Profiles
-
-Named configuration bundles that package a soul, working directory, permission rules, and pre-approved tool lists into one reusable agent identity. Create and manage profiles at `/agents/profiles`. The default profile is applied automatically to every run; pick any profile from the dropdown above the goal input.
-
-Built-in starter templates: General Agent, Dev Agent, Research Agent, Turbo Agent (auto-approves all tools).
-
-### Memory
-
-The agent stores durable facts across sessions in a local SQLite table. Browse, search, and delete memories from `/agents/tools` → Memory tab.
-
-### Sessions
-
-Every agent run is persisted as a session with a full audit trail of tool calls, changes, and the conversation. View, continue, rename, or delete sessions from the session history panel.
-
-### Permissions
-
-Tools are classified as safe / moderate / dangerous. The agent asks for permission before running moderate/dangerous tools. You can approve once, approve for the session, or set a tool as always-allowed. Profiles can pre-approve specific tools so they never interrupt.
-
-### Stop Reasons
-
-When the agent stops for a non-obvious reason, a banner explains why:
-
-| Reason | Cause |
-|---|---|
-| `max_rounds` | Used all available steps — reply to continue |
-| `tool_failure` | Too many consecutive tool errors |
-| `loop_detected` | Repeating tool cycle detected |
-| `reflection_abort` | Agent self-reflected and decided it was stuck |
-
-### Changes & Revert
-
-File writes and shell commands are tracked per session. View the changes panel to see what the agent touched. Revert a session to roll back file changes using a git stash or directory snapshot checkpoint.
-
-### OS Notifications
-
-Asyncat fires native OS notifications (via Web Notifications API) when:
-- The agent finishes a run
-- The agent needs your approval (`ask_user`)
-- The agent is requesting a risky permission
-
-Clicking a notification focuses the tab directly.
-
-### MCP
-
-Connect external tool servers via `data/mcp.json`. MCP tools are loaded dynamically into the tool registry.
-
-### Scheduler
-
-Create and manage scheduled agent jobs at `/agents/schedule`. Jobs run the full agent loop autonomously on a repeating interval, daily at a set time, or once after a delay. All jobs survive server restarts (persisted to SQLite).
-
-Supported schedule formats:
-
-| Format | Example | Meaning |
-|---|---|---|
-| `interval:<ms>` | `interval:3600000` | Every hour |
-| `hourly` | `hourly` | Top of every hour |
-| `daily:<HH:MM>` | `daily:09:00` | Every day at 09:00 |
-| `once:<ms>` | `once:1800000` | Once in 30 minutes |
-| `at:<ISO>` | `at:2026-05-01T10:00:00Z` | Once at exact time |
-
----
+- Password: `LOCAL_PASSWORD` from `den/.env`
 
 ## Configuration
 
-### From the UI
+Backend configuration lives in `den/.env`.
 
-Settings → Server to change:
-- JWT_SECRET
-- AI_API_KEY
-- SOLO_PASSWORD
+Common values:
 
-### From the terminal
-
-```bash
-asyncat config get AI_MODEL
-asyncat config set AI_MODEL=gpt-4o-mini
-asyncat restart
+```env
+PORT=8716
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-...
+AI_MODEL=gpt-4o-mini
+MODELS_PATH=./data/models
+LLAMA_SERVER_PORT=8765
 ```
 
----
+Provider and capability settings can also be managed in the UI under Models.
 
-## No Cloud. No Teams. No Subscription.
+## Agent Harness
 
-This is the full stack. Running on your machine. Your data. Your model.
+The main loop lives in `den/src/agent/AgentRuntime.js`.
 
-> "Don't give it sudo access. Unless you want to. We aren't your parents."
+High-level flow:
 
----
+```text
+User goal
+  -> AgentRuntime
+  -> prompt builder + skills + memory + tool schemas
+  -> model call
+  -> tool parsing/native tool calls
+  -> PermissionManager
+  -> toolRegistry
+  -> AgentSession + agent_tool_audit
+  -> SSE events to Command Center
+```
+
+Important files:
+
+| Path | Purpose |
+|---|---|
+| `den/src/agent/AgentRuntime.js` | Agent loop, tool execution, compaction, permissions, stop reasons |
+| `den/src/agent/AgentSession.js` | Session persistence and tool audit writes |
+| `den/src/agent/tools/` | Tool implementations and registry inputs |
+| `den/src/agent/skills/` | Bundled procedural skills |
+| `den/src/agent/prompts/agentSystemPrompt.js` | System prompt assembly |
+| `den/src/agent/SandboxManager.js` | Disposable coding sandboxes and patch promotion |
+| `den/src/ai/routes/aiAgentRoutes.js` | Agent HTTP/SSE routes |
+| `den/src/ai/routes/agentMetricsRoutes.js` | Agent health metrics API |
+| `neko/src/CommandCenter/` | Main agent UI and run feed |
+| `neko/src/AgentHealth/AgentHealthPage.jsx` | Visible health dashboard |
+| `neko/src/Tools/ToolsSkillsPage.jsx` | Tools, skills, soul, and memory UI |
+
+## Agent Health
+
+The Agent Health page is available at:
+
+```text
+/agent-health
+```
+
+Backend endpoints:
+
+```text
+GET /api/agent/metrics/summary?days=30
+GET /api/agent/metrics/tools?days=30&limit=100
+```
+
+Metrics currently include total tool calls, failed calls, success rate, sessions, tools used, invalid tool arguments, read-before-write guard blocks, permission denials, average duration, and recent failures.
+
+## Evals
+
+Run deterministic harness checks:
+
+```bash
+npm run eval:agent -w den
+```
+
+Run the live-model eval mode:
+
+```bash
+npm run eval:agent -w den -- --live
+```
+
+Live mode creates a disposable sandbox, runs a real `AgentRuntime` session against the currently configured model, asks the agent to edit and test a small project, validates the result, and then removes the sandbox.
+
+Useful options:
+
+```bash
+npm run eval:agent -w den -- --live --max-rounds 12
+npm run eval:agent -w den -- --live --keep-sandbox
+npm run eval:agent -w den -- --live --user-id <id> --workspace-id <id>
+npm run eval:agent -w den -- --json
+```
+
+## Testing
+
+Backend tests:
+
+```bash
+npm test -w den
+```
+
+Frontend production build:
+
+```bash
+npm run build -w neko
+```
+
+Full useful loop while touching the harness:
+
+```bash
+npm test -w den
+npm run eval:agent -w den
+npm run build -w neko
+```
+
+Use live evals intentionally because they call the active model provider.
+
+## Sandboxes
+
+The sandbox system supports isolated copy or git worktree runs.
+
+Typical flow:
+
+1. Create a sandbox from a source workspace.
+2. Run a delegated agent or manual commands inside the sandbox.
+3. Review changed files and generated patch.
+4. Promote selected files, create a branch, or apply a patch back to the source.
+5. Delete the sandbox when done.
+
+Sandbox data is stored under `.asyncat/sandboxes` near the source root unless `ASYNCAT_SANDBOX_DIR` is set.
+
+## UI Areas
+
+| Route | Area |
+|---|---|
+| `/home` | Command Center |
+| `/conversations` | Current and historical chats |
+| `/agent-health` | Agent reliability and eval entrypoints |
+| `/tools` | Tool inventory and management |
+| `/skills` | Skill inventory and management |
+| `/models` | Chat/local/multimodal providers |
+| `/profiles` | Agent profile configuration |
+| `/scheduler` | Scheduled agent jobs |
+| `/files` | Workspace file browser |
+| `/workspace` | Projects and workspace data |
+| `/settings` | App and server settings |
+
+## Repository Layout
+
+```text
+asyncat-oss/
+├── cat                         # Source launcher
+├── cli/                        # CLI and terminal UI
+├── den/                        # Backend API and agent runtime
+│   ├── scripts/run-agent-evals.js
+│   ├── src/agent/
+│   ├── src/ai/
+│   ├── src/db/
+│   └── test/
+├── neko/                       # React frontend
+│   ├── src/AgentHealth/
+│   ├── src/CommandCenter/
+│   ├── src/Models/
+│   ├── src/Tools/
+│   └── src/sidebar/
+├── data/                       # Local SQLite DB and MCP config
+└── logs/                       # Runtime logs
+```
+
+## Database
+
+SQLite is created automatically at `data/asyncat.db` unless `DB_PATH` is set.
+
+Core tables:
+
+| Table | Purpose |
+|---|---|
+| `users` | Local users |
+| `workspaces` | Workspace ownership |
+| `agent_sessions` | Persisted agent runs |
+| `agent_tool_audit` | Per-tool call audit trail and metrics source |
+| `agent_memory` | Durable agent memory |
+| `agent_profiles` | Agent profile settings |
+| `agent_sandboxes` | Disposable sandbox metadata |
+| `agent_sandbox_jobs` | Sandbox command jobs |
+| `scheduled_jobs` | Recurring agent work |
+
+## Model Providers
+
+Asyncat supports local and cloud providers from the Models page.
+
+Chat providers include OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, xAI, Mistral, DeepSeek, Groq, Together, Perplexity, Cohere, Fireworks, Cerebras, DeepInfra, NVIDIA NIM, OpenRouter, Hugging Face, Azure OpenAI, Amazon Bedrock, Ollama, LM Studio, and built-in llama.cpp.
+
+Capability providers cover STT, TTS, image generation, and vision where supported.
+
 
 ## License
 
 MIT
-
----
-
-## Contributing
-
-Issues and PRs welcome. No safety department. No corporate oversight.
-
-Good luck. Have fun. Don't blame us if your quantized baby model deletes your homework.
-
-🐱
-
----
-
-## For Developers
-
-### Running from Source
-
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Start the local Web UI
-./cat                  # Mac/Linux: start services and open browser
-node cat               # Windows/cross-platform equivalent
-npm run cli            # npm wrapper around node cat
-
-# Start without opening the browser
-./cat start --no-open
-node cat start --no-open
-
-# Force frontend dev mode instead of previewing neko/dist
-./cat start --dev --no-open
-
-# Interactive terminal UI
-./cat tui
-
-# 3. Or run components separately
-npm run dev:backend    # den/ server only (port 8716)
-npm run dev:frontend   # neko/ UI only (port from neko/vite.config.js)
-```
-
-The source launcher is `./cat`; the installed command is `asyncat`. If you run `asyncat` while developing, it may point at the installed copy in `~/.asyncat` instead of your current checkout.
-
-### Logs
-
-Startup stays quiet by default. Detailed service and CLI logs are written under `logs/`:
-
-```text
-logs/cli/
-logs/backend/app/
-logs/backend/http/
-logs/backend/error/
-logs/backend/process/
-logs/frontend.log
-```
-
-Useful log commands:
-
-```bash
-./cat logs              # recent CLI, backend, and frontend logs
-./cat logs backend      # backend logs only
-./cat logs frontend     # frontend log only
-./cat logs cli          # CLI log summary
-./cat logs cli-view ui  # one CLI log category
-./cat logs clear        # clear all saved logs
-./cat logs clear backend
-```
-
-### Project Architecture
-
-```
-asyncat-oss/
-├── cat              # Simple launcher script (shebang → cli/index.js)
-├── cli/             # Terminal User Interface (TUI)
-│   ├── index.js     # Main CLI entry
-│   ├── commands/    # Individual commands (start, stop, models, etc.)
-│   ├── lib/         # TUI helpers, themes, colors
-│   └── skills/      # 36 bundled Cerebellum skills (markdown)
-├── den/             # Backend API server (Express + SQLite)
-│   └── src/
-│       ├── agent/
-│       │   ├── AgentRuntime.js     # ReAct loop orchestration
-│       │   ├── AgentSession.js     # Session persistence
-│       │   ├── ProfileManager.js   # Agent profile CRUD (SQLite)
-│       │   ├── PermissionManager.js
-│       │   ├── Compactor.js        # Context window management
-│       │   ├── Scheduler.js        # Cron-style goal scheduling
-│       │   ├── skills.js           # Cerebellum skill loader + relevance matching
-│       │   ├── souls/              # Agent persona files (default.md, editable from UI)
-│       │   ├── prompts/            # System prompt builder (soul + skills + memory + tools)
-│       │   └── tools/              # 100+ tool implementations
-│       └── ai/
-│           └── routes/
-│               ├── aiAgentRoutes.js   # Agent HTTP/SSE routes
-│               └── providerRoutes.js  # STT/TTS/image cloud provider routes
-├── neko/            # Frontend web UI (Vite + React)
-│   └── src/
-│       ├── Agent/
-│       │   ├── AgentToolsSkillsPage.jsx  # Tools / Skills / Soul / Memory tabs
-│       │   ├── AgentProfilesPage.jsx     # Profile CRUD UI (/agents/profiles)
-│       │   └── SchedulerPage.jsx         # Scheduled jobs UI (/agents/schedule)
-│       ├── Models/                       # Models page + capability provider sections
-│       ├── CommandCenter/               # Main agent run interface + chat
-│       └── sidebar/                     # Dock sidebar with ⌘1–⌘9 shortcuts
-└── data/            # SQLite DB (asyncat.db), MCP config (mcp.json)
-```
-
-| Directory | Purpose | Port |
-|-----------|---------|------|
-| `cli/` | Terminal interface | N/A |
-| `den/` | Backend API | 8716 |
-| `neko/` | Web UI | `neko/vite.config.js` |
-
-### npm Scripts
-
-```bash
-npm run cli           # Start TUI (node cat)
-npm run dev           # Start both backend + frontend
-npm run dev:backend   # Backend only
-npm run dev:frontend  # Frontend only
-npm run build         # Build frontend for production
-```
-
-### Key Files
-
-- `cat` — 2-line launcher
-- `den/src/agent/skills/` — 36 bundled Cerebellum skill markdown files
-- `den/src/agent/souls/default.md` — agent persona (editable from UI at `/agents/tools` → Soul)
-- `den/src/agent/AgentRuntime.js` — ReAct loop, SSE streaming, tool execution, stop reason tracking
-- `den/src/agent/ProfileManager.js` — agent profile CRUD (SQLite-backed)
-- `den/src/agent/Scheduler.js` — SQLite-backed cron scheduler
-- `den/src/agent/skills.js` — skill loader with stop-word filtering and relevance scoring
-- `den/src/ai/routes/aiAgentRoutes.js` — all agent HTTP/SSE routes (run, tools, skills, soul, memory, profiles, schedule, mcp, multi)
-- `den/src/ai/routes/providerRoutes.js` — STT/TTS/image cloud provider adapters (fal.ai, ElevenLabs, Gemini, Stability AI, OpenAI)
-- `neko/src/Agent/AgentToolsSkillsPage.jsx` — Tools / Skills / Soul / Memory tabs
-- `neko/src/Agent/AgentProfilesPage.jsx` — Profile management UI (`/agents/profiles`)
-- `neko/src/Agent/SchedulerPage.jsx` — Scheduler UI (`/agents/schedule`)
-- `neko/src/Models/CapabilityProvidersSection.jsx` — STT/TTS/image/vision provider selection UI
-- `neko/src/CommandCenter/CommandCenterV2Enhanced.jsx` — main agent run UI with profile picker
-- `neko/src/sidebar/Sidebar.jsx` — dock sidebar (⌘1–⌘9 shortcuts)
-
-### Database
-
-SQLite at `data/asyncat.db`, created automatically on first run. Tables include:
-
-| Table | Purpose |
-|---|---|
-| `agent_sessions` | Every agent run with goal, status, scratchpad |
-| `agent_tool_audit` | Per-tool call log with args, result, timing |
-| `agent_memory` | Durable key-value memory across sessions |
-| `agent_profiles` | Named agent configurations (soul, tools, permissions) |
-| `scheduled_jobs` | Cron-style scheduled agent goals |
-| `workspaces` | User workspaces |
-| `notes`, `tasks`, `events` | Workspace data |
-
-### Environment
-
-- `.env` files are auto-created and first-run local credentials are hardened by `scripts/postinstall.js`
-- Config: `den/.env` (backend settings)

@@ -4,7 +4,7 @@ const DEFAULT_SHORTCUTS = {
   newChat: { key: 'n', ctrl: true, meta: true, label: 'New Chat', action: 'newChat' },
   dock1: { key: '1', ctrl: true, meta: true, label: 'Command Center', action: 'navHome' },
   dock2: { key: '2', ctrl: true, meta: true, label: 'Chat History', action: 'navChat' },
-  dock3: { key: '3', ctrl: true, meta: true, label: 'Workspace', action: 'navWorkspace' },
+  dock3: { key: '3', ctrl: true, meta: true, label: 'Projects', action: 'navWorkspace' },
   dock4: { key: '4', ctrl: true, meta: true, label: 'Calendar', action: 'navCalendar' },
   dock5: { key: '5', ctrl: true, meta: true, label: 'Files', action: 'navFiles' },
   dock6: { key: '6', ctrl: true, meta: true, label: 'Models', action: 'navModels' },

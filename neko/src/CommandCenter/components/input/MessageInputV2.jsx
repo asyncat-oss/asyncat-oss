@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, Mic, Paperclip, Rss, Send, SlidersHorizontal, Square, Wrench, X, Zap } from "lucide-react";
+import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, Mic, Paperclip, Rss, Send, SlidersHorizontal, Square, Wrench, X, Zap, Plus, ArrowUp, Check, Folder } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
@@ -10,6 +10,28 @@ import { localModelsApi, llamaServerApi, audioApi, aiProviderApi } from "../../.
 import { profilesApi, filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 import { AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
+
+const ToggleSwitch = ({ checked, onChange, disabled }) => {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onChange}
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+        checked
+          ? "bg-indigo-600 dark:bg-indigo-500"
+          : "bg-gray-200 dark:bg-gray-700"
+      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+          checked ? "translate-x-4" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
+};
+
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -67,7 +89,7 @@ function splitFileQuery(query = "") {
 
 function formatRootLabel(rootPath = "") {
   const parts = String(rootPath || "").split(/[\\/]/).filter(Boolean);
-  if (parts.length === 0) return "Workspace";
+  if (parts.length === 0) return "Projects";
   return parts.slice(-2).join("/");
 }
 
@@ -96,7 +118,7 @@ function safeAttachmentName(name = "attachment") {
 function labelForWorkingContext(context, root) {
   if (context?.relativePath && context.relativePath !== ".") return basename(context.relativePath);
   if (root?.path) return formatRootLabel(root.path);
-  return "Workspace";
+  return "Projects";
 }
 
 function relativeToContext(entryPath, contextPath = ".") {
@@ -1011,7 +1033,7 @@ export const MessageInputV2 = ({
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
         <form onSubmit={handleSubmit}>
             <div
-              className={`bg-white px-4 pt-4 pb-0 rounded-[1.35rem] border transition-colors dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()}`}
+              className={`bg-white px-4 pt-4 pb-3 rounded-[1.35rem] border transition-colors dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()}`}
             >
               {(error || modelSwitchError) && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
@@ -1203,413 +1225,337 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-                            <div ref={toolbarRef} className="-mx-4 mt-3 flex min-h-11 flex-col items-stretch gap-2 rounded-b-[1.25rem] border-t border-gray-100 bg-gray-50/95 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/40 midnight:border-slate-800 midnight:bg-slate-950/70 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 flex-wrap items-center gap-1">
-                  {activeWorkingContext && (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={openWorkingContextMenu}
-                        disabled={disabled || !onWorkingContextChange}
-                        title={`Agent working directory: ${activeWorkingContext.workingDir}`}
-                        className="inline-flex max-w-[10rem] items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-gray-500 transition-all duration-200 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
-                      >
-                        {(() => {
-                          const RootIcon = rootIcon(activeRoot?.kind);
-                          return <RootIcon className="h-3.5 w-3.5 shrink-0" />;
-                        })()}
-                        <span className="hidden shrink-0 text-gray-400 dark:text-gray-500 sm:inline">Working in</span>
-                        <span className="min-w-0 truncate font-medium">{activeContextLabel}</span>
-                        <ChevronDown className="h-3 w-3 shrink-0 opacity-40" />
-                      </button>
-
-                    </div>
-                  )}
-
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
-                      disabled={disabled || activeBrain.loading || isSwitchingModel}
-                      title={`${activeBrain.label}${activeBrain.supportsTools ? " native tools enabled" : ""}`}
-                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                        activeBrain.isLoadingModel
-                          ? "text-amber-500 dark:text-amber-400"
-                          : activeBrain.isReady
-                            ? activeBrain.isLocal
-                              ? "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
-                              : "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-                            : "text-gray-400 dark:text-gray-500"
-                      } disabled:cursor-not-allowed`}
-                    >
-                      {activeBrain.isLoadingModel || activeBrain.loading || isSwitchingModel ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <BrainIcon className="w-3.5 h-3.5" />
-                      )}
-                      <span className="hidden sm:inline"><span className="truncate max-w-[10rem]">{modelLabel}</span></span>
-                      <ChevronDown className="w-3 h-3 opacity-40" />
-                    </button>
-                    {openMenu === "model" && (
-                      <div className="absolute left-0 bottom-full z-30 mb-1.5 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                        <div className="max-h-72 overflow-y-auto p-1">
-                          {allModelOptions.length === 0 ? (
-                            <div className="px-2.5 py-4 text-center text-xs text-gray-400 dark:text-gray-500">
-                              No models configured
-                            </div>
-                          ) : allModelOptions.map((item, i) => {
-                            if (item.type === "section") {
-                              return (
-                                <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                                  {item.label}
-                                </div>
-                              );
-                            }
-                            if (item.type === "divider") {
-                              return <div key={`d-${i}`} className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />;
-                            }
-                            return (
-                              <button
-                                key={item.value}
-                                type="button"
-                                disabled={item.active}
-                                onClick={() => handleModelSelect(item.value)}
-                                className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-default ${
-                                  item.active
-                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                }`}
-                              >
-                                <span className="flex items-center gap-2">
-                                  <span className="block truncate font-medium flex-1">{item.label}</span>
-                                  {item.active && (
-                                    <span className="flex h-2 w-2 shrink-0 relative">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                                    </span>
-                                  )}
-                                </span>
-                                {item.detail && (
-                                  <span className="block truncate text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{item.detail}</span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="border-t border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
-                          <button
-                            type="button"
-                            onClick={() => handleModelSelect("__manage__")}
-                            className="w-full rounded-md px-2.5 py-2 text-left text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800"
-                          >
-                            Manage models →
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {(onToggleAgentMode || onToggleTools) && (
-                    <button
-                      type="button"
-                      onClick={onToggleAgentMode || onToggleTools}
-                      disabled={disabled}
-                      title={isActionMode ? "Action mode \u2014 can execute approved changes" : "Plan mode \u2014 safe inspection and answers only"}
-                      className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                        isActionMode
-                          ? "text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                          : "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
-                      }`}
-                    >
-                      {isActionMode ? <Wrench className="w-3.5 h-3.5" /> : <ClipboardPen className="w-3.5 h-3.5" />}
-                      <span className="hidden sm:inline">{isActionMode ? 'Action' : 'Plan'}</span>
-                    </button>
-                  )}
-
-                  {(() => {
-                    const hasOverflowItems =
-                      (onReasoningEffortChange && supportsReasoningControl) ||
-                      onEnabledIntegrationToolsChange ||
-                      (onToggleAutoApprove && isActionMode) ||
-                      (voiceConversationAvailable && onToggleVoiceMode);
-                    if (!hasOverflowItems) return null;
-                    const activeOverflowCount = [
-                      reasoningEffort !== "auto" && onReasoningEffortChange && supportsReasoningControl,
-                      enabledIntegrationCount > 0,
-                      autoApprove && onToggleAutoApprove && isActionMode,
-                      voiceConversationActive && voiceConversationAvailable && onToggleVoiceMode,
-                    ].filter(Boolean).length;
-                    return (
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setOpenMenu((current) => (current === "settings" ? null : "settings"))}
-                          disabled={disabled}
-                          title="Settings"
-                          className={`inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-xs transition-all duration-200 ${
-                            activeOverflowCount > 0
-                              ? "text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300"
-                              : "text-gray-400 dark:text-gray-500 hover:bg-gray-50 hover:text-gray-600 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
-                          }`}
-                        >
-                          <SlidersHorizontal className="w-3.5 h-3.5" />
-                          {activeOverflowCount > 0 && (
-                            <span className="hidden sm:inline text-[10px] font-medium tabular-nums">{activeOverflowCount}</span>
-                          )}
-                          <ChevronDown className="w-3 h-3 opacity-40" />
-                        </button>
-                        {openMenu === "settings" && (
-                          <div className="absolute left-0 bottom-full z-30 mb-1.5 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                            <div className="max-h-80 overflow-y-auto">
-
-                              {onReasoningEffortChange && supportsReasoningControl && (
-                                <>
-                                  <div className="px-3 pt-2 pb-1">
-                                    <div className="flex items-center justify-between mb-1">
-                                      <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Reasoning</span>
-                                      <span className={`text-xs font-medium ${
-                                        reasoningEffort === "auto"
-                                          ? "text-gray-400 dark:text-gray-500"
-                                          : "text-violet-600 dark:text-violet-400"
-                                      }`}>{currentReasoningOption.label}</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1">
-                                      {currentReasoningOptions.map((option) => (
-                                        <button
-                                          key={option.value}
-                                          type="button"
-                                          onClick={() => onReasoningEffortChange(option.value)}
-                                          className={`rounded px-2 py-1 text-xs transition-colors ${
-                                            option.value === reasoningEffort
-                                              ? "bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300"
-                                              : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                          }`}
-                                        >
-                                          {option.label}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
-                                </>
-                              )}
-
-                              {onEnabledIntegrationToolsChange && (
-                                <>
-                                  <div className="px-3 pt-2 pb-1">
-                                    <div className="mb-1">
-                                      <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Apps</span>
-                                    </div>
-                                    {INTEGRATION_TOOL_PACKS.map((pack) => {
-                                      const PackIcon = pack.icon;
-                                      const isEnabled = pack.tools.some(tool => enabledIntegrationSet.has(tool));
-                                      return (
-                                        <button
-                                          key={pack.id}
-                                          type="button"
-                                          aria-pressed={isEnabled}
-                                          onClick={() => toggleIntegrationPack(pack)}
-                                          className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
-                                            isEnabled
-                                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                                              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                          }`}
-                                        >
-                                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
-                                            isEnabled
-                                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                                              : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                                          }`}>
-                                            <PackIcon className="h-3.5 w-3.5" />
-                                          </span>
-                                          <span className="min-w-0 flex-1">
-                                            <span className="block truncate font-medium">{pack.label}</span>
-                                            <span className="block truncate text-[11px] text-gray-400 dark:text-gray-500">{pack.description}</span>
-                                          </span>
-                                          <span className={`h-3.5 w-3.5 shrink-0 rounded-full border ${
-                                            isEnabled
-                                              ? "border-emerald-500 bg-emerald-500 shadow-[inset_0_0_0_3px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_3px_rgba(17,24,39,0.95)]"
-                                              : "border-gray-300 dark:border-gray-600"
-                                          }`} />
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
-                                </>
-                              )}
-
-                              {onToggleAutoApprove && isActionMode && (
-                                <>
-                                  <div className="px-3 pt-2 pb-1">
-                                    <button
-                                      type="button"
-                                      onClick={onToggleAutoApprove}
-                                      disabled={disabled}
-                                      className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
-                                        autoApprove
-                                          ? "text-amber-600 dark:text-amber-400"
-                                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                      }`}
-                                    >
-                                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
-                                        autoApprove
-                                          ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                                          : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                                      }`}>
-                                        <Zap className="h-3.5 w-3.5" />
-                                      </span>
-                                      <span className="flex-1">
-                                        <span className="block font-medium">Auto-approve</span>
-                                        <span className="block text-[11px] text-gray-400 dark:text-gray-500">
-                                          {autoApprove ? "Approve tools automatically" : "Ask before risky tools"}
-                                        </span>
-                                      </span>
-                                      <span className={`h-3.5 w-3.5 shrink-0 rounded-full border ${
-                                        autoApprove
-                                          ? "border-amber-500 bg-amber-500 shadow-[inset_0_0_0_3px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_3px_rgba(17,24,39,0.95)]"
-                                          : "border-gray-300 dark:border-gray-600"
-                                      }`} />
-                                    </button>
-                                  </div>
-                                  <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
-                                </>
-                              )}
-
-                              {voiceConversationAvailable && onToggleVoiceMode && (
-                                <div className="px-3 pt-2 pb-1">
-                                  <button
-                                    type="button"
-                                    onClick={onToggleVoiceMode}
-                                    disabled={disabled}
-                                    className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
-                                      voiceConversationActive
-                                        ? "text-violet-600 dark:text-violet-400"
-                                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                                    }`}
-                                  >
-                                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
-                                      voiceConversationActive
-                                        ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-                                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                                    }`}>
-                                      <Headphones className="h-3.5 w-3.5" />
-                                    </span>
-                                    <span className="flex-1">
-                                      <span className="block font-medium">Voice mode</span>
-                                      <span className="block text-[11px] text-gray-400 dark:text-gray-500">
-                                        {voiceConversationActive ? "Hands-free conversation" : "Enable hands-free conversation"}
-                                      </span>
-                                    </span>
-                                    <span className={`h-3.5 w-3.5 shrink-0 rounded-full border ${
-                                      voiceConversationActive
-                                        ? "border-violet-500 bg-violet-500 shadow-[inset_0_0_0_3px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_3px_rgba(17,24,39,0.95)]"
-                                        : "border-gray-300 dark:border-gray-600"
-                                    }`} />
-                                  </button>
-                                </div>
-                              )}
-
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div className="flex shrink-0 items-center justify-end gap-1.5">
-                  <input
-                    ref={filePickerRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={handlePickedFiles}
-                  />
+            <div ref={toolbarRef} className="mt-2.5 flex items-center justify-between gap-2 bg-transparent text-gray-500 select-none">
+              <div className="flex items-center gap-1.5">
+                <div className="relative">
                   <button
                     type="button"
-                    onClick={() => filePickerRef.current?.click()}
-                    disabled={disabled || uploadingAttachment}
-                    title="Attach files"
-                    className={`inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2.5 text-xs transition-all duration-200 ${
-                      uploadingAttachment
-                        ? "text-blue-500 dark:text-blue-400"
-                        : "text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
+                    onClick={() => setOpenMenu((current) => (current === "plus" ? null : "plus"))}
+                    disabled={disabled}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition-colors"
+                    title="Options"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                  {openMenu === "plus" && (
+                    <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          filePickerRef.current?.click();
+                        }}
+                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                        <span className="flex-1 font-medium">Add photos & files</span>
+                      </button>
+
+
+
+                      {voiceConversationAvailable && onToggleVoiceMode && (
+                        <div className="flex items-center justify-between rounded-md px-3 py-2 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <Headphones className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                            <div className="text-left">
+                              <span className="block text-xs font-medium text-gray-700 dark:text-gray-300">Voice mode</span>
+                              <span className="block text-[10px] text-gray-400 dark:text-gray-500">
+                                {voiceConversationActive ? "Hands-free conversation active" : "Enable hands-free conversation"}
+                              </span>
+                            </div>
+                          </div>
+                          <ToggleSwitch
+                            checked={voiceConversationActive}
+                            onChange={onToggleVoiceMode}
+                            disabled={disabled}
+                          />
+                        </div>
+                      )}
+
+                      {(supportsReasoningControl || onEnabledIntegrationToolsChange) && (
+                        <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                      )}
+
+                      {onReasoningEffortChange && supportsReasoningControl && (
+                        <div className="px-3 py-2">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5">
+                            Reasoning effort
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {currentReasoningOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => onReasoningEffortChange(option.value)}
+                                className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                                  option.value === reasoningEffort
+                                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300"
+                                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+                                }`}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {onEnabledIntegrationToolsChange && supportsReasoningControl && (
+                        <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                      )}
+
+                      {onEnabledIntegrationToolsChange && (
+                        <div className="px-3 py-2">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">
+                            Plugins
+                          </span>
+                          <div className="space-y-0.5">
+                            {INTEGRATION_TOOL_PACKS.map((pack) => {
+                              const PackIcon = pack.icon;
+                              const isEnabled = pack.tools.some(tool => enabledIntegrationSet.has(tool));
+                              return (
+                                <button
+                                  key={pack.id}
+                                  type="button"
+                                  onClick={() => toggleIntegrationPack(pack)}
+                                  className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+                                    isEnabled
+                                      ? "text-indigo-600 dark:text-indigo-400"
+                                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                                  }`}
+                                >
+                                  <PackIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                                  <span className="flex-1 font-medium">{pack.label}</span>
+                                  <span className={`h-3 w-3 shrink-0 rounded-full border ${
+                                    isEnabled
+                                      ? "border-indigo-500 bg-indigo-500 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_2px_rgba(17,24,39,0.95)]"
+                                      : "border-gray-300 dark:border-gray-600"
+                                  }`} />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
+                    disabled={disabled || activeBrain.loading || isSwitchingModel}
+                    title={`${activeBrain.label}${activeBrain.supportsTools ? " native tools enabled" : ""}`}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                      activeBrain.isLoadingModel
+                        ? "text-amber-500 dark:text-amber-400"
+                        : activeBrain.isReady
+                          ? activeBrain.isLocal
+                            ? "text-emerald-600 dark:text-emerald-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-emerald-700 dark:hover:text-emerald-300"
+                            : "text-indigo-600 dark:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-indigo-700 dark:hover:text-indigo-300"
+                          : "text-gray-400 dark:text-gray-500"
+                    } disabled:cursor-not-allowed`}
+                  >
+                    {activeBrain.isLoadingModel || activeBrain.loading || isSwitchingModel ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <BrainIcon className="w-3.5 h-3.5" />
+                    )}
+                    <span className="truncate max-w-[12rem]">{modelLabel}</span>
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                  {openMenu === "model" && (
+                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+                      <div className="max-h-72 overflow-y-auto p-1">
+                        {allModelOptions.length === 0 ? (
+                          <div className="px-2.5 py-4 text-center text-xs text-gray-400 dark:text-gray-500">
+                            No models configured
+                          </div>
+                        ) : allModelOptions.map((item, i) => {
+                          if (item.type === "section") {
+                            return (
+                              <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                                {item.label}
+                              </div>
+                            );
+                          }
+                          if (item.type === "divider") {
+                            return <div key={`d-${i}`} className="my-1 border-t border-gray-100 dark:border-gray-800" />;
+                          }
+                          return (
+                            <button
+                              key={item.value}
+                              type="button"
+                              disabled={item.active}
+                              onClick={() => handleModelSelect(item.value)}
+                              className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-default ${
+                                item.active
+                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                              }`}
+                            >
+                              <span className="flex items-center gap-2">
+                                <span className="block truncate font-medium flex-1">{item.label}</span>
+                                {item.active && (
+                                  <span className="flex h-2 w-2 shrink-0 relative">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                  </span>
+                                )}
+                              </span>
+                              {item.detail && (
+                                <span className="block truncate text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{item.detail}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="border-t border-gray-100 p-1 dark:border-gray-800">
+                        <button
+                          type="button"
+                          onClick={() => handleModelSelect("__manage__")}
+                          className="w-full rounded-md px-2.5 py-2 text-left text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                        >
+                          Manage models →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <input
+                  ref={filePickerRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handlePickedFiles}
+                />
+                
+                {sttReady && (
+                  <button
+                    type="button"
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={disabled && !isRecording}
+                    title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode active" : "Record voice input"}
+                    className={`flex h-8 items-center justify-center gap-2 rounded-full transition-all duration-200 ${
+                      isRecording
+                        ? "w-auto px-2.5 bg-red-50 text-red-500 ring-1 ring-red-200 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-800/70"
+                        : autoRecordPrompt
+                          ? "w-8 bg-violet-100 text-violet-600 ring-2 ring-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-700"
+                          : voiceConversationActive
+                            ? "w-8 bg-violet-50 text-violet-500 ring-1 ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-800"
+                            : "w-8 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
                     }`}
                   >
-                    {uploadingAttachment ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                    {isRecording ? (
+                      <>
+                        <RecordingWaveform />
+                        <span className="tabular-nums text-xs font-semibold">{formatElapsed(recordingDuration)}</span>
+                      </>
+                    ) : (
+                      <Mic className="w-4 h-4" />
+                    )}
                   </button>
-
-                  {sttReady && (
-                    <button
-                      type="button"
-                      onClick={isRecording ? stopRecording : startRecording}
-                      disabled={disabled && !isRecording}
-                      title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode active" : "Record voice input"}
-                      className={`inline-flex h-8 min-w-8 items-center justify-center gap-2 rounded-lg px-2.5 text-xs font-medium transition-all duration-200 ${
-                        isRecording
-                          ? "bg-red-50 text-red-500 ring-1 ring-red-200 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-800/70 midnight:bg-red-900/20"
-                          : autoRecordPrompt
-                            ? "animate-bounce bg-violet-100 text-violet-600 ring-2 ring-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-700"
-                            : voiceConversationActive
-                              ? "bg-violet-50 text-violet-500 ring-1 ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-800"
-                              : "text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800/60 dark:hover:text-gray-300"
-                      }`}
-                    >
-                      {isRecording ? (
-                        <>
-                          <RecordingWaveform />
-                          <span className="tabular-nums">{formatElapsed(recordingDuration)}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Mic className="w-3.5 h-3.5" />
-                          {autoRecordPrompt && <span className="hidden sm:inline">Speak</span>}
-                        </>
-                      )}
-                    </button>
-                  )}
+                )}
 
                 {isRunning ? (
-                  <div className="inline-flex items-center gap-1.5">
-                    {tokenUsage?.totalTokens > 0 && (
-                      <>
-                        <TokenBar usage={tokenUsage} />
-                      </>
-                    )}
+                  <div className="inline-flex items-center gap-2">
+                    {tokenUsage?.totalTokens > 0 && <TokenBar usage={tokenUsage} />}
                     <button
                       type="button"
                       onClick={onStop}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs text-red-500 transition-all duration-200 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
                       title="Stop generating"
                     >
                       <Square className="h-3.5 w-3.5 fill-current" />
-                      <span className="hidden sm:inline">Stop</span>
                     </button>
                   </div>
                 ) : (
-                  <div className="inline-flex items-center gap-1.5">
-                    {tokenUsage?.totalTokens > 0 && (
-                      <TokenBar usage={tokenUsage} />
-                    )}
+                  <div className="inline-flex items-center gap-2">
+                    {tokenUsage?.totalTokens > 0 && <TokenBar usage={tokenUsage} />}
                     <button
                       type="submit"
                       disabled={!canSubmit}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-200 ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
                         canSubmit
-                          ? "text-gray-500 hover:bg-gray-50 hover:text-gray-800 active:scale-95 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-gray-100"
-                          : "text-gray-300 dark:text-gray-600 midnight:text-gray-600 cursor-not-allowed"
+                          ? "bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+                          : "bg-gray-100 text-gray-300 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed"
                       }`}
-                      title={localModelSendBlockReason || (canSubmit ? "Send (Enter)" : "Type a message")}
+                      title={localModelSendBlockReason || (canSubmit ? "Send" : "Type a message")}
                     >
-                      <Send className="w-4 h-4" />
+                      <ArrowUp className="w-4 h-4" />
                     </button>
                   </div>
                 )}
               </div>
             </div>
-            </div>
-          </form>
+          </div>
+        </form>
+
+        {activeWorkingContext && (
+          <div className="mt-2.5 px-2 flex flex-wrap items-center gap-3 select-none">
+            {/* Workspace & Folder Combined Button */}
+            <button
+              type="button"
+              onClick={openWorkingContextMenu}
+              disabled={disabled || !onWorkingContextChange}
+              title={`Workspace Root: ${activeWorkingContext.rootPath} | Working Folder: ${activeWorkingContext.relativePath}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              {(() => {
+                const RootIcon = rootIcon(activeRoot?.kind);
+                return <RootIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />;
+              })()}
+              <span>{activeWorkingContext.rootLabel || "Projects"}</span>
+              <span className="text-gray-300 dark:text-gray-700">/</span>
+              <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              <span>{activeContextLabel}</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+
+            {/* Plan / Action Mode Selector */}
+            {(onToggleAgentMode || onToggleTools) && (
+              <button
+                type="button"
+                onClick={onToggleAgentMode || onToggleTools}
+                disabled={disabled}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+                title={isActionMode ? "Switch to Plan mode (Safe inspection)" : "Switch to Action mode (Execute changes)"}
+              >
+                {isActionMode ? (
+                  <>
+                    <Wrench className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-400" />
+                    <span>Action Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <ClipboardPen className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
+                    <span>Plan Mode</span>
+                  </>
+                )}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            )}
+
+            {/* Auto-Approve Toggle Selector */}
+            {onToggleAutoApprove && isActionMode && (
+              <button
+                type="button"
+                onClick={onToggleAutoApprove}
+                disabled={disabled}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+                title={autoApprove ? "Switch to Manual approval mode" : "Switch to Auto-approve mode"}
+              >
+                <Zap className={`h-3.5 w-3.5 shrink-0 transition-colors ${autoApprove ? "text-amber-500 dark:text-amber-400" : "text-gray-400 dark:text-gray-500 opacity-60"}`} />
+                <span>{autoApprove ? "Auto-approve tools" : "Ask before tools"}</span>
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            )}
+          </div>
+        )}
 
         {hasMessages && (
           <div className="mt-2 text-center">

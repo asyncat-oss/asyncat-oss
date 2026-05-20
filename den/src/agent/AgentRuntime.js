@@ -78,6 +78,7 @@ const SNAPSHOT_SKIP = new Set([
 const MUTATING_FILE_TOOLS = new Set([
   'write_file', 'create_file', 'edit_file', 'patch_file', 'create_directory',
   'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
+  'search_replace_block',
 ]);
 const MUTATING_SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
 const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify|look at|review)\b/i;
@@ -97,6 +98,21 @@ const PLAN_BLOCKED_SAFE_TOOLS = new Set([
   'create_csv',
   'create_html_page',
 ]);
+const TOOL_PROFILE_PATTERNS = {
+  coding: /\b(code|implement|fix|bug|refactor|test|build|component|route|api|schema|migration|repo|frontend|backend|package|dependency)\b/i,
+  writing: /\b(write|draft|document|report|summary|email|note|markdown|copy|proposal|article|blog)\b/i,
+  research: /\b(research|web|search|browse|look\s+up|source|citation|latest|current)\b/i,
+  data: /\b(data|csv|json|sql|query|chart|analy[sz]e|spreadsheet|table|statistics)\b/i,
+  navigation: /\b(open|browser|page|website|screenshot|click|navigate|inspect\s+page|localhost)\b/i,
+};
+const TOOL_CATEGORY_PRIORITY = {
+  coding: ['plan', 'file', 'code', 'lsp', 'git', 'shell', 'workspace', 'dev', 'docker', 'skill', 'memory'],
+  writing: ['plan', 'artifact', 'note', 'memory', 'search', 'web', 'file', 'skill'],
+  research: ['plan', 'search', 'web', 'browser', 'memory', 'artifact', 'file', 'skill'],
+  data: ['plan', 'data', 'database', 'artifact', 'file', 'shell', 'skill'],
+  navigation: ['plan', 'browser', 'screen', 'web', 'file', 'shell', 'skill'],
+  default: ['plan', 'file', 'search', 'memory', 'skill', 'artifact', 'shell'],
+};
 
 function applyReasoningEffort(params, effort, providerInfo, model) {
   const providerId = providerInfo?.providerId || providerInfo?.provider_id || '';
@@ -284,6 +300,7 @@ export class AgentRuntime {
     let conversationRoundStart = 0;
     let conversationToolStart = 0;
     const reasoningEvents = [];
+    this.currentGoal = goal;
 
     this._throwIfAborted();
 
@@ -356,6 +373,7 @@ export class AgentRuntime {
       agentMode: this.agentMode,
     });
     this.session.save();
+    this.currentGoal = goal;
 
     this.onEvent({
       type: 'session_start',
@@ -373,7 +391,7 @@ export class AgentRuntime {
     const memories = this._loadMemories(goal);
 
     // Build tool descriptions and select skills in parallel — both are independent.
-    const toolDefs = this._toolDefinitionsForMode();
+    const toolDefs = this._toolDefinitionsForMode(goal);
     const [toolDescriptions, skillSelection] = await Promise.all([
       Promise.resolve(ToolCallFormatter.formatToolsForPrompt(
         toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
@@ -763,6 +781,7 @@ export class AgentRuntime {
             type: 'tool_start',
             data: {
               tool: tc.tool_name,
+              toolCallId: tc.call_id,
               args: tc.arguments,
               permission: 'none',
               permissionDecision: 'not_applicable',
@@ -784,8 +803,9 @@ export class AgentRuntime {
               : 'Unknown tool; not sent for approval',
             workingDir: this.workingDir,
             startedAt: new Date().toISOString(),
+            toolCallId: tc.call_id,
           });
-          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: unknownResult, round } });
+          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, toolCallId: tc.call_id, result: unknownResult, round } });
           messages.push(this._toolResultMessage(tc, unknownResult, Boolean(nativeToolCallsForThread)));
           continue;
         }
@@ -811,6 +831,7 @@ export class AgentRuntime {
             type: 'tool_start',
             data: {
               tool: tc.tool_name,
+              toolCallId: tc.call_id,
               args: tc.arguments,
               permission: 'none',
               permissionDecision: 'not_applicable',
@@ -827,8 +848,9 @@ export class AgentRuntime {
             permissionReason: 'Invalid arguments; not executed',
             workingDir: this.workingDir,
             startedAt: new Date().toISOString(),
+            toolCallId: tc.call_id,
           });
-          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: invalidResult, round } });
+          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, toolCallId: tc.call_id, result: invalidResult, round } });
           messages.push(this._toolResultMessage(tc, invalidResult, Boolean(nativeToolCallsForThread)));
 
           const repairKey = `${tc.tool_name}:${JSON.stringify(validation.missing)}:${JSON.stringify(validation.invalid)}`;
@@ -865,6 +887,7 @@ export class AgentRuntime {
             type: 'tool_start',
             data: {
               tool: tc.tool_name,
+              toolCallId: tc.call_id,
               args: tc.arguments,
               permission,
               permissionDecision: permResult.decision || 'denied',
@@ -880,8 +903,9 @@ export class AgentRuntime {
             permissionReason: permResult.reason || 'Denied',
             workingDir: this.workingDir,
             startedAt: permissionStartedAt,
+            toolCallId: tc.call_id,
           });
-          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result: deniedResult, round } });
+          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, toolCallId: tc.call_id, result: deniedResult, round } });
           messages.push(this._toolResultMessage(
             tc,
             this._compactToolResultForContext(tc.tool_name, deniedResult),
@@ -896,6 +920,7 @@ export class AgentRuntime {
             type: 'tool_start',
             data: {
               tool: tc.tool_name,
+              toolCallId: tc.call_id,
               args: tc.arguments,
               permission,
               permissionDecision: permResult.decision || 'allowed',
@@ -931,23 +956,37 @@ export class AgentRuntime {
         const writeIndices = isRead.reduce((acc, r, i) => (!r ? [...acc, i] : acc), []);
 
         const execResults = new Array(permitted.length);
+        const executeToolCall = (toolCall) =>
+          toolRegistry.execute(toolCall.tool_name, toolCall.arguments, {
+            ...toolContext,
+            toolCallId: toolCall.call_id,
+          });
 
         // Parallel reads
         if (readIndices.length > 0) {
           const readResults = await Promise.all(
             readIndices.map(i => {
               const { toolCall } = permitted[i];
-              return toolRegistry.execute(toolCall.tool_name, toolCall.arguments, toolContext)
+              return executeToolCall(toolCall)
                 .catch(err => ({ success: false, error: err.message || String(err) }));
             })
           );
           readIndices.forEach((origIdx, ri) => { execResults[origIdx] = readResults[ri]; });
+          readIndices.forEach((origIdx) => {
+            const { toolCall } = permitted[origIdx];
+            this._trackReadToolResult(toolCall, execResults[origIdx]);
+          });
         }
 
         // Sequential writes — preserves order, prevents clobber
         for (const i of writeIndices) {
           const { toolCall } = permitted[i];
-          execResults[i] = await toolRegistry.execute(toolCall.tool_name, toolCall.arguments, toolContext)
+          const preflight = this._preflightMutatingTool(toolCall);
+          if (preflight) {
+            execResults[i] = preflight;
+            continue;
+          }
+          execResults[i] = await executeToolCall(toolCall)
             .catch(err => ({ success: false, error: err.message || String(err) }));
         }
         this._throwIfAborted();
@@ -956,36 +995,15 @@ export class AgentRuntime {
           const tc = item.toolCall;
           let result = execResults[i];
 
-          // ── Phase 1a: Track file reads for read-before-write guard ──────
-          if ((tc.tool_name === 'read_file' || tc.tool_name === 'list_definitions') && result?.success !== false) {
-            const readPath = tc.arguments?.path;
-            if (readPath) this.filesReadInSession.add(path.resolve(this.workingDir, readPath));
-          }
-          // Read-before-write soft-block: prevent editing files the agent hasn't read
-          if (['write_file', 'edit_file', 'patch_file'].includes(tc.tool_name) && result?.success !== false) {
-            const targetFile = tc.arguments?.path;
-            if (targetFile) {
-              const absTarget = path.resolve(this.workingDir, targetFile);
-              if (fs.existsSync(absTarget) && !this.filesReadInSession.has(absTarget)) {
-                // Override result — soft-block with helpful error
-                result = {
-                  success: false,
-                  error: `You must read_file("${targetFile}") before editing it. This ensures your edits match the current file content and prevents failures from stale content.`,
-                  hint: 'read_first',
-                };
-                execResults[i] = result;
-              }
-            }
-          }
-
           this.session.recordToolCall(tc.tool_name, tc.arguments, result, {
             permissionLevel: item.permission,
             permissionDecision: item.permissionDecision,
             permissionReason: item.permissionReason,
             workingDir: this.workingDir,
             startedAt: item.startedAt,
+            toolCallId: tc.call_id,
           });
-          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, result, round } });
+          this.onEvent({ type: 'tool_result', data: { tool: tc.tool_name, toolCallId: tc.call_id, result, round } });
           messages.push(this._toolResultMessage(
             tc,
             this._compactToolResultForContext(tc.tool_name, result),
@@ -1295,6 +1313,7 @@ export class AgentRuntime {
       const request = {
         sessionId: this.session?.id,
         tool: toolCall.tool_name,
+        toolCallId: toolCall.call_id,
         args: toolCall.arguments,
         permission,
         description: actionDesc,
@@ -1775,7 +1794,7 @@ export class AgentRuntime {
     return fallbackPermission;
   }
 
-  _toolDefinitionsForMode() {
+  _toolDefinitionsForMode(goal = this.currentGoal || '') {
     const modeTools = this.agentMode !== 'plan'
       ? toolRegistry.all()
       : toolRegistry.all().filter(tool => {
@@ -1786,11 +1805,74 @@ export class AgentRuntime {
       return false;
     });
 
-    if (!this.enabledIntegrationTools) return modeTools;
-    return modeTools.filter(tool => {
+    const visibleTools = this.enabledIntegrationTools
+      ? modeTools.filter(tool => {
       if (tool.category !== 'integrations') return true;
       return this.enabledIntegrationTools.has(tool.name);
+    })
+      : modeTools;
+
+    return this._rankToolsForGoal(visibleTools, goal);
+  }
+
+  _rankToolsForGoal(tools, goal = '') {
+    const profile = Object.entries(TOOL_PROFILE_PATTERNS)
+      .find(([, pattern]) => pattern.test(String(goal || '')))?.[0] || 'default';
+    const categoryOrder = TOOL_CATEGORY_PRIORITY[profile] || TOOL_CATEGORY_PRIORITY.default;
+    const categoryRank = new Map(categoryOrder.map((category, index) => [category, index]));
+    const defaultRank = categoryOrder.length + 2;
+    const criticalToolRank = new Map([
+      ['todo_write', -3],
+      ['list_plan', -2],
+      ['ask_user', -1],
+      ['read_file', 0],
+      ['patch_file', 1],
+      ['search_replace_block', 2],
+      ['run_command', 3],
+    ]);
+
+    return [...tools].sort((a, b) => {
+      const aCritical = criticalToolRank.has(a.name) ? criticalToolRank.get(a.name) : null;
+      const bCritical = criticalToolRank.has(b.name) ? criticalToolRank.get(b.name) : null;
+      if (aCritical !== null || bCritical !== null) {
+        return (aCritical ?? 99) - (bCritical ?? 99);
+      }
+      const aRank = categoryRank.get(a.category) ?? defaultRank;
+      const bRank = categoryRank.get(b.category) ?? defaultRank;
+      if (aRank !== bRank) return aRank - bRank;
+      return String(a.name).localeCompare(String(b.name));
     });
+  }
+
+  _trackReadToolResult(toolCall, result) {
+    if (result?.success === false) return;
+    const args = toolCall?.arguments || {};
+    const readPath = (
+      toolCall?.tool_name === 'read_file' ||
+      toolCall?.tool_name === 'list_definitions' ||
+      toolCall?.tool_name === 'file_watch'
+    ) ? args.path : null;
+    if (!readPath) return;
+    this.filesReadInSession.add(path.resolve(this.workingDir, readPath));
+  }
+
+  _preflightMutatingTool(toolCall) {
+    if (!['write_file', 'edit_file', 'patch_file', 'search_replace_block'].includes(toolCall?.tool_name)) {
+      return null;
+    }
+    const targetFile = toolCall?.arguments?.path;
+    if (!targetFile) return null;
+
+    const absTarget = path.resolve(this.workingDir, targetFile);
+    if (!fs.existsSync(absTarget)) return null;
+    if (this.filesReadInSession.has(absTarget)) return null;
+
+    return {
+      success: false,
+      code: 'read_before_write_required',
+      error: `You must read_file("${targetFile}") before editing it. This ensures your edits match the current file content and prevents stale or blind writes.`,
+      hint: 'read_first',
+    };
   }
 
   _isMutatingTool(toolName, args = {}) {

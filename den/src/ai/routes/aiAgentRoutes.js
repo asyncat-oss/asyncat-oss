@@ -2,6 +2,7 @@
 // Combines conversation CRUD (formerly aiRoutes.js) and agent runtime (formerly agentRoutes.js)
 
 import express from 'express';
+import { createAgentMetricsRouter } from './agentMetricsRoutes.js';
 import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
 import { attachDb } from '../../db/sqlite.js';
 import db from '../../db/client.js';
@@ -1085,6 +1086,8 @@ function createAskUserRequest(req, res) {
 
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
+router.use('/metrics', createAgentMetricsRouter({ authenticate }));
+
 router.get('/tools', authenticate, async (req, res) => {
   const { toolRegistry } = await import('../../agent/index.js');
   const tools = toolRegistry.all().map(t => ({
@@ -2034,7 +2037,7 @@ router.get('/sessions/:id/audit', authenticate, async (req, res) => {
     }
 
     const rows = db.prepare(`
-      SELECT id, session_id, tool_name, permission_level, permission_decision,
+      SELECT id, session_id, tool_name, tool_call_id, permission_level, permission_decision,
              permission_reason, working_dir, args, result, success, round,
              started_at, completed_at
       FROM agent_tool_audit
@@ -3000,7 +3003,7 @@ function loadOwnedSession(sessionId, userId) {
 
 function getSessionAuditRows(sessionId, userId) {
   return db.prepare(`
-    SELECT id, session_id, tool_name, permission_level, permission_decision,
+    SELECT id, session_id, tool_name, tool_call_id, permission_level, permission_decision,
            permission_reason, working_dir, args, result, success, round,
            started_at, completed_at
     FROM agent_tool_audit

@@ -5,13 +5,11 @@ import {
 	LayoutGrid,
 	KanbanSquare,
 	List,
-	GanttChartSquare,
 } from "lucide-react";
 
 // Import view components directly here
 import KanIndex from "../views/kanban/KanIndex";
 import ListView from "../views/list/ListView";
-import GanttView from "../views/gantt/GanttView";
 
 // Import context providers
 import { ColumnProvider } from "../views/context/ColumnProvider";
@@ -23,15 +21,13 @@ import { useWorkspace } from "../contexts/WorkspaceContext";
 const soraFontBase = "font-sora";
 
 const PROJECT_VIEWS = [
-	{ key: 'kanban',   label: 'Board',    Icon: KanbanSquare },
-	{ key: 'list',     label: 'List',     Icon: List },
-	{ key: 'gantt',    label: 'Plan',     Icon: GanttChartSquare },
+	{ key: 'kanban', label: 'Board', Icon: KanbanSquare },
+	{ key: 'list',   label: 'List',  Icon: List },
 ];
 
 const TASK_VIEW_COMPONENTS = {
 	kanban: KanIndex,
 	list: ListView,
-	gantt: GanttView,
 };
 
 // Comprehensive skeleton component for the project overview

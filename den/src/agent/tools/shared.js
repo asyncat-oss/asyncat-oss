@@ -36,10 +36,17 @@ export function clearBinCache() {
 
 export function safePath(filePath, workingDir) {
   const resolved = path.resolve(workingDir, filePath);
-  if (!resolved.startsWith(path.resolve(workingDir))) {
+  if (!isPathInside(resolved, workingDir)) {
     throw new Error(`Path "${filePath}" is outside the working directory`);
   }
   return resolved;
+}
+
+export function isPathInside(childPath, parentPath) {
+  const child = path.resolve(childPath);
+  const parent = path.resolve(parentPath);
+  const relative = path.relative(parent, child);
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 // ── Standardized process execution ────────────────────────────────────────

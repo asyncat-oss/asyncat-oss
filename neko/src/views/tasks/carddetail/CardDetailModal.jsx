@@ -14,12 +14,9 @@ import {
  	Clock,
  	Trash2,
  	Save,
- 	AlertTriangle,
  	ChevronUp,
  	ChevronDown,
  	Paperclip,
- 	Calendar,
- 	CalendarDays,
  	Edit3,
  	Loader,
 	Bot,
@@ -37,7 +34,6 @@ import CardSubtasksSection from "../subtask/CardSubtasksSection";
 import CardAttachmentsSection from "../attachments/CardAttachmentsSection";
 
 import { InteractiveStatusBadge } from "../../list/ListViewCard";
-import CustomDatePicker from "../../kanban/features/shared/components/CustomDatePicker";
 import DropdownBar from "../../kanban/features/shared/components/DropdownBar";
 
 // Collapsible Section Component
@@ -141,7 +137,6 @@ const CardDetailModal = ({
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isEntering, setIsEntering] = useState(true);
 	const [isLeaving, setIsLeaving] = useState(false);
-	const [dateValidationError, setDateValidationError] = useState(null);
 
 	// Unsaved subtask text state
 	const [hasUnsavedSubtaskText, setHasUnsavedSubtaskText] = useState(false);
@@ -173,9 +168,6 @@ const CardDetailModal = ({
 		checklist: frozenInitialCard.current.checklist || [],
 		files: [], // attachments disabled
 		attachments: frozenInitialCard.current.attachments || [],
-		startDate: frozenInitialCard.current.startDate || null,
-		dueDate: frozenInitialCard.current.dueDate || null,
-		predictedMinutes: frozenInitialCard.current.predictedMinutes || null,
 	});
 
 	const { setSelectedCard } = useCardContext();
@@ -230,44 +222,6 @@ const CardDetailModal = ({
 		}
 	};
 
-	const validateDates = (startDate, dueDate) => {
-		if (!startDate || !dueDate) return null;
-
-		try {
-			const start = new Date(startDate);
-			const due = new Date(dueDate);
-
-			if (start > due) {
-				return "Start date cannot be after due date";
-			}
-			return null;
-		} catch (error) {
-			return "Invalid date format";
-		}
-	};
-
-	const handleChange = useCallback(
-		(e) => {
-			const { name, value } = e.target;
-
-			// Immediate state update without causing re-renders
-			setLocalCard((prev) => ({ ...prev, [name]: value }));
-
-			// Handle date validation separately to avoid re-render during typing
-			if (name === "startDate" || name === "dueDate") {
-				const startDate =
-					name === "startDate" ? value : localCard.startDate;
-				const dueDate = name === "dueDate" ? value : localCard.dueDate;
-				const error = validateDates(startDate, dueDate);
-				setDateValidationError(error);
-			}
-
-			// Debounce optimistic updates to avoid frequent re-renders
-			setHasUnsavedChanges(true);
-		},
-		[localCard.startDate, localCard.dueDate]
-	);
-
 	// Separate handlers for title and description to prevent cursor jumping
 	const handleTitleChange = useCallback((e) => {
 		const value = e.target.value;
@@ -282,32 +236,17 @@ const CardDetailModal = ({
 	}, []);
 
 	const handleSave = useCallback(async () => {
-		if (dateValidationError) {
-			setSaveStatus("error");
-			setTimeout(() => setSaveStatus(null), 2000);
-			return;
-		}
-
 		try {
 			setSaveStatus("saving");
 			setIsSubmitting(true);
 			const columnId = String(localCard.columnId);
 			const cardId = String(localCard.id);
 
-			// Get files from localCard state
-			const files =
-				localCard.files && localCard.files.length > 0
-					? localCard.files
-					: null;
-
 			const cardUpdateData = {
 				id: localCard.id,
 				title: localCard.title,
 				description: localCard.description,
 				priority: localCard.priority,
-				startDate: localCard.startDate,
-				dueDate: localCard.dueDate,
-				predictedMinutes: localCard.predictedMinutes,
 				progress: localCard.progress,
 				columnId: localCard.columnId,
 				checklist: localCard.checklist,
@@ -364,13 +303,7 @@ const CardDetailModal = ({
 			setTimeout(() => setSaveStatus(null), 2000);
 			setIsSubmitting(false);
 		}
-	}, [
-		localCard,
-		handleCardUpdate,
-		setColumns,
-		addAttachment,
-		dateValidationError,
-	]);
+	}, [localCard, handleCardUpdate, setColumns]);
 
 	useEffect(() => {
 		handleSaveRef.current = handleSave;
@@ -455,14 +388,6 @@ const CardDetailModal = ({
 				(task) => task.completed
 			).length;
 
-			const totalDuration = processedChecklist.reduce((total, item) => {
-				if (!item.completed) {
-					const itemDuration = parseInt(item.duration) || 0;
-					return total + itemDuration;
-				}
-				return total;
-			}, 0);
-
 			const updates = {
 				checklist: processedChecklist,
 				progress:
@@ -473,7 +398,6 @@ const CardDetailModal = ({
 					completed: completedTasks,
 					total: processedChecklist.length,
 				},
-				predictedMinutes: totalDuration,
 			};
 
 			// Handle optimistic update for real-time sync
@@ -553,30 +477,6 @@ const CardDetailModal = ({
 		}));
 	};
 
-	const getDueStatus = () => {
-		if (!localCard.dueDate) return null;
-		const today = new Date();
-		const dueDate = new Date(localCard.dueDate);
-		const diffTime = dueDate - today;
-		const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-		if (diffDays < 0)
-			return {
-				status: "overdue",
-				color: "text-red-600",
-				bg: "bg-red-50",
-			};
-		if (diffDays === 0)
-			return {
-				status: "today",
-				color: "text-amber-600",
-				bg: "bg-amber-50",
-			};
-		if (diffDays <= 3)
-			return { status: "soon", color: "text-gray-600", bg: "bg-gray-50" };
-		return { status: "future", color: "text-gray-600", bg: "bg-gray-50" };
-	};
-
 	const getPriorityColor = () => {
 		switch (localCard.priority) {
 			case "High":
@@ -589,8 +489,6 @@ const CardDetailModal = ({
 				return "text-gray-500";
 		}
 	};
-
-	const dueStatus = getDueStatus();
 
 	useEffect(() => {
 		for (const column of columns) {
@@ -716,8 +614,7 @@ const CardDetailModal = ({
 										}
 										disabled={
 											isSubmitting ||
-											isUploadingFiles ||
-											dateValidationError
+											isUploadingFiles
 										}
 										className="px-5 py-2.5 bg-gray-900 dark:bg-gray-600 midnight:bg-gray-400 hover:bg-gray-800 dark:hover:bg-gray-500 midnight:hover:bg-gray-300 disabled:bg-gray-300 dark:disabled:bg-gray-700 midnight:disabled:bg-gray-800 disabled:cursor-not-allowed text-white dark:text-gray-100 midnight:text-gray-900 text-sm font-medium rounded-lg transition-all duration-200 hover:shadow-md flex items-center space-x-2"
 									>
@@ -736,18 +633,6 @@ const CardDetailModal = ({
 								</div>
 						</div>
 					</div>
-
-					{/* Date Validation Error */}
-					{dateValidationError && (
-						<div className="px-6 py-3 bg-red-50 dark:bg-red-900/10 midnight:bg-red-900/20 border-b border-red-200 dark:border-red-900/20 midnight:border-red-900/30">
-							<div className="flex items-center space-x-2 text-red-600 dark:text-red-400 midnight:text-red-300">
-								<AlertTriangle className="w-4 h-4" />
-								<span className="text-sm">
-									{dateValidationError}
-								</span>
-							</div>
-						</div>
-					)}
 
 					{/* Modal Content */}
 					<div className="overflow-auto max-h-[calc(90vh-120px)]">
@@ -1230,85 +1115,6 @@ const CardDetailModal = ({
 												</div>
 											</div>
 
-										</div>
-
-										{/* Dates */}
-										<div className="space-y-4">
-											<div>
-												<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-200 mb-2">
-													<CalendarDays className="w-4 h-4 inline mr-2" />
-													Start Date
-												</label>
-												<CustomDatePicker
-													name="startDate"
-													value={(() => {
-														try {
-															return localCard.startDate
-																? new Date(
-																		localCard.startDate
-																  )
-																		.toISOString()
-																		.split(
-																			"T"
-																		)[0]
-																: "";
-														} catch {
-															return "";
-														}
-													})()}
-													onChange={handleChange}
-													disabled={
-														isSubmitting
-													}
-												/>
-											</div>
-
-											<div>
-												<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-200 mb-2">
-													<Calendar className="w-4 h-4 inline mr-2" />
-													Due Date
-												</label>
-												<CustomDatePicker
-													name="dueDate"
-													value={(() => {
-														try {
-															return localCard.dueDate
-																? new Date(
-																		localCard.dueDate
-																  )
-																		.toISOString()
-																		.split(
-																			"T"
-																		)[0]
-																: "";
-														} catch {
-															return "";
-														}
-													})()}
-													onChange={handleChange}
-													disabled={
-														isSubmitting
-													}
-												/>
-												{dueStatus && (
-													<div
-														className={`mt-2 text-xs px-2 py-1 rounded ${dueStatus.bg} ${dueStatus.color}`}
-													>
-														{dueStatus.status ===
-															"overdue" &&
-															"Overdue"}
-														{dueStatus.status ===
-															"today" &&
-															"Due today"}
-														{dueStatus.status ===
-															"soon" &&
-															"Due soon"}
-														{dueStatus.status ===
-															"future" &&
-															"Upcoming"}
-													</div>
-												)}
-											</div>
 										</div>
 
 										{/* Priority */}

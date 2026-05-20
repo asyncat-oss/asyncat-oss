@@ -13,12 +13,11 @@ const ListView = ({ selectedProject }) => {
 	const { setSelectedCard } = useCardContext();
 	const [searchTerm, setSearchTerm] = useState("");
 	const [sortConfig, setSortConfig] = useState({
-		key: "dueDate",
+		key: "title",
 		direction: "asc",
 	});
 	const [filterConfig, setFilterConfig] = useState({
 		priority: [],
-		dueStatus: [],
 		running: false,
 	});
 	const [cards, setCards] = useState([]);
@@ -126,14 +125,6 @@ const ListView = ({ selectedProject }) => {
 			);
 		}
 
-		// Apply due status filter
-		if (filterConfig.dueStatus.length > 0) {
-			filteredCards = filteredCards.filter((card) => {
-				const status = getDueStatus(card.dueDate);
-				return filterConfig.dueStatus.includes(status);
-			});
-		}
-
 		// Apply sorting
 		filteredCards.sort((a, b) => {
 			const { key, direction } = sortConfig;
@@ -144,10 +135,6 @@ const ListView = ({ selectedProject }) => {
 				case "description":
 					valueA = a[key]?.toLowerCase() || "";
 					valueB = b[key]?.toLowerCase() || "";
-					break;
-				case "dueDate":
-					valueA = a[key] ? new Date(a[key]).getTime() : Infinity;
-					valueB = b[key] ? new Date(b[key]).getTime() : Infinity;
 					break;
 				case "runStatus":
 					valueA = a.agentRun?.status || "unassigned";
@@ -175,27 +162,6 @@ const ListView = ({ selectedProject }) => {
 		filterConfig,
 		sortConfig,
 	]);
-
-	// Calculate due status for filtering
-	const getDueStatus = (dueDate) => {
-		if (!dueDate) return "none";
-
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-
-		const due = new Date(dueDate);
-		due.setHours(0, 0, 0, 0);
-
-		if (due < today) return "overdue";
-		if (due.getTime() === today.getTime()) return "today";
-
-		const nextWeek = new Date(today);
-		nextWeek.setDate(today.getDate() + 7);
-
-		if (due <= nextWeek) return "thisWeek";
-
-		return "later";
-	};
 
 	// Sort handler
 	const handleSort = (key) => {
@@ -230,28 +196,8 @@ const ListView = ({ selectedProject }) => {
 		});
 	};
 
-	const toggleDueStatusFilter = (status) => {
-		setFilterConfig((prev) => {
-			if (prev.dueStatus.includes(status)) {
-				return {
-					...prev,
-					dueStatus: prev.dueStatus.filter((s) => s !== status),
-				};
-			} else {
-				return {
-					...prev,
-					dueStatus: [...prev.dueStatus, status],
-				};
-			}
-		});
-	};
-
 	const clearFilters = () => {
-		setFilterConfig({
-			priority: [],
-			dueStatus: [],
-			running: false,
-		});
+		setFilterConfig({ priority: [], running: false });
 	};
 
 	const handleAssignAgent = async (card, profileId) => {
@@ -362,7 +308,6 @@ const ListView = ({ selectedProject }) => {
 				filterConfig={filterConfig}
 				toggleRunningFilter={toggleRunningFilter}
 				togglePriorityFilter={togglePriorityFilter}
-				toggleDueStatusFilter={toggleDueStatusFilter}
 				onClearFilters={clearFilters}
 				onCreateTask={() => setShowCreateTask(true)}
 				searchContext={{

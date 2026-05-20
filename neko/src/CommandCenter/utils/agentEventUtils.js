@@ -1,6 +1,7 @@
 function normalizeAgentToolRows(rows = []) {
   return rows.map(row => ({
     tool: row.tool_name || row.tool,
+    toolCallId: row.tool_call_id || row.toolCallId || row.call_id || row.callId,
     args: row.args,
     result: row.result,
     round: row.round,
@@ -77,6 +78,7 @@ function buildAgentEventsFromSession(session, auditRows = []) {
         type: 'tool_start',
         data: {
           tool: tc.tool,
+          toolCallId: tc.toolCallId,
           args: tc.args,
           round: tc.round,
           permission: tc.permission,
@@ -130,6 +132,7 @@ function buildAgentEventsFromSession(session, auditRows = []) {
           type: 'tool_start',
           data: {
             tool: tc.tool,
+            toolCallId: tc.toolCallId,
             args: tc.args,
             round: tc.round,
             permission: tc.permission,

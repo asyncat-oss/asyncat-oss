@@ -108,9 +108,8 @@ const UniversalSearch = ({ isOpen, onClose }) => {
     const term = searchTerm.trim().toLowerCase();
 
     const PROJECT_TABS = [
-      { id: 'kanban',   label: 'Board' },
-      { id: 'list',     label: 'List' },
-      { id: 'gantt',    label: 'Plan' },
+      { id: 'kanban', label: 'Board' },
+      { id: 'list',   label: 'List' },
     ];
 
     const expandedProjects = [];

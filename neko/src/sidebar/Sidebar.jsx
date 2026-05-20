@@ -13,6 +13,7 @@ import {
   MessageSquare as ChatIcon,
   Cpu,
   Wrench,
+  Activity,
   HardDrive,
   Clock,
   Layers,
@@ -434,6 +435,7 @@ const DynamicSidebar = ({
         case 'navFiles': navigate("/files"); break;
         case 'navModels': navigate("/models"); break;
         case 'navTools': navigate("/tools"); break;
+        case 'navAgentHealth': navigate("/agent-health"); break;
         case 'navScheduler': navigate("/scheduler"); break;
         case 'navProfiles': navigate("/profiles"); break;
         default: break;
@@ -463,6 +465,7 @@ const DynamicSidebar = ({
   const isOnScheduler = location.pathname.startsWith("/scheduler");
   const isOnProfiles  = location.pathname.startsWith("/profiles");
   const isOnTools = location.pathname.startsWith("/tools");
+  const isOnAgentHealth = location.pathname.startsWith("/agent-health");
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
 
@@ -509,7 +512,7 @@ const DynamicSidebar = ({
 
   const primaryItems = [
     { label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
-    { label: "Workspace", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
+    { label: "Projects", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
     { label: "Calendar", action: "navCalendar", onClick: () => navigate("/calendar"), active: isOnCalendar, icon: calendarIcon },
     { label: "Files", action: "navFiles", onClick: () => navigate("/files"), active: isOnFiles, icon: <HardDrive className="w-5 h-5" /> },
   ];
@@ -517,6 +520,7 @@ const DynamicSidebar = ({
   const appItems = [
     { label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
     { label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
+    { label: "Agent Health", action: "navAgentHealth", onClick: () => navigate("/agent-health"), active: isOnAgentHealth, icon: <Activity className="w-5 h-5" /> },
     { label: "Scheduler", action: "navScheduler", onClick: () => navigate("/scheduler"), active: isOnScheduler, icon: <Clock className="w-5 h-5" /> },
     { label: "Profiles", action: "navProfiles", onClick: () => navigate("/profiles"), active: isOnProfiles, icon: <Layers className="w-5 h-5" /> },
   ];
@@ -712,7 +716,7 @@ const DynamicSidebar = ({
 
         {/* Workspace — navigates directly to projects page */}
         <DockItem
-          label={labelWithShortcut("Workspace", "navWorkspace")}
+          label={labelWithShortcut("Projects", "navWorkspace")}
           onClick={() => navigate("/workspace")}
           isActive={isOnWorkspace}
           dockPosition={dockPosition}
@@ -760,6 +764,16 @@ const DynamicSidebar = ({
           dockPosition={dockPosition}
         >
           <Wrench className="w-5 h-5" />
+        </DockItem>
+
+        {/* Agent Health */}
+        <DockItem
+          label={labelWithShortcut("Agent Health", "navAgentHealth")}
+          onClick={() => navigate("/agent-health")}
+          isActive={isOnAgentHealth}
+          dockPosition={dockPosition}
+        >
+          <Activity className="w-5 h-5" />
         </DockItem>
 
         {/* Scheduler */}

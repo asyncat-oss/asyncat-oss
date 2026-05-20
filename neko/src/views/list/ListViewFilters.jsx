@@ -7,22 +7,17 @@ const ListViewFilters = ({
 	filterConfig,
 	toggleRunningFilter,
 	togglePriorityFilter,
-	toggleDueStatusFilter,
 	onClearFilters,
 	onCreateTask,
 	searchContext = { isSearchActive: false, totalResults: 0 },
 }) => {
-	// Check if any filters are active
 	const hasActiveFilters =
 		filterConfig.running ||
-		(filterConfig.priority && filterConfig.priority.length > 0) ||
-		(filterConfig.dueStatus && filterConfig.dueStatus.length > 0);
+		(filterConfig.priority && filterConfig.priority.length > 0);
 
-	// Count total active filters
 	const activeFilterCount =
 		(filterConfig.running ? 1 : 0) +
-		(filterConfig.priority?.length || 0) +
-		(filterConfig.dueStatus?.length || 0);
+		(filterConfig.priority?.length || 0);
 	return (
 		<div className="bg-white dark:bg-gray-900 midnight:bg-gray-950 border-b border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60">
 			<div className="px-6 py-4">
@@ -115,50 +110,6 @@ const ListViewFilters = ({
 										}`}
 									>
 										{priority}
-									</button>
-								))}
-							</div>
-
-							{/* Due Status Filters */}
-							<div className="flex items-center gap-1">
-								{[
-									{
-										key: "overdue",
-										label: "Overdue",
-										color: "red",
-									},
-									{
-										key: "today",
-										label: "Today",
-										color: "amber",
-									},
-									{
-										key: "thisWeek",
-										label: "This Week",
-										color: "blue",
-									},
-								].map(({ key, label, color }) => (
-									<button
-										key={key}
-										onClick={() =>
-											toggleDueStatusFilter(key)
-										}
-										className={`px-3 py-2 text-xs font-medium border rounded-lg transition-all duration-200 whitespace-nowrap ${
-											filterConfig.dueStatus.includes(key)
-												? color === "red"
-													? "bg-red-50 dark:bg-red-900/30 midnight:bg-red-900/20 text-red-700 dark:text-red-400 midnight:text-red-300 border-red-200 dark:border-red-600 midnight:border-red-700"
-													: color === "amber"
-													? "bg-amber-50 dark:bg-amber-900/30 midnight:bg-amber-900/20 text-amber-700 dark:text-amber-400 midnight:text-amber-300 border-amber-200 dark:border-amber-600 midnight:border-amber-700"
-													: "bg-blue-50 dark:bg-blue-900/30 midnight:bg-blue-900/20 text-blue-700 dark:text-blue-400 midnight:text-blue-300 border-blue-200 dark:border-blue-600 midnight:border-blue-700"
-												: "bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-600 dark:text-gray-400 midnight:text-gray-500 border-gray-200 dark:border-gray-600 midnight:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
-										}`}
-									>
-										<span className="hidden sm:inline">
-											{label}
-										</span>
-										<span className="sm:hidden">
-											{label.split(" ")[0]}
-										</span>
 									</button>
 								))}
 							</div>

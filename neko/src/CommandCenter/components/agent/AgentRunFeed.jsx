@@ -2495,52 +2495,133 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
   const isError = result?.success === false || data?.success === false;
   const sessionId = result?.sessionId || data?.sessionId;
   const [expanded, setExpanded] = useState(false);
+  const [answerExpanded, setAnswerExpanded] = useState(false);
+  const answerBlocks = useMemo(() => {
+    if (!answer?.trim()) return [];
+    try {
+      return parseAIResponseToBlocks(answer);
+    } catch {
+      return [{ type: 'text', content: answer }];
+    }
+  }, [answer]);
+  const shouldCollapseAnswer = answer.length > 520 || answerBlocks.length > 4;
+  const statusLabel = pending ? 'Running' : isError ? 'Needs attention' : 'Complete';
+  const statusClass = pending
+    ? 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-400'
+    : isError
+      ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300 midnight:border-red-900/60 midnight:bg-red-950/20 midnight:text-red-300'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300 midnight:border-emerald-900/50 midnight:bg-emerald-950/20 midnight:text-emerald-300';
+  const AccentIcon = pending ? Loader2 : isError ? AlertTriangle : CheckCircle2;
 
   return (
-    <FeedFrame className="mb-2">
-      <div className="flex items-start gap-3 text-xs">
-        <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${isError ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}>
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-500 dark:text-gray-400" /> : <span className="text-sm">{icon}</span>}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-medium text-gray-700 dark:text-gray-300">
-              {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
-            </span>
-            {handle && <code className="text-[10px] text-gray-400">@{handle}</code>}
-          </div>
-          {data?.task && (
-            <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 dark:text-gray-500">
-              {data.task}
-            </p>
-          )}
-          {answer && (
-            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-              {answer.length > 260 ? `${answer.slice(0, 260)}...` : answer}
-            </p>
-          )}
-          {sessionId && (
-            <p className="mt-1 text-[10px] text-gray-300 dark:text-gray-700">
-              Session {sessionId}
-            </p>
-          )}
-          {events.length > 0 && (
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => setExpanded(v => !v)}
-                className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
-              >
-                {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                {expanded ? 'Hide sub-agent steps' : `Show sub-agent steps (${events.length})`}
-              </button>
-              {expanded && (
-                <div className="mt-2 pl-3 border-l-2 border-indigo-100 dark:border-indigo-900/60 space-y-1.5 bg-indigo-50/5 dark:bg-indigo-950/5 p-2 rounded-lg">
+    <FeedFrame className="mb-3">
+      <div className={`group relative overflow-hidden rounded-xl border text-xs transition-colors ${
+        isError
+          ? 'border-red-200 bg-red-50/30 dark:border-red-900/50 dark:bg-red-950/10 midnight:border-red-900/50 midnight:bg-red-950/10'
+          : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/25 midnight:border-slate-800 midnight:bg-slate-950/25'
+      }`}>
+        <div className={`absolute inset-y-0 left-0 w-0.5 ${isError ? 'bg-red-300 dark:bg-red-800' : 'bg-gray-200 dark:bg-gray-800 midnight:bg-slate-800'}`} />
+
+        <div className="relative px-3.5 py-3 sm:px-4">
+          <div className="flex items-start gap-3">
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
+              isError
+                ? 'border-red-200 bg-red-50 text-red-500 dark:border-red-900/70 dark:bg-red-950/30 midnight:border-red-900/70 midnight:bg-red-950/30'
+                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/70 midnight:text-slate-400'
+            }`}>
+              {pending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <span className="text-base leading-none">{icon}</span>
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="font-semibold leading-tight text-gray-800 dark:text-gray-100 midnight:text-slate-100">
+                      {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
+                    </span>
+                    {handle && (
+                      <code className="rounded-md bg-gray-100/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:bg-gray-900/70 dark:text-gray-500 midnight:bg-slate-900/70 midnight:text-slate-500">
+                        @{handle}
+                      </code>
+                    )}
+                  </div>
+                </div>
+                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusClass}`}>
+                  <AccentIcon className={`h-3 w-3 ${pending ? 'animate-spin' : ''}`} />
+                  {statusLabel}
+                </span>
+              </div>
+
+              {data?.task && (
+                <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-gray-200/70 bg-gray-50/70 px-2.5 py-2 text-gray-500 dark:border-gray-800/70 dark:bg-gray-900/35 dark:text-gray-400 midnight:border-slate-800/70 midnight:bg-slate-900/35 midnight:text-slate-400">
+                  <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+                  <p className="line-clamp-2 text-[11px] leading-relaxed">{data.task}</p>
+                </div>
+              )}
+
+              {answerBlocks.length > 0 && (
+                <div className="mt-3 overflow-hidden rounded-xl border border-gray-200/70 bg-white/70 dark:border-gray-800/70 dark:bg-gray-950/35 midnight:border-slate-800/70 midnight:bg-slate-950/35">
+                  <div className="flex items-center gap-2 border-b border-gray-100/80 px-3 py-2 dark:border-gray-800/70 midnight:border-slate-800/70">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-50 text-gray-400 dark:bg-gray-900/70 dark:text-gray-500 midnight:bg-slate-900/70 midnight:text-slate-500">
+                      <MessageCircle className="h-3 w-3" />
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                      Sub-agent handoff
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <div className={`px-3 py-2.5 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300 midnight:text-slate-300 [&_.mb-3]:mb-2 [&_.mb-5]:mb-2.5 [&_.mb-6]:mb-2.5 [&_h1]:text-base [&_h1]:mb-2 [&_h1]:mt-2 [&_h2]:text-sm [&_h2]:mb-2 [&_h2]:mt-2 [&_h3]:text-sm [&_h3]:mb-1.5 [&_h3]:mt-2 [&_li]:text-[12px] [&_p]:text-[12px] [&_p]:leading-relaxed ${shouldCollapseAnswer && !answerExpanded ? 'max-h-56 overflow-hidden' : ''}`}>
+                      {answerBlocks.map((block, i) => (
+                        <BlockRenderer key={i} block={block} />
+                      ))}
+                    </div>
+                    {shouldCollapseAnswer && !answerExpanded && (
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/90 to-transparent dark:from-gray-950 dark:via-gray-950/90 midnight:from-slate-950 midnight:via-slate-950/90" />
+                    )}
+                  </div>
+                  {shouldCollapseAnswer && (
+                    <button
+                      type="button"
+                      onClick={() => setAnswerExpanded(v => !v)}
+                      className="flex w-full items-center justify-center gap-1.5 border-t border-gray-100/80 px-3 py-1.5 text-[10px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:border-gray-800/70 dark:text-gray-400 dark:hover:bg-gray-900/60 dark:hover:text-gray-200 midnight:border-slate-800/70 midnight:text-slate-400 midnight:hover:bg-slate-900/60"
+                    >
+                      {answerExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                      {answerExpanded ? 'Show less' : 'Read full handoff'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {sessionId && (
+                  <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-300 dark:bg-gray-900/60 dark:text-gray-700 midnight:bg-slate-900/60 midnight:text-slate-700">
+                    <Link2 className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Session {sessionId}</span>
+                  </span>
+                )}
+                {events.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(v => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-900/60 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:bg-slate-900/60"
+                  >
+                    {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    {expanded ? 'Hide sub-agent steps' : `Show sub-agent steps (${events.length})`}
+                  </button>
+                )}
+              </div>
+
+              {events.length > 0 && expanded && (
+                <div className="mt-2.5 rounded-xl border border-gray-200/70 bg-gray-50/50 p-2 dark:border-gray-800/70 dark:bg-gray-900/30 midnight:border-slate-800/70 midnight:bg-slate-900/30 [&_.max-w-4xl]:mx-0 [&_.max-w-4xl]:max-w-none">
                   {renderWorkContent(events, {})}
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </FeedFrame>
