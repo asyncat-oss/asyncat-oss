@@ -2,7 +2,7 @@ import { Square, Cpu, Gauge, MessageSquare, Mic, Volume2, Eye, Image } from 'luc
 import { Badge } from './modelPageShared.jsx';
 
 const STATUS_DOT = {
-  idle:    'bg-gray-300 dark:bg-gray-600',
+  idle:    'bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600',
   loading: 'bg-amber-400 animate-pulse',
   ready:   'bg-green-500',
   error:   'bg-red-500',
@@ -11,9 +11,9 @@ const STATUS_DOT = {
 const CapabilityStatus = ({ icon: Icon, label, value, status = 'idle' }) => (
   <div className="flex min-w-0 items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-900/50">
     <span className={`h-2 w-2 flex-shrink-0 rounded-full ${STATUS_DOT[status] || STATUS_DOT.idle}`} />
-    <Icon className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+    <Icon className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
     <div className="min-w-0">
-      <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">{label}</div>
+      <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{label}</div>
       <div className="truncate text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{value}</div>
     </div>
   </div>
@@ -109,7 +109,7 @@ const ActiveBrainPanel = ({
         )}
 
         {serverStatus?.error && (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{serverStatus.error}</p>
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400 midnight:text-red-400">{serverStatus.error}</p>
         )}
 
         <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -151,7 +151,7 @@ const ActiveBrainPanel = ({
             <button
               onClick={onDeactivateProvider}
               disabled={Boolean(providerAction)}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200 transition-all"
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700 transition-all"
             >
               <Square className="w-4 h-4" />
               Disconnect
@@ -175,13 +175,13 @@ const ActiveBrainPanel = ({
             <div className="flex items-center gap-2">
               <Gauge className="w-3.5 h-3.5 flex-shrink-0" />
               <span>{runtimeLabel}</span>
-              {engineSource && <span className="text-gray-300 dark:text-gray-700">·</span>}
+              {engineSource && <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">·</span>}
               {engineSource && <span>{engineSource}</span>}
             </div>
             <div className="flex items-center gap-2">
               <Cpu className="w-3.5 h-3.5 flex-shrink-0" />
               <span>{hardwareLabel}</span>
-              {hardwareNote && <span className="text-gray-300 dark:text-gray-700">·</span>}
+              {hardwareNote && <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">·</span>}
               {hardwareNote && <span>{hardwareNote}</span>}
             </div>
             {serverStatus?.ctxSize && (

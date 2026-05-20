@@ -40,7 +40,7 @@ const RangeButton = ({ active, children, onClick }) => (
     onClick={onClick}
     className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
       active
-        ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900'
+        ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
         : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:hover:bg-slate-800'
     }`}
   >

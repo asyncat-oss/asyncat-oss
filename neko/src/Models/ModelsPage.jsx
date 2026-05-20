@@ -47,7 +47,7 @@ const CollapsibleSection = ({
         {Icon && (
           <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border transition-colors ${
             expanded
-              ? 'border-gray-200 bg-gray-900 text-white dark:border-gray-600 dark:bg-gray-100 dark:text-gray-900 midnight:border-slate-600 midnight:bg-slate-100 midnight:text-slate-900'
+              ? 'border-gray-200 bg-gray-900 text-white dark:border-gray-600 dark:bg-gray-100 dark:text-gray-900 midnight:border-slate-600 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
               : 'border-gray-100 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-500'
           }`}>
             <Icon className="w-4 h-4" />
@@ -134,11 +134,11 @@ const ModelsPage = () => {
   const isRunning = status === 'ready' || status === 'loading';
   const isReady = status === 'ready';
   const iconClass = {
-    ready:   'text-green-600 dark:text-green-400',
-    loading: 'text-amber-600 dark:text-amber-400 animate-pulse',
-    error:   'text-red-500',
-    idle:    'text-gray-400',
-  }[status] ?? 'text-gray-400';
+    ready:   'text-green-600 dark:text-green-400 midnight:text-green-400',
+    loading: 'text-amber-600 dark:text-amber-400 midnight:text-amber-400 animate-pulse',
+    error:   'text-red-500 midnight:text-red-400',
+    idle:    'text-gray-400 midnight:text-slate-500',
+  }[status] ?? 'text-gray-400 midnight:text-slate-500';
 
   const hardwareBadgeLabel = engineData?.hardware ? conciseHardwareSummary(engineData.hardware) : '';
   const currentCapabilityLabel = engineData?.current?.capabilityLabel || '';
@@ -363,7 +363,7 @@ const ModelsPage = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full w-full flex-col bg-white text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100 font-sans">
+    <div data-models-page className="flex h-full w-full flex-col bg-white text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100 font-sans">
       <ConfirmDeleteDialog
         model={deleteConfirm}
         onConfirm={confirmDelete}

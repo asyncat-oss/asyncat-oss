@@ -185,7 +185,7 @@ const CapabilityProvidersSection = ({ capability }) => {
         title={`${CAPABILITY_LABELS[capability] || 'Capability'} Providers`}
         description="Local runs first. Add API keys when you want cloud fallback or hosted specialist models."
         action={
-          <button onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800">
+          <button onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-400 midnight:hover:bg-slate-800">
             <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
@@ -193,7 +193,7 @@ const CapabilityProvidersSection = ({ capability }) => {
       />
 
       {capability === 'vision' && (
-        <p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
+        <p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 midnight:border-blue-900/40 midnight:bg-blue-950/30 midnight:text-blue-300">
           {VISION_ROUTING_NOTE}
         </p>
       )}
@@ -221,7 +221,7 @@ const CapabilityProvidersSection = ({ capability }) => {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{provider.name}</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{provider.name}</h3>
                     {isActive && isImplemented && <Badge color="green">Selected</Badge>}
                     {!isImplemented
                       ? <Badge color="gray"><Construction className="inline h-2.5 w-2.5 mr-0.5" />Coming soon</Badge>
@@ -230,13 +230,13 @@ const CapabilityProvidersSection = ({ capability }) => {
                         : <Badge color="amber">Key needed</Badge>
                     }
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{provider.description}</p>
-                  <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{provider.description}</p>
+                  <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                     {provider.models[capability]}
                   </p>
                 </div>
                 {provider.docsUrl && (
-                  <a href={provider.docsUrl} target="_blank" rel="noreferrer" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Provider docs">
+                  <a href={provider.docsUrl} target="_blank" rel="noreferrer" className="rounded-lg p-1.5 text-gray-400 midnight:text-slate-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200" title="Provider docs">
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 )}
@@ -251,13 +251,13 @@ const CapabilityProvidersSection = ({ capability }) => {
                       value={keyValues[provider.secretKey] || ''}
                       onChange={(e) => setKeyValues(prev => ({ ...prev, [provider.secretKey]: e.target.value }))}
                       placeholder={hasKey ? `Replace ${provider.secretKey}` : provider.secretKey}
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:focus:border-gray-600"
+                      className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:focus:border-gray-600 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-100 midnight:placeholder:text-slate-500 midnight:focus:border-slate-700"
                     />
                   </div>
                   <button
                     onClick={() => saveKey(provider)}
                     disabled={!keyValues[provider.secretKey]?.trim() || busy}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-800"
                   >
                     {saving === `key:${provider.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
                     Save
@@ -274,7 +274,7 @@ const CapabilityProvidersSection = ({ capability }) => {
                     ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 midnight:bg-gray-800 midnight:text-gray-500 cursor-not-allowed'
                     : isActive
                     ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
-                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200'
+                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700'
                 }`}
               >
                 {saving === `active:${provider.id}` ? <Loader2 className="h-4 w-4 animate-spin" />

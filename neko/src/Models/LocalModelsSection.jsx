@@ -124,14 +124,14 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
   }, [repoId]);
 
   return (
-    <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-400 truncate">
+    <div className="mt-2 border border-gray-200 dark:border-gray-700 midnight:border-slate-800 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-700 midnight:border-slate-800">
+        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-slate-400 truncate">
           {repoId}
         </span>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-2 flex-shrink-0"
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:text-slate-200 ml-2 flex-shrink-0"
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -139,7 +139,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
       <div className="max-h-48 overflow-y-auto">
         {loading && (
           <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            <Loader2 className="w-4 h-4 animate-spin text-gray-400 midnight:text-slate-500" />
           </div>
         )}
         {error && <p className="text-xs text-red-500 px-3 py-2">{error}</p>}
@@ -158,13 +158,13 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
                 repoId,
               })
             }
-            className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left border-b border-gray-100 dark:border-gray-800 last:border-0"
+            className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 transition-colors text-left border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 last:border-0"
           >
-            <span className="text-xs text-gray-700 dark:text-gray-300 truncate font-mono">
+            <span className="text-xs text-gray-700 dark:text-gray-300 midnight:text-slate-300 truncate font-mono">
               {f.rfilename}
             </span>
             {f.size && (
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-2 flex-shrink-0">
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 ml-2 flex-shrink-0">
                 {formatBytes(f.size)}
               </span>
             )}
@@ -383,7 +383,7 @@ const LocalModelsSection = ({ onRefresh }) => {
       {/* ── Active downloads — always visible ── */}
       {Object.keys(activeDownloads).length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">
             Downloading
           </h3>
           {Object.entries(activeDownloads).map(([filename, dl]) => {
@@ -395,7 +395,7 @@ const LocalModelsSection = ({ onRefresh }) => {
                 className="px-3 py-3 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800/80 rounded-xl shadow-sm"
               >
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[80%] font-mono text-xs">
+                  <span className="font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100 truncate max-w-[80%] font-mono text-xs">
                     {filename}
                   </span>
                   <button
@@ -406,7 +406,7 @@ const LocalModelsSection = ({ onRefresh }) => {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mb-1">
                   {dl.status === "error" ? (
                     <span className="text-red-500 font-medium">Download failed</span>
                   ) : (
@@ -420,7 +420,7 @@ const LocalModelsSection = ({ onRefresh }) => {
                       {dl.speedFormatted} • {dl.etaFormatted}
                     </span>
                   )}
-                  <span className="font-mono font-medium text-gray-700 dark:text-gray-300">
+                  <span className="font-mono font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">
                     {dl.status === "error" ? "ERROR" : `${pct}%`}
                   </span>
                 </div>
@@ -437,7 +437,7 @@ const LocalModelsSection = ({ onRefresh }) => {
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                       {totalBytes > 0 && (
                         <span>Download size {formatBytes(totalBytes)}</span>
                       )}
@@ -453,10 +453,10 @@ const LocalModelsSection = ({ onRefresh }) => {
       {/* ── HuggingFace live search ── */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">
             Search HuggingFace
           </h3>
-          <span className="text-xs text-gray-400 dark:text-gray-500">
+          <span className="text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
             GGUF models
           </span>
         </div>
@@ -495,7 +495,7 @@ const LocalModelsSection = ({ onRefresh }) => {
           </p>
         )}
         {!searching && results.length > 0 && (
-          <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+          <div className="mt-2 border border-gray-200 dark:border-gray-700 midnight:border-slate-800 rounded-xl overflow-hidden">
             {results.map((model, i) => {
               const repoId = model.modelId || model.id;
               const isExpanded = expandedRepo === repoId;
@@ -505,15 +505,15 @@ const LocalModelsSection = ({ onRefresh }) => {
               return (
                 <div
                   key={repoId}
-                  className={`border-b border-gray-100 dark:border-gray-800 last:border-0 ${i % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-gray-800/30"}`}
+                  className={`border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 last:border-0 ${i % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-gray-800/30 midnight:bg-slate-900/40"}`}
                 >
                   <div className="flex items-center justify-between px-3 py-2.5 gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                      <div className="text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200 truncate">
                         {repoId}
                       </div>
                       {downloads && (
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-0.5">
                           {downloads}
                         </div>
                       )}
@@ -599,7 +599,7 @@ const LocalModelsSection = ({ onRefresh }) => {
             )}
             <button
               onClick={handleCustomDownload}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700"
             >
               <Download className="w-4 h-4" />
               Start Download

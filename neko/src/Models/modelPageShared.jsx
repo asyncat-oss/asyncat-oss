@@ -1,10 +1,10 @@
 export const Badge = ({ children, color = 'gray' }) => {
   const colors = {
-    green: 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800/30 midnight:bg-slate-900/30 midnight:text-green-400',
-    gray:  'bg-gray-50 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:bg-slate-800 midnight:text-slate-400',
-    amber: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/30 midnight:bg-slate-900/30 midnight:text-amber-400',
-    red:   'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/30 midnight:bg-slate-900/30 midnight:text-red-400',
-    blue:  'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/30 midnight:bg-slate-900/30 midnight:text-blue-400',
+    green: 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800/30 midnight:border-green-900/40 midnight:bg-green-950/25 midnight:text-green-400',
+    gray:  'bg-gray-50 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-400',
+    amber: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/30 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-400',
+    red:   'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/30 midnight:border-red-900/40 midnight:bg-red-950/25 midnight:text-red-400',
+    blue:  'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/30 midnight:border-blue-900/40 midnight:bg-blue-950/25 midnight:text-blue-400',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[color]}`}>

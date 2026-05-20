@@ -64,14 +64,14 @@ const VisualModelCard = ({ model, type, highlighted, onDelete }) => {
             </h3>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">{meta.label}</span>
-              {model.assetKind && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{model.assetKind}</span>}
-              {model.extension && <span className="text-[10px] font-medium uppercase text-gray-400 dark:text-gray-500">{model.extension.replace('.', '')}</span>}
-              {model.isExternal && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">External</span>}
+              {model.assetKind && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">{model.assetKind}</span>}
+              {model.extension && <span className="text-[10px] font-medium uppercase text-gray-400 dark:text-gray-500 midnight:text-slate-500">{model.extension.replace('.', '')}</span>}
+              {model.isExternal && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">External</span>}
               {model.isMissing && <span className="text-[10px] font-medium text-red-500">Missing</span>}
-              {model.sizeFormatted && <span className="text-[10px] text-gray-400 dark:text-gray-500">{model.sizeFormatted}</span>}
+              {model.sizeFormatted && <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{model.sizeFormatted}</span>}
             </div>
             {model.path && (
-              <p className="mt-2 truncate font-mono text-[10px] text-gray-400 dark:text-gray-500" title={model.path}>
+              <p className="mt-2 truncate font-mono text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500" title={model.path}>
                 {model.path}
               </p>
             )}
@@ -80,13 +80,13 @@ const VisualModelCard = ({ model, type, highlighted, onDelete }) => {
       </div>
 
       <div className="flex items-center gap-2 border-t border-gray-50 px-5 py-3 dark:border-gray-800 midnight:border-slate-800">
-        <div className="flex flex-1 items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex flex-1 items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
           {model.isMissing ? <AlertTriangle className="h-3.5 w-3.5 text-red-500" /> : <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
           {model.isMissing ? 'Path missing' : 'Indexed'}
         </div>
         <button
           onClick={() => onDelete(model)}
-          className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20 dark:hover:text-red-400"
+          className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20 dark:hover:text-red-400 midnight:text-slate-500 midnight:hover:bg-red-950/30 midnight:hover:text-red-400"
           title={model.isExternal ? 'Remove from library' : 'Delete asset'}
         >
           <Trash2 className="h-4 w-4" />
@@ -149,14 +149,14 @@ const AddPathForm = ({ type, onAdd }) => {
 };
 
 const GeneratedPreview = ({ result }) => (
-  <div className="min-h-80 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/60">
+      <div className="min-h-80 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/60 midnight:border-slate-800 midnight:bg-slate-950/60">
     {result?.image ? (
       <div className="space-y-2">
-        <img src={result.image} alt="Generated result" className="aspect-square w-full rounded-xl object-contain bg-white dark:bg-gray-900" />
-        <div className="flex flex-wrap gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">{result.width}x{result.height}</span>
-          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">seed {result.seed}</span>
-          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">{result.steps} steps</span>
+        <img src={result.image} alt="Generated result" className="aspect-square w-full rounded-xl object-contain bg-white dark:bg-gray-900 midnight:bg-slate-900" />
+        <div className="flex flex-wrap gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-slate-900">{result.width}x{result.height}</span>
+          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-slate-900">seed {result.seed}</span>
+          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-slate-900">{result.steps} steps</span>
         </div>
       </div>
     ) : (
@@ -175,33 +175,33 @@ const ImagePromptControls = ({
   modelPlaceholder = 'No models found', children
 }) => (
   <div className="space-y-3">
-    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
       Prompt
       <textarea
         value={form.prompt}
         onChange={(e) => update('prompt', e.target.value)}
         rows={4}
         placeholder="A cinematic product photo of a translucent mechanical keyboard on a walnut desk..."
-        className="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600"
+        className="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-100 midnight:placeholder:text-slate-500 midnight:focus:border-slate-700"
       />
     </label>
 
-    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
       Negative Prompt
       <input
         value={form.negativePrompt}
         onChange={(e) => update('negativePrompt', e.target.value)}
-        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600"
+        className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-100 midnight:placeholder:text-slate-500 midnight:focus:border-slate-700"
       />
     </label>
 
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-      <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+      <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
         {modelLabel}
         <select
           value={form[modelValueKey]}
           onChange={(e) => update(modelValueKey, e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100"
+          className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-100"
         >
           {!models.length && <option value="">{modelPlaceholder}</option>}
           {models.map(model => (
@@ -212,13 +212,13 @@ const ImagePromptControls = ({
         </select>
       </label>
 
-      <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+      <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
         Seed
         <input
           value={form.seed}
           onChange={(e) => update('seed', e.target.value)}
           placeholder="Random"
-          className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100"
+          className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-100 midnight:placeholder:text-slate-500"
         />
       </label>
     </div>
@@ -230,7 +230,7 @@ const ImagePromptControls = ({
         ['steps', 'Steps', 1, 100],
         ['cfg', 'CFG', 1, 20],
       ].map(([key, label, min, max]) => (
-        <label key={key} className="text-xs font-medium text-gray-600 dark:text-gray-300">
+        <label key={key} className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
           {label}
           <input
             type="number"
@@ -238,7 +238,7 @@ const ImagePromptControls = ({
             max={max}
             value={form[key]}
             onChange={(e) => update(key, e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100"
+            className="mt-1.5 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-100"
           />
         </label>
       ))}
@@ -320,8 +320,8 @@ const SimpleImageRuntimePanel = () => {
 
       <div className={`mt-4 rounded-xl border px-4 py-3 text-xs ${
         runtime.found
-          ? 'border-green-100 bg-green-50 text-green-800 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
-          : 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300'
+          ? 'border-green-100 bg-green-50 text-green-800 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300 midnight:border-green-900/40 midnight:bg-green-950/25 midnight:text-green-300'
+          : 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-300'
       }`}>
         <div className="flex items-start gap-2.5">
           {runtime.found ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" /> : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />}
@@ -368,7 +368,7 @@ const SimpleImageRuntimePanel = () => {
             <button
               onClick={handleGenerate}
               disabled={!canGenerate}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
             >
               {generating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {generating ? 'Generating...' : 'Generate Test Image'}
@@ -457,8 +457,8 @@ const ImageGenerationRuntimePanel = () => {
 
       <div className={`mt-4 rounded-xl border px-4 py-3 text-xs ${
         runtime.found
-          ? 'border-green-100 bg-green-50 text-green-800 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
-          : 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300'
+          ? 'border-green-100 bg-green-50 text-green-800 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300 midnight:border-green-900/40 midnight:bg-green-950/25 midnight:text-green-300'
+          : 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-300'
       }`}>
         <div className="flex items-start gap-2.5">
           {runtime.found ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" /> : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />}
@@ -570,7 +570,7 @@ const ImageGenerationRuntimePanel = () => {
           <button
             onClick={handleGenerate}
             disabled={!canGenerate}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
           >
             {generating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {generating ? 'Generating...' : 'Generate Test Image'}

@@ -64,20 +64,20 @@ const AudioModelCard = ({ model, isLoaded, isStarting, highlighted, onStart, onD
 
         {(type === 'whisper' && (model.quality || model.language)) && (
           <div className="mt-3 flex gap-1.5 flex-wrap">
-            {model.quality && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.quality}</span>}
-            {model.language && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 font-medium capitalize">{model.language}</span>}
+            {model.quality && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400 font-medium">{model.quality}</span>}
+            {model.language && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400 font-medium capitalize">{model.language}</span>}
           </div>
         )}
         {type === 'tts' && (model.qualityLabel || (model.languageName && model.languageName !== 'unknown')) && (
           <div className="mt-3 flex gap-1.5 flex-wrap">
-            {model.qualityLabel && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.qualityLabel}</span>}
-            {model.languageName && model.languageName !== 'unknown' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 font-medium">{model.languageName}</span>}
+            {model.qualityLabel && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400 font-medium">{model.qualityLabel}</span>}
+            {model.languageName && model.languageName !== 'unknown' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400 font-medium">{model.languageName}</span>}
           </div>
         )}
         {model.missingConfig && (
-          <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 rounded-lg px-2.5 py-1.5">
+          <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400 midnight:text-amber-300 bg-amber-50 dark:bg-amber-950/20 midnight:bg-amber-950/25 rounded-lg px-2.5 py-1.5">
             <AlertTriangle className="w-3 h-3 inline mr-1 -mt-0.5" />
-            Needs matching <code className="text-[10px] bg-amber-100 dark:bg-amber-900/30 px-1 py-0.5 rounded font-mono">.onnx.json</code> config
+            Needs matching <code className="text-[10px] bg-amber-100 dark:bg-amber-900/30 midnight:bg-amber-900/30 px-1 py-0.5 rounded font-mono">.onnx.json</code> config
           </p>
         )}
       </div>
@@ -89,7 +89,7 @@ const AudioModelCard = ({ model, isLoaded, isStarting, highlighted, onStart, onD
           className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl transition-all disabled:opacity-40
             ${isLoaded
               ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
-              : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200'}`}
+              : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700'}`}
         >
           {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : isLoaded ? <CheckCircle2 className="w-4 h-4" /> : <Play className="w-4 h-4" />}
           {isStarting ? 'Loading...' : isLoaded ? 'Active' : 'Load'}
@@ -112,19 +112,19 @@ const EngineStatusBanner = ({ type, status, binaryFound, onCheck }) => {
 
   if (binaryFound === false) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
-        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
+      <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 px-4 py-3 text-sm shadow-sm">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-amber-200 dark:border-amber-800 midnight:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 midnight:bg-amber-950/30 flex items-center justify-center">
           <AlertTriangle className="w-3 h-3 text-amber-500" />
         </div>
         <div className="flex-1">
-          <span className="font-medium text-gray-700 dark:text-gray-200">{label} not found.</span>
-          <span className="text-gray-500 dark:text-gray-400 ml-1">
+          <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">{label} not found.</span>
+          <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400 ml-1">
             {type === 'whisper'
               ? 'Install whisper.cpp or set WHISPER_BINARY_PATH in den/.env'
               : 'Install piper-tts or set PIPER_BINARY_PATH in den/.env'}
           </span>
         </div>
-        <button onClick={onCheck} className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex-shrink-0">Re-check</button>
+        <button onClick={onCheck} className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors flex-shrink-0">Re-check</button>
       </div>
     );
   }
@@ -361,7 +361,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
               </div>
             </div>
             {whisperReady && (
-              <button onClick={handleWhisperStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors">
+            <button onClick={handleWhisperStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-800 transition-colors">
                 <Square className="w-3 h-3 fill-current" /> Stop
               </button>
             )}
@@ -370,7 +370,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
           <EngineStatusBanner type="whisper" status={whisperStatus} binaryFound={whisperBinary} onCheck={checkBinaries} />
 
           {whisperBinary && ffmpegFound === false && (
-            <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300">
+            <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-300">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
               <span>
                 Install <code className="rounded bg-amber-100 px-1 py-0.5 text-[10px] dark:bg-amber-900/30">ffmpeg</code> for transcription from recorded or uploaded audio formats.
@@ -381,11 +381,11 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
 
           {loading ? (
             <div className="mt-4 space-y-3">
-              {[1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800/50" />)}
+              {[1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800/50 midnight:bg-slate-800/50" />)}
             </div>
           ) : whisperModels.length === 0 ? (
-            <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 px-4 py-8">
-              <Mic className="w-6 h-6 text-gray-300 dark:text-gray-600 mb-2" />
+            <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 midnight:border-slate-800 midnight:bg-slate-900/40 px-4 py-8">
+              <Mic className="w-6 h-6 text-gray-300 dark:text-gray-600 midnight:text-slate-600 mb-2" />
               <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 text-center">
                 No Whisper models found.<br />
                 <span className="text-gray-400 dark:text-gray-500 midnight:text-gray-500">Download a <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">.bin</code> model from <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">ggerganov/whisper.cpp</code> on HuggingFace.<br />Use the search above or place files in <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">data/models/audio/whisper/</code></span>
@@ -423,7 +423,7 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
               </div>
             </div>
             {ttsReady && (
-              <button onClick={handleTtsStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors">
+              <button onClick={handleTtsStop} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-800 transition-colors">
                 <Square className="w-3 h-3 fill-current" /> Stop
               </button>
             )}
@@ -433,11 +433,11 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
 
           {loading ? (
             <div className="mt-4 space-y-3">
-              {[1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800/50" />)}
+              {[1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800/50 midnight:bg-slate-800/50" />)}
             </div>
           ) : ttsModels.length === 0 ? (
-            <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 px-4 py-8">
-              <Volume2 className="w-6 h-6 text-gray-300 dark:text-gray-600 mb-2" />
+            <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 midnight:border-slate-800 midnight:bg-slate-900/40 px-4 py-8">
+              <Volume2 className="w-6 h-6 text-gray-300 dark:text-gray-600 midnight:text-slate-600 mb-2" />
               <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 text-center">
                 No voice models found.<br />
                 <span className="text-gray-400 dark:text-gray-500 midnight:text-gray-500">Piper needs <strong>both</strong> a <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">.onnx</code> model and its <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">.onnx.json</code> config file.<br />Search for <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">rhasspy/piper-voices</code> above and download both files to <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">data/models/audio/tts/</code></span>
@@ -464,8 +464,8 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
       </div>
 
       {/* Info banner */}
-      <div className="mt-4 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm px-4 py-3">
-        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center mt-0.5">
+      <div className="mt-4 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm px-4 py-3">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50 dark:bg-gray-800 midnight:bg-slate-800 flex items-center justify-center mt-0.5">
           <Info className="w-3 h-3 text-gray-400 dark:text-gray-500" />
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 leading-relaxed space-y-1.5">

@@ -83,16 +83,16 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
           <div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{profile ? 'Edit Provider' : `${modalAction} ${selectedPreset?.name || 'Provider'}`}</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedPreset?.description || 'Configure an OpenAI-compatible endpoint.'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5">{selectedPreset?.description || 'Configure an OpenAI-compatible endpoint.'}</p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 text-gray-500 midnight:text-slate-500">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
           {showApiKeyInput && (
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
               <span className="flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5" />
                 API Key
@@ -102,7 +102,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                 value={form.api_key}
                 onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
                 type="password"
-                className="mt-1.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                className="mt-1.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
                 placeholder={requiresKey ? `Paste API key${apiKeyEnv ? ` (${apiKeyEnv})` : ''}` : 'Optional'}
                 autoFocus
               />
@@ -110,11 +110,11 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
           )}
 
           {(isAddingFromPreset && presetHasDefaults) || setupItems.length > 0 || selectedPreset?.compatibility || docsUrl ? (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-gray-50 dark:bg-gray-950 midnight:bg-slate-900 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 midnight:text-slate-300">
               {isAddingFromPreset && presetHasDefaults && (
                 <>
-                  <p className="font-medium text-gray-800 dark:text-gray-200">Default model: {selectedPreset.model}</p>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">Default model: {selectedPreset.model}</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                     {form.provider_id === 'openrouter'
                       ? 'OpenRouter can route automatically with openrouter/auto. Pick a concrete model later when you need predictable behavior.'
                       : 'The preset default model is a starting point. Use Models after saving to choose a model returned by the provider.'}
@@ -122,10 +122,10 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                 </>
               )}
               {selectedPreset?.compatibility && (
-                <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{selectedPreset.compatibility}</p>
+                <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{selectedPreset.compatibility}</p>
               )}
               {setupItems.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                   {setupItems.map(item => <li key={item}>- {item}</li>)}
                 </ul>
               )}
@@ -134,7 +134,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                   href={docsUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-800 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors"
                 >
                   <Link2 className="h-3.5 w-3.5" />
                   Provider docs
@@ -144,12 +144,12 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
           ) : null}
 
           {/* Name — always shown but compact when adding from preset */}
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
             Name
             <input
               value={form.name}
               onChange={(e) => update('name', e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
               placeholder={selectedPreset?.name || 'Provider name'}
             />
           </label>
@@ -159,7 +159,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
             <button
               type="button"
               onClick={() => setShowAdvanced(v => !v)}
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors"
             >
               <Settings className="w-3.5 h-3.5" />
               Endpoint and model
@@ -169,7 +169,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
 
           {showAdvanced && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
                 Provider
                 <select
                   value={form.provider_id}
@@ -185,7 +185,7 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                       settings: next?.settings || prev.settings || {},
                     }));
                   }}
-                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
                 >
                   {catalog.filter(item => !item.managed).map(item => (
                     <option key={item.id} value={item.providerId}>{item.name}</option>
@@ -193,51 +193,51 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                 </select>
               </label>
 
-              <label className="md:col-span-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+              <label className="md:col-span-2 text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
                 Base URL
                 <input
                   value={form.base_url}
                   onChange={(e) => update('base_url', e.target.value)}
                   disabled={isLocalManaged}
-                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none disabled:opacity-60"
+                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none disabled:opacity-60"
                   placeholder={selectedPreset?.baseUrl || 'https://.../v1'}
                 />
               </label>
 
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
                 Model
                 <input
                   value={form.model}
                   onChange={(e) => update('model', e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
                   placeholder={selectedPreset?.model || 'model-id'}
                 />
               </label>
 
               {isAzure && (
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
                   API Version
                   <input
                     value={form.settings?.apiVersion || '2024-10-21'}
                     onChange={(e) => updateSetting('apiVersion', e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
                   />
                 </label>
               )}
 
               {isAzure && (
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
                   Deployment
                   <input
                     value={form.settings?.deployment || ''}
                     onChange={(e) => updateSetting('deployment', e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
                     placeholder="Defaults to Model if blank"
                   />
                 </label>
               )}
 
-              <label className="md:col-span-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <label className="md:col-span-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 midnight:text-slate-300">
                 <input
                   type="checkbox"
                   checked={Boolean(form.supports_tools)}
@@ -251,8 +251,8 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
-          <button type="button" onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">Cancel</button>
-          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 midnight:hover:bg-slate-800">Cancel</button>
+          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 disabled:opacity-50">
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save
           </button>
@@ -298,7 +298,7 @@ const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, p
         <button
           onClick={onUse}
           disabled={Boolean(providerAction)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
         >
           <Sparkles className="w-4 h-4" />
           Use {name}
@@ -315,22 +315,22 @@ const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, p
 
 const LocalSwitchPrompt = ({ profile, serverStatus, onChoose, onClose, busy }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-    <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-5">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl p-5">
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
           <Zap className="w-5 h-5" />
         </div>
         <div>
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Local model is still loaded</h3>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Local model is still loaded</h3>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 midnight:text-slate-400">
             Switch to {profile?.name || 'this provider'} and choose whether to keep {serverStatus?.model || 'the local model'} in memory.
           </p>
         </div>
       </div>
       <div className="mt-5 flex flex-col sm:flex-row gap-2">
-        <button disabled={busy} onClick={() => onChoose(true)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">Stop local server</button>
-        <button disabled={busy} onClick={() => onChoose(false)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">Keep it running</button>
-        <button disabled={busy} onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+        <button disabled={busy} onClick={() => onChoose(true)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 disabled:opacity-50">Stop local server</button>
+        <button disabled={busy} onClick={() => onChoose(false)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 disabled:opacity-50">Keep it running</button>
+        <button disabled={busy} onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl text-gray-500 midnight:text-slate-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800">Cancel</button>
       </div>
     </div>
   </div>
@@ -381,7 +381,7 @@ const RemoteModelPickerModal = ({
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Choose Remote Model</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{profile?.name} · {profile?.base_url}</p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 text-gray-500 midnight:text-slate-500">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -394,14 +394,14 @@ const RemoteModelPickerModal = ({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by name, ID, description or provider..."
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
                 autoFocus
               />
             </label>
             <button
               onClick={onRefresh}
               disabled={loading}
-              className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 disabled:opacity-50 midnight:hover:bg-slate-800"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -426,16 +426,16 @@ const RemoteModelPickerModal = ({
                   const completionPrice = fmtPrice(model.pricing?.completion);
 
                   return (
-                    <div key={modelId} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-4">
+                    <div key={modelId} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-4 midnight:hover:bg-slate-900/50">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{model.name || modelId}</p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100 truncate">{model.name || modelId}</p>
                           {isCurrent && <Badge color="green">Current</Badge>}
                           {model.context_window && <Badge color="gray">{Number(model.context_window).toLocaleString()} ctx</Badge>}
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate">{modelId}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5 font-mono truncate">{modelId}</p>
                         {model.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{model.description}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-1 line-clamp-2">{model.description}</p>
                         )}
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           {/* Modalities */}
@@ -456,7 +456,7 @@ const RemoteModelPickerModal = ({
                             </span>
                           )}
                           {params.includes('reasoning') && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-300">
                               <Brain className="w-3 h-3" /> Reasoning
                             </span>
                           )}
@@ -466,7 +466,7 @@ const RemoteModelPickerModal = ({
                             </span>
                           )}
                           {params.includes('structured_outputs') && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
                               JSON
                             </span>
                           )}
@@ -479,25 +479,25 @@ const RemoteModelPickerModal = ({
                           )}
                           {/* Knowledge cutoff */}
                           {model.knowledge_cutoff && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
                               <Calendar className="w-3 h-3" /> {model.knowledge_cutoff}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        <p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-1">
                           {[model.owned_by, model.context_window_source].filter(Boolean).join(' · ')}
                         </p>
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <button
                           onClick={() => onSelect(model)}
-                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         >
                           Set Model
                         </button>
                         <button
                           onClick={() => onSelectAndActivate(model)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700"
                         >
                           <Zap className="w-3.5 h-3.5" />
                           Set + Activate
@@ -734,7 +734,7 @@ const ProvidersSection = ({
                       className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl transition-all disabled:opacity-40
                         ${isActive
                           ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
-                          : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200'}`}
+                          : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700'}`}
                     >
                       {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
                       {isActive ? 'Active' : 'Activate'}
@@ -826,7 +826,7 @@ const ProvidersSection = ({
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Endpoint</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Hosted chat APIs, local runtimes, and custom OpenAI-compatible endpoints.</p>
           </div>
-          <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900">
+          <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700">
             <Plus className="w-4 h-4" />
             Custom
           </button>

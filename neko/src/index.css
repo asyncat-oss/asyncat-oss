@@ -220,6 +220,116 @@ body {
   color: #f8fafc;
 }
 
+/* ── Models page midnight fallback ──────────────────────────────────────── */
+/* Keeps older light/dark-only model manager surfaces from flashing white. */
+.midnight [data-models-page] {
+  color-scheme: dark;
+}
+
+.midnight [data-models-page] [class~="bg-white"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-white/40"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-white/50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-white/70"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-white/80"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-white/90"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-white/95"]:not([class*="midnight:bg-"]) {
+  background-color: #020617;
+}
+
+.midnight [data-models-page] [class~="bg-gray-50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-50/40"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-50/50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-50/60"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-50/70"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-50/80"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-50/95"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-100"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-100/50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-100/60"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-100/70"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-gray-100/80"]:not([class*="midnight:bg-"]) {
+  background-color: #0f172a;
+}
+
+.midnight [data-models-page] [class~="hover:bg-gray-50"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-50/40"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-50/50"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-50/60"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-50/70"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-50/80"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-100"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-100/50"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-100/60"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-100/70"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-100/80"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-200"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-models-page] [class~="hover:bg-gray-200/70"]:hover:not([class*="midnight:hover:bg-"]) {
+  background-color: #1e293b;
+}
+
+.midnight [data-models-page] [class~="bg-amber-50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-amber-50/60"]:not([class*="midnight:bg-"]) {
+  background-color: rgba(69, 26, 3, 0.34);
+}
+
+.midnight [data-models-page] [class~="bg-red-50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-red-50/60"]:not([class*="midnight:bg-"]) {
+  background-color: rgba(69, 10, 10, 0.34);
+}
+
+.midnight [data-models-page] [class~="bg-green-50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-green-50/60"]:not([class*="midnight:bg-"]) {
+  background-color: rgba(5, 46, 22, 0.34);
+}
+
+.midnight [data-models-page] [class~="bg-blue-50"]:not([class*="midnight:bg-"]),
+.midnight [data-models-page] [class~="bg-blue-50/60"]:not([class*="midnight:bg-"]) {
+  background-color: rgba(23, 37, 84, 0.34);
+}
+
+.midnight [data-models-page] [class~="border-gray-100"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-100/50"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-100/60"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-100/70"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-100/80"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-200"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-200/50"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-200/60"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-200/70"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-200/80"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-200/90"]:not([class*="midnight:border-"]),
+.midnight [data-models-page] [class~="border-gray-300"]:not([class*="midnight:border-"]) {
+  border-color: #1e293b;
+}
+
+.midnight [data-models-page] [class~="divide-gray-100"]:not([class*="midnight:divide-"]) > :not([hidden]) ~ :not([hidden]),
+.midnight [data-models-page] [class~="divide-gray-200"]:not([class*="midnight:divide-"]) > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e293b;
+}
+
+.midnight [data-models-page] [class~="text-gray-950"]:not([class*="midnight:text-"]),
+.midnight [data-models-page] [class~="text-gray-900"]:not([class*="midnight:text-"]),
+.midnight [data-models-page] [class~="text-gray-800"]:not([class*="midnight:text-"]),
+.midnight [data-models-page] [class~="text-gray-700"]:not([class*="midnight:text-"]) {
+  color: #e2e8f0;
+}
+
+.midnight [data-models-page] [class~="text-gray-600"]:not([class*="midnight:text-"]) {
+  color: #cbd5e1;
+}
+
+.midnight [data-models-page] [class~="text-gray-500"]:not([class*="midnight:text-"]),
+.midnight [data-models-page] [class~="text-gray-400"]:not([class*="midnight:text-"]) {
+  color: #94a3b8;
+}
+
+.midnight [data-models-page] [class~="hover:text-gray-900"]:hover:not([class*="midnight:hover:text-"]),
+.midnight [data-models-page] [class~="hover:text-gray-800"]:hover:not([class*="midnight:hover:text-"]),
+.midnight [data-models-page] [class~="hover:text-gray-700"]:hover:not([class*="midnight:hover:text-"]),
+.midnight [data-models-page] [class~="hover:text-gray-600"]:hover:not([class*="midnight:hover:text-"]) {
+  color: #f8fafc;
+}
+
 /* Search highlight animation */
 .search-highlight {
   animation: pulse-highlight 2s;

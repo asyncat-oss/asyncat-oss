@@ -23,7 +23,7 @@ import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 const TARGETS = {
   model: {
     label: 'Model',
-    color: 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200',
+    color: 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700',
     subDir: '',
     extensions: ['.gguf', '.bin'],
   },
@@ -206,16 +206,16 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
   };
 
   return (
-    <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/60 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/60">
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{repoId}</span>
-        <button onClick={onClose} className="ml-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300">
+    <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/60 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/60 midnight:border-slate-800 midnight:bg-slate-900">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 midnight:text-slate-400">{repoId}</span>
+        <button onClick={onClose} className="ml-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-200">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
       <div className="max-h-72 overflow-y-auto">
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-5 text-xs text-gray-400 dark:text-gray-500">
+          <div className="flex items-center justify-center gap-2 py-5 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading files…
           </div>
@@ -227,7 +227,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
           </div>
         )}
         {!loading && !error && files.length === 0 && (
-          <div className="flex flex-col items-center gap-1 py-5 text-xs text-gray-400 dark:text-gray-500">
+          <div className="flex flex-col items-center gap-1 py-5 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
             <File className="h-5 w-5 opacity-40" />
             No downloadable files found in this repo.
           </div>
@@ -241,18 +241,18 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
           return (
             <div
               key={f.rfilename}
-              className="flex items-center gap-3 border-b border-gray-50 px-3 py-2.5 last:border-0 transition-colors hover:bg-gray-50/60 dark:border-gray-800/50 dark:hover:bg-gray-800/60"
+              className="flex items-center gap-3 border-b border-gray-50 px-3 py-2.5 last:border-0 transition-colors hover:bg-gray-50/60 dark:border-gray-800/50 dark:hover:bg-gray-800/60 midnight:border-slate-800/70 midnight:hover:bg-slate-800/60"
             >
-              <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400`}>
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
                 <FileIcon className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-xs text-gray-800 dark:text-gray-200">
-                  {folder && <span className="text-gray-400 dark:text-gray-500">{folder}</span>}
+                <div className="truncate font-mono text-xs text-gray-800 dark:text-gray-200 midnight:text-slate-200">
+                  {folder && <span className="text-gray-400 dark:text-gray-500 midnight:text-slate-500">{folder}</span>}
                   {basename}
                 </div>
                 {f.size > 0 && (
-                  <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                  <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                     {formatBytes(f.size)}
                   </span>
                 )}
@@ -630,14 +630,14 @@ const ModelDownloadHub = ({
               <div key={trackingKey} className="rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 midnight:border-gray-800/80 midnight:bg-gray-900">
                 <div className="mb-1.5 flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">{target.label}</span>
-                    <span className="truncate font-mono text-xs font-medium text-gray-900 dark:text-gray-100">{dl.filename}</span>
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300">{target.label}</span>
+                    <span className="truncate font-mono text-xs font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{dl.filename}</span>
                   </div>
-                  <button onClick={() => handleCancelDownload(trackingKey)} className="flex-shrink-0 text-gray-400 transition-colors hover:text-red-500" title="Cancel">
+                  <button onClick={() => handleCancelDownload(trackingKey)} className="flex-shrink-0 text-gray-400 transition-colors hover:text-red-500 midnight:text-slate-500 midnight:hover:text-red-400" title="Cancel">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <div className="mb-1 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                <div className="mb-1 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                   {dl.status === 'error' ? (
                     <span className="font-medium text-red-500">Download failed</span>
                   ) : (
@@ -646,7 +646,7 @@ const ModelDownloadHub = ({
                   {dl.status !== 'error' && dl.speedFormatted && dl.etaFormatted && (
                     <span className="opacity-80">{dl.speedFormatted} - {dl.etaFormatted}</span>
                   )}
-                  <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{dl.status === 'error' ? 'ERROR' : `${pct}%`}</span>
+                  <span className="font-mono font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{dl.status === 'error' ? 'ERROR' : `${pct}%`}</span>
                 </div>
                 {dl.status === 'error' ? (
                   <div className="mt-1 text-[11px] text-red-500/90 dark:text-red-400">{dl.error || 'Network request failed'}</div>
@@ -671,7 +671,7 @@ const ModelDownloadHub = ({
                 onClick={() => setActiveFilter(isActive ? 'all' : chip.key)}
                 className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
                   isActive
-                    ? 'bg-gray-900 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900'
+                    ? 'bg-gray-900 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
                     : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 midnight:border-gray-700 midnight:bg-gray-900 midnight:text-gray-400 midnight:hover:bg-gray-800 midnight:hover:text-gray-200'
                 }`}
               >
@@ -697,14 +697,14 @@ const ModelDownloadHub = ({
         </div>
 
         {searchQuery && activeFilter !== 'hf' && downloadedMatches.filter(m => matchesFilter(m, activeFilter)).length > 0 && (
-          <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800">
             {groupMatches(downloadedMatches.filter(m => matchesFilter(m, activeFilter))).map((group) => (
               <div key={group.key}>
-                <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50 midnight:border-slate-800 midnight:bg-slate-900">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                     {group.label}
                   </span>
-                  <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                  <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
                     {group.items.length}
                   </span>
                 </div>
@@ -719,16 +719,16 @@ const ModelDownloadHub = ({
                     <button
                       key={`${item.type}:${item.id}`}
                       onClick={() => onDownloadedSelect?.(item)}
-                      className="flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-gray-50/60 dark:border-gray-800 dark:hover:bg-gray-800/60"
+                      className="flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-gray-50/60 dark:border-gray-800 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-800/60"
                     >
                       <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
                         <Icon className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+                        <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">
                           <HighlightText text={item.name} query={searchQuery} />
                         </div>
-                        <div className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{item.detail}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{item.detail}</div>
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-2">
                         {item.isActive && (
@@ -752,12 +752,12 @@ const ModelDownloadHub = ({
         {searching && <div className="mt-3 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Searching HuggingFace...</div>}
         {searchError && <p className="mt-2 flex items-center gap-1 text-xs text-red-500 dark:text-red-400"><AlertCircle className="h-3 w-3" /> {searchError}</p>}
         {!searching && results.filter(m => matchesHFFilter(m, activeFilter)).length > 0 && (
-          <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+          <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800">
+            <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50 midnight:border-slate-800 midnight:bg-slate-900">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                 HuggingFace
               </span>
-              <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+              <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
                 {results.filter(m => matchesHFFilter(m, activeFilter)).length}
               </span>
             </div>
@@ -772,29 +772,29 @@ const ModelDownloadHub = ({
               const tags = (model.tags || []).slice(0, 3);
               const pipeline = model.pipeline_tag || '';
               return (
-                <div key={repoId} className="border-b border-gray-100 last:border-0 dark:border-gray-800">
+                <div key={repoId} className="border-b border-gray-100 last:border-0 dark:border-gray-800 midnight:border-slate-800">
                   <div className="flex items-start justify-between gap-3 px-3 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm font-medium text-gray-500 dark:text-gray-400">{author}</span>
-                        <span className="text-gray-300 dark:text-gray-600">/</span>
-                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <span className="truncate text-sm font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">{author}</span>
+                        <span className="text-gray-300 dark:text-gray-600 midnight:text-slate-700">/</span>
+                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
                           <HighlightText text={modelName} query={searchQuery} />
                         </span>
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         {pipeline && (
-                          <span className="inline-flex items-center rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                          <span className="inline-flex items-center rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-300">
                             {pipeline}
                           </span>
                         )}
                         {tags.map((tag) => (
-                          <span key={tag} className="text-[10px] text-gray-400 dark:text-gray-500">
+                          <span key={tag} className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                             {tag}
                           </span>
                         ))}
                       </div>
-                      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500">
+                      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                         {downloads && (
                           <span className="flex items-center gap-1">
                             <Download className="h-3 w-3 opacity-70" />
@@ -843,12 +843,12 @@ const ModelDownloadHub = ({
           </div>
         )}
         {!searching && searchQuery && downloadedMatches.filter(m => matchesFilter(m, activeFilter)).length === 0 && results.filter(m => matchesHFFilter(m, activeFilter)).length === 0 && !searchError && (
-          <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 py-6 dark:border-gray-800 dark:bg-gray-800/20">
-            <Search className="h-5 w-5 text-gray-300 dark:text-gray-600" />
-            <p className="text-xs text-gray-400 dark:text-gray-500">
+          <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 py-6 dark:border-gray-800 dark:bg-gray-800/20 midnight:border-slate-800 midnight:bg-slate-900/30">
+            <Search className="h-5 w-5 text-gray-300 dark:text-gray-600 midnight:text-slate-600" />
+            <p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
               {activeFilter === 'all' ? `No results for "${searchQuery}"` : `No ${FILTER_CHIPS.find(c => c.key === activeFilter)?.label || ''} results for "${searchQuery}"`}
             </p>
-            <p className="text-[10px] text-gray-300 dark:text-gray-600">
+            <p className="text-[10px] text-gray-300 dark:text-gray-600 midnight:text-slate-600">
               {activeFilter === 'all' ? 'Try a broader keyword like "llama", "qwen", or "flux"' : 'Try switching the filter to "All" for broader results'}
             </p>
           </div>

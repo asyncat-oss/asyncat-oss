@@ -228,7 +228,7 @@ const EngineRuntimeSection = ({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700">
                 <Cpu className="h-4 w-4" />
               </div>
               <div>
@@ -250,7 +250,7 @@ const EngineRuntimeSection = ({
               <button
                 onClick={primaryAction.onClick}
                 disabled={Boolean(switchingKey) || Boolean(installingKey)}
-                className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900"
+                className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
               >
                 {PrimaryActionIcon && <PrimaryActionIcon className={`h-3.5 w-3.5 ${switchingKey === primaryAction.key || installingKey === primaryAction.key ? 'animate-spin' : ''}`} />}
                 {primaryAction.label}
@@ -296,18 +296,18 @@ const EngineRuntimeSection = ({
         </div>
 
         {actionError && (
-          <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300 midnight:border-red-900/50 midnight:bg-red-950/25 midnight:text-red-300">
             <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span>{actionError}</span>
           </div>
         )}
         {actionSuccess && (
-          <div className="mt-4 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300">
+          <div className="mt-4 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300 midnight:border-green-900/50 midnight:bg-green-950/25 midnight:text-green-300">
             {actionSuccess}
           </div>
         )}
         {missingRuntimeTools.length > 0 && (
-          <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+          <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200 midnight:border-amber-900/50 midnight:bg-amber-950/25 midnight:text-amber-300">
             <div className="flex items-start gap-3">
               <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <div className="min-w-0">
@@ -315,7 +315,7 @@ const EngineRuntimeSection = ({
                   Missing runtime tools: {missingRuntimeTools.map(item => item.id).join(', ')}
                 </p>
                 {installCommand && (
-                  <p className="mt-1 truncate font-mono text-xs text-amber-700 dark:text-amber-300">
+                  <p className="mt-1 truncate font-mono text-xs text-amber-700 dark:text-amber-300 midnight:text-amber-300">
                     {installCommand}
                   </p>
                 )}
@@ -406,7 +406,7 @@ const EngineRuntimeSection = ({
                       assetName: bestManagedAsset.asset.name,
                     }, true)}
                     disabled={!canRetry || Boolean(installingKey)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                     Install and Retry
@@ -439,7 +439,7 @@ const EngineRuntimeSection = ({
                   <button
                     onClick={() => onBuildGpuRuntime?.(installProfile, true)}
                     disabled={!canRetry || Boolean(activeBuildJob)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                     Build and Retry
@@ -493,7 +493,7 @@ const EngineRuntimeSection = ({
                         <button
                           onClick={() => onSwitch?.({ runtime: candidate.runtime, path: candidate.path }, true)}
                           disabled={candidate.isCurrent || !canRetry || Boolean(switchingKey) || Boolean(installingKey)}
-                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
                         >
                           Retry
                         </button>
@@ -537,7 +537,7 @@ const EngineRuntimeSection = ({
               <button
                 onClick={() => submitCustom(true)}
                 disabled={!customPath.trim() || !canRetry || Boolean(switchingKey) || Boolean(installingKey)}
-                className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+                className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
               >
                 Switch and Retry
               </button>
