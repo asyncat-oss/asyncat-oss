@@ -461,7 +461,7 @@ const DynamicSidebar = ({
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnCalendar = basePage === "calendar";
   const isOnModels = basePage === "models";
-  const isOnAgent = location.pathname.startsWith("/agent") || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
+  const isOnAgent = (location.pathname.startsWith("/agent") && !location.pathname.startsWith("/agent-health")) || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
   const isOnTools = location.pathname.startsWith("/tools");
   const isOnAgentHealth = location.pathname.startsWith("/agent-health");
   const isOnTrash = basePage === "trash";
