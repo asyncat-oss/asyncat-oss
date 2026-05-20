@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
-  CheckCircle2,
   Cloud,
   Cpu,
   Download,
@@ -11,7 +10,6 @@ import {
   FileArchive,
   Heart,
   Image as ImageIcon,
-  KeyRound,
   Loader2,
   Mic,
   Search,
@@ -19,7 +17,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react';
-import { configApi, localModelsApi } from '../Settings/settingApi.js';
+import { localModelsApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 
 const TARGETS = {
@@ -374,89 +372,6 @@ const timeAgo = (dateStr) => {
   return `${Math.floor(days / 365)}y ago`;
 };
 
-const HuggingFaceAccessPanel = () => {
-  const [tokenValue, setTokenValue] = useState('');
-  const [maskedToken, setMaskedToken] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await configApi.getSecrets();
-      setMaskedToken(res.secrets?.HF_TOKEN || '');
-      setError('');
-    } catch (err) {
-      setError(err.message || 'Could not load Hugging Face token status.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const save = async () => {
-    const value = tokenValue.trim();
-    if (!value) return;
-    setSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      await configApi.updateSecret('HF_TOKEN', value);
-      setTokenValue('');
-      setMessage('Hugging Face token saved.');
-      await load();
-    } catch (err) {
-      setError(err.message || 'Could not save Hugging Face token.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/40 midnight:border-gray-800 midnight:bg-gray-900/50">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="min-w-0 flex-1 text-xs font-medium text-gray-600 dark:text-gray-300">
-          <span className="flex items-center gap-1.5">
-            <KeyRound className="h-3.5 w-3.5 text-gray-400" />
-            Hugging Face token
-            {maskedToken && !loading ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 dark:text-green-400">
-                <CheckCircle2 className="h-3 w-3" />
-                saved {maskedToken}
-              </span>
-            ) : null}
-          </span>
-          <input
-            type="password"
-            value={tokenValue}
-            onChange={(e) => setTokenValue(e.target.value)}
-            placeholder={maskedToken ? 'Replace saved token' : 'hf_...'}
-            className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-gray-600"
-          />
-        </label>
-        <button
-          onClick={save}
-          disabled={!tokenValue.trim() || saving}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-        >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
-          Save Token
-        </button>
-      </div>
-      {(message || error) && (
-        <p className={`mt-2 text-xs ${error ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-          {error || message}
-        </p>
-      )}
-    </div>
-  );
-};
-
 const FILTER_CHIPS = [
   { key: 'all', label: 'All' },
   { key: 'model', label: 'Models' },
@@ -745,8 +660,6 @@ const ModelDownloadHub = ({
           })}
         </div>
       )}
-
-      <HuggingFaceAccessPanel />
 
       <div className="mt-5">
         <div className="mb-3 flex flex-wrap items-center gap-1.5">

@@ -305,6 +305,17 @@ const MailLogo = () => (
   <Mail size={22} className="text-sky-600 dark:text-sky-400 midnight:text-sky-400" />
 );
 
+const HuggingFaceLogo = () => (
+  <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" fill="#FFD21E" />
+    <circle cx="8.5" cy="10" r="1.4" fill="#333" />
+    <circle cx="15.5" cy="10" r="1.4" fill="#333" />
+    <path d="M8 14.5c1.2 1.8 6.8 1.8 8 0" stroke="#333" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+    <path d="M7 8.5c-.5-1-1.5-1-2 0" stroke="#333" strokeWidth="1" fill="none" strokeLinecap="round" />
+    <path d="M17 8.5c.5-1 1.5-1 2 0" stroke="#333" strokeWidth="1" fill="none" strokeLinecap="round" />
+  </svg>
+);
+
 function RssReadLaterManager({ onChanged, flash }) {
   const [feeds, setFeeds] = useState([]);
   const [savedLinks, setSavedLinks] = useState([]);
@@ -528,6 +539,11 @@ export default function IntegrationsSection() {
   const [mailDisconnecting, setMailDisconnecting] = useState(false);
   const [mailTesting,       setMailTesting]       = useState(null);
 
+  // ── Hugging Face ───────────────────────────────────────────────────────────
+  const [hfConfigured,      setHfConfigured]      = useState(false);
+  const [hfLoading,         setHfLoading]         = useState(true);
+  const [hfDisconnecting,   setHfDisconnecting]   = useState(false);
+
   const flash = useCallback((msg, ms = 4000) => {
     setMessage(msg);
     setTimeout(() => setMessage(null), ms);
@@ -571,6 +587,17 @@ export default function IntegrationsSection() {
     finally { setMailLoading(false); }
   }, []);
 
+  const loadHfStatus = useCallback(async () => {
+    try {
+      const res = await configApi.getSecrets();
+      setHfConfigured(Boolean(res.secrets?.HF_TOKEN));
+    } catch {
+      setHfConfigured(false);
+    } finally {
+      setHfLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadGcStatus();
     loadGhStatus();
@@ -578,7 +605,8 @@ export default function IntegrationsSection() {
     loadObStatus();
     loadRssStatus();
     loadMailStatus();
-  }, [loadGcStatus, loadGhStatus, loadOlStatus, loadObStatus, loadRssStatus, loadMailStatus]);
+    loadHfStatus();
+  }, [loadGcStatus, loadGhStatus, loadOlStatus, loadObStatus, loadRssStatus, loadMailStatus, loadHfStatus]);
 
   // ── Handle OAuth redirect-back params ───────────────────────────────────────
 
@@ -744,6 +772,21 @@ export default function IntegrationsSection() {
       flash({ type: 'error', text: apiUtils.handleError(err, `${kind === 'imap' ? 'IMAP' : 'SMTP'} test failed`) });
     } finally {
       setMailTesting(null);
+    }
+  };
+
+  // ── Hugging Face actions ────────────────────────────────────────────────────
+
+  const handleHfDisconnect = async () => {
+    setHfDisconnecting(true);
+    try {
+      await configApi.updateSecret('HF_TOKEN', '');
+      await loadHfStatus();
+      flash({ type: 'success', text: 'Hugging Face token removed.' });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to remove token') });
+    } finally {
+      setHfDisconnecting(false);
     }
   };
 
@@ -964,6 +1007,30 @@ export default function IntegrationsSection() {
             </button>
           </div>
         </IntegrationCard>
+
+        {/* Hugging Face */}
+        <IntegrationCard
+          logo={<HuggingFaceLogo />}
+          name="Hugging Face"
+          description="Access gated models and private repos when downloading from HuggingFace Hub in the Models page."
+          status={{ configured: hfConfigured }}
+          configured={hfConfigured}
+          loading={hfLoading}
+          onDisconnect={handleHfDisconnect}
+          disconnecting={hfDisconnecting}
+          onCredsSaved={loadHfStatus}
+          noOAuth
+          setupFields={[
+            {
+              key: 'HF_TOKEN',
+              label: 'Access Token',
+              configType: 'secret',
+              placeholder: 'hf_...',
+            },
+          ]}
+          setupHelpUrl="https://huggingface.co/settings/tokens"
+          setupHelpText="Create token"
+        />
       </div>
     </div>
   );
