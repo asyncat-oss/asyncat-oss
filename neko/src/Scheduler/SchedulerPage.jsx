@@ -627,7 +627,7 @@ function EmptyState({ onAdd }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function SchedulerPage() {
+export default function SchedulerPage({ embedded = false }) {
   const [jobs, setJobs]           = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
@@ -720,42 +720,57 @@ export default function SchedulerPage() {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Clock className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            <h1 className="text-base font-semibold text-gray-900 dark:text-white">Agent Scheduler</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 text-xs text-gray-400">
+      {embedded ? (
+        <div className="flex items-center justify-end gap-3 px-6 py-2 flex-shrink-0">
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {activeJobs.length} active
+            </span>
+            {pausedJobs.length > 0 && (
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                {activeJobs.length} active
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
+                {pausedJobs.length} paused
               </span>
-              {pausedJobs.length > 0 && (
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
-                  {pausedJobs.length} paused
-                </span>
-              )}
+            )}
+          </div>
+          <button onClick={fetchJobs} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors">
+            <Plus className="w-4 h-4" />New Job
+          </button>
+        </div>
+      ) : (
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <h1 className="text-base font-semibold text-gray-900 dark:text-white">Agent Scheduler</h1>
             </div>
-            <button
-              onClick={fetchJobs}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setShowModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              New Job
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  {activeJobs.length} active
+                </span>
+                {pausedJobs.length > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
+                    {pausedJobs.length} paused
+                  </span>
+                )}
+              </div>
+              <button onClick={fetchJobs} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors">
+                <Plus className="w-4 h-4" />New Job
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto">

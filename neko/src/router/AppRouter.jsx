@@ -26,6 +26,7 @@ import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
 import AgentHealthPage from '../AgentHealth/AgentHealthPage';
 import SchedulerPage from '../Scheduler/SchedulerPage';
 import ProfilesPage from '../Profiles/ProfilesPage';
+import AgentPage from '../Agent/AgentPage';
 const loadingMessages = [
   "Waking up the cat AI...",
   "Paws initializing...",
@@ -241,12 +242,27 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "scheduler",
-        element: <SchedulerPage />,
+        element: <Navigate to="/agent/scheduler" replace />,
         errorElement: <RouteErrorElement />
       },
       {
         path: "profiles",
-        element: <ProfilesPage />,
+        element: <Navigate to="/agent/profiles" replace />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agent",
+        element: <Navigate to="/agent/profiles" replace />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agent/profiles",
+        element: <AgentPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "agent/scheduler",
+        element: <AgentPage />,
         errorElement: <RouteErrorElement />
       },
       {

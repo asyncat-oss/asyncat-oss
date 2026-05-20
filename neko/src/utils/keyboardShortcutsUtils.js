@@ -8,8 +8,8 @@ const DEFAULT_SHORTCUTS = {
   dock4: { key: '4', ctrl: true, meta: true, label: 'Calendar', action: 'navCalendar' },
   dock5: { key: '5', ctrl: true, meta: true, label: 'Models', action: 'navModels' },
   dock6: { key: '6', ctrl: true, meta: true, label: 'Tools & Skills', action: 'navTools' },
-  dock7: { key: '7', ctrl: true, meta: true, label: 'Scheduler', action: 'navScheduler' },
-  dock8: { key: '8', ctrl: true, meta: true, label: 'Profiles', action: 'navProfiles' },
+  dock7: { key: '7', ctrl: true, meta: true, label: 'Agent Health', action: 'navAgentHealth' },
+  dock8: { key: '8', ctrl: true, meta: true, label: 'Agent', action: 'navAgent' },
 };
 
 export const loadKeyboardShortcuts = () => {

@@ -14,9 +14,10 @@ import {
   Cpu,
   Wrench,
   Activity,
-  Clock,
-  Layers,
+  BrainCircuit,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import UniversalSearch from "./UniversalSearch";
@@ -434,8 +435,9 @@ const DynamicSidebar = ({
         case 'navModels': navigate("/models"); break;
         case 'navTools': navigate("/tools"); break;
         case 'navAgentHealth': navigate("/agent-health"); break;
-        case 'navScheduler': navigate("/scheduler"); break;
-        case 'navProfiles': navigate("/profiles"); break;
+        case 'navScheduler': navigate("/agent/scheduler"); break;
+        case 'navProfiles': navigate("/agent/profiles"); break;
+        case 'navAgent': navigate("/agent"); break;
         default: break;
       }
     };
@@ -459,8 +461,7 @@ const DynamicSidebar = ({
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnCalendar = basePage === "calendar";
   const isOnModels = basePage === "models";
-  const isOnScheduler = location.pathname.startsWith("/scheduler");
-  const isOnProfiles  = location.pathname.startsWith("/profiles");
+  const isOnAgent = location.pathname.startsWith("/agent") || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
   const isOnTools = location.pathname.startsWith("/tools");
   const isOnAgentHealth = location.pathname.startsWith("/agent-health");
   const isOnTrash = basePage === "trash";
@@ -517,8 +518,7 @@ const DynamicSidebar = ({
     { label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
     { label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
     { label: "Agent Health", action: "navAgentHealth", onClick: () => navigate("/agent-health"), active: isOnAgentHealth, icon: <Activity className="w-5 h-5" /> },
-    { label: "Scheduler", action: "navScheduler", onClick: () => navigate("/scheduler"), active: isOnScheduler, icon: <Clock className="w-5 h-5" /> },
-    { label: "Profiles", action: "navProfiles", onClick: () => navigate("/profiles"), active: isOnProfiles, icon: <Layers className="w-5 h-5" /> },
+    { label: "Agent", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
   ];
 
   const settingsIcon = profilePictureUrl || profileInitials ? (
@@ -548,6 +548,16 @@ const DynamicSidebar = ({
       ? 'fixed right-0 top-0 bottom-0 w-20 z-40'
       : 'fixed left-0 top-0 bottom-0 w-20 z-40';
 
+    const toggleCollapse = () => {
+      const next = sidebarState === 'collapsed' ? 'expanded' : 'collapsed';
+      localStorage.setItem('sidebarState', next);
+      window.dispatchEvent(new Event('sidebar-state-changed'));
+    };
+
+    const CollapseIcon = sidebarState === 'collapsed'
+      ? (sidebarPosition === 'right' ? ChevronLeft : ChevronRight)
+      : (sidebarPosition === 'right' ? ChevronRight : ChevronLeft);
+
     return (
       <>
         {sidebarVisibility === 'hover' && !isSidebarVisible && (
@@ -561,7 +571,7 @@ const DynamicSidebar = ({
             fixed ${sidebarEdgeClasses} ${topBarVisible ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}
             z-50 flex ${sidebarWidthClass} flex-col bg-white/70 backdrop-blur-xl
             dark:bg-gray-950/55 midnight:bg-gray-950/55
-            transition-[opacity,transform] duration-150
+            transition-[opacity,transform,width] duration-150
             ${sidebarVisibilityClass}
           `}
           onMouseLeave={() => {
@@ -570,27 +580,46 @@ const DynamicSidebar = ({
             }
           }}
         >
-          <button
-            type="button"
-            onClick={openCommandCenter}
-            className="group flex h-16 items-center gap-3 px-3 text-left transition-colors hover:bg-gray-100/60 dark:hover:bg-white/[0.04] midnight:hover:bg-white/[0.04] sm:px-4"
-            title={labelWithShortcut("Command Center", "navHome")}
-          >
-            <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100/80 transition-colors group-hover:bg-gray-100 dark:bg-white/[0.045] dark:group-hover:bg-white/[0.07] midnight:bg-white/[0.045] midnight:group-hover:bg-white/[0.07]">
-              <img src="/cat.svg" alt="Asyncat" className="h-5 w-5" />
-              {hasActiveRuns && (
-                <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
-              )}
-            </span>
-            <span className={`min-w-0 ${sidebarState === 'collapsed' ? 'hidden' : 'hidden sm:block'}`}>
-              <span className="block truncate text-sm font-semibold text-gray-950 dark:text-white">
-                Asyncat
+          {/* Header row — identical styling to SidebarNavItem */}
+          <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
+            <button
+              type="button"
+              onClick={openCommandCenter}
+              title={labelWithShortcut("Command Center", "navHome")}
+              className={`
+                group flex-1 h-10 flex items-center gap-3 rounded-lg px-3
+                transition-colors duration-150
+                ${isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")
+                  ? "bg-gray-100/80 text-gray-950 dark:bg-white/[0.06] dark:text-white midnight:bg-white/[0.05] midnight:text-white"
+                  : "text-gray-500 hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.045] dark:hover:text-gray-100 midnight:text-gray-500 midnight:hover:bg-white/[0.045] midnight:hover:text-gray-100"
+                }
+              `}
+            >
+              <span className={`relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors ${
+                isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")
+                  ? 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
+                  : 'text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-gray-500 midnight:group-hover:text-gray-300'
+              }`}>
+                <img src="/cat.svg" alt="Asyncat" className="h-5 w-5" />
+                {hasActiveRuns && (
+                  <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
+                )}
               </span>
-              <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
-                {conversationTitle || "Command Center"}
+              <span className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${sidebarState === 'collapsed' ? 'hidden' : 'hidden sm:block'}`}>
+                {conversationTitle || 'Asyncat'}
               </span>
-            </span>
-          </button>
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              title={sidebarState === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100/70 dark:hover:bg-white/[0.06] midnight:hover:bg-white/[0.06] transition-colors"
+            >
+              <CollapseIcon className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
 
           <nav className="flex-1 overflow-y-auto px-2.5 py-3">
             <div className="space-y-1">
@@ -607,9 +636,7 @@ const DynamicSidebar = ({
               ))}
             </div>
 
-            <div className="my-3 h-px bg-gray-200/50 dark:bg-white/[0.045] midnight:bg-white/[0.035]" />
-
-            <div className="space-y-1">
+            <div className="space-y-1 mt-1">
               {appItems.map((item) => (
                 <SidebarNavItem
                   key={item.label}
@@ -698,8 +725,6 @@ const DynamicSidebar = ({
           )}
         </DockItem>
 
-        <DockSep dockPosition={dockPosition} />
-
         {/* History — navigates to all chats history */}
         <DockItem
           label={labelWithShortcut("History", "navChat")}
@@ -729,8 +754,6 @@ const DynamicSidebar = ({
         >
           {calendarIcon}
         </DockItem>
-
-        <DockSep dockPosition={dockPosition} />
 
         {/* Models — standalone app */}
         <DockItem
@@ -762,24 +785,14 @@ const DynamicSidebar = ({
           <Activity className="w-5 h-5" />
         </DockItem>
 
-        {/* Scheduler */}
+        {/* Agent (Profiles + Scheduler) */}
         <DockItem
-          label={labelWithShortcut("Scheduler", "navScheduler")}
-          onClick={() => navigate("/scheduler")}
-          isActive={isOnScheduler}
+          label={labelWithShortcut("Agent", "navAgent")}
+          onClick={() => navigate("/agent")}
+          isActive={isOnAgent}
           dockPosition={dockPosition}
         >
-          <Clock className="w-5 h-5" />
-        </DockItem>
-
-        {/* Profiles */}
-        <DockItem
-          label={labelWithShortcut("Profiles", "navProfiles")}
-          onClick={() => navigate("/profiles")}
-          isActive={isOnProfiles}
-          dockPosition={dockPosition}
-        >
-          <Layers className="w-5 h-5" />
+          <BrainCircuit className="w-5 h-5" />
         </DockItem>
 
         {/* Trash */}
@@ -791,8 +804,6 @@ const DynamicSidebar = ({
         >
           <Trash2 className="w-5 h-5" />
         </DockItem>
-
-        <DockSep dockPosition={dockPosition} />
 
         {/* Settings/Profile — navigates to unified settings page */}
         <DockItem

@@ -677,7 +677,7 @@ EmptyState.propTypes = {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function AgentProfilesPage() {
+export default function AgentProfilesPage({ embedded = false }) {
   const [profiles, setProfiles] = useState([]);
   const [tools, setTools]       = useState([]);
   const [souls, setSouls]       = useState(['default']);
@@ -775,28 +775,45 @@ export default function AgentProfilesPage() {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Layers className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            <h1 className="text-base font-semibold text-gray-900 dark:text-white">Agent Profiles</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
-            <button onClick={fetchProfiles} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh">
-              <RefreshCw className="w-4 h-4" />
+      {embedded ? (
+        <div className="flex items-center justify-end gap-2 px-6 py-2 flex-shrink-0">
+          <span className="text-xs text-gray-400">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
+          <button onClick={fetchProfiles} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          {!showForm && (
+            <button
+              onClick={() => { setEditTarget(null); setShowForm(true); setSaveError(null); }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />New Profile
             </button>
-            {!showForm && (
-              <button
-                onClick={() => { setEditTarget(null); setShowForm(true); setSaveError(null); }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors"
-              >
-                <Plus className="w-4 h-4" />New Profile
+          )}
+        </div>
+      ) : (
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Layers className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <h1 className="text-base font-semibold text-gray-900 dark:text-white">Agent Profiles</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
+              <button onClick={fetchProfiles} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh">
+                <RefreshCw className="w-4 h-4" />
               </button>
-            )}
+              {!showForm && (
+                <button
+                  onClick={() => { setEditTarget(null); setShowForm(true); setSaveError(null); }}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Plus className="w-4 h-4" />New Profile
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto">
