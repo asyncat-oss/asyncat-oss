@@ -1540,10 +1540,10 @@ export const MessageInputV2 = ({
                     <button
                       type="button"
                       onClick={onStop}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
                       title="Stop generating"
                     >
-                      <Square className="h-3.5 w-3.5 fill-current" />
+                      <Square className="h-2.5 w-2.5 fill-current" />
                     </button>
                   </div>
                 ) : (
@@ -1554,12 +1554,12 @@ export const MessageInputV2 = ({
                       disabled={!canSubmit}
                       className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
                         canSubmit
-                          ? "bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-                          : "bg-gray-100 text-gray-300 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed"
+                          ? "bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 active:scale-95 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          : "bg-gray-50 text-gray-300 dark:bg-gray-800/50 dark:text-gray-600 cursor-not-allowed"
                       }`}
                       title={localModelSendBlockReason || (canSubmit ? "Send" : "Type a message")}
                     >
-                      <ArrowUp className="w-4 h-4" />
+                      <Send className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
@@ -1575,7 +1575,7 @@ export const MessageInputV2 = ({
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
                 title="No workspace selected. Prompt attachments are allowed; local folders, commands, and edits are disabled."
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-60 dark:text-emerald-400 dark:hover:text-emerald-300"
+                className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-60 dark:text-emerald-400 dark:hover:text-emerald-300"
               >
                 <MessageCircle className="h-3.5 w-3.5 shrink-0" />
                 <span>No workspace</span>
@@ -1587,7 +1587,7 @@ export const MessageInputV2 = ({
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
                 title={`Workspace Root: ${activeWorkingContext.rootPath} | Working Folder: ${activeWorkingContext.relativePath}`}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+                className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
               >
                 {(() => {
                   const RootIcon = rootIcon(activeRoot?.kind);
@@ -1608,7 +1608,7 @@ export const MessageInputV2 = ({
                   type="button"
                   onClick={() => setModeMenuOpen(open => !open)}
                   disabled={disabled}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+                  className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
                 >
                   {!isActionMode ? (
                     <>
@@ -1706,13 +1706,6 @@ export const MessageInputV2 = ({
           </div>
         </form>
 
-        {hasMessages && (
-          <div className="mt-2 text-center">
-            <p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-              The Cat can make mistakes. Verify important information.
-            </p>
-          </div>
-        )}
       </div>
 
       {lightbox && (
