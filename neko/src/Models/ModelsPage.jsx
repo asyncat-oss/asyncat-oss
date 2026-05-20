@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  RefreshCw, TriangleAlert, X, ChevronDown,
+  RefreshCw, TriangleAlert, X,
   Mic, Volume2, Cpu, Eye, Image, MessageSquare, BarChart3
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
@@ -33,44 +33,45 @@ const StatusDot = ({ status }) => {
   return <span className={`inline-block h-2 w-2 rounded-full flex-shrink-0 ${cls}`} />;
 };
 
-// ── Collapsible section wrapper ───────────────────────────────────────────────
-const CollapsibleSection = ({
-  icon: Icon, title, subtitle, badge, expanded, onToggle,
-  actions, children, className = ''
-}) => (
-  <div className={`rounded-2xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 overflow-hidden transition-all duration-200 ${expanded ? 'shadow-sm' : ''} ${className}`}>
-    <button
-      onClick={onToggle}
-      className="w-full flex items-center justify-between gap-4 px-6 py-5 hover:bg-gray-50/30 dark:hover:bg-gray-800/30 midnight:hover:bg-slate-800/30 transition-colors text-left"
-    >
-      <div className="flex items-center gap-3.5 min-w-0">
-        {Icon && (
-          <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border transition-colors ${
-            expanded
-              ? 'border-gray-200 bg-gray-900 text-white dark:border-gray-600 dark:bg-gray-100 dark:text-gray-900 midnight:border-slate-600 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
-              : 'border-gray-100 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-500'
-          }`}>
-            <Icon className="w-4 h-4" />
-          </div>
-        )}
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">{title}</h3>
-          {subtitle && !expanded && (
-            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 line-clamp-2">{subtitle}</p>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        {actions}
-        {badge}
-        <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 midnight:text-gray-500 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
-      </div>
-    </button>
-    {expanded && (
-      <div className="border-t border-gray-50 dark:border-gray-800/50 midnight:border-slate-800/50 px-6 pb-6">
-        {children}
-      </div>
+// ── Tabbed page shell ────────────────────────────────────────────────────────
+const TabButton = ({ icon: Icon, label, meta, active, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors sm:flex-none sm:justify-start ${
+      active
+        ? 'bg-gray-950 text-white shadow-sm dark:bg-gray-100 dark:text-gray-950 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
+        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100'
+    }`}
+  >
+    <Icon className="h-4 w-4 flex-shrink-0" />
+    <span className="truncate">{label}</span>
+    {meta && (
+      <span className={`hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:inline-flex ${
+        active
+          ? 'bg-white/15 text-white dark:bg-gray-950/10 dark:text-gray-700 midnight:bg-slate-700 midnight:text-slate-200'
+          : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-900 midnight:text-slate-400'
+      }`}>
+        {meta}
+      </span>
     )}
+  </button>
+);
+
+const TabHeader = ({ icon: Icon, title, subtitle, badge }) => (
+  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex min-w-0 items-start gap-3">
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-300">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{title}</h2>
+        {subtitle && (
+          <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{subtitle}</p>
+        )}
+      </div>
+    </div>
+    {badge}
   </div>
 );
 
@@ -226,14 +227,8 @@ const ModelsPage = () => {
       .catch(() => setInstallReadiness(null));
   }, []);
 
-  // ── Collapsible section state ──────────────────────────────────────────────
-  const [expandedStt, setExpandedStt] = useState(false);
-  const [expandedTts, setExpandedTts] = useState(false);
-  const [expandedVision, setExpandedVision] = useState(false);
-  const [expandedImage, setExpandedImage] = useState(false);
-  const [expandedEngine, setExpandedEngine] = useState(false);
-  const [expandedChat, setExpandedChat] = useState(true);
-  const [expandedUsage, setExpandedUsage] = useState(true);
+  // ── Task navigation ───────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState('chat');
 
   // ── Unified search ─────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -329,12 +324,10 @@ const ModelsPage = () => {
 
   const handleDownloadedSelect = (item) => {
     setHighlightedItem(item);
-    if (item.type === 'model') setExpandedChat(true);
-    if (item.type === 'whisper') setExpandedStt(true);
-    if (item.type === 'tts') setExpandedTts(true);
-    if (item.type === 'vision') setExpandedVision(true);
-    if (item.type === 'image') setExpandedImage(true);
-    if (item.type === 'provider') setExpandedChat(true);
+    if (item.type === 'model' || item.type === 'provider') setActiveTab('chat');
+    if (item.type === 'whisper' || item.type === 'tts') setActiveTab('audio');
+    if (item.type === 'vision') setActiveTab('vision');
+    if (item.type === 'image') setActiveTab('image');
     window.setTimeout(() => {
       const id = item.type === 'model'
         ? `model-card-${item.id}`
@@ -344,7 +337,7 @@ const ModelsPage = () => {
             ? `provider-card-${item.id}`
             : `visual-card-${item.type}-${item.id}`;
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 120);
+    }, 180);
   };
 
   // ── Refresh handler ────────────────────────────────────────────────────────
@@ -360,6 +353,18 @@ const ModelsPage = () => {
     loadEngineCatalog(true);
     loadProviderData();
   };
+
+  const audioAssetCount = audioModels.whisper.length + audioModels.tts.length;
+  const chatReady = status === 'ready' || Boolean(providerConfig?.model);
+  const usageRequestCount = modelUsage?.totals?.request_count || 0;
+  const tabItems = [
+    { key: 'chat', label: 'Chat', icon: MessageSquare, meta: chatReady ? 'Active' : String(providerProfiles.length + models.length) },
+    { key: 'audio', label: 'Audio', icon: Mic, meta: audioAssetCount ? String(audioAssetCount) : null },
+    { key: 'vision', label: 'Vision', icon: Eye, meta: visualModels.vision.length ? String(visualModels.vision.length) : null },
+    { key: 'image', label: 'Image', icon: Image, meta: visualModels.image.length ? String(visualModels.image.length) : null },
+    { key: 'usage', label: 'Usage', icon: BarChart3, meta: usageRequestCount ? String(usageRequestCount) : usageRange },
+    { key: 'runtime', label: 'Runtime', icon: Cpu, meta: engineData?.current?.capabilityLabel || null },
+  ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -459,227 +464,239 @@ const ModelsPage = () => {
             onVisualRefresh={refreshVisualData}
           />
 
-          {/* ── Usage ──────────────────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={BarChart3}
-            title="Usage"
-            subtitle={modelUsage?.totals?.request_count
-              ? `${modelUsage.totals.request_count} request${modelUsage.totals.request_count === 1 ? '' : 's'} · ${Math.round((modelUsage.totals.total_tokens || 0) / 1000)}k tokens`
-              : 'Track exact and estimated model usage'}
-            badge={<Badge color={modelUsage?.totals?.request_count ? 'blue' : 'gray'}>{usageRange}</Badge>}
-            expanded={expandedUsage}
-            onToggle={() => setExpandedUsage(v => !v)}
-          >
-            <div className="pt-5">
-              <ModelUsageSection
-                usage={modelUsage}
-                loading={loadingUsage}
-                error={usageError}
-                range={usageRange}
-                onRangeChange={setUsageRange}
-                onRefresh={refreshUsageData}
-                catalog={providerCatalog}
-              />
+          <div className="sticky top-0 z-20 -mx-6 border-y border-gray-200/80 bg-white/95 px-6 py-3 backdrop-blur dark:border-gray-800/80 dark:bg-gray-900/95 midnight:border-slate-800/80 midnight:bg-slate-950/95 lg:-mx-8 lg:px-8">
+            <div className="flex gap-2 overflow-x-auto pb-0.5">
+              {tabItems.map((item) => (
+                <TabButton
+                  key={item.key}
+                  icon={item.icon}
+                  label={item.label}
+                  meta={item.meta}
+                  active={activeTab === item.key}
+                  onClick={() => setActiveTab(item.key)}
+                />
+              ))}
             </div>
-          </CollapsibleSection>
+          </div>
 
-          {/* ── Chat & Agent Models ──────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={MessageSquare}
-            title="Chat & Agent Models"
-            subtitle={`${providerProfiles.length} endpoint profile${providerProfiles.length === 1 ? '' : 's'} · ${models.length} local LLM${models.length === 1 ? '' : 's'}${activeProviderName ? ` · ${activeProviderName} active` : ''}`}
-            badge={<Badge color={status === 'ready' || providerConfig?.model ? 'green' : 'gray'}>{status === 'ready' || providerConfig?.model ? 'Active' : 'Choose one'}</Badge>}
-            expanded={expandedChat}
-            onToggle={() => setExpandedChat(v => !v)}
-          >
-            <div className="pt-5 space-y-8">
-              <ProvidersSection
-                catalog={providerCatalog}
-                profiles={providerProfiles}
-                activeConfig={providerConfig}
-                serverStatus={serverStatus}
-                loading={loadingProviders}
-                providerAction={providerAction}
-                providerError={providerError}
-                highlightedItem={highlightedItem}
-                onRefresh={loadProviderData}
-                onSave={handleProviderSave}
-                onDelete={handleProviderDelete}
-                onTest={handleProviderTest}
-                onActivate={handleProviderActivate}
-                onLoadModels={handleLoadProviderModels}
-              />
+          <div className="space-y-6">
+            {activeTab === 'chat' && (
+              <>
+                <TabHeader
+                  icon={MessageSquare}
+                  title="Chat and Agent Models"
+                  subtitle={`${providerProfiles.length} provider profile${providerProfiles.length === 1 ? '' : 's'} · ${models.length} local LLM${models.length === 1 ? '' : 's'}${activeProviderName ? ` · ${activeProviderName} active` : ''}`}
+                  badge={<Badge color={chatReady ? 'green' : 'gray'}>{chatReady ? 'Active' : 'Choose one'}</Badge>}
+                />
+                <div className="space-y-8">
+                  <ProvidersSection
+                    catalog={providerCatalog}
+                    profiles={providerProfiles}
+                    activeConfig={providerConfig}
+                    serverStatus={serverStatus}
+                    loading={loadingProviders}
+                    providerAction={providerAction}
+                    providerError={providerError}
+                    highlightedItem={highlightedItem}
+                    onRefresh={loadProviderData}
+                    onSave={handleProviderSave}
+                    onDelete={handleProviderDelete}
+                    onTest={handleProviderTest}
+                    onActivate={handleProviderActivate}
+                    onLoadModels={handleLoadProviderModels}
+                  />
 
-              <LocalModelsPane
-                models={models}
-                loadingModels={loadingModels}
-                serverStatus={serverStatus}
-                status={status}
-                startingModel={startingModel}
-                setStartingModel={setStartingModel}
-                deletingModel={deletingModel}
-                switchingEngine={switchingEngine}
-                installingEngine={installingEngine}
-                highlightedItem={highlightedItem}
-                quickLoadPath={quickLoadPath}
-                setQuickLoadPath={setQuickLoadPath}
-                modelContextConfig={modelContextConfig}
-                setServerStatus={setServerStatus}
-                pollCleanup={pollCleanup}
-                loadEngineData={loadEngineData}
-                loadProviderData={loadProviderData}
-                loadStatus={loadStatus}
-                handleAddPath={handleAddPath}
-                switchError={switchError}
-                switchSuccess={switchSuccess}
-                setSwitchError={setSwitchError}
-                setSwitchSuccess={setSwitchSuccess}
-                modelLoadCtxSizes={modelLoadCtxSizes}
-                modelLoadCtxErrors={modelLoadCtxErrors}
-                updateModelLoadCtxSize={updateModelLoadCtxSize}
-                commitModelLoadCtxSize={commitModelLoadCtxSize}
-                handleStart={handleStart}
-                handleDelete={handleDelete}
-              />
-            </div>
-          </CollapsibleSection>
+                  <LocalModelsPane
+                    models={models}
+                    loadingModels={loadingModels}
+                    serverStatus={serverStatus}
+                    status={status}
+                    startingModel={startingModel}
+                    setStartingModel={setStartingModel}
+                    deletingModel={deletingModel}
+                    switchingEngine={switchingEngine}
+                    installingEngine={installingEngine}
+                    highlightedItem={highlightedItem}
+                    quickLoadPath={quickLoadPath}
+                    setQuickLoadPath={setQuickLoadPath}
+                    modelContextConfig={modelContextConfig}
+                    setServerStatus={setServerStatus}
+                    pollCleanup={pollCleanup}
+                    loadEngineData={loadEngineData}
+                    loadProviderData={loadProviderData}
+                    loadStatus={loadStatus}
+                    handleAddPath={handleAddPath}
+                    switchError={switchError}
+                    switchSuccess={switchSuccess}
+                    setSwitchError={setSwitchError}
+                    setSwitchSuccess={setSwitchSuccess}
+                    modelLoadCtxSizes={modelLoadCtxSizes}
+                    modelLoadCtxErrors={modelLoadCtxErrors}
+                    updateModelLoadCtxSize={updateModelLoadCtxSize}
+                    commitModelLoadCtxSize={commitModelLoadCtxSize}
+                    handleStart={handleStart}
+                    handleDelete={handleDelete}
+                  />
+                </div>
+              </>
+            )}
 
-          {/* ── Speech-to-Text ────────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={Mic}
-            title="Speech-to-Text"
-            subtitle={SpeechSubtitle({
-              status: voiceState.sttStatus,
-              model: voiceState.sttModel,
-              loaded: voiceState.loaded,
-              idleLabel: 'Transcribe audio with a hosted provider or local Whisper model',
-            })}
-            badge={<SpeechCompactBadge status={voiceState.sttStatus} label="STT" />}
-            expanded={expandedStt}
-            onToggle={() => setExpandedStt(v => !v)}
-          >
-            <div className="pt-5 space-y-5">
-              <CapabilityProvidersSection capability="stt" />
-              <AudioModelsSection
-                mode="whisper"
-                highlightedItem={highlightedItem}
-                onModelsChange={setAudioModels}
-              />
-            </div>
-          </CollapsibleSection>
+            {activeTab === 'audio' && (
+              <>
+                <TabHeader
+                  icon={Mic}
+                  title="Audio Models"
+                  subtitle={`${SpeechSubtitle({
+                    status: voiceState.sttStatus,
+                    model: voiceState.sttModel,
+                    loaded: voiceState.loaded,
+                    idleLabel: 'Speech-to-text idle',
+                  })} · ${SpeechSubtitle({
+                    status: voiceState.ttsStatus,
+                    model: voiceState.ttsModel,
+                    loaded: voiceState.loaded,
+                    idleLabel: 'Text-to-speech idle',
+                  })}`}
+                  badge={<div className="flex items-center gap-3"><SpeechCompactBadge status={voiceState.sttStatus} label="STT" /><SpeechCompactBadge status={voiceState.ttsStatus} label="TTS" /></div>}
+                />
+                <div className="grid gap-5 xl:grid-cols-2">
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">
+                      <Mic className="h-4 w-4 text-gray-400" />
+                      Speech-to-Text
+                    </div>
+                    <CapabilityProvidersSection capability="stt" />
+                    <AudioModelsSection
+                      mode="whisper"
+                      highlightedItem={highlightedItem}
+                      onModelsChange={setAudioModels}
+                    />
+                  </div>
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">
+                      <Volume2 className="h-4 w-4 text-gray-400" />
+                      Text-to-Speech
+                    </div>
+                    <CapabilityProvidersSection capability="tts" />
+                    <AudioModelsSection
+                      mode="tts"
+                      highlightedItem={highlightedItem}
+                      onModelsChange={setAudioModels}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
-          {/* ── Text-to-Speech ────────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={Volume2}
-            title="Text-to-Speech"
-            subtitle={SpeechSubtitle({
-              status: voiceState.ttsStatus,
-              model: voiceState.ttsModel,
-              loaded: voiceState.loaded,
-              idleLabel: 'Create spoken responses with a hosted provider or local Piper voice',
-            })}
-            badge={<SpeechCompactBadge status={voiceState.ttsStatus} label="TTS" />}
-            expanded={expandedTts}
-            onToggle={() => setExpandedTts(v => !v)}
-          >
-            <div className="pt-5 space-y-5">
-              <CapabilityProvidersSection capability="tts" />
-              <AudioModelsSection
-                mode="tts"
-                highlightedItem={highlightedItem}
-                onModelsChange={setAudioModels}
-              />
-            </div>
-          </CollapsibleSection>
+            {activeTab === 'vision' && (
+              <>
+                <TabHeader
+                  icon={Eye}
+                  title="Vision Models"
+                  subtitle={AssetSubtitle({
+                    count: visualModels.vision.length,
+                    emptyLabel: 'No vision assets',
+                    singularLabel: 'vision asset',
+                    pluralLabel: 'vision assets',
+                  })}
+                  badge={visualModels.vision.length > 0 ? <Badge color="gray">{visualModels.vision.length} asset{visualModels.vision.length === 1 ? '' : 's'}</Badge> : null}
+                />
+                <div className="space-y-5">
+                  <CapabilityProvidersSection capability="vision" />
+                  <VisualModelsSection
+                    mode="vision"
+                    highlightedItem={highlightedItem}
+                    onModelsChange={setVisualModels}
+                  />
+                </div>
+              </>
+            )}
 
-          {/* ── Vision ────────────────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={Eye}
-            title="Vision"
-            subtitle={AssetSubtitle({
-              count: visualModels.vision.length,
-              emptyLabel: 'No vision assets yet',
-              singularLabel: 'vision asset',
-              pluralLabel: 'vision assets',
-            })}
-            badge={visualModels.vision.length > 0 ? <Badge color="gray">{visualModels.vision.length}</Badge> : null}
-            expanded={expandedVision}
-            onToggle={() => setExpandedVision(v => !v)}
-          >
-            <div className="pt-5 space-y-5">
-              <CapabilityProvidersSection capability="vision" />
-              <VisualModelsSection
-                mode="vision"
-                highlightedItem={highlightedItem}
-                onModelsChange={setVisualModels}
-              />
-            </div>
-          </CollapsibleSection>
+            {activeTab === 'image' && (
+              <>
+                <TabHeader
+                  icon={Image}
+                  title="Image Generation"
+                  subtitle={AssetSubtitle({
+                    count: visualModels.image.length,
+                    emptyLabel: 'No image generation assets',
+                    singularLabel: 'image asset',
+                    pluralLabel: 'image assets',
+                  })}
+                  badge={visualModels.image.length > 0 ? <Badge color="gray">{visualModels.image.length} asset{visualModels.image.length === 1 ? '' : 's'}</Badge> : null}
+                />
+                <div className="space-y-5">
+                  <CapabilityProvidersSection capability="image" />
+                  <VisualModelsSection
+                    mode="image"
+                    highlightedItem={highlightedItem}
+                    onModelsChange={setVisualModels}
+                  />
+                </div>
+              </>
+            )}
 
-          {/* ── Image Generation ──────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={Image}
-            title="Image Generation"
-            subtitle={AssetSubtitle({
-              count: visualModels.image.length,
-              emptyLabel: 'No image generation assets yet',
-              singularLabel: 'image asset',
-              pluralLabel: 'image assets',
-            })}
-            badge={visualModels.image.length > 0 ? <Badge color="gray">{visualModels.image.length}</Badge> : null}
-            expanded={expandedImage}
-            onToggle={() => setExpandedImage(v => !v)}
-          >
-            <div className="pt-5 space-y-5">
-              <CapabilityProvidersSection capability="image" />
-              <VisualModelsSection
-                mode="image"
-                highlightedItem={highlightedItem}
-                onModelsChange={setVisualModels}
-              />
-            </div>
-          </CollapsibleSection>
+            {activeTab === 'usage' && (
+              <>
+                <TabHeader
+                  icon={BarChart3}
+                  title="Usage"
+                  subtitle={modelUsage?.totals?.request_count
+                    ? `${modelUsage.totals.request_count} request${modelUsage.totals.request_count === 1 ? '' : 's'} · ${Math.round((modelUsage.totals.total_tokens || 0) / 1000)}k tokens`
+                    : 'No usage recorded yet'}
+                  badge={<Badge color={modelUsage?.totals?.request_count ? 'blue' : 'gray'}>{usageRange}</Badge>}
+                />
+                <ModelUsageSection
+                  usage={modelUsage}
+                  loading={loadingUsage}
+                  error={usageError}
+                  range={usageRange}
+                  onRangeChange={setUsageRange}
+                  onRefresh={refreshUsageData}
+                  catalog={providerCatalog}
+                />
+              </>
+            )}
 
-          {/* ── Engine ────────────────────────────────────────────────────── */}
-          <CollapsibleSection
-            icon={Cpu}
-            title="Engine"
-            subtitle={EngineSubtitle({ engineData })}
-            badge={engineData?.current ? (
-              <Badge color={capabilityBadgeColor(engineData.current.capabilityHint)}>
-                {engineData.current.capabilityLabel}
-              </Badge>
-            ) : null}
-            expanded={expandedEngine}
-            onToggle={() => setExpandedEngine(v => !v)}
-          >
-            <div className="pt-5">
-              <EngineRuntimeSection
-                engineData={engineData}
-                engineCatalog={engineCatalog}
-                loadingCatalog={loadingCatalog}
-                installJob={installJob}
-                loading={loadingEngines}
-                switchingKey={switchingEngine}
-                installingKey={installingEngine}
-                switchError={switchError}
-                switchSuccess={switchSuccess}
-                installError={installError}
-                installSuccess={installSuccess}
-                revertSelection={revertSelection}
-                retryModel={serverStatus?.model || null}
-                pythonInstallJob={pythonInstallJob}
-                pythonBuildError={pythonBuildError}
-                pythonBuildSuccess={pythonBuildSuccess}
-                onRescan={loadEngineData}
-                onSwitch={handleEngineSwitch}
-                onInstall={handleManagedInstall}
-                onBuildGpuRuntime={handleBuildGpuRuntime}
-                onRefreshCatalog={loadEngineCatalog}
-                installReadiness={installReadiness}
-              />
-            </div>
-          </CollapsibleSection>
+            {activeTab === 'runtime' && (
+              <>
+                <TabHeader
+                  icon={Cpu}
+                  title="Runtime"
+                  subtitle={EngineSubtitle({ engineData })}
+                  badge={engineData?.current ? (
+                    <Badge color={capabilityBadgeColor(engineData.current.capabilityHint)}>
+                      {engineData.current.capabilityLabel}
+                    </Badge>
+                  ) : null}
+                />
+                <EngineRuntimeSection
+                  engineData={engineData}
+                  engineCatalog={engineCatalog}
+                  loadingCatalog={loadingCatalog}
+                  installJob={installJob}
+                  loading={loadingEngines}
+                  switchingKey={switchingEngine}
+                  installingKey={installingEngine}
+                  switchError={switchError}
+                  switchSuccess={switchSuccess}
+                  installError={installError}
+                  installSuccess={installSuccess}
+                  revertSelection={revertSelection}
+                  retryModel={serverStatus?.model || null}
+                  pythonInstallJob={pythonInstallJob}
+                  pythonBuildError={pythonBuildError}
+                  pythonBuildSuccess={pythonBuildSuccess}
+                  onRescan={loadEngineData}
+                  onSwitch={handleEngineSwitch}
+                  onInstall={handleManagedInstall}
+                  onBuildGpuRuntime={handleBuildGpuRuntime}
+                  onRefreshCatalog={loadEngineCatalog}
+                  installReadiness={installReadiness}
+                />
+              </>
+            )}
+          </div>
 
         </div>
       </div>

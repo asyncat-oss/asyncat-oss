@@ -11,6 +11,7 @@ import {
   Heart,
   Image as ImageIcon,
   Loader2,
+  Lock,
   Mic,
   Search,
   ShieldAlert,
@@ -75,11 +76,6 @@ const formatETA = (secondsLeft) => {
   const s = Math.floor(secondsLeft % 60);
   if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m`;
   return `${m}:${s.toString().padStart(2, '0')}`;
-};
-
-const filenameMatches = (filename, extensions) => {
-  const lower = String(filename || '').toLowerCase();
-  return extensions.some(ext => lower.endsWith(ext));
 };
 
 const targetOptionsForFile = (filename, repoId = '') => {
