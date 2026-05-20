@@ -97,7 +97,7 @@ const ViewEventModal = ({
 							className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
 							style={{ backgroundColor: baseColor.hex }}
 						/>
-						<h2 className="text-xl font-semibold text-gray-900 dark:text-white midnight:text-indigo-200 break-words">
+						<h2 className="text-xl font-semibold text-gray-900 dark:text-white midnight:text-white break-words">
 							{event.title}
 						</h2>
 					</div>

@@ -18,7 +18,7 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
           <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
             Sources & media
           </span>
-          <span className="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{catalog.totalCount}</span>
+          <span className="text-[11px] tabular-nums text-gray-400 dark:text-gray-500 midnight:text-slate-500">{catalog.totalCount}</span>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800">
           <button
@@ -27,8 +27,8 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
             disabled={!hasImages}
             className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
               tab === 'images'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100'
-                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-900 midnight:text-slate-100'
+                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:text-slate-100'
             }`}
           >
             <Image className="h-3.5 w-3.5" />
@@ -40,8 +40,8 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
             disabled={!hasSources}
             className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
               tab === 'sources'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100'
-                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-900 midnight:text-slate-100'
+                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:text-slate-100'
             }`}
           >
             <Link2 className="h-3.5 w-3.5" />
@@ -59,10 +59,10 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
                 href={img.url || img.image}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700"
+                className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700"
                 title={img.title}
               >
-                <div className="relative aspect-square bg-gray-100 dark:bg-gray-800">
+                <div className="relative aspect-square bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
                   <img
                     src={img.thumbnail || img.image}
                     alt={img.title}
@@ -70,11 +70,11 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
-                  <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-white/90 p-0.5 text-gray-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:bg-gray-900/90 dark:text-gray-200" />
+                  <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-white/90 p-0.5 text-gray-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:bg-gray-900/90 dark:text-gray-200 midnight:bg-slate-900/90 midnight:text-slate-200" />
                 </div>
                 <div className="min-w-0 px-2 py-1.5">
-                  <p className="truncate text-[11px] font-medium text-gray-700 dark:text-gray-200">{img.title}</p>
-                  <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">{img.answerLabel}</p>
+                  <p className="truncate text-[11px] font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">{img.title}</p>
+                  <p className="truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{img.answerLabel}</p>
                 </div>
               </a>
             ))}
@@ -89,7 +89,7 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
                 href={source.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
+                className="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700 midnight:hover:bg-blue-950/20"
               >
                 <div className="flex min-w-0 items-start gap-2">
                   <img
@@ -99,16 +99,16 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{source.title}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-blue-600 dark:text-blue-400">{source.domain}</p>
+                    <p className="truncate text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">{source.title}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-blue-600 dark:text-blue-400 midnight:text-blue-400">{source.domain}</p>
                     {source.snippet && (
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                         {source.snippet}
                       </p>
                     )}
-                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">{source.answerLabel}</p>
+                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{source.answerLabel}</p>
                   </div>
-                  <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-300" />
+                  <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-300 midnight:text-slate-600" />
                 </div>
               </a>
             ))}

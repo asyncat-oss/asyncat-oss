@@ -2195,7 +2195,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   // Chat Layout
   return (
-    <div className="flex h-full min-h-0 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+    <div data-command-center className="flex h-full min-h-0 bg-white dark:bg-gray-900 midnight:bg-slate-950">
       <div className="flex min-h-0 flex-1 min-w-0 flex-col h-full transition-all duration-300">
         {TopBar}
         {isConversationLoading ? (

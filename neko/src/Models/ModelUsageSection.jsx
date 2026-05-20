@@ -30,7 +30,7 @@ const Stat = ({ icon: Icon, label, value, detail }) => (
       {label}
     </div>
     <div className="mt-2 text-xl font-semibold tabular-nums text-gray-950 dark:text-gray-100 midnight:text-slate-100">{value}</div>
-    {detail && <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">{detail}</div>}
+    {detail && <div className="mt-1 text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-400">{detail}</div>}
   </div>
 );
 
@@ -138,9 +138,9 @@ const ModelUsageSection = ({ usage, loading, error, range, onRangeChange, onRefr
         </>
       ) : (
         <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-          <BarChart3 className="mx-auto h-7 w-7 text-gray-300 dark:text-gray-600" />
-          <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">No model usage recorded yet</p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Run an agent or chat once, then this panel will start filling in.</p>
+          <BarChart3 className="mx-auto h-7 w-7 text-gray-300 dark:text-gray-600 midnight:text-gray-500" />
+          <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">No model usage recorded yet</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">Run an agent or chat once, then this panel will start filling in.</p>
         </div>
       )}
     </div>

@@ -72,11 +72,11 @@ function PreviewPanel({ initialUrl }) {
   return (
     <div className="flex h-full flex-col min-h-0">
       {/* Address bar */}
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-2 py-1.5">
         <button
           type="button"
           onClick={() => { setKey(k => k + 1); setLoading(true); setBlocked(false); }}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
           title="Reload"
         >
           <RotateCcw className="h-3 w-3" />
@@ -88,7 +88,7 @@ function PreviewPanel({ initialUrl }) {
           <input
             value={inputUrl}
             onChange={(e) => setInputUrl(e.target.value)}
-            className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-mono text-gray-700 outline-none transition-colors focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+            className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-mono text-gray-700 outline-none transition-colors focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200 midnight:focus:border-indigo-500 midnight:focus:ring-indigo-500/30"
             placeholder="http://localhost:3000"
             spellCheck={false}
           />
@@ -98,7 +98,7 @@ function PreviewPanel({ initialUrl }) {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
             title="Open in browser"
           >
             <ExternalLink className="h-3 w-3" />
@@ -107,7 +107,7 @@ function PreviewPanel({ initialUrl }) {
       </div>
 
       {/* Frame */}
-      <div className="relative min-h-0 flex-1 bg-white dark:bg-gray-950">
+      <div className="relative min-h-0 flex-1 bg-white dark:bg-gray-950 midnight:bg-slate-950">
         {!url ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center px-6">
@@ -121,23 +121,23 @@ function PreviewPanel({ initialUrl }) {
         ) : (
           <>
             {loading && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-gray-950/80">
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-gray-950/80 midnight:bg-slate-950/80">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
               </div>
             )}
             {blocked && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-gray-950 px-6">
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-gray-950 midnight:bg-slate-950 px-6">
                 <div className="text-center">
                   <AlertTriangle className="mx-auto mb-3 h-7 w-7 text-amber-400" />
-                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Can't embed this page</p>
-                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed">
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">Can't embed this page</p>
+                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 leading-relaxed">
                     The server set headers that prevent embedding (X-Frame-Options). Open it in your browser instead.
                   </p>
                   <a
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-800"
                   >
                     <ExternalLink className="h-3 w-3" />
                     Open in browser
@@ -199,18 +199,18 @@ function ChatNavPanel({ items = [] }) {
           key={item.domId}
           type="button"
           onClick={() => document.getElementById(item.domId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          className="w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-gray-100 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900/50"
+          className="w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-gray-100 dark:hover:bg-slate-800 midnight:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900/50 midnight:focus:ring-indigo-900/50"
         >
           <div className="flex items-start gap-2">
-            <span className="mt-0.5 text-[10px] font-semibold text-gray-400 dark:text-slate-500 tabular-nums w-4 shrink-0">{i + 1}</span>
+            <span className="mt-0.5 text-[10px] font-semibold text-gray-400 dark:text-slate-500 midnight:text-slate-500 tabular-nums w-4 shrink-0">{i + 1}</span>
             <div className="min-w-0 flex-1">
               {item.goal ? (
-                <p className="text-xs font-medium text-gray-700 dark:text-slate-200 line-clamp-2 leading-snug">{item.goal}</p>
+                <p className="text-xs font-medium text-gray-700 dark:text-slate-200 midnight:text-slate-200 line-clamp-2 leading-snug">{item.goal}</p>
               ) : (
-                <p className="text-xs font-medium text-gray-400 dark:text-slate-500 italic">Agent message</p>
+                <p className="text-xs font-medium text-gray-400 dark:text-slate-500 midnight:text-slate-500 italic">Agent message</p>
               )}
               {item.answerPreview && (
-                <p className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500 line-clamp-1">{item.answerPreview}</p>
+                <p className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500 midnight:text-slate-500 line-clamp-1">{item.answerPreview}</p>
               )}
             </div>
           </div>
@@ -229,13 +229,13 @@ function SavedMessagesPanel({ highlights = null, onOpenMessage }) {
         key={item.id}
         type="button"
         onClick={() => onOpenMessage?.(item.id)}
-        className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left transition-colors hover:border-amber-200 hover:bg-amber-50/60 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:border-amber-900/60 dark:hover:bg-amber-950/20 dark:focus:ring-amber-900/50"
+        className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left transition-colors hover:border-amber-200 hover:bg-amber-50/60 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:border-amber-900/60 dark:hover:bg-amber-950/20 dark:focus:ring-amber-900/50 midnight:border-slate-800 midnight:bg-slate-950/60 midnight:hover:border-amber-900/60 midnight:hover:bg-amber-950/20 midnight:focus:ring-amber-900/50"
       >
-        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-slate-500">
+        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-slate-500 midnight:text-slate-500">
           <BookMarked className="h-3 w-3 text-amber-500" />
           <span>{item.type === 'user' ? 'You' : 'Assistant'}</span>
         </div>
-        <p className="line-clamp-4 whitespace-pre-wrap text-xs leading-relaxed text-gray-700 dark:text-slate-200">
+        <p className="line-clamp-4 whitespace-pre-wrap text-xs leading-relaxed text-gray-700 dark:text-slate-200 midnight:text-slate-200">
           {item.content || 'Empty message'}
         </p>
       </button>
@@ -244,7 +244,7 @@ function SavedMessagesPanel({ highlights = null, onOpenMessage }) {
 
   if (!bookmarked.length) {
     return (
-      <div className="p-4 text-sm text-gray-500 dark:text-slate-400">
+      <div className="p-4 text-sm text-gray-500 dark:text-slate-400 midnight:text-slate-400">
         Bookmark messages you want to collect here. Click any bookmark to jump back to it in the chat.
       </div>
     );
@@ -253,7 +253,7 @@ function SavedMessagesPanel({ highlights = null, onOpenMessage }) {
   return (
     <div className="h-full overflow-y-auto p-3">
       <section>
-        <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-slate-300">
+        <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-slate-300 midnight:text-slate-300">
           <BookMarked className="h-3.5 w-3.5 text-amber-500" />
           Bookmarks
           <span className="text-[10px] font-normal text-gray-400">{bookmarked.length}</span>
@@ -297,28 +297,28 @@ export default function CommandCenterSidePanel({
   const Icon = meta.icon;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-[#0f1724] midnight:bg-[#0f1724]">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-[#0f1724] midnight:bg-slate-950">
       <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-slate-800 midnight:border-slate-800">
         {currentTab === 'artifact' && onBack ? (
           <button
             type="button"
             onClick={onBack}
-            className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
             title="Back"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
         ) : (
-          <Icon className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+          <Icon className="h-4 w-4 text-gray-500 dark:text-slate-400 midnight:text-slate-400" />
         )}
-        <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-slate-400">
+        <span className="flex-1 text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-slate-400 midnight:text-slate-400">
           {meta.label}
         </span>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
             title="Close panel"
           >
             <X className="h-4 w-4" />

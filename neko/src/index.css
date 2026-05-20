@@ -130,6 +130,96 @@ body {
 /* Add midnight variant */
 @custom-variant midnight (&:where(.midnight, .midnight *));
 
+/* ── Command Center midnight fallback ────────────────────────────────────── */
+/* Catches older Command Center utilities that only define dark-mode classes. */
+.midnight [data-command-center] {
+  color-scheme: dark;
+}
+
+.midnight [data-command-center] [class~="bg-white"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-white/40"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-white/50"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-white/70"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-white/80"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-white/90"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-white/95"]:not([class*="midnight:bg-"]) {
+  background-color: #020617;
+}
+
+.midnight [data-command-center] [class~="bg-gray-50"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-50/40"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-50/50"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-50/60"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-50/70"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-50/80"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-50/95"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-100"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-100/50"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-100/60"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-100/70"]:not([class*="midnight:bg-"]),
+.midnight [data-command-center] [class~="bg-gray-100/80"]:not([class*="midnight:bg-"]) {
+  background-color: #0f172a;
+}
+
+.midnight [data-command-center] [class~="hover:bg-gray-50"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-50/40"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-50/50"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-50/60"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-50/70"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-50/80"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-100"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-100/50"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-100/60"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-100/70"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-100/80"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-200"]:hover:not([class*="midnight:hover:bg-"]),
+.midnight [data-command-center] [class~="hover:bg-gray-200/70"]:hover:not([class*="midnight:hover:bg-"]) {
+  background-color: #1e293b;
+}
+
+.midnight [data-command-center] [class~="border-gray-100"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-100/50"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-100/60"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-100/70"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-100/80"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-200"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-200/50"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-200/60"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-200/70"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-200/80"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-200/90"]:not([class*="midnight:border-"]),
+.midnight [data-command-center] [class~="border-gray-300"]:not([class*="midnight:border-"]) {
+  border-color: #1e293b;
+}
+
+.midnight [data-command-center] [class~="divide-gray-100"]:not([class*="midnight:divide-"]) > :not([hidden]) ~ :not([hidden]),
+.midnight [data-command-center] [class~="divide-gray-200"]:not([class*="midnight:divide-"]) > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e293b;
+}
+
+.midnight [data-command-center] [class~="text-gray-950"]:not([class*="midnight:text-"]),
+.midnight [data-command-center] [class~="text-gray-900"]:not([class*="midnight:text-"]),
+.midnight [data-command-center] [class~="text-gray-800"]:not([class*="midnight:text-"]),
+.midnight [data-command-center] [class~="text-gray-700"]:not([class*="midnight:text-"]) {
+  color: #e2e8f0;
+}
+
+.midnight [data-command-center] [class~="text-gray-600"]:not([class*="midnight:text-"]) {
+  color: #cbd5e1;
+}
+
+.midnight [data-command-center] [class~="text-gray-500"]:not([class*="midnight:text-"]),
+.midnight [data-command-center] [class~="text-gray-400"]:not([class*="midnight:text-"]) {
+  color: #94a3b8;
+}
+
+.midnight [data-command-center] [class~="hover:text-gray-900"]:hover:not([class*="midnight:hover:text-"]),
+.midnight [data-command-center] [class~="hover:text-gray-800"]:hover:not([class*="midnight:hover:text-"]),
+.midnight [data-command-center] [class~="hover:text-gray-700"]:hover:not([class*="midnight:hover:text-"]),
+.midnight [data-command-center] [class~="hover:text-gray-600"]:hover:not([class*="midnight:hover:text-"]) {
+  color: #f8fafc;
+}
+
 /* Search highlight animation */
 .search-highlight {
   animation: pulse-highlight 2s;

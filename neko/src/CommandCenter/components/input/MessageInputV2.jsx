@@ -20,7 +20,7 @@ const ToggleSwitch = ({ checked, onChange, disabled }) => {
       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
         checked
           ? "bg-indigo-600 dark:bg-indigo-500"
-          : "bg-gray-200 dark:bg-gray-700"
+          : "bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700"
       } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
     >
       <span
@@ -205,14 +205,14 @@ function TokenBar({ usage }) {
   const totalTokens = usage.cumulativeTotalTokens || usage.totalTokens || usage.lastTotalTokens || 0;
   const pct = Math.min((contextTokens / ctx) * 100, 100);
   const color = pct >= 90 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : pct >= 70 ? 'bg-yellow-300' : 'bg-emerald-400';
-  const textColor = pct >= 90 ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500';
+  const textColor = pct >= 90 ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500 midnight:text-slate-500';
   const label = `${usage.estimated ? '~' : ''}${(contextTokens / 1000).toFixed(1)}k`;
   const tooltip = `${usage.estimated ? 'Estimated — ' : ''}${(contextTokens / 1000).toFixed(1)}k current context · ${(totalTokens / 1000).toFixed(1)}k total used · ${pct.toFixed(0)}% of ${(ctx / 1000).toFixed(0)}k context (${usage.contextWindowSource || 'unknown'})`;
 
   return (
     <span className="inline-flex items-center gap-1" title={tooltip}>
       <span className={`text-[10px] tabular-nums ${textColor}`}>{label}</span>
-      <span className="relative h-1 w-10 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+      <span className="relative h-1 w-10 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700">
         <span className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
       </span>
       {pct >= 80 && (
@@ -1305,22 +1305,22 @@ export const MessageInputV2 = ({
                     type="button"
                     onClick={() => setOpenMenu((current) => (current === "plus" ? null : "plus"))}
                     disabled={disabled}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition-colors"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-300 transition-colors"
                     title="Options"
                   >
                     <Plus className="h-5 w-5" />
                   </button>
                   {openMenu === "plus" && (
-                    <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950">
+                    <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
                       <button
                         type="button"
                         onClick={() => {
                           setOpenMenu(null);
                           filePickerRef.current?.click();
                         }}
-                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       >
-                        <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                        <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
                         <span className="flex-1 font-medium">{chatOnlyMode ? "Attach prompt files" : "Add photos & files"}</span>
                       </button>
 
@@ -1329,10 +1329,10 @@ export const MessageInputV2 = ({
                       {voiceConversationAvailable && onToggleVoiceMode && (
                         <div className="flex items-center justify-between rounded-md px-3 py-2 transition-colors">
                           <div className="flex items-center gap-3">
-                            <Headphones className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                            <Headphones className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
                             <div className="text-left">
-                              <span className="block text-xs font-medium text-gray-700 dark:text-gray-300">Voice mode</span>
-                              <span className="block text-[10px] text-gray-400 dark:text-gray-500">
+                              <span className="block text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">Voice mode</span>
+                              <span className="block text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                                 {voiceConversationActive ? "Hands-free conversation active" : "Enable hands-free conversation"}
                               </span>
                             </div>
@@ -1346,12 +1346,12 @@ export const MessageInputV2 = ({
                       )}
 
                       {(supportsReasoningControl || onEnabledIntegrationToolsChange) && (
-                        <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                        <div className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
                       )}
 
                       {onReasoningEffortChange && supportsReasoningControl && (
                         <div className="px-3 py-2">
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500 mb-1.5">
                             Reasoning effort
                           </span>
                           <div className="flex flex-wrap gap-1">
@@ -1362,8 +1362,8 @@ export const MessageInputV2 = ({
                                 onClick={() => onReasoningEffortChange(option.value)}
                                 className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                                   option.value === reasoningEffort
-                                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300"
-                                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+                                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 midnight:bg-indigo-900/20 midnight:text-indigo-300"
+                                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
                                 }`}
                               >
                                 {option.label}
@@ -1374,12 +1374,12 @@ export const MessageInputV2 = ({
                       )}
 
                       {onEnabledIntegrationToolsChange && allowWorkspaceAccess && supportsReasoningControl && (
-                        <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                        <div className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
                       )}
 
                       {onEnabledIntegrationToolsChange && allowWorkspaceAccess && (
                         <div className="px-3 py-2">
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500 mb-1">
                             Plugins
                           </span>
                           <div className="space-y-0.5">
@@ -1393,16 +1393,16 @@ export const MessageInputV2 = ({
                                   onClick={() => toggleIntegrationPack(pack)}
                                   className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
                                     isEnabled
-                                      ? "text-indigo-600 dark:text-indigo-400"
-                                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                                      ? "text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400"
+                                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                                   }`}
                                 >
                                   <PackIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
                                   <span className="flex-1 font-medium">{pack.label}</span>
                                   <span className={`h-3 w-3 shrink-0 rounded-full border ${
                                     isEnabled
-                                      ? "border-indigo-500 bg-indigo-500 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_2px_rgba(17,24,39,0.95)]"
-                                      : "border-gray-300 dark:border-gray-600"
+                                      ? "border-indigo-500 bg-indigo-500 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_2px_rgba(17,24,39,0.95)] midnight:shadow-[inset_0_0_0_2px_rgba(15,23,42,0.95)]"
+                                      : "border-gray-300 dark:border-gray-600 midnight:border-slate-600"
                                   }`} />
                                 </button>
                               );
@@ -1425,9 +1425,9 @@ export const MessageInputV2 = ({
                         ? "text-amber-500 dark:text-amber-400"
                         : activeBrain.isReady
                           ? activeBrain.isLocal
-                            ? "text-emerald-600 dark:text-emerald-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-emerald-700 dark:hover:text-emerald-300"
-                            : "text-indigo-600 dark:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-indigo-700 dark:hover:text-indigo-300"
-                          : "text-gray-400 dark:text-gray-500"
+                            ? "text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 hover:text-emerald-700 dark:hover:text-emerald-300 midnight:hover:text-emerald-300"
+                            : "text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 hover:text-indigo-700 dark:hover:text-indigo-300 midnight:hover:text-indigo-300"
+                          : "text-gray-400 dark:text-gray-500 midnight:text-slate-500"
                     } disabled:cursor-not-allowed`}
                   >
                     {activeBrain.isLoadingModel || activeBrain.loading || isSwitchingModel ? (
@@ -1439,22 +1439,22 @@ export const MessageInputV2 = ({
                     <ChevronDown className="w-3 h-3 opacity-60" />
                   </button>
                   {openMenu === "model" && (
-                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
                       <div className="max-h-72 overflow-y-auto p-1">
                         {allModelOptions.length === 0 ? (
-                          <div className="px-2.5 py-4 text-center text-xs text-gray-400 dark:text-gray-500">
+                          <div className="px-2.5 py-4 text-center text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                             No models configured
                           </div>
                         ) : allModelOptions.map((item, i) => {
                           if (item.type === "section") {
                             return (
-                              <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                              <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                                 {item.label}
                               </div>
                             );
                           }
                           if (item.type === "divider") {
-                            return <div key={`d-${i}`} className="my-1 border-t border-gray-100 dark:border-gray-800" />;
+                            return <div key={`d-${i}`} className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />;
                           }
                           return (
                             <button
@@ -1464,8 +1464,8 @@ export const MessageInputV2 = ({
                               onClick={() => handleModelSelect(item.value)}
                               className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-default ${
                                 item.active
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-900/20 midnight:text-emerald-300"
+                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                               }`}
                             >
                               <span className="flex items-center gap-2">
@@ -1478,17 +1478,17 @@ export const MessageInputV2 = ({
                                 )}
                               </span>
                               {item.detail && (
-                                <span className="block truncate text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{item.detail}</span>
+                                <span className="block truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-0.5">{item.detail}</span>
                               )}
                             </button>
                           );
                         })}
                       </div>
-                      <div className="border-t border-gray-100 p-1 dark:border-gray-800">
+                      <div className="border-t border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
                         <button
                           type="button"
                           onClick={() => handleModelSelect("__manage__")}
-                          className="w-full rounded-md px-2.5 py-2 text-left text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                          className="w-full rounded-md px-2.5 py-2 text-left text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
                         >
                           Manage models →
                         </button>
@@ -1520,7 +1520,7 @@ export const MessageInputV2 = ({
                           ? "w-8 bg-violet-100 text-violet-600 ring-2 ring-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-700"
                           : voiceConversationActive
                             ? "w-8 bg-violet-50 text-violet-500 ring-1 ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-800"
-                            : "w-8 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                            : "w-8 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-300"
                     }`}
                   >
                     {isRecording ? (
@@ -1540,7 +1540,7 @@ export const MessageInputV2 = ({
                     <button
                       type="button"
                       onClick={onStop}
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-500 midnight:hover:text-slate-300 midnight:hover:bg-slate-800 transition-colors"
                       title="Stop generating"
                     >
                       <Square className="h-2.5 w-2.5 fill-current" />
@@ -1554,8 +1554,8 @@ export const MessageInputV2 = ({
                       disabled={!canSubmit}
                       className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
                         canSubmit
-                          ? "bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 active:scale-95 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                          : "bg-gray-50 text-gray-300 dark:bg-gray-800/50 dark:text-gray-600 cursor-not-allowed"
+                          ? "bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 active:scale-95 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-gray-200 midnight:bg-slate-800 midnight:hover:bg-slate-700 midnight:text-slate-400 midnight:hover:text-slate-200"
+                          : "bg-gray-50 text-gray-300 dark:bg-gray-800/50 dark:text-gray-600 midnight:bg-slate-800/50 midnight:text-slate-600 cursor-not-allowed"
                       }`}
                       title={localModelSendBlockReason || (canSubmit ? "Send" : "Type a message")}
                     >
@@ -1587,14 +1587,14 @@ export const MessageInputV2 = ({
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
                 title={`Workspace Root: ${activeWorkingContext.rootPath} | Working Folder: ${activeWorkingContext.relativePath}`}
-                className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+                className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200"
               >
                 {(() => {
                   const RootIcon = rootIcon(activeRoot?.kind);
                   return <RootIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />;
                 })()}
                 <span>{activeWorkingContext.rootLabel || "Projects"}</span>
-                <span className="text-gray-300 dark:text-gray-700">/</span>
+                <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">/</span>
                 <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
                 <span>{activeContextLabel}</span>
                 <ChevronDown className="h-3 w-3 opacity-60" />
@@ -1608,7 +1608,7 @@ export const MessageInputV2 = ({
                   type="button"
                   onClick={() => setModeMenuOpen(open => !open)}
                   disabled={disabled}
-                  className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+                  className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200"
                 >
                   {!isActionMode ? (
                     <>
@@ -1630,7 +1630,7 @@ export const MessageInputV2 = ({
                 </button>
 
                 {modeMenuOpen && (
-                  <div className="absolute left-0 bottom-full z-30 mb-2 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950">
+                  <div className="absolute left-0 bottom-full z-30 mb-2 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
                     {/* Plan */}
                     <button
                       type="button"
@@ -1640,8 +1640,8 @@ export const MessageInputV2 = ({
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
                         !isActionMode
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-900/20 midnight:text-emerald-300"
+                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
                     >
                       <ClipboardPen className="h-3.5 w-3.5 shrink-0" />
@@ -1662,8 +1662,8 @@ export const MessageInputV2 = ({
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
                         isActionMode && !autoApprove
-                          ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                          ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 midnight:bg-blue-900/20 midnight:text-blue-300"
+                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
                     >
                       <Wrench className="h-3.5 w-3.5 shrink-0" />
@@ -1685,8 +1685,8 @@ export const MessageInputV2 = ({
                         }}
                         className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
                           isActionMode && autoApprove
-                            ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-                            : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                            ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-900/20 midnight:text-amber-300"
+                            : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         }`}
                       >
                         <Zap className="h-3.5 w-3.5 shrink-0" />

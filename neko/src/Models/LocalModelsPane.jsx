@@ -204,7 +204,7 @@ const LocalModelsPane = ({
               value={quickLoadPath}
               onChange={(e) => setQuickLoadPath(e.target.value)}
               placeholder="Path to .gguf file or MLX directory..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 midnight:border-gray-800/80 midnight:bg-gray-900/50"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 midnight:border-gray-800/80 midnight:bg-gray-900/50 midnight:text-gray-100 midnight:placeholder:text-gray-500 midnight:focus:border-gray-700"
             />
           </div>
         </div>

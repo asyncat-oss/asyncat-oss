@@ -1,27 +1,22 @@
 // Theme handling utilities
 export const initializeTheme = () => {
-  // Check if theme is explicitly set in localStorage
-  if (localStorage.theme === 'dark') {
+  const stored = localStorage.theme;
+
+  if (stored === 'light') {
+    document.documentElement.classList.remove('dark', 'midnight');
+  } else if (stored === 'dark') {
     document.documentElement.classList.add('dark');
     document.documentElement.classList.remove('midnight');
-  } else if (localStorage.theme === 'light') {
-    document.documentElement.classList.remove('dark', 'midnight');
+  } else if (stored === 'midnight') {
+    document.documentElement.classList.add('midnight');
+    document.documentElement.classList.remove('dark');
   } else {
-    // Respect system preference if no theme is explicitly set
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.classList.toggle('dark', prefersDark);
-    document.documentElement.classList.remove('midnight');
-  }
-
-  if (localStorage.theme === 'midnight') {
-    localStorage.removeItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     document.documentElement.classList.toggle('dark', prefersDark);
     document.documentElement.classList.remove('midnight');
   }
 };
 
-// Set up system theme preference listener
 export const setupThemeListener = () => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const handleChange = (e) => {
@@ -30,7 +25,7 @@ export const setupThemeListener = () => {
       document.documentElement.classList.remove('midnight');
     }
   };
-  
+
   mediaQuery.addEventListener('change', handleChange);
   return () => mediaQuery.removeEventListener('change', handleChange);
 };

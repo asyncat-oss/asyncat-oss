@@ -11,18 +11,18 @@ import { agentApi } from '../CommandCenter/api';
 import ConfirmModal from '../CommandCenter/components/modals/ConfirmModal.jsx';
 
 const PERM_META = {
-  safe:      { label: 'Safe',      dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' },
-  moderate:  { label: 'Moderate',  dot: 'bg-amber-500',   badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' },
-  dangerous: { label: 'Dangerous', dot: 'bg-red-500',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' },
+  safe:      { label: 'Safe',      dot: 'bg-emerald-500 midnight:bg-emerald-600/80', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-400/75' },
+  moderate:  { label: 'Moderate',  dot: 'bg-amber-500 midnight:bg-amber-600/80',   badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-400/75' },
+  dangerous: { label: 'Dangerous', dot: 'bg-red-500 midnight:bg-red-600/80',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-400/75' },
 };
 
 const BRAIN_REGION_META = {
-  prefrontal:    { label: 'Planning',      icon: Brain,       color: 'text-violet-500', desc: 'Goal shaping and step-by-step reasoning' },
-  cerebellum:    { label: 'Workflow',      icon: BookOpen,    color: 'text-blue-500',   desc: 'Procedures, craft patterns, and repeatable execution' },
-  hippocampus:   { label: 'Recall',        icon: Cpu,         color: 'text-cyan-500',   desc: 'Context retrieval and learned project knowledge' },
-  amygdala:      { label: 'Risk Checks',   icon: ShieldAlert, color: 'text-red-500',    desc: 'Safety, permissions, and high-impact cautions' },
-  basal_ganglia: { label: 'Habits',        icon: Brain,       color: 'text-amber-500',  desc: 'Default behaviors and operating preferences' },
-  limbic:        { label: 'Tone',          icon: BookOpen,    color: 'text-pink-500',   desc: 'Style, empathy, and user-facing expression' },
+  prefrontal:    { label: 'Planning',      icon: Brain,       color: 'text-violet-500 midnight:text-violet-400/85', desc: 'Goal shaping and step-by-step reasoning' },
+  cerebellum:    { label: 'Workflow',      icon: BookOpen,    color: 'text-blue-500 midnight:text-blue-400/85',   desc: 'Procedures, craft patterns, and repeatable execution' },
+  hippocampus:   { label: 'Recall',        icon: Cpu,         color: 'text-cyan-500 midnight:text-cyan-400/85',   desc: 'Context retrieval and learned project knowledge' },
+  amygdala:      { label: 'Risk Checks',   icon: ShieldAlert, color: 'text-red-500 midnight:text-red-400/85',    desc: 'Safety, permissions, and high-impact cautions' },
+  basal_ganglia: { label: 'Habits',        icon: Brain,       color: 'text-amber-500 midnight:text-amber-400/85',  desc: 'Default behaviors and operating preferences' },
+  limbic:        { label: 'Tone',          icon: BookOpen,    color: 'text-pink-500 midnight:text-pink-400/85',   desc: 'Style, empathy, and user-facing expression' },
   unknown:       { label: 'Other',         icon: Wrench,      color: 'text-gray-400',   desc: 'Uncategorized skills' },
 };
 
@@ -36,9 +36,9 @@ const SKILL_ORIGIN_FILTERS = [
 ];
 
 const SKILL_ORIGIN_META = {
-  default: { label: 'Default', className: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
-  user: { label: 'User', className: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' },
-  auto: { label: 'Auto', className: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' },
+  default: { label: 'Default', className: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400' },
+  user: { label: 'User', className: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 midnight:bg-blue-950/30 midnight:text-blue-450/70' },
+  auto: { label: 'Auto', className: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-400/70' },
 };
 
 function formatSkillAge(isoString) {
@@ -95,12 +95,12 @@ function renderInlineMarkdown(text, keyPrefix) {
     const key = `${keyPrefix}-${parts.length}`;
     if (token.startsWith('`')) {
       parts.push(
-        <code key={key} className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[0.92em] text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+        <code key={key} className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[0.92em] text-gray-700 dark:bg-gray-800 dark:text-gray-200 midnight:bg-slate-800 midnight:text-indigo-200">
           {token.slice(1, -1)}
         </code>
       );
     } else {
-      parts.push(<strong key={key} className="font-semibold text-gray-900 dark:text-gray-100">{token.slice(2, -2)}</strong>);
+      parts.push(<strong key={key} className="font-semibold text-gray-900 dark:text-gray-100 midnight:text-white">{token.slice(2, -2)}</strong>);
     }
 
     lastIndex = match.index + token.length;
@@ -172,8 +172,8 @@ function SoulPreview({ content }) {
         if (block.type === 'heading') {
           const HeadingTag = block.depth === 1 ? 'h1' : block.depth === 2 ? 'h2' : 'h3';
           const headingClass = block.depth === 1
-            ? 'mb-5 text-xl font-semibold text-gray-950 dark:text-white'
-            : 'mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100';
+            ? 'mb-5 text-xl font-semibold text-gray-950 dark:text-white midnight:text-white'
+            : 'mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100 midnight:text-slate-200';
           return (
             <HeadingTag key={`heading-${idx}`} className={headingClass}>
               {renderInlineMarkdown(block.text, `heading-${idx}`)}
@@ -184,7 +184,7 @@ function SoulPreview({ content }) {
         if (block.type === 'numbered') {
           return (
             <div key={`numbered-${idx}`} className="my-4 flex gap-3">
-              <span className="mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              <span className="mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-300">
                 {block.number}
               </span>
               <p className="min-w-0">{renderInlineMarkdown(block.text, `numbered-${idx}`)}</p>
@@ -195,7 +195,7 @@ function SoulPreview({ content }) {
         if (block.type === 'bullet') {
           return (
             <div key={`bullet-${idx}`} className="my-2 flex gap-3">
-              <span className="mt-3 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400 dark:bg-gray-500" />
+              <span className="mt-3 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400 dark:bg-gray-500 midnight:bg-slate-500" />
               <p className="min-w-0">{renderInlineMarkdown(block.text, `bullet-${idx}`)}</p>
             </div>
           );
@@ -228,8 +228,8 @@ function MarkdownPanel({ content, emptyText = 'No description' }) {
         if (block.type === 'heading') {
           const HeadingTag = block.depth === 1 ? 'h3' : 'h4';
           const headingClass = block.depth === 1
-            ? 'pt-1 text-base font-semibold text-gray-950 dark:text-white'
-            : 'pt-3 text-xs font-semibold uppercase tracking-wide text-gray-800 dark:text-gray-200';
+            ? 'pt-1 text-base font-semibold text-gray-950 dark:text-white midnight:text-white'
+            : 'pt-3 text-xs font-semibold uppercase tracking-wide text-gray-800 dark:text-gray-200 midnight:text-slate-205';
           return (
             <HeadingTag key={`md-heading-${idx}`} className={headingClass}>
               {renderInlineMarkdown(block.text, `md-heading-${idx}`)}
@@ -240,7 +240,7 @@ function MarkdownPanel({ content, emptyText = 'No description' }) {
         if (block.type === 'numbered') {
           return (
             <div key={`md-numbered-${idx}`} className="flex gap-3">
-              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-350">
                 {block.number}
               </span>
               <p className="min-w-0">{renderInlineMarkdown(block.text, `md-numbered-${idx}`)}</p>
@@ -251,7 +251,7 @@ function MarkdownPanel({ content, emptyText = 'No description' }) {
         if (block.type === 'bullet') {
           return (
             <div key={`md-bullet-${idx}`} className="flex gap-3">
-              <span className="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400 dark:bg-gray-500" />
+              <span className="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400 dark:bg-gray-500 midnight:bg-slate-500" />
               <p className="min-w-0">{renderInlineMarkdown(block.text, `md-bullet-${idx}`)}</p>
             </div>
           );
@@ -337,13 +337,13 @@ function SkillCard({ skill, isFirst, selected, onSelect }) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{skill.name}</span>
               <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${originMeta.className}`}>{originMeta.label}</span>
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{meta.label}</span>
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">{meta.label}</span>
             </div>
             <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{skill.description || 'No description'}</p>
             {skill.tags?.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {skill.tags.slice(0, 4).map(tag => (
-                  <span key={tag} className="rounded border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-gray-800 dark:text-gray-500">{tag}</span>
+                  <span key={tag} className="rounded border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-gray-800 midnight:border-slate-800 dark:text-gray-500 midnight:text-slate-500">{tag}</span>
                 ))}
               </div>
             )}
@@ -382,7 +382,7 @@ function ToolSection({ category, catTools, selectedToolName, onSelectTool }) {
         <div className="min-w-0">
           <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{formatLabel(category)}</h2>
         </div>
-        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50">{catTools.length}</span>
+        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50 midnight:bg-slate-800/50">{catTools.length}</span>
       </div>
       <div>
         {sortedTools.map((tool, idx) => (
@@ -417,7 +417,7 @@ function SkillSection({ region, regionSkills, selectedSkillName, onSelectSkill }
           <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{meta.label}</h2>
           <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{meta.desc}</p>
         </div>
-        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50">{regionSkills.length}</span>
+        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50 midnight:bg-slate-800/50">{regionSkills.length}</span>
       </div>
       <div>
         {sortedSkills.map((skill, idx) => (
@@ -463,7 +463,7 @@ function ToolInspector({ tool }) {
           <h3 className="break-words font-mono text-base font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{tool.name}</h3>
           <div className="mt-2 flex flex-wrap gap-2">
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${perm.badge}`}>{perm.label}</span>
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">
               {formatLabel(tool.category)}
             </span>
           </div>
@@ -531,9 +531,9 @@ function SkillInspector({ skill, onRequestDelete, isDeleting }) {
           )}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{meta.label}</span>
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">{meta.label}</span>
           {skill.tags?.map(tag => (
-            <span key={tag} className="rounded border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-gray-800 dark:text-gray-500">{tag}</span>
+            <span key={tag} className="rounded border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-gray-800 midnight:border-slate-800 dark:text-gray-500 midnight:text-slate-500">{tag}</span>
           ))}
         </div>
       </div>
@@ -633,16 +633,16 @@ function NewSkillModal({ open, onClose, onCreated }) {
     }
   }
 
-  const inputClass = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800';
+  const inputClass = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-200';
   const labelClass = 'mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
+        className="w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800 midnight:border-slate-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">New Skill</h2>
           <button onClick={onClose} className="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
             <X className="h-4 w-4" />
@@ -692,7 +692,7 @@ function NewSkillModal({ open, onClose, onCreated }) {
           )}
 
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
+            <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-800">
               Cancel
             </button>
             <button
@@ -1051,30 +1051,30 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">What this shows</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
                     Tools are the actions the agent can request while working, from reading files to running shell commands and using workspace services.
                   </p>
                 </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Permission levels</p>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Permission levels</p>
                   <div className="mt-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Safe</span><span className="font-mono text-gray-800 dark:text-gray-200">{safeCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Moderate</span><span className="font-mono text-gray-800 dark:text-gray-200">{modCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500" />Dangerous</span><span className="font-mono text-gray-800 dark:text-gray-200">{dangerCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Safe</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{safeCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Moderate</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{modCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500" />Dangerous</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{dangerCount}</span></div>
                   </div>
                 </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Catalog</p>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Catalog</p>
                   <div className="mt-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Visible tools</span><span className="font-mono text-gray-800 dark:text-gray-200">{filteredTools.length}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200">{toolCategoryCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Visible tools</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{filteredTools.length}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{toolCategoryCount}</span></div>
                   </div>
                 </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
                   <button
                     onClick={() => setToolsSidebarOpen(false)}
-                    className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-400 midnight:hover:text-slate-200"
                   >
                     <PanelLeftClose className="h-3.5 w-3.5" />
                     Close sidebar
@@ -1093,7 +1093,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                         <button
                           onClick={() => setToolsSidebarOpen(true)}
                           title="Show sidebar"
-                          className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                          className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-400 midnight:hover:text-slate-200"
                         >
                           <PanelLeft className="h-4 w-4" />
                         </button>
@@ -1130,7 +1130,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     </div>
                   )}
                   {!loadingTools && !errorTools && Object.keys(toolsByCategory).length === 0 && (
-                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                     <Search className="h-6 w-6" />
                     <p className="text-sm">{toolSearch ? 'No tools match your search' : 'No tools available'}</p>
                     </div>
@@ -1159,31 +1159,31 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:overflow-y-auto lg:border-b-0 lg:border-r">
               <div className="space-y-5">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this shows</p>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">What this shows</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
                     Skills are reusable instruction packs the agent can load automatically when a task matches their purpose.
                   </p>
                 </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Catalog</p>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Catalog</p>
                   <div className="mt-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Visible skills</span><span className="font-mono text-gray-800 dark:text-gray-200">{filteredSkills.length}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200">{skillRegionCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Default</span><span className="font-mono text-gray-800 dark:text-gray-200">{defaultSkillCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">User-created</span><span className="font-mono text-gray-800 dark:text-gray-200">{userSkillCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400">Auto-created</span><span className="font-mono text-gray-800 dark:text-gray-200">{autoSkillCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Visible skills</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{filteredSkills.length}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{skillRegionCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Default</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{defaultSkillCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">User-created</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{userSkillCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Auto-created</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{autoSkillCount}</span></div>
                   </div>
                 </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">How they run</p>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">How they run</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
                     The agent chooses relevant skills in context. Opening a row shows when it applies and what process it adds.
                   </p>
                 </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
                   <button
                     onClick={() => setSkillsSidebarOpen(false)}
-                    className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-400 midnight:hover:text-slate-200"
                   >
                     <PanelLeftClose className="h-3.5 w-3.5" />
                     Close sidebar
@@ -1202,7 +1202,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                         <button
                           onClick={() => setSkillsSidebarOpen(true)}
                           title="Show sidebar"
-                          className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                          className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-400 midnight:hover:text-slate-200"
                         >
                           <PanelLeft className="h-4 w-4" />
                         </button>
@@ -1228,7 +1228,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                           onClick={handleReloadSkills}
                           disabled={reloadingSkills || loadingSkills}
                           title="Reload skills from disk"
-                          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         >
                           {reloadSkillsSuccess
                             ? <Check className="h-3.5 w-3.5 text-emerald-500" />
@@ -1238,7 +1238,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                         <button
                           onClick={() => setNewSkillOpen(true)}
                           title="Create a new skill"
-                          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         >
                           <Plus className="h-3.5 w-3.5" />
                           New
@@ -1278,7 +1278,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     </div>
                   )}
                   {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length === 0 && (
-                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                     <Search className="h-6 w-6" />
                     <p className="text-sm">{skillSearch || skillOriginFilter !== 'all' ? 'No skills match your filters' : 'No skills available'}</p>
                     </div>
@@ -1312,7 +1312,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     <button
                       onClick={() => setSoulSidebarOpen(true)}
                       title="Show sidebar"
-                      className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                      className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-400 midnight:hover:text-slate-200"
                     >
                       <PanelLeft className="h-4 w-4" />
                     </button>
@@ -1320,8 +1320,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                   <span className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">default.md</span>
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                     editingSoul
-                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
-                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-400/70'
+                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-400/70'
                   }`}>
                     {editingSoul ? (soulDirty ? 'Editing' : 'No changes') : 'Active'}
                   </span>
@@ -1341,7 +1341,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                 {!editingSoul && !loadingSoul && !errorSoul && (
                   <button
                     onClick={() => setEditingSoul(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-200 midnight:hover:bg-slate-800"
                   >
                     <Edit2 className="h-3.5 w-3.5" />
                     Edit
@@ -1352,7 +1352,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     <button
                       onClick={cancelEdit}
                       disabled={savingSoul}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-800"
                     >
                       <X className="h-3.5 w-3.5" />
                       Cancel
@@ -1396,49 +1396,49 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                 <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:border-b-0 lg:border-r">
                   <div className="space-y-5">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">What this controls</p>
-                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">What this controls</p>
+                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
                         The soul is the default instruction file for the local agent: its identity, working style, and rules before a task starts.
                       </p>
                     </div>
 
-                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">How to edit</p>
-                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">How to edit</p>
+                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
                         Preview renders the Markdown for reading. Edit shows the raw file so headings, lists, and front matter stay exactly as saved.
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Document</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Document</p>
                       <div className="mt-2 space-y-2 text-xs">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-gray-500 dark:text-gray-400">Lines</span>
-                          <span className="font-mono text-gray-800 dark:text-gray-200">{soulStats.lines}</span>
+                          <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Lines</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{soulStats.lines}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-gray-500 dark:text-gray-400">Words</span>
-                          <span className="font-mono text-gray-800 dark:text-gray-200">{soulStats.words}</span>
+                          <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Words</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{soulStats.words}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-gray-500 dark:text-gray-400">Characters</span>
-                          <span className="font-mono text-gray-800 dark:text-gray-200">{soulStats.chars}</span>
+                          <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Characters</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{soulStats.chars}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">State</p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">State</p>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 midnight:text-slate-300">
                         <span className={`h-1.5 w-1.5 rounded-full ${soulDirty ? 'bg-amber-500' : 'bg-emerald-500'}`} />
                         {editingSoul ? (soulDirty ? 'Unsaved changes' : 'Ready to edit') : 'Loaded from profile'}
                       </div>
                     </div>
                   </div>
-                  <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
                     <button
                       onClick={() => setSoulSidebarOpen(false)}
-                      className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-400 midnight:hover:text-slate-200"
                     >
                       <PanelLeftClose className="h-3.5 w-3.5" />
                       Close sidebar
@@ -1484,7 +1484,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
         {memoryTabActive && (
           <div className="flex flex-col h-full">
             {/* Search + filter bar */}
-            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 flex gap-2 items-center">
+            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex gap-2 items-center">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -1492,13 +1492,13 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                   value={memorySearch}
                   onChange={e => setMemorySearch(e.target.value)}
                   placeholder="Search memories…"
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600"
+                  className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg text-gray-700 dark:text-gray-200 midnight:text-slate-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600"
                 />
               </div>
               <select
                 value={memoryKind}
                 onChange={e => setMemoryKind(e.target.value)}
-                className="text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-2 text-gray-600 dark:text-gray-300 focus:outline-none"
+                className="text-xs bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg px-2 py-2 text-gray-600 dark:text-gray-300 midnight:text-slate-300 focus:outline-none"
               >
                 <option value="all">All types</option>
                 <option value="user">user</option>
@@ -1514,7 +1514,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             </div>
 
             {/* Memory list */}
-            <div className="flex-1 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-800/60">
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-800/60 midnight:divide-slate-800/60">
               {loadingMemory && (
                 <div className="flex items-center gap-2 py-16 justify-center text-gray-400">
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -1546,14 +1546,14 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
 }
 
 const KIND_COLORS = {
-  user:       'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
-  feedback:   'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
-  project:    'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
-  reference:  'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
-  fact:       'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
-  preference: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
-  context:    'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
-  task_state: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300',
+  user:       'bg-blue-100 dark:bg-blue-900/30 midnight:bg-blue-950/30 text-blue-700 dark:text-blue-300 midnight:text-blue-300',
+  feedback:   'bg-amber-100 dark:bg-amber-900/30 midnight:bg-amber-950/30 text-amber-700 dark:text-amber-300 midnight:text-amber-300',
+  project:    'bg-indigo-100 dark:bg-indigo-900/30 midnight:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 midnight:text-indigo-300',
+  reference:  'bg-emerald-100 dark:bg-emerald-900/30 midnight:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 midnight:text-emerald-300',
+  fact:       'bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 text-gray-600 dark:text-gray-400 midnight:text-slate-400',
+  preference: 'bg-purple-100 dark:bg-purple-900/30 midnight:bg-purple-950/30 text-purple-700 dark:text-purple-300 midnight:text-purple-300',
+  context:    'bg-teal-100 dark:bg-teal-900/30 midnight:bg-teal-950/30 text-teal-700 dark:text-teal-300 midnight:text-teal-300',
+  task_state: 'bg-rose-100 dark:bg-rose-900/30 midnight:bg-rose-950/30 text-rose-700 dark:text-rose-300 midnight:text-rose-300',
 };
 
 function MemoryRow({ mem, onDelete, deleting }) {
@@ -1564,7 +1564,7 @@ function MemoryRow({ mem, onDelete, deleting }) {
   const importanceDots = Math.round(importance * 5);
 
   return (
-    <div className="px-6 py-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group">
+    <div className="px-6 py-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 midnight:hover:bg-slate-800/30 transition-colors group">
       <div className="flex items-start gap-3">
         <button
           onClick={() => setExpanded(v => !v)}
@@ -1582,7 +1582,7 @@ function MemoryRow({ mem, onDelete, deleting }) {
               {mem.kind || mem.memory_type || 'fact'}
             </span>
             {tags.map(tag => (
-              <span key={tag} className="text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500">{tag}</span>
+              <span key={tag} className="text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 text-gray-500 dark:text-gray-500 midnight:text-slate-500">{tag}</span>
             ))}
             <span className="text-[10px] text-gray-300 dark:text-gray-700 ml-auto flex items-center gap-0.5" title={`Importance: ${importance.toFixed(1)}`}>
               {Array.from({ length: 5 }).map((_, i) => (
@@ -1605,7 +1605,7 @@ function MemoryRow({ mem, onDelete, deleting }) {
         <button
           onClick={() => onDelete(mem.key)}
           disabled={deleting}
-          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 midnight:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 disabled:opacity-50"
           title="Delete memory"
         >
           {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}

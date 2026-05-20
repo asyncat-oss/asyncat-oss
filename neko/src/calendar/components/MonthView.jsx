@@ -655,7 +655,7 @@ const MonthView = ({
 						{DAYS_OF_WEEK.map((day) => (
 							<div
 								key={day}
-								className="text-center text-base font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-500"
+								className="text-center text-base font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400"
 							>
 								{day}
 							</div>
@@ -723,7 +723,7 @@ const MonthView = ({
 										{/* Show "more" link if there are more than 2 items */}
 										{dateItems.length > 2 && (
 											<div
-												className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500 pl-1 font-medium cursor-pointer hover:underline"
+												className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 pl-1 font-medium cursor-pointer hover:underline"
 												onClick={(e) => {
 													e.stopPropagation();
 
@@ -814,7 +814,7 @@ const MonthView = ({
 										{/* Show "more" link if there are more than 2 items */}
 										{dateItems.length > 2 && (
 											<div
-												className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500 pl-1 font-medium cursor-pointer hover:underline"
+												className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 pl-1 font-medium cursor-pointer hover:underline"
 												onClick={(e) => {
 													e.stopPropagation();
 
@@ -890,7 +890,7 @@ const MonthView = ({
 										{/* Show "more" link if there are more than 2 items */}
 										{dateItems.length > 2 && (
 											<div
-												className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500 pl-1 font-medium cursor-pointer hover:underline"
+												className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 pl-1 font-medium cursor-pointer hover:underline"
 												onClick={(e) => {
 													e.stopPropagation();
 

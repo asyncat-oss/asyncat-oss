@@ -132,7 +132,7 @@ const TrashPage = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-transparent">
+    <div data-command-center className="h-full flex flex-col bg-transparent">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-gray-100 px-6 py-4 dark:border-gray-800 midnight:border-slate-800">
         <div className="flex items-center justify-between">

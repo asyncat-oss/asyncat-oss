@@ -922,19 +922,21 @@ const WeekView = ({
 									className={`py-1.5 text-center ${
 										index === 0
 											? ""
-											: "border-l border-gray-200 dark:border-gray-600 midnight:border-gray-700"
+											: "border-l border-gray-200 dark:border-gray-600 midnight:border-gray-800"
 									}`}
 								>
 									<div
-										className={`text-base font-medium text-gray-500 dark:text-grey-400 midnight:text-grey-400 ${
-											isCurrentDay ? "text-blue-600" : ""
+										className={`text-base font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 ${
+											isCurrentDay ? "text-blue-600 midnight:text-blue-400" : ""
 										}`}
 									>
 										{day}
 									</div>
 									<div
-										className={`text-lg text-gray-600 font-semibold w-8 h-8 rounded-full mx-auto flex items-center justify-center ${
-											isCurrentDay ? "bg-blue-100" : ""
+										className={`text-lg font-semibold w-8 h-8 rounded-full mx-auto flex items-center justify-center ${
+											isCurrentDay
+												? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-blue-950 midnight:text-blue-400"
+												: "text-gray-600 dark:text-gray-300 midnight:text-gray-300"
 										}`}
 									>
 										{date.getDate()}
@@ -966,7 +968,7 @@ const WeekView = ({
 									className={`px-1 py-1 min-h-10 space-y-1 ${
 										index === 0
 											? ""
-											: "border-l border-gray-200 dark:border-gray-600 midnight:border-gray-700"
+											: "border-l border-gray-200 dark:border-gray-600 midnight:border-gray-800"
 									}`}
 								>
 									{allDayEvents.slice(0, 1).map((event) => (
@@ -1000,7 +1002,7 @@ const WeekView = ({
 
 									{allDayEvents.length > 1 && (
 										<div
-											className="text-xs text-gray-500 pl-1 cursor-pointer hover:underline"
+											className="text-xs text-gray-500 midnight:text-gray-400 pl-1 cursor-pointer hover:underline"
 											onClick={(e) => {
 												e.stopPropagation();
 												const rect = e.currentTarget.getBoundingClientRect();
@@ -1028,7 +1030,7 @@ const WeekView = ({
 				>
 					<div className="grid grid-cols-[5rem_repeat(7,minmax(0,1fr))]">
 						{/* Time Labels Column - Enhanced visibility */}
-						<div className="divide-y">
+						<div className="divide-y divide-gray-200 dark:divide-gray-700 midnight:divide-gray-800">
 							{timeSlots.map((time, hourIndex) => (
 								<div
 									key={time}
@@ -1046,7 +1048,7 @@ const WeekView = ({
                     ${
 						time === "00:00"
 							? "text-red-600 dark:text-red-400 midnight:text-red-400"
-							: "text-gray-500"
+							: "text-gray-500 dark:text-gray-400 midnight:text-gray-500"
 					}
                   `}
 								>
@@ -1077,7 +1079,7 @@ const WeekView = ({
 							return (
 								<div
 									key={day}
-									className={`relative divide-y divide-gray-200 dark:divide-gray-700 midnight:divide-gray-800 border-l border-gray-200 dark:border-gray-600 midnight:border-gray-700`}
+									className={`relative divide-y divide-gray-200 dark:divide-gray-700 midnight:divide-gray-800 border-l border-gray-200 dark:border-gray-600 midnight:border-gray-800`}
 								>
 									{isCurrentDay && (
 										<div
@@ -1143,8 +1145,8 @@ const WeekView = ({
 												</div>
 												{/* Add hover effect with plus icon - Ensure it's on top and clickable */}
 												<div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-200 z-15 pointer-events-none">
-													<div className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-800/90 rounded-full p-1.5 shadow-md">
-														<Plus className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+													<div className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 rounded-full p-1.5 shadow-md">
+														<Plus className="w-5 h-5 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
 													</div>
 												</div>
 											</div>

@@ -142,15 +142,15 @@ const UpdateSection = () => {
 
         {localInfo ? (
           <div className="grid grid-cols-3 gap-3">
-            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/40">
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Version</p>
               <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">v{localInfo.version}</p>
             </div>
-            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/40">
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Commit</p>
               <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">{localInfo.currentHash}</p>
             </div>
-            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/40">
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
               <div className="flex items-center gap-1 mb-1">
                 <GitBranch size={11} className="text-gray-400 dark:text-gray-500" />
                 <p className="text-xs text-gray-400 dark:text-gray-500">Branch</p>
@@ -161,14 +161,14 @@ const UpdateSection = () => {
         ) : (
           <div className="grid grid-cols-3 gap-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
+              <div key={i} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 animate-pulse" />
             ))}
           </div>
         )}
       </div>
 
       {/* Check for updates */}
-      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
+      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
         <div className="flex items-center gap-2 mb-4">
           <RefreshCw size={18} className="text-gray-500 dark:text-gray-400" />
           <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
@@ -185,8 +185,8 @@ const UpdateSection = () => {
             disabled={checking || updating}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
               bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700
-              midnight:bg-gray-800 midnight:hover:bg-gray-700
-              text-gray-700 dark:text-gray-200 midnight:text-gray-200
+              midnight:bg-slate-800 midnight:hover:bg-slate-700
+              text-gray-700 dark:text-gray-200 midnight:text-slate-200
               disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {checking
@@ -222,7 +222,7 @@ const UpdateSection = () => {
 
       {/* Apply update */}
       {hasPending && (
-        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
+        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
           <div className="flex items-center gap-2 mb-4">
             <ArrowUpCircle size={18} className="text-indigo-500 dark:text-indigo-400" />
             <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
@@ -252,7 +252,7 @@ const UpdateSection = () => {
 
       {/* Live log output */}
       {logs.length > 0 && (
-        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
+        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
           <div className="flex items-center gap-2 mb-3">
             <Terminal size={16} className="text-gray-500 dark:text-gray-400" />
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
@@ -341,7 +341,7 @@ const UpdateSection = () => {
         </div>
       )}
 
-      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
+      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
         <div className="flex items-center gap-2 mb-4">
           <Trash2 size={18} className="text-red-500 dark:text-red-400" />
           <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">

@@ -271,10 +271,10 @@ const CapabilityProvidersSection = ({ capability }) => {
                 title={!isImplemented ? 'Not yet available — coming soon' : undefined}
                 className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors disabled:opacity-40 ${
                   !isImplemented
-                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed'
+                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 midnight:bg-gray-800 midnight:text-gray-500 cursor-not-allowed'
                     : isActive
-                    ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
-                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200'
+                    ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
+                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200'
                 }`}
               >
                 {saving === `active:${provider.id}` ? <Loader2 className="h-4 w-4 animate-spin" />

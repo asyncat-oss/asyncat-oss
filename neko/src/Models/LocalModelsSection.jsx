@@ -126,7 +126,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
   return (
     <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 truncate">
+        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-400 truncate">
           {repoId}
         </span>
         <button
@@ -144,7 +144,7 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
         )}
         {error && <p className="text-xs text-red-500 px-3 py-2">{error}</p>}
         {!loading && !error && files.length === 0 && (
-          <p className="text-xs text-gray-400 px-3 py-2">
+          <p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500 px-3 py-2">
             No GGUF files found in this repo.
           </p>
         )}

@@ -154,15 +154,15 @@ const GeneratedPreview = ({ result }) => (
       <div className="space-y-2">
         <img src={result.image} alt="Generated result" className="aspect-square w-full rounded-xl object-contain bg-white dark:bg-gray-900" />
         <div className="flex flex-wrap gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900">{result.width}x{result.height}</span>
-          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900">seed {result.seed}</span>
-          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900">{result.steps} steps</span>
+          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">{result.width}x{result.height}</span>
+          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">seed {result.seed}</span>
+          <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">{result.steps} steps</span>
         </div>
       </div>
     ) : (
       <div className="flex h-full min-h-72 flex-col items-center justify-center text-center">
-        <Image className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-700" />
-        <p className="max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400">
+        <Image className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-700 midnight:text-gray-600" />
+        <p className="max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-gray-400">
           Generated images appear here for quick runtime testing.
         </p>
       </div>
@@ -579,18 +579,18 @@ const ImageGenerationRuntimePanel = () => {
 
         <div className="min-h-80 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/60">
           {result?.image ? (
-            <div className="space-y-2">
-              <img src={result.image} alt="Generated result" className="aspect-square w-full rounded-xl object-contain bg-white dark:bg-gray-900" />
-              <div className="flex flex-wrap gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-                <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900">{result.width}x{result.height}</span>
-                <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900">seed {result.seed}</span>
-                <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900">{result.steps} steps</span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-full min-h-72 flex-col items-center justify-center text-center">
-              <Image className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-700" />
-              <p className="max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400">
+<div className="space-y-2">
+ <img src={result.image} alt="Generated result" className="aspect-square w-full rounded-xl object-contain bg-white dark:bg-gray-900 midnight:bg-slate-900" />
+               <div className="flex flex-wrap gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+                 <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">{result.width}x{result.height}</span>
+                 <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">seed {result.seed}</span>
+                 <span className="rounded bg-white px-1.5 py-0.5 dark:bg-gray-900 midnight:bg-gray-900">{result.steps} steps</span>
+               </div>
+             </div>
+           ) : (
+             <div className="flex h-full min-h-72 flex-col items-center justify-center text-center">
+               <Image className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-700 midnight:text-gray-600" />
+               <p className="max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-gray-400">
                 Generated images appear here for quick runtime testing.
               </p>
             </div>
@@ -626,10 +626,10 @@ const VisualColumn = ({ type, models, loading, highlightedItem, onDelete, onRelo
         </div>
       ) : models.length === 0 ? (
         <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 px-4 py-8 text-center dark:border-gray-800 dark:bg-gray-900/50">
-          <Icon className="mb-2 h-6 w-6 text-gray-300 dark:text-gray-600" />
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <Icon className="mb-2 h-6 w-6 text-gray-300 dark:text-gray-600 midnight:text-gray-500" />
+          <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400">
             {meta.empty}<br />
-            <span className="text-gray-400 dark:text-gray-500">{meta.hint}</span>
+            <span className="text-gray-400 dark:text-gray-500 midnight:text-gray-500">{meta.hint}</span>
           </p>
         </div>
       ) : (
@@ -752,22 +752,22 @@ const VisualModelsSection = ({ mode = 'all', highlightedItem = null, onModelsCha
         <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
           <Info className="h-3 w-3 text-gray-400 dark:text-gray-500" />
         </div>
-        <div className="space-y-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+        <div className="space-y-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400 midnight:text-gray-400">
           {showVision && (
             <div>
-              <span className="font-medium text-gray-700 dark:text-gray-200">Vision:</span>{' '}
+              <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Vision:</span>{' '}
               Multimodal setups usually need a language model plus a matching projector or vision encoder. Keep those assets separate from image generation checkpoints.
             </div>
           )}
           {showImage && (
             <div>
-              <span className="font-medium text-gray-700 dark:text-gray-200">Image generation:</span>{' '}
+              <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Image generation:</span>{' '}
               Use the Simple engine for stable-diffusion.cpp style one-model generation, or ComfyUI for advanced graph workflows.
             </div>
           )}
           <div className="flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-gray-400" />
-            Search above for terms like <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">mmproj</code>, <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">llava</code>, <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">flux gguf</code>, or <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800">sdxl safetensors</code>.
+            <Sparkles className="h-3.5 w-3.5 text-gray-400 midnight:text-gray-400" />
+            Search above for terms like <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">mmproj</code>, <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">llava</code>, <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">flux gguf</code>, or <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">sdxl safetensors</code>.
           </div>
         </div>
       </div>

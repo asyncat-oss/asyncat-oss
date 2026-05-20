@@ -23,31 +23,31 @@ import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 const TARGETS = {
   model: {
     label: 'Model',
-    color: 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200',
+    color: 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200',
     subDir: '',
     extensions: ['.gguf', '.bin'],
   },
   whisper: {
     label: 'STT',
-    color: 'bg-violet-50 text-violet-600 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:hover:bg-violet-900/50',
+    color: 'bg-violet-50 text-violet-600 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:hover:bg-violet-900/50 midnight:bg-violet-900/30 midnight:text-violet-300 midnight:hover:bg-violet-900/50',
     subDir: 'audio/whisper',
     extensions: ['.bin', '.gguf'],
   },
   tts: {
     label: 'TTS',
-    color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50',
+    color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 midnight:bg-emerald-900/30 midnight:text-emerald-300 midnight:hover:bg-emerald-900/50',
     subDir: 'audio/tts',
     extensions: ['.onnx', '.onnx.json'],
   },
   vision: {
     label: 'Vision',
-    color: 'bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50',
+    color: 'bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50 midnight:bg-sky-900/30 midnight:text-sky-300 midnight:hover:bg-sky-900/50',
     subDir: 'vision',
     extensions: ['.gguf', '.bin', '.mmproj', '.safetensors', '.json'],
   },
   image: {
     label: 'Image',
-    color: 'bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 dark:hover:bg-fuchsia-900/50',
+    color: 'bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 dark:hover:bg-fuchsia-900/50 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300 midnight:hover:bg-fuchsia-900/50',
     subDir: 'image',
     extensions: ['.safetensors', '.ckpt', '.gguf', '.onnx', '.pt', '.pth', '.bin', '.json'],
   },
@@ -291,7 +291,7 @@ const HighlightText = ({ text, query }) => {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="rounded bg-amber-100 px-0.5 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+      <mark className="rounded bg-amber-100 px-0.5 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 midnight:bg-amber-900/50 midnight:text-amber-200">
         {text.slice(idx, idx + q.length)}
       </mark>
       {text.slice(idx + q.length)}
@@ -304,42 +304,42 @@ const TYPE_META = {
   model: {
     label: 'Model',
     icon: Cpu,
-    iconBg: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-    activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
-    activeBadge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    iconBg: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400',
+    activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
+    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300',
+    activeBadge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
   },
   whisper: {
     label: 'STT',
     icon: Mic,
-    iconBg: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400',
-    badge: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400',
+    iconBg: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 midnight:bg-violet-900/30 midnight:text-violet-300',
+    badge: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 midnight:bg-violet-900/30 midnight:text-violet-300',
   },
   tts: {
     label: 'TTS',
     icon: Volume2,
-    iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
-    badge: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+    iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
+    badge: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
   },
   vision: {
     label: 'Vision',
     icon: Eye,
-    iconBg: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400',
-    badge: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400',
+    iconBg: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400 midnight:bg-sky-900/30 midnight:text-sky-300',
+    badge: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400 midnight:bg-sky-900/30 midnight:text-sky-300',
   },
   image: {
     label: 'Image',
     icon: ImageIcon,
-    iconBg: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400',
-    badge: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400',
+    iconBg: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300',
+    badge: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300',
   },
   provider: {
     label: 'Provider',
     icon: Cloud,
-    iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-    activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-    activeBadge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-blue-900/30 midnight:text-blue-300',
+    activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
+    badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-blue-900/30 midnight:text-blue-300',
+    activeBadge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
   },
 };
 
@@ -671,8 +671,8 @@ const ModelDownloadHub = ({
                 onClick={() => setActiveFilter(isActive ? 'all' : chip.key)}
                 className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
                   isActive
-                    ? 'bg-gray-900 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900'
-                    : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200'
+                    ? 'bg-gray-900 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900'
+                    : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 midnight:border-gray-700 midnight:bg-gray-900 midnight:text-gray-400 midnight:hover:bg-gray-800 midnight:hover:text-gray-200'
                 }`}
               >
                 {chip.label}

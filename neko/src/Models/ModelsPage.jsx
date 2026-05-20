@@ -28,8 +28,8 @@ const StatusDot = ({ status }) => {
     ready:   'bg-green-500',
     loading: 'bg-amber-400 animate-pulse',
     error:   'bg-red-500',
-    idle:    'bg-gray-300 dark:bg-gray-600',
-  }[status] ?? 'bg-gray-300 dark:bg-gray-600';
+    idle:    'bg-gray-300 dark:bg-gray-600 midnight:bg-gray-600',
+  }[status] ?? 'bg-gray-300 dark:bg-gray-600 midnight:bg-gray-600';
   return <span className={`inline-block h-2 w-2 rounded-full flex-shrink-0 ${cls}`} />;
 };
 
@@ -63,7 +63,7 @@ const CollapsibleSection = ({
       <div className="flex items-center gap-3 flex-shrink-0">
         {actions}
         {badge}
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 midnight:text-gray-500 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
       </div>
     </button>
     {expanded && (
@@ -86,7 +86,7 @@ const SpeechSubtitle = ({ status, model, loaded, idleLabel }) => {
 const SpeechCompactBadge = ({ status, label }) => (
   <span className="flex items-center gap-1.5">
     <StatusDot status={status} />
-    <span className="text-[10px] text-gray-500 dark:text-gray-400">{label}</span>
+    <span className="text-[10px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">{label}</span>
   </span>
 );
 

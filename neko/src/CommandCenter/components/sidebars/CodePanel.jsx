@@ -24,9 +24,9 @@ const EXT_COLOR = {
 };
 
 function FileIcon({ name, isDir }) {
-  if (isDir) return <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400 dark:text-amber-300" />;
+  if (isDir) return <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400 dark:text-amber-300 midnight:text-amber-300" />;
   const ext = name?.split('.').pop()?.toLowerCase();
-  const color = EXT_COLOR[ext] || 'text-gray-300 dark:text-slate-600';
+  const color = EXT_COLOR[ext] || 'text-gray-300 dark:text-slate-600 midnight:text-slate-600';
   return <FileCode className={`h-3.5 w-3.5 shrink-0 ${color}`} />;
 }
 
@@ -74,19 +74,19 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950 midnight:bg-slate-950">
       {/* Breadcrumb */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md bg-gray-50 px-2 py-1 text-[11px] text-gray-500 dark:bg-slate-800/60 dark:text-slate-400">
-          <button type="button" onClick={() => setEntryPath('.')} className="shrink-0 hover:text-gray-900 dark:hover:text-slate-100">
+      <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950 midnight:border-slate-800 midnight:bg-slate-950">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md bg-gray-50 px-2 py-1 text-[11px] text-gray-500 dark:bg-slate-800/60 dark:text-slate-400 midnight:bg-slate-900/70 midnight:text-slate-400">
+          <button type="button" onClick={() => setEntryPath('.')} className="shrink-0 hover:text-gray-900 dark:hover:text-slate-100 midnight:hover:text-slate-100">
             workspace
           </button>
           {parts.map((part, index) => {
             const nextPath = parts.slice(0, index + 1).join('/');
             return (
               <span key={nextPath} className="flex min-w-0 items-center gap-1">
-                <ChevronRight className="h-3 w-3 shrink-0 text-gray-300 dark:text-slate-600" />
-                <button type="button" onClick={() => setEntryPath(nextPath)} className="truncate hover:text-gray-900 dark:hover:text-slate-100">
+                <ChevronRight className="h-3 w-3 shrink-0 text-gray-300 dark:text-slate-600 midnight:text-slate-600" />
+                <button type="button" onClick={() => setEntryPath(nextPath)} className="truncate hover:text-gray-900 dark:hover:text-slate-100 midnight:hover:text-slate-100">
                   {part}
                 </button>
               </span>
@@ -96,7 +96,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
         <button
           type="button"
           onClick={() => load(entryPath)}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-300"
           title="Refresh"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -104,7 +104,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
       </div>
 
       {error && (
-        <div className="m-3 rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-300">
+        <div className="m-3 rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-300 midnight:border-rose-950/50 midnight:bg-rose-950/20 midnight:text-rose-300">
           {error}
         </div>
       )}
@@ -119,13 +119,13 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
                   const parent = entryPath.split('/').slice(0, -1).join('/');
                   setEntryPath(parent || '.');
                 }}
-                className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 midnight:border-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-800"
               >
                 ← Back
               </button>
             </div>
             <Suspense fallback={
-              <div className="flex items-center justify-center py-12 text-xs text-gray-400">
+              <div className="flex items-center justify-center py-12 text-xs text-gray-400 midnight:text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading editor…
               </div>
             }>
@@ -139,7 +139,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
             </Suspense>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-md border border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="overflow-hidden rounded-md border border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900/40 midnight:border-slate-800 midnight:bg-slate-900/40">
             {entryPath !== '.' && (
               <button
                 type="button"
@@ -147,7 +147,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
                   const parent = parts.slice(0, -1).join('/');
                   setEntryPath(parent || '.');
                 }}
-                className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs text-gray-400 hover:bg-gray-50 dark:border-slate-800 dark:text-slate-500 dark:hover:bg-slate-800/60"
+                className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs text-gray-400 hover:bg-gray-50 dark:border-slate-800 dark:text-slate-500 dark:hover:bg-slate-800/60 midnight:border-slate-800 midnight:text-slate-500 midnight:hover:bg-slate-800/60"
               >
                 ..
               </button>
@@ -157,15 +157,15 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
                 key={item.path}
                 type="button"
                 onClick={() => setEntryPath(item.path)}
-                className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+                className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-800/60 midnight:border-slate-800 midnight:hover:bg-slate-800/60"
               >
                 <FileIcon name={item.name} isDir={item.type === 'dir'} />
-                <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-slate-200">{item.name}</span>
+                <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-slate-200 midnight:text-slate-200">{item.name}</span>
                 {item.type === 'file' && (
-                  <span className="text-[10px] text-gray-300 dark:text-slate-700">{item.ext || ''}</span>
+                  <span className="text-[10px] text-gray-300 dark:text-slate-700 midnight:text-slate-700">{item.ext || ''}</span>
                 )}
                 {item.type === 'file' && item.size > 0 && (
-                  <span className="text-[10px] text-gray-300 dark:text-slate-700 tabular-nums">
+                  <span className="text-[10px] text-gray-300 dark:text-slate-700 midnight:text-slate-700 tabular-nums">
                     {item.size > 1024 * 1024
                       ? `${(item.size / (1024 * 1024)).toFixed(1)}MB`
                       : item.size > 1024
@@ -177,7 +177,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
               </button>
             ))}
             {!entries.length && !loading && (
-              <div className="px-3 py-4 text-center text-xs text-gray-400 dark:text-slate-500">Empty directory</div>
+              <div className="px-3 py-4 text-center text-xs text-gray-400 dark:text-slate-500 midnight:text-slate-500">Empty directory</div>
             )}
           </div>
         )}
@@ -218,9 +218,9 @@ export default function CodePanel({
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950 midnight:bg-slate-950">
       {/* Tab bar — 5 columns */}
-      <div className="grid shrink-0 grid-cols-5 gap-0.5 border-b border-gray-100 bg-white p-1.5 dark:border-slate-800 dark:bg-slate-950">
+      <div className="grid shrink-0 grid-cols-5 gap-0.5 border-b border-gray-100 bg-white p-1.5 dark:border-slate-800 dark:bg-slate-950 midnight:border-slate-800 midnight:bg-slate-950">
         {buttons.map(item => {
           const Icon = item.icon;
           const active = section === item.id;
@@ -232,11 +232,11 @@ export default function CodePanel({
               title={item.label}
               className={`inline-flex flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[9px] font-medium transition-colors ${
                 active
-                  ? 'bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100'
-                  : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800/60 dark:hover:text-slate-300'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100 midnight:bg-slate-800 midnight:text-slate-100'
+                  : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800/60 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:bg-slate-800/60 midnight:hover:text-slate-300'
               }`}
             >
-              <Icon className={`h-3.5 w-3.5 ${active ? 'text-indigo-500 dark:text-indigo-400' : ''}`} />
+              <Icon className={`h-3.5 w-3.5 ${active ? 'text-indigo-500 dark:text-indigo-400 midnight:text-indigo-400' : ''}`} />
               <span className="leading-none">{item.label}</span>
               {item.count > 0 && (
                 <span className="rounded-full bg-indigo-500 px-1 py-0 text-[8px] font-semibold text-white leading-none">

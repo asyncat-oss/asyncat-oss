@@ -62,11 +62,11 @@ function splitPath(filePath = '') {
 }
 
 function statusMeta(file = {}) {
-  if (file.untracked) return { label: 'U', text: 'text-sky-500 dark:text-sky-300', title: 'Untracked' };
-  if (file.renamed) return { label: 'R', text: 'text-violet-500 dark:text-violet-300', title: 'Renamed' };
-  if (file.deleted) return { label: 'D', text: 'text-red-500 dark:text-red-300', title: 'Deleted' };
-  if (file.staged && !file.unstaged) return { label: 'S', text: 'text-emerald-600 dark:text-emerald-300', title: 'Staged' };
-  return { label: 'M', text: 'text-amber-600 dark:text-amber-300', title: 'Modified' };
+  if (file.untracked) return { label: 'U', text: 'text-sky-500 dark:text-sky-300 midnight:text-sky-300', title: 'Untracked' };
+  if (file.renamed) return { label: 'R', text: 'text-violet-500 dark:text-violet-300 midnight:text-violet-300', title: 'Renamed' };
+  if (file.deleted) return { label: 'D', text: 'text-red-500 dark:text-red-300 midnight:text-red-300', title: 'Deleted' };
+  if (file.staged && !file.unstaged) return { label: 'S', text: 'text-emerald-600 dark:text-emerald-300 midnight:text-emerald-300', title: 'Staged' };
+  return { label: 'M', text: 'text-amber-600 dark:text-amber-300 midnight:text-amber-300', title: 'Modified' };
 }
 
 function canDiscard(file = {}) {
@@ -91,7 +91,7 @@ function IconButton({ title, onClick, disabled, children }) {
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
     >
       {children}
     </button>
@@ -175,11 +175,11 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
         <div className="w-full max-w-md overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
           <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800 midnight:border-slate-800">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{actionCopy(action)}</p>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{title}</h2>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400 midnight:text-slate-400">{actionCopy(action)}</p>
             </div>
             {!busy && (
-              <button type="button" onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+              <button type="button" onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200">
                 <X className="h-4 w-4" />
               </button>
             )}
@@ -194,7 +194,7 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
                 onChange={event => onPayloadChange({ ...payload, message: event.target.value })}
                 rows={3}
                 placeholder={action === 'stash-save' ? 'Stash message' : optionalMessage ? 'New commit message, or leave empty to keep current' : 'Commit message'}
-                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-100 midnight:focus:border-slate-500"
               />
             )}
             {needsBranch && (
@@ -202,21 +202,21 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
                 value={payload.name || ''}
                 onChange={event => onPayloadChange({ ...payload, name: event.target.value })}
                 placeholder="branch-name"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-100 midnight:focus:border-slate-500"
               />
             )}
             {error && (
-              <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">
+              <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-300">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
           </div>
-          <div className="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/60 midnight:border-slate-800">
-            <button type="button" onClick={onClose} disabled={busy} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800">
+          <div className="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/60 midnight:border-slate-800 midnight:bg-slate-900/60">
+            <button type="button" onClick={onClose} disabled={busy} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-800">
               Cancel
             </button>
-            <button type="button" onClick={onConfirm} disabled={disabled} className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200">
+            <button type="button" onClick={onConfirm} disabled={disabled} className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500">
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               Confirm
             </button>
@@ -233,14 +233,14 @@ function ChangeRow({ file, checked, onToggleCheck, onSelect, onAction, onAttach,
   const { Icon, color } = fileIconMeta(ext, 'file');
   const meta = statusMeta(file);
   return (
-    <div className="group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-100/80 dark:hover:bg-slate-800/70">
+    <div className="group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-100/80 dark:hover:bg-slate-800/70 midnight:hover:bg-slate-800/70">
       <button
         type="button"
         onClick={onToggleCheck}
-        className="shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-200"
+        className="shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-200 midnight:text-slate-500 midnight:hover:text-slate-200"
         title={checked ? 'Deselect' : 'Select'}
       >
-        {checked ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
+        {checked ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 midnight:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
       </button>
       <button
         type="button"
@@ -248,24 +248,24 @@ function ChangeRow({ file, checked, onToggleCheck, onSelect, onAction, onAttach,
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         <Icon className={`h-4 w-4 shrink-0 ${color}`} />
-        <span className="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-slate-200" title={file.path}>
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-slate-200 midnight:text-slate-200" title={file.path}>
           <span className="font-medium">{name}</span>
-          {dir && <span className="ml-2 text-xs text-gray-400 dark:text-slate-500">{compactPath(dir)}</span>}
+          {dir && <span className="ml-2 text-xs text-gray-400 dark:text-slate-500 midnight:text-slate-500">{compactPath(dir)}</span>}
         </span>
         <span className={`w-4 shrink-0 text-right text-xs font-semibold ${meta.text}`} title={meta.title}>
           {meta.label}
         </span>
       </button>
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        <button type="button" onClick={() => onAttach(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Attach to composer">
+        <button type="button" onClick={() => onAttach(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100 midnight:hover:bg-slate-700 midnight:hover:text-slate-100" title="Attach to composer">
           <Paperclip className="h-3.5 w-3.5" />
         </button>
         {onDiscard && (
-          <button type="button" onClick={() => onDiscard(file)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400" title="Discard changes">
+          <button type="button" onClick={() => onDiscard(file)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 midnight:hover:bg-red-500/10 midnight:hover:text-red-400" title="Discard changes">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         )}
-        <button type="button" onClick={() => onAction(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100" title={file.staged && !file.unstaged ? 'Unstage' : 'Stage'}>
+        <button type="button" onClick={() => onAction(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100 midnight:hover:bg-slate-700 midnight:hover:text-slate-100" title={file.staged && !file.unstaged ? 'Unstage' : 'Stage'}>
           {file.staged && !file.unstaged ? <Upload className="h-3.5 w-3.5 rotate-180" /> : <Plus className="h-3.5 w-3.5" />}
         </button>
       </div>
@@ -489,7 +489,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
 
   if (loading && !state) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-400">
+      <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-400 midnight:text-slate-500">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading Git state
       </div>
@@ -498,7 +498,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
 
   if (error) {
     return (
-      <div className="p-4 text-sm text-red-600 dark:text-red-400">
+      <div className="p-4 text-sm text-red-600 dark:text-red-400 midnight:text-red-400">
         <AlertCircle className="mb-2 h-5 w-5" />
         {error}
       </div>
@@ -507,7 +507,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
 
   if (!state?.detected) {
     return (
-      <div className="p-4 text-sm text-gray-500 dark:text-gray-400">
+      <div className="p-4 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
         No Git repository detected in this workspace.
       </div>
     );
@@ -517,29 +517,29 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const hasChangesChecked = checkedChanges.size > 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col text-gray-800 dark:text-slate-200">
+    <div className="flex h-full min-h-0 flex-col text-gray-800 dark:text-slate-200 midnight:text-slate-200">
       <div className="shrink-0 border-b border-gray-200 px-4 py-3 dark:border-slate-800 midnight:border-slate-800">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <GitBranch className="h-4 w-4 text-orange-500" />
-              <span className="truncate text-sm font-semibold text-gray-900 dark:text-slate-100">{state.branch || 'Detached'}</span>
+              <span className="truncate text-sm font-semibold text-gray-900 dark:text-slate-100 midnight:text-slate-100">{state.branch || 'Detached'}</span>
             </div>
-            <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500" title={state.root}>
+            <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500 midnight:text-slate-500" title={state.root}>
               {state.upstream || 'No upstream'} · {state.clean ? 'Clean' : `${state.changedCount} changed`}
             </p>
           </div>
-          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-60 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Refresh Git state">
+          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-60 dark:hover:bg-slate-800 dark:hover:text-slate-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200" title="Refresh Git state">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-slate-500">
-          <span className={syncNeeded ? 'inline-flex items-center gap-1 font-medium text-sky-600 dark:text-sky-300' : ''}>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-slate-500 midnight:text-slate-500">
+          <span className={syncNeeded ? 'inline-flex items-center gap-1 font-medium text-sky-600 dark:text-sky-300 midnight:text-sky-300' : ''}>
             {syncNeeded && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
             {aheadCount} ahead · {behindCount} behind
           </span>
           <span>{state.stashCount || 0} stash</span>
-          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300 midnight:text-emerald-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             coding ready
           </span>
@@ -547,11 +547,11 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
       </div>
 
       {actionError && !action && (
-        <div className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300">
+        <div className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300 midnight:border-red-900/30 midnight:bg-red-950/30 midnight:text-red-300">
           <div className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="flex-1">{actionError}</span>
-            <button type="button" onClick={() => setActionError(null)} className="rounded-md p-0.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50">
+            <button type="button" onClick={() => setActionError(null)} className="rounded-md p-0.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 midnight:hover:bg-red-900/50">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -566,13 +566,13 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
             onChange={handleCommitMessageChange}
             rows={1}
             placeholder={`Message${state.branch ? ` for ${state.branch}` : ''}`}
-            className="w-full resize-none rounded-md border border-gray-200 bg-gray-50 py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700 dark:focus:bg-[#0b1220]"
+            className="w-full resize-none rounded-md border border-gray-200 bg-gray-50 py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700 dark:focus:bg-[#0b1220] midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-100 midnight:placeholder:text-slate-600 midnight:focus:border-slate-700 midnight:focus:bg-slate-950"
           />
           <button
             type="button"
             onClick={generateCommitMessage}
             disabled={!canGenerateCommitMessage}
-            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-200/70 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-200/70 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
             title={stagedFiles.length ? 'Generate commit message from staged changes' : 'Generate commit message from changes'}
           >
             {generatingCommitMessage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
@@ -584,7 +584,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
               type="button"
               onClick={() => openAction(mainCommitAction, { files: [], message: commitMessage })}
               disabled={!canMainCommit}
-              className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-l-md bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+              className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-l-md bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500"
               title={stagedFiles.length ? 'Commit staged changes' : 'Stage all changes and commit'}
             >
               <GitCommitHorizontal className="h-4 w-4" />
@@ -595,20 +595,20 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
               onClick={() => setCommitMenuOpen(open => !open)}
               disabled={commitMenuItems.every(item => item.disabled)}
               aria-expanded={commitMenuOpen}
-              className="inline-flex w-9 items-center justify-center rounded-r-md border-l border-white/20 bg-gray-900 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-300/30 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+              className="inline-flex w-9 items-center justify-center rounded-r-md border-l border-white/20 bg-gray-900 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-300/30 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white midnight:border-indigo-400/40 midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500"
               title="More commit actions"
             >
               <ChevronDown className="h-4 w-4" />
             </button>
             {commitMenuOpen && (
-              <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-950">
+              <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-950 midnight:border-slate-800 midnight:bg-slate-950">
                 {commitMenuItems.map(item => (
                   <button
                     key={`${item.action}-${item.label}`}
                     type="button"
                     disabled={item.disabled}
                     onClick={() => openAction(item.action, { files: [], message: commitMessage })}
-                    className="flex w-full items-center px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300 dark:text-slate-200 dark:hover:bg-slate-800 dark:disabled:text-slate-600"
+                    className="flex w-full items-center px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300 dark:text-slate-200 dark:hover:bg-slate-800 dark:disabled:text-slate-600 midnight:text-slate-200 midnight:hover:bg-slate-800 midnight:disabled:text-slate-600"
                   >
                     {item.label}
                   </button>
@@ -636,19 +636,19 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
       <div className="flex shrink-0 border-b border-gray-100 px-2 dark:border-slate-800 midnight:border-slate-800">
         <button
           onClick={() => setActiveTab('working')}
-          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'working' ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300'}`}
+          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'working' ? 'border-sky-500 text-sky-600 dark:text-sky-400 midnight:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300'}`}
         >
           Working Tree
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'history' ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300'}`}
+          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'history' ? 'border-sky-500 text-sky-600 dark:text-sky-400 midnight:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300'}`}
         >
           History
         </button>
         <button
           onClick={() => setActiveTab('stashes')}
-          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'stashes' ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300'}`}
+          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'stashes' ? 'border-sky-500 text-sky-600 dark:text-sky-400 midnight:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300'}`}
         >
           Stashes
         </button>
@@ -659,7 +659,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
           <div className="flex h-full flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
               {files.length === 0 && (
-                <div className="py-8 text-center text-sm text-gray-400">Working tree clean.</div>
+                <div className="py-8 text-center text-sm text-gray-400 midnight:text-slate-500">Working tree clean.</div>
               )}
               
               {files.length > 0 && (
@@ -670,45 +670,45 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                         <button
                           type="button"
                           onClick={() => setStagedExpanded(v => !v)}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300"
                         >
                           {stagedExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                           Staged
-                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stagedFiles.length}</span>
+                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800 midnight:bg-slate-800">{stagedFiles.length}</span>
                         </button>
                         <button
                           type="button"
                           onClick={selectAllStaged}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                           title={checkedStaged.size === stagedFiles.length ? 'Deselect all staged' : 'Select all staged'}
                         >
-                          {checkedStaged.size === stagedFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
+                          {checkedStaged.size === stagedFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 midnight:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
                         </button>
                         <button
                           type="button"
                           onClick={() => openAction('unstage', { files: [] })}
                           disabled={!stagedFiles.length}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                           title="Unstage all"
                         >
                           <Upload className="h-3.5 w-3.5 rotate-180" />
                         </button>
                       </div>
                       {hasStagedChecked && (
-                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900">
-                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400">{checkedStaged.size} selected</span>
+                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900 midnight:border-slate-800 midnight:bg-slate-900">
+                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400 midnight:text-slate-400">{checkedStaged.size} selected</span>
                           <div className="ml-auto flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => { openAction('unstage', { files: Array.from(checkedStaged) }); setCheckedStaged(new Set()); }}
-                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700"
+                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-700"
                             >
                               Unstage
                             </button>
                             <button
                               type="button"
                               onClick={() => setCheckedStaged(new Set())}
-                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:bg-slate-700 midnight:hover:text-slate-300"
                             >
                               Clear
                             </button>
@@ -739,52 +739,52 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                         <button
                           type="button"
                           onClick={() => setChangesExpanded(v => !v)}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300"
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300"
                         >
                           {changesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                           Changes
-                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{workingFiles.length}</span>
+                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800 midnight:bg-slate-800">{workingFiles.length}</span>
                         </button>
                         <button
                           type="button"
                           onClick={selectAllChanges}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                           title={checkedChanges.size === workingFiles.length ? 'Deselect all changes' : 'Select all changes'}
                         >
-                          {checkedChanges.size === workingFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
+                          {checkedChanges.size === workingFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 midnight:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
                         </button>
                         <button
                           type="button"
                           onClick={() => openAction('stage', { files: [] })}
                           disabled={!workingFiles.length}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                           title="Stage all changes"
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </button>
                       </div>
                       {hasChangesChecked && (
-                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900">
-                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400">{checkedChanges.size} selected</span>
+                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900 midnight:border-slate-800 midnight:bg-slate-900">
+                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400 midnight:text-slate-400">{checkedChanges.size} selected</span>
                           <div className="ml-auto flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => { openAction('stage', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}
-                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700"
+                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-700"
                             >
                               Stage
                             </button>
                             <button
                               type="button"
                               onClick={() => { openAction('discard', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}
-                              className="rounded px-2 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                              className="rounded px-2 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 midnight:text-red-400 midnight:hover:bg-red-500/10"
                             >
                               Discard
                             </button>
                             <button
                               type="button"
                               onClick={() => setCheckedChanges(new Set())}
-                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:bg-slate-700 midnight:hover:text-slate-300"
                             >
                               Clear
                             </button>

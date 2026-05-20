@@ -65,7 +65,7 @@ function healthMeta(successRate, totalCalls) {
       label: 'No data',
       prefix: 'Tool reliability',
       description: 'No agent tool calls were recorded in this window.',
-      tone: 'text-gray-500 dark:text-gray-400',
+      tone: 'text-gray-500 dark:text-gray-400 midnight:text-slate-400',
       bg: 'bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800',
       icon: Activity,
     };
@@ -75,8 +75,8 @@ function healthMeta(successRate, totalCalls) {
       label: 'Healthy',
       prefix: 'Tool reliability',
       description: 'At least 95% of agent tool calls completed without an error.',
-      tone: 'text-emerald-700 dark:text-emerald-300',
-      bg: 'bg-emerald-50 dark:bg-emerald-900/20 midnight:bg-emerald-900/20',
+      tone: 'text-emerald-700 dark:text-emerald-300 midnight:text-emerald-400/80',
+      bg: 'bg-emerald-50 dark:bg-emerald-900/20 midnight:bg-emerald-950/30',
       icon: CheckCircle2,
     };
   }
@@ -85,8 +85,8 @@ function healthMeta(successRate, totalCalls) {
       label: 'Watch',
       prefix: 'Tool reliability',
       description: '80-94% of agent tool calls completed. Some tools need attention.',
-      tone: 'text-amber-700 dark:text-amber-300',
-      bg: 'bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/20',
+      tone: 'text-amber-700 dark:text-amber-300 midnight:text-amber-400/80',
+      bg: 'bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-950/30',
       icon: ShieldAlert,
     };
   }
@@ -94,8 +94,8 @@ function healthMeta(successRate, totalCalls) {
     label: 'Degraded',
     prefix: 'Tool reliability',
     description: 'Fewer than 80% of agent tool calls completed without an error in this window.',
-    tone: 'text-red-700 dark:text-red-300',
-    bg: 'bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20',
+    tone: 'text-red-700 dark:text-red-300 midnight:text-red-400/80',
+    bg: 'bg-red-50 dark:bg-red-900/20 midnight:bg-red-950/30',
     icon: XCircle,
   };
 }
@@ -110,7 +110,7 @@ function SummaryTile({ icon: Icon, label, value, sublabel, title }) {
         <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">
           {label}
         </span>
-        <Icon className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+        <Icon className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
       </div>
       <div className="mt-3 text-2xl font-semibold text-gray-950 dark:text-white midnight:text-slate-100">
         {value}
@@ -139,10 +139,10 @@ function DefinitionRow({ label, children }) {
 
 function BreakdownPill({ label, value, tone = 'gray' }) {
   const toneClass = {
-    red: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300',
-    amber: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300',
-    blue: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300',
-    gray: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300',
+    red: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 midnight:border-red-900/50 midnight:bg-red-950/30 midnight:text-red-300',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300 midnight:border-amber-900/50 midnight:bg-amber-950/30 midnight:text-amber-300',
+    blue: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300 midnight:border-sky-900/50 midnight:bg-sky-950/30 midnight:text-sky-300',
+    gray: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-300',
   }[tone];
   return (
     <div className={`rounded-lg border px-3 py-2 ${toneClass}`}>
@@ -207,12 +207,12 @@ function EvalHistoryList({ evals = [], loading = false }) {
   return (
     <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
       <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
-        <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Eval History</h2>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Recent deterministic and live checks.</p>
+        <h2 className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Eval History</h2>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">Recent deterministic and live checks.</p>
       </div>
       <div className="max-h-64 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800/70 midnight:divide-slate-800">
         {loading ? (
-          <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">Loading eval history...</div>
+          <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">Loading eval history...</div>
         ) : evals.length ? evals.map(item => (
           <div key={item.id} className="px-4 py-3">
             <div className="flex items-center justify-between gap-3">
@@ -225,22 +225,22 @@ function EvalHistoryList({ evals = [], loading = false }) {
                   ) : (
                     <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-300" />
                   )}
-                  <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{item.mode}</span>
+                  <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-200">{item.mode}</span>
                 </div>
-                <div className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                <div className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                   {item.model || item.phase || item.status}
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                <div className="text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200 midnight:text-slate-200">
                   {item.passed}/{item.total || 0}
                 </div>
-                <div className="mt-1 whitespace-nowrap text-[11px] text-gray-400">{formatTime(item.createdAt)}</div>
+                <div className="mt-1 whitespace-nowrap text-[11px] text-gray-400 midnight:text-slate-500">{formatTime(item.createdAt)}</div>
               </div>
             </div>
           </div>
         )) : (
-          <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">No eval runs recorded yet.</div>
+          <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">No eval runs recorded yet.</div>
         )}
       </div>
     </section>
@@ -258,7 +258,7 @@ function ModelContextPanel({ activeProvider, usage, loading, error }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Model Context</div>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
             Agent health is measured from tool calls. Model usage is shown here so failures can be compared with the active provider and recent token activity.
           </p>
           {error ? (
@@ -267,20 +267,20 @@ function ModelContextPanel({ activeProvider, usage, loading, error }) {
         </div>
         <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:min-w-[560px] lg:grid-cols-4">
           <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-900">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Active model</div>
-            <div className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100" title={activeModel}>{loading ? 'Loading...' : activeModel}</div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400 midnight:text-slate-500">Active model</div>
+            <div className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-200" title={activeModel}>{loading ? 'Loading...' : activeModel}</div>
           </div>
           <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-900">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Provider</div>
-            <div className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100" title={activeProviderLabel}>{loading ? 'Loading...' : activeProviderLabel}</div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400 midnight:text-slate-500">Provider</div>
+            <div className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-200" title={activeProviderLabel}>{loading ? 'Loading...' : activeProviderLabel}</div>
           </div>
           <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-900">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Model requests</div>
-            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{loading ? '...' : formatNumber(totals.request_count)}</div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400 midnight:text-slate-500">Model requests</div>
+            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100 midnight:text-slate-200">{loading ? '...' : formatNumber(totals.request_count)}</div>
           </div>
           <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-900">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Tokens</div>
-            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{loading ? '...' : formatTokens(totals.total_tokens)}</div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400 midnight:text-slate-500">Tokens</div>
+            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100 midnight:text-slate-200">{loading ? '...' : formatTokens(totals.total_tokens)}</div>
           </div>
         </div>
       </div>
@@ -464,7 +464,7 @@ export default function AgentHealthPage() {
       <header className="flex flex-col gap-4 border-b border-gray-200 px-5 py-4 dark:border-gray-800 midnight:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+            <Activity className="h-5 w-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
             <h1 className="text-lg font-semibold tracking-tight">Agent Health</h1>
             <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${meta.bg} ${meta.tone}`}>
               <HealthIcon className="h-3.5 w-3.5" />
@@ -486,7 +486,7 @@ export default function AgentHealthPage() {
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   days === windowDays
                     ? 'bg-white text-gray-950 shadow-sm dark:bg-gray-800 dark:text-white midnight:bg-slate-800 midnight:text-white'
-                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-250'
                 }`}
               >
                 {windowDays}d
@@ -496,7 +496,7 @@ export default function AgentHealthPage() {
           <button
             type="button"
             onClick={() => setShowClearConfirm(true)}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-gray-800 dark:text-gray-200 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-300 midnight:border-slate-800 midnight:text-slate-200"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-gray-800 dark:text-gray-200 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-300 midnight:border-slate-800 midnight:text-slate-200 midnight:hover:bg-red-950/30 midnight:hover:text-red-300"
           >
             <Trash2 className="h-4 w-4" />
             Clear diagnostics
@@ -521,7 +521,7 @@ export default function AgentHealthPage() {
           </div>
         ) : null}
         {clearMessage ? (
-          <div className="mb-5 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+          <div className="mb-5 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-300">
             <Info className="h-4 w-4" />
             {clearMessage}
           </div>
@@ -575,14 +575,14 @@ export default function AgentHealthPage() {
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
                   <div>
-                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Tool Metrics</h2>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Sorted by failed calls, then volume.</p>
+                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Tool Metrics</h2>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">Sorted by failed calls, then volume.</p>
                   </div>
-                  <span className="text-xs text-gray-400">{tools.length} tools</span>
+                  <span className="text-xs text-gray-400 midnight:text-slate-500">{tools.length} tools</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-100 text-sm dark:divide-gray-800/70 midnight:divide-slate-800">
-                    <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-400 dark:bg-gray-950 midnight:bg-slate-950">
+                    <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-400 dark:bg-gray-950 midnight:bg-slate-950 midnight:text-slate-500">
                       <tr>
                         <th className="px-4 py-3 text-left font-medium">Tool</th>
                         <th className="px-4 py-3 text-right font-medium">Calls</th>
@@ -596,21 +596,21 @@ export default function AgentHealthPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800/70 midnight:divide-slate-800">
                       {tools.map(tool => (
-                        <tr key={tool.toolName} className="hover:bg-gray-50/70 dark:hover:bg-white/[0.03]">
-                          <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-gray-800 dark:text-gray-200">{tool.toolName}</td>
-                          <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{formatNumber(tool.totalCalls)}</td>
-                          <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{formatPercent(tool.successRate)}</td>
-                          <td className={`px-4 py-3 text-right ${tool.failedCalls ? 'font-medium text-red-600 dark:text-red-300' : 'text-gray-500 dark:text-gray-400'}`}>{formatNumber(tool.failedCalls)}</td>
-                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400">{formatNumber(tool.invalidArguments)}</td>
-                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400">{formatNumber(tool.guardBlocks ?? (tool.readBeforeWriteBlocks + tool.permissionDenied))}</td>
-                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400">{formatDuration(tool.avgDurationMs)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right text-gray-500 dark:text-gray-400">{formatTime(tool.lastSeenAt)}</td>
+                        <tr key={tool.toolName} className="hover:bg-gray-50/70 dark:hover:bg-white/[0.03] midnight:hover:bg-white/[0.03]">
+                          <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-gray-800 dark:text-gray-200 midnight:text-slate-200">{tool.toolName}</td>
+                          <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300 midnight:text-slate-300">{formatNumber(tool.totalCalls)}</td>
+                          <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300 midnight:text-slate-300">{formatPercent(tool.successRate)}</td>
+                          <td className={`px-4 py-3 text-right ${tool.failedCalls ? 'font-medium text-red-600 dark:text-red-300 midnight:text-red-400/80' : 'text-gray-500 dark:text-gray-400 midnight:text-slate-400'}`}>{formatNumber(tool.failedCalls)}</td>
+                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 midnight:text-slate-400">{formatNumber(tool.invalidArguments)}</td>
+                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 midnight:text-slate-400">{formatNumber(tool.guardBlocks ?? (tool.readBeforeWriteBlocks + tool.permissionDenied))}</td>
+                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 midnight:text-slate-400">{formatDuration(tool.avgDurationMs)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-gray-500 dark:text-gray-400 midnight:text-slate-400">{formatTime(tool.lastSeenAt)}</td>
                         </tr>
                       ))}
                       {!tools.length ? (
                         <tr>
-                          <td className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400" colSpan={8}>
-                            No tool audit data for this window.
+                          <td className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400" colSpan={8}>
+                                No tool audit data for this window.
                           </td>
                         </tr>
                       ) : null}
@@ -622,17 +622,17 @@ export default function AgentHealthPage() {
               <div className="space-y-5">
                 <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                   <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
-                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Needs Attention</h2>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Highest failure and block counts in this window.</p>
+                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Needs Attention</h2>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">Highest failure and block counts in this window.</p>
                   </div>
                   <div className="divide-y divide-gray-100 dark:divide-gray-800/70 midnight:divide-slate-800">
                     {attentionTools.map(tool => (
-                      <div key={tool.toolName} className="px-4 py-3">
+                       <div key={tool.toolName} className="px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="truncate font-mono text-xs text-gray-800 dark:text-gray-200">{tool.toolName}</span>
-                          <span className="text-xs font-medium text-red-600 dark:text-red-300">{tool.failedCalls} failed</span>
+                          <span className="truncate font-mono text-xs text-gray-800 dark:text-gray-200 midnight:text-slate-200">{tool.toolName}</span>
+                          <span className="text-xs font-medium text-red-600 dark:text-red-300 midnight:text-red-400/80">{tool.failedCalls} failed</span>
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                           <span>{tool.invalidArguments} invalid args</span>
                           <span>{tool.readBeforeWriteBlocks} read-first</span>
                           <span>{tool.permissionDenied} denied</span>
@@ -641,7 +641,7 @@ export default function AgentHealthPage() {
                       </div>
                     ))}
                     {!attentionTools.length ? (
-                      <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">
+                      <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                         No failing or blocked tools in this window.
                       </div>
                     ) : null}
@@ -652,7 +652,7 @@ export default function AgentHealthPage() {
 
                 <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                   <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
-                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Metric Guide</h2>
+                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Metric Guide</h2>
                   </div>
                   <DefinitionRow label="Degraded">
                     Tool success is below 80% for the selected time window.
@@ -670,8 +670,8 @@ export default function AgentHealthPage() {
 
                 <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                   <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
-                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Eval Harness</h2>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Eval Harness</h2>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                       Deterministic checks verify tool contracts. Live sandbox uses your active model in a disposable project and can take a few minutes.
                     </p>
                   </div>
@@ -680,7 +680,7 @@ export default function AgentHealthPage() {
                       type="button"
                       onClick={() => runEval('deterministic')}
                       disabled={Boolean(evalRunning)}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:text-slate-200 midnight:hover:bg-slate-800"
                     >
                       {evalRunning === 'deterministic' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                       Run deterministic eval
@@ -689,7 +689,7 @@ export default function AgentHealthPage() {
                       type="button"
                       onClick={() => runEval('live')}
                       disabled={Boolean(evalRunning)}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-60 dark:border-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/20"
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-60 dark:border-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/20 midnight:border-amber-900/50 midnight:text-amber-400/80 midnight:hover:bg-amber-950/20"
                     >
                       {evalRunning === 'live' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                       Run live sandbox eval
@@ -722,7 +722,7 @@ export default function AgentHealthPage() {
                     <EvalResultDetails result={evalResult} />
                   </div>
                   <details className="border-t border-gray-100 dark:border-gray-800/70 midnight:border-slate-800">
-                    <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+                    <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-450 midnight:hover:text-slate-200">
                       Developer CLI commands
                     </summary>
                     <CommandRow label="Deterministic" command="npm run eval:agent -w den" />
@@ -732,22 +732,22 @@ export default function AgentHealthPage() {
 
                 <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                   <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
-                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Recent Failures</h2>
+                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Recent Failures</h2>
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800/70 midnight:divide-slate-800">
                     {recentFailures.map((failure, index) => (
                       <div key={`${failure.sessionId}-${failure.toolName}-${index}`} className="px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="truncate font-mono text-xs text-gray-800 dark:text-gray-200">{failure.toolName}</span>
+                          <span className="truncate font-mono text-xs text-gray-800 dark:text-gray-200 midnight:text-slate-200">{failure.toolName}</span>
                           <div className="flex items-center gap-2">
-                            <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-gray-400">
+                            <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-gray-400 midnight:text-slate-500">
                               <Clock3 className="h-3 w-3" />
                               {formatTime(failure.startedAt)}
                             </span>
                             {failure.sessionId ? (
                               <a
                                 href={`/agents/${failure.sessionId}`}
-                                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
                                 title="Open related agent session"
                               >
                                 <ExternalLink className="h-3.5 w-3.5" />
@@ -756,13 +756,13 @@ export default function AgentHealthPage() {
                           </div>
                         </div>
                         {failure.code ? (
-                          <div className="mt-1 font-mono text-[11px] text-gray-400">{failure.code}</div>
+                          <div className="mt-1 font-mono text-[11px] text-gray-400 midnight:text-slate-400">{failure.code}</div>
                         ) : null}
-                        <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{failure.error}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{failure.error}</p>
                       </div>
                     ))}
                     {!recentFailures.length ? (
-                      <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">
+                      <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                         No recent failures in this window.
                       </div>
                     ) : null}

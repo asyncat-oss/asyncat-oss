@@ -407,7 +407,7 @@ function RssReadLaterManager({ onChanged, flash }) {
               type="button"
               onClick={refreshFeeds}
               disabled={busy === 'refresh' || feeds.length === 0}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-gray-400 midnight:hover:bg-gray-900 midnight:hover:text-gray-200"
             >
               {busy === 'refresh' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
               Refresh
@@ -432,7 +432,7 @@ function RssReadLaterManager({ onChanged, flash }) {
           </div>
           <div className="max-h-36 overflow-auto rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800">
             {feeds.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-gray-400">No feeds yet.</p>
+              <p className="px-3 py-3 text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500">No feeds yet.</p>
             ) : feeds.map(feed => (
               <div key={feed.id} className="flex items-center gap-2 border-b border-gray-100 px-3 py-2 last:border-b-0 dark:border-gray-800 midnight:border-gray-800">
                 <div className="min-w-0 flex-1">
@@ -480,7 +480,7 @@ function RssReadLaterManager({ onChanged, flash }) {
           />
           <div className="max-h-36 overflow-auto rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800">
             {savedLinks.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-gray-400">No saved links yet.</p>
+              <p className="px-3 py-3 text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500">No saved links yet.</p>
             ) : savedLinks.map(item => (
               <a
                 key={item.id}
@@ -804,7 +804,7 @@ export default function IntegrationsSection() {
       )}
 
       <p className={`${mutedCls} -mt-1`}>
-        Connect external services. Click <strong className="font-medium text-gray-600 dark:text-gray-300">Configure</strong> on any card to enter credentials directly — no need to edit <code className="px-1 rounded bg-gray-100 dark:bg-gray-800 font-mono text-[11px]">.env</code> manually.
+        Connect external services. Click <strong className="font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300">Configure</strong> on any card to enter credentials directly — no need to edit <code className="px-1 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 font-mono text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">.env</code> manually.
       </p>
 
       <div className="space-y-3">
@@ -972,15 +972,15 @@ export default function IntegrationsSection() {
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
               mailStatus?.imapConfigured
-                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300'
-                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
+                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300 midnight:border-green-800/40 midnight:bg-green-900/20 midnight:text-green-300'
+                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-gray-800 midnight:bg-gray-950 midnight:text-gray-400'
             }`}>
               IMAP {mailStatus?.imapConfigured ? 'configured' : 'not configured'}
             </span>
             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
               mailStatus?.smtpConfigured
-                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300'
-                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
+                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300 midnight:border-green-800/40 midnight:bg-green-900/20 midnight:text-green-300'
+                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-gray-800 midnight:bg-gray-950 midnight:text-gray-400'
             }`}>
               SMTP {mailStatus?.smtpConfigured ? 'configured' : 'not configured'}
             </span>
@@ -991,7 +991,7 @@ export default function IntegrationsSection() {
               type="button"
               onClick={() => handleMailTest('imap')}
               disabled={!mailStatus?.imapConfigured || mailTesting === 'imap'}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-gray-700 midnight:text-gray-300 midnight:hover:bg-gray-900"
             >
               {mailTesting === 'imap' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
               Test IMAP
@@ -1000,7 +1000,7 @@ export default function IntegrationsSection() {
               type="button"
               onClick={() => handleMailTest('smtp')}
               disabled={!mailStatus?.smtpConfigured || mailTesting === 'smtp'}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-gray-700 midnight:text-gray-300 midnight:hover:bg-gray-900"
             >
               {mailTesting === 'smtp' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
               Test SMTP

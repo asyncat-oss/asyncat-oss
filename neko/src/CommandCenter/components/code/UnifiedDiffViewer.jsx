@@ -99,26 +99,26 @@ function DiffLine({ line, lang }) {
   const html = useMemo(() => highlight(line.text, lang), [line.text, lang]);
 
   const rowBg = line.type === 'add'
-    ? 'bg-emerald-50/80 dark:bg-emerald-950/30'
+    ? 'bg-emerald-50/80 dark:bg-emerald-950/30 midnight:bg-emerald-950/30'
     : line.type === 'del'
-      ? 'bg-red-50/80 dark:bg-red-950/30'
+      ? 'bg-red-50/80 dark:bg-red-950/30 midnight:bg-red-950/30'
       : '';
 
   const marker = line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ';
   const markerColor = line.type === 'add'
-    ? 'text-emerald-600 dark:text-emerald-400'
+    ? 'text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400'
     : line.type === 'del'
-      ? 'text-red-600 dark:text-red-400'
-      : 'text-gray-300 dark:text-slate-700';
+      ? 'text-red-600 dark:text-red-400 midnight:text-red-400'
+      : 'text-gray-300 dark:text-slate-700 midnight:text-slate-700';
 
   return (
     <tr className={`group ${rowBg}`}>
       {/* old line number */}
-      <td className="w-10 select-none px-1.5 py-0 text-right font-mono text-[10px] text-gray-300 dark:text-slate-700 border-r border-gray-100 dark:border-slate-800">
+      <td className="w-10 select-none px-1.5 py-0 text-right font-mono text-[10px] text-gray-300 dark:text-slate-700 midnight:text-slate-700 border-r border-gray-100 dark:border-slate-800 midnight:border-slate-800">
         {line.oldLine ?? ''}
       </td>
       {/* new line number */}
-      <td className="w-10 select-none px-1.5 py-0 text-right font-mono text-[10px] text-gray-300 dark:text-slate-700 border-r border-gray-100 dark:border-slate-800">
+      <td className="w-10 select-none px-1.5 py-0 text-right font-mono text-[10px] text-gray-300 dark:text-slate-700 midnight:text-slate-700 border-r border-gray-100 dark:border-slate-800 midnight:border-slate-800">
         {line.newLine ?? ''}
       </td>
       {/* +/- marker */}
@@ -143,7 +143,7 @@ function Hunk({ hunk, lang }) {
   return (
     <tbody>
       <tr className="select-none">
-        <td colSpan={4} className="px-3 py-0.5 font-mono text-[10px] text-sky-600 dark:text-sky-400 bg-sky-50/60 dark:bg-sky-950/20 border-y border-sky-100 dark:border-sky-900/40">
+        <td colSpan={4} className="px-3 py-0.5 font-mono text-[10px] text-sky-600 dark:text-sky-400 midnight:text-sky-400 bg-sky-50/60 dark:bg-sky-950/20 midnight:bg-sky-950/20 border-y border-sky-100 dark:border-sky-900/40 midnight:border-sky-900/40">
           {hunk.header}
         </td>
       </tr>
@@ -183,7 +183,7 @@ export default function UnifiedDiffViewer({ diff, filePath, className = '' }) {
         return <FileDiff key="single" file={syntheticFile} />;
       }
     }
-    return <div className={`px-4 py-3 text-xs text-gray-400 ${className}`}>No diff available.</div>;
+    return <div className={`px-4 py-3 text-xs text-gray-400 midnight:text-slate-500 ${className}`}>No diff available.</div>;
   }
 
   return (
@@ -198,13 +198,13 @@ function FileDiff({ file }) {
   const lang = detectLangFromPath(displayPath);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+    <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-800 midnight:border-slate-800 bg-white dark:bg-slate-950 midnight:bg-slate-950">
       {/* file header */}
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 px-3 py-1.5">
-        <span className="min-w-0 truncate font-mono text-[11px] text-gray-700 dark:text-slate-300">{displayPath}</span>
+      <div className="flex items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800 midnight:border-slate-800 bg-gray-50 dark:bg-slate-900 midnight:bg-slate-900 px-3 py-1.5">
+        <span className="min-w-0 truncate font-mono text-[11px] text-gray-700 dark:text-slate-300 midnight:text-slate-300">{displayPath}</span>
         <div className="flex shrink-0 items-center gap-2 font-mono text-[10px]">
-          {file.additions > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{file.additions}</span>}
-          {file.deletions > 0 && <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>}
+          {file.additions > 0 && <span className="text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400">+{file.additions}</span>}
+          {file.deletions > 0 && <span className="text-red-600 dark:text-red-400 midnight:text-red-400">-{file.deletions}</span>}
         </div>
       </div>
       {/* diff table */}

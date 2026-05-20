@@ -16,14 +16,14 @@ import { profilesApi, agentApi } from '../CommandCenter/api';
 const PROFILE_ICONS = ['🤖', '🧠', '🔍', '⚡', '🛠️', '🎯', '🔐', '📦', '🌐', '🧪', '🗂️', '✍️', '🔬', '🛡️', '🚀'];
 
 const PROFILE_COLORS = [
-  { key: 'indigo',  bg: 'bg-indigo-100 dark:bg-indigo-900/30',  text: 'text-indigo-700 dark:text-indigo-300',  dot: 'bg-indigo-500'  },
-  { key: 'blue',    bg: 'bg-blue-100 dark:bg-blue-900/30',      text: 'text-blue-700 dark:text-blue-300',      dot: 'bg-blue-500'    },
-  { key: 'violet',  bg: 'bg-violet-100 dark:bg-violet-900/30',  text: 'text-violet-700 dark:text-violet-300',  dot: 'bg-violet-500'  },
-  { key: 'emerald', bg: 'bg-emerald-100 dark:bg-emerald-900/30',text: 'text-emerald-700 dark:text-emerald-300',dot: 'bg-emerald-500' },
-  { key: 'amber',   bg: 'bg-amber-100 dark:bg-amber-900/30',    text: 'text-amber-700 dark:text-amber-300',    dot: 'bg-amber-500'   },
-  { key: 'rose',    bg: 'bg-rose-100 dark:bg-rose-900/30',      text: 'text-rose-700 dark:text-rose-300',      dot: 'bg-rose-500'    },
-  { key: 'cyan',    bg: 'bg-cyan-100 dark:bg-cyan-900/30',      text: 'text-cyan-700 dark:text-cyan-300',      dot: 'bg-cyan-500'    },
-  { key: 'gray',    bg: 'bg-gray-100 dark:bg-gray-800',         text: 'text-gray-700 dark:text-gray-300',      dot: 'bg-gray-400'    },
+  { key: 'indigo',  bg: 'bg-indigo-100 dark:bg-indigo-900/30 midnight:bg-indigo-950/30',  text: 'text-indigo-700 dark:text-indigo-300 midnight:text-indigo-400/85',  dot: 'bg-indigo-500 midnight:bg-indigo-600/70'  },
+  { key: 'blue',    bg: 'bg-blue-100 dark:bg-blue-900/30 midnight:bg-blue-950/30',      text: 'text-blue-700 dark:text-blue-300 midnight:text-blue-400/85',      dot: 'bg-blue-500 midnight:bg-blue-600/70'    },
+  { key: 'violet',  bg: 'bg-violet-100 dark:bg-violet-900/30 midnight:bg-violet-950/30',  text: 'text-violet-700 dark:text-violet-300 midnight:text-violet-400/85',  dot: 'bg-violet-500 midnight:bg-violet-600/70'  },
+  { key: 'emerald', bg: 'bg-emerald-100 dark:bg-emerald-900/30 midnight:bg-emerald-950/30',text: 'text-emerald-700 dark:text-emerald-300 midnight:text-emerald-400/85',dot: 'bg-emerald-500 midnight:bg-emerald-600/70' },
+  { key: 'amber',   bg: 'bg-amber-100 dark:bg-amber-900/30 midnight:bg-amber-950/30',    text: 'text-amber-700 dark:text-amber-300 midnight:text-amber-400/85',    dot: 'bg-amber-500 midnight:bg-amber-600/70'   },
+  { key: 'rose',    bg: 'bg-rose-100 dark:bg-rose-900/30 midnight:bg-rose-950/30',      text: 'text-rose-700 dark:text-rose-300 midnight:text-rose-400/85',      dot: 'bg-rose-500 midnight:bg-rose-600/70'    },
+  { key: 'cyan',    bg: 'bg-cyan-100 dark:bg-cyan-900/30 midnight:bg-cyan-950/30',      text: 'text-cyan-700 dark:text-cyan-300 midnight:text-cyan-400/85',      dot: 'bg-cyan-500 midnight:bg-cyan-600/70'    },
+  { key: 'gray',    bg: 'bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800',         text: 'text-gray-700 dark:text-gray-300 midnight:text-slate-400',      dot: 'bg-gray-400 midnight:bg-slate-500'    },
 ];
 
 const DEFAULT_PROFILES = [
@@ -34,9 +34,9 @@ const DEFAULT_PROFILES = [
 ];
 
 const TOOL_PERMISSION_META = {
-  safe:      { label: 'Safe',      dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-300' },
-  moderate:  { label: 'Moderate',  dot: 'bg-amber-500',   badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-300' },
-  dangerous: { label: 'Dangerous', dot: 'bg-red-500',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-300' },
+  safe:      { label: 'Safe',      dot: 'bg-emerald-500 midnight:bg-emerald-600/70', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-400/80' },
+  moderate:  { label: 'Moderate',  dot: 'bg-amber-500 midnight:bg-amber-600/70',   badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-400/80' },
+  dangerous: { label: 'Dangerous', dot: 'bg-red-500 midnight:bg-red-600/70',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-400/80' },
 };
 
 const TOOL_PRESETS = [
@@ -249,8 +249,8 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
                   onClick={() => setColor(c.key)}
                   className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-xs font-medium transition-colors ${
                     color === c.key
-                      ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white midnight:border-slate-700 midnight:bg-slate-900'
-                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-900'
+                      ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-900 midnight:text-slate-400'
                   }`}
                   title={c.key}
                 >
@@ -296,18 +296,18 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
               <button
                 type="button"
                 onClick={() => setUseSoulOverride(false)}
-                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${!useSoulOverride ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60'}`}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${!useSoulOverride ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-900 midnight:text-slate-400'}`}
               >
                 <span className="font-medium">Soul file</span>
-                <span className="mt-0.5 block text-[11px] text-gray-400">Use a saved prompt</span>
+                <span className="mt-0.5 block text-[11px] text-gray-400 midnight:text-slate-500">Use a saved prompt</span>
               </button>
               <button
                 type="button"
                 onClick={() => setUseSoulOverride(true)}
-                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${useSoulOverride ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60'}`}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${useSoulOverride ? 'border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-900 midnight:text-slate-400'}`}
               >
                 <span className="font-medium">Custom text</span>
-                <span className="mt-0.5 block text-[11px] text-gray-400">Override just here</span>
+                <span className="mt-0.5 block text-[11px] text-gray-400 midnight:text-slate-500">Override just here</span>
               </button>
             </div>
             {!useSoulOverride ? (
@@ -363,8 +363,8 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
           </div>
           <label className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
             autoApprove
-              ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-300'
-              : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-950'
+              ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-300 midnight:border-amber-950/45 midnight:bg-amber-950/25 midnight:text-amber-400/80'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-900'
           }`}>
             <input type="checkbox" checked={autoApprove} onChange={e => setAutoApprove(e.target.checked)} className="rounded text-amber-600" />
             <Zap className="h-4 w-4" />
@@ -388,13 +388,13 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
 
         <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
           <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
-            <ShieldCheck className="h-3 w-3 text-emerald-500" /> {toolStats.safe} safe
+            <ShieldCheck className="h-3 w-3 text-emerald-500 midnight:text-emerald-500/80" /> {toolStats.safe} safe
           </span>
           <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
-            <ShieldAlert className="h-3 w-3 text-amber-500" /> {toolStats.moderate} moderate
+            <ShieldAlert className="h-3 w-3 text-amber-500 midnight:text-amber-500/80" /> {toolStats.moderate} moderate
           </span>
           <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
-            <ShieldAlert className="h-3 w-3 text-red-500" /> {toolStats.dangerous} dangerous
+            <ShieldAlert className="h-3 w-3 text-red-500 midnight:text-red-500/80" /> {toolStats.dangerous} dangerous
           </span>
           {selectedTools.length > 0 && (
             <button type="button" onClick={() => setAlwaysAllowedTools([])} className="ml-auto text-xs text-gray-400 hover:text-red-500">
@@ -422,7 +422,7 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
             <button
               type="button"
               onClick={() => setShowToolPicker(v => !v)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-200 midnight:hover:bg-slate-900"
             >
               {showToolPicker ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               Browse
@@ -438,7 +438,7 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
                     <span key={t.name} className="inline-flex min-w-0 items-center gap-1.5 rounded bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${perm.dot}`} />
                       <span className="max-w-[180px] truncate font-mono">{t.name}</span>
-                      <button type="button" onClick={() => toggleTool(t.name)} className="text-gray-400 hover:text-red-500" aria-label={`Remove ${t.name}`}>
+                      <button type="button" onClick={() => toggleTool(t.name)} className="text-gray-400 hover:text-red-500 midnight:text-slate-500 midnight:hover:text-red-400" aria-label={`Remove ${t.name}`}>
                         <X className="h-3 w-3" />
                       </button>
                     </span>
@@ -475,14 +475,14 @@ function ProfileForm({ initial, souls = [], tools = [], onSave, onCancel, saving
       </section>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+      <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors midnight:border-slate-800 midnight:text-slate-350 midnight:hover:bg-slate-900">
           Cancel
         </button>
         <button
           type="submit"
           disabled={saving || !name.trim()}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white dark:text-gray-900 transition-colors font-medium"
+          className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white dark:text-gray-900 transition-colors font-medium midnight:bg-slate-100 midnight:hover:bg-white midnight:text-slate-950 midnight:disabled:bg-slate-800 midnight:disabled:text-slate-500"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
           {initial ? 'Save changes' : 'Create profile'}
@@ -510,8 +510,8 @@ function ProfileCard({ profile, onEdit, onDelete, onSetDefault, deleting, settin
   return (
     <div className={`border transition-colors ${
       profile.is_default
-        ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/40'
-        : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900'
+        ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-700 bg-gray-50 dark:bg-gray-800/40 midnight:bg-slate-900/60'
+        : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950'
     }`}>
       <div className="flex items-start gap-3 p-4">
         {/* Icon badge */}
@@ -522,23 +522,23 @@ function ProfileCard({ profile, onEdit, onDelete, onSetDefault, deleting, settin
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">{profile.name}</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-200">{profile.name}</span>
             {profile.is_default && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">Default</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 midnight:bg-slate-900 midnight:text-slate-300">Default</span>
             )}
             {profile.auto_approve && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 midnight:bg-amber-950/40 midnight:text-amber-400/80 flex items-center gap-1">
                 <Zap className="w-2.5 h-2.5" />Auto-approve
               </span>
             )}
           </div>
           {profile.description && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{profile.description}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5 truncate">{profile.description}</p>
           )}
           {profile.handle && (
-            <p className="text-[11px] font-mono text-gray-400 dark:text-gray-500 mt-0.5">@{profile.handle}</p>
+            <p className="text-[11px] font-mono text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-0.5">@{profile.handle}</p>
           )}
-          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400 dark:text-gray-500 flex-wrap">
+          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-400 flex-wrap">
             <span>Soul: {profile.soul_override ? 'custom' : profile.soul_name}</span>
             <span>{profile.max_rounds} rounds</span>
             {profile.always_allowed_tools?.length > 0 && (
@@ -580,29 +580,29 @@ function ProfileCard({ profile, onEdit, onDelete, onSetDefault, deleting, settin
       </div>
 
       {expanded && (
-        <div className="px-4 pb-4 pt-1 border-t border-gray-50 dark:border-gray-800">
+        <div className="px-4 pb-4 pt-1 border-t border-gray-50 dark:border-gray-800 midnight:border-slate-800">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
             <div>
-              <span className="text-gray-400 block mb-0.5">Description</span>
-              <span className="text-gray-600 dark:text-gray-300">{profile.description || '—'}</span>
+              <span className="text-gray-400 midnight:text-slate-500 block mb-0.5">Description</span>
+              <span className="text-gray-600 dark:text-gray-300 midnight:text-slate-300">{profile.description || '—'}</span>
             </div>
             <div>
-              <span className="text-gray-400 block mb-0.5">Soul</span>
-              <span className="text-gray-600 dark:text-gray-300">{profile.soul_override ? 'Custom (inline)' : profile.soul_name}</span>
+              <span className="text-gray-400 midnight:text-slate-500 block mb-0.5">Soul</span>
+              <span className="text-gray-600 dark:text-gray-300 midnight:text-slate-300">{profile.soul_override ? 'Custom (inline)' : profile.soul_name}</span>
             </div>
             {profile.always_allowed_tools?.length > 0 && (
               <div className="col-span-2">
-                <span className="text-gray-400 block mb-1">Always-allowed tools</span>
+                <span className="text-gray-400 midnight:text-slate-500 block mb-1">Always-allowed tools</span>
                 <div className="flex flex-wrap gap-1">
                   {profile.always_allowed_tools.map(t => (
-                    <code key={t} className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-[10px] font-mono">{t}</code>
+                    <code key={t} className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 midnight:bg-slate-900 midnight:text-slate-300 text-[10px] font-mono">{t}</code>
                   ))}
                 </div>
               </div>
             )}
             <div>
-              <span className="text-gray-400 block mb-0.5">Profile ID</span>
-              <code className="text-gray-400 dark:text-gray-600 font-mono text-[10px]">{profile.id}</code>
+              <span className="text-gray-400 midnight:text-slate-500 block mb-0.5">Profile ID</span>
+              <code className="text-gray-400 dark:text-gray-600 midnight:text-slate-550 font-mono text-[10px]">{profile.id}</code>
             </div>
           </div>
         </div>
@@ -633,12 +633,12 @@ function StarterTemplates({ onCreate }) {
             <button
               key={p.name}
               onClick={() => onCreate(p)}
-              className="flex items-start gap-3 p-3 border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors text-left"
+              className="flex items-start gap-3 p-3 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:bg-gray-50 dark:hover:bg-gray-800/60 midnight:hover:bg-slate-850/50 transition-colors text-left rounded-lg"
             >
               <span className={`w-8 h-8 rounded flex items-center justify-center text-base flex-shrink-0 ${cm.bg}`}>{p.icon}</span>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-gray-800 dark:text-white">{p.name}</p>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-snug mt-0.5 line-clamp-2">{p.description}</p>
+                <p className="text-xs font-semibold text-gray-800 dark:text-white midnight:text-slate-200">{p.name}</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 midnight:text-slate-400 leading-snug mt-0.5 line-clamp-2">{p.description}</p>
               </div>
             </button>
           );
@@ -657,14 +657,14 @@ StarterTemplates.propTypes = {
 function EmptyState({ onAdd }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-      <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+      <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 flex items-center justify-center mb-4">
         <Layers className="w-6 h-6 text-gray-400" />
       </div>
-      <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-2">No agent profiles yet</h3>
-      <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs leading-relaxed mb-6">
+      <h3 className="text-sm font-semibold text-gray-800 dark:text-white midnight:text-slate-200 mb-2">No agent profiles yet</h3>
+      <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 max-w-xs leading-relaxed mb-6">
         Profiles are named configurations — each one bundles a soul, working directory, permission rules, and pre-approved tools.
       </p>
-      <button onClick={onAdd} className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors">
+      <button onClick={onAdd} className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 midnight:text-slate-950 midnight:bg-slate-100 midnight:hover:bg-white rounded-lg text-sm font-medium transition-colors">
         <Plus className="w-4 h-4" />Create your first profile
       </button>
     </div>
@@ -795,17 +795,17 @@ export default function AgentProfilesPage({ embedded = false }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Layers className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              <h1 className="text-base font-semibold text-gray-900 dark:text-white">Agent Profiles</h1>
+              <h1 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Agent Profiles</h1>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
-              <button onClick={fetchProfiles} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh">
+              <span className="text-xs text-gray-400 midnight:text-slate-400">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
+              <button onClick={fetchProfiles} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors midnight:text-slate-400 midnight:hover:text-slate-200 midnight:hover:bg-slate-900" title="Refresh">
                 <RefreshCw className="w-4 h-4" />
               </button>
               {!showForm && (
                 <button
                   onClick={() => { setEditTarget(null); setShowForm(true); setSaveError(null); }}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors midnight:bg-slate-100 midnight:hover:bg-white midnight:text-slate-950"
                 >
                   <Plus className="w-4 h-4" />New Profile
                 </button>
@@ -836,8 +836,8 @@ export default function AgentProfilesPage({ embedded = false }) {
           <div className="px-6 py-5">
             {/* Create/Edit form */}
             {showForm && (
-              <div className="mb-6 p-5 bg-gray-50/70 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
-                <h2 className="text-sm font-semibold text-gray-800 dark:text-white mb-4">
+              <div className="mb-6 p-5 bg-gray-50/70 dark:bg-gray-900/50 midnight:bg-slate-900/30 border border-gray-100 dark:border-gray-800 midnight:border-slate-800 rounded-lg">
+                <h2 className="text-sm font-semibold text-gray-800 dark:text-white midnight:text-slate-200 mb-4">
                   {editTarget && !editTarget._isTemplate ? 'Edit Profile' : 'New Profile'}
                 </h2>
                 {saveError && (

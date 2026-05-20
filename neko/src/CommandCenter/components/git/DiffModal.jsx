@@ -64,12 +64,12 @@ export default function DiffModal({ file, staged = false, compare = null, workin
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800 midnight:border-slate-800">
             <div className="flex min-w-0 items-center gap-2">
-              <FileCode className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
-              <span className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-gray-100" title={title}>
+              <FileCode className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
+              <span className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100" title={title}>
                 {title}
               </span>
               {diff && (
-                <span className="shrink-0 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
+                <span className="shrink-0 text-[10px] tabular-nums text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                   +{diff.additions || 0} -{diff.deletions || 0}
                 </span>
               )}
@@ -78,7 +78,7 @@ export default function DiffModal({ file, staged = false, compare = null, workin
               <button
                 type="button"
                 onClick={copyDiff}
-                className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
                 title="Copy diff"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
@@ -86,7 +86,7 @@ export default function DiffModal({ file, staged = false, compare = null, workin
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
                 title="Close (Esc)"
               >
                 <X className="h-4 w-4" />
@@ -95,14 +95,14 @@ export default function DiffModal({ file, staged = false, compare = null, workin
           </div>
 
           {/* Body */}
-          <div className="min-h-0 flex-1 overflow-auto bg-gray-50 dark:bg-[#0b1220]">
+          <div className="min-h-0 flex-1 overflow-auto bg-gray-50 dark:bg-[#0b1220] midnight:bg-slate-950">
             {loading && (
-              <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500">
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500 midnight:text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading diff...
               </div>
             )}
             {error && (
-              <div className="flex items-center gap-2 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+              <div className="flex items-center gap-2 px-4 py-3 text-sm text-red-600 dark:text-red-300 midnight:text-red-300">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 {error}
               </div>
@@ -110,7 +110,7 @@ export default function DiffModal({ file, staged = false, compare = null, workin
             {!loading && !error && (
               diff?.diff
                 ? <UnifiedDiffViewer diff={diff.diff} filePath={file.path} className="rounded-none border-0" />
-                : <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-slate-600">No diff available for this file.</div>
+                : <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">No diff available for this file.</div>
             )}
           </div>
         </div>

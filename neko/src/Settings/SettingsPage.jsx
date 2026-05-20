@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { SlidersHorizontal, Lock, Moon, Sun, Server, LogOut, ArrowUpCircle, HardDrive, Plug } from 'lucide-react';
+import { SlidersHorizontal, Lock, Moon, Star, Sun, Server, LogOut, ArrowUpCircle, HardDrive, Plug } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 
 // Import our components
@@ -30,19 +30,20 @@ const SettingsPage = () => {
     document.documentElement.classList.remove('dark', 'midnight');
     if (mode === 'dark' || (mode === 'system' && prefersDark)) {
       document.documentElement.classList.add('dark');
+    } else if (mode === 'midnight') {
+      document.documentElement.classList.add('midnight');
     }
   }, []);
 
   useEffect(() => {
     const storedTheme = localStorage.theme;
-    const initialTheme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'system';
-    if (storedTheme === 'midnight') localStorage.removeItem('theme');
+    const initialTheme = ['light', 'dark', 'midnight'].includes(storedTheme) ? storedTheme : 'system';
     applyTheme(initialTheme);
     setTheme(initialTheme);
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
-      if (!('theme' in localStorage)) {
+      if (!('theme' in localStorage) || localStorage.theme === 'system') {
         document.documentElement.classList.toggle('dark', e.matches);
         document.documentElement.classList.remove('midnight');
         setTheme('system');
@@ -54,7 +55,7 @@ const SettingsPage = () => {
   }, [applyTheme]);
 
   const setThemeMode = (mode) => {
-    const nextTheme = mode === 'dark' || mode === 'light' ? mode : 'system';
+    const nextTheme = ['dark', 'light', 'midnight'].includes(mode) ? mode : 'system';
     if (nextTheme === 'system') {
       localStorage.removeItem('theme');
     } else {
@@ -91,7 +92,9 @@ const SettingsPage = () => {
       id: 'appearance',
       label: 'Appearance',
       icon:
-        theme === 'dark' ? (
+        theme === 'midnight' ? (
+          <Star className="w-4 h-4" />
+        ) : theme === 'dark' ? (
           <Moon className="w-4 h-4" />
         ) : (
           <Sun className="w-4 h-4" />
@@ -176,12 +179,12 @@ const SettingsPage = () => {
                 className={`w-full flex items-center px-3 py-1.5 rounded-lg text-left transition-all duration-150
                   ${
                     activeTab === tab.id
-                      ? 'bg-white dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-200 shadow-sm ring-1 ring-gray-200/50 dark:ring-gray-700/50'
+                      ? 'bg-white dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100 shadow-sm ring-1 ring-gray-200/50 dark:ring-gray-700/50 midnight:ring-gray-700/50'
                       : 'text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 active:scale-[0.98]'
                   }`}
               >
                 <div className="flex items-center gap-2.5 w-full">
-                  <div className={`flex-shrink-0 ${activeTab === tab.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                  <div className={`flex-shrink-0 ${activeTab === tab.id ? 'text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400' : 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'}`}>
                     {tab.icon}
                   </div>
                   <div className="flex-1 min-w-0">

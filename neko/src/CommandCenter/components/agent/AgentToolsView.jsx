@@ -7,9 +7,9 @@ import {
 import { agentApi } from '../../api';
 
 const PERM_META = {
-  safe:      { label: 'Safe',      dot: 'bg-emerald-400', text: 'text-emerald-600 dark:text-emerald-400' },
-  moderate:  { label: 'Moderate',  dot: 'bg-amber-400',   text: 'text-amber-600 dark:text-amber-400'   },
-  dangerous: { label: 'Dangerous', dot: 'bg-red-400',     text: 'text-red-600 dark:text-red-400'       },
+  safe:      { label: 'Safe',      dot: 'bg-emerald-400 midnight:bg-emerald-600/70', text: 'text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400/80' },
+  moderate:  { label: 'Moderate',  dot: 'bg-amber-400 midnight:bg-amber-600/70',   text: 'text-amber-600 dark:text-amber-400 midnight:text-amber-400/80'   },
+  dangerous: { label: 'Dangerous', dot: 'bg-red-400 midnight:bg-red-600/70',     text: 'text-red-600 dark:text-red-400 midnight:text-red-400/80'       },
 };
 
 const CATEGORY_META = {
@@ -44,25 +44,25 @@ function ToolCard({ tool }) {
     <div className="group">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        className="w-full flex items-start gap-2.5 px-3 py-2 rounded-lg text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/40 transition-colors"
       >
         <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${perm.dot} mt-0.5`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{tool.name}</span>
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">{tool.name}</span>
           </div>
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1 leading-snug">
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-400 mt-0.5 line-clamp-1 leading-snug">
             {tool.description || 'No description available'}
           </p>
         </div>
         {expanded
-          ? <ChevronDown className="w-3 h-3 text-gray-300 dark:text-gray-600 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-          : <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-600 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />}
+          ? <ChevronDown className="w-3 h-3 text-gray-300 dark:text-gray-600 midnight:text-slate-650 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+          : <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-600 midnight:text-slate-650 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />}
       </button>
 
       {expanded && (
-        <div className="mx-3 mb-2 pl-4 border-l border-gray-100 dark:border-gray-800">
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed py-1">
+        <div className="mx-3 mb-2 pl-4 border-l border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+          <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 leading-relaxed py-1">
             {tool.description || 'No description available'}
           </p>
           <p className={`text-[10px] font-medium mt-1 ${perm.text}`}>
@@ -70,8 +70,8 @@ function ToolCard({ tool }) {
           </p>
           {tool.parameters && (
             <div className="mt-2">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-1">Parameters</p>
-              <pre className="text-[10px] text-gray-500 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-900/40 rounded p-2 overflow-x-auto leading-relaxed">
+              <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Parameters</p>
+              <pre className="text-[10px] text-gray-500 dark:text-gray-400 midnight:text-slate-400 font-mono bg-gray-50 dark:bg-gray-900/40 midnight:bg-slate-900/40 rounded p-2 overflow-x-auto leading-relaxed">
                 {typeof tool.parameters === 'string' ? tool.parameters : JSON.stringify(tool.parameters, null, 2)}
               </pre>
             </div>
@@ -135,7 +135,7 @@ export default function AgentToolsView() {
   return (
     <div className="flex flex-col h-full">
       {/* Search + stats row */}
-      <div className="flex-shrink-0 px-4 py-3 flex items-center gap-3 border-b border-gray-100 dark:border-gray-800">
+      <div className="flex-shrink-0 px-4 py-3 flex items-center gap-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
           <input
@@ -143,13 +143,13 @@ export default function AgentToolsView() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Filter tools…"
-            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-transparent text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600"
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 midnight:border-slate-850 rounded-lg bg-transparent text-gray-700 dark:text-gray-200 midnight:text-slate-200 placeholder-gray-400 dark:placeholder-gray-600 midnight:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600 midnight:focus:ring-slate-700"
           />
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-600 flex-shrink-0">
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />{safeCount}</span>
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />{modCount}</span>
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400" />{dangerCount}</span>
+        <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-600 midnight:text-slate-500 flex-shrink-0">
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 midnight:bg-emerald-600/70" />{safeCount}</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 midnight:bg-amber-600/70" />{modCount}</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400 midnight:bg-red-600/70" />{dangerCount}</span>
         </div>
       </div>
 
@@ -183,8 +183,8 @@ export default function AgentToolsView() {
             <div key={category} className="mb-4">
               <div className="flex items-center gap-2 px-3 mb-1">
                 <CatIcon className={`w-3 h-3 ${catMeta.color}`} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{category}</span>
-                <span className="text-[10px] text-gray-300 dark:text-gray-700 ml-auto">{catTools.length}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">{category}</span>
+                <span className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-slate-700 ml-auto">{catTools.length}</span>
               </div>
               {catTools.sort((a, b) => a.name.localeCompare(b.name)).map(tool => (
                 <ToolCard key={tool.name} tool={tool} />
@@ -194,8 +194,8 @@ export default function AgentToolsView() {
         })}
       </div>
 
-      <div className="flex-shrink-0 px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 text-center">
-        <p className="text-[11px] text-gray-300 dark:text-gray-700">Tools are called automatically during agent tasks</p>
+      <div className="flex-shrink-0 px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 text-center">
+        <p className="text-[11px] text-gray-300 dark:text-gray-700 midnight:text-slate-500">Tools are called automatically during agent tasks</p>
       </div>
     </div>
   );

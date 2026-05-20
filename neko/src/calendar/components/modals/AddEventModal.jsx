@@ -130,19 +130,19 @@ export function AddEventModal({
 				initial={{ scale: 0.95, opacity: 0, y: 10 }}
 				animate={{ scale: 1, opacity: 1, y: 0 }}
 				exit={{ scale: 0.95, opacity: 0, y: 10 }}
-				className="bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-800 w-full max-w-lg mx-4 flex flex-col overflow-hidden"
+				className="bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-800 midnight:border-gray-900 w-full max-w-lg mx-4 flex flex-col overflow-hidden"
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Header */}
-				<div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-					<h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+				<div className="p-5 border-b border-gray-100 dark:border-gray-800 midnight:border-gray-900 flex items-center justify-between">
+					<h2 className="text-xl font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
 						{initialeventid ? "Edit Event" : "Create New Event"}
 					</h2>
 					<button
 						onClick={onClose}
-						className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+						className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 rounded-lg transition-colors"
 					>
-						<X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+						<X className="w-5 h-5 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
 					</button>
 				</div>
 
@@ -151,13 +151,13 @@ export function AddEventModal({
 					<form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 						{/* Title */}
 						<div>
-							<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+							<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-1">
 								Event Title *
 							</label>
 							<input
 								{...register("title", { required: "Title is required" })}
 								placeholder="Enter event title"
-								className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+								className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg bg-white dark:bg-gray-800 midnight:bg-gray-900 text-gray-900 dark:text-white midnight:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
 							/>
 							{errors.title && <p className="text-red-500 text-xs mt-1">{errors.title.message}</p>}
 						</div>
@@ -165,7 +165,7 @@ export function AddEventModal({
 						{/* Dates */}
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-1">
 									Start Date
 								</label>
 								<CustomDatePicker
@@ -175,7 +175,7 @@ export function AddEventModal({
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-1">
 									End Date
 								</label>
 								<CustomDatePicker
@@ -189,7 +189,7 @@ export function AddEventModal({
 						{/* Times */}
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-1">
 									Start Time
 								</label>
 								<CustomTimePicker
@@ -199,7 +199,7 @@ export function AddEventModal({
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-1">
 									End Time
 								</label>
 								<CustomTimePicker
@@ -212,7 +212,7 @@ export function AddEventModal({
 
 						{/* Color */}
 						<div>
-							<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+							<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-2">
 								Color
 							</label>
 							<div className="flex flex-wrap gap-2">
@@ -240,7 +240,7 @@ export function AddEventModal({
 
 						{/* Description */}
 						<div>
-							<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+							<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-1">
 								Description
 							</label>
 							<textarea
@@ -248,7 +248,7 @@ export function AddEventModal({
 								placeholder="Add a description..."
 								rows={3}
 								onKeyDown={(e) => { if (e.key === " " || e.code === "Space") e.stopPropagation(); }}
-								className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+								className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg bg-white dark:bg-gray-800 midnight:bg-gray-900 text-gray-900 dark:text-white midnight:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
 							/>
 						</div>
 
@@ -257,7 +257,7 @@ export function AddEventModal({
 							<button
 								type="button"
 								onClick={onClose}
-								className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+								className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 rounded-lg transition-colors"
 							>
 								Cancel
 							</button>

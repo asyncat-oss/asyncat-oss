@@ -130,12 +130,12 @@ const EngineStatusBanner = ({ type, status, binaryFound, onCheck }) => {
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400">
       <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[status?.status] || STATUS_COLORS.idle}`} />
       <span className="font-medium">{label}</span>
       <span>·</span>
       <span className="capitalize">{status?.status || 'idle'}</span>
-      {status?.model && <><span>·</span><span className="text-gray-700 dark:text-gray-300 font-medium">{status.model}</span></>}
+      {status?.model && <><span>·</span><span className="text-gray-700 dark:text-gray-300 midnight:text-slate-300 font-medium">{status.model}</span></>}
     </div>
   );
 };
@@ -386,9 +386,9 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
           ) : whisperModels.length === 0 ? (
             <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 px-4 py-8">
               <Mic className="w-6 h-6 text-gray-300 dark:text-gray-600 mb-2" />
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 text-center">
                 No Whisper models found.<br />
-                <span className="text-gray-400 dark:text-gray-500">Download a <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">.bin</code> model from <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">ggerganov/whisper.cpp</code> on HuggingFace.<br />Use the search above or place files in <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">data/models/audio/whisper/</code></span>
+                <span className="text-gray-400 dark:text-gray-500 midnight:text-gray-500">Download a <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">.bin</code> model from <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">ggerganov/whisper.cpp</code> on HuggingFace.<br />Use the search above or place files in <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">data/models/audio/whisper/</code></span>
               </p>
             </div>
           ) : (
@@ -438,9 +438,9 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
           ) : ttsModels.length === 0 ? (
             <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white/70 dark:border-gray-800 dark:bg-gray-900/50 px-4 py-8">
               <Volume2 className="w-6 h-6 text-gray-300 dark:text-gray-600 mb-2" />
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 text-center">
                 No voice models found.<br />
-                <span className="text-gray-400 dark:text-gray-500">Piper needs <strong>both</strong> a <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">.onnx</code> model and its <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">.onnx.json</code> config file.<br />Search for <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">rhasspy/piper-voices</code> above and download both files to <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">data/models/audio/tts/</code></span>
+                <span className="text-gray-400 dark:text-gray-500 midnight:text-gray-500">Piper needs <strong>both</strong> a <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">.onnx</code> model and its <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">.onnx.json</code> config file.<br />Search for <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">rhasspy/piper-voices</code> above and download both files to <code className="text-[10px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded">data/models/audio/tts/</code></span>
               </p>
             </div>
           ) : (
@@ -468,19 +468,19 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
         <div className="flex-shrink-0 w-6 h-6 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center mt-0.5">
           <Info className="w-3 h-3 text-gray-400 dark:text-gray-500" />
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed space-y-1.5">
+        <div className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 leading-relaxed space-y-1.5">
           {showWhisper && showTts && <div>
-            <span className="font-medium text-gray-700 dark:text-gray-200">Agent tools:</span>{' '}
-            When models are loaded, your agent can use <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">transcribe_audio</code> and{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">speak_text</code> tools automatically.
+            <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Agent tools:</span>{' '}
+            When models are loaded, your agent can use <code className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded text-[11px]">transcribe_audio</code> and{' '}
+            <code className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded text-[11px]">speak_text</code> tools automatically.
           </div>}
           {showWhisper && <div>
-            <span className="font-medium text-gray-700 dark:text-gray-200">Whisper STT:</span>{' '}
-            Needs a single <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.bin</code> file (e.g. <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">ggml-base.en.bin</code>).
+            <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Whisper STT:</span>{' '}
+            Needs a single <code className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.bin</code> file (e.g. <code className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded text-[11px]">ggml-base.en.bin</code>).
           </div>}
           {showTts && <div>
-            <span className="font-medium text-gray-700 dark:text-gray-200">Piper TTS:</span>{' '}
-            Needs <strong>two files</strong> — the <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx</code> voice model <strong>and</strong> its matching <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx.json</code> config. Download both to the same folder.
+            <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Piper TTS:</span>{' '}
+            Needs <strong>two files</strong> — the <code className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx</code> voice model <strong>and</strong> its matching <code className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 px-1 py-0.5 rounded text-[11px]">.onnx.json</code> config. Download both to the same folder.
           </div>}
         </div>
       </div>

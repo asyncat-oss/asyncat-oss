@@ -886,8 +886,8 @@ const DayView = ({
 								<span
 									className={`text-lg font-semibold w-8 h-8 flex items-center justify-center rounded-md ${
 										isToday(currentDate)
-											? "bg-blue-100 text-blue-700"
-											: "text-gray-700 dark:text-gray-300"
+											? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-blue-950 midnight:text-blue-400"
+											: "text-gray-700 dark:text-gray-300 midnight:text-gray-300"
 									}`}
 								>
 									{currentDate.getDate()}
@@ -897,8 +897,8 @@ const DayView = ({
 					</div>
 					{/* All-day & multi-day events section - Enhanced like WeekView */}
 					{allDayEvents.length > 0 && (
-						<div className="border-t border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60 px-6 py-3 bg-gradient-to-r from-indigo-50/30 to-purple-50/30 dark:from-indigo-900/10 dark:to-purple-900/10">
-							<div className="text-sm text-gray-600 dark:text-gray-400 font-semibold mb-2 flex items-center">
+						<div className="border-t border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60 px-6 py-3 bg-gradient-to-r from-indigo-50/30 to-purple-50/30 dark:from-indigo-900/10 dark:to-purple-900/10 midnight:from-indigo-950/20 midnight:to-purple-950/20">
+							<div className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400 font-semibold mb-2 flex items-center">
 								<div className="w-2 h-2 rounded-full bg-indigo-500 mr-2"></div>
 								All-day Events
 							</div>
@@ -934,7 +934,7 @@ const DayView = ({
 
 								{allDayEvents.length > 2 && (
 									<div
-										className="text-sm text-indigo-600 dark:text-indigo-400 pl-3 cursor-pointer hover:underline font-medium flex items-center transition-colors"
+										className="text-sm text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400 pl-3 cursor-pointer hover:underline font-medium flex items-center transition-colors"
 										onClick={(e) => {
 											e.stopPropagation();
 											const rect = e.currentTarget.getBoundingClientRect();
@@ -1016,8 +1016,8 @@ const DayView = ({
 												}}
 												className="absolute inset-0 z-10 flex items-center justify-center w-full h-full transition-opacity duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
 											>
-												<div className="bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-800/90 rounded-full p-1.5 shadow-md">
-													<Plus className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+												<div className="bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 rounded-full p-1.5 shadow-md">
+													<Plus className="w-5 h-5 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
 												</div>
 											</button>
 										</div>

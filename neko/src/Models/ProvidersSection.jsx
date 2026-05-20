@@ -268,7 +268,7 @@ const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, p
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className={`p-2 rounded-xl border ${experimental ? 'border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400' : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
+          <div className={`p-2 rounded-xl border ${experimental ? 'border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 midnight:border-amber-800 midnight:bg-amber-900/30 midnight:text-amber-300' : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-400'}`}>
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
@@ -283,7 +283,7 @@ const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, p
             {hasModels && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {models.slice(0, 5).map(m => (
-                  <span key={m} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">{m}</span>
+                  <span key={m} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:bg-gray-800 midnight:text-gray-300">{m}</span>
                 ))}
                 {models.length > 5 && <span className="text-xs text-gray-400 dark:text-gray-500">+{models.length - 5} more</span>}
               </div>
@@ -667,9 +667,9 @@ const ProvidersSection = ({
           <div className="h-32 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         ) : profiles.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-8 text-center">
-            <Cloud className="w-7 h-7 text-gray-300 dark:text-gray-600 mx-auto" />
-            <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">No provider profiles yet</p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Add a cloud API or local runtime below.</p>
+            <Cloud className="w-7 h-7 text-gray-300 dark:text-gray-600 midnight:text-gray-500 mx-auto" />
+            <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">No provider profiles yet</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">Add a cloud API or local runtime below.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -826,7 +826,7 @@ const ProvidersSection = ({
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Endpoint</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Hosted chat APIs, local runtimes, and custom OpenAI-compatible endpoints.</p>
           </div>
-          <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
+          <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900">
             <Plus className="w-4 h-4" />
             Custom
           </button>

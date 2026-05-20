@@ -19,6 +19,7 @@ import {
   Globe,
   Cpu,
   Mic,
+  Star,
 } from 'lucide-react';
 import authService from './services/authService.js';
 
@@ -104,7 +105,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
   // Preferences State
   const [themePref, setThemePref] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
-    return ['light', 'dark'].includes(savedTheme) ? savedTheme : 'system';
+    return ['light', 'dark', 'midnight'].includes(savedTheme) ? savedTheme : 'system';
   });
   const [dockVis, setDockVis] = useState('always');
   const [topMenuVis, setTopMenuVis] = useState('always');
@@ -151,6 +152,9 @@ const WelcomePage = ({ session, onTeamCreated }) => {
     } else if (themePref === 'dark') {
       document.documentElement.classList.add('dark');
       document.documentElement.classList.remove('midnight');
+    } else if (themePref === 'midnight') {
+      document.documentElement.classList.add('midnight');
+      document.documentElement.classList.remove('dark');
     } else if (themePref === 'light') {
       document.documentElement.classList.remove('dark', 'midnight');
     }
@@ -370,6 +374,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                     options={[
                       { value: 'light', label: 'Light', icon: Sun },
                       { value: 'dark', label: 'Dark', icon: Moon },
+                      { value: 'midnight', label: 'Midnight', icon: Star },
                       { value: 'system', label: 'Auto', icon: Monitor },
                     ]}
                   />
