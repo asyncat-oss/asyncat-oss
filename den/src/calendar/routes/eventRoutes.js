@@ -58,189 +58,6 @@ const formatEvent = (event) => ({
 	createdBy: event.createdBy,
 });
 
-const isAssignedToSubtask = (checklist, userId) => {
-	if (!Array.isArray(checklist)) return false;
-	return checklist.some(
-		(item) => Array.isArray(item.assignees) && item.assignees.includes(userId)
-	);
-};
-
-const userCanAccessProject = async (userId, projectId, db) => {
-	if (!projectId) return false;
-
-	const { data: project, error } = await db
-		.from("projects")
-		.select("created_by, owner_id")
-		.eq("id", projectId)
-		.single();
-
-	if (error || !project) return false;
-	return project.created_by === userId || project.owner_id === userId;
-};
-
-const formatCard = (card) => {
-	const assignees = [];
-	if (Array.isArray(card.checklist)) {
-		card.checklist.forEach((item) => {
-			if (!Array.isArray(item.assignees)) return;
-			item.assignees.forEach((assigneeId) => {
-				if (!assignees.includes(assigneeId)) assignees.push(assigneeId);
-			});
-		});
-	}
-
-	const isCompleted = (card.progress || 0) >= 100;
-
-	return {
-		id: card.id,
-		title: card.title,
-		description: card.description,
-		dueDate: card.dueDate,
-		priority: card.priority || "Medium",
-		progress: card.progress || 0,
-		tags: card.tags || [],
-		createdBy: card.createdBy,
-		administrator_id: card.administrator_id,
-		assignees,
-		checklist: card.checklist || [],
-		tasks: card.tasks
-			? {
-					total: card.tasks.total || 0,
-					completed: card.tasks.completed || 0,
-			  }
-			: { total: 0, completed: 0 },
-		column: {
-			id: card.Columns?.id,
-			title: card.Columns?.title,
-			projectId: card.Columns?.projectId,
-		},
-		projectId: card.Columns?.projectId,
-		isCompleted,
-		type: "card",
-	};
-};
-
-const getCardsWithDueDates = async (req, db, dateRange = null) => {
-	const userId = req.user.id;
-
-	let cardsQ = db
-		.from("Cards")
-		.select(
-			"id, title, description, priority, dueDate, columnId, tasks, progress, tags, createdBy, administrator_id, checklist"
-		)
-		.not("dueDate", "is", null);
-
-	if (dateRange?.startDate && dateRange?.endDate) {
-		cardsQ = cardsQ.gte("dueDate", dateRange.startDate).lte("dueDate", dateRange.endDate);
-	}
-
-	const { data: allCards, error } = await cardsQ;
-	if (error) throw error;
-
-	const colIds = [...new Set((allCards || []).map((card) => card.columnId).filter(Boolean))];
-	const colMap = {};
-	if (colIds.length > 0) {
-		const { data: cols } = await db
-			.from("Columns")
-			.select("id, title, projectId")
-			.in("id", colIds);
-		(cols || []).forEach((col) => {
-			colMap[col.id] = col;
-		});
-	}
-
-	return (allCards || [])
-		.map((card) => ({ ...card, Columns: colMap[card.columnId] || null }))
-		.filter((card) => {
-			if (card.createdBy === userId) return true;
-			if (card.administrator_id === userId) return true;
-			if (isAssignedToSubtask(card.checklist, userId)) return true;
-			return false;
-		});
-};
-
-router.get("/calendar-cards", async (req, res) => {
-	try {
-		const { startDate, endDate } = req.query;
-		const dateRange = startDate && endDate ? { startDate, endDate } : null;
-		const cards = await getCardsWithDueDates(req, req.db, dateRange);
-
-		res.json({
-			success: true,
-			cards: cards.map(formatCard),
-			total: cards.length,
-		});
-	} catch (error) {
-		console.error("Error fetching calendar cards:", error);
-		res.status(500).json({
-			error: "Failed to fetch cards for calendar",
-			details: error.message,
-		});
-	}
-});
-
-router.put("/cards/:id/due-date", async (req, res) => {
-	try {
-		const { id } = req.params;
-		const { dueDate } = req.body;
-		const userId = req.user.id;
-
-		if (!dueDate) {
-			return res.status(400).json({ error: "Due date is required" });
-		}
-
-		const { data: card, error: cardError } = await req.db
-			.from("Cards")
-			.select("createdBy, administrator_id, checklist, columnId")
-			.eq("id", id)
-			.single();
-
-		if (cardError || !card) {
-			return res.status(404).json({ error: "Card not found" });
-		}
-
-		const { data: cardColumn } = await req.db
-			.from("Columns")
-			.select("projectId")
-			.eq("id", card.columnId)
-			.single();
-
-		const hasDirectAccess =
-			card.createdBy === userId ||
-			card.administrator_id === userId ||
-			isAssignedToSubtask(card.checklist, userId);
-		const hasProjectAccess =
-			!hasDirectAccess && (await userCanAccessProject(userId, cardColumn?.projectId, req.db));
-
-		if (!hasDirectAccess && !hasProjectAccess) {
-			return res.status(403).json({
-				error: "You do not have permission to update this card",
-			});
-		}
-
-		const { data: updatedCard, error } = await req.db
-			.schema("kanban")
-			.from("Cards")
-			.update({ dueDate: new Date(dueDate).toISOString() })
-			.eq("id", id)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		res.json({
-			success: true,
-			card: updatedCard,
-		});
-	} catch (error) {
-		console.error("Error updating card due date:", error);
-		res.status(500).json({
-			error: "Failed to update card due date",
-			details: error.message,
-		});
-	}
-});
-
 router.get("/combined-data", async (req, res) => {
 	try {
 		const { startDate, endDate } = req.query;
@@ -259,26 +76,15 @@ router.get("/combined-data", async (req, res) => {
 				.gte("endTime", new Date(dateRange.startDate).toISOString());
 		}
 
-		const [eventsResult, cards] = await Promise.all([
-			eventsQ,
-			getCardsWithDueDates(req, req.db, dateRange),
-		]);
+		const { data, error } = await eventsQ;
+		if (error) throw error;
 
-		if (eventsResult.error) throw eventsResult.error;
-
-		const events = (eventsResult.data || []).map(formatEvent);
-		const formattedCards = cards.map(formatCard);
+		const events = (data || []).map(formatEvent);
 
 		res.json({
 			success: true,
-			data: {
-				events,
-				cards: formattedCards,
-			},
-			totals: {
-				events: events.length,
-				cards: formattedCards.length,
-			},
+			data: { events },
+			totals: { events: events.length },
 		});
 	} catch (error) {
 		console.error("Error in combined data fetch:", error);

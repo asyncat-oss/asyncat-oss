@@ -4,11 +4,9 @@ import TopBar from "./TopBar";
 import Calendar from "./Calendar";
 import { AddEventModal } from "./components/modals/AddEventModal";
 import CalendarSkeleton from "./components/CalendarSkeleton";
-import ViewCardModal from "./components/modals/ViewCardModal";
 import {
 	calendarEventsApi,
 	calendarDataApi,
-	calendarProjectsApi,
 } from "./api/calendarApi";
 import { calendarUtils } from "./api/calendarUtils";
 
@@ -29,53 +27,16 @@ const Layout = ({ session }) => {
 	const [_selectedDate] = useState(null);
 	const [showAddEvent, setShowAddEvent] = useState(false);
 	const [events, setEvents] = useState([]);
-	const [cards, setCards] = useState([]);
 	const [isInitialLoading, setIsInitialLoading] = useState(true);
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [isMutating, setIsMutating] = useState(false);
 	const [, setLoadingType] = useState("");
-	const [selectedCard, setSelectedCard] = useState(null);
-	const [showCardModal, setShowCardModal] = useState(false);
-	const [projectsMap, setProjectsMap] = useState({});
 	const [fetchTrigger, setFetchTrigger] = useState(0);
 
 	const isFirstLoad = useRef(true);
 	const prevViewRef = useRef(view);
 	const prevDateRef = useRef(currentDate);
 	const prefetchTimeoutRef = useRef(null);
-
-	const [cardFilters, setCardFilters] = useState(() => {
-		try {
-			const saved = localStorage.getItem("calendar-card-filters");
-			if (saved) {
-				const parsed = JSON.parse(saved);
-				return {
-					showCards: parsed.showCards !== undefined ? parsed.showCards : true,
-					priority: parsed.priority || "all",
-					completed: parsed.completed || "all",
-				};
-			}
-		} catch {
-			// Ignore malformed persisted filters.
-		}
-		return { showCards: true, priority: "all", completed: "all" };
-	});
-
-	useEffect(() => {
-		const fetchProjects = async () => {
-			try {
-				const { data } = await calendarProjectsApi.getProjects();
-				const map = {};
-				(data || []).forEach((project) => {
-					map[project.id] = project;
-				});
-				setProjectsMap(map);
-			} catch (error) {
-				console.error("Error fetching projects for calendar cards:", error);
-			}
-		};
-		fetchProjects();
-	}, []);
 
 	useEffect(() => {
 		setIsInitialLoading(true);
@@ -89,14 +50,10 @@ const Layout = ({ session }) => {
 		};
 
 		window.addEventListener("eventUpdated", invalidateAndRefresh);
-		window.addEventListener("cardUpdated", invalidateAndRefresh);
-		window.addEventListener("projectsUpdated", invalidateAndRefresh);
 		window.addEventListener("networkRestored", invalidateAndRefresh);
 
 		return () => {
 			window.removeEventListener("eventUpdated", invalidateAndRefresh);
-			window.removeEventListener("cardUpdated", invalidateAndRefresh);
-			window.removeEventListener("projectsUpdated", invalidateAndRefresh);
 			window.removeEventListener("networkRestored", invalidateAndRefresh);
 			calendarDataApi.backgroundSync.stop();
 		};
@@ -133,14 +90,6 @@ const Layout = ({ session }) => {
 	}, [view]);
 
 	useEffect(() => {
-		try {
-			localStorage.setItem("calendar-card-filters", JSON.stringify(cardFilters));
-		} catch {
-			// Ignore storage failures.
-		}
-	}, [cardFilters]);
-
-	useEffect(() => {
 		if (!isInitialLoading) {
 			if (view !== prevViewRef.current) {
 				setIsRefreshing(true);
@@ -175,11 +124,10 @@ const Layout = ({ session }) => {
 					endDate: endDate.toISOString().split("T")[0],
 				};
 
-				const { events: fetchedEvents, cards: fetchedCards } =
+				const { events: fetchedEvents } =
 					await calendarDataApi.fetchCalendarDataWithRetry(filters);
 
 				setEvents(fetchedEvents.map(calendarUtils.formatEventForFrontend));
-				setCards(fetchedCards);
 
 				if (prefetchTimeoutRef.current) clearTimeout(prefetchTimeoutRef.current);
 				prefetchTimeoutRef.current = setTimeout(() => {
@@ -191,7 +139,6 @@ const Layout = ({ session }) => {
 				console.error("Error loading calendar data:", error);
 				if (error.message?.includes("Authentication")) return;
 				setEvents([]);
-				setCards([]);
 			} finally {
 				setIsInitialLoading(false);
 				setIsRefreshing(false);
@@ -218,10 +165,6 @@ const Layout = ({ session }) => {
 		} finally {
 			setIsRefreshing(false);
 		}
-	};
-
-	const updateCardFilter = (key, value) => {
-		setCardFilters((prev) => ({ ...prev, [key]: value }));
 	};
 
 	const handleAddEvent = async (newEvent) => {
@@ -347,75 +290,6 @@ const Layout = ({ session }) => {
 		}
 	};
 
-	const handleCardUpdate = async (updatedCard) => {
-		setIsMutating(true);
-		setLoadingType("updating");
-		const originalCard = cards.find((card) => card.id === updatedCard.id);
-
-		try {
-			setCards((prev) =>
-				prev.map((card) =>
-					card.id === updatedCard.id ? { ...updatedCard, isPending: true } : card
-				)
-			);
-
-			const responseData = await calendarEventsApi.updateCardDueDate(
-				updatedCard.id,
-				updatedCard.dueDate
-			);
-
-			setCards((prev) =>
-				prev.map((card) =>
-					card.id === updatedCard.id
-						? { ...responseData.card, isPending: false }
-						: card
-				)
-			);
-			calendarDataApi.invalidateCache();
-			window.dispatchEvent(
-				new CustomEvent("cardUpdated", {
-					detail: { cardId: updatedCard.id, card: responseData.card },
-				})
-			);
-		} catch (error) {
-			console.error("Error updating card:", error);
-			if (originalCard) {
-				setCards((prev) =>
-					prev.map((card) =>
-						card.id === updatedCard.id
-							? { ...originalCard, hasError: true }
-							: card
-					)
-				);
-				setTimeout(() => {
-					setCards((prev) =>
-						prev.map((card) =>
-							card.id === updatedCard.id
-								? { ...originalCard, hasError: false }
-								: card
-						)
-					);
-				}, 3000);
-			}
-			throw error;
-		} finally {
-			setIsMutating(false);
-		}
-	};
-
-	const filteredCards = cards.filter((card) => {
-		if (!cardFilters.showCards) return false;
-		if (
-			cardFilters.priority !== "all" &&
-			card.priority?.toLowerCase() !== cardFilters.priority.toLowerCase()
-		) {
-			return false;
-		}
-		if (cardFilters.completed === "completed" && !card.isCompleted) return false;
-		if (cardFilters.completed === "notCompleted" && card.isCompleted) return false;
-		return true;
-	});
-
 	return (
 		<div
 			className={`flex flex-col h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 ${soraFontBase}`}
@@ -425,8 +299,6 @@ const Layout = ({ session }) => {
 				onViewChange={setView}
 				currentDate={currentDate}
 				onDateChange={setCurrentDate}
-				cardFilters={cardFilters}
-				updateCardFilter={updateCardFilter}
 				isCalendarRefreshing={isRefreshing}
 			/>
 
@@ -442,18 +314,10 @@ const Layout = ({ session }) => {
 						onDateChange={setCurrentDate}
 						selectedDate={_selectedDate}
 						events={events}
-						cards={filteredCards}
 						onAddEvent={handleAddEvent}
 						onDeleteEvent={handleDeleteEvent}
 						onEventUpdate={handleEventUpdate}
-						onCardUpdate={handleCardUpdate}
-						onCardClick={(card) => {
-							setSelectedCard(card);
-							setShowCardModal(true);
-						}}
-						isEmpty={events.length === 0 && filteredCards.length === 0}
 						fetchEvents={smartRefresh}
-						projectsMap={projectsMap}
 						currentUserId={session?.user?.id}
 						currentUserEmail={session?.user?.email}
 					/>
@@ -472,15 +336,6 @@ const Layout = ({ session }) => {
 					/>
 				)}
 
-				{showCardModal && (
-					<ViewCardModal
-						isOpen={showCardModal}
-						onClose={() => setShowCardModal(false)}
-						card={selectedCard}
-						projectsMap={projectsMap}
-						currentUserId={session?.user?.id}
-					/>
-				)}
 			</AnimatePresence>
 		</div>
 	);

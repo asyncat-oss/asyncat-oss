@@ -8,7 +8,6 @@ import {
 	DragOverlay,
 } from "@dnd-kit/core";
 import DraggableEvent from "./DraggableEvent";
-import DraggableCard from "./DraggableCard";
 import MultipleEventsModal from "./MultipleEventsModal";
 import { DAYS_OF_WEEK } from "../data/CalendarConstants";
 import DroppableDay from "./DroppableDay";
@@ -16,38 +15,30 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const MonthView = ({
 	events,
-	cards = [], // Added cards prop with default empty array
 	isToday,
 	isSelectedDate,
 	monthDays,
 	_firstDayOfMonth,
 	onEventClick,
-	onCardClick, // Added handler for card clicks
 	onShowMoreClick,
 	getEventStyle,
 	setSelectedTimeSlot,
 	setShowAddEvent,
 	onEventUpdate,
-	onCardUpdate, // Added handler for card updates
 	_fetchEvents,
-	currentDate, // Add currentDate prop for navigation
-	onDateChange, // Add onDateChange prop for navigation
-	currentUserId, // Add current user ID
-	currentUserEmail, // Add current user email
-	allProjects = [], // Add allProjects prop for permissions
-	// Modal props
+	currentDate,
+	onDateChange,
+	currentUserId,
+	currentUserEmail,
+	allProjects = [],
 	showMultipleEvents = false,
 	selectedDateEvents = [],
-	selectedDateCards = [],
 	selectedDatePosition = null,
 	onCloseMultipleEvents = () => {},
 	onEventClickFromModal = () => {},
-	onCardClickFromModal = () => {},
 }) => {
 	const [activeEvent, setActiveEvent] = useState(null);
-	const [activeCard, setActiveCard] = useState(null); // Add state for active card
 	const [processedEvents, setProcessedEvents] = useState([]);
-	const [processedCards, setProcessedCards] = useState([]);
 	// Refs for scroll functionality
 	const containerRef = useRef(null);
 	const isScrollingRef = useRef(false);
@@ -389,22 +380,6 @@ const MonthView = ({
 		setProcessedEvents(allEvents);
 	}, [events]);
 
-	// Process cards for calendar display
-	useEffect(() => {
-		// Map cards to a format suitable for the calendar
-		const formattedCards = cards.map((card) => {
-			// Use dueDate as the display date
-			const dueDate = new Date(card.dueDate);
-			return {
-				...card,
-				displayDate: dueDate,
-			};
-		});
-
-		setProcessedCards(formattedCards);
-	}, [cards]);
-
-
 	// Handle day click
 	const handleDayClick = (date) => {
 		const now = new Date();
@@ -425,51 +400,28 @@ const MonthView = ({
 	const handleDragStart = (event) => {
 		const { active } = event;
 
-		// Close modal when drag starts
 		if (showMultipleEvents) {
 			onCloseMultipleEvents();
 		}
 
-		// Check if it's a card being dragged (support modal IDs and data type)
-		const isCard =
-			active?.data?.current?.type === "card" ||
-			String(active.id).startsWith("card-") ||
-			String(active.id).startsWith("modal-card-");
-
-		if (isCard) {
-			const draggedCard =
-				active.data?.current ||
-				cards.find((c) => `card-${c.id}` === active.id);
-
-			if (!draggedCard) {
-				console.error("Could not find card with id:", active.id);
-				return;
-			}
-
-			setActiveCard(draggedCard);
+		const rawData = active.data?.current;
+		let draggedEvent = null;
+		if (rawData && rawData.id) {
+			draggedEvent = rawData;
 		} else {
-			// It's an event being dragged
-			const rawData = active.data?.current;
-			let draggedEvent = null;
-			if (rawData && rawData.id) {
-				draggedEvent = rawData;
-			} else {
-				const idStr = String(active.id);
-				const plainId = idStr.startsWith("modal-event-")
-					? idStr.replace("modal-event-", "")
-					: idStr;
-				draggedEvent = processedEvents.find(
-					(e) => String(e.id) === plainId
-				);
-			}
-
-			if (!draggedEvent) {
-				console.error("Could not find event with id:", active.id);
-				return;
-			}
-
-			setActiveEvent(draggedEvent);
+			const idStr = String(active.id);
+			const plainId = idStr.startsWith("modal-event-")
+				? idStr.replace("modal-event-", "")
+				: idStr;
+			draggedEvent = processedEvents.find((e) => String(e.id) === plainId);
 		}
+
+		if (!draggedEvent) {
+			console.error("Could not find event with id:", active.id);
+			return;
+		}
+
+		setActiveEvent(draggedEvent);
 	};
 
 	const handleDragEnd = async (event) => {
@@ -477,58 +429,14 @@ const MonthView = ({
 
 		if (!over || active.id === over.id) {
 			setActiveEvent(null);
-			setActiveCard(null);
 			return;
 		}
 
-		// Check if it's a card being dragged (support modal IDs and data type)
-		const isCard =
-			active?.data?.current?.type === "card" ||
-			String(active.id).startsWith("card-") ||
-			String(active.id).startsWith("modal-card-");
+		const draggedEvent = activeEvent;
+		setActiveEvent(null);
 
-		if (isCard) {
-			const draggedCard = activeCard;
-
-			// Clear drag state immediately for faster UI response
-			setActiveCard(null);
-
-			if (!draggedCard || !onCardUpdate) {
-				console.error("No card data or onCardUpdate handler available");
-				return;
-			}
-
-			try {
-				const targetDate = new Date(over.id);
-
-				// Update card due date
-				const updatedCardData = {
-					...draggedCard,
-					dueDate: targetDate.toISOString(),
-				};
-
-				// Fire and forget - don't await to avoid blocking UI
-				onCardUpdate(updatedCardData).catch((error) => {
-					console.error(
-						"Error updating card in MonthView.handleDragEnd:",
-						error
-					);
-				});
-			} catch (error) {
-				console.error(
-					"Error updating card in MonthView.handleDragEnd:",
-					error
-				);
-			}
-		} else {
-			// Handle event dragging (existing logic)
-			const draggedEvent = activeEvent;
-
-			// Clear drag state immediately for faster UI response
-			setActiveEvent(null);
-
-			try {
-				const targetDate = new Date(over.id);
+		try {
+			const targetDate = new Date(over.id);
 
 				let updatedEventData = {
 					...draggedEvent,
@@ -618,12 +526,11 @@ const MonthView = ({
 						error
 					);
 				});
-			} catch (error) {
-				console.error(
-					"Error updating event in MonthView.handleDragEnd:",
-					error
-				);
-			}
+		} catch (error) {
+			console.error(
+				"Error updating event in MonthView.handleDragEnd:",
+				error
+			);
 		}
 	};
 
@@ -690,24 +597,10 @@ const MonthView = ({
 		monthDays[0].getMonth()
 	);
 
-	// Get combined items (events and cards) for a date
 	const getItemsForDate = (date) => {
-		const dateEvents = processedEvents
+		return processedEvents
 			.filter((event) => isSameDate(event.displayDate, date))
-			.filter((event) => {
-				// Hide the event only if it's being dragged (moved), not resized
-				// Note: MonthView typically doesn't have resize operations, but keeping consistent logic
-				return !activeEvent || activeEvent.id !== event.id;
-			});
-		const dateCards = processedCards
-			.filter((card) => isSameDate(card.displayDate, date))
-			.filter((card) => {
-				// Hide the card if it's being dragged
-				return !activeCard || activeCard.id !== card.id;
-			});
-
-		// Return combined array with cards first (typically fewer), then events
-		return [...dateCards, ...dateEvents];
+			.filter((event) => !activeEvent || activeEvent.id !== event.id);
 	};
 	return (
 		<DndContext
@@ -799,68 +692,34 @@ const MonthView = ({
 									<div className="space-y-0.5 h-16">
 										{" "}
 										{/* Fixed height and overflow hidden */}
-										{/* Show first 2 items (cards and events combined) */}
-										{dateItems.slice(0, 2).map((item) => {
-											// Item with dueDate property is a card
-											if ("dueDate" in item) {
-												return (
-													<DraggableCard
-														key={`card-${item.id}`}
-														card={item}
-														onCardClick={
-															onCardClick
-														}
-														currentUserId={
-															currentUserId
-														}
-													/>
-												);
-											} else {
-												// Otherwise it's an event
-												return (
-													<DraggableEvent
-														key={`event-${item.id}`}
-														event={item}
-														onEventClick={
-															onEventClick
-														}
-														getEventStyle={(e) =>
-															e.isMultiDay
-																? getMultiDayEventStyle(
-																		e
-																  )
-																: getEventStyle(
-																		e
-																  )
-														}
-														showIcons={true}
-														resizable={false} // Disable resizing in month view
-														style={{
-															marginLeft:
-																item.isMultiDay &&
-																!item.isFirstDay
-																	? "-0.5rem"
-																	: "0",
-															marginRight:
-																item.isMultiDay &&
-																!item.isLastDay
-																	? "-0.5rem"
-																	: "0",
-														}}
-														compact={true} // Add compact prop to make events smaller
-														currentUserId={
-															currentUserId
-														}
-														currentUserEmail={
-															currentUserEmail
-														}
-														allProjects={
-															allProjects
-														} // Pass allProjects for permissions
-													/>
-												);
-											}
-										})}
+										{dateItems.slice(0, 2).map((item) => (
+											<DraggableEvent
+												key={`event-${item.id}`}
+												event={item}
+												onEventClick={onEventClick}
+												getEventStyle={(e) =>
+													e.isMultiDay
+														? getMultiDayEventStyle(e)
+														: getEventStyle(e)
+												}
+												showIcons={true}
+												resizable={false}
+												style={{
+													marginLeft:
+														item.isMultiDay && !item.isFirstDay
+															? "-0.5rem"
+															: "0",
+													marginRight:
+														item.isMultiDay && !item.isLastDay
+															? "-0.5rem"
+															: "0",
+												}}
+												compact={true}
+												currentUserId={currentUserId}
+												currentUserEmail={currentUserEmail}
+												allProjects={allProjects}
+											/>
+										))}
 										{/* Show "more" link if there are more than 2 items */}
 										{dateItems.length > 2 && (
 											<div
@@ -924,68 +783,34 @@ const MonthView = ({
 									<div className="space-y-0.5 h-16">
 										{" "}
 										{/* Fixed height and overflow hidden */}
-										{/* Show first 2 items (cards and events combined) */}
-										{dateItems.slice(0, 2).map((item) => {
-											// Item with dueDate property is a card
-											if ("dueDate" in item) {
-												return (
-													<DraggableCard
-														key={`card-${item.id}`}
-														card={item}
-														onCardClick={
-															onCardClick
-														}
-														currentUserId={
-															currentUserId
-														}
-													/>
-												);
-											} else {
-												// Otherwise it's an event
-												return (
-													<DraggableEvent
-														key={`event-${item.id}`}
-														event={item}
-														onEventClick={
-															onEventClick
-														}
-														getEventStyle={(e) =>
-															e.isMultiDay
-																? getMultiDayEventStyle(
-																		e
-																  )
-																: getEventStyle(
-																		e
-																  )
-														}
-														showIcons={true}
-														resizable={false} // Disable resizing in month view
-														style={{
-															marginLeft:
-																item.isMultiDay &&
-																!item.isFirstDay
-																	? "-0.5rem"
-																	: "0",
-															marginRight:
-																item.isMultiDay &&
-																!item.isLastDay
-																	? "-0.5rem"
-																	: "0",
-														}}
-														compact={true} // Add compact prop to make events smaller
-														currentUserId={
-															currentUserId
-														}
-														currentUserEmail={
-															currentUserEmail
-														}
-														allProjects={
-															allProjects
-														} // Pass allProjects for permissions
-													/>
-												);
-											}
-										})}
+										{dateItems.slice(0, 2).map((item) => (
+											<DraggableEvent
+												key={`event-${item.id}`}
+												event={item}
+												onEventClick={onEventClick}
+												getEventStyle={(e) =>
+													e.isMultiDay
+														? getMultiDayEventStyle(e)
+														: getEventStyle(e)
+												}
+												showIcons={true}
+												resizable={false}
+												style={{
+													marginLeft:
+														item.isMultiDay && !item.isFirstDay
+															? "-0.5rem"
+															: "0",
+													marginRight:
+														item.isMultiDay && !item.isLastDay
+															? "-0.5rem"
+															: "0",
+												}}
+												compact={true}
+												currentUserId={currentUserId}
+												currentUserEmail={currentUserEmail}
+												allProjects={allProjects}
+											/>
+										))}
 										{/* Show "more" link if there are more than 2 items */}
 										{dateItems.length > 2 && (
 											<div
@@ -1034,68 +859,34 @@ const MonthView = ({
 									<div className="space-y-0.5 h-16">
 										{" "}
 										{/* Fixed height and overflow hidden */}
-										{/* Show first 2 items (cards and events combined) */}
-										{dateItems.slice(0, 2).map((item) => {
-											// Item with dueDate property is a card
-											if ("dueDate" in item) {
-												return (
-													<DraggableCard
-														key={`card-${item.id}`}
-														card={item}
-														onCardClick={
-															onCardClick
-														}
-														currentUserId={
-															currentUserId
-														}
-													/>
-												);
-											} else {
-												// Otherwise it's an event
-												return (
-													<DraggableEvent
-														key={`event-${item.id}`}
-														event={item}
-														onEventClick={
-															onEventClick
-														}
-														getEventStyle={(e) =>
-															e.isMultiDay
-																? getMultiDayEventStyle(
-																		e
-																  )
-																: getEventStyle(
-																		e
-																  )
-														}
-														showIcons={true}
-														resizable={false} // Disable resizing in month view
-														style={{
-															marginLeft:
-																item.isMultiDay &&
-																!item.isFirstDay
-																	? "-0.5rem"
-																	: "0",
-															marginRight:
-																item.isMultiDay &&
-																!item.isLastDay
-																	? "-0.5rem"
-																	: "0",
-														}}
-														compact={true} // Add compact prop to make events smaller
-														currentUserId={
-															currentUserId
-														}
-														currentUserEmail={
-															currentUserEmail
-														}
-														allProjects={
-															allProjects
-														} // Pass allProjects for permissions
-													/>
-												);
-											}
-										})}
+										{dateItems.slice(0, 2).map((item) => (
+											<DraggableEvent
+												key={`event-${item.id}`}
+												event={item}
+												onEventClick={onEventClick}
+												getEventStyle={(e) =>
+													e.isMultiDay
+														? getMultiDayEventStyle(e)
+														: getEventStyle(e)
+												}
+												showIcons={true}
+												resizable={false}
+												style={{
+													marginLeft:
+														item.isMultiDay && !item.isFirstDay
+															? "-0.5rem"
+															: "0",
+													marginRight:
+														item.isMultiDay && !item.isLastDay
+															? "-0.5rem"
+															: "0",
+												}}
+												compact={true}
+												currentUserId={currentUserId}
+												currentUserEmail={currentUserEmail}
+												allProjects={allProjects}
+											/>
+										))}
 										{/* Show "more" link if there are more than 2 items */}
 										{dateItems.length > 2 && (
 											<div
@@ -1129,7 +920,7 @@ const MonthView = ({
 					</div>
 				</motion.div>
 			</div>
-			{/* DragOverlay styled exactly like event/card */}
+			{/* DragOverlay */}
 			{createPortal(
 				<DragOverlay dropAnimation={null}>
 					{activeEvent ? (
@@ -1155,20 +946,6 @@ const MonthView = ({
 							resizable={false} // Disable resize handles in drag overlay
 						/>
 					) : null}
-					{activeCard ? (
-						<DraggableCard
-							card={activeCard}
-							onCardClick={() => {}} // No-op for drag overlay
-							currentUserId={currentUserId}
-							style={{
-								maxWidth: "280px",
-								opacity: 0.9,
-								boxShadow:
-									"0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-								transform: "rotate(2deg)", // Slight rotation to indicate dragging
-							}}
-						/>
-					) : null}
 				</DragOverlay>,
 				document.body
 			)}
@@ -1178,16 +955,9 @@ const MonthView = ({
 					isOpen={showMultipleEvents}
 					onClose={onCloseMultipleEvents}
 					events={selectedDateEvents}
-					cards={selectedDateCards}
-					date={
-						selectedDateEvents[0]?.date ||
-						(selectedDateCards[0]?.dueDate
-							? new Date(selectedDateCards[0].dueDate)
-							: null)
-					}
+					date={selectedDateEvents[0]?.date || null}
 					position={selectedDatePosition}
 					onEventClick={onEventClickFromModal}
-					onCardClick={onCardClickFromModal}
 					getEventStyle={getEventStyle}
 					currentUserId={currentUserId}
 					currentUserEmail={currentUserEmail}

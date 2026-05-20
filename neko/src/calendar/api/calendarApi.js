@@ -6,7 +6,6 @@ const MAIN_API_URL = import.meta.env.VITE_USER_URL;
 class CalendarCache {
 	constructor() {
 		this.eventCache = new Map();
-		this.cardCache = new Map();
 		this.cacheTTL = 5 * 60 * 1000;
 	}
 
@@ -40,17 +39,8 @@ class CalendarCache {
 		this.set(this.eventCache, this.generateCacheKey(filters), data);
 	}
 
-	getCards(filters) {
-		return this.get(this.cardCache, this.generateCacheKey(filters));
-	}
-
-	setCards(filters, data) {
-		this.set(this.cardCache, this.generateCacheKey(filters), data);
-	}
-
 	clear() {
 		this.eventCache.clear();
-		this.cardCache.clear();
 	}
 }
 
@@ -132,25 +122,6 @@ export const calendarEventsApi = {
 		return await handleResponse(response);
 	},
 
-	getCalendarCards: async (filters = {}) => {
-		const params = new URLSearchParams();
-		appendDateRange(params, filters);
-		const response = await authService.authenticatedFetch(
-			`${CALENDAR_API_URL}/api/events/calendar-cards?${params.toString()}`
-		);
-		return await handleResponse(response);
-	},
-
-	updateCardDueDate: async (cardId, dueDate) => {
-		const response = await authService.authenticatedFetch(
-			`${CALENDAR_API_URL}/api/events/cards/${cardId}/due-date`,
-			{
-				method: "PUT",
-				body: JSON.stringify({ dueDate }),
-			}
-		);
-		return await handleResponse(response);
-	},
 };
 
 export const calendarDataApi = {
@@ -177,59 +148,24 @@ export const calendarDataApi = {
 	fetchCalendarData: async (filters = {}) => {
 		const startTime = performance.now();
 		const cachedEvents = calendarCache.getEvents(filters);
-		const cachedCards = calendarCache.getCards(filters);
 
-		if (cachedEvents && cachedCards) {
-			calendarDataApi.performanceMetrics.recordRequest(
-				true,
-				performance.now() - startTime
-			);
-			return {
-				events: cachedEvents,
-				cards: cachedCards,
-				cached: { events: true, cards: true },
-			};
+		if (cachedEvents) {
+			calendarDataApi.performanceMetrics.recordRequest(true, performance.now() - startTime);
+			return { events: cachedEvents };
 		}
 
 		try {
 			const result = await calendarEventsApi.getCombinedData(filters);
 			const events = result.data?.events || [];
-			const cards = result.data?.cards || [];
-
 			calendarCache.setEvents(filters, events);
-			calendarCache.setCards(filters, cards);
-			calendarDataApi.performanceMetrics.recordRequest(
-				false,
-				performance.now() - startTime
-			);
-
-			return {
-				events,
-				cards,
-				cached: { events: false, cards: false },
-			};
+			calendarDataApi.performanceMetrics.recordRequest(false, performance.now() - startTime);
+			return { events };
 		} catch (error) {
 			console.error("Error fetching calendar data:", error);
-
-			const [eventsResult, cardsResult] = await Promise.all([
-				cachedEvents
-					? Promise.resolve({ events: cachedEvents })
-					: calendarEventsApi.getEvents(filters),
-				cachedCards
-					? Promise.resolve({ cards: cachedCards })
-					: calendarEventsApi.getCalendarCards(filters),
-			]);
-
-			const events = cachedEvents || eventsResult.events || [];
-			const cards = cachedCards || cardsResult.cards || [];
+			const eventsResult = await calendarEventsApi.getEvents(filters);
+			const events = eventsResult.events || [];
 			calendarCache.setEvents(filters, events);
-			calendarCache.setCards(filters, cards);
-
-			return {
-				events,
-				cards,
-				cached: { events: !!cachedEvents, cards: !!cachedCards },
-			};
+			return { events };
 		}
 	},
 
@@ -335,15 +271,6 @@ export const calendarDataApi = {
 	},
 };
 
-export const calendarProjectsApi = {
-	getProjects: async () => {
-		const response = await authService.authenticatedFetch(
-			`${MAIN_API_URL}/api/projects`
-		);
-		return await handleResponse(response);
-	},
-};
-
 export const calendarUsersApi = {
 	getUserProfile: async (userId) => {
 		const response = await authService.authenticatedFetch(
@@ -371,6 +298,5 @@ export const calendarUsersApi = {
 export const calendarApi = {
 	calendarEventsApi,
 	calendarDataApi,
-	calendarProjectsApi,
 	calendarUsersApi,
 };

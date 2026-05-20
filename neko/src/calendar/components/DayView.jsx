@@ -112,31 +112,25 @@ const DroppableTimeSlot = ({ id, children, className, onClick }) => {
 const DayView = ({
 	currentDate,
 	events = [],
-	cards = [],
 	isToday,
 	_isSelectedDate,
 	_getEventStyle,
 	onEventClick,
-	onCardClick,
 	handleTimeSlotClick,
 	handleShowMoreClick,
 	getCurrentTimePosition,
 	onEventUpdate,
-	onCardUpdate, // Add handler for card updates
 	_fetchEvents,
-	currentTime, // Add currentTime prop
-	onDateChange, // Add onDateChange prop for navigation
-	currentUserId, // Add current user ID
-	currentUserEmail, // Add current user email
-	allProjects = [], // Add allProjects prop for permissions
-	// Modal props
+	currentTime,
+	onDateChange,
+	currentUserId,
+	currentUserEmail,
+	allProjects = [],
 	showMultipleEvents = false,
 	selectedDateEvents = [],
-	selectedDateCards = [],
 	selectedDatePosition = null,
 	onCloseMultipleEvents = () => {},
 	onEventClickFromModal = () => {},
-	onCardClickFromModal = () => {},
 }) => {
 	// State for drag and drop functionality
 	const [activeDragItem, setActiveDragItem] = useState(null);
@@ -409,23 +403,6 @@ const DayView = ({
 			}
 		});
 
-		// Process cards for this day
-		const cardsByHour = {};
-
-		cards.forEach((card) => {
-			if (!card.dueDate) return;
-
-			const dueDate = new Date(card.dueDate);
-
-			if (dueDate.toDateString() === selectedDay.toDateString()) {
-				if (!cardsByHour["all-day"]) {
-					cardsByHour["all-day"] = [];
-				}
-
-				cardsByHour["all-day"].push(card);
-			}
-		});
-
 		// Calculate layout for timed events
 		const finalEventsByHour = {};
 		for (const hourKey in eventsByHour) {
@@ -444,10 +421,10 @@ const DayView = ({
 			finalEventsByHour[hourKey] = calculateEventLayout(hourlyEvents);
 		}
 
-		return { eventsByHour: finalEventsByHour, allDayEvents, cardsByHour };
+		return { eventsByHour: finalEventsByHour, allDayEvents };
 	};
 
-	const { eventsByHour, allDayEvents, cardsByHour } = processDayViewEvents();
+	const { eventsByHour, allDayEvents } = processDayViewEvents();
 
 	// Calculate layout for all timed events on the current day
 	const eventLayouts = useMemo(() => {
@@ -668,20 +645,6 @@ const DayView = ({
 
 		return baseStyle;
 	};
-	// Get card priority style - from WeekView
-	const getCardPriorityStyle = (priority) => {
-		switch (priority?.toLowerCase()) {
-			case "high":
-				return "bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/20 border-l-4 border-red-500 text-red-800 dark:text-red-200 shadow-sm";
-			case "medium":
-				return "bg-gradient-to-r from-amber-50 to-orange-100 dark:from-amber-900/30 dark:to-orange-800/20 border-l-4 border-amber-500 text-amber-800 dark:text-amber-200 shadow-sm";
-			case "low":
-				return "bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/30 dark:to-emerald-800/20 border-l-4 border-green-500 text-green-800 dark:text-green-200 shadow-sm";
-			default:
-				return "bg-gradient-to-r from-blue-50 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-800/20 border-l-4 border-blue-500 text-blue-800 dark:text-blue-200 shadow-sm";
-		}
-	};
-
 	// Generate time slots for the day
 	const timeSlots = useMemo(() => {
 		return Array.from(
@@ -850,9 +813,6 @@ const DayView = ({
 		}
 	};
 
-	// Calculate all cards for the day
-	const dayCards = cardsByHour["all-day"] || [];
-
 	return (
 		<DndContext
 			sensors={sensors}
@@ -936,14 +896,13 @@ const DayView = ({
 						</div>
 					</div>
 					{/* All-day & multi-day events section - Enhanced like WeekView */}
-					{(allDayEvents.length > 0 || dayCards.length > 0) && (
+					{allDayEvents.length > 0 && (
 						<div className="border-t border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60 px-6 py-3 bg-gradient-to-r from-indigo-50/30 to-purple-50/30 dark:from-indigo-900/10 dark:to-purple-900/10">
 							<div className="text-sm text-gray-600 dark:text-gray-400 font-semibold mb-2 flex items-center">
 								<div className="w-2 h-2 rounded-full bg-indigo-500 mr-2"></div>
 								All-day Events
 							</div>
 							<div className="space-y-2">
-								{/* Show multi-day events first */}
 								{allDayEvents.slice(0, 2).map((event) => (
 									<DraggableEvent
 										key={event.id}
@@ -956,13 +915,11 @@ const DayView = ({
 										}
 										style={{
 											marginLeft:
-												event.isMultiDay &&
-												!event.isFirstDay
+												event.isMultiDay && !event.isFirstDay
 													? "-0.5rem"
 													: "0",
 											marginRight:
-												event.isMultiDay &&
-												!event.isLastDay
+												event.isMultiDay && !event.isLastDay
 													? "-0.5rem"
 													: "0",
 										}}
@@ -971,64 +928,26 @@ const DayView = ({
 										compact={true}
 										currentUserId={currentUserId}
 										currentUserEmail={currentUserEmail}
-										allProjects={allProjects} // Pass allProjects for permissions
+										allProjects={allProjects}
 									/>
 								))}
 
-								{/* Show cards if space */}
-								{allDayEvents.length < 2 &&
-									dayCards
-										.slice(0, 2 - allDayEvents.length)
-										.map((card) => (
-											<div
-												key={`card-${card.id}`}
-												onClick={(e) => {
-													e.stopPropagation();
-													onCardClick(card);
-												}}
-												className={`${getCardPriorityStyle(
-													card.priority
-												)} text-sm p-3 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] border border-white/20`}
-											>
-												<div className="font-medium">
-													{card.title}
-												</div>
-												{card.description && (
-													<div className="text-xs opacity-75 mt-1 truncate">
-														{card.description}
-													</div>
-												)}
-											</div>
-										))}
-
-								{/* Show "more" if needed */}
-								{allDayEvents.length + dayCards.length > 2 && (
+								{allDayEvents.length > 2 && (
 									<div
 										className="text-sm text-indigo-600 dark:text-indigo-400 pl-3 cursor-pointer hover:underline font-medium flex items-center transition-colors"
 										onClick={(e) => {
 											e.stopPropagation();
-
-											// Get button position for smart positioning
-											const rect =
-												e.currentTarget.getBoundingClientRect();
-											const position = {
+											const rect = e.currentTarget.getBoundingClientRect();
+											handleShowMoreClick(currentDate, {
 												top: rect.top,
 												bottom: rect.bottom,
 												left: rect.left,
 												right: rect.right,
-											};
-
-											handleShowMoreClick(
-												currentDate,
-												_position
-											);
+											});
 										}}
 									>
 										<Plus className="w-4 h-4 mr-1" />
-										{allDayEvents.length +
-											dayCards.length -
-											2}{" "}
-										more events
+										{allDayEvents.length - 2} more events
 									</div>
 								)}
 							</div>
@@ -1236,22 +1155,14 @@ const DayView = ({
 					isOpen={showMultipleEvents}
 					onClose={onCloseMultipleEvents}
 					events={selectedDateEvents}
-					cards={selectedDateCards}
-					date={
-						selectedDateEvents[0]?.date ||
-						(selectedDateCards[0]?.dueDate
-							? new Date(selectedDateCards[0].dueDate)
-							: null)
-					}
+					date={selectedDateEvents[0]?.date || null}
 					position={selectedDatePosition}
 					onEventClick={onEventClickFromModal}
-					onCardClick={onCardClickFromModal}
 					getEventStyle={getEventStyle}
 					currentUserId={currentUserId}
 					currentUserEmail={currentUserEmail}
 					allProjects={allProjects}
 					onEventUpdate={onEventUpdate}
-					onCardUpdate={onCardUpdate}
 				/>
 			)}
 		</DndContext>

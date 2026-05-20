@@ -8,7 +8,6 @@ import {
 import { EVENT_COLORS } from "./data/CalendarConstants";
 import { AddEventModal } from "./components/modals/AddEventModal";
 import ViewEventModal from "./components/modals/ViewEventModal";
-import ViewCardModal from "./components/modals/ViewCardModal";
 import MonthView from "./components/MonthView";
 import DayView from "./components/DayView";
 import WeekView from "./components/WeekView";
@@ -21,29 +20,21 @@ const Calendar = ({
 	onDateChange,
 	selectedDate,
 	events = [],
-	cards = [], // Add cards as a new prop
 	onAddEvent,
 	onDeleteEvent,
 	onEventUpdate,
-	onCardUpdate, // Add handler for card updates
-	onCardClick, // Add handler for card clicks
 	fetchEvents,
-	projectsMap = {}, // Add projects map for card modal
-	currentUserId, // Add current user ID
-	currentUserEmail, // Add current user email
+	currentUserId,
+	currentUserEmail,
 }) => {
 	const [showAddEvent, setShowAddEvent] = useState(false);
 	const [showViewEvent, setShowViewEvent] = useState(false);
 	const [selectedEvent, setSelectedEvent] = useState(null);
-	// Add view card modal state
-	const [showViewCard, setShowViewCard] = useState(false);
-	const [selectedCard, setSelectedCard] = useState(null);
 	const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
 	const timeSlotRef = useRef(null);
 	const [showMultipleEvents, setShowMultipleEvents] = useState(false);
 	const [selectedDatePosition, setSelectedDatePosition] = useState(null);
 	const [selectedDateEvents, setSelectedDateEvents] = useState([]);
-	const [selectedDateCards, setSelectedDateCards] = useState([]); // Add state for cards
 	const [showEditModal, setShowEditModal] = useState(false);
 	// Optimistic UI states
 	const [localEvents, setLocalEvents] = useState([]);
@@ -89,20 +80,6 @@ const Calendar = ({
 		setShowViewEvent(true);
 	};
 
-	// New handler for card clicks
-	const handleCardClick = (card, e) => {
-		if (e) e.stopPropagation();
-
-		// If there's an external handler, use it
-		if (onCardClick) {
-			onCardClick(card);
-		} else {
-			// Otherwise show the card modal
-			setSelectedCard(card);
-			setShowViewCard(true);
-		}
-	};
-
 	// Optimistic UI for deleting an event
 	const handleDeleteAndClose = (event) => {
 		// Optimistically update UI
@@ -124,25 +101,12 @@ const Calendar = ({
 			});
 	};
 
-	// Handle showing more items for a date
 	const handleShowMoreClick = (date, position = null) => {
-		// Get events for the date
 		const eventsOnDate = filteredEvents.filter((event) =>
 			isSameDate(new Date(event.date), date)
 		);
-
-		// Get cards for the date
-		const cardsOnDate = cards.filter((card) => {
-			const cardDate = new Date(card.dueDate);
-			return isSameDate(cardDate, date);
-		});
-
-		// Set selected items
 		setSelectedDateEvents(eventsOnDate);
-		setSelectedDateCards(cardsOnDate);
-		setSelectedDatePosition(position); // Store the button position
-
-		// Show modal
+		setSelectedDatePosition(position);
 		setShowMultipleEvents(true);
 	};
 
@@ -400,70 +364,6 @@ const Calendar = ({
 		});
 	}, [localEvents, view, currentDate]);
 
-	// Filter cards based on current view
-	const filteredCards = useMemo(() => {
-		return cards.filter((card) => {
-			// Skip cards without due dates
-			if (!card.dueDate) return false;
-
-			const cardDate = new Date(card.dueDate);
-			cardDate.setHours(0, 0, 0, 0);
-
-			const compareDate = new Date(currentDate);
-			compareDate.setHours(0, 0, 0, 0);
-
-			if (view === "day") {
-				return cardDate.toDateString() === currentDate.toDateString();
-			} else if (view === "week") {
-				const weekStart = new Date(currentDate);
-				const dayOfWeek = currentDate.getDay();
-				const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday becomes 6, Monday becomes 0
-				weekStart.setDate(currentDate.getDate() - mondayOffset);
-				weekStart.setHours(0, 0, 0, 0);
-
-				const weekEnd = new Date(weekStart);
-				weekEnd.setDate(weekStart.getDate() + 6);
-				weekEnd.setHours(23, 59, 59, 999);
-
-				return cardDate >= weekStart && cardDate <= weekEnd;
-			} else if (view === "month") {
-				// For month view, include the full visible range including overflow days from adjacent months
-				const year = compareDate.getFullYear();
-				const month = compareDate.getMonth();
-
-				// Get the first day of the month
-				const firstDayOfMonth = new Date(year, month, 1);
-				const dayOfWeek = firstDayOfMonth.getDay();
-				const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday becomes 6, Monday becomes 0
-
-				// Calculate the start of the visible range (including previous month overflow)
-				const visibleRangeStart = new Date(firstDayOfMonth);
-				visibleRangeStart.setDate(
-					firstDayOfMonth.getDate() - mondayOffset
-				);
-				visibleRangeStart.setHours(0, 0, 0, 0);
-
-				// Get the last day of the month
-				const lastDayOfMonth = new Date(year, month + 1, 0);
-				const lastDayOfWeek = lastDayOfMonth.getDay();
-				const sundayOffset =
-					lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek; // Days needed to reach Sunday
-
-				// Calculate the end of the visible range (including next month overflow)
-				const visibleRangeEnd = new Date(lastDayOfMonth);
-				visibleRangeEnd.setDate(
-					lastDayOfMonth.getDate() + sundayOffset
-				);
-				visibleRangeEnd.setHours(23, 59, 59, 999);
-
-				// Check if card falls within the visible range
-				return (
-					cardDate >= visibleRangeStart && cardDate <= visibleRangeEnd
-				);
-			}
-			return false;
-		});
-	}, [cards, view, currentDate]);
 	return (
 		<div
 			className="calendar-container bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-lg shadow-lg h-full overflow-auto"
@@ -481,28 +381,21 @@ const Calendar = ({
 				<DayView
 					currentDate={currentDate}
 					events={filteredEvents}
-					cards={filteredCards}
 					isToday={isToday}
 					isSelectedDate={isSelectedDate}
 					getEventStyle={getEventStyle}
 					onEventClick={handleEventClick}
-					onCardClick={handleCardClick}
 					handleTimeSlotClick={handleTimeSlotClick}
 					handleShowMoreClick={handleShowMoreClick}
-					getCurrentTimePosition={() =>
-						getCurrentTimePosition(currentTime)
-					} // Pass currentTime
+					getCurrentTimePosition={() => getCurrentTimePosition(currentTime)}
 					onEventUpdate={handleUpdateEvent}
-					onCardUpdate={onCardUpdate}
 					fetchEvents={fetchEvents}
-					currentTime={currentTime} // Pass currentTime as a prop
-					onDateChange={onDateChange} // Add onDateChange prop for day navigation
-					currentUserId={currentUserId} // Pass current user ID
-					currentUserEmail={currentUserEmail} // Pass current user email
-					// Modal props
+					currentTime={currentTime}
+					onDateChange={onDateChange}
+					currentUserId={currentUserId}
+					currentUserEmail={currentUserEmail}
 					showMultipleEvents={showMultipleEvents}
 					selectedDateEvents={selectedDateEvents}
-					selectedDateCards={selectedDateCards}
 					selectedDatePosition={selectedDatePosition}
 					onCloseMultipleEvents={() => {
 						setShowMultipleEvents(false);
@@ -511,16 +404,6 @@ const Calendar = ({
 					onEventClickFromModal={(event) => {
 						setSelectedEvent(event);
 						setShowViewEvent(true);
-						setShowMultipleEvents(false);
-						setSelectedDatePosition(null);
-					}}
-					onCardClickFromModal={(card) => {
-						if (onCardClick) {
-							onCardClick(card);
-						} else {
-							setSelectedCard(card);
-							setShowViewCard(true);
-						}
 						setShowMultipleEvents(false);
 						setSelectedDatePosition(null);
 					}}
@@ -530,28 +413,21 @@ const Calendar = ({
 				<WeekView
 					currentDate={currentDate}
 					events={filteredEvents}
-					cards={filteredCards}
 					isToday={isToday}
 					isSelectedDate={isSelectedDate}
 					getEventStyle={getEventStyle}
 					onEventClick={handleEventClick}
-					onCardClick={handleCardClick}
 					handleTimeSlotClick={handleTimeSlotClick}
 					handleShowMoreClick={handleShowMoreClick}
-					getCurrentTimePosition={() =>
-						getCurrentTimePosition(currentTime)
-					} // Pass currentTime
+					getCurrentTimePosition={() => getCurrentTimePosition(currentTime)}
 					onEventUpdate={handleUpdateEvent}
-					onCardUpdate={onCardUpdate}
 					fetchEvents={fetchEvents}
-					currentTime={currentTime} // Pass currentTime as a prop
-					onDateChange={onDateChange} // Add onDateChange prop for week navigation
-					currentUserId={currentUserId} // Pass current user ID
-					currentUserEmail={currentUserEmail} // Pass current user email
-					// Modal props
+					currentTime={currentTime}
+					onDateChange={onDateChange}
+					currentUserId={currentUserId}
+					currentUserEmail={currentUserEmail}
 					showMultipleEvents={showMultipleEvents}
 					selectedDateEvents={selectedDateEvents}
-					selectedDateCards={selectedDateCards}
 					selectedDatePosition={selectedDatePosition}
 					onCloseMultipleEvents={() => {
 						setShowMultipleEvents(false);
@@ -560,16 +436,6 @@ const Calendar = ({
 					onEventClickFromModal={(event) => {
 						setSelectedEvent(event);
 						setShowViewEvent(true);
-						setShowMultipleEvents(false);
-						setSelectedDatePosition(null);
-					}}
-					onCardClickFromModal={(card) => {
-						if (onCardClick) {
-							onCardClick(card);
-						} else {
-							setSelectedCard(card);
-							setShowViewCard(true);
-						}
 						setShowMultipleEvents(false);
 						setSelectedDatePosition(null);
 					}}
@@ -580,7 +446,6 @@ const Calendar = ({
 					currentDate={currentDate}
 					onDateChange={onDateChange}
 					events={filteredEvents}
-					cards={filteredCards} // Pass filtered cards
 					isToday={isToday}
 					isSelectedDate={isSelectedDate}
 					monthDays={getMonthDays(
@@ -593,23 +458,19 @@ const Calendar = ({
 							currentDate.getMonth(),
 							1
 						).getDay();
-						return firstDay === 0 ? 6 : firstDay - 1; // Convert Sunday=0 to Sunday=6, Monday=1 to Monday=0, etc.
+						return firstDay === 0 ? 6 : firstDay - 1;
 					})()}
 					onEventClick={handleEventClick}
-					onCardClick={handleCardClick} // Pass card click handler
 					onShowMoreClick={handleShowMoreClick}
 					getEventStyle={getEventStyle}
 					setSelectedTimeSlot={setSelectedTimeSlot}
 					onEventUpdate={handleUpdateEvent}
-					onCardUpdate={onCardUpdate} // Pass card update handler
 					setShowAddEvent={setShowAddEvent}
 					fetchEvents={fetchEvents}
-					currentUserId={currentUserId} // Pass current user ID
-					currentUserEmail={currentUserEmail} // Pass current user email
-					// Modal props
+					currentUserId={currentUserId}
+					currentUserEmail={currentUserEmail}
 					showMultipleEvents={showMultipleEvents}
 					selectedDateEvents={selectedDateEvents}
-					selectedDateCards={selectedDateCards}
 					selectedDatePosition={selectedDatePosition}
 					onCloseMultipleEvents={() => {
 						setShowMultipleEvents(false);
@@ -618,16 +479,6 @@ const Calendar = ({
 					onEventClickFromModal={(event) => {
 						setSelectedEvent(event);
 						setShowViewEvent(true);
-						setShowMultipleEvents(false);
-						setSelectedDatePosition(null);
-					}}
-					onCardClickFromModal={(card) => {
-						if (onCardClick) {
-							onCardClick(card);
-						} else {
-							setSelectedCard(card);
-							setShowViewCard(true);
-						}
 						setShowMultipleEvents(false);
 						setSelectedDatePosition(null);
 					}}
@@ -671,16 +522,6 @@ const Calendar = ({
 					/>
 				)}
 
-				{/* Add ViewCardModal */}
-				{showViewCard && selectedCard && (
-					<ViewCardModal
-						isOpen={showViewCard}
-						onClose={() => setShowViewCard(false)}
-						card={selectedCard}
-						projectsMap={projectsMap}
-						currentUserId={currentUserId}
-					/>
-				)}
 			</AnimatePresence>
 		</div>
 	);

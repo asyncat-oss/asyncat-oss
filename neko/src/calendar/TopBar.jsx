@@ -1,29 +1,15 @@
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-	ChevronLeft,
-	ChevronRight,
-	RefreshCw,
-	Filter,
-	CheckSquare,
-	AlertTriangle,
-	CheckCircle,
-	Target,
-} from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 const TopBar = ({
 	view,
 	onViewChange,
 	currentDate,
 	onDateChange,
-	cardFilters,
-	updateCardFilter,
 	isCalendarRefreshing,
 }) => {
-	const [showTaskFilters, setShowTaskFilters] = useState(false);
 	const [isOnline, setIsOnline] = useState(navigator.onLine);
 	const [lastSyncTime, setLastSyncTime] = useState(null);
-	const taskFiltersRef = useRef(null);
 
 	useEffect(() => {
 		const handleOnline = () => {
@@ -43,19 +29,6 @@ const TopBar = ({
 		const handleSyncComplete = () => setLastSyncTime(new Date());
 		window.addEventListener("calendarSyncComplete", handleSyncComplete);
 		return () => window.removeEventListener("calendarSyncComplete", handleSyncComplete);
-	}, []);
-
-	useEffect(() => {
-		const handleClickOutside = (event) => {
-			if (
-				taskFiltersRef.current &&
-				!taskFiltersRef.current.contains(event.target)
-			) {
-				setShowTaskFilters(false);
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
 	}, []);
 
 	const formatLastSyncTime = (time) => {
@@ -81,15 +54,6 @@ const TopBar = ({
 		else if (view === "week") newDate.setDate(newDate.getDate() + 7);
 		else if (view === "day") newDate.setDate(newDate.getDate() + 1);
 		onDateChange(newDate);
-	};
-
-	const activeFilterCount =
-		(cardFilters.showCards && cardFilters.priority !== "all" ? 1 : 0) +
-		(cardFilters.showCards && cardFilters.completed !== "all" ? 1 : 0);
-
-	const clearTaskFilters = () => {
-		updateCardFilter("priority", "all");
-		updateCardFilter("completed", "all");
 	};
 
 	return (
@@ -173,140 +137,6 @@ const TopBar = ({
 			</div>
 
 			<div className="flex items-center gap-4">
-				<div className="relative mr-2" ref={taskFiltersRef}>
-					<motion.button
-						onClick={() => setShowTaskFilters(!showTaskFilters)}
-						className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 ${
-							showTaskFilters || cardFilters.showCards
-								? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700"
-								: "bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 midnight:bg-gray-900 midnight:text-gray-200 midnight:hover:bg-gray-800"
-						}`}
-						whileHover={{ scale: 1.02 }}
-						whileTap={{ scale: 0.98 }}
-					>
-						<CheckSquare className="w-4 h-4" />
-						<span>Tasks</span>
-						{activeFilterCount > 0 && (
-							<span className="ml-1 px-1.5 py-0.5 bg-green-600 dark:bg-green-500 text-white text-xs rounded-full">
-								{activeFilterCount}
-							</span>
-						)}
-					</motion.button>
-
-					<AnimatePresence>
-						{showTaskFilters && (
-							<motion.div
-								initial={{ opacity: 0, y: -10, scale: 0.95 }}
-								animate={{ opacity: 1, y: 0, scale: 1 }}
-								exit={{ opacity: 0, y: -10, scale: 0.95 }}
-								transition={{ duration: 0.15 }}
-								className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-gray-900 midnight:bg-gray-950 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-800 z-50"
-							>
-								<div className="p-4 space-y-4">
-									<div className="flex items-center justify-between">
-										<label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-											Show Tasks
-										</label>
-										<motion.button
-											onClick={() =>
-												updateCardFilter("showCards", !cardFilters.showCards)
-											}
-											className={`relative w-12 h-6 rounded-full transition-colors ${
-												cardFilters.showCards
-													? "bg-green-500"
-													: "bg-gray-300 dark:bg-gray-700"
-											}`}
-											whileTap={{ scale: 0.95 }}
-										>
-											<motion.div
-												className="absolute top-1 w-4 h-4 bg-white rounded-full shadow"
-												animate={{ x: cardFilters.showCards ? 24 : 2 }}
-												transition={{
-													type: "spring",
-													stiffness: 300,
-													damping: 30,
-												}}
-											/>
-										</motion.button>
-									</div>
-
-									{cardFilters.showCards && (
-										<motion.div
-											initial={{ opacity: 0, height: 0 }}
-											animate={{ opacity: 1, height: "auto" }}
-											exit={{ opacity: 0, height: 0 }}
-											className="space-y-3"
-										>
-											<div>
-												<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-													Priority
-												</label>
-												<div className="grid grid-cols-2 gap-2">
-													{[
-														{ value: "all", label: "All", icon: Filter },
-														{ value: "high", label: "High", icon: AlertTriangle },
-														{ value: "medium", label: "Medium", icon: Target },
-														{ value: "low", label: "Low", icon: CheckCircle },
-													].map(({ value, label, icon: Icon }) => (
-														<button
-															key={value}
-															onClick={() => updateCardFilter("priority", value)}
-															className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm transition-colors ${
-																cardFilters.priority === value
-																	? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300"
-																	: "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-															}`}
-														>
-															<Icon className="w-4 h-4" />
-															<span>{label}</span>
-														</button>
-													))}
-												</div>
-											</div>
-
-											<div>
-												<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-													Status
-												</label>
-												<div className="grid grid-cols-3 gap-2">
-													{[
-														{ value: "all", label: "All" },
-														{ value: "completed", label: "Done" },
-														{ value: "notCompleted", label: "Todo" },
-													].map(({ value, label }) => (
-														<button
-															key={value}
-															onClick={() => updateCardFilter("completed", value)}
-															className={`px-3 py-2 rounded-md text-sm transition-colors ${
-																cardFilters.completed === value
-																	? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300"
-																	: "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-															}`}
-														>
-															{label}
-														</button>
-													))}
-												</div>
-											</div>
-										</motion.div>
-									)}
-
-									{activeFilterCount > 0 && (
-										<motion.button
-											onClick={clearTaskFilters}
-											className="w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-											whileHover={{ scale: 1.02 }}
-											whileTap={{ scale: 0.98 }}
-										>
-											Clear Task Filters
-										</motion.button>
-									)}
-								</div>
-							</motion.div>
-						)}
-					</AnimatePresence>
-				</div>
-
 				<div className="flex items-center bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg p-1">
 					{["month", "week", "day"].map((viewName) => (
 						<button

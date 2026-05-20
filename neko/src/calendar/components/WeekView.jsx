@@ -15,7 +15,6 @@ import {
 	useDroppable,
 } from "@dnd-kit/core";
 import DraggableEvent from "./DraggableEvent";
-import DraggableCard from "./DraggableCard";
 import MultipleEventsModal from "./MultipleEventsModal";
 import { DAYS_OF_WEEK } from "../data/CalendarConstants";
 import { Plus } from "lucide-react";
@@ -82,35 +81,27 @@ const DroppableAllDay = ({
 const WeekView = ({
 	currentDate,
 	events = [],
-	cards = [],
 	isToday,
 	_isSelectedDate,
 	getEventStyle,
 	onEventClick,
-	onCardClick,
 	handleTimeSlotClick,
 	handleShowMoreClick,
 	getCurrentTimePosition,
 	onEventUpdate,
-	onCardUpdate, // Add handler for card updates
 	_fetchEvents,
-	currentTime, // Add currentTime prop
-	onDateChange, // Add onDateChange prop for navigation
-	currentUserId, // Add current user ID
-	currentUserEmail, // Add current user email
-	allProjects = [], // Add allProjects prop for permissions
-	// Modal props
+	currentTime,
+	onDateChange,
+	currentUserId,
+	currentUserEmail,
+	allProjects = [],
 	showMultipleEvents = false,
 	selectedDateEvents = [],
-	selectedDateCards = [],
 	selectedDatePosition = null,
 	onCloseMultipleEvents = () => {},
 	onEventClickFromModal = () => {},
-	onCardClickFromModal = () => {},
 }) => {
-	// State for drag and drop functionality
 	const [activeDragItem, setActiveDragItem] = useState(null);
-	const [activeCard, setActiveCard] = useState(null); // Add state for active card
 	const [localEvents, setLocalEvents] = useState(events);
 	const scrollContainerRef = useRef(null);
 
@@ -336,16 +327,12 @@ const WeekView = ({
 		weekEnd.setDate(weekStart.getDate() + 6);
 		weekEnd.setHours(23, 59, 59, 999);
 
-		// Store all events by day and time slot
 		const eventsByDayAndTime = {};
-		// Store all cards by day and time slot
-		const cardsByDayAndTime = {};
 
 		for (let i = 0; i < 7; i++) {
 			const currentDay = new Date(weekStart);
 			currentDay.setDate(weekStart.getDate() + i);
 			eventsByDayAndTime[currentDay.toDateString()] = {};
-			cardsByDayAndTime[currentDay.toDateString()] = {};
 		}
 
 		localEvents.forEach((event) => {
@@ -460,32 +447,10 @@ const WeekView = ({
 				}
 			}
 		});
-		// Process cards for the week - only add to all-day section
-		cards.forEach((card) => {
-			if (!card.dueDate) return;
-
-			const dueDate = new Date(card.dueDate);
-			const dayKey = dueDate.toDateString();
-
-			// Check if the card's due date falls within the week
-			if (
-				dueDate >= weekStart &&
-				dueDate <= weekEnd &&
-				cardsByDayAndTime[dayKey]
-			) {
-				// Only add to all-day section for visibility
-				if (!cardsByDayAndTime[dayKey]["all-day"]) {
-					cardsByDayAndTime[dayKey]["all-day"] = [];
-				}
-
-				cardsByDayAndTime[dayKey]["all-day"].push(card);
-			}
-		});
-
-		return { eventsByDayAndTime, cardsByDayAndTime };
+		return { eventsByDayAndTime };
 	};
 
-	const { eventsByDayAndTime, cardsByDayAndTime } = processWeekViewEvents();
+	const { eventsByDayAndTime } = processWeekViewEvents();
 	const weekStart = new Date(currentDate);
 	// For Monday-based week: Monday = 1, Tuesday = 2, ..., Sunday = 0
 	const dayOfWeek = currentDate.getDay();
@@ -689,36 +654,14 @@ const WeekView = ({
 		}
 	};
 
-	// Handle drag start
 	const handleDragStart = (event) => {
 		const { active } = event;
 
-		// Close modal when drag starts
 		if (showMultipleEvents) {
 			onCloseMultipleEvents();
 		}
 
-		// Check if it's a card being dragged (support modal IDs and data type)
-		const isCard =
-			active?.data?.current?.type === "card" ||
-			String(active.id).startsWith("card-") ||
-			String(active.id).startsWith("modal-card-");
-
-		if (isCard) {
-			const draggedCard =
-				active.data?.current ||
-				cards.find((c) => `card-${c.id}` === active.id);
-
-			if (!draggedCard) {
-				console.error("Could not find card with id:", active.id);
-				return;
-			}
-
-			setActiveCard(draggedCard);
-			return;
-		}
-
-		// Handle event dragging (existing logic, but support modal-provided raw event data)
+		// Handle event dragging
 		const rawData = active.data?.current;
 		const type =
 			rawData?.type &&
@@ -823,64 +766,14 @@ const WeekView = ({
 		}
 	};
 
-	// Handle drag end - OPTIMIZED VERSION
 	const handleDragEnd = async (event) => {
-		const { over, active } = event;
+		const { over } = event;
 
 		if (!over) {
 			setActiveDragItem(null);
-			setActiveCard(null);
 			return;
 		}
 
-		// Check if it's a card being dragged (support modal IDs and data type)
-		const isCard =
-			active?.data?.current?.type === "card" ||
-			String(active.id).startsWith("card-") ||
-			String(active.id).startsWith("modal-card-");
-
-		if (isCard) {
-			const draggedCard = activeCard;
-
-			// Clear drag state immediately for faster UI response
-			setActiveCard(null);
-
-			if (!draggedCard || !onCardUpdate) {
-				console.error("No card data or onCardUpdate handler available");
-				return;
-			}
-
-			try {
-				// Handle dropping on all-day section
-				if (over.id.startsWith("all-day-")) {
-					const dayIndex = parseInt(over.id.replace("all-day-", ""));
-					const targetDate = new Date(weekStart);
-					targetDate.setDate(weekStart.getDate() + dayIndex);
-
-					// Update card due date
-					const updatedCardData = {
-						...draggedCard,
-						dueDate: targetDate.toISOString(),
-					};
-
-					// Fire and forget - don't await to avoid blocking UI
-					onCardUpdate(updatedCardData).catch((error) => {
-						console.error(
-							"Error updating card in WeekView.handleDragEnd:",
-							error
-						);
-					});
-				}
-			} catch (error) {
-				console.error(
-					"Error updating card in WeekView.handleDragEnd:",
-					error
-				);
-			}
-			return;
-		}
-
-		// Handle event dragging (existing logic)
 		if (!activeDragItem) {
 			setActiveDragItem(null);
 			return;
@@ -1065,21 +958,6 @@ const WeekView = ({
 							const dateKey = date.toDateString();
 							const allDayEvents =
 								eventsByDayAndTime[dateKey]?.["all-day"] || [];
-							const allDayCards =
-								cardsByDayAndTime[dateKey]?.["all-day"] || [];
-
-							// Filter out cards that are currently being dragged
-							const visibleCards = allDayCards.filter(
-								(card) =>
-									!activeCard || activeCard.id !== card.id
-							);
-
-							// Combine them with events first, then cards
-							const allItems = [...allDayEvents, ...visibleCards];
-
-							// Only show drop zone when dragging a card (not an event)
-							const showDropZone =
-								!!activeCard && !activeDragItem;
 
 							return (
 								<DroppableAllDay
@@ -1090,14 +968,10 @@ const WeekView = ({
 											? ""
 											: "border-l border-gray-200 dark:border-gray-600 midnight:border-gray-700"
 									}`}
-									showDropZone={showDropZone}
 								>
-									{/* Show events first */}
 									{allDayEvents.slice(0, 1).map((event) => (
 										<DraggableEvent
-											key={`${
-												event.id
-											}-${date.toISOString()}`}
+											key={`${event.id}-${date.toISOString()}`}
 											event={event}
 											onEventClick={onEventClick}
 											getEventStyle={(e) =>
@@ -1107,13 +981,11 @@ const WeekView = ({
 											}
 											style={{
 												marginLeft:
-													event.isMultiDay &&
-													!event.isFirstDay
+													event.isMultiDay && !event.isFirstDay
 														? "-0.25rem"
 														: "0",
 												marginRight:
-													event.isMultiDay &&
-													!event.isLastDay
+													event.isMultiDay && !event.isLastDay
 														? "-0.25rem"
 														: "0",
 											}}
@@ -1122,51 +994,25 @@ const WeekView = ({
 											compact={true}
 											currentUserId={currentUserId}
 											currentUserEmail={currentUserEmail}
-											allProjects={allProjects} // Pass allProjects for permissions
+											allProjects={allProjects}
 										/>
 									))}
 
-									{/* Show cards if space - use DraggableCard, filter out dragged cards */}
-									{allDayEvents.length < 1 &&
-										visibleCards
-											.slice(0, 1)
-											.map((card) => (
-												<DraggableCard
-													key={`card-${
-														card.id
-													}-${date.toISOString()}`}
-													card={card}
-													onCardClick={onCardClick}
-													currentUserId={
-														currentUserId
-													}
-												/>
-											))}
-
-									{/* Show "more" if needed */}
-									{allItems.length > 1 && (
+									{allDayEvents.length > 1 && (
 										<div
 											className="text-xs text-gray-500 pl-1 cursor-pointer hover:underline"
 											onClick={(e) => {
 												e.stopPropagation();
-
-												// Get button position for smart positioning
-												const rect =
-													e.currentTarget.getBoundingClientRect();
-												const position = {
+												const rect = e.currentTarget.getBoundingClientRect();
+												handleShowMoreClick(date, {
 													top: rect.top,
 													bottom: rect.bottom,
 													left: rect.left,
 													right: rect.right,
-												};
-
-												handleShowMoreClick(
-													date,
-													position
-												);
+												});
 											}}
 										>
-											+{allItems.length - 1} more
+											+{allDayEvents.length - 1} more
 										</div>
 									)}
 								</DroppableAllDay>
@@ -1416,20 +1262,6 @@ const WeekView = ({
 							allProjects={allProjects} // Pass allProjects for permissions
 						/>
 					) : null}
-					{activeCard ? (
-						<DraggableCard
-							card={activeCard}
-							onCardClick={() => {}} // No-op for drag overlay
-							currentUserId={currentUserId}
-							style={{
-								maxWidth: "280px",
-								opacity: 0.9,
-								boxShadow:
-									"0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-								transform: "rotate(2deg)", // Slight rotation to indicate dragging
-							}}
-						/>
-					) : null}
 				</DragOverlay>,
 				document.body
 			)}
@@ -1440,16 +1272,9 @@ const WeekView = ({
 					isOpen={showMultipleEvents}
 					onClose={onCloseMultipleEvents}
 					events={selectedDateEvents}
-					cards={selectedDateCards}
-					date={
-						selectedDateEvents[0]?.date ||
-						(selectedDateCards[0]?.dueDate
-							? new Date(selectedDateCards[0].dueDate)
-							: null)
-					}
+					date={selectedDateEvents[0]?.date || null}
 					position={selectedDatePosition}
 					onEventClick={onEventClickFromModal}
-					onCardClick={onCardClickFromModal}
 					getEventStyle={getEventStyle}
 					currentUserId={currentUserId}
 					currentUserEmail={currentUserEmail}
