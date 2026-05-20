@@ -6,11 +6,10 @@ const DEFAULT_SHORTCUTS = {
   dock2: { key: '2', ctrl: true, meta: true, label: 'Chat History', action: 'navChat' },
   dock3: { key: '3', ctrl: true, meta: true, label: 'Projects', action: 'navWorkspace' },
   dock4: { key: '4', ctrl: true, meta: true, label: 'Calendar', action: 'navCalendar' },
-  dock5: { key: '5', ctrl: true, meta: true, label: 'Files', action: 'navFiles' },
-  dock6: { key: '6', ctrl: true, meta: true, label: 'Models', action: 'navModels' },
-  dock7: { key: '7', ctrl: true, meta: true, label: 'Tools & Skills', action: 'navTools' },
-  dock8: { key: '8', ctrl: true, meta: true, label: 'Scheduler', action: 'navScheduler' },
-  dock9: { key: '9', ctrl: true, meta: true, label: 'Profiles', action: 'navProfiles' },
+  dock5: { key: '5', ctrl: true, meta: true, label: 'Models', action: 'navModels' },
+  dock6: { key: '6', ctrl: true, meta: true, label: 'Tools & Skills', action: 'navTools' },
+  dock7: { key: '7', ctrl: true, meta: true, label: 'Scheduler', action: 'navScheduler' },
+  dock8: { key: '8', ctrl: true, meta: true, label: 'Profiles', action: 'navProfiles' },
 };
 
 export const loadKeyboardShortcuts = () => {

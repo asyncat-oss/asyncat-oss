@@ -14,7 +14,6 @@ import {
   Cpu,
   Wrench,
   Activity,
-  HardDrive,
   Clock,
   Layers,
   Trash2,
@@ -432,7 +431,6 @@ const DynamicSidebar = ({
         case 'navChat': navigate("/all-chats"); break;
         case 'navWorkspace': navigate("/workspace"); break;
         case 'navCalendar': navigate("/calendar"); break;
-        case 'navFiles': navigate("/files"); break;
         case 'navModels': navigate("/models"); break;
         case 'navTools': navigate("/tools"); break;
         case 'navAgentHealth': navigate("/agent-health"); break;
@@ -460,7 +458,6 @@ const DynamicSidebar = ({
   const isOnConversations = basePage === "all-chats";
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnCalendar = basePage === "calendar";
-  const isOnFiles = basePage === "files";
   const isOnModels = basePage === "models";
   const isOnScheduler = location.pathname.startsWith("/scheduler");
   const isOnProfiles  = location.pathname.startsWith("/profiles");
@@ -514,7 +511,6 @@ const DynamicSidebar = ({
     { label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
     { label: "Projects", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
     { label: "Calendar", action: "navCalendar", onClick: () => navigate("/calendar"), active: isOnCalendar, icon: calendarIcon },
-    { label: "Files", action: "navFiles", onClick: () => navigate("/files"), active: isOnFiles, icon: <HardDrive className="w-5 h-5" /> },
   ];
 
   const appItems = [
@@ -732,16 +728,6 @@ const DynamicSidebar = ({
           dockPosition={dockPosition}
         >
           {calendarIcon}
-        </DockItem>
-
-        {/* Files — direct navigate */}
-        <DockItem
-          label={labelWithShortcut("Files", "navFiles")}
-          onClick={() => navigate("/files")}
-          isActive={isOnFiles}
-          dockPosition={dockPosition}
-        >
-          <HardDrive className="w-5 h-5" />
         </DockItem>
 
         <DockSep dockPosition={dockPosition} />

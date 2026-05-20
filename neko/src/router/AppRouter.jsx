@@ -26,9 +26,6 @@ import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
 import AgentHealthPage from '../AgentHealth/AgentHealthPage';
 import SchedulerPage from '../Scheduler/SchedulerPage';
 import ProfilesPage from '../Profiles/ProfilesPage';
-import FilesPage from '../files/FilesPage';
-
-
 const loadingMessages = [
   "Waking up the cat AI...",
   "Paws initializing...",
@@ -257,11 +254,6 @@ const createRouter = () => createBrowserRouter([
         element: <CommandCenterV2Enhanced />,
         errorElement: <RouteErrorElement />
       },
-      {
-        path: "files",
-        element: <FilesPage />,
-        errorElement: <RouteErrorElement />
-      }
     ]
   },
   {

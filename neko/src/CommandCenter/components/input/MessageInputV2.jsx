@@ -1600,43 +1600,125 @@ export const MessageInputV2 = ({
               </button>
             )}
 
-            {/* Plan / Action Mode Selector */}
+            {/* Agent Mode Selector Dropdown */}
             {!chatOnlyMode && (onToggleAgentMode || onToggleTools) && (
-              <button
-                type="button"
-                onClick={onToggleAgentMode || onToggleTools}
-                disabled={disabled}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
-                title={isActionMode ? "Switch to Plan mode (Safe inspection)" : "Switch to Action mode (Execute changes)"}
-              >
-                {isActionMode ? (
-                  <>
-                    <Wrench className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-400" />
-                    <span>Action Mode</span>
-                  </>
-                ) : (
-                  <>
-                    <ClipboardPen className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
-                    <span>Plan Mode</span>
-                  </>
-                )}
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </button>
-            )}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenMenu(curr => curr === "agentMode" ? null : "agentMode")}
+                  disabled={disabled}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
+                  title="Change agent safety and execution mode"
+                >
+                  {!isActionMode ? (
+                    <>
+                      <ClipboardPen className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
+                      <span>Plan Mode</span>
+                    </>
+                  ) : autoApprove ? (
+                    <>
+                      <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
+                      <span>YOLO Mode</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wrench className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-400" />
+                      <span>Action (Ask)</span>
+                    </>
+                  )}
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </button>
 
-            {/* Auto-Approve Toggle Selector */}
-            {!chatOnlyMode && onToggleAutoApprove && isActionMode && (
-              <button
-                type="button"
-                onClick={onToggleAutoApprove}
-                disabled={disabled}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200"
-                title={autoApprove ? "Switch to Manual approval mode" : "Switch to Auto-approve mode"}
-              >
-                <Zap className={`h-3.5 w-3.5 shrink-0 transition-colors ${autoApprove ? "text-amber-500 dark:text-amber-400" : "text-gray-400 dark:text-gray-500 opacity-60"}`} />
-                <span>{autoApprove ? "Auto-approve tools" : "Ask before tools"}</span>
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </button>
+                {openMenu === "agentMode" && (
+                  <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
+                    {/* Plan Mode option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        if (isActionMode) {
+                          const toggle = onToggleAgentMode || onToggleTools;
+                          toggle();
+                        }
+                      }}
+                      className={`flex w-full flex-col rounded-md px-3 py-2 text-left transition-colors ${
+                        !isActionMode
+                          ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300 midnight:bg-emerald-950/20"
+                          : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-xs font-semibold">
+                        <ClipboardPen className={`h-3.5 w-3.5 ${!isActionMode ? "text-emerald-500" : "text-gray-400"}`} />
+                        <span>Plan Mode</span>
+                        {!isActionMode && <Check className="ml-auto h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
+                      </span>
+                      <span className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
+                        Safe inspection, asks before executing
+                      </span>
+                    </button>
+
+                    {/* Action Mode (Ask) option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        if (!isActionMode) {
+                          const toggle = onToggleAgentMode || onToggleTools;
+                          toggle();
+                        }
+                        if (autoApprove && onToggleAutoApprove) {
+                          onToggleAutoApprove();
+                        }
+                      }}
+                      className={`flex w-full flex-col rounded-md px-3 py-2 text-left transition-colors ${
+                        isActionMode && !autoApprove
+                          ? "bg-blue-50 text-blue-900 dark:bg-blue-950/30 dark:text-blue-300 midnight:bg-blue-950/20"
+                          : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-xs font-semibold">
+                        <Wrench className={`h-3.5 w-3.5 ${isActionMode && !autoApprove ? "text-blue-500" : "text-gray-400"}`} />
+                        <span>Action (Ask)</span>
+                        {isActionMode && !autoApprove && <Check className="ml-auto h-3 w-3 text-blue-600 dark:text-blue-400" />}
+                      </span>
+                      <span className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
+                        Execute actions with manual approval
+                      </span>
+                    </button>
+
+                    {/* YOLO Mode option */}
+                    {onToggleAutoApprove && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          if (!isActionMode) {
+                            const toggle = onToggleAgentMode || onToggleTools;
+                            toggle();
+                          }
+                          if (!autoApprove && onToggleAutoApprove) {
+                            onToggleAutoApprove();
+                          }
+                        }}
+                        className={`flex w-full flex-col rounded-md px-3 py-2 text-left transition-colors ${
+                          isActionMode && autoApprove
+                            ? "bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-300 midnight:bg-amber-950/20"
+                            : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-xs font-semibold">
+                          <Zap className={`h-3.5 w-3.5 ${isActionMode && autoApprove ? "text-amber-500" : "text-gray-400"}`} />
+                          <span>YOLO Mode</span>
+                          {isActionMode && autoApprove && <Check className="ml-auto h-3 w-3 text-amber-600 dark:text-amber-400" />}
+                        </span>
+                        <span className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
+                          Execute actions without manual approval
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
