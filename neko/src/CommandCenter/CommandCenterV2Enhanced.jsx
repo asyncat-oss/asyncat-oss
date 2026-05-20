@@ -707,7 +707,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     <button
       type="button"
       onClick={() => toggleSidePanelTab('history')}
-      className={`relative ${compact ? 'p-2' : 'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium'} transition-colors ${
+      className={`relative shrink-0 ${compact ? 'p-2' : 'inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium sm:px-2.5 sm:text-sm'} transition-colors ${
         showActivitySidebar && sidePanelTab === 'history' && !compact
           ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
           : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -715,7 +715,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       title="Recent conversations"
     >
       <History className={compact ? "w-5 h-5" : "w-4 h-4"} />
-      {!compact && <span>History</span>}
+      {!compact && <span className="hidden sm:inline">History</span>}
       {hasActiveRuns && (
         <span
           className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-900 animate-pulse"
@@ -2235,13 +2235,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           welcomeScreenJSX
         ) : (
           <>
-            <div className="shrink-0 bg-white dark:bg-gray-900 midnight:bg-slate-950">
-              <div className="max-w-5xl mx-auto px-4 md:px-8 py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" />
+            <div className="shrink-0 border-b border-transparent bg-white dark:bg-gray-900 midnight:bg-slate-950">
+              <div className="mx-auto max-w-[min(100vw,96rem)] px-3 py-2.5 sm:px-4 md:px-6">
+                <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 overflow-hidden items-center gap-2 lg:w-[min(28rem,34vw)] lg:shrink-0">
+                    <div className="hidden h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 sm:block" />
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                       {isEditingTitle ? (
                         <input
                           type="text"
@@ -2249,22 +2249,22 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                           onChange={(e) => setEditTitle(e.target.value)}
                           onKeyDown={handleKeyDown}
                           onBlur={handleSaveRename}
-                          className="text-sm bg-gray-50 dark:bg-gray-900 midnight:bg-slate-900 border border-gray-300 dark:border-gray-700 midnight:border-slate-700 rounded-md px-2 py-0.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-w-[160px] max-w-[280px] text-gray-900 dark:text-gray-100 midnight:text-slate-100"
+                          className="h-8 min-w-0 w-full max-w-full rounded-md border border-gray-300 bg-gray-50 px-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
                           autoFocus
                         />
                       ) : currentConversationId && conversationTitle ? (
                         <button
                           onClick={handleStartRename}
-                          className="group flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors cursor-text text-left"
+                          className="group flex min-w-0 max-w-full flex-1 items-center gap-1.5 overflow-hidden rounded-md px-1 py-1 text-left text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/60 dark:hover:text-white midnight:text-gray-300 midnight:hover:bg-slate-800/60"
                           title="Click to rename"
                         >
-                          <span className="max-w-xs truncate">
+                          <span className="block min-w-0 flex-1 truncate">
                             {conversationTitle}
                           </span>
                           <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
                         </button>
                       ) : (
-                        <h1 className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300 max-w-xs truncate">
+                        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-gray-300">
                           {conversationTitle || "Untitled Chat"}
                         </h1>
                       )}
@@ -2278,17 +2278,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="-mx-1 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {!isGhostMode && (
                       <>
                         <button
                           type="button"
                           onClick={handleStartNewConversation}
-                          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                          className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 sm:px-2.5 sm:text-sm dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
                           title="Start new conversation"
                         >
                           <Plus className="h-4 w-4" />
-                          New
+                          <span className="hidden sm:inline">New</span>
                         </button>
                         <ConversationSwitcher />
                         {hasConversationBranches && (
@@ -2296,7 +2296,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                             <button
                               type="button"
                               onClick={() => setShowBranchMenu(v => !v)}
-                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                              className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
                                 showBranchMenu
                                   ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                                   : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -2304,7 +2304,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                               title="Conversation branches"
                             >
                               <GitBranch className="h-4 w-4" />
-                              Branches
+                              <span className="hidden sm:inline">Branches</span>
                               <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                                 {conversationBranches.length}
                               </span>
@@ -2382,7 +2382,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     <button
                       type="button"
                       onClick={() => toggleSidePanelTab('code')}
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                      className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
                         showActivitySidebar && sidePanelTab === 'code'
                           ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                           : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -2390,7 +2390,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       title="Show code files, Git, and sandboxes"
                     >
                       <Code2 className="h-4 w-4" />
-                      Code
+                      <span className="hidden sm:inline">Code</span>
                       {gitState?.detected && (
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {gitState.changedCount || 0}
@@ -2403,7 +2403,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('artifacts')}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
                           showActivitySidebar && sidePanelTab === 'artifacts'
                             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -2411,7 +2411,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         title="Show artifacts"
                       >
                         <FilePlus className="h-4 w-4" />
-                        Artifacts
+                        <span className="hidden sm:inline">Artifacts</span>
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {conversationArtifacts.length}
                         </span>
@@ -2422,7 +2422,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('media')}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
                           showActivitySidebar && sidePanelTab === 'media'
                             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -2430,7 +2430,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         title="Show all sources and media"
                       >
                         <Image className="h-4 w-4" />
-                        Media
+                        <span className="hidden sm:inline">Media</span>
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {sourceCatalog.totalCount}
                         </span>
@@ -2443,7 +2443,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         onClick={() => {
                           toggleSidePanelTab('steps');
                         }}
-                        className={`hidden xl:inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                        className={`hidden h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-sm font-medium transition-colors xl:inline-flex ${
                           showActivitySidebar && sidePanelTab === 'steps'
                             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -2460,7 +2460,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('saved')}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
                           showActivitySidebar && sidePanelTab === 'saved'
                             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -2468,7 +2468,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         title="Show bookmarked messages"
                       >
                         <BookMarked className="h-4 w-4" />
-                        Saved
+                        <span className="hidden sm:inline">Saved</span>
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {savedItemsCount}
                         </span>
@@ -2479,7 +2479,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('preview')}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
                           showActivitySidebar && sidePanelTab === 'preview'
                             ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 midnight:bg-emerald-950/30'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
@@ -2490,7 +2490,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                           <Globe className="h-4 w-4" />
                           <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         </span>
-                        Preview
+                        <span className="hidden sm:inline">Preview</span>
                       </button>
                     )}
 
@@ -2498,7 +2498,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       <div ref={exportMenuRef} className="relative">
                         <button
                           onClick={() => setShowExportMenu((v) => !v)}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 rounded transition-colors"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-gray-800"
                           title="Export conversation"
                         >
                           <Download className="w-4 h-4" />
@@ -2549,7 +2549,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     {isGhostMode && (
                       <button
                         onClick={toggleGhostMode}
-                        className="p-2 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-gray-800/50"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-gray-800/50"
                         title="Exit Incognito Mode"
                       >
                         <Ghost className="w-5 h-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400" />
@@ -2561,7 +2561,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => setShowDeleteConfirm(true)}
-                            className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded-lg transition-colors"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-800 dark:hover:text-red-400 midnight:hover:bg-slate-800"
                             title="Delete conversation"
                           >
                             <Trash2 className="w-4 h-4" />
