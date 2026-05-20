@@ -14,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/api';
+import ConfirmModal from '../CommandCenter/components/modals/ConfirmModal';
 
 const WINDOWS = [7, 14, 30, 90];
 
@@ -125,6 +126,7 @@ export default function AgentHealthPage() {
   const [evalRunning, setEvalRunning] = useState(null);
   const [evalResult, setEvalResult] = useState(null);
   const [evalError, setEvalError] = useState('');
+  const [showLiveEvalConfirm, setShowLiveEvalConfirm] = useState(false);
 
   const refresh = useCallback(async ({ quiet = false } = {}) => {
     if (quiet) setRefreshing(true);
@@ -168,10 +170,10 @@ export default function AgentHealthPage() {
       .slice(0, 6)
   ), [tools]);
 
-  const runEval = useCallback(async (mode) => {
-    if (mode === 'live') {
-      const ok = window.confirm('Live eval runs a real agent session with your active model provider inside a disposable sandbox. Continue?');
-      if (!ok) return;
+  const runEval = useCallback(async (mode, skipConfirm = false) => {
+    if (mode === 'live' && !skipConfirm) {
+      setShowLiveEvalConfirm(true);
+      return;
     }
     setEvalRunning(mode);
     setEvalError('');
@@ -404,6 +406,19 @@ export default function AgentHealthPage() {
           </div>
         )}
       </main>
+
+      <ConfirmModal
+        isOpen={showLiveEvalConfirm}
+        onClose={() => setShowLiveEvalConfirm(false)}
+        onConfirm={() => {
+          setShowLiveEvalConfirm(false);
+          runEval('live', true);
+        }}
+        title="Run Live Eval"
+        message="Live eval runs a real agent session with your active model provider inside a disposable sandbox. Continue?"
+        confirmLabel="Continue"
+        cancelLabel="Cancel"
+      />
     </div>
   );
 }
