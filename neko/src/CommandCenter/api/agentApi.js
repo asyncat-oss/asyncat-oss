@@ -137,6 +137,13 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/metrics/summary?${params}`);
   },
 
+  runEval: async ({ mode = 'deterministic', confirmLive = false, keepSandbox = false } = {}) => {
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/evals`, {
+      method: 'POST',
+      body: JSON.stringify({ mode, confirmLive, keepSandbox }),
+    });
+  },
+
   revertSession: async (sessionId) => {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/revert`, {
       method: 'POST',

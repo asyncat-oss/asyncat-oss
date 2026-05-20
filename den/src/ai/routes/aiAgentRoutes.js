@@ -343,6 +343,27 @@ function resolveFileAttachments(fileAttachments = [], workingContext = null) {
   for (const attachment of fileAttachments.slice(0, 10)) {
     const filePath = typeof attachment === 'string' ? attachment : attachment?.path;
     if (!filePath) continue;
+    if (typeof attachment === 'object' && attachment?.promptOnly) {
+      const content = typeof attachment.content === 'string'
+        ? attachment.content.slice(0, 120_000)
+        : '';
+      const dataUrl = typeof attachment.dataUrl === 'string' && attachment.dataUrl.length < 8_000_000
+        ? attachment.dataUrl
+        : '';
+      results.push({
+        path: filePath,
+        toolPath: null,
+        rootId: 'none',
+        name: attachment.name || filePath.replace(/^prompt:\/\//, ''),
+        ext: attachment.ext || (attachment.name ? attachment.name.split('.').pop() : ''),
+        mime: attachment.mime || '',
+        size: Number(attachment.size || 0),
+        promptOnly: true,
+        content,
+        dataUrl,
+      });
+      continue;
+    }
     const rootId = typeof attachment === 'object' && attachment?.rootId
       ? attachment.rootId
       : workingContext?.rootId || 'workspace';
@@ -382,7 +403,30 @@ function injectFileAttachments(goal, fileAttachments = []) {
     const mime = String(f.mime || '').toLowerCase();
     const toolPath = f.toolPath || f.path;
     if (f.content) {
-      return `--- Attached file: ${f.path} ---\nTool path: ${toolPath}\nMIME: ${f.mime || 'text/plain'}\n\`\`\`${ext}\n${f.content}\n\`\`\`\n`;
+      const scopeLine = f.promptOnly
+        ? 'Scope: prompt-only upload; not stored in or read from the workspace.'
+        : `Tool path: ${toolPath}`;
+      return `--- Attached file: ${f.name || f.path} ---\n${scopeLine}\nMIME: ${f.mime || 'text/plain'}\n\`\`\`${ext}\n${f.content}\n\`\`\`\n`;
+    }
+    if (f.promptOnly && f.dataUrl && mime.startsWith('image/')) {
+      return [
+        `--- Attached image: ${f.name || f.path} ---`,
+        'Scope: prompt-only upload; not stored in or read from the workspace.',
+        `MIME: ${f.mime || 'image/*'}`,
+        f.size ? `Size: ${f.size} bytes` : null,
+        'Image bytes are attached to the conversation UI. If visual inspection is needed, ask the user to switch to a workspace/tool mode with vision-capable attachment inspection.',
+        '',
+      ].filter(Boolean).join('\n');
+    }
+    if (f.promptOnly) {
+      return [
+        `--- Attached file: ${f.name || f.path} ---`,
+        'Scope: prompt-only upload; not stored in or read from the workspace.',
+        `MIME: ${f.mime || 'application/octet-stream'}`,
+        f.size ? `Size: ${f.size} bytes` : null,
+        'This file type is available as metadata only in No workspace mode.',
+        '',
+      ].filter(Boolean).join('\n');
     }
     const hint = mime.startsWith('image/')
       ? `Use inspect_attachment with path "${toolPath}" first; it will route to image_describe when vision is available.`
@@ -1500,7 +1544,11 @@ router.post('/run', authenticate, async (req, res) => {
       userMessageId = null,
       assistantMessageId = null,
     } = req.body;
-    const resolvedAgentMode = agentMode === 'plan' || enableTools === false ? 'plan' : 'action';
+    const resolvedAgentMode = agentMode === 'chat'
+      ? 'chat'
+      : agentMode === 'plan' || enableTools === false
+        ? 'plan'
+        : 'action';
     const baseGoal = (rawGoal || rawMessage || '').trim();
 
     if (!baseGoal) {
@@ -1539,9 +1587,14 @@ router.post('/run', authenticate, async (req, res) => {
       heartbeatInterval = null;
     });
 
-    const resolvedWorkingContext = resolveAgentWorkingContext({ workingContext, workingDir, profile });
+    const resolvedWorkingContext = resolvedAgentMode === 'chat'
+      ? resolveAgentWorkingContext({ workingContext: null, workingDir: null, profile: null })
+      : resolveAgentWorkingContext({ workingContext, workingDir, profile });
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
-    const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext);
+    const resolvedFiles = resolveFileAttachments(
+      fileAttachments,
+      resolvedAgentMode === 'chat' ? null : resolvedWorkingContext,
+    );
     const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
     // Capabilities go into the system prompt via AgentRuntime — NOT prepended to the user's goal.
     const capabilitiesSection = formatMultimodalCapabilityPrompt(multimodalCapabilities);

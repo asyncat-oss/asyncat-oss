@@ -59,6 +59,10 @@ export function AttachmentChip({ file, capabilities, onRemove, onPreview }) {
   const [previewUrl, setPreviewUrl] = useState(null);
 
   useEffect(() => {
+    if (file.dataUrl) {
+      setPreviewUrl(file.dataUrl);
+      return undefined;
+    }
     if (!["image", "audio"].includes(kind) || !file.rootId || !file.path) return undefined;
     let cancelled = false;
     filesApi

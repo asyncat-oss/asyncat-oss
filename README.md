@@ -156,6 +156,8 @@ Metrics currently include total tool calls, failed calls, success rate, sessions
 
 ## Evals
 
+Most users can run evals from the Agent Health page at `/agent-health`. The terminal commands below are for developers and operators who want CI-friendly output.
+
 Run deterministic harness checks:
 
 ```bash
@@ -232,6 +234,8 @@ Sandbox data is stored under `.asyncat/sandboxes` near the source root unless `A
 | `/files` | Workspace file browser |
 | `/workspace` | Projects and workspace data |
 | `/settings` | App and server settings |
+
+The Command Center context picker includes `No workspace` for prompt-only work. In that context, the agent can use the conversation, selected skills, memories, and prompt-only text attachments, but it cannot inspect local folders, run commands, or modify files.
 
 ## Repository Layout
 

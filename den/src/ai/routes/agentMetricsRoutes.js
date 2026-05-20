@@ -1,5 +1,13 @@
 import express from 'express';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import db from '../../db/client.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEN_ROOT = path.resolve(__dirname, '../../..');
+const EVAL_SCRIPT = path.join(DEN_ROOT, 'scripts', 'run-agent-evals.js');
+let activeEval = null;
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -33,6 +41,71 @@ function emptyToolMetric(row) {
       : Number(Number(row.avg_duration_ms).toFixed(1)),
     lastSeenAt: row.last_seen_at,
   };
+}
+
+function runEvalProcess({ mode = 'deterministic', keepSandbox = false } = {}) {
+  if (activeEval) {
+    const error = new Error('An agent eval is already running.');
+    error.status = 409;
+    throw error;
+  }
+
+  const live = mode === 'live';
+  const args = [EVAL_SCRIPT, '--json'];
+  if (live) args.push('--live');
+  if (live && keepSandbox) args.push('--keep-sandbox');
+  const timeoutMs = live ? 6 * 60_000 : 90_000;
+
+  activeEval = { mode, startedAt: Date.now() };
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, args, {
+      cwd: DEN_ROOT,
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      const error = new Error(`Agent eval timed out after ${Math.round(timeoutMs / 1000)}s.`);
+      error.status = 504;
+      reject(error);
+    }, timeoutMs);
+
+    child.stdout.on('data', chunk => {
+      stdout += chunk.toString();
+      if (stdout.length > 2_000_000) stdout = stdout.slice(-2_000_000);
+    });
+    child.stderr.on('data', chunk => {
+      stderr += chunk.toString();
+      if (stderr.length > 200_000) stderr = stderr.slice(-200_000);
+    });
+    child.on('error', reject);
+    child.on('close', code => {
+      clearTimeout(timer);
+      try {
+        const jsonStart = stdout.indexOf('{');
+        const jsonEnd = stdout.lastIndexOf('}');
+        const jsonText = jsonStart >= 0 && jsonEnd >= jsonStart
+          ? stdout.slice(jsonStart, jsonEnd + 1)
+          : stdout.trim();
+        const parsed = JSON.parse(jsonText || '{}');
+        resolve({
+          ...parsed,
+          exitCode: code,
+          stderr: stderr.trim(),
+        });
+      } catch {
+        const error = new Error(stderr.trim() || stdout.trim() || `Agent eval exited with code ${code}`);
+        error.status = code === 0 ? 500 : 400;
+        reject(error);
+      }
+    });
+  }).finally(() => {
+    activeEval = null;
+  });
 }
 
 export function createAgentMetricsRouter({ authenticate }) {
@@ -125,6 +198,27 @@ export function createAgentMetricsRouter({ authenticate }) {
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/evals', authenticate, async (req, res) => {
+    try {
+      const mode = req.body?.mode === 'live' ? 'live' : 'deterministic';
+      if (mode === 'live' && req.body?.confirmLive !== true) {
+        return res.status(400).json({
+          success: false,
+          error: 'Live evals call the active model provider. Pass confirmLive=true to run one.',
+        });
+      }
+
+      const payload = await runEvalProcess({
+        mode,
+        keepSandbox: req.body?.keepSandbox === true,
+      });
+
+      res.json(payload);
+    } catch (err) {
+      res.status(err.status || 500).json({ success: false, error: err.message });
     }
   });
 

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   Loader2,
+  Play,
   RefreshCw,
   ShieldAlert,
   Terminal,
@@ -121,6 +122,9 @@ export default function AgentHealthPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [evalRunning, setEvalRunning] = useState(null);
+  const [evalResult, setEvalResult] = useState(null);
+  const [evalError, setEvalError] = useState('');
 
   const refresh = useCallback(async ({ quiet = false } = {}) => {
     if (quiet) setRefreshing(true);
@@ -163,6 +167,28 @@ export default function AgentHealthPage() {
       ))
       .slice(0, 6)
   ), [tools]);
+
+  const runEval = useCallback(async (mode) => {
+    if (mode === 'live') {
+      const ok = window.confirm('Live eval runs a real agent session with your active model provider inside a disposable sandbox. Continue?');
+      if (!ok) return;
+    }
+    setEvalRunning(mode);
+    setEvalError('');
+    setEvalResult(null);
+    try {
+      const result = await agentApi.runEval({
+        mode,
+        confirmLive: mode === 'live',
+      });
+      setEvalResult(result);
+      await refresh({ quiet: true });
+    } catch (err) {
+      setEvalError(err.message || 'Agent eval failed.');
+    } finally {
+      setEvalRunning(null);
+    }
+  }, [refresh]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100 midnight:bg-gray-950 midnight:text-slate-100">
@@ -309,7 +335,41 @@ export default function AgentHealthPage() {
 
                 <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                   <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
-                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Eval Commands</h2>
+                    <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Eval Harness</h2>
+                  </div>
+                  <div className="space-y-2 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => runEval('deterministic')}
+                      disabled={Boolean(evalRunning)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      {evalRunning === 'deterministic' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      Run deterministic eval
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => runEval('live')}
+                      disabled={Boolean(evalRunning)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-60 dark:border-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/20"
+                    >
+                      {evalRunning === 'live' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      Run live sandbox eval
+                    </button>
+                    {evalError ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+                        {evalError}
+                      </div>
+                    ) : null}
+                    {evalResult ? (
+                      <div className={`rounded-md border px-3 py-2 text-xs ${
+                        evalResult.success
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300'
+                          : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300'
+                      }`}>
+                        {evalResult.mode} eval: {evalResult.passed}/{evalResult.total} passed
+                      </div>
+                    ) : null}
                   </div>
                   <CommandRow label="Deterministic" command="npm run eval:agent -w den" />
                   <CommandRow label="Live sandbox" command="npm run eval:agent -w den -- --live" />

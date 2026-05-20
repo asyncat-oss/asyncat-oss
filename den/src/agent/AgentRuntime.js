@@ -245,7 +245,7 @@ export class AgentRuntime {
     this.providerInfo = opts.providerInfo || null;
     this.reasoningEffort = opts.reasoningEffort || 'auto';
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
-    this.agentMode = opts.agentMode === 'plan' ? 'plan' : 'action';
+    this.agentMode = ['chat', 'plan', 'action'].includes(opts.agentMode) ? opts.agentMode : 'action';
     this.enabledIntegrationTools = Array.isArray(opts.enabledIntegrationTools)
       ? new Set(opts.enabledIntegrationTools.filter(Boolean).map(String))
       : null;
@@ -529,7 +529,7 @@ export class AgentRuntime {
     // Plan-driven continuation: limits how many times we nudge the agent
     let planContinuationNudges = 0;
     // In plan mode, agent should converge quickly — fewer nudges, less looping
-    const MAX_PLAN_NUDGES = this.agentMode === 'plan' ? 1 : 3;
+    const MAX_PLAN_NUDGES = this.agentMode === 'plan' || this.agentMode === 'chat' ? 1 : 3;
 
     for (let round = 0; round < this.maxRounds; round++) {
       this._throwIfAborted();
@@ -1355,10 +1355,13 @@ export class AgentRuntime {
 
     // For cloud models with native tool support, pass tool definitions via API
     if (useNativeTools) {
-      params.tools = toolRegistry.toOpenAIFormat(this._toolDefinitionsForMode().map(t => t.name));
-      params.tool_choice = options.forceToolName
-        ? { type: 'function', function: { name: options.forceToolName } }
-        : 'auto';
+      const nativeTools = toolRegistry.toOpenAIFormat(this._toolDefinitionsForMode().map(t => t.name));
+      if (nativeTools.length > 0) {
+        params.tools = nativeTools;
+        params.tool_choice = options.forceToolName
+          ? { type: 'function', function: { name: options.forceToolName } }
+          : 'auto';
+      }
       params.max_completion_tokens = params.max_tokens;
       delete params.max_tokens;
     }
@@ -1450,6 +1453,7 @@ export class AgentRuntime {
   }
 
   _ensureAutoPlan(goal, round = 0) {
+    if (this.agentMode === 'chat') return;
     if (!ACTION_GOAL_RE.test(String(goal || ''))) return;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return;
 
@@ -1613,6 +1617,7 @@ export class AgentRuntime {
   }
 
   _shouldPrimePlan(goal, round) {
+    if (this.agentMode === 'chat') return false;
     if (!this.supportsNativeTools) return false;
     if (round > 2) return false;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return false;
@@ -1795,6 +1800,7 @@ export class AgentRuntime {
   }
 
   _toolDefinitionsForMode(goal = this.currentGoal || '') {
+    if (this.agentMode === 'chat') return [];
     const modeTools = this.agentMode !== 'plan'
       ? toolRegistry.all()
       : toolRegistry.all().filter(tool => {
