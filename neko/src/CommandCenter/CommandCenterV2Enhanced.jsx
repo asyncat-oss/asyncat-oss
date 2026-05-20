@@ -49,6 +49,7 @@ import {
   Image,
   GitBranch,
   BookMarked,
+  FilePlus,
   Headphones,
   Sparkles,
   Globe,
@@ -84,6 +85,31 @@ function getVoicePlaceholder(sttReady, ttsReady, fallback) {
     return "Speech output active - type a message and play replies aloud...";
   }
   return fallback;
+}
+
+function getArtifactIdentity(artifact = {}) {
+  return artifact.noteId
+    ? `note:${artifact.noteId}`
+    : artifact.filename
+      ? `file:${artifact.filename}`
+      : artifact.path
+        ? `path:${artifact.path}`
+        : `${artifact.type || artifact.originalType || 'artifact'}:${artifact.title || artifact.name || 'untitled'}`;
+}
+
+function collectArtifactsFromEvents(events = []) {
+  const artifactsByKey = new Map();
+  events.forEach((event, index) => {
+    const artifact = event?.result?.artifact;
+    if (!artifact) return;
+    const key = getArtifactIdentity(artifact);
+    artifactsByKey.set(key, {
+      ...artifact,
+      _artifactKey: key,
+      _artifactIndex: index,
+    });
+  });
+  return [...artifactsByKey.values()].sort((a, b) => (a._artifactIndex || 0) - (b._artifactIndex || 0));
 }
 
 function createConversationBranchId() {
@@ -649,10 +675,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const handleViewArtifactInPanel = useCallback((artifact) => {
     setSelectedArtifact(artifact);
     setShowActivitySidebar(true);
-    setPrevSidePanelTab(tab => tab === 'artifact' ? 'steps' : tab);
+    setPrevSidePanelTab(sidePanelTab === 'artifact' ? prevSidePanelTab : sidePanelTab);
     setSidePanelTab('artifact');
     try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* noop */ }
-  }, []);
+  }, [prevSidePanelTab, sidePanelTab]);
 
   const handleArtifactPanelBack = useCallback(() => {
     setSidePanelTab(prev => prev === 'artifact' ? prevSidePanelTab : prev);
@@ -1850,6 +1876,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return buildEventsFromMessages(messages);
   }, [agentEvents, messages]);
 
+  const conversationArtifacts = useMemo(
+    () => collectArtifactsFromEvents(persistedAgentEvents),
+    [persistedAgentEvents],
+  );
+
   const currentPlanEvent = useMemo(() => {
     const lastGoalIndex = persistedAgentEvents.reduce((lastIndex, event, index) => (
       event?.type === 'user_goal' ? index : lastIndex
@@ -2368,6 +2399,25 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       )}
                     </button>
 
+                    {conversationArtifacts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('artifacts')}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'artifacts'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Show artifacts"
+                      >
+                        <FilePlus className="h-4 w-4" />
+                        Artifacts
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {conversationArtifacts.length}
+                        </span>
+                      </button>
+                    )}
+
                     {sourceCatalog.totalCount > 0 && (
                       <button
                         type="button"
@@ -2675,7 +2725,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside
           style={{ width: sidePanelWidth }}
           className="hidden xl:flex xl:shrink-0 relative border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700"
@@ -2713,6 +2763,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
+              artifacts={conversationArtifacts}
+              onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}
               chatNavItems={chatNavItems}
             />
@@ -2720,7 +2772,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"
@@ -2754,6 +2806,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
+              artifacts={conversationArtifacts}
+              onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}
               chatNavItems={chatNavItems}
             />

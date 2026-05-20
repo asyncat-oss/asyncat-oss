@@ -14,6 +14,7 @@ const panelMeta = {
   history: { label: 'History', icon: History },
   saved: { label: 'Saved', icon: BookMarked },
   preview: { label: 'Preview', icon: Globe },
+  artifacts: { label: 'Artifacts', icon: FilePlus },
   artifact: { label: 'Artifact', icon: FilePlus },
   nav: { label: 'Jump to', icon: List },
 };
@@ -174,8 +175,46 @@ function ArtifactPanel({ artifact }) {
     );
   }
   return (
-    <div className="flex flex-col h-full p-3">
-      <ArtifactCard artifact={artifact} defaultExpanded fullHeight />
+    <div className="flex h-full min-h-0 flex-col p-3">
+      <ArtifactCard
+        key={artifact._artifactKey || artifact.noteId || artifact.path || artifact.filename || artifact.title}
+        artifact={artifact}
+        defaultExpanded
+        fullHeight
+      />
+    </div>
+  );
+}
+
+function ArtifactsPanel({ artifacts = [], onSelectArtifact }) {
+  if (!artifacts.length) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="text-center">
+          <FilePlus className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-600" />
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No artifacts yet</p>
+          <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Artifacts created by the agent will collect here.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-3">
+      <div className="mb-2 flex items-center justify-between px-0.5">
+        <p className="text-[11px] font-medium text-gray-400 dark:text-slate-500 midnight:text-slate-500">
+          {artifacts.length} artifact{artifacts.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+      <div className="space-y-2">
+        {artifacts.map((artifact) => (
+          <ArtifactCard
+            key={artifact._artifactKey || artifact.path || artifact.filename || artifact.title}
+            artifact={artifact}
+            onOpen={onSelectArtifact ? () => onSelectArtifact(artifact) : null}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -289,6 +328,8 @@ export default function CommandCenterSidePanel({
   highlights = null,
   onOpenSavedMessage,
   previewUrl = null,
+  artifacts = [],
+  onSelectArtifact,
   selectedArtifact = null,
   chatNavItems = [],
 }) {
@@ -360,6 +401,9 @@ export default function CommandCenterSidePanel({
         )}
         {currentTab === 'preview' && (
           <PreviewPanel initialUrl={previewUrl} />
+        )}
+        {currentTab === 'artifacts' && (
+          <ArtifactsPanel artifacts={artifacts} onSelectArtifact={onSelectArtifact} />
         )}
         {currentTab === 'artifact' && (
           <ArtifactPanel artifact={selectedArtifact} />

@@ -97,7 +97,7 @@ function CsvPreview({ content, maxRows = 15 }) {
 }
 
 // ── Code block ──────────────────────────────────────────────────────────────
-function CodePreview({ content }) {
+function CodePreview({ content, fullHeight = false }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
@@ -106,7 +106,7 @@ function CodePreview({ content }) {
   };
 
   return (
-    <div className="relative group">
+    <div className={`relative group ${fullHeight ? 'h-full min-h-[320px]' : ''}`}>
       <button
         onClick={handleCopy}
         className="absolute right-1.5 top-1.5 p-1 rounded text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-gray-300 hover:bg-gray-800"
@@ -114,7 +114,7 @@ function CodePreview({ content }) {
       >
         {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
       </button>
-      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-gray-900 p-2.5 font-mono text-[11px] leading-relaxed text-gray-300">
+      <pre className={`${fullHeight ? 'h-full min-h-[320px]' : 'max-h-64'} overflow-auto whitespace-pre-wrap break-words rounded bg-gray-900 p-2.5 font-mono text-[11px] leading-relaxed text-gray-300`}>
         {content?.slice(0, 5000)}
         {content?.length > 5000 && '\n\n… [truncated]'}
       </pre>
@@ -137,20 +137,26 @@ function MarkdownPreview({ content }) {
 }
 
 // ── HTML iframe ─────────────────────────────────────────────────────────────
-function HtmlPreview({ content, title }) {
+function HtmlPreview({ content, title, fullHeight = false }) {
   const [fullscreen, setFullscreen] = useState(false);
   const blob = useMemo(() => {
     if (!content) return null;
     return URL.createObjectURL(new Blob([content], { type: 'text/html' }));
   }, [content]);
 
+  useEffect(() => {
+    return () => {
+      if (blob) URL.revokeObjectURL(blob);
+    };
+  }, [blob]);
+
   return (
     <>
-      <div className="relative rounded overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div className={`relative rounded overflow-hidden border border-gray-200 dark:border-gray-700 ${fullHeight ? 'h-full min-h-[360px]' : ''}`}>
         <iframe
           src={blob}
           title={title || 'Preview'}
-          className="w-full h-56 bg-white"
+          className={`w-full bg-white ${fullHeight ? 'h-full' : 'h-56'}`}
           sandbox="allow-scripts allow-same-origin"
         />
         <button
@@ -333,21 +339,21 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         return <MarkdownPreview content={content} />;
       case 'html':
       case 'mermaid':
-        return <HtmlPreview content={content} title={title} />;
+        return <HtmlPreview content={content} title={title} fullHeight={fullHeight} />;
       case 'csv':
-        return <CsvPreview content={content} />;
+        return <CsvPreview content={content} maxRows={fullHeight ? 100 : 15} />;
       case 'json':
-        return <CodePreview content={content} />;
+        return <CodePreview content={content} fullHeight={fullHeight} />;
       case 'code':
-        return <CodePreview content={content} />;
+        return <CodePreview content={content} fullHeight={fullHeight} />;
       case 'svg':
         return (
-          <div className="flex items-center justify-center p-3 bg-white dark:bg-gray-900 rounded">
-            <div dangerouslySetInnerHTML={{ __html: content }} className="max-w-full max-h-52" />
+          <div className={`flex items-center justify-center p-3 bg-white dark:bg-gray-900 rounded ${fullHeight ? 'h-full min-h-[320px]' : ''}`}>
+            <div dangerouslySetInnerHTML={{ __html: content }} className={`max-w-full ${fullHeight ? 'max-h-full' : 'max-h-52'}`} />
           </div>
         );
       default:
-        return <CodePreview content={content} />;
+        return <CodePreview content={content} fullHeight={fullHeight} />;
     }
   };
 
