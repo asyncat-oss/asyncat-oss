@@ -46,6 +46,11 @@ function fail(message, extra = {}) {
   return { ok: false, message, ...extra };
 }
 
+function progress(phase, label = phase) {
+  if (process.env.ASYNCAT_EVAL_PROGRESS !== '1') return;
+  process.stderr.write(`ASYNCAT_EVAL_PROGRESS ${JSON.stringify({ phase, label, at: new Date().toISOString() })}\n`);
+}
+
 async function runScenario(scenario) {
   if (scenario.id === 'coding-patch-file') {
     const root = tempWorkspace();
@@ -169,7 +174,9 @@ function asResultPayload({ mode, startedAt, results, extra = {} }) {
 async function runDeterministicEvals() {
   const startedAt = Date.now();
   const results = [];
+  progress('running', 'Running deterministic tool checks');
   for (const scenario of agentEvalScenarios) {
+    progress('running', `Checking ${scenario.id}`);
     const result = await runScenario(scenario);
     results.push({
       id: scenario.id,
@@ -228,6 +235,7 @@ function resolveEvalIdentity(db, requestedUserId, requestedWorkspaceId) {
 
 async function runLiveModelEval() {
   const startedAt = Date.now();
+  progress('preparing', 'Preparing live sandbox eval');
   const keepSandbox = process.argv.includes('--keep-sandbox');
   const maxRounds = Math.max(1, Math.min(30, Number(optionValue('--max-rounds', 10)) || 10));
   const requestedUserId = optionValue('--user-id', process.env.ASYNCAT_EVAL_USER_ID || null);
@@ -253,6 +261,7 @@ async function runLiveModelEval() {
     cleanupUserId = identity.userId;
     const provider = getAiClientForUser(identity.userId);
     sourceRoot = createLiveEvalSource();
+    progress('creating_sandbox', 'Creating disposable sandbox');
     const created = createSandbox({
       userId: identity.userId,
       workspaceId: identity.workspaceId,
@@ -292,7 +301,9 @@ async function runLiveModelEval() {
       'Run npm test after the edit. Keep all work inside the current sandbox and do not install packages.',
     ].join('\n');
 
+    progress('running_agent', `Running agent with ${provider.model}`);
     const result = await agent.run(goal);
+    progress('validating', 'Validating sandbox result');
     const validation = spawnSync(process.execPath, ['check.mjs'], {
       cwd: sandbox.sandboxPath,
       encoding: 'utf8',
@@ -340,7 +351,9 @@ async function runLiveModelEval() {
       },
     });
 
+    progress('recording', 'Recording eval result');
     if (!keepSandbox) {
+      progress('cleaning_up', 'Cleaning up sandbox');
       deleteSandbox(identity.userId, sandbox.id, { force: true });
       sandbox = null;
       fs.rmSync(sourceRoot, { recursive: true, force: true });
@@ -349,6 +362,7 @@ async function runLiveModelEval() {
 
     return payload;
   } catch (err) {
+    progress('failed', err.message || String(err));
     return asResultPayload({
       mode: 'live',
       startedAt,

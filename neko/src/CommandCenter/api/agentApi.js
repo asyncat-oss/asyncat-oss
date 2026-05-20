@@ -144,6 +144,23 @@ export const agentApi = {
     });
   },
 
+  getEvalHistory: async ({ limit = 10 } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/evals?${params}`);
+  },
+
+  getActiveEval: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/evals/active`);
+  },
+
+  clearDiagnostics: async ({ days = 30, all = false } = {}) => {
+    const params = new URLSearchParams(all ? { all: 'true' } : { days: String(days) });
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/audit?${params}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ days, all }),
+    });
+  },
+
   revertSession: async (sessionId) => {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/revert`, {
       method: 'POST',

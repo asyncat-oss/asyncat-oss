@@ -5,12 +5,14 @@ import {
   BarChart3,
   CheckCircle2,
   Clock3,
+  ExternalLink,
   Info,
   Loader2,
   Play,
   RefreshCw,
   ShieldAlert,
   Terminal,
+  Trash2,
   Wrench,
   XCircle,
 } from 'lucide-react';
@@ -185,6 +187,66 @@ function EvalResultDetails({ result }) {
   );
 }
 
+function EvalProgress({ progress, evalRunning }) {
+  if (!evalRunning && !progress) return null;
+  const label = progress?.label || (evalRunning === 'live' ? 'Running live sandbox eval' : 'Running deterministic eval');
+  return (
+    <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300">
+      <div className="flex items-center gap-2 font-medium">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {label}
+      </div>
+      {progress?.elapsedMs !== undefined ? (
+        <div className="mt-0.5 opacity-80">{formatDuration(progress.elapsedMs)}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function EvalHistoryList({ evals = [], loading = false }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+      <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
+        <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Eval History</h2>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Recent deterministic and live checks.</p>
+      </div>
+      <div className="max-h-64 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800/70 midnight:divide-slate-800">
+        {loading ? (
+          <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">Loading eval history...</div>
+        ) : evals.length ? evals.map(item => (
+          <div key={item.id} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {item.success ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" />
+                  ) : item.status === 'running' ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600 dark:text-sky-300" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-300" />
+                  )}
+                  <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{item.mode}</span>
+                </div>
+                <div className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                  {item.model || item.phase || item.status}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                  {item.passed}/{item.total || 0}
+                </div>
+                <div className="mt-1 whitespace-nowrap text-[11px] text-gray-400">{formatTime(item.createdAt)}</div>
+              </div>
+            </div>
+          </div>
+        )) : (
+          <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">No eval runs recorded yet.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ModelContextPanel({ activeProvider, usage, loading, error }) {
   const topModel = usage?.models?.[0] || null;
   const totals = usage?.totals || {};
@@ -241,6 +303,12 @@ export default function AgentHealthPage() {
   const [modelUsage, setModelUsage] = useState(null);
   const [modelLoading, setModelLoading] = useState(true);
   const [modelError, setModelError] = useState('');
+  const [evalHistory, setEvalHistory] = useState([]);
+  const [evalHistoryLoading, setEvalHistoryLoading] = useState(true);
+  const [evalProgress, setEvalProgress] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearingDiagnostics, setClearingDiagnostics] = useState(false);
+  const [clearMessage, setClearMessage] = useState('');
 
   const modelUsageRange = days <= 7 ? '7d' : days >= 90 ? '90d' : '30d';
 
@@ -288,6 +356,44 @@ export default function AgentHealthPage() {
     refreshModelContext();
   }, [refreshModelContext]);
 
+  const refreshEvalHistory = useCallback(async () => {
+    setEvalHistoryLoading(true);
+    try {
+      const history = await agentApi.getEvalHistory({ limit: 12 });
+      setEvalHistory(history.evals || []);
+    } catch {
+      setEvalHistory([]);
+    } finally {
+      setEvalHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshEvalHistory();
+  }, [refreshEvalHistory]);
+
+  useEffect(() => {
+    if (!evalRunning) {
+      setEvalProgress(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await agentApi.getActiveEval();
+        if (!cancelled) setEvalProgress(res.active || null);
+      } catch {
+        if (!cancelled) setEvalProgress(null);
+      }
+    };
+    poll();
+    const timer = window.setInterval(poll, 1200);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [evalRunning]);
+
   const summary = summaryData?.summary || {};
   const tools = toolData?.tools || [];
   const recentFailures = summaryData?.recentFailures || [];
@@ -330,12 +436,28 @@ export default function AgentHealthPage() {
       setEvalResult(result);
       await refresh({ quiet: true });
       await refreshModelContext();
+      await refreshEvalHistory();
     } catch (err) {
       setEvalError(err.message || 'Agent eval failed.');
     } finally {
       setEvalRunning(null);
     }
-  }, [refresh, refreshModelContext]);
+  }, [refresh, refreshModelContext, refreshEvalHistory]);
+
+  const clearDiagnostics = useCallback(async () => {
+    setClearingDiagnostics(true);
+    setClearMessage('');
+    try {
+      const result = await agentApi.clearDiagnostics({ days, all: false });
+      setShowClearConfirm(false);
+      setClearMessage(`Cleared ${formatNumber(result.deleted)} diagnostic row${result.deleted === 1 ? '' : 's'} from the last ${days} days.`);
+      await refresh({ quiet: true });
+    } catch (err) {
+      setClearMessage(err.message || 'Failed to clear diagnostics.');
+    } finally {
+      setClearingDiagnostics(false);
+    }
+  }, [days, refresh]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100 midnight:bg-gray-950 midnight:text-slate-100">
@@ -373,6 +495,14 @@ export default function AgentHealthPage() {
           </div>
           <button
             type="button"
+            onClick={() => setShowClearConfirm(true)}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-gray-800 dark:text-gray-200 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-300 midnight:border-slate-800 midnight:text-slate-200"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear diagnostics
+          </button>
+          <button
+            type="button"
             onClick={() => refresh({ quiet: true })}
             disabled={refreshing}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:text-slate-200 midnight:hover:bg-slate-900"
@@ -388,6 +518,12 @@ export default function AgentHealthPage() {
           <div className="mb-5 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
             <AlertCircle className="h-4 w-4" />
             {error}
+          </div>
+        ) : null}
+        {clearMessage ? (
+          <div className="mb-5 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+            <Info className="h-4 w-4" />
+            {clearMessage}
           </div>
         ) : null}
 
@@ -512,6 +648,8 @@ export default function AgentHealthPage() {
                   </div>
                 </section>
 
+                <EvalHistoryList evals={evalHistory} loading={evalHistoryLoading} />
+
                 <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                   <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800/70 midnight:border-slate-800">
                     <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Metric Guide</h2>
@@ -561,6 +699,7 @@ export default function AgentHealthPage() {
                         {evalError}
                       </div>
                     ) : null}
+                    <EvalProgress progress={evalProgress} evalRunning={evalRunning} />
                     {evalResult ? (
                       <div className={`rounded-md border px-3 py-2 text-xs ${
                         evalResult.success
@@ -600,10 +739,21 @@ export default function AgentHealthPage() {
                       <div key={`${failure.sessionId}-${failure.toolName}-${index}`} className="px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
                           <span className="truncate font-mono text-xs text-gray-800 dark:text-gray-200">{failure.toolName}</span>
-                          <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-gray-400">
-                            <Clock3 className="h-3 w-3" />
-                            {formatTime(failure.startedAt)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-gray-400">
+                              <Clock3 className="h-3 w-3" />
+                              {formatTime(failure.startedAt)}
+                            </span>
+                            {failure.sessionId ? (
+                              <a
+                                href={`/agents/${failure.sessionId}`}
+                                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                                title="Open related agent session"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            ) : null}
+                          </div>
                         </div>
                         {failure.code ? (
                           <div className="mt-1 font-mono text-[11px] text-gray-400">{failure.code}</div>
@@ -635,6 +785,19 @@ export default function AgentHealthPage() {
         message="Live eval runs a real agent session with your active model provider inside a disposable sandbox. Continue?"
         confirmLabel="Continue"
         cancelLabel="Cancel"
+      />
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => {
+          if (!clearingDiagnostics) setShowClearConfirm(false);
+        }}
+        onConfirm={clearDiagnostics}
+        title="Clear Diagnostics"
+        message={`Clear agent tool-call diagnostics from the last ${days} days?\n\nThis does not delete conversations, agent sessions, model usage, files, or eval history.`}
+        confirmLabel="Clear diagnostics"
+        cancelLabel="Cancel"
+        isDestructive
+        isProcessing={clearingDiagnostics}
       />
     </div>
   );
