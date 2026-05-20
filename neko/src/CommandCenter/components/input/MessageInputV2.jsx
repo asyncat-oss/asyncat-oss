@@ -1565,11 +1565,9 @@ export const MessageInputV2 = ({
                 )}
               </div>
             </div>
-          </div>
-        </form>
 
-        {(activeWorkingContext || onWorkingContextChange) && (
-          <div className="mt-2.5 px-2 flex flex-wrap items-center gap-3 select-none">
+              {(activeWorkingContext || onWorkingContextChange) && (
+                <div className="-mx-4 px-4 pt-2.5 pb-3 mt-2 -mb-3 bg-gray-50/80 dark:bg-gray-800/40 midnight:bg-slate-800/40 flex flex-wrap items-center gap-3 select-none">
             {/* Workspace & Folder Combined Button */}
             {chatOnlyMode ? (
               <button
@@ -1703,8 +1701,10 @@ export const MessageInputV2 = ({
                 )}
               </div>
             )}
+                </div>
+              )}
           </div>
-        )}
+        </form>
 
         {hasMessages && (
           <div className="mt-2 text-center">

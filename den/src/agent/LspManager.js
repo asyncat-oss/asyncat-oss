@@ -44,6 +44,10 @@ class LspClient {
 
     this.process.on('close', (code) => {
       console.log(`[LSP Client] ${this.language} server exited with code ${code}`);
+      for (const { reject } of this.pendingRequests.values()) {
+        reject(new Error(`${this.language} LSP server exited before responding.`));
+      }
+      this.pendingRequests.clear();
       this.process = null;
     });
 

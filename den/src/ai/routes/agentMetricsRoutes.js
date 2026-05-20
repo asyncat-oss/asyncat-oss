@@ -23,19 +23,28 @@ function boundedDays(value, fallback = 30) {
   return Math.max(1, Math.min(365, Number(value || fallback)));
 }
 
-function emptyToolMetric(row) {
+function toolMetricFromRow(row) {
   const total = Number(row.total_calls || 0);
   const failed = Number(row.failed_calls || 0);
   const successful = Math.max(0, total - failed);
+  const invalidArguments = Number(row.invalid_arguments || 0);
+  const readBeforeWriteBlocks = Number(row.read_before_write_blocks || 0);
+  const permissionDenied = Number(row.permission_denied || 0);
+  const unknownTools = Number(row.unknown_tools || 0);
+  const guardBlocks = readBeforeWriteBlocks + permissionDenied;
+  const executionErrors = Math.max(0, failed - invalidArguments - guardBlocks - unknownTools);
   return {
     toolName: row.tool_name,
     totalCalls: total,
     successfulCalls: successful,
     failedCalls: failed,
     successRate: total ? Number((successful / total).toFixed(3)) : null,
-    invalidArguments: Number(row.invalid_arguments || 0),
-    readBeforeWriteBlocks: Number(row.read_before_write_blocks || 0),
-    permissionDenied: Number(row.permission_denied || 0),
+    invalidArguments,
+    readBeforeWriteBlocks,
+    permissionDenied,
+    guardBlocks,
+    unknownTools,
+    executionErrors,
     avgDurationMs: row.avg_duration_ms === null || row.avg_duration_ms === undefined
       ? null
       : Number(Number(row.avg_duration_ms).toFixed(1)),
@@ -43,7 +52,7 @@ function emptyToolMetric(row) {
   };
 }
 
-function runEvalProcess({ mode = 'deterministic', keepSandbox = false } = {}) {
+function runEvalProcess({ mode = 'deterministic', keepSandbox = false, userId = null, workspaceId = null } = {}) {
   if (activeEval) {
     const error = new Error('An agent eval is already running.');
     error.status = 409;
@@ -54,6 +63,8 @@ function runEvalProcess({ mode = 'deterministic', keepSandbox = false } = {}) {
   const args = [EVAL_SCRIPT, '--json'];
   if (live) args.push('--live');
   if (live && keepSandbox) args.push('--keep-sandbox');
+  if (live && userId) args.push('--user-id', userId);
+  if (live && workspaceId) args.push('--workspace-id', workspaceId);
   const timeoutMs = live ? 6 * 60_000 : 90_000;
 
   activeEval = { mode, startedAt: Date.now() };
@@ -108,6 +119,14 @@ function runEvalProcess({ mode = 'deterministic', keepSandbox = false } = {}) {
   });
 }
 
+function metricFailureSql() {
+  return `
+    success = 0
+    OR json_extract(result, '$.success') = 0
+    OR json_extract(result, '$.error') IS NOT NULL
+  `;
+}
+
 export function createAgentMetricsRouter({ authenticate }) {
   const router = express.Router();
 
@@ -119,10 +138,11 @@ export function createAgentMetricsRouter({ authenticate }) {
         SELECT
           tool_name,
           COUNT(*) AS total_calls,
-          SUM(CASE WHEN success = 0 OR json_extract(result, '$.success') = 0 OR json_extract(result, '$.error') IS NOT NULL THEN 1 ELSE 0 END) AS failed_calls,
+          SUM(CASE WHEN ${metricFailureSql()} THEN 1 ELSE 0 END) AS failed_calls,
           SUM(CASE WHEN json_extract(result, '$.code') = 'invalid_tool_arguments' THEN 1 ELSE 0 END) AS invalid_arguments,
           SUM(CASE WHEN json_extract(result, '$.code') = 'read_before_write_required' THEN 1 ELSE 0 END) AS read_before_write_blocks,
           SUM(CASE WHEN permission_decision IN ('denied', 'deny') THEN 1 ELSE 0 END) AS permission_denied,
+          SUM(CASE WHEN json_extract(result, '$.code') = 'unknown_tool' OR json_extract(result, '$.error') LIKE 'Unknown tool:%' THEN 1 ELSE 0 END) AS unknown_tools,
           AVG(CASE
             WHEN completed_at IS NOT NULL
             THEN (julianday(completed_at) - julianday(started_at)) * 86400000.0
@@ -141,7 +161,7 @@ export function createAgentMetricsRouter({ authenticate }) {
         success: true,
         windowDays: days,
         count: rows.length,
-        tools: rows.map(emptyToolMetric),
+        tools: rows.map(toolMetricFromRow),
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -154,7 +174,11 @@ export function createAgentMetricsRouter({ authenticate }) {
       const totals = db.prepare(`
         SELECT
           COUNT(*) AS total_calls,
-          SUM(CASE WHEN success = 0 OR json_extract(result, '$.success') = 0 OR json_extract(result, '$.error') IS NOT NULL THEN 1 ELSE 0 END) AS failed_calls,
+          SUM(CASE WHEN ${metricFailureSql()} THEN 1 ELSE 0 END) AS failed_calls,
+          SUM(CASE WHEN json_extract(result, '$.code') = 'invalid_tool_arguments' THEN 1 ELSE 0 END) AS invalid_arguments,
+          SUM(CASE WHEN json_extract(result, '$.code') = 'read_before_write_required' THEN 1 ELSE 0 END) AS read_before_write_blocks,
+          SUM(CASE WHEN permission_decision IN ('denied', 'deny') THEN 1 ELSE 0 END) AS permission_denied,
+          SUM(CASE WHEN json_extract(result, '$.code') = 'unknown_tool' OR json_extract(result, '$.error') LIKE 'Unknown tool:%' THEN 1 ELSE 0 END) AS unknown_tools,
           COUNT(DISTINCT session_id) AS sessions,
           COUNT(DISTINCT tool_name) AS tools_used
         FROM agent_tool_audit
@@ -167,7 +191,7 @@ export function createAgentMetricsRouter({ authenticate }) {
         FROM agent_tool_audit
         WHERE user_id = ?
           AND julianday(started_at) >= julianday('now', ?)
-          AND (success = 0 OR json_extract(result, '$.success') = 0 OR json_extract(result, '$.error') IS NOT NULL)
+          AND (${metricFailureSql()})
         ORDER BY started_at DESC
         LIMIT 20
       `).all(req.user.id, `-${days} days`).map(row => {
@@ -183,6 +207,12 @@ export function createAgentMetricsRouter({ authenticate }) {
 
       const totalCalls = Number(totals?.total_calls || 0);
       const failedCalls = Number(totals?.failed_calls || 0);
+      const invalidArguments = Number(totals?.invalid_arguments || 0);
+      const readBeforeWriteBlocks = Number(totals?.read_before_write_blocks || 0);
+      const permissionDenied = Number(totals?.permission_denied || 0);
+      const unknownTools = Number(totals?.unknown_tools || 0);
+      const guardBlocks = readBeforeWriteBlocks + permissionDenied;
+      const executionErrors = Math.max(0, failedCalls - invalidArguments - guardBlocks - unknownTools);
       res.json({
         success: true,
         windowDays: days,
@@ -193,6 +223,12 @@ export function createAgentMetricsRouter({ authenticate }) {
           successRate: totalCalls ? Number(((totalCalls - failedCalls) / totalCalls).toFixed(3)) : null,
           sessions: Number(totals?.sessions || 0),
           toolsUsed: Number(totals?.tools_used || 0),
+          invalidArguments,
+          readBeforeWriteBlocks,
+          permissionDenied,
+          guardBlocks,
+          unknownTools,
+          executionErrors,
         },
         recentFailures,
       });
@@ -214,6 +250,8 @@ export function createAgentMetricsRouter({ authenticate }) {
       const payload = await runEvalProcess({
         mode,
         keepSandbox: req.body?.keepSandbox === true,
+        userId: req.user.id,
+        workspaceId: req.workspaceId || req.body?.workspaceId || null,
       });
 
       res.json(payload);

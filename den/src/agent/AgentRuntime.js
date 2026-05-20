@@ -773,6 +773,7 @@ export class AgentRuntime {
         if (!toolRegistry.has(tc.tool_name) || !knownTools.includes(tc.tool_name)) {
           const unknownResult = {
             success: false,
+            code: 'unknown_tool',
             error: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
               ? `Tool "${tc.tool_name}" is not available in Plan mode.`
               : `Unknown tool: "${tc.tool_name}"`,

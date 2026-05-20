@@ -13,6 +13,8 @@ import { searchTools } from '../src/agent/tools/searchTools.js';
 import { browserTools } from '../src/agent/tools/browserTools.js';
 import { dataTools } from '../src/agent/tools/dataTools.js';
 import { dbQueryTools } from '../src/agent/tools/dbQueryTools.js';
+import { toolRegistry } from '../src/agent/tools/toolRegistry.js';
+import { AgentRuntime } from '../src/agent/AgentRuntime.js';
 
 const allToolNames = new Set([
   ...fileTools,
@@ -22,6 +24,15 @@ const allToolNames = new Set([
   ...dataTools,
   ...dbQueryTools,
 ].map(tool => tool.name));
+
+toolRegistry.registerAll([
+  ...fileTools,
+  ...artifactTools,
+  ...searchTools,
+  ...browserTools,
+  ...dataTools,
+  ...dbQueryTools,
+]);
 
 function tempWorkspace() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-agent-eval-'));
@@ -65,6 +76,48 @@ async function runScenario(scenario) {
     return safePathRejected && !isPathInside(sibling, root) && commandResult.success === false
       ? pass('path and cwd escape attempts were rejected')
       : fail('path containment checks failed', { safePathRejected, commandResult });
+  }
+
+  if (scenario.id === 'tool-argument-validation') {
+    const validation = toolRegistry.validateArgs('read_file', { file: 'example.js' });
+    const execution = await toolRegistry.execute('read_file', { file: 'example.js' }, { workingDir: tempWorkspace() });
+    return validation.valid === false
+      && validation.missing.includes('path')
+      && execution.success === false
+      && execution.code === 'invalid_tool_arguments'
+      ? pass('malformed tool calls are rejected before execution')
+      : fail('tool argument validation did not reject malformed args', { validation, execution });
+  }
+
+  if (scenario.id === 'read-before-write-guard') {
+    const root = tempWorkspace();
+    fs.writeFileSync(path.join(root, 'example.js'), 'export const value = 1;\n', 'utf8');
+    const runtime = Object.create(AgentRuntime.prototype);
+    runtime.workingDir = root;
+    runtime.filesReadInSession = new Set();
+    const blocked = runtime._preflightMutatingTool({
+      tool_name: 'patch_file',
+      arguments: { path: 'example.js' },
+    });
+    runtime.filesReadInSession.add(path.join(root, 'example.js'));
+    const allowed = runtime._preflightMutatingTool({
+      tool_name: 'patch_file',
+      arguments: { path: 'example.js' },
+    });
+    return blocked?.success === false && blocked.code === 'read_before_write_required' && allowed === null
+      ? pass('blind edits to existing files require a prior read')
+      : fail('read-before-write guard did not behave as expected', { blocked, allowed });
+  }
+
+  if (scenario.id === 'shell-command-classification') {
+    const runtime = Object.create(AgentRuntime.prototype);
+    const readOnly = ['pwd', 'ls', 'rg "AgentRuntime"', 'git status'];
+    const mutating = ['npm run test', 'git commit -m test', 'node script.js', 'rm -rf tmp'];
+    const readOnlyOk = readOnly.every(command => runtime._looksReadOnlyShellCommand(command) === true);
+    const mutatingOk = mutating.every(command => runtime._looksReadOnlyShellCommand(command) === false);
+    return readOnlyOk && mutatingOk
+      ? pass('shell command classification preserves read-only vs mutating boundary')
+      : fail('shell command classification drifted', { readOnlyOk, mutatingOk });
   }
 
   if (scenario.id === 'writing-artifact-tools') {
