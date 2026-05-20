@@ -277,8 +277,8 @@ Write-Host "  For humans (UI app):"
 Write-Host "    Click " -NoNewline; Write-Host "Asyncat" -ForegroundColor Cyan -NoNewline; Write-Host " on your Desktop or Start Menu"
 Write-Host ""
 Write-Host "  For terminal users:"
-Write-Host "    asyncat              " -NoNewline; Write-Host "open the interactive CLI REPL" -ForegroundColor Cyan
-Write-Host "    asyncat start        " -NoNewline; Write-Host "start backend only" -ForegroundColor Cyan
+Write-Host "    asyncat              " -NoNewline; Write-Host "start and open the web app" -ForegroundColor Cyan
+Write-Host "    asyncat start        " -NoNewline; Write-Host "start and open the web app" -ForegroundColor Cyan
 Write-Host "    asyncat-ui.ps1       " -NoNewline; Write-Host "launch the web app" -ForegroundColor Cyan
 Write-Host "    asyncat --help       " -NoNewline; Write-Host "see all commands" -ForegroundColor Cyan
 Write-Host ""

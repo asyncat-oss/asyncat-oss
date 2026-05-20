@@ -172,7 +172,7 @@ export const envGetTool = {
 // ── notify ────────────────────────────────────────────────────────────────────
 export const notifyTool = {
   name: 'notify',
-  description: 'Send a desktop system notification. Use to alert the user when a long task finishes, an error occurs, or something needs attention — especially useful when the TUI is backgrounded.',
+  description: 'Send a desktop system notification. Use to alert the user when a long task finishes, an error occurs, or something needs attention.',
   category: 'system',
   permission: PermissionLevel.SAFE,
   parameters: {

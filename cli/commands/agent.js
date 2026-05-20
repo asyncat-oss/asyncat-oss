@@ -13,8 +13,6 @@ import { apiGet, apiPost, getToken, getBase, streamPost } from '../lib/denApi.js
 import { logger } from '../lib/logger.js';
 import readline from 'readline';
 import path from 'path';
-import { spawn } from 'child_process';
-import { ROOT } from '../lib/env.js';
 
 // ── Permission display ──────────────────────────────────────────────────────
 
@@ -209,7 +207,7 @@ async function getProviderInfo(base, token) {
 
 // ── Core stream runner ──────────────────────────────────────────────────────
 
-async function runAgent(goal, options = {}, tui = null) {
+async function runAgent(goal, options = {}) {
   lastUsage = null;
   // Auth
   let token, base;
@@ -259,19 +257,6 @@ async function runAgent(goal, options = {}, tui = null) {
     const cost = usage.costUsd ? `  ~$${usage.costUsd.toFixed(4)}` : '';
     log(`  ${col('dim', `Usage: ${Number(usage.totalTokens || 0).toLocaleString()} tokens${cost}`)}`);
   }
-}
-
-// ── Interactive mode ─────────────────────────────────────────────────────────
-
-async function interactiveMode(_options) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(ROOT, 'cat')], {
-      cwd: ROOT,
-      stdio: 'inherit',
-    });
-    child.on('error', reject);
-    child.on('exit', () => resolve());
-  });
 }
 
 // ── Exported run ─────────────────────────────────────────────────────────────
@@ -334,7 +319,7 @@ export async function run(args = []) {
     log('');
     await runAgent(goal, options);
   } else {
-    // Interactive REPL mode
-    await interactiveMode(options);
+    log('  Usage: asyncat agent "<goal>"');
+    log('         asyncat agent --auto-approve --max-rounds 30 "<goal>"');
   }
 }

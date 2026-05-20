@@ -1,7 +1,7 @@
 // den/src/agent/tools/planTools.js
 // ─── Planning / TODO Tools ───────────────────────────────────────────────────
 // Gives the agent a visible, persistent plan. Wired through session.plan so
-// the TUI can render the TODO list alongside thoughts and tool calls.
+// clients can render the TODO list alongside thoughts and tool calls.
 //
 // The plan is an array of items:
 //   { id, content, status: 'pending'|'in_progress'|'completed', activeForm }
@@ -116,7 +116,7 @@ export const todoWriteTool = {
 
     const snap = planSnapshot(session);
 
-    // Emit plan_update event so TUIs / SSE consumers can render it.
+    // Emit plan_update event so clients / SSE consumers can render it.
     if (typeof context?.emitEvent === 'function') {
       context.emitEvent({ type: 'plan_update', data: { plan: next, round: session.totalRounds } });
 

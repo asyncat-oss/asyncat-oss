@@ -1,5 +1,5 @@
 import readline from 'readline';
-import { getRl, col, c, log, ok, warn, err, info } from '../lib/colors.js';
+import { col, c, log, ok, warn, err, info } from '../lib/colors.js';
 import { getToken, streamPost, getBase } from '../lib/denApi.js';
 import { renderMarkdown } from '../lib/markdown.js';
 
@@ -9,7 +9,7 @@ const AI_LABEL    = `  ${col('magenta', 'asyncat')} ${col('dim', '▸')} `;
 function chatHelp() {
   console.log('');
   console.log(`  ${col('bold', 'Chat commands:')}`);
-  console.log(`  ${col('cyan', '/exit')}   ${col('dim', '/bye /quit')}   Leave chat, return to REPL`);
+  console.log(`  ${col('cyan', '/exit')}   ${col('dim', '/bye /quit')}   Leave chat`);
   console.log(`  ${col('cyan', '/new')}               Start a fresh conversation`);
   console.log(`  ${col('cyan', '/clear')}             Clear the screen`);
   console.log(`  ${col('cyan', '/web')}               Toggle web search on/off`);
@@ -136,8 +136,6 @@ async function streamMessage(message, history, opts, token, base) {
 }
 
 export async function run(args = []) {
-  const mainRl = getRl();
-
   // ── Auth check ──────────────────────────────────────────────────────────────
   let token, base;
   try {
@@ -163,28 +161,15 @@ export async function run(args = []) {
 
   printHeader(webSearch, thinking, style);
 
-  // ── Take over the main RL line handler ───────────────────────────────────────
-  const savedListeners = mainRl ? mainRl.rawListeners('line') : [];
-  const savedPrompt    = mainRl ? mainRl._prompt : '';
-
-  if (mainRl) {
-    mainRl.removeAllListeners('line');
-    mainRl.setPrompt(CHAT_PROMPT);
-    mainRl.prompt();
-  }
-
   return new Promise((resolve) => {
     let exited = false;
+    let inputRl = null;
+    const prompt = () => { if (!exited) inputRl?.prompt(); };
     const exit = () => {
       if (exited) return;
       exited = true;
-      if (mainRl) {
-        mainRl.removeAllListeners('line');
-        mainRl.removeListener('escape', exit);
-        for (const l of savedListeners) mainRl.on('line', l);
-        mainRl.setPrompt(savedPrompt);
-      }
-      info('Back in REPL. Type ' + col('cyan', 'help') + ' for commands.');
+      info('Exited chat.');
+      if (inputRl && !inputRl.closed) inputRl.close();
       resolve();
     };
 
@@ -260,12 +245,12 @@ export async function run(args = []) {
             warn(`Unknown command: ${col('white', cmd)}  (type ${col('cyan', '/help')})`);
         }
 
-        if (mainRl) mainRl.prompt();
+        prompt();
         return;
       }
 
       // ── Empty input ──────────────────────────────────────────────────────────
-      if (!trimmed) { if (mainRl) mainRl.prompt(); return; }
+      if (!trimmed) { prompt(); return; }
 
       // ── Send message ─────────────────────────────────────────────────────────
       try {
@@ -283,25 +268,15 @@ export async function run(args = []) {
         console.log('');
       }
 
-      if (mainRl) mainRl.prompt();
+      prompt();
     };
 
-    if (mainRl) {
-      mainRl.on('line', handleLine);
-      mainRl.once('escape', exit);
-    } else {
-      // Fallback: no main REPL (invoked directly from CLI args)
-      const tmpRl = readline.createInterface({
-        input: process.stdin, output: process.stdout,
-        prompt: CHAT_PROMPT, terminal: true,
-      });
-      printHeader(webSearch, thinking, style);
-      tmpRl.prompt();
-      tmpRl.on('line', async (line) => {
-        await handleLine(line);
-        tmpRl.prompt();
-      });
-      tmpRl.on('close', resolve);
-    }
+    inputRl = readline.createInterface({
+      input: process.stdin, output: process.stdout,
+      prompt: CHAT_PROMPT, terminal: true,
+    });
+    inputRl.prompt();
+    inputRl.on('line', handleLine);
+    inputRl.on('close', exit);
   });
 }

@@ -4,7 +4,7 @@
 
 import readline from 'readline';
 import { readEnv } from '../lib/env.js';
-import { getRl, col, log, ok, warn, err, info } from '../lib/colors.js';
+import { col, log, ok, warn, err, info } from '../lib/colors.js';
 import { renderMarkdown } from '../lib/markdown.js';
 
 const RUN_PROMPT = `  ${col('green', 'you')} ${col('dim', '▸')} `;
@@ -118,37 +118,28 @@ export async function run(args = []) {
   console.log(`  ${col('dim', '/bye or ctrl+c to exit · /clear to clear · /reset to restart')}`);
   console.log('');
 
-  const mainRl        = getRl();
-  const savedListeners = mainRl ? mainRl.rawListeners('line') : [];
-  const savedPrompt    = mainRl ? mainRl._prompt : '';
-
   let history = [
     { role: 'system', content: 'You are a helpful AI assistant. Be concise and accurate.' },
   ];
 
-  if (mainRl) {
-    mainRl.removeAllListeners('line');
-    mainRl.setPrompt(RUN_PROMPT);
-    mainRl.prompt();
-  }
-
   return new Promise((resolve) => {
+    let exited = false;
+    let inputRl = null;
+    const prompt = () => { if (!exited) inputRl?.prompt(); };
     const exit = () => {
-      if (mainRl) {
-        mainRl.removeAllListeners('line');
-        for (const l of savedListeners) mainRl.on('line', l);
-        mainRl.setPrompt(savedPrompt);
-      }
+      if (exited) return;
+      exited = true;
       console.log('');
-      info('Exited run mode. Type ' + col('cyan', 'help') + ' for commands.');
+      info('Exited run mode.');
       console.log('');
+      if (inputRl && !inputRl.closed) inputRl.close();
       resolve();
     };
 
     const handleLine = async (input) => {
       const trimmed = input.trim();
 
-      if (!trimmed) { if (mainRl) mainRl.prompt(); return; }
+      if (!trimmed) { prompt(); return; }
 
       if (trimmed === '/bye' || trimmed === '/exit' || trimmed === '/quit') {
         exit(); return;
@@ -157,13 +148,13 @@ export async function run(args = []) {
         console.clear();
         console.log(`  ${col('dim', `model: ${modelName}`)}`);
         console.log('');
-        if (mainRl) mainRl.prompt();
+        prompt();
         return;
       }
       if (trimmed === '/reset') {
         history = [history[0]]; // keep system prompt
         ok('Conversation reset.');
-        if (mainRl) mainRl.prompt();
+        prompt();
         return;
       }
       if (trimmed === '/info') {
@@ -172,7 +163,7 @@ export async function run(args = []) {
         info(`Model:  ${col('white', modelName)}`);
         info(`Turns:  ${col('white', String(Math.floor((history.length - 1) / 2)))}`);
         console.log('');
-        if (mainRl) mainRl.prompt();
+        prompt();
         return;
       }
 
@@ -193,22 +184,15 @@ export async function run(args = []) {
         console.log('');
       }
 
-      if (mainRl) mainRl.prompt();
+      prompt();
     };
 
-    if (mainRl) {
-      mainRl.on('line', handleLine);
-    } else {
-      const tmpRl = readline.createInterface({
-        input: process.stdin, output: process.stdout,
-        prompt: RUN_PROMPT, terminal: true,
-      });
-      tmpRl.prompt();
-      tmpRl.on('line', async (line) => {
-        await handleLine(line);
-        tmpRl.prompt();
-      });
-      tmpRl.on('close', resolve);
-    }
+    inputRl = readline.createInterface({
+      input: process.stdin, output: process.stdout,
+      prompt: RUN_PROMPT, terminal: true,
+    });
+    inputRl.prompt();
+    inputRl.on('line', handleLine);
+    inputRl.on('close', exit);
   });
 }

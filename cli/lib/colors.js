@@ -3,7 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { execSync } from 'child_process';
-import { getTheme, getThemeName } from './theme.js';
+import { getTheme } from './theme.js';
 import { logger } from './logger.js';
 
 // ── Base ANSI codes ────────────────────────────────────────────────────────────
@@ -26,26 +26,14 @@ export const col = (color, str) => `${c[color] || ''}${str}${c.reset}`;
 const vis = s => s.replace(/\x1b\[[^m]*m/g, '').length;
 
 // ── RL / LL state ──────────────────────────────────────────────────────────────
-let _rl = null;
-let _ll = null;
 let _liveLogsEnabled = false;
 
-export const setRl  = (iface) => { _rl = iface; };
-export const getRl  = () => _rl;
-export const rlOpen = () => _rl && !_rl.closed;
-export const setLl  = (ll)    => { _ll = ll; };
-export const getLl  = () => _ll;
 export const setLiveLogsEnabled = (enabled) => { _liveLogsEnabled = enabled; };
 export const getLiveLogsEnabled = () => _liveLogsEnabled;
 
 // ── Logging ────────────────────────────────────────────────────────────────────
 export function log(msg) {
-  if (_ll) { _ll.printAbove(msg); return; }
-  if (!rlOpen()) { console.log(msg); return; }
-  readline.clearLine(process.stdout, 0);
-  readline.cursorTo(process.stdout, 0);
   console.log(msg);
-  _rl.prompt(true);
 }
 
 export const ok   = (msg) => { logger.commands.ok(msg); log(`  ${col('green',  '✔')}  ${msg}`); };
@@ -57,15 +45,7 @@ export function line(tag, text, color) {
   const formatted = `${col(color, '[' + tag + ']')} ${text}`;
   logger.ui.info(`[${tag}] ${text}`);
   if (!_liveLogsEnabled) return;
-  if (_ll) {
-    _ll.printAbove(formatted);
-    return;
-  }
-  if (!rlOpen()) { process.stdout.write(formatted + '\n'); return; }
-  readline.clearLine(process.stdout, 0);
-  readline.cursorTo(process.stdout, 0);
   process.stdout.write(formatted + '\n');
-  _rl.prompt(true);
 }
 
 // ── Banner ─────────────────────────────────────────────────────────────────────
@@ -87,8 +67,6 @@ export function banner() {
 
   const sepRow = (left) =>
     console.log(bord('│') + pad(left, L) + bord('├') + bord('─'.repeat(R)) + bord('┤'));
-
-  const themeName = getThemeName();
 
   // Recent history
   let recent = [];
@@ -122,7 +100,7 @@ export function banner() {
   );
   row(
     `  ${acc('  /  o   o  \\ ')}  open-source AI workspace`,
-    ` ${dim('press / for menu')}`
+    ` ${dim('start  open Web UI')}`
   );
   row(
     `  ${acc(' ( ==  ^  == )')}  `,
@@ -132,7 +110,7 @@ export function banner() {
     `  ${acc('  )         ( ')}  ${dim('─'.repeat(17))}`
   );
   row(
-    `  ${acc(' (           )')}  theme  ${dim(themeName)}`,
+    `  ${acc(' (           )')}  cli    ${dim('command tools')}`,
     ` ${dim('git   project status')}`
   );
   row(
@@ -141,7 +119,7 @@ export function banner() {
   );
   row(
     `  ${acc('(__(__)___(__)__)')}`,
-    ` ${dim('exit  quit asyncat')}`
+    ` ${dim('version  show CLI info')}`
   );
   row('', recent.length > 0 ? ` ${dim('recent: ' + recent.join(', '))}` : '');
 
@@ -155,23 +133,21 @@ export function spinner(msg) {
   const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   let i = 0;
   const id = setInterval(() => {
-    if (_ll) {
-      _ll.printAbove(`  ${col('cyan', frames[i++ % frames.length])}  ${msg}`);
-    } else {
-      readline.clearLine(process.stdout, 0);
-      readline.cursorTo(process.stdout, 0);
-      process.stdout.write(`  ${col('cyan', frames[i++ % frames.length])}  ${msg}`);
-    }
+    readline.clearLine(process.stdout, 0);
+    readline.cursorTo(process.stdout, 0);
+    process.stdout.write(`  ${col('cyan', frames[i++ % frames.length])}  ${msg}`);
   }, 80);
   return {
     stop(successMsg) {
       clearInterval(id);
-      if (!_ll) { readline.clearLine(process.stdout, 0); readline.cursorTo(process.stdout, 0); }
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
       if (successMsg !== undefined) ok(successMsg);
     },
     fail(failMsg) {
       clearInterval(id);
-      if (!_ll) { readline.clearLine(process.stdout, 0); readline.cursorTo(process.stdout, 0); }
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
       if (failMsg !== undefined) err(failMsg);
     },
   };

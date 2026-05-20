@@ -242,7 +242,7 @@ The Command Center context picker includes `No workspace` for prompt-only work. 
 ```text
 asyncat-oss/
 ├── cat                         # Source launcher
-├── cli/                        # CLI and terminal UI
+├── cli/                        # CLI launcher and commands
 ├── den/                        # Backend API and agent runtime
 │   ├── scripts/run-agent-evals.js
 │   ├── src/agent/

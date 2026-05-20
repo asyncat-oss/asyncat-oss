@@ -455,7 +455,7 @@ asyncat server --daemon    ← runs in background, survives terminal close
 Messaging channels:
   Telegram bot  ──inbound message──▶  agent pipeline  ──▶ response
   Discord bot   ──inbound message──▶  agent pipeline  ──▶ response
-  CLI/TUI      ──WebSocket────────▶  same pipeline   ──▶ streaming
+  CLI          ──WebSocket────────▶  same pipeline   ──▶ streaming
 ```
 
 ### What's Needed

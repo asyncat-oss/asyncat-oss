@@ -1,16 +1,13 @@
 # Asyncat CLI
 
-The terminal control center for your AI Agent OS.
+The command-line launcher for Asyncat.
 
 > This thing gives a quantified baby model keys to your entire computer. What could go wrong?
 
 ## What it is
 
-The CLI that:
-- Starts and stops the stack
-- Manages local GGUF models
-- Switches AI providers
-- Messes with config and logs
+The CLI starts and stops the Web UI stack, manages local GGUF models,
+switches AI providers, and exposes config, logs, and agent commands.
 
 ## Requirements
 
@@ -41,6 +38,8 @@ asyncat restart      # bounce
 asyncat logs        # tail logs
 asyncat doctor      # health check
 asyncat config      # read/write env
+asyncat agent       # run a one-shot agent task
+asyncat chat        # terminal chat mode
 asyncat version     # show versions
 ```
 
