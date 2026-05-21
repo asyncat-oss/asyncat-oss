@@ -190,14 +190,14 @@ router.post('/uninstall', (req, res) => {
     : [UNINSTALL_SCRIPT, ...(purge ? ['--purge'] : [])];
   try {
     const child = spawn(command, args, {
-      cwd: ROOT,
+      cwd: os.homedir(),
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
       env: {
         ...process.env,
         ASYNCAT_INSTALL_DIR: ROOT,
-        ASYNCAT_HOME: process.env.ASYNCAT_HOME || join(os.homedir(), IS_WIN ? 'AppData/Local/Asyncat' : '.asyncat'),
+        ASYNCAT_HOME: process.env.ASYNCAT_HOME || join(os.homedir(), '.asyncat'),
       },
     });
     child.unref();

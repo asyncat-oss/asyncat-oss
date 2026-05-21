@@ -54,6 +54,8 @@ irm https://asyncat.com/install.ps1 | iex
 
 The installer clones Asyncat into your user profile, installs dependencies, builds the web app, and creates a local launcher for first run. Account, workspace, preferences, provider choice, and runtime readiness are finished in the Welcome flow and Settings.
 
+Future updates are handled from Settings → Update. Asyncat pulls the latest git changes, reinstalls dependencies, rebuilds the web UI, and restarts the local services from the app.
+
 ### Install From Source
 
 ```bash

@@ -790,7 +790,7 @@ export const updateApi = {
   // onWaiting() — called when server is down and we're polling
   // onBack()    — called when /health responds 200 again
   // onTimeout() — called if server never comes back within timeoutMs
-  restart: (onWaiting, onBack, onTimeout, timeoutMs = 30000) => {
+  restart: (onWaiting, onBack, onTimeout, timeoutMs = 60000) => {
     let stopped = false;
 
     (async () => {

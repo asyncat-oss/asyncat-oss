@@ -199,7 +199,7 @@ if (-not `$nekoRunning) {
     # Wait for frontend to start
     for (`$i = 0; `$i -lt 30; `$i++) {
         try {
-            `$null = Invoke-WebRequest "http://localhost:`\``$NEKO_PORT" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+            `$null = Invoke-WebRequest "http://localhost:`$NEKO_PORT" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
             break
         } catch { Start-Sleep 0.5 }
     }

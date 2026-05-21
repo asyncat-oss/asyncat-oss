@@ -374,7 +374,7 @@ const UpdateSection = () => {
           {updateDone === 'success' && (
             <div className="mt-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/20 border border-green-200 dark:border-green-800 space-y-3">
               <p className="text-sm text-green-700 dark:text-green-300">
-                Update applied. Restart the server to load the new backend code.
+                Update applied. Restart Asyncat services to load the new backend code.
               </p>
               <div className="flex items-center gap-3 flex-wrap">
                 <button
@@ -393,7 +393,7 @@ const UpdateSection = () => {
                   {restartPhase === 'restarting' ? 'Restarting…'
                     : restartPhase === 'waiting' ? 'Waiting for server…'
                     : restartPhase === 'done' ? 'Reloading…'
-                    : 'Restart server now'}
+                    : 'Restart Asyncat now'}
                 </button>
                 {restartPhase === 'done' && (
                   <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
@@ -403,7 +403,7 @@ const UpdateSection = () => {
                 {restartPhase === 'timeout' && (
                   <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 flex-wrap">
                     <AlertTriangle size={12} className="flex-shrink-0" />
-                    Did not restart automatically — in dev mode, restart your backend terminal with{' '}
+                    Did not restart automatically — relaunch Asyncat, or in dev mode restart your backend terminal with{' '}
                     <code className="font-mono px-1 rounded bg-amber-100 dark:bg-amber-900/40">npm run dev</code>
                   </span>
                 )}

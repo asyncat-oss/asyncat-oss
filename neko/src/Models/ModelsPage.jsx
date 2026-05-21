@@ -5,7 +5,6 @@ import {
   Mic, Volume2, Cpu, Eye, Image, MessageSquare, BarChart3
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
-import EngineRuntimeSection from './EngineRuntimeSection.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
 import AudioModelsSection from './AudioModelsSection.jsx';
@@ -16,11 +15,10 @@ import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
 import {
   Badge, STATUS_META, conciseHardwareSummary,
-  providerLabel, capabilityBadgeColor
+  providerLabel
 } from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
 import { audioApi, visualModelsApi, aiProviderApi } from '../Settings/settingApi.js';
-import { installApi } from '../CommandCenter/api/installApi.js';
 
 // ── Status dot ────────────────────────────────────────────────────────────────
 const StatusDot = ({ status }) => {
@@ -96,26 +94,16 @@ const AssetSubtitle = ({ count, emptyLabel, singularLabel, pluralLabel }) => {
   return `${count} ${count === 1 ? singularLabel : pluralLabel}`;
 };
 
-// ── Engine compact subtitle ───────────────────────────────────────────────────
-const EngineSubtitle = ({ engineData }) => {
-  if (!engineData?.current) return 'Not detected';
-  const hw = conciseHardwareSummary(engineData.hardware);
-  const label = engineData.current.capabilityLabel || 'Unknown';
-  const managed = engineData.current.managed ? ' · Managed' : '';
-  return `${label} · ${hw}${managed}`;
-};
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 const ModelsPage = () => {
   const {
     modelContextConfig, serverStatus, setServerStatus,
-    models, engineData, engineCatalog, installJob, setInstallJob,
+    models, engineData, setInstallJob,
     loadingModels, loadingStatus, loadingEngines, loadingCatalog,
     startingModel, setStartingModel, stopping, deletingModel,
     switchingEngine, installingEngine, switchError, setSwitchError,
-    switchSuccess, setSwitchSuccess, installError, installSuccess,
-    revertSelection, quickLoadPath, setQuickLoadPath,
-    pythonInstallJob, pythonBuildError, pythonBuildSuccess,
+    switchSuccess, setSwitchSuccess,
+    quickLoadPath, setQuickLoadPath,
     modelLoadCtxSizes, modelLoadCtxErrors,
     providerCatalog, providerProfiles, providerConfig,
     loadingProviders, providerAction, providerError,
@@ -126,7 +114,7 @@ const ModelsPage = () => {
     handleProviderSave, handleProviderDelete, handleProviderTest,
     handleProviderActivate, handleProviderDeactivate, handleLoadProviderModels,
     handleStart, handleStop, handleDelete, confirmDelete,
-    handleAddPath, handleEngineSwitch, handleManagedInstall, handleBuildGpuRuntime,
+    handleAddPath,
   } = useModelsPageController();
 
   // ── Derived state ──────────────────────────────────────────────────────────
@@ -165,7 +153,6 @@ const ModelsPage = () => {
   });
   const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
   const [visualModels, setVisualModels] = useState({ vision: [], image: [] });
-  const [installReadiness, setInstallReadiness] = useState(null);
   const [highlightedItem, setHighlightedItem] = useState(null);
   const [usageRange, setUsageRange] = useState('30d');
   const [modelUsage, setModelUsage] = useState(null);
@@ -220,12 +207,6 @@ const ModelsPage = () => {
   useEffect(() => {
     refreshUsageData();
   }, [refreshUsageData]);
-
-  useEffect(() => {
-    installApi.getReadiness()
-      .then(setInstallReadiness)
-      .catch(() => setInstallReadiness(null));
-  }, []);
 
   // ── Task navigation ───────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('chat');
@@ -363,7 +344,6 @@ const ModelsPage = () => {
     { key: 'vision', label: 'Vision', icon: Eye, meta: visualModels.vision.length ? String(visualModels.vision.length) : null },
     { key: 'image', label: 'Image', icon: Image, meta: visualModels.image.length ? String(visualModels.image.length) : null },
     { key: 'usage', label: 'Usage', icon: BarChart3, meta: usageRequestCount ? String(usageRequestCount) : usageRange },
-    { key: 'runtime', label: 'Runtime', icon: Cpu, meta: engineData?.current?.capabilityLabel || null },
   ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -658,44 +638,6 @@ const ModelsPage = () => {
               </>
             )}
 
-            {activeTab === 'runtime' && (
-              <>
-                <TabHeader
-                  icon={Cpu}
-                  title="Runtime"
-                  subtitle={EngineSubtitle({ engineData })}
-                  badge={engineData?.current ? (
-                    <Badge color={capabilityBadgeColor(engineData.current.capabilityHint)}>
-                      {engineData.current.capabilityLabel}
-                    </Badge>
-                  ) : null}
-                />
-                <EngineRuntimeSection
-                  engineData={engineData}
-                  engineCatalog={engineCatalog}
-                  loadingCatalog={loadingCatalog}
-                  installJob={installJob}
-                  loading={loadingEngines}
-                  switchingKey={switchingEngine}
-                  installingKey={installingEngine}
-                  switchError={switchError}
-                  switchSuccess={switchSuccess}
-                  installError={installError}
-                  installSuccess={installSuccess}
-                  revertSelection={revertSelection}
-                  retryModel={serverStatus?.model || null}
-                  pythonInstallJob={pythonInstallJob}
-                  pythonBuildError={pythonBuildError}
-                  pythonBuildSuccess={pythonBuildSuccess}
-                  onRescan={loadEngineData}
-                  onSwitch={handleEngineSwitch}
-                  onInstall={handleManagedInstall}
-                  onBuildGpuRuntime={handleBuildGpuRuntime}
-                  onRefreshCatalog={loadEngineCatalog}
-                  installReadiness={installReadiness}
-                />
-              </>
-            )}
           </div>
 
         </div>

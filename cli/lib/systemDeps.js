@@ -1,4 +1,6 @@
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
 import { execFileSync, execSync } from 'child_process';
 
 const isWin = process.platform === 'win32';
@@ -87,17 +89,75 @@ function versionFor(command, args = ['--version']) {
 }
 
 function pythonCandidates() {
-  return isWin ? ['python', 'python3', 'py'] : ['python3', 'python'];
+  if (isWin) return ['python', 'python3', 'py'];
+  return [
+    'python3',
+    'python',
+    '/opt/homebrew/opt/python@3.12/bin/python3.12',
+    '/opt/homebrew/opt/python@3.11/bin/python3.11',
+    '/usr/local/opt/python@3.12/bin/python3.12',
+    '/usr/local/opt/python@3.11/bin/python3.11',
+    '/opt/homebrew/bin/python3',
+    '/usr/local/bin/python3',
+    '/usr/bin/python3',
+  ];
+}
+
+function asyncatHome() {
+  if (isWin) {
+    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
+  }
+  return path.join(os.homedir(), '.asyncat');
+}
+
+function existingFile(candidates) {
+  return candidates.find(candidate => {
+    if (!candidate) return false;
+    try {
+      return fs.existsSync(candidate);
+    } catch {
+      return false;
+    }
+  }) || null;
+}
+
+function whisperServerCandidates() {
+  const home = os.homedir();
+  return [
+    (process.env.WHISPER_BINARY_PATH || '').trim(),
+    path.join(asyncatHome(), 'whisper.cpp', 'whisper-server'),
+    path.join(asyncatHome(), 'whisper.cpp', 'main'),
+    path.join(home, '.local', 'bin', 'whisper-server'),
+    '/usr/local/bin/whisper-server',
+    '/opt/homebrew/bin/whisper-server',
+    '/usr/bin/whisper-server',
+    path.join(home, 'whisper.cpp', 'build', 'bin', 'whisper-server'),
+    path.join(home, 'whisper.cpp', 'server'),
+  ].filter(Boolean);
+}
+
+function piperCandidates() {
+  const home = os.homedir();
+  return [
+    (process.env.PIPER_BINARY_PATH || '').trim(),
+    path.join(asyncatHome(), 'piper', 'piper'),
+    path.join(home, '.local', 'bin', 'piper'),
+    '/usr/local/bin/piper',
+    '/opt/homebrew/bin/piper',
+    '/usr/bin/piper',
+    path.join(home, 'piper', 'piper'),
+  ].filter(Boolean);
 }
 
 export function detectPython() {
+  let fallback = null;
   for (const command of pythonCandidates()) {
     if (!commandExists(command)) continue;
     const probe = run(command, ['--version']);
     const version = parseSemver(probe.stdout);
     const hasVenv = run(command, ['-m', 'venv', '--help'], { timeout: 12000 }).ok;
     const hasPip = run(command, ['-m', 'pip', '--version'], { timeout: 12000 }).ok;
-    return {
+    const result = {
       found: true,
       command,
       version: version?.raw || probe.stdout || null,
@@ -106,8 +166,10 @@ export function detectPython() {
       hasPip,
       minVersion: '3.10',
     };
+    if (result.ok) return result;
+    fallback ||= result;
   }
-  return {
+  return fallback || {
     found: false,
     command: null,
     version: null,
@@ -155,7 +217,7 @@ function compilerStatus() {
 }
 
 function binaryCheck(name, commands, options = {}) {
-  const command = firstExisting(commands);
+  const command = firstExisting(commands) || existingFile(options.paths || []);
   const version = command ? versionFor(command, options.versionArgs || ['--version']) : null;
   return {
     id: name,
@@ -166,6 +228,7 @@ function binaryCheck(name, commands, options = {}) {
     required: Boolean(options.required),
     scope: options.scope || 'optional',
     reason: options.reason || '',
+    source: commands.includes(command) ? 'PATH' : (command ? 'file' : null),
   };
 }
 
@@ -266,10 +329,12 @@ export function inspectSystemDependencies() {
       reason: 'Optional if using Asyncat managed llama.cpp, llama-cpp-python, Ollama, LM Studio, or cloud providers.',
     }),
     binaryCheck('whisper-server', ['whisper-server'], {
+      paths: whisperServerCandidates(),
       scope: 'speech-to-text',
       reason: 'Local Whisper STT runtime.',
     }),
     binaryCheck('piper', ['piper'], {
+      paths: piperCandidates(),
       scope: 'text-to-speech',
       reason: 'Local Piper TTS runtime.',
     }),

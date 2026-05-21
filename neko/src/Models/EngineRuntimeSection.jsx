@@ -192,8 +192,20 @@ const EngineRuntimeSection = ({
   const currentKey = engineKey(current);
   const mlxAvailable = engineData?.hardware?.platform === 'darwin'
     && (engineData?.hardware?.arch === 'arm64' || engineData?.hardware?.gpu?.vendor === 'Apple');
+  const relevantToolIds = useMemo(() => {
+    const ids = new Set();
+    if (bestManagedAsset) {
+      const name = String(bestManagedAsset.asset?.name || '').toLowerCase();
+      if (name.endsWith('.zip')) ids.add('unzip');
+      if (name.endsWith('.tar') || name.endsWith('.tgz') || name.endsWith('.tar.gz')) ids.add('tar');
+    } else if (installProfile) {
+      ids.add('python');
+      ids.add('cxx-compiler');
+    }
+    return ids;
+  }, [bestManagedAsset, installProfile]);
   const missingRuntimeTools = (installReadiness?.checks || [])
-    .filter(check => ['python', 'ffmpeg', 'whisper-server', 'piper', 'cxx-compiler', 'unzip', 'tar'].includes(check.id) && !check.ok)
+    .filter(check => relevantToolIds.has(check.id) && !check.ok)
     .slice(0, 5);
   const installCommand = installReadiness?.commands?.[0]?.command || '';
   const jobStatus = activeBuildJob?.status || activeInstallJob?.status;
