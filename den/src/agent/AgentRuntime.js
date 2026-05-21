@@ -21,7 +21,7 @@ import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } fr
 import { listMemories, searchMemories } from './tools/memoryTools.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
-import { cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
+import { appendReasoningText, cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
 import { normalizeUsage, recordModelUsage } from '../ai/controllers/ai/modelUsageService.js';
 import { getSnapshotsDir } from './workspacePaths.js';
@@ -1408,7 +1408,7 @@ export class AgentRuntime {
 
       const reasoningDelta = reasoningTextFromDelta(delta);
       if (reasoningDelta) {
-        reasoningText += reasoningDelta;
+        reasoningText = appendReasoningText(reasoningText, reasoningDelta);
       }
 
       if (delta.content) {

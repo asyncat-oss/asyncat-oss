@@ -148,6 +148,23 @@ export function reasoningTextFromDelta(delta = {}) {
     .join('');
 }
 
+export function appendReasoningText(existing = '', incoming = '') {
+  const current = String(existing || '');
+  const next = String(incoming || '');
+  if (!next) return current;
+  if (!current) return next;
+  if (current.endsWith(next)) return current;
+  if (next.startsWith(current)) return next;
+
+  const max = Math.min(current.length, next.length);
+  for (let size = max; size > 0; size--) {
+    if (current.slice(-size) === next.slice(0, size)) {
+      return current + next.slice(size);
+    }
+  }
+  return current + next;
+}
+
 export function combineReasoningParts(...parts) {
   const combined = [];
   for (const part of parts) {

@@ -26,7 +26,7 @@ function stripSpuriousGemmaThoughtLabel(text) {
 }
 
 function extractGemmaChannel(text) {
-  const startRe = /<\|channel\>thought\s*\n?/i;
+  const startRe = /<\|channel>thought\s*\n?/i;
   const start = text.search(startRe);
   if (start === -1) return null;
 
@@ -88,9 +88,49 @@ export function cleanReasoningAnswer(text) {
   return stripSpuriousGemmaThoughtLabel(stripToolWrappers(text))
     .replace(/^\s*(?:\*\*)?Answer:(?:\*\*)?\s*/i, '')
     .replace(/(?:\*\*)?Action:(?:\*\*)?\s*/i, '')
-    .replace(/<\|channel\>thought\s*\n?<channel\|>/gi, '')
+    .replace(/<\|channel>thought\s*\n?<channel\|>/gi, '')
     .replace(/<\|turn\|>|<turn\|>|<eos>|<\/s>/gi, '')
     .trim();
+}
+
+function tokenKey(token = '') {
+  return String(token || '')
+    .toLowerCase()
+    .replace(/^[^\w]+|[^\w]+$/g, '');
+}
+
+function collapseGluedDuplicateWords(text = '') {
+  return String(text || '').replace(/\b([A-Za-z][A-Za-z]{1,24})\1\b/g, '$1');
+}
+
+export function normalizeReasoningForDisplay(text) {
+  const raw = collapseGluedDuplicateWords(text);
+  const tokens = raw.match(/\S+\s*/g) || [];
+  if (tokens.length < 8) return raw;
+
+  const output = [];
+  let collapsed = 0;
+  for (let i = 0; i < tokens.length;) {
+    const maxWindow = Math.min(10, output.length, tokens.length - i);
+    let duplicateSize = 0;
+    for (let size = maxWindow; size >= 1; size--) {
+      const prev = output.slice(output.length - size).map(tokenKey);
+      const next = tokens.slice(i, i + size).map(tokenKey);
+      if (prev.every(Boolean) && prev.every((value, index) => value === next[index])) {
+        duplicateSize = size;
+        break;
+      }
+    }
+    if (duplicateSize > 0) {
+      collapsed += duplicateSize;
+      i += duplicateSize;
+      continue;
+    }
+    output.push(tokens[i]);
+    i++;
+  }
+
+  return collapsed >= 4 ? output.join('') : raw;
 }
 
 export function extractReasoningFromText(text) {

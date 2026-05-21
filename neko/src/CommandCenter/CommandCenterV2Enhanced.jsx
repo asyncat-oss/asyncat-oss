@@ -2115,6 +2115,20 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return `Midnight warrior, ${firstName}! Sleep is optional.`;
   };
   const hasConversationContent = messages.length > 0 || persistedAgentEvents.length > 0 || agentRunning;
+  const shouldRenderSidePanel = showActivitySidebar && (
+    sidePanelTab === 'history'
+    || sidePanelTab === 'saved'
+    || sidePanelTab === 'preview'
+    || sidePanelTab === 'artifacts'
+    || sidePanelTab === 'artifact'
+    || sidePanelTab === 'nav'
+    || sidePanelTab === 'code'
+    || gitState?.detected
+    || sourceCatalog.totalCount > 0
+    || persistedAgentEvents.length > 0
+    || agentRunning
+    || agentLoadingSession
+  );
 
   const welcomeScreenJSX =
     !hasConversationContent ? (
@@ -2236,7 +2250,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         ) : (
           <>
             <div className="shrink-0 border-b border-transparent bg-white dark:bg-gray-900 midnight:bg-slate-950">
-              <div className="mx-auto max-w-[min(100vw,96rem)] px-3 py-2.5 sm:px-4 md:px-6">
+              <div className={`mx-auto px-3 py-2.5 sm:px-4 md:px-6 ${shouldRenderSidePanel ? 'max-w-[min(100vw,96rem)]' : 'max-w-5xl'}`}>
                 <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex min-w-0 overflow-hidden items-center gap-2 lg:w-[min(28rem,34vw)] lg:shrink-0">
                     <div className="hidden h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 sm:block" />

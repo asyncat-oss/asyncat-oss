@@ -11,7 +11,7 @@ import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
 import { extractChanges, FileChangeRow, CommandRow, RevertRunModal } from './AgentChangesPanel';
 import { parseAIResponseToBlocks, BlockRenderer } from '../renderers/BlockBasedMessageRenderer';
-import { extractReasoningFromText } from '../../utils/reasoningParser.js';
+import { extractReasoningFromText, normalizeReasoningForDisplay } from '../../utils/reasoningParser.js';
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import { fileIconMeta } from '../../../files/fileUtils.js';
 import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.jsx';
@@ -414,7 +414,7 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
 // Minimal inline reasoning disclosure for agent thought events.
 function ThinkingEvent({ data }) {
   const [expanded, setExpanded] = useState(false);
-  const thought = data?.thought || '';
+  const thought = normalizeReasoningForDisplay(data?.thought || '');
   const words = thought.trim().split(/\s+/).filter(Boolean).length;
 
   return (
