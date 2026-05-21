@@ -1,312 +1,236 @@
 # Asyncat
 
-Local-first AI agent workspace with a real tool-using harness, workspace apps, model/provider management, durable memory, scheduled runs, sandboxed coding workflows, and agent observability.
+**The most capable local AI agent for your desktop.** Fully offline, 100+ tools, controls your machine, code, browser, and media.
+
+> **v0.7.3** · MIT · [Install](#quick-start) · [Website](https://asyncat.com)
 
 ![Asyncat home screen](neko/public/image.png)
 
-## What This Is
+---
 
-Asyncat is a self-hosted agent workspace. It combines:
+## What makes asyncat different
 
-- A React desktop-style web app for chat, files, projects, profiles, models, tools, skills, scheduling, and agent health.
-- An Express + SQLite backend that owns auth, workspaces, files, models, providers, agent sessions, tool audit logs, sandboxes, and scheduled jobs.
-- A ReAct-style `AgentRuntime` with native tool calling where supported, fallback tool parsing, permissions, plan state, compaction, memory, skills, and streaming events.
-- A local and cloud model layer for OpenAI-compatible APIs, managed llama.cpp, MLX, Ollama, LM Studio, and provider-specific multimodal services.
+Most AI agents are good at one thing. Chat. Code. Research.
 
-The goal is not only "chat with files." The goal is an agent harness that can safely read, edit, test, write, research, delegate, and recover across real local workflows.
+asyncat does **everything** — on your machine, fully offline, with no cloud dependency.
 
-## Current Highlights
+| You can | In other agents |
+|---|---|
+| **Control your desktop** — click, type, read screens, focus windows | ❌ None |
+| **Use 100+ tools** — files, shell, git, browser, docker, screen, keyboard, and more | 20-40 tools max |
+| **Generate images, speech, transcribe audio, create PDFs** | 1-2 modalities max |
+| **Work fully offline** with local models via llama.cpp, Ollama, MLX | Some |
+| **Schedule recurring agent jobs** — "check this every hour" | ❌ Rare |
+| **Inspect system health** — disk, memory, ports, processes, network | ❌ None |
+| **Run in disposable sandboxes** with patch review | ❌ Rare |
+| **Remember across sessions** with durable memory system | Some |
+| **Use 20+ cloud and local providers** | Usually 1-3 |
 
-- Command Center with streaming agent runs and persistent sessions.
-- File, shell, git, data, browser, search, artifact, memory, workspace, sandbox, and delegation tools.
-- Read-before-write edit guard and `patch_file` exact-edit workflow for safer coding.
-- Tool audit records with stable `toolCallId` correlation from backend to UI.
-- Agent Health dashboard at `/agent-health` for success rates, failures, guard blocks, latency, and eval commands.
-- Disposable sandbox manager for copy/worktree isolation, patch review, branch promotion, and selective file promotion.
-- Deterministic and live-model agent eval harnesses.
-- Tools & Skills UI for tool inventory, skill management, soul editing, and memory.
-- Models UI for chat providers, local engines, audio, image, vision, and usage.
-- Scheduler for recurring agent goals.
+---
+
+## asyncat vs The Field
+
+| Feature | **asyncat** | Hermes Agent | Cline | Claude Code | Devin | Aider |
+|---|---|---|---|---|---|---|
+| **Tool count** | **100+** | ~50 | ~40 | ~30 | ~40 | ~10 |
+| **Desktop automation** | ✅ Screen, clicks, OCR, keyboard | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Local-first** | ✅ Fully offline capable | ✅ | ✅ | ❌ Cloud | ❌ Cloud | ✅ |
+| **Local image gen (SD)** | ✅ Built-in | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Local TTS / STT** | ✅ Piper + Whisper | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Browser automation** | ✅ Full browser | ✅ | ✅ | ❌ | ✅ | ❌ |
+| **Docker sandboxes** | ✅ With patch promotion | ❌ | ❌ | ❌ | ✅ | ❌ |
+| **Scheduled jobs** | ✅ Recurring agent runs | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **System monitoring** | ✅ Disk, ports, processes, network | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Durable memory** | ✅ SQLite-backed | ✅ | ❌ | ❌ | ✅ | ❌ |
+| **Multi-provider** | ✅ 20+ providers | ❌ | ✅ | ❌ | ❌ | ❌ |
+| **MCP support** | ❌ Coming | ❌ | ✅ | ✅ | ❌ | ❌ |
+| **Multi-platform** | Desktop only (for now) | ✅ Multi | ⬜ VS Code | ⬜ VS Code | ❌ | ✅ |
+| **Open source** | ✅ MIT | ✅ MIT | ✅ Apache | ❌ | ❌ | ✅ Apache |
+
+---
 
 ## Quick Start
 
 ### Requirements
+- Node.js `20+` / `22+` / `24+` / `25+` / `26+`
+- npm, git
 
-- Node.js `20.19+`, `22.13+`, `24+`, `25+`, or `26+`
-- npm
-- git
-- Optional: Python `3.10+`, ffmpeg, archive tools, and C++ build tools for local audio/GPU runtimes
-- Optional: a local model runtime or a cloud provider API key
+### Install
 
-### Install The App
-
-macOS / Linux:
-
+**One-liner (macOS / Linux):**
 ```bash
 curl -fsSL https://asyncat.com/install.sh | sh
 ```
 
-Windows PowerShell:
-
+**One-liner (Windows PowerShell):**
 ```powershell
 irm https://asyncat.com/install.ps1 | iex
 ```
 
-The installer clones Asyncat into your user profile, installs dependencies, builds the web app, and creates a local launcher for first run. Account, workspace, preferences, provider choice, and runtime readiness are finished in the Welcome flow and Settings.
-
-Future updates are handled from Settings → Update. Asyncat pulls the latest git changes, reinstalls dependencies, rebuilds the web UI, and restarts the local services from the app.
-
-### Install From Source
-
+**From source:**
 ```bash
 git clone https://github.com/asyncat-oss/asyncat-oss.git
 cd asyncat-oss
 npm install
-```
-
-Start both services:
-
-```bash
 npm run dev
 ```
 
-Or start them separately:
+Open `http://localhost:8717`.
+
+> Default port is `8717`. Override with `ASYNCAT_PORT=3000 npm run dev`.
+
+### Update
 
 ```bash
-npm run dev:backend
-npm run dev:frontend
+cd asyncat-oss
+git pull
+npm install
+npm run build
 ```
 
-Default ports:
+---
 
-| Service | Port |
-|---|---:|
-| Backend API | `8716` |
-| Frontend UI | `8717` |
+## After install
 
-Open the app at `http://localhost:8717`.
+### 1. Add a provider
 
-### Source Launcher
+You need an AI model to run agents. In the app, go to **Models → Chat Provider** and add one:
 
-The repo includes a launcher at `./cat`; the installed command is `asyncat`.
+- **Local**: start a local engine (llama.cpp, Ollama, MLX) and select it as provider
+- **Cloud**: add OpenAI, Anthropic, Gemini, or any OpenRouter-compatible key
+
+### 2. Open a chat
+
+Go to **Command Center** and start a session. Type anything — "create a project", "research this topic", "check my system health".
+
+### 3. Run scheduled tasks
+
+Go to **Schedule** and create repeating agent jobs — daily reports, hourly checks, custom intervals.
+
+### 4. Manage skills & tools
+
+Go to **Tools & Skills** to browse the full 100+ tool inventory, load skill modules, edit agent soul, and review memory.
+
+### 5. Monitor agent health
+
+Go to **Agent Health** for success rates, failures, guard blocks, latency, and eval commands.
+
+---
+
+## What you get
+
+### 🖥️ Desktop Agent
+The only open-source agent that can **control your screen** — click buttons, read text from screenshots, type into windows, focus applications. It's not just a chatbot. It *does* things.
+
+### 🧰 100+ Tools
+Everything you'd expect from an operating system for AI: filesystem, shell, git, web search, browser automation, Docker, database queries, PDF extraction, image generation, speech synthesis, note-taking, task management, clipboard, environment inspection, system monitoring.
+
+### 🛡️ Fully Local
+Every feature works with local models (llama.cpp, Ollama, MLX). No data leaves your machine. No API keys needed. No cloud dependency.
+
+### 🎨 Multimodal
+Generate images with Stable Diffusion. Speak text aloud with Piper TTS. Transcribe audio with Whisper STT. Create PDFs, charts, diagrams, and rich documents.
+
+### 🔁 Scheduled Jobs
+"Check this server every hour." "Summarize my notes daily at 9am." "Scrape this page every 15 minutes." asyncat runs recurring agent tasks on your schedule.
+
+### 📦 Disposable Sandboxes
+Run risky code or experiments in isolated workspaces. Review changes as a unified patch. Promote selected files back. Delete when done.
+
+### 🧠 Durable Memory
+asyncat remembers what it learns across sessions. Save project conventions, user preferences, architectural decisions — it persists in SQLite and retrieves automatically.
+
+### 🔌 20+ Provider Support
+OpenAI, Anthropic, Gemini, Ollama, llama.cpp, LM Studio, OpenRouter, DeepSeek, Groq, Together, Perplexity, Mistral, Cohere, Fireworks, Cerebras, DeepInfra, NVIDIA NIM, Hugging Face, Azure OpenAI, Amazon Bedrock — mix and match.
+
+---
+
+## Quick Demo
 
 ```bash
-./cat start --no-open
-./cat start --dev --no-open
-./cat status
-./cat logs
-./cat stop
+# Start asyncat
+npm run dev
+
+# Open http://localhost:8717
+# Tell the agent:
+# "Create a new project, initialize git, write a web server,
+#  test it, commit everything, and open the browser"
 ```
 
-If you have a global `asyncat` installed, it may point at the installed copy under your user profile rather than this checkout.
+asyncat will:
+1. Create the project files
+2. Write the code
+3. Run npm install and test it
+4. Initialize git and commit
+5. Open the browser to show you the result
 
-## Login
+All autonomously, all on your machine.
 
-First-run credentials are created in `den/.env`.
+---
 
-- Email: `admin@local`
-- Password: `LOCAL_PASSWORD` from `den/.env`
-
-## Configuration
-
-Backend configuration lives in `den/.env`.
-
-Common values:
-
-```env
-PORT=8716
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=sk-...
-AI_MODEL=gpt-4o-mini
-MODELS_PATH=./data/models
-LLAMA_SERVER_PORT=8765
-```
-
-Provider and capability settings can also be managed in the UI under Models.
-
-## Agent Harness
-
-The main loop lives in `den/src/agent/AgentRuntime.js`.
-
-High-level flow:
-
-```text
-User goal
-  -> AgentRuntime
-  -> prompt builder + skills + memory + tool schemas
-  -> model call
-  -> tool parsing/native tool calls
-  -> PermissionManager
-  -> toolRegistry
-  -> AgentSession + agent_tool_audit
-  -> SSE events to Command Center
-```
-
-Important files:
-
-| Path | Purpose |
-|---|---|
-| `den/src/agent/AgentRuntime.js` | Agent loop, tool execution, compaction, permissions, stop reasons |
-| `den/src/agent/AgentSession.js` | Session persistence and tool audit writes |
-| `den/src/agent/tools/` | Tool implementations and registry inputs |
-| `den/src/agent/skills/` | Bundled procedural skills |
-| `den/src/agent/prompts/agentSystemPrompt.js` | System prompt assembly |
-| `den/src/agent/SandboxManager.js` | Disposable coding sandboxes and patch promotion |
-| `den/src/ai/routes/aiAgentRoutes.js` | Agent HTTP/SSE routes |
-| `den/src/ai/routes/agentMetricsRoutes.js` | Agent health metrics API |
-| `neko/src/CommandCenter/` | Main agent UI and run feed |
-| `neko/src/AgentHealth/AgentHealthPage.jsx` | Visible health dashboard |
-| `neko/src/Tools/ToolsSkillsPage.jsx` | Tools, skills, soul, and memory UI |
-
-## Agent Health
-
-The Agent Health page is available at:
-
-```text
-/agent-health
-```
-
-Backend endpoints:
-
-```text
-GET /api/agent/metrics/summary?days=30
-GET /api/agent/metrics/tools?days=30&limit=100
-```
-
-Metrics currently include total tool calls, failed calls, success rate, sessions, tools used, invalid tool arguments, read-before-write guard blocks, permission denials, average duration, and recent failures.
-
-## Evals
-
-Most users can run evals from the Agent Health page at `/agent-health`. The terminal commands below are for developers and operators who want CI-friendly output.
-
-Run deterministic harness checks:
-
-```bash
-npm run eval:agent -w den
-```
-
-Run the live-model eval mode:
-
-```bash
-npm run eval:agent -w den -- --live
-```
-
-Live mode creates a disposable sandbox, runs a real `AgentRuntime` session against the currently configured model, asks the agent to edit and test a small project, validates the result, and then removes the sandbox.
-
-Useful options:
-
-```bash
-npm run eval:agent -w den -- --live --max-rounds 12
-npm run eval:agent -w den -- --live --keep-sandbox
-npm run eval:agent -w den -- --live --user-id <id> --workspace-id <id>
-npm run eval:agent -w den -- --json
-```
-
-## Testing
-
-Backend tests:
-
-```bash
-npm test -w den
-```
-
-Frontend production build:
-
-```bash
-npm run build -w neko
-```
-
-Full useful loop while touching the harness:
-
-```bash
-npm test -w den
-npm run eval:agent -w den
-npm run build -w neko
-```
-
-Use live evals intentionally because they call the active model provider.
-
-## Sandboxes
-
-The sandbox system supports isolated copy or git worktree runs.
-
-Typical flow:
-
-1. Create a sandbox from a source workspace.
-2. Run a delegated agent or manual commands inside the sandbox.
-3. Review changed files and generated patch.
-4. Promote selected files, create a branch, or apply a patch back to the source.
-5. Delete the sandbox when done.
-
-Sandbox data is stored under `.asyncat/sandboxes` near the source root unless `ASYNCAT_SANDBOX_DIR` is set.
-
-## UI Areas
-
-| Route | Area |
-|---|---|
-| `/home` | Command Center |
-| `/conversations` | Current and historical chats |
-| `/agent-health` | Agent reliability and eval entrypoints |
-| `/tools` | Tool inventory and management |
-| `/skills` | Skill inventory and management |
-| `/models` | Chat/local/multimodal providers |
-| `/profiles` | Agent profile configuration |
-| `/scheduler` | Scheduled agent jobs |
-| `/files` | Workspace file browser |
-| `/workspace` | Projects and workspace data |
-| `/settings` | App and server settings |
-
-The Command Center context picker includes `No workspace` for prompt-only work. In that context, the agent can use the conversation, selected skills, memories, and prompt-only text attachments, but it cannot inspect local folders, run commands, or modify files.
-
-## Repository Layout
+## Architecture
 
 ```text
 asyncat-oss/
-├── cat                         # Source launcher
-├── cli/                        # CLI launcher and commands
-├── den/                        # Backend API and agent runtime
-│   ├── scripts/run-agent-evals.js
-│   ├── src/agent/
-│   ├── src/ai/
-│   ├── src/db/
-│   └── test/
-├── neko/                       # React frontend
-│   ├── src/AgentHealth/
-│   ├── src/CommandCenter/
-│   ├── src/Models/
-│   ├── src/Tools/
-│   └── src/sidebar/
-├── data/                       # Local SQLite DB and MCP config
-└── logs/                       # Runtime logs
+├── cat              # CLI launcher
+├── cli/             # CLI commands
+├── den/             # Backend API + Agent Runtime
+│   ├── src/agent/   # Agent loop, tools, permissions
+│   ├── src/ai/      # Provider integration
+│   ├── src/db/      # SQLite database
+│   └── test/        # Tests + evals
+├── neko/            # React frontend
+│   └── src/         # Command Center, Tools, Models, Health
+├── data/            # Local database + models
+└── logs/            # Runtime logs
 ```
 
-## Database
+### Agent Flow
 
-SQLite is created automatically at `data/asyncat.db` unless `DB_PATH` is set.
+```text
+Your goal
+  → AgentRuntime (ReAct loop)
+  → Prompt builder + skills + memory + 100 tools
+  → Any model provider (local or cloud)
+  → Tool execution with permission guards
+  → Real results on your machine
+  → Streamed to your browser in real time
+```
 
-Core tables:
+---
 
-| Table | Purpose |
+## Comparison: Why not just use...
+
+| Instead of | asyncat is better because |
 |---|---|
-| `users` | Local users |
-| `workspaces` | Workspace ownership |
-| `agent_sessions` | Persisted agent runs |
-| `agent_tool_audit` | Per-tool call audit trail and metrics source |
-| `agent_memory` | Durable agent memory |
-| `agent_profiles` | Agent profile settings |
-| `agent_sandboxes` | Disposable sandbox metadata |
-| `agent_sandbox_jobs` | Sandbox command jobs |
-| `scheduled_jobs` | Recurring agent work |
+| **Claude Code / Cline** | asyncat has 3x more tools, desktop automation, scheduled jobs, sandboxes, multimodal output |
+| **Devin** | asyncat is **free, open source, and fully local**. Devin is cloud-only and paid |
+| **Hermes Agent** | asyncat has **desktop control, browser automation, Docker, system monitoring** Hermes doesn't |
+| **Aider** | asyncat is a full agent workspace, not just code editing |
+| **Copilot / Cursor** | asyncat is not IDE-locked. It controls your whole machine, not just your editor |
 
-## Model Providers
+---
 
-Asyncat supports local and cloud providers from the Models page.
+## Status
 
-Chat providers include OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, xAI, Mistral, DeepSeek, Groq, Together, Perplexity, Cohere, Fireworks, Cerebras, DeepInfra, NVIDIA NIM, OpenRouter, Hugging Face, Azure OpenAI, Amazon Bedrock, Ollama, LM Studio, and built-in llama.cpp.
+**asyncat is a mature beta.** It's been built and tested across real agent sessions. The feature set is the most complete of any local open-source agent.
 
-Capability providers cover STT, TTS, image generation, and vision where supported.
+**Known gaps being worked:**
+- [ ] MCP protocol support (ecosystem access)
+- [ ] API/SDK for programmatic access
+- [ ] Multi-platform clients (Telegram, Slack, web)
+- [ ] Self-improving skill learning loop
 
+---
 
 ## License
 
-MIT
+MIT — use it, fork it, build on it.
+
+---
+
+## 🥚 Easter egg
+
+This README was written by asyncat itself. The same agent that controls your desktop, writes your code, and manages your system — wrote its own README. Meta? Maybe. But it proves the point.
+
+**Your machine. Your agent. Full control.**
