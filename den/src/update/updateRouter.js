@@ -53,7 +53,13 @@ router.post('/check', async (req, res) => {
   try {
     const upstream = execFileSync('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd: ROOT }).toString().trim();
     const remote = upstream.split('/')[0];
-    execFileSync('git', ['fetch', '--quiet', remote], { cwd: ROOT, timeout: 30000 });
+    const isShallow = (() => {
+      try { return execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd: ROOT }).toString().trim() === 'true'; } catch { return false; }
+    })();
+    const fetchArgs = isShallow
+      ? ['fetch', '--quiet', '--unshallow', remote]
+      : ['fetch', '--quiet', remote];
+    execFileSync('git', fetchArgs, { cwd: ROOT, timeout: 60000 });
     const behind = parseInt(
       execFileSync('git', ['rev-list', `HEAD..${upstream}`, '--count'], { cwd: ROOT }).toString().trim()
     ) || 0;

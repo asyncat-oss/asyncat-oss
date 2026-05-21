@@ -377,24 +377,32 @@ const UpdateSection = () => {
                 Update applied. Restart Asyncat services to load the new backend code.
               </p>
               <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleRestart}
-                  disabled={restartPhase === 'restarting' || restartPhase === 'waiting' || restartPhase === 'done'}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium
-                    bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-500
-                    text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {(restartPhase === 'restarting' || restartPhase === 'waiting') ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <RotateCcw size={12} />
-                  )}
-                  {restartPhase === 'restarting' ? 'Restarting…'
-                    : restartPhase === 'waiting' ? 'Waiting for server…'
-                    : restartPhase === 'done' ? 'Reloading…'
-                    : 'Restart Asyncat now'}
-                </button>
+                {localInfo?.canRestart === false ? (
+                  <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle size={12} className="flex-shrink-0" />
+                    Restart helper not found — relaunch Asyncat manually or run{' '}
+                    <code className="font-mono px-1 rounded bg-amber-100 dark:bg-amber-900/40">npm run dev</code>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRestart}
+                    disabled={restartPhase === 'restarting' || restartPhase === 'waiting' || restartPhase === 'done'}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium
+                      bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-500
+                      text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {(restartPhase === 'restarting' || restartPhase === 'waiting') ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <RotateCcw size={12} />
+                    )}
+                    {restartPhase === 'restarting' ? 'Restarting…'
+                      : restartPhase === 'waiting' ? 'Waiting for server…'
+                      : restartPhase === 'done' ? 'Reloading…'
+                      : 'Restart Asyncat now'}
+                  </button>
+                )}
                 {restartPhase === 'done' && (
                   <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                     <CheckCircle2 size={12} /> Server is back — reloading

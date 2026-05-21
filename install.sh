@@ -227,10 +227,10 @@ cat > "$LAUNCHER" <<'LAUNCHER_SCRIPT'
 #!/usr/bin/env bash
 # asyncat-ui — start services + open as native app window
 
-CYAN='\\033[0;36m'; GREEN='\\033[0;32m'; YELLOW='\\033[1;33m'; NC='\\033[0m'
-info() { echo -e "\${CYAN}[asyncat]\${NC} \$*"; }
-ok()   { echo -e "\${GREEN}[asyncat]\${NC} ✓ \$*"; }
-warn() { echo -e "\${YELLOW}[asyncat]\${NC} ⚠ \$*"; }
+CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+info() { printf "${CYAN}[asyncat]${NC} %s\n" "$*"; }
+ok()   { printf "${GREEN}[asyncat]${NC} ✓ %s\n" "$*"; }
+warn() { printf "${YELLOW}[asyncat]${NC} ⚠ %s\n" "$*"; }
 
 INSTALL_DIR="${ASYNCAT_INSTALL_DIR:-__ASYNCAT_INSTALL_DIR__}"
 NEKO_DIST="$INSTALL_DIR/neko/dist"
