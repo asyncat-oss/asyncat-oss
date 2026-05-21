@@ -432,6 +432,8 @@ function extToType(ext) {
     '.svg': 'svg',
     '.csv': 'csv',
     '.json': 'json',
+    '.pdf': 'pdf',
+    '.zip': 'zip',
     '.txt': 'text',
     '.js': 'code', '.ts': 'code', '.py': 'code', '.sh': 'code',
     '.css': 'code', '.jsx': 'code', '.tsx': 'code',

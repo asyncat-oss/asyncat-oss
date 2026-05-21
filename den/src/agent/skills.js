@@ -222,6 +222,7 @@ const SKILL_PATTERNS = [
   ['plan',                      /\b(plan\b|planning|roadmap|design\s+doc|breakdown\s+(?:the\s+)?task|step.?by.?step)\b/],
   ['architecture-review',       /\b(architecture|system\s+design|trade.?off|design\s+decision|scalab|coupling|microservice|monolith)\b/],
   // UX / research
+  ['design-workspace',          /\b(design|prototype|mockup|wireframe|canvas|one[-\s]?pager|pitch\s+deck|landing\s+page|visual\s+exploration|handoff|figma|ui\s+flow|user\s+flow)\b/],
   ['ui-ux-review',              /\b(ui\b|ux\b|user\s+interface|user\s+experience|design\s+review|figma|wireframe)\b/],
   ['accessibility-audit',       /\b(accessib|a11y\b|aria\b|wcag|screen\s+reader|contrast\s+ratio|keyboard\s+nav)\b/],
   ['web-research',              /\b(web\s+research|search\s+(?:the\s+)?web|browse|scrape|crawl|look\s+up\s+online|fetch\s+url)\b/],

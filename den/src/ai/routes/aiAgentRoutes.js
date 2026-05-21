@@ -1561,9 +1561,11 @@ router.post('/run', authenticate, async (req, res) => {
     } = req.body;
     const resolvedAgentMode = agentMode === 'chat'
       ? 'chat'
-      : agentMode === 'plan' || enableTools === false
-        ? 'plan'
-        : 'action';
+      : agentMode === 'design'
+        ? 'design'
+        : agentMode === 'plan' || enableTools === false
+          ? 'plan'
+          : 'action';
     const baseGoal = (rawGoal || rawMessage || '').trim();
 
     if (!baseGoal) {
@@ -2933,6 +2935,7 @@ router.get('/artifacts', jwtVerify, (req, res) => {
         '.md': 'markdown', '.markdown': 'markdown',
         '.html': 'html', '.htm': 'html',
         '.svg': 'svg', '.csv': 'csv', '.json': 'json', '.txt': 'text',
+        '.pdf': 'pdf', '.zip': 'zip',
         '.js': 'code', '.ts': 'code', '.py': 'code', '.jsx': 'code', '.tsx': 'code',
       };
       return {
@@ -2968,6 +2971,7 @@ router.get('/artifacts/:filename', jwtVerify, (req, res) => {
       '.svg': 'image/svg+xml', '.csv': 'text/csv', '.json': 'application/json',
       '.txt': 'text/plain', '.js': 'text/javascript', '.ts': 'text/plain',
       '.py': 'text/plain', '.css': 'text/css',
+      '.pdf': 'application/pdf', '.zip': 'application/zip',
     };
     const contentType = mimeMap[ext] || 'application/octet-stream';
 

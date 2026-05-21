@@ -97,8 +97,42 @@ const PLAN_BLOCKED_SAFE_TOOLS = new Set([
   'create_diagram',
   'create_csv',
   'create_html_page',
+  'create_design_canvas',
+  'create_design_handoff',
+]);
+const DESIGN_ALLOWED_CATEGORIES = new Set([
+  'plan',
+  'file',
+  'code',
+  'lsp',
+  'search',
+  'browser',
+  'design',
+  'artifact',
+  'visual',
+  'skill',
+  'memory',
+  'workspace',
+]);
+const DESIGN_BLOCKED_TOOLS = new Set([
+  ...MUTATING_FILE_TOOLS,
+  ...MUTATING_SHELL_TOOLS,
+  'git_commit',
+  'git_push',
+  'git_pull',
+  'git_stash',
+  'git_branch',
+  'git_clone',
+  'package_manager',
+  'create_task',
+  'update_task',
+  'delete_task',
+  'create_event',
+  'update_event',
+  'delete_event',
 ]);
 const TOOL_PROFILE_PATTERNS = {
+  design: /\b(design|prototype|mockup|wireframe|one[-\s]?pager|pitch\s+deck|landing\s+page|canvas|visual\s+exploration|handoff|figma|ui\s+flow|user\s+flow)\b/i,
   coding: /\b(code|implement|fix|bug|refactor|test|build|component|route|api|schema|migration|repo|frontend|backend|package|dependency)\b/i,
   writing: /\b(write|draft|document|report|summary|email|note|markdown|copy|proposal|article|blog)\b/i,
   research: /\b(research|web|search|browse|look\s+up|source|citation|latest|current)\b/i,
@@ -107,6 +141,7 @@ const TOOL_PROFILE_PATTERNS = {
   navigation: /\b(open|browser|page|website|screenshot|click|navigate|inspect\s+page|localhost)\b/i,
 };
 const TOOL_CATEGORY_PRIORITY = {
+  design: ['plan', 'design', 'artifact', 'visual', 'browser', 'file', 'code', 'lsp', 'search', 'web', 'workspace', 'skill', 'memory'],
   coding: ['plan', 'file', 'code', 'lsp', 'git', 'shell', 'workspace', 'dev', 'docker', 'skill', 'memory'],
   writing: ['plan', 'artifact', 'note', 'memory', 'search', 'web', 'file', 'skill'],
   research: ['plan', 'search', 'web', 'browser', 'memory', 'artifact', 'file', 'skill'],
@@ -247,7 +282,7 @@ export class AgentRuntime {
     this.providerInfo = opts.providerInfo || null;
     this.reasoningEffort = opts.reasoningEffort || 'auto';
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
-    this.agentMode = ['chat', 'plan', 'action'].includes(opts.agentMode) ? opts.agentMode : 'action';
+    this.agentMode = ['chat', 'plan', 'action', 'design'].includes(opts.agentMode) ? opts.agentMode : 'action';
     this.enabledIntegrationTools = Array.isArray(opts.enabledIntegrationTools)
       ? new Set(opts.enabledIntegrationTools.filter(Boolean).map(String))
       : null;
@@ -1849,15 +1884,24 @@ export class AgentRuntime {
 
   _toolDefinitionsForMode(goal = this.currentGoal || '') {
     if (this.agentMode === 'chat') return [];
-    const modeTools = this.agentMode !== 'plan'
-      ? toolRegistry.all()
-      : toolRegistry.all().filter(tool => {
-      if (PLAN_BLOCKED_SAFE_TOOLS.has(tool.name)) return false;
-      if (tool.permission === 'safe') return true;
-      if (PLAN_DYNAMIC_SAFE_TOOLS.has(tool.name)) return true;
-      if (tool.name?.startsWith('git_')) return true;
-      return false;
-    });
+    const allTools = toolRegistry.all();
+    const modeTools = this.agentMode === 'plan'
+      ? allTools.filter(tool => {
+          if (PLAN_BLOCKED_SAFE_TOOLS.has(tool.name)) return false;
+          if (tool.permission === 'safe') return true;
+          if (PLAN_DYNAMIC_SAFE_TOOLS.has(tool.name)) return true;
+          if (tool.name?.startsWith('git_')) return true;
+          return false;
+        })
+      : this.agentMode === 'design'
+        ? allTools.filter(tool => {
+            if (DESIGN_BLOCKED_TOOLS.has(tool.name)) return false;
+            if (!DESIGN_ALLOWED_CATEGORIES.has(tool.category)) return false;
+            if (tool.category === 'file' && tool.permission !== 'safe') return false;
+            if (tool.category === 'workspace' && tool.permission !== 'safe') return false;
+            return true;
+          })
+        : allTools;
 
     const visibleTools = this.enabledIntegrationTools
       ? modeTools.filter(tool => {

@@ -149,7 +149,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     try {
       const savedMode = localStorage.getItem('asyncat_agent_mode');
       if (savedMode === 'plan') return false;
-      if (savedMode === 'action') return true;
+      if (savedMode === 'action' || savedMode === 'design') return true;
       return localStorage.getItem('asyncat_tools_enabled') !== 'false';
     } catch { return true; }
   });
@@ -225,7 +225,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const handleSetToolsEnabled = useCallback((val) => {
     setToolsEnabled(val);
     try {
-      localStorage.setItem('asyncat_agent_mode', val ? 'action' : 'plan');
+      const previousMode = localStorage.getItem('asyncat_agent_mode');
+      localStorage.setItem('asyncat_agent_mode', previousMode === 'design' && val ? 'design' : val ? 'action' : 'plan');
       localStorage.setItem('asyncat_tools_enabled', String(val));
     } catch {}
   }, []);

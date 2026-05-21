@@ -325,6 +325,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     catch { return false; }
   });
   const chatOnlyMode = workingContext?.rootId === 'none' || workingContext?.noWorkspace === true;
+  const [selectedAgentMode, setSelectedAgentMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('asyncat_agent_mode');
+      return ['plan', 'action', 'design'].includes(saved) ? saved : null;
+    } catch {
+      return null;
+    }
+  });
   const voiceConversationActive = voiceMode && sttReady && ttsReady;
   const voiceAudioRef = useRef(null);
   const [voiceModeTtsState, setVoiceModeTtsState] = useState('idle'); // idle | loading | playing
@@ -356,7 +364,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [brainStats, setBrainStats] = useState(null);
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
-  const agentMode = toolsEnabled ? 'action' : 'plan';
+  const agentMode = chatOnlyMode ? 'chat' : (selectedAgentMode || (toolsEnabled ? 'action' : 'plan'));
   const agentRunning = Boolean(currentRun.running);
   const agentEvents = currentRun.events || EMPTY_AGENT_EVENTS;
   const agentCurrentGoal = currentRun.goal || '';
@@ -380,6 +388,21 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
     return null;
   }, [agentEvents]);
+  useEffect(() => {
+    if (chatOnlyMode) return;
+    if (selectedAgentMode === 'design') {
+      if (!toolsEnabled) setToolsEnabled(true);
+      return;
+    }
+    const derivedMode = toolsEnabled ? 'action' : 'plan';
+    if (selectedAgentMode !== derivedMode) setSelectedAgentMode(derivedMode);
+  }, [chatOnlyMode, selectedAgentMode, setToolsEnabled, toolsEnabled]);
+  const handleAgentModeChange = useCallback((nextMode) => {
+    const mode = ['plan', 'action', 'design'].includes(nextMode) ? nextMode : 'action';
+    setSelectedAgentMode(mode);
+    setToolsEnabled(mode !== 'plan');
+    try { localStorage.setItem('asyncat_agent_mode', mode); } catch { /* localStorage may be unavailable */ }
+  }, [setToolsEnabled]);
   const latestAskUser = useMemo(() => {
     for (let i = agentEvents.length - 1; i >= 0; i--) {
       if (agentEvents[i]?.type === 'ask_user') return agentEvents[i].data;
@@ -995,7 +1018,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const effectiveAgentMode = requestedChatOnly
       ? 'chat'
       : runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
-    const effectiveToolsEnabled = effectiveAgentMode === 'action';
+    const effectiveToolsEnabled = effectiveAgentMode === 'action' || effectiveAgentMode === 'design';
     const activeWorkingContext = effectiveAgentMode === 'chat' ? null : workingContext || null;
     const activeConversationHistory = Array.isArray(runOptions.baseConversationHistory)
       ? runOptions.baseConversationHistory
@@ -1681,7 +1704,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const handleRunInActionMode = useCallback((goal) => {
     if (!goal?.trim() || agentRunning) return;
+    setSelectedAgentMode('action');
     setToolsEnabled(true);
+    try { localStorage.setItem('asyncat_agent_mode', 'action'); } catch { /* localStorage may be unavailable */ }
     handleAgentRun({ content: goal }, { enableTools: true, agentMode: 'action' });
   }, [agentRunning, handleAgentRun, setToolsEnabled]);
 
@@ -2288,6 +2313,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               toolsEnabled={toolsEnabled}
               agentMode={agentMode}
               onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
+              onAgentModeChange={handleAgentModeChange}
               chatOnlyMode={chatOnlyMode}
               autoApprove={agentAutoApprove}
               onToggleAutoApprove={handleToggleAgentAutoApprove}
@@ -2795,6 +2821,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 toolsEnabled={toolsEnabled}
                 agentMode={agentMode}
                 onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
+                onAgentModeChange={handleAgentModeChange}
                 chatOnlyMode={chatOnlyMode}
                 autoApprove={agentAutoApprove}
                 onToggleAutoApprove={handleToggleAgentAutoApprove}

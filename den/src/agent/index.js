@@ -24,6 +24,7 @@ import { artifactTools } from './tools/artifactTools.js';
 import { noteTools } from './tools/noteTools.js';
 import { audioTools } from './tools/audioTools.js';
 import { visualTools } from './tools/visualTools.js';
+import { designTools } from './tools/designTools.js';
 import { installTools } from './tools/installTools.js';
 import { integrationTools } from './tools/integrationTools.js';
 import { dbQueryTools } from './tools/dbQueryTools.js';
@@ -78,6 +79,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(noteTools);
   toolRegistry.registerAll(audioTools);
   toolRegistry.registerAll(visualTools);
+  toolRegistry.registerAll(designTools);
   toolRegistry.registerAll(installTools);
   toolRegistry.registerAll(integrationTools);
   toolRegistry.registerAll(dbQueryTools);

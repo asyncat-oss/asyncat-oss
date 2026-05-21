@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, SlidersHorizontal, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, ArrowUp, Check, Folder } from "lucide-react";
+import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Palette, Rss, Send, SlidersHorizontal, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, ArrowUp, Check, Folder } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
@@ -503,6 +503,7 @@ export const MessageInputV2 = ({
   onToggleTools,
   agentMode = toolsEnabled ? 'action' : 'plan',
   onToggleAgentMode,
+  onAgentModeChange,
   chatOnlyMode = false,
   autoApprove = false,
   onToggleAutoApprove,
@@ -1055,6 +1056,19 @@ export const MessageInputV2 = ({
 
   const canSubmit = value.trim() && !disabled && !isRunning && !localModelSendBlockReason;
   const isActionMode = agentMode === 'action';
+  const isDesignMode = agentMode === 'design';
+  const setAgentMode = useCallback((mode) => {
+    if (onAgentModeChange) {
+      onAgentModeChange(mode);
+      return;
+    }
+    if (mode === 'plan' && isActionMode && (onToggleAgentMode || onToggleTools)) {
+      (onToggleAgentMode || onToggleTools)();
+    }
+    if ((mode === 'action' || mode === 'design') && !isActionMode && (onToggleAgentMode || onToggleTools)) {
+      (onToggleAgentMode || onToggleTools)();
+    }
+  }, [isActionMode, onAgentModeChange, onToggleAgentMode, onToggleTools]);
   const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
   const currentReasoningOption = currentReasoningOptions.find(option => option.value === reasoningEffort) || currentReasoningOptions[0] || { label: "Auto", short: "Think auto" };
   const enabledIntegrationSet = useMemo(
@@ -1887,7 +1901,7 @@ export const MessageInputV2 = ({
             )}
 
             {/* Mode Selector Dropdown */}
-            {!chatOnlyMode && (onToggleAgentMode || onToggleTools) && (
+            {!chatOnlyMode && (onAgentModeChange || onToggleAgentMode || onToggleTools) && (
               <div ref={modeMenuRef} className="relative">
                 <button
                   type="button"
@@ -1895,7 +1909,12 @@ export const MessageInputV2 = ({
                   disabled={disabled}
                   className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200"
                 >
-                  {!isActionMode ? (
+                  {isDesignMode ? (
+                    <>
+                      <Palette className="h-3.5 w-3.5 shrink-0 text-fuchsia-500 dark:text-fuchsia-400" />
+                      <span>Design</span>
+                    </>
+                  ) : !isActionMode ? (
                     <>
                       <ClipboardPen className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
                       <span>Plan</span>
@@ -1920,11 +1939,11 @@ export const MessageInputV2 = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (isActionMode) (onToggleAgentMode || onToggleTools)();
+                        setAgentMode('plan');
                         setModeMenuOpen(false);
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                        !isActionMode
+                        !isActionMode && !isDesignMode
                           ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-900/20 midnight:text-emerald-300"
                           : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
@@ -1934,19 +1953,40 @@ export const MessageInputV2 = ({
                         <span className="block font-medium">Plan</span>
                         <span className="block text-[10px] opacity-60">Read-only, no tool execution</span>
                       </div>
-                      {!isActionMode && <Check className="h-3.5 w-3.5 shrink-0" />}
+                      {!isActionMode && !isDesignMode && <Check className="h-3.5 w-3.5 shrink-0" />}
+                    </button>
+
+                    {/* Design */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAgentMode('design');
+                        setModeMenuOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
+                        isDesignMode
+                          ? "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-300 midnight:bg-fuchsia-900/20 midnight:text-fuchsia-300"
+                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
+                      }`}
+                    >
+                      <Palette className="h-3.5 w-3.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="block font-medium">Design</span>
+                        <span className="block text-[10px] opacity-60">Canvas, prototype, handoff</span>
+                      </div>
+                      {isDesignMode && <Check className="h-3.5 w-3.5 shrink-0" />}
                     </button>
 
                     {/* Action */}
                     <button
                       type="button"
                       onClick={() => {
-                        if (!isActionMode) (onToggleAgentMode || onToggleTools)();
+                        setAgentMode('action');
                         if (autoApprove && onToggleAutoApprove) onToggleAutoApprove();
                         setModeMenuOpen(false);
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                        isActionMode && !autoApprove
+                        isActionMode && !isDesignMode && !autoApprove
                           ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 midnight:bg-blue-900/20 midnight:text-blue-300"
                           : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
@@ -1956,7 +1996,7 @@ export const MessageInputV2 = ({
                         <span className="block font-medium">Action</span>
                         <span className="block text-[10px] opacity-60">Ask before each tool call</span>
                       </div>
-                      {isActionMode && !autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
+                      {isActionMode && !isDesignMode && !autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
                     </button>
 
                     {/* Yolo */}
@@ -1964,12 +2004,12 @@ export const MessageInputV2 = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (!isActionMode) (onToggleAgentMode || onToggleTools)();
+                          setAgentMode('action');
                           if (!autoApprove) onToggleAutoApprove();
                           setModeMenuOpen(false);
                         }}
                         className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                          isActionMode && autoApprove
+                          isActionMode && !isDesignMode && autoApprove
                             ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-900/20 midnight:text-amber-300"
                             : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         }`}
@@ -1979,7 +2019,7 @@ export const MessageInputV2 = ({
                           <span className="block font-medium">Yolo</span>
                           <span className="block text-[10px] opacity-60">Auto-approve all tools</span>
                         </div>
-                        {isActionMode && autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
+                        {isActionMode && !isDesignMode && autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
                       </button>
                     )}
                   </div>

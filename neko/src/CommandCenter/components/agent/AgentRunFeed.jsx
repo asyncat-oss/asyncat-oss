@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
-  Search, Pencil, Trash2, List, Zap, FilePlus,
+  Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
-  AlertTriangle, RefreshCw, TimerOff, AlertCircle
+  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
@@ -115,6 +115,9 @@ const TOOL_META = {
   create_csv:        { icon: List,        label: 'Create CSV' },
   create_html_page:  { icon: Globe,       label: 'Create HTML page' },
   list_artifacts:    { icon: FolderOpen,  label: 'List artifacts' },
+  inspect_design_system: { icon: Palette, label: 'Inspect design system' },
+  create_design_canvas:  { icon: Palette, label: 'Create design canvas' },
+  create_design_handoff: { icon: FileDown, label: 'Create design handoff' },
   // Audio tools
   speak_text:        { icon: Volume2,     label: 'Generated speech' },
   transcribe_audio:  { icon: Mic,         label: 'Transcribed audio' },
@@ -240,6 +243,13 @@ function useElapsedTime(startMs) {
 function ModeBadge({ toolsEnabled, agentMode }) {
   const mode = agentMode || (typeof toolsEnabled === 'boolean' ? (toolsEnabled ? 'action' : 'plan') : null);
   if (!mode) return null;
+  if (mode === 'design') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-1.5 py-0.5 text-[10px] font-medium text-fuchsia-600 dark:bg-fuchsia-950/30 dark:text-fuchsia-300">
+        Design
+      </span>
+    );
+  }
   const isActionMode = mode === 'action';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
@@ -516,8 +526,8 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
 }
 
 // ── Artifact tool result inline card ────────────────────────────────────────
-const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page', 'create_note', 'update_note', 'append_to_note']);
-const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'mermaid', 'note']);
+const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page', 'create_design_canvas', 'create_design_handoff', 'create_note', 'update_note', 'append_to_note']);
+const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'design', 'mermaid', 'note']);
 
 function ArtifactResultCard({ result, prominent = false, onViewInPanel }) {
   if (!result?.artifact) return null;

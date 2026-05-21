@@ -7,7 +7,7 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Download, FileText, Table2, Code2,
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
-  X, Maximize2, Copy, Check, FileDown, PanelRight, BookOpen,
+  X, Maximize2, Copy, Check, FileDown, PanelRight, BookOpen, Palette, FileArchive,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer, headingId } from './BlockBasedMessageRenderer';
 import { agentApi } from '../../api';
@@ -19,11 +19,14 @@ import ModernNoteEditor from '../../../notes/modern/ModernNoteEditor';
 const TYPE_META = {
   markdown: { icon: FileText,  label: 'Document',   accent: 'bg-blue-500' },
   html:     { icon: Globe,     label: 'HTML',        accent: 'bg-orange-500' },
+  design:   { icon: Palette,   label: 'Design',      accent: 'bg-fuchsia-500' },
   mermaid:  { icon: BarChart3, label: 'Diagram',     accent: 'bg-violet-500' },
   csv:      { icon: Table2,    label: 'CSV Data',    accent: 'bg-emerald-500' },
   json:     { icon: Code2,     label: 'JSON',        accent: 'bg-amber-500' },
   code:     { icon: Code2,     label: 'Code',        accent: 'bg-cyan-500' },
   svg:      { icon: Image,     label: 'SVG',         accent: 'bg-pink-500' },
+  pdf:      { icon: FileDown,  label: 'PDF',         accent: 'bg-red-500' },
+  zip:      { icon: FileArchive, label: 'Bundle',    accent: 'bg-fuchsia-500' },
   text:     { icon: FileText,  label: 'Text',        accent: 'bg-gray-500' },
   note:     { icon: BookOpen,  label: 'Note',        accent: 'bg-indigo-500' },
 };
@@ -214,8 +217,10 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const size = formatSize(artifactData.size || artifactData.sizeBytes);
   const filename = artifactData.filename || '';
   const artifactPath = artifactData.path || '';
+  const downloadOnly = type === 'zip' || type === 'pdf';
 
   const loadContent = async () => {
+    if (downloadOnly) return;
     if (content || loading) return;
     setLoading(true);
     setFetchError(null);
@@ -263,7 +268,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   };
 
   const handleDownload = async (e) => {
-    e.stopPropagation();
+    e?.stopPropagation?.();
     if (downloading) return;
     try {
       setDownloading(true);
@@ -313,6 +318,24 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         </div>
       );
     }
+    if (downloadOnly) {
+      return (
+        <div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+          <p className="mb-2">
+            {type === 'zip' ? 'This bundle is available as a download.' : 'This PDF is available as a download.'}
+          </p>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+          >
+            <Download className="h-3 w-3" />
+            {downloading ? 'Downloading...' : 'Download'}
+          </button>
+        </div>
+      );
+    }
     if (!content) {
       return (
         <div className="py-3 text-center">
@@ -338,6 +361,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
       case 'pdf_source':
         return <MarkdownPreview content={content} />;
       case 'html':
+      case 'design':
       case 'mermaid':
         return <HtmlPreview content={content} title={title} fullHeight={fullHeight} />;
       case 'csv':
