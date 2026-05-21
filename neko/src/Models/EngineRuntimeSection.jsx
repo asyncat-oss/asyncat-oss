@@ -347,7 +347,7 @@ const EngineRuntimeSection = ({
           <SettingRow
             label={INSTALL_PROFILE_LABELS[installProfile]}
             detail={bestManagedAsset.asset.name}
-            divider={installProfile && !bestManagedAsset}
+            divider={false}
           >
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button
