@@ -19,6 +19,14 @@ export const schedulerApi = {
     });
   },
 
+  updateJob: async (id, fields) => {
+    return await apiRequest(`${API_BASE_URL}/agent/schedule/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields || {}),
+    });
+  },
+
   enableJob: async (id) => {
     return await apiRequest(`${API_BASE_URL}/agent/schedule/${encodeURIComponent(id)}/enable`, {
       method: 'PATCH',

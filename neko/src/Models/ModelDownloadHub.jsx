@@ -20,35 +20,46 @@ import {
 } from 'lucide-react';
 import { localModelsApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
+import { HFAuthorLogo } from './modelLogos.jsx';
 
 const TARGETS = {
   model: {
     label: 'Model',
     color: 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700',
+    accentBar: 'bg-gray-400 dark:bg-gray-500',
+    barColor: 'bg-gray-700 dark:bg-gray-300 midnight:bg-slate-400',
     subDir: '',
     extensions: ['.gguf', '.bin'],
   },
   whisper: {
     label: 'STT',
     color: 'bg-violet-50 text-violet-600 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:hover:bg-violet-900/50 midnight:bg-violet-900/30 midnight:text-violet-300 midnight:hover:bg-violet-900/50',
+    accentBar: 'bg-violet-400',
+    barColor: 'bg-violet-500',
     subDir: 'audio/whisper',
     extensions: ['.bin', '.gguf'],
   },
   tts: {
     label: 'TTS',
     color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 midnight:bg-emerald-900/30 midnight:text-emerald-300 midnight:hover:bg-emerald-900/50',
+    accentBar: 'bg-emerald-400',
+    barColor: 'bg-emerald-500',
     subDir: 'audio/tts',
     extensions: ['.onnx', '.onnx.json'],
   },
   vision: {
     label: 'Vision',
     color: 'bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50 midnight:bg-sky-900/30 midnight:text-sky-300 midnight:hover:bg-sky-900/50',
+    accentBar: 'bg-sky-400',
+    barColor: 'bg-sky-500',
     subDir: 'vision',
     extensions: ['.gguf', '.bin', '.mmproj', '.safetensors', '.json'],
   },
   image: {
     label: 'Image',
     color: 'bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 dark:hover:bg-fuchsia-900/50 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300 midnight:hover:bg-fuchsia-900/50',
+    accentBar: 'bg-fuchsia-400',
+    barColor: 'bg-fuchsia-500',
     subDir: 'image',
     extensions: ['.safetensors', '.ckpt', '.gguf', '.onnx', '.pt', '.pth', '.bin', '.json'],
   },
@@ -300,6 +311,7 @@ const TYPE_META = {
   model: {
     label: 'Model',
     icon: Cpu,
+    dotColor: 'bg-gray-400 dark:bg-gray-500',
     iconBg: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400',
     activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
     badge: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300',
@@ -308,30 +320,35 @@ const TYPE_META = {
   whisper: {
     label: 'STT',
     icon: Mic,
+    dotColor: 'bg-violet-400',
     iconBg: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 midnight:bg-violet-900/30 midnight:text-violet-300',
     badge: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 midnight:bg-violet-900/30 midnight:text-violet-300',
   },
   tts: {
     label: 'TTS',
     icon: Volume2,
+    dotColor: 'bg-emerald-400',
     iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
     badge: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
   },
   vision: {
     label: 'Vision',
     icon: Eye,
+    dotColor: 'bg-sky-400',
     iconBg: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400 midnight:bg-sky-900/30 midnight:text-sky-300',
     badge: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400 midnight:bg-sky-900/30 midnight:text-sky-300',
   },
   image: {
     label: 'Image',
     icon: ImageIcon,
+    dotColor: 'bg-fuchsia-400',
     iconBg: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300',
     badge: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300',
   },
   provider: {
     label: 'Provider',
     icon: Cloud,
+    dotColor: 'bg-blue-400',
     iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-blue-900/30 midnight:text-blue-300',
     activeIconBg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
     badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 midnight:bg-blue-900/30 midnight:text-blue-300',
@@ -622,33 +639,45 @@ const ModelDownloadHub = ({
           {activeEntries.map(([trackingKey, dl]) => {
             const pct = dl.progress || 0;
             const target = TARGETS[dl.targetKey] || TARGETS.model;
+            const hasSpeed = dl.speedFormatted && dl.speedFormatted !== '0 B/s';
+            const hasEta = dl.etaFormatted && dl.etaFormatted !== '--:--';
             return (
-              <div key={trackingKey} className="rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 midnight:border-gray-800/80 midnight:bg-gray-900">
-                <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300">{target.label}</span>
-                    <span className="truncate font-mono text-xs font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{dl.filename}</span>
+              <div key={trackingKey} className="relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 midnight:border-gray-800/80 midnight:bg-gray-900">
+                {/* Left accent strip */}
+                <div className={`absolute left-0 top-0 bottom-0 w-0.5 ${target.accentBar}`} />
+                {/* Main row */}
+                <div className="flex items-center gap-3 pl-4 pr-3 pt-2.5 pb-1.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className={`flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${target.color}`}>{target.label}</span>
+                    <span className="truncate font-mono text-xs font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">{dl.filename}</span>
                   </div>
-                  <button onClick={() => handleCancelDownload(trackingKey)} className="flex-shrink-0 text-gray-400 transition-colors hover:text-red-500 midnight:text-slate-500 midnight:hover:text-red-400" title="Cancel">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex flex-shrink-0 items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                    {dl.status !== 'error' && (
+                      <>
+                        <span className="font-mono font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">{pct}%</span>
+                        {hasSpeed && <span>{dl.speedFormatted}</span>}
+                        {hasEta && <span>· {dl.etaFormatted}</span>}
+                      </>
+                    )}
+                    <button onClick={() => handleCancelDownload(trackingKey)} className="ml-1 flex-shrink-0 text-gray-400 transition-colors hover:text-red-500 midnight:text-slate-500 midnight:hover:text-red-400" title="Cancel">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
-                <div className="mb-1 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                  {dl.status === 'error' ? (
-                    <span className="font-medium text-red-500">Download failed</span>
-                  ) : (
-                    <span>{dl.downloadedFormatted || '0 B'} / {dl.totalFormatted || '?'}</span>
-                  )}
-                  {dl.status !== 'error' && dl.speedFormatted && dl.etaFormatted && (
-                    <span className="opacity-80">{dl.speedFormatted} - {dl.etaFormatted}</span>
-                  )}
-                  <span className="font-mono font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{dl.status === 'error' ? 'ERROR' : `${pct}%`}</span>
-                </div>
+                {/* Size row */}
+                {dl.status !== 'error' && (
+                  <div className="flex items-center pl-4 pr-3 pb-1.5 text-[10px] text-gray-400 dark:text-gray-600">
+                    {dl.downloadedFormatted || '0 B'} of {dl.totalFormatted || '?'}
+                  </div>
+                )}
+                {/* Progress / error */}
                 {dl.status === 'error' ? (
-                  <div className="mt-1 text-[11px] text-red-500/90 dark:text-red-400">{dl.error || 'Network request failed'}</div>
+                  <div className="pl-4 pr-3 pb-2.5 text-[11px] text-red-500 dark:text-red-400">
+                    {dl.error || 'Network request failed'}
+                  </div>
                 ) : (
-                  <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800">
-                    <div className="h-full rounded-full bg-gray-700 transition-all duration-300 dark:bg-gray-300 midnight:bg-slate-300" style={{ width: `${pct}%` }} />
+                  <div className="h-1 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800">
+                    <div className={`h-full transition-all duration-300 ${target.barColor}`} style={{ width: `${pct}%` }} />
                   </div>
                 )}
               </div>
@@ -715,16 +744,16 @@ const ModelDownloadHub = ({
                     <button
                       key={`${item.type}:${item.id}`}
                       onClick={() => onDownloadedSelect?.(item)}
-                      className="flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-gray-50/60 dark:border-gray-800 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-800/60"
+                      className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-left transition-colors last:border-0 hover:bg-gray-50/60 dark:border-gray-800 dark:hover:bg-gray-800/60 midnight:border-slate-800 midnight:hover:bg-slate-800/60"
                     >
-                      <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
-                        <Icon className="h-3.5 w-3.5" />
+                      <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+                        <Icon className="h-3 w-3" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">
+                        <div className="truncate text-xs font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">
                           <HighlightText text={item.name} query={searchQuery} />
                         </div>
-                        <div className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{item.detail}</div>
+                        <div className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{item.detail}</div>
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-2">
                         {item.isActive && (
@@ -733,7 +762,8 @@ const ModelDownloadHub = ({
                             <span className="text-[10px] font-medium text-green-600 dark:text-green-400">Active</span>
                           </span>
                         )}
-                        <span className={badgeClasses}>
+                        <span className={`inline-flex items-center gap-1 ${badgeClasses}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${meta.dotColor || 'bg-gray-400'}`} />
                           {meta.label}
                         </span>
                       </div>
@@ -769,18 +799,25 @@ const ModelDownloadHub = ({
               const pipeline = model.pipeline_tag || '';
               return (
                 <div key={repoId} className="border-b border-gray-100 last:border-0 dark:border-gray-800 midnight:border-slate-800">
-                  <div className="flex items-start justify-between gap-3 px-3 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">{author}</span>
-                        <span className="text-gray-300 dark:text-gray-600 midnight:text-slate-700">/</span>
-                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                  <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+                    <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                      <HFAuthorLogo author={author} size="sm" />
+                      <div className="min-w-0 flex-1">
+                      {/* Author stacked above model name */}
+                      <div className="flex flex-col gap-0.5">
+                        {author && (
+                          <span className="text-[10px] leading-none text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                            {author}
+                          </span>
+                        )}
+                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100 leading-tight">
                           <HighlightText text={modelName} query={searchQuery} />
                         </span>
                       </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      {/* Pipeline tag + tags */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         {pipeline && (
-                          <span className="inline-flex items-center rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-300">
+                          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
                             {pipeline}
                           </span>
                         )}
@@ -790,34 +827,34 @@ const ModelDownloadHub = ({
                           </span>
                         ))}
                       </div>
-                      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                      {/* Stats row */}
+                      <div className="mt-1.5 flex items-center gap-2.5 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                         {downloads && (
-                          <span className="flex items-center gap-1">
-                            <Download className="h-3 w-3 opacity-70" />
+                          <span className="flex items-center gap-0.5">
+                            <Download className="h-2.5 w-2.5" />
                             {downloads}
                           </span>
                         )}
                         {likes && (
-                          <span className="flex items-center gap-1">
-                            <Heart className="h-3 w-3 opacity-70" />
+                          <span className="flex items-center gap-0.5">
+                            <Heart className="h-2.5 w-2.5" />
                             {likes}
                           </span>
                         )}
-                        {updated && (
-                          <span>Updated {updated}</span>
-                        )}
+                        {updated && <span>{updated}</span>}
                         {model.gated && (
-                          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                            <ShieldAlert className="h-3 w-3" />
-                            Gated
+                          <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                            <ShieldAlert className="h-2.5 w-2.5" />
+                            gated
                           </span>
                         )}
                         {model.private && (
-                          <span className="flex items-center gap-1 text-red-500 dark:text-red-400">
-                            <Lock className="h-3 w-3" />
-                            Private
+                          <span className="flex items-center gap-0.5 text-red-500 dark:text-red-400">
+                            <Lock className="h-2.5 w-2.5" />
+                            private
                           </span>
                         )}
+                      </div>
                       </div>
                     </div>
                     <button
@@ -825,7 +862,7 @@ const ModelDownloadHub = ({
                       className="mt-0.5 flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-950 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 midnight:hover:bg-slate-800"
                     >
                       <Download className="h-3 w-3" />
-                      {isExpanded ? 'Hide' : 'Select files'}
+                      {isExpanded ? 'Hide' : 'Get'}
                     </button>
                   </div>
                   {isExpanded && (

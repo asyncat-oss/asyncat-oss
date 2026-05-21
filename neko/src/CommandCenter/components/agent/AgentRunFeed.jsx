@@ -1673,7 +1673,33 @@ function StopReasonBanner({ data, toolResults = [] }) {
 // AgentDelegateEvent has been moved below renderWorkContent to avoid circular dependency
 
 // Visual separator between consecutive goals in a single session
-function RunDivider({ data }) {
+function RunDivider({ event, data }) {
+  if (event?.type === 'compaction') {
+    const dropped = data?.droppedMessages || 0;
+    const before = data?.tokensBefore ? `${(data.tokensBefore / 1000).toFixed(1)}k` : null;
+    const after = data?.tokensAfter ? `${(data.tokensAfter / 1000).toFixed(1)}k` : null;
+    const detail = [
+      dropped ? `${dropped} summarized` : null,
+      before && after ? `${before} to ${after}` : null,
+    ].filter(Boolean).join(' · ');
+
+    return (
+      <FeedFrame className="my-6">
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
+          <div
+            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+            title={detail || 'Older context was summarized for the model'}
+          >
+            <RotateCcw className="h-3 w-3" />
+            <span>Context automatically compacted</span>
+          </div>
+          <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
+        </div>
+      </FeedFrame>
+    );
+  }
+
   return (
     <div className="my-6">
       <div className="flex items-center gap-3 mb-2">
@@ -2689,7 +2715,7 @@ export function buildEventSegments(evList) {
   let current = null;
 
   for (const ev of evList) {
-    if (ev.type === 'run_start') {
+    if (ev.type === 'run_start' || ev.type === 'compaction') {
       if (current) segments.push(current);
       segments.push({ divider: ev });
       current = null;
@@ -2736,6 +2762,7 @@ export default function AgentRunFeed({
   onRetryGoal,
   highlightedMessageId = null,
   ttsReady = false,
+  renderPendingInteractionsInline = true,
 }) {
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
@@ -2754,7 +2781,7 @@ export default function AgentRunFeed({
 
       {segments.map((seg, si) => {
         if (seg.divider) {
-          return <RunDivider key={`divider_${si}`} data={seg.divider.data} />;
+          return <RunDivider key={`divider_${si}`} event={seg.divider} data={seg.divider.data} />;
         }
 
         const isLastSeg = si === segments.length - 1;
@@ -2775,9 +2802,16 @@ export default function AgentRunFeed({
         const segArtifacts = seg.workEvents.filter(ev =>
           ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact
         );
-        const drawerEvents = seg.workEvents.filter(ev =>
-          !(ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact)
-        );
+        const drawerEvents = seg.workEvents.filter(ev => {
+          if (ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact) {
+            return false;
+          }
+          if (!renderPendingInteractionsInline) {
+            if (ev.type === 'permission_request' && !ev.data?.resolved && !ev.data?.historical) return false;
+            if (ev.type === 'ask_user' && !ev.data?.answered && !ev.data?._inferred_answered) return false;
+          }
+          return true;
+        });
 
         return (
           <div key={si} id={`chat-seg-${si}`}>

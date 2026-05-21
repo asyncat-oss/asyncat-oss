@@ -103,6 +103,7 @@ const TOOL_PROFILE_PATTERNS = {
   writing: /\b(write|draft|document|report|summary|email|note|markdown|copy|proposal|article|blog)\b/i,
   research: /\b(research|web|search|browse|look\s+up|source|citation|latest|current)\b/i,
   data: /\b(data|csv|json|sql|query|chart|analy[sz]e|spreadsheet|table|statistics)\b/i,
+  schedule: /\b(schedule|scheduled|cron|remind|reminder|every\s+\d*|hourly|daily|tomorrow|later)\b/i,
   navigation: /\b(open|browser|page|website|screenshot|click|navigate|inspect\s+page|localhost)\b/i,
 };
 const TOOL_CATEGORY_PRIORITY = {
@@ -110,8 +111,9 @@ const TOOL_CATEGORY_PRIORITY = {
   writing: ['plan', 'artifact', 'note', 'memory', 'search', 'web', 'file', 'skill'],
   research: ['plan', 'search', 'web', 'browser', 'memory', 'artifact', 'file', 'skill'],
   data: ['plan', 'data', 'database', 'artifact', 'file', 'shell', 'skill'],
+  schedule: ['plan', 'schedule', 'system', 'memory', 'skill'],
   navigation: ['plan', 'browser', 'screen', 'web', 'file', 'shell', 'skill'],
-  default: ['plan', 'file', 'search', 'memory', 'skill', 'artifact', 'shell'],
+  default: ['plan', 'file', 'search', 'schedule', 'memory', 'skill', 'artifact', 'shell', 'system'],
 };
 
 function applyReasoningEffort(params, effort, providerInfo, model) {
@@ -251,6 +253,8 @@ export class AgentRuntime {
       : null;
     this.abortSignal = opts.abortSignal || null;
     this.capabilitiesSection = opts.capabilitiesSection || '';
+    this.clientTimestamp = opts.clientTimestamp || null;
+    this.clientTimezone = opts.clientTimezone || process.env.TZ || null;
     this.usageContext = opts.usageContext || {};
     this.agentProfileId = opts.agentProfileId || null;
     this.sessionIdOverride = opts.sessionIdOverride || null;
@@ -437,6 +441,7 @@ export class AgentRuntime {
       soul,
       agentMode: this.agentMode,
       capabilitiesSection: this.capabilitiesSection,
+      temporalContext: this._buildTemporalContext(),
     });
 
     // Auto-detect and store corrections from user's latest message in continued conversations
@@ -456,7 +461,10 @@ export class AgentRuntime {
       const _hm = validHistory[_hi];
       const _hTokens = this._estimateTokens(typeof _hm.content === 'string' ? _hm.content : '');
       if (_historyTokens + _hTokens > HISTORY_TOKEN_BUDGET && historyPrefix.length >= 2) break;
-      historyPrefix.unshift({ role: _hm.role, content: _hm.content });
+      historyPrefix.unshift({
+        role: _hm.role,
+        content: this._decorateMessageWithTimestamp(_hm.content, _hm.timestamp || _hm.createdAt || _hm.created_at),
+      });
       _historyTokens += _hTokens;
       if (historyPrefix.length >= 12) break; // hard cap
     }
@@ -474,7 +482,7 @@ export class AgentRuntime {
     const messages = [
       ...historyPrefix,
       ...planStateMsg,
-      { role: 'user', content: goal },
+      { role: 'user', content: this._decorateMessageWithTimestamp(goal, this.clientTimestamp, { label: 'sent' }) },
     ];
     const goalIndex = historyPrefix.length + planStateMsg.length; // position of the original goal user message
 
@@ -1765,6 +1773,44 @@ export class AgentRuntime {
     } catch (err) {
       console.warn('[agent] Failed to record model usage:', err.message);
     }
+  }
+
+  _formatShortTimestamp(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const options = {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    };
+    if (this.clientTimezone) options.timeZone = this.clientTimezone;
+    try {
+      return new Intl.DateTimeFormat('en-US', options).format(date).replace(',', '');
+    } catch {
+      delete options.timeZone;
+      return new Intl.DateTimeFormat('en-US', options).format(date).replace(',', '');
+    }
+  }
+
+  _decorateMessageWithTimestamp(content, timestamp, { label = '' } = {}) {
+    const stamp = this._formatShortTimestamp(timestamp);
+    if (!stamp) return content;
+    const tag = label ? `${label} ${stamp}` : stamp;
+    return `[${tag}] ${content}`;
+  }
+
+  _buildTemporalContext() {
+    const now = new Date();
+    const parts = [`Current server time: ${now.toISOString()}.`];
+    const userNow = this._formatShortTimestamp(this.clientTimestamp || now);
+    if (userNow) {
+      parts.push(`User-visible current time: ${userNow}${this.clientTimezone ? ` (${this.clientTimezone})` : ''}.`);
+    }
+    parts.push('Conversation history messages may include compact [Mon DD HH:MM] prefixes. Use them to notice long gaps between turns and to interpret relative dates.');
+    return parts.join('\n');
   }
 
   _estimateTokens(value) {

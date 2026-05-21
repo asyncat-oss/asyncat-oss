@@ -1,4 +1,5 @@
 import { RefreshCw, Play, Trash2, Box, Cpu, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, FolderOpen } from 'lucide-react';
+import { LocalModelLogo } from './modelLogos.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';
 import { localModelsApi, llamaServerApi, mlxApi } from '../Settings/settingApi.js';
 import { Badge, DEFAULT_LOAD_CTX_SIZE, Panel, SectionHeader, getModelContextLimit, getModelLoadCtxError } from './modelPageShared.jsx';
@@ -42,13 +43,24 @@ const ModelCard = ({
       <div className="px-5 pt-5 pb-4 flex-1">
         {/* Top row: icon + name */}
         <div className="flex items-start gap-3">
-          <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
-            isLoaded
-              ? 'bg-gray-900 text-white dark:bg-gray-600 midnight:bg-slate-700'
-              : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400'
-          }`}>
-            {m.isExternal ? <FolderOpen className="w-5 h-5" /> : <Cpu className="w-5 h-5" />}
-          </div>
+          {m.isExternal
+            ? (
+              <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
+                isLoaded
+                  ? 'bg-gray-900 text-white dark:bg-gray-600 midnight:bg-slate-700'
+                  : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400'
+              }`}>
+                <FolderOpen className="w-5 h-5" />
+              </div>
+            ) : (
+              <LocalModelLogo
+                modelName={m.name || ''}
+                modelFile={m.filename || ''}
+                isActive={isLoaded}
+                size="md"
+              />
+            )
+          }
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">

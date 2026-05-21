@@ -149,7 +149,7 @@ async function generateWithCloudImageProvider(providerId, params) {
 export const generateImageTool = {
   name: 'generate_image',
   description:
-    'Generate an image using a configured local image runtime. Supports stable-diffusion.cpp ("simple") and ComfyUI ("comfyui"). ' +
+    'Generate an image using a configured local image runtime. This calls the local ComfyUI API directly when engine="comfyui", or stable-diffusion.cpp directly when engine="simple". ' +
     'Use this when the user asks to create, draw, render, or generate an image.',
   category: 'visual',
   permission: PermissionLevel.MODERATE,

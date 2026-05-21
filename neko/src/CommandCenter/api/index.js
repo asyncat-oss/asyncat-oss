@@ -23,6 +23,7 @@ import { bulkApi } from './bulkApi.js';
 import { workspaceUtils } from './bulkApi.js';
 import { chatFoldersApi } from './chatApi.js';
 import { installApi } from './installApi.js';
+import { schedulerApi } from './schedulerApi.js';
 
 export default {
   chat: chatApi,
@@ -38,5 +39,6 @@ export default {
   cache: cacheUtils,
   workspace: workspaceUtils,
   files: filesApi,
-  install: installApi
+  install: installApi,
+  scheduler: schedulerApi,
 };

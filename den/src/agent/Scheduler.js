@@ -116,6 +116,50 @@ export async function runJobNow(id) {
   return _fireJob(id, { manual: true });
 }
 
+/** Update an existing scheduled job. */
+export function updateJob({ id, userId, workspaceId, name, goal, schedule, enabled, profileId, providerProfileId, providerSnapshot, workingDir }) {
+  const existing = db.prepare('SELECT * FROM scheduled_jobs WHERE id = ? AND user_id = ? AND workspace_id = ?')
+    .get(id, userId, workspaceId);
+  if (!existing) return null;
+
+  const updates = [];
+  const values = [];
+  const set = (column, value) => {
+    updates.push(`${column} = ?`);
+    values.push(value);
+  };
+
+  if (name !== undefined) set('name', name);
+  if (goal !== undefined) set('goal', goal);
+  if (workingDir !== undefined) set('working_dir', workingDir || '.');
+  if (profileId !== undefined) set('profile_id', profileId || null);
+  if (providerProfileId !== undefined) set('provider_profile_id', providerProfileId || null);
+  if (providerSnapshot !== undefined) set('provider_snapshot', JSON.stringify(providerSnapshot || {}));
+  if (enabled !== undefined) set('enabled', enabled ? 1 : 0);
+
+  if (schedule !== undefined) {
+    const nextRunAt = _calcNextRun(schedule, new Date());
+    if (!nextRunAt) throw new Error(`Invalid schedule: "${schedule}". Use: interval:<ms> | at:<ISO> | once:<ms> | daily:<HH:MM> | hourly`);
+    set('schedule', schedule);
+    set('next_run_at', nextRunAt.toISOString());
+  }
+
+  if (updates.length === 0) return _hydrateJob(existing);
+
+  updates.push("updated_at = datetime('now')");
+  values.push(id, userId, workspaceId);
+  db.prepare(`
+    UPDATE scheduled_jobs
+    SET ${updates.join(', ')}
+    WHERE id = ? AND user_id = ? AND workspace_id = ?
+  `).run(...values);
+
+  _clearTimer(id);
+  const updated = db.prepare('SELECT * FROM scheduled_jobs WHERE id = ?').get(id);
+  if (updated?.enabled) _armTimer(id);
+  return _hydrateJob(updated);
+}
+
 /** Disable / delete a job. */
 export function deleteJob(id) {
   _clearTimer(id);
@@ -301,4 +345,4 @@ function _calcNextRun(schedule, fromDate) {
   return null;
 }
 
-export default { initScheduler, scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob };
+export default { initScheduler, scheduleJob, listJobs, listJobRuns, runJobNow, updateJob, deleteJob, enableJob, disableJob };

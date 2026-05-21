@@ -26,13 +26,14 @@ import {
 import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
-import { scheduleJob, listJobs, listJobRuns, runJobNow, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { scheduleJob, listJobs, listJobRuns, runJobNow, updateJob, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool, renameSymbolTool } from '../../agent/tools/codeSearchTools.js';
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
+import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
 import { branchGit, commitGit, discardGitFiles, getGitBranches, getGitCommit, getGitCommitMessageContext, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
@@ -50,7 +51,11 @@ const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
 function normalizeConversationHistory(history = []) {
   return (Array.isArray(history) ? history : [])
     .filter(m => m?.role === 'user' || m?.role === 'assistant')
-    .map(m => ({ role: m.role, content: String(m.content || '') }));
+    .map(m => ({
+      role: m.role,
+      content: String(m.content || ''),
+      timestamp: m.timestamp || m.createdAt || m.created_at || null,
+    }));
 }
 
 function defaultAgentWorkingDir() {
@@ -1151,6 +1156,14 @@ router.get('/capabilities/multimodal', authenticate, async (req, res) => {
   }
 });
 
+router.get('/runtime/status', authenticate, async (req, res) => {
+  try {
+    res.json(await getModelRuntimeStatus(req.user.id));
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to load model runtime status' });
+  }
+});
+
 router.get('/skills', authenticate, (req, res) => {
   loadSkills();
   const skills = listSkills().map(s => ({
@@ -1543,6 +1556,8 @@ router.post('/run', authenticate, async (req, res) => {
       conversationId = null,
       userMessageId = null,
       assistantMessageId = null,
+      clientTimestamp = null,
+      clientTimezone = null,
     } = req.body;
     const resolvedAgentMode = agentMode === 'chat'
       ? 'chat'
@@ -1638,6 +1653,8 @@ router.post('/run', authenticate, async (req, res) => {
       enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : null,
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,
+      clientTimestamp,
+      clientTimezone,
       abortSignal: abortController.signal,
       usageContext: {
         operation: 'agent',
@@ -2750,6 +2767,37 @@ router.get('/schedule/:id/runs', authenticate, async (req, res) => {
     const runs = listJobRuns(req.params.id, req.user.id, workspaceId || 'default', limit);
     if (!runs) return res.status(404).json({ success: false, error: 'Job not found' });
     res.json({ success: true, count: runs.length, runs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/schedule/:id', authenticate, async (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    const body = req.body || {};
+    const patch = {};
+    if (body.name !== undefined) patch.name = String(body.name || '').trim();
+    if (body.goal !== undefined) patch.goal = String(body.goal || '').trim();
+    if (body.schedule !== undefined) patch.schedule = String(body.schedule || '').trim();
+    if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
+    if (body.profileId !== undefined || body.profile_id !== undefined) patch.profileId = body.profileId ?? body.profile_id ?? null;
+    if (body.workingDir !== undefined || body.working_dir !== undefined) patch.workingDir = body.workingDir ?? body.working_dir ?? '.';
+    if (body.providerProfileId !== undefined || body.provider_profile_id !== undefined) {
+      const provider = resolveScheduledProvider(req.user.id, body.providerProfileId ?? body.provider_profile_id ?? null);
+      patch.providerProfileId = provider.providerProfileId;
+      patch.providerSnapshot = provider.providerSnapshot;
+    }
+
+    const job = updateJob({
+      id: req.params.id,
+      userId: req.user.id,
+      workspaceId: workspaceId || 'default',
+      ...patch,
+    });
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+    res.json({ success: true, job: enrichScheduledJob(job) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

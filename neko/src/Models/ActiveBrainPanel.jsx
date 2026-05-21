@@ -1,5 +1,6 @@
 import { Square, Cpu, Gauge, MessageSquare, Mic, Volume2, Eye, Image, BarChart3 } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
+import { ProviderLogo, LocalModelLogo } from './modelLogos.jsx';
 
 const STATUS_DOT = {
   idle:    'bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600',
@@ -96,23 +97,31 @@ const ActiveBrainPanel = ({
           )}
         </div>
 
-        {/* Title */}
-        <h2 className="text-2xl font-semibold text-gray-950 dark:text-white midnight:text-slate-100 tracking-tight">
-          {primaryTitle}
-        </h2>
-        <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-          {subtitle}
-        </p>
-
-        {activeConfig?.base_url && providerIsExternal && (
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 font-mono break-all">
-            {activeConfig.base_url}
-          </p>
-        )}
-
-        {serverStatus?.error && (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400 midnight:text-red-400">{serverStatus.error}</p>
-        )}
+        {/* Title + logo */}
+        <div className="flex items-center gap-4">
+          {providerIsExternal
+            ? <ProviderLogo providerId={activeConfig?.provider_id} name={activeProviderName} isActive size="lg" />
+            : serverStatus?.model
+              ? <LocalModelLogo modelName={serverStatus.model} modelFile={serverStatus.model} isActive size="lg" />
+              : null
+          }
+          <div className="min-w-0">
+            <h2 className="text-2xl font-semibold text-gray-950 dark:text-white midnight:text-slate-100 tracking-tight">
+              {primaryTitle}
+            </h2>
+            <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+              {subtitle}
+            </p>
+            {activeConfig?.base_url && providerIsExternal && (
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 font-mono break-all">
+                {activeConfig.base_url}
+              </p>
+            )}
+            {serverStatus?.error && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400 midnight:text-red-400">{serverStatus.error}</p>
+            )}
+          </div>
+        </div>
 
         <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
           <CapabilityStatus

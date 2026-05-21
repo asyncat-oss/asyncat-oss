@@ -3,6 +3,7 @@ import { RefreshCw, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search,
 import { aiProviderApi } from '../Settings/settingApi.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 import { Badge, providerLabel } from './modelPageShared.jsx';
+import { ProviderLogo } from './modelLogos.jsx';
 
 const modelDisplayName = (profile, catalog = []) => {
   const preset = catalog.find(item => item.providerId === profile?.provider_id || item.id === profile?.provider_id);
@@ -690,13 +691,12 @@ const ProvidersSection = ({
                 >
                   <div className="px-5 pt-5 pb-4 flex-1">
                     <div className="flex items-start gap-3">
-                      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
-                        isActive
-                          ? 'bg-gray-900 text-white dark:bg-gray-600 midnight:bg-slate-700'
-                          : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400'
-                      }`}>
-                        {isLocal ? <Zap className="w-5 h-5" /> : <Cloud className="w-5 h-5" />}
-                      </div>
+                      <ProviderLogo
+                        providerId={profile.provider_id}
+                        name={profile.name}
+                        isActive={isActive}
+                        size="md"
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate">{profile.name}</h3>
@@ -840,11 +840,14 @@ const ProvidersSection = ({
                 onClick={() => setModalState({ preset: item })}
                 className="text-left rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-4 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{item.name}</div>
-                  {providerAuthIcon(item)}
+                <div className="flex items-center gap-3 mb-2">
+                  <ProviderLogo providerId={item.providerId || item.id} name={item.name} size="sm" />
+                  <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                    <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{item.name}</div>
+                    {providerAuthIcon(item)}
+                  </div>
                 </div>
-                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
+                <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge color={typeBadge.color}>{typeBadge.label}</Badge>
                   {item.supportsTools && <Badge color="green">Tools</Badge>}

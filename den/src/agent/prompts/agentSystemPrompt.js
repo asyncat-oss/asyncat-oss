@@ -82,6 +82,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     agentMode = 'action',
     platform = process.platform,
     capabilitiesSection = '',   // multimodal capability status — injected here, NOT in the goal
+    temporalContext = '',
   } = opts;
 
   const shellName = getShellName(platform);
@@ -99,7 +100,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     ? `
 ## Current Mode: Plan
 - You are in **Plan mode**. Your job is to INSPECT, ANALYZE, and ANSWER — not to fix, build, or change anything.
-- **Allowed:** read_file, list_directory, code_search, find_definition, search_files, find_files, list_definitions, run_command (read-only only), ask_user, todo_write
+- **Allowed:** read_file, list_directory, code_search, find_definition, search_files, find_files, list_definitions, ai_status, models_loaded, list_scheduled_tasks, list_scheduled_task_runs, run_command (read-only only), ask_user, todo_write
 - **NOT allowed:** write_file, edit_file, patch_file, search_replace_block, create_directory, install packages, git commit/push, or any action with side effects
 - If the user asks you to make a change, inspect what you can, explain what needs to be done, and tell them to switch to Action mode.
 
@@ -155,6 +156,9 @@ export function buildAgentSystemPrompt(opts = {}) {
   const capSection = capabilitiesSection
     ? `\n## Multimodal Capabilities\n${capabilitiesSection}\n`
     : '';
+  const timeSection = temporalContext
+    ? `\n## Time Context\n${temporalContext}\n`
+    : '';
 
   if (agentMode === 'chat') {
     return `${identity}
@@ -163,7 +167,7 @@ export function buildAgentSystemPrompt(opts = {}) {
 - **Platform**: ${platform}
 - **Workspace access**: disabled
 - **Shell/tool access**: disabled
-${modeSection}${capSection}
+${modeSection}${capSection}${timeSection}
 
 ## How You Work
 - Respond directly and helpfully in natural language.
@@ -191,7 +195,7 @@ Begin by answering the user's request directly.`;
 - **Platform**: ${platform}
 - **Working directory**: ${workingDir}
 - **Shell**: ${shellName}
-${modeSection}${capSection}
+${modeSection}${capSection}${timeSection}
 
 ## How You Work (ReAct Pattern)
 For each step, you MUST output your response in this exact format:

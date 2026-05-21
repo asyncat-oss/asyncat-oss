@@ -389,6 +389,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           apiHistory.push({
             role: msg.type,
             content: msg.content,
+            timestamp: msg.timestamp,
             toolsEnabled: msg.toolsEnabled,
             agentSessionId: msg.agentSessionId,
           });

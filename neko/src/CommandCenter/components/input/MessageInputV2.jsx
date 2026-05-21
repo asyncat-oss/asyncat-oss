@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, SlidersHorizontal, Square, Wrench, X, Zap, Plus, ArrowUp, Check, Folder } from "lucide-react";
+import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, SlidersHorizontal, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, ArrowUp, Check, Folder } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
@@ -224,6 +224,247 @@ function TokenBar({ usage }) {
   );
 }
 
+function formatCountdown(ms) {
+  const safeMs = Math.max(0, Number(ms) || 0);
+  const totalSeconds = Math.ceil(safeMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function summarizePermissionRequest(data = {}) {
+  const args = data.args && typeof data.args === "object" ? data.args : {};
+  const tool = data.tool || data.toolName || "tool";
+  if (typeof args.command === "string" && args.command.trim()) {
+    return { label: "Run command", value: args.command.trim() };
+  }
+  if (typeof args.code === "string" && args.code.trim()) {
+    return { label: tool === "run_python" ? "Run Python" : "Run code", value: args.code.trim() };
+  }
+  if (typeof args.path === "string" && args.path.trim()) {
+    const verb = /delete/i.test(tool) ? "Delete file"
+      : /write|create/i.test(tool) ? "Write file"
+        : /edit|patch/i.test(tool) ? "Edit file"
+          : "Use file";
+    return { label: verb, value: args.path.trim() };
+  }
+  if (typeof args.query === "string" && args.query.trim()) {
+    return { label: "Search", value: args.query.trim() };
+  }
+  if (typeof data.description === "string" && data.description.trim()) {
+    return { label: "Use tool", value: data.description.trim() };
+  }
+  try {
+    const text = JSON.stringify(args || {}, null, 2);
+    if (text && text !== "{}") return { label: "Use tool", value: text };
+  } catch {
+    /* ignore */
+  }
+  return { label: "Use tool", value: tool };
+}
+
+function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserAnswer, tokenUsage, isRunning, onStop }) {
+  const [answer, setAnswer] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+  const data = interaction?.data || {};
+  const expiresAt = useMemo(() => (
+    Number.isFinite(data.expiresInMs) && !data.resolved && !data.answered
+      ? Date.now() + data.expiresInMs
+      : null
+  ), [data.expiresInMs, data.resolved, data.answered]);
+  const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : null;
+  const expired = remainingMs === 0;
+
+  useEffect(() => {
+    if (!expiresAt) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  if (!interaction?.type) return null;
+
+  const resolving = Boolean(data.resolving || data.answered);
+  const statusText = remainingMs !== null
+    ? expired ? "Expired" : `Auto-deny in ${formatCountdown(remainingMs)}`
+    : "Waiting";
+
+  if (interaction.type === "ask_user") {
+    const submit = (value) => {
+      const next = String(value ?? answer ?? "").trim();
+      if (!next && !data.default) return;
+      onAskUserAnswer?.(data.requestId, next || data.default || "");
+      setAnswer("");
+    };
+
+    return (
+      <div className="bg-transparent">
+        <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
+          <div className="overflow-hidden rounded-[1.35rem] border border-blue-200/80 bg-white shadow-sm dark:border-blue-900/60 dark:bg-gray-900 midnight:border-blue-900/60 midnight:bg-slate-900">
+            <div className="flex items-start gap-3 px-4 pt-4">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+                <MessageCircle className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Agent question</span>
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{statusText}</span>
+                </div>
+                <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100 midnight:text-slate-100">{data.question}</p>
+                {Array.isArray(data.choices) && data.choices.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {data.choices.map((choice, index) => (
+                      <button
+                        key={`${choice}-${index}`}
+                        type="button"
+                        onClick={() => submit(choice)}
+                        disabled={resolving}
+                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                      >
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 border-t border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-gray-800 dark:bg-gray-950/40 midnight:border-slate-800 midnight:bg-slate-950/40">
+              <div className="flex items-center gap-2">
+                <input
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") submit();
+                  }}
+                  disabled={resolving}
+                  placeholder={data.default ? `Default: ${data.default}` : "Type your answer..."}
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-blue-800 dark:focus:ring-blue-950 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
+                  autoFocus
+                />
+                {data.default && (
+                  <button
+                    type="button"
+                    onClick={() => submit(data.default)}
+                    disabled={resolving}
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-white disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+                  >
+                    Default
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => submit()}
+                  disabled={resolving || (!answer.trim() && !data.default)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700 disabled:bg-gray-300 disabled:text-white dark:disabled:bg-gray-700"
+                  title="Send answer"
+                >
+                  {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const intent = summarizePermissionRequest(data);
+  const dangerous = data.permission === "dangerous";
+  const approveClass = dangerous
+    ? "bg-rose-600 text-white hover:bg-rose-700"
+    : "bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white";
+
+  return (
+    <div className="bg-transparent">
+      <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
+        <div className={`overflow-hidden rounded-[1.35rem] border bg-white shadow-sm dark:bg-gray-900 midnight:bg-slate-900 ${
+          dangerous
+            ? "border-rose-200 dark:border-rose-900/60 midnight:border-rose-900/60"
+            : "border-amber-200 dark:border-amber-900/60 midnight:border-amber-900/60"
+        }`}>
+          <div className="flex items-start gap-3 px-4 py-4">
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
+              dangerous
+                ? "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
+                : "border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+            }`}>
+              <ShieldAlert className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">Permission needed</span>
+                <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
+                  {data.tool || data.toolName || "tool"}
+                </span>
+                <span className={`text-[10px] font-medium ${expired ? "text-red-500" : "text-gray-400 dark:text-gray-500"}`}>{statusText}</span>
+              </div>
+              <p className="mt-1 text-sm text-gray-800 dark:text-gray-100 midnight:text-slate-100">{intent.label}</p>
+              <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/50">
+                <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-700 dark:text-gray-300 midnight:text-slate-300">
+                  {intent.value}
+                </code>
+              </div>
+              {data.workingDir && (
+                <p className="mt-1 truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{data.workingDir}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-gray-800 dark:bg-gray-950/40 midnight:border-slate-800 midnight:bg-slate-950/40">
+            <div className="flex items-center gap-2">
+              {tokenUsage?.totalTokens > 0 && <TokenBar usage={tokenUsage} />}
+              {isRunning && onStop && (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-white hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+                  title="Stop run"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onPermissionDecision?.(data.requestId, "deny")}
+                disabled={resolving || expired}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-white disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+              >
+                Deny
+              </button>
+              <button
+                type="button"
+                onClick={() => onPermissionDecision?.(data.requestId, "allow")}
+                disabled={resolving || expired}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${approveClass}`}
+              >
+                {resolving && <Loader2 className="h-3 w-3 animate-spin" />}
+                Approve once
+              </button>
+              <button
+                type="button"
+                onClick={() => onPermissionDecision?.(data.requestId, "allow_session")}
+                disabled={resolving || expired}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-white disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-900"
+              >
+                Trust run
+              </button>
+              <button
+                type="button"
+                onClick={() => onPermissionDecision?.(data.requestId, "allow_always")}
+                disabled={resolving || expired}
+                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/20"
+              >
+                <ShieldOff className="h-3 w-3" />
+                Always
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RecordingWaveform() {
   const bars = [
     { height: "0.55rem", delay: "0ms", duration: "720ms" },
@@ -281,6 +522,9 @@ export const MessageInputV2 = ({
   onToggleVoiceMode,
   autoRecordPrompt = false,
   multimodalCapabilities = null,
+  pendingInteraction = null,
+  onPermissionDecision,
+  onAskUserAnswer,
 }) => {
   const [value, setValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -1093,6 +1337,19 @@ export const MessageInputV2 = ({
   const getBorderColor = () => {
     return "border-gray-200/90 dark:border-gray-800 midnight:border-slate-800 focus-within:border-gray-300 dark:focus-within:border-gray-700 midnight:focus-within:border-slate-700";
   };
+
+  if (pendingInteraction?.type) {
+    return (
+      <PendingInteractionInput
+        interaction={pendingInteraction}
+        onPermissionDecision={onPermissionDecision}
+        onAskUserAnswer={onAskUserAnswer}
+        tokenUsage={tokenUsage}
+        isRunning={isRunning}
+        onStop={onStop}
+      />
+    );
+  }
 
   return (
     <div className="bg-transparent">

@@ -54,6 +54,7 @@ import {
   Sparkles,
   Globe,
   List,
+  Cpu,
 } from "lucide-react";
 
 import {
@@ -133,6 +134,7 @@ function buildConversationHistoryFromMessages(messages = []) {
       agentMentions: msg.agentMentions,
       fileAttachments: msg.fileAttachments,
       workingContext: msg.workingContext,
+      timestamp: msg.timestamp,
       branchId: msg.branchId,
       parentBranchId: msg.parentBranchId,
       branchPointMessageId: msg.branchPointMessageId,
@@ -302,6 +304,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [gitError, setGitError] = useState(null);
   const [externalFileAttachment, setExternalFileAttachment] = useState(null);
   const [multimodalCapabilities, setMultimodalCapabilities] = useState(null);
+  const [runtimeStatus, setRuntimeStatus] = useState(null);
+  const [runtimeStatusLoading, setRuntimeStatusLoading] = useState(false);
   const [agentAutoApprove, setAgentAutoApprove] = useState(() => {
     try {
       return localStorage.getItem('asyncat_agent_auto_approve') === 'true';
@@ -388,6 +392,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
     return null;
   }, [agentEvents]);
+  const pendingInputInteraction = useMemo(() => {
+    for (let i = agentEvents.length - 1; i >= 0; i--) {
+      const event = agentEvents[i];
+      if (event?.type === 'ask_user' && !event.data?.answered && !event.data?._inferred_answered) {
+        return { type: 'ask_user', data: event.data };
+      }
+      if (event?.type === 'permission_request' && !event.data?.resolved && !event.data?.historical) {
+        return { type: 'permission_request', data: event.data };
+      }
+    }
+    return null;
+  }, [agentEvents]);
   useAgentNotifications({
     isRunning: agentRunning,
     lastAnswer: latestAnswer,
@@ -421,6 +437,33 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       window.removeEventListener('asyncat-audio-models-updated', loadCapabilities);
     };
   }, []);
+
+  const loadRuntimeStatus = useCallback(async () => {
+    setRuntimeStatusLoading(true);
+    try {
+      const res = await agentApi.getModelStatus();
+      setRuntimeStatus(res || null);
+    } catch {
+      setRuntimeStatus(null);
+    } finally {
+      setRuntimeStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!showActivitySidebar || sidePanelTab !== 'runtime') return;
+    loadRuntimeStatus();
+    const interval = setInterval(loadRuntimeStatus, 30000);
+    window.addEventListener('asyncat-model-runtime-updated', loadRuntimeStatus);
+    window.addEventListener('asyncat-visual-models-updated', loadRuntimeStatus);
+    window.addEventListener('asyncat-audio-models-updated', loadRuntimeStatus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('asyncat-model-runtime-updated', loadRuntimeStatus);
+      window.removeEventListener('asyncat-visual-models-updated', loadRuntimeStatus);
+      window.removeEventListener('asyncat-audio-models-updated', loadRuntimeStatus);
+    };
+  }, [loadRuntimeStatus, showActivitySidebar, sidePanelTab]);
 
   // Brain stats — fetch counts, refresh after each run completes
   useEffect(() => {
@@ -998,6 +1041,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       {
         role: 'user',
         content: submittedGoal,
+        timestamp: submittedAt,
         toolsEnabled: effectiveToolsEnabled,
         agentMode: effectiveAgentMode,
         reasoningEffort: selectedReasoningEffort,
@@ -1095,6 +1139,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         conversationId: runConversationId,
         userMessageId,
         assistantMessageId,
+        clientTimestamp: submittedAt,
+        clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
       })) {
         if (controller.signal.aborted) break;
         if (event.type === 'session_start') {
@@ -1268,9 +1314,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         }));
       }
       if (capturedFinalAnswer) {
+        const answeredAt = new Date().toISOString();
         const nextHistory = [
           ...optimisticConversationHistory,
-          { role: 'assistant', content: capturedFinalAnswer, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId, branchId: runBranchId },
+          { role: 'assistant', content: capturedFinalAnswer, timestamp: answeredAt, toolsEnabled: effectiveToolsEnabled, agentMode: effectiveAgentMode, reasoningEffort: selectedReasoningEffort, agentSessionId: runSessionId, branchId: runBranchId },
         ];
         const shouldPersistCompactedHistory = nextHistory.some(item => item?.compacted);
         updateChatRun(runKey, { conversationHistory: nextHistory });
@@ -1299,7 +1346,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           id: assistantMessageId,
           content: capturedFinalAnswer,
           type: 'assistant',
-          timestamp: new Date().toISOString(),
+          timestamp: answeredAt,
           agentSessionId: runSessionId,
           toolsEnabled: effectiveToolsEnabled,
           agentMode: effectiveAgentMode,
@@ -2123,6 +2170,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     || sidePanelTab === 'artifact'
     || sidePanelTab === 'nav'
     || sidePanelTab === 'code'
+    || sidePanelTab === 'runtime'
     || gitState?.detected
     || sourceCatalog.totalCount > 0
     || persistedAgentEvents.length > 0
@@ -2155,6 +2203,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     : ''}
                 </span>
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSidePanelTab('runtime')}
+              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
+                showActivitySidebar && sidePanelTab === 'runtime'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+              }`}
+              title="Runtime status"
+            >
+              <Cpu className="w-4 h-4" />
             </button>
           </div>
         )}
@@ -2230,6 +2290,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 workingContext={workingContext}
                 onWorkingContextChange={setWorkingContext}
                 multimodalCapabilities={multimodalCapabilities}
+                pendingInteraction={pendingInputInteraction}
+                onPermissionDecision={handleAgentPermission}
+                onAskUserAnswer={handleAgentAskUser}
               />
 
 
@@ -2409,6 +2472,25 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {gitState.changedCount || 0}
                           {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleSidePanelTab('runtime')}
+                      className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
+                        showActivitySidebar && sidePanelTab === 'runtime'
+                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                      }`}
+                      title="Show model runtime status"
+                    >
+                      <Cpu className="h-4 w-4" />
+                      <span className="hidden sm:inline">Runtime</span>
+                      {runtimeStatus?.counts?.loaded > 0 && (
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {runtimeStatus.counts.loaded}
                         </span>
                       )}
                     </button>
@@ -2677,6 +2759,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     onRetryGoal={handleRetryGoal}
                     highlightedMessageId={highlightedMessageId}
                     ttsReady={ttsReady}
+                    renderPendingInteractionsInline={false}
                   />
                   <div ref={messagesEndRef} className="h-4" />
                 </div>
@@ -2733,13 +2816,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onWorkingContextChange={setWorkingContext}
                 tokenUsage={latestTokenUsage}
                 multimodalCapabilities={multimodalCapabilities}
+                pendingInteraction={pendingInputInteraction}
+                onPermissionDecision={handleAgentPermission}
+                onAskUserAnswer={handleAgentAskUser}
               />
             </div>
           </>
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside
           style={{ width: sidePanelWidth }}
           className="hidden xl:flex xl:shrink-0 relative border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700"
@@ -2782,12 +2868,15 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}
               chatNavItems={chatNavItems}
+              runtimeStatus={runtimeStatus}
+              runtimeStatusLoading={runtimeStatusLoading}
+              onRuntimeStatusRefresh={loadRuntimeStatus}
             />
           </div>
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"
@@ -2826,6 +2915,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}
               chatNavItems={chatNavItems}
+              runtimeStatus={runtimeStatus}
+              runtimeStatusLoading={runtimeStatusLoading}
+              onRuntimeStatusRefresh={loadRuntimeStatus}
             />
           </div>
         </div>

@@ -37,6 +37,8 @@ export const agentApi = {
         conversationId: opts.conversationId || null,
         userMessageId: opts.userMessageId || null,
         assistantMessageId: opts.assistantMessageId || null,
+        clientTimestamp: opts.clientTimestamp || new Date().toISOString(),
+        clientTimezone: opts.clientTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
       })
     });
 
@@ -205,6 +207,10 @@ export const agentApi = {
 
   getMultimodalCapabilities: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/capabilities/multimodal`);
+  },
+
+  getModelStatus: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/runtime/status`);
   },
 
   getSkills: async () => {
