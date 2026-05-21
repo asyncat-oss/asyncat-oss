@@ -1417,6 +1417,7 @@ export class AgentRuntime {
       const reasoningDelta = reasoningTextFromDelta(delta);
       if (reasoningDelta) {
         reasoningText = appendReasoningText(reasoningText, reasoningDelta);
+        this.onEvent({ type: 'reasoning_delta', data: { content: reasoningDelta } });
       }
 
       if (delta.content) {

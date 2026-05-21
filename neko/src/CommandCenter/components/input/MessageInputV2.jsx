@@ -525,6 +525,9 @@ export const MessageInputV2 = ({
   pendingInteraction = null,
   onPermissionDecision,
   onAskUserAnswer,
+  onOpenRuntimePanel,
+  runtimeStatus = null,
+  runtimePanelOpen = false,
 }) => {
   const [value, setValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -1076,6 +1079,7 @@ export const MessageInputV2 = ({
   const modelLabel = activeBrain.isLoadingModel
     ? "Loading"
     : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
+  const loadedRuntimeCount = runtimeStatus?.counts?.loaded || 0;
 
   const allModelOptions = useMemo(() => {
     const opts = [];
@@ -1753,6 +1757,30 @@ export const MessageInputV2 = ({
                     </div>
                   )}
                 </div>
+
+                {onOpenRuntimePanel && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenu(null);
+                      onOpenRuntimePanel();
+                    }}
+                    title="Runtime status"
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors ${
+                      runtimePanelOpen
+                        ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
+                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
+                    }`}
+                  >
+                    <Cpu className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Runtime</span>
+                    {loadedRuntimeCount > 0 && (
+                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
+                        {loadedRuntimeCount}
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-2.5">

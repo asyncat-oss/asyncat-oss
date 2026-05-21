@@ -1849,8 +1849,9 @@ function SkillSuggestedEvent({ data }) {
 }
 
 // Live streaming preview — shown while LLM is generating
-function StreamingPreview({ text }) {
+function StreamingPreview({ text, reasoningText = '' }) {
   const { thinking, answer } = extractReasoningFromText(text);
+  const liveThinking = reasoningText?.trim() || thinking || '';
   const clean = answer.trim();
   const blocks = useMemo(() => {
     if (!clean) return [];
@@ -1861,7 +1862,7 @@ function StreamingPreview({ text }) {
     }
   }, [clean]);
 
-  if (!text?.trim()) return null;
+  if (!text?.trim() && !liveThinking) return null;
 
   if (!clean) {
     return (
@@ -1873,9 +1874,9 @@ function StreamingPreview({ text }) {
             <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
           </span>
           <span>Reasoning…</span>
-          {thinking && (
+          {liveThinking && (
             <span className="truncate text-[10px] text-gray-300 dark:text-gray-700">
-              {thinking.length > 120 ? `${thinking.slice(0, 120)}...` : thinking}
+              {liveThinking.length > 120 ? `${liveThinking.slice(0, 120)}...` : liveThinking}
             </span>
           )}
         </div>
@@ -2764,6 +2765,7 @@ export default function AgentRunFeed({
   events,
   isRunning,
   streamingText,
+  streamingReasoning = '',
   runStartedAt,
   sessionId = null,
   session = null,
@@ -2872,8 +2874,8 @@ export default function AgentRunFeed({
         );
       })}
 
-      {isRunning && <StreamingPreview text={streamingText} />}
-      {isRunning && !streamingText && <RunningIndicator runStartedAt={runStartedAt} />}
+      {isRunning && <StreamingPreview text={streamingText} reasoningText={streamingReasoning} />}
+      {isRunning && !streamingText && !streamingReasoning && <RunningIndicator runStartedAt={runStartedAt} />}
       {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} sessionId={sessionId} session={session} onViewArtifactInPanel={onViewArtifactInPanel} />}
     </div>
   );

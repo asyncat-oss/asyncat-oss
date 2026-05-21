@@ -54,7 +54,6 @@ import {
   Sparkles,
   Globe,
   List,
-  Cpu,
 } from "lucide-react";
 
 import {
@@ -367,6 +366,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const agentTaskRunStatus = getTaskRunDisplayStatus(agentTaskRun);
   const agentConversationHistory = currentRun.conversationHistory || [];
   const agentStreamingText = currentRun.streamingText || '';
+  const agentStreamingReasoning = currentRun.streamingReasoning || '';
   // Extract latest token usage for the input toolbar
   const latestTokenUsage = useMemo(() => {
     for (let i = agentEvents.length - 1; i >= 0; i--) {
@@ -513,6 +513,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             session: null,
             running: false,
             streamingText: '',
+            streamingReasoning: '',
             events: [{ type: 'error', data: { message: 'Agent session not found.' } }],
           });
           return;
@@ -530,6 +531,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           session,
           running: session.status === 'active',
           streamingText: '',
+          streamingReasoning: '',
           conversationHistory: Array.isArray(session.messages) ? session.messages : [],
           events,
         });
@@ -541,6 +543,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           session: null,
           running: false,
           streamingText: '',
+          streamingReasoning: '',
           events: [{ type: 'error', data: { message: error.message || 'Failed to load agent session.' } }],
         });
       } finally {
@@ -695,6 +698,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     });
   }, [sidePanelTab]);
 
+  const openRuntimePanel = useCallback(() => {
+    setSidePanelTab('runtime');
+    setShowActivitySidebar(true);
+    try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* localStorage may be unavailable */ }
+    loadRuntimeStatus();
+  }, [loadRuntimeStatus]);
+
   // Drag-to-resize side panel
   useEffect(() => {
     const onMove = (e) => {
@@ -809,6 +819,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       events: buildEventsFromMessages(nextMessages),
       conversationHistory: buildConversationHistoryFromMessages(nextMessages),
       streamingText: '',
+      streamingReasoning: '',
       running: false,
     }));
 
@@ -1100,6 +1111,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         goal: submittedGoal,
         running: true,
         streamingText: '',
+        streamingReasoning: '',
         session: null,
         selectedProfileId: effectiveProfileId || null,
         agentMentions,
@@ -1154,10 +1166,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           updateChatRun(runKey, prev => ({ ...prev, streamingText: (prev.streamingText || '') + (event.data?.content || '') }));
           continue;
         }
+        if (event.type === 'reasoning_delta') {
+          updateChatRun(runKey, prev => ({ ...prev, streamingReasoning: (prev.streamingReasoning || '') + (event.data?.content || '') }));
+          continue;
+        }
         if (event.type === 'thinking') {
-          updateChatRun(runKey, prev => ({ ...prev, streamingText: cleanReasoningAnswer(prev.streamingText || '') }));
+          updateChatRun(runKey, prev => ({ ...prev, streamingText: cleanReasoningAnswer(prev.streamingText || ''), streamingReasoning: '' }));
         } else if (event.type === 'tool_start' || event.type === 'answer') {
-          updateChatRun(runKey, { streamingText: '' });
+          updateChatRun(runKey, { streamingText: '', streamingReasoning: '' });
         }
         if (event.type === 'done') {
           if (event.data?.sessionId) {
@@ -1296,6 +1312,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         updateChatRun(runKey, prev => ({
           ...prev,
           streamingText: '',
+          streamingReasoning: '',
           events: [...(prev.events || []), { type: 'error', data: { message: err.message, goal: submittedGoal } }],
         }));
       }
@@ -1422,7 +1439,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           setError('Agent run failed');
         }
       }
-      updateChatRun(runKey, { streamingText: '', running: false });
+      updateChatRun(runKey, { streamingText: '', streamingReasoning: '', running: false });
       agentAbortControllersRef.current.delete(runKey);
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
@@ -1508,6 +1525,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       sessionId: null,
       session: null,
       streamingText: '',
+      streamingReasoning: '',
       running: false,
     }));
 
@@ -1675,6 +1693,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setCurrentChatRun(prev => ({
       ...prev,
       streamingText: '',
+      streamingReasoning: '',
       running: false,
       events: [...(prev.events || []), { type: 'status', data: { message: 'Stopped by user.' } }],
     }));
@@ -1895,6 +1914,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       conversationHistory: [],
       sessionId: null,
       streamingText: '',
+      streamingReasoning: '',
       running: false,
     });
     setIsEditingGoal(false);
@@ -1911,6 +1931,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         sessionId: null,
         conversationHistory: [],
         streamingText: '',
+        streamingReasoning: '',
         running: false,
       });
       triggerConversationRefresh();
@@ -2204,18 +2225,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 </span>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => toggleSidePanelTab('runtime')}
-              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
-                showActivitySidebar && sidePanelTab === 'runtime'
-                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-              }`}
-              title="Runtime status"
-            >
-              <Cpu className="w-4 h-4" />
-            </button>
           </div>
         )}
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
@@ -2293,6 +2302,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 pendingInteraction={pendingInputInteraction}
                 onPermissionDecision={handleAgentPermission}
                 onAskUserAnswer={handleAgentAskUser}
+                onOpenRuntimePanel={openRuntimePanel}
+                runtimeStatus={runtimeStatus}
+                runtimePanelOpen={showActivitySidebar && sidePanelTab === 'runtime'}
               />
 
 
@@ -2472,25 +2484,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {gitState.changedCount || 0}
                           {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
-                        </span>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleSidePanelTab('runtime')}
-                      className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                        showActivitySidebar && sidePanelTab === 'runtime'
-                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                      }`}
-                      title="Show model runtime status"
-                    >
-                      <Cpu className="h-4 w-4" />
-                      <span className="hidden sm:inline">Runtime</span>
-                      {runtimeStatus?.counts?.loaded > 0 && (
-                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                          {runtimeStatus.counts.loaded}
                         </span>
                       )}
                     </button>
@@ -2744,6 +2737,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     events={persistedAgentEvents}
                     isRunning={agentRunning}
                     streamingText={agentStreamingText}
+                    streamingReasoning={agentStreamingReasoning}
                     runStartedAt={runStartedAtRef.current}
                     sessionId={agentCurrentSessionId}
                     session={agentCurrentSession}

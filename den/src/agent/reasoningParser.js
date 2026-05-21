@@ -76,18 +76,43 @@ function extractTaggedReasoning(text) {
 }
 
 function extractMarkdownThought(text) {
-  const thoughtMatch = text.match(/(?:\*\*)?Thought:(?:\*\*)?\s*([\s\S]*?)(?=(?:\*\*)?(?:Action|Answer):(?:\*\*)?|<tool_call>|<think>|<thought>|<reasoning>|$)/i);
-  if (!thoughtMatch) return { thinking: null, answer: text };
+  const raw = String(text || '');
+  const labelRe = /(?:\*\*)?(Thought|Action|Final Answer|Answer):(?:\*\*)?\s*/gi;
+  const matches = [...raw.matchAll(labelRe)];
+  if (!matches.length) return { thinking: null, answer: text };
 
-  const thinking = cleanText(thoughtMatch[1]);
-  const answer = text.replace(thoughtMatch[0], '').replace(/^\s*(?:\*\*)?Answer:(?:\*\*)?\s*/i, '').trim();
-  return { thinking: thinking || null, answer };
+  const hasThought = matches.some(match => match[1]?.toLowerCase() === 'thought');
+  const hasAnswer = matches.some(match => /^(?:final answer|answer)$/i.test(match[1] || ''));
+  if (!hasThought && !hasAnswer) return { thinking: null, answer: text };
+
+  const thinkingParts = [];
+  const answerParts = [];
+
+  matches.forEach((match, index) => {
+    const label = String(match[1] || '').toLowerCase();
+    const start = match.index + match[0].length;
+    const end = matches[index + 1]?.index ?? raw.length;
+    const segment = raw.slice(start, end).trim();
+    if (!segment) return;
+
+    if (label === 'thought') {
+      thinkingParts.push(segment);
+    } else if (label === 'answer' || label === 'final answer') {
+      answerParts.push(segment);
+    }
+  });
+
+  return {
+    thinking: compactParts(thinkingParts),
+    answer: hasAnswer ? cleanText(answerParts.join('\n\n')) : '',
+  };
 }
 
 export function cleanReasoningAnswer(text) {
   return stripSpuriousGemmaThoughtLabel(stripToolWrappers(text))
-    .replace(/^\s*(?:\*\*)?Answer:(?:\*\*)?\s*/i, '')
-    .replace(/(?:\*\*)?Action:(?:\*\*)?\s*/i, '')
+    .replace(/^\s*(?:\*\*)?(?:Final Answer|Answer):(?:\*\*)?\s*/i, '')
+    .replace(/(?:\*\*)?Action:(?:\*\*)?\s*/gi, '')
+    .replace(/(?:\*\*)?Thought:(?:\*\*)?\s*/gi, '')
     .replace(/<\|channel\>thought\s*\n?<channel\|>/gi, '')
     .replace(/<\|turn\|>|<turn\|>|<eos>|<\/s>/gi, '')
     .trim();
