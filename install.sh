@@ -93,8 +93,8 @@ fi
 info "Checking Node.js..."
 command -v node >/dev/null 2>&1 || die "Node.js not found. Install from https://nodejs.org (v20+ required), or install via your OS package manager."
 NODE_VER=$(node -e "process.stdout.write(process.version)")
-NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v\([0-9]*\).*/\1/')
-[ "$NODE_MAJOR" -ge 20 ] || die "Node.js v20+ required. You have $NODE_VER — upgrade at https://nodejs.org or with a current package manager."
+node -e "const [M,m]=process.versions.node.split('.').map(Number); process.exit(((M===20&&m>=19)||(M===22&&m>=13)||M>=24)?0:1)" \
+  || die "Node.js 20.19+, 22.13+, or 24+ required. You have $NODE_VER — upgrade at https://nodejs.org or with a current package manager."
 ok "Node.js $NODE_VER"
 
 # ── 2. git ────────────────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ ok "Command ready: asyncat"
 
 # ── 8. Finish first-run setup automatically ──────────────────────────────────
 info "Finishing first-run setup..."
-(cd "$INSTALL_DIR" && node "$INSTALL_DIR/cat" install --skip-packages --local-engine) \
+(cd "$INSTALL_DIR" && node "$INSTALL_DIR/cat" install --skip-packages --skip-local-engine) \
   && ok "First-run setup complete"
 
 # ── 9. Add ~/.local/bin to PATH if needed ─────────────────────────────────────
@@ -222,7 +222,6 @@ ok "Icons installed"
 
 # ── 11. Desktop launcher (for humans) ─────────────────────────────────────────
 LAUNCHER="$BIN_DIR/asyncat-ui"
-STATIC_SERVER="$INSTALL_DIR/neko/dist"
 
 cat > "$LAUNCHER" <<'LAUNCHER_SCRIPT'
 #!/usr/bin/env bash

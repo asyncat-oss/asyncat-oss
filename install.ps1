@@ -30,8 +30,8 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Die "Node.js not found. Install from https://nodejs.org (v20+ required)"
 }
 $nodeVer   = node -e "process.stdout.write(process.version)"
-$nodeMajor = [int]($nodeVer -replace 'v(\d+)\..*', '$1')
-if ($nodeMajor -lt 20) { Die "Node.js v20+ required. You have $nodeVer - upgrade at https://nodejs.org" }
+$null = node -e "const [M,m]=process.versions.node.split('.').map(Number); process.exit(((M===20&&m>=19)||(M===22&&m>=13)||M>=24)?0:1)"
+if ($LASTEXITCODE -ne 0) { Die "Node.js 20.19+, 22.13+, or 24+ required. You have $nodeVer - upgrade at https://nodejs.org" }
 Ok "Node.js $nodeVer"
 
 # -- 2. git --------------------------------------------------------------------
@@ -189,11 +189,11 @@ if (-not `$nekoRunning) {
     Write-Host "[asyncat] Starting frontend..." -ForegroundColor Cyan
     
     if (Test-Path `$NEKO_DIST) {
-        # Serve built frontend with serve
-        Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd '\`$NEKO_DIST'; npx serve -l `\`$NEKO_PORT`"" -NoNewWindow
+        # Serve built frontend with the bundled Vite preview script
+        Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd '\`$InstallDir\neko'; npm run preview -- --host 127.0.0.1 --port 8717`"" -NoNewWindow
     } else {
         # Fallback: use Vite dev server
-        Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd '\`$InstallDir\neko'; npx vite --port `\``$NEKO_PORT`"" -NoNewWindow
+        Start-Process powershell -ArgumentList "-WindowStyle Hidden -NoExit -Command `"cd '\`$InstallDir\neko'; npm run dev -- --host 127.0.0.1 --port 8717`"" -NoNewWindow
     }
     
     # Wait for frontend to start

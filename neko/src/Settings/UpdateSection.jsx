@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal, Trash2, AlertTriangle, RotateCcw, HardDrive } from 'lucide-react';
 import { updateApi } from './settingApi';
+import { installApi } from '../CommandCenter/api/installApi.js';
 
 const soraFontBase = 'font-sora';
 
+const missingChecks = (readiness, required) => (
+  (readiness?.checks || []).filter(check => Boolean(check.required) === required && !check.ok)
+);
+
 const UpdateSection = () => {
   const [localInfo, setLocalInfo] = useState(null);
+  const [readiness, setReadiness] = useState(null);
+  const [readinessError, setReadinessError] = useState(null);
   const [checkResult, setCheckResult] = useState(null); // { behind, latestHash }
   const [checking, setChecking] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -24,6 +31,7 @@ const UpdateSection = () => {
 
   useEffect(() => {
     loadLocalInfo();
+    loadReadiness();
     return () => {
       cleanupRef.current?.();
       restartCleanupRef.current?.();
@@ -44,6 +52,16 @@ const UpdateSection = () => {
       else setStatusError(data.error || 'Could not read git info');
     } catch (e) {
       setStatusError(e.message || 'Could not reach backend');
+    }
+  };
+
+  const loadReadiness = async () => {
+    setReadinessError(null);
+    try {
+      const data = await installApi.getReadiness();
+      setReadiness(data);
+    } catch (e) {
+      setReadinessError(e.message || 'Could not read system readiness');
     }
   };
 
@@ -78,6 +96,7 @@ const UpdateSection = () => {
         setUpdateDone('success');
         // Refresh local info to show new hash/version
         loadLocalInfo();
+        loadReadiness();
       },
       (text) => {
         setLogs(prev => [...prev, { type: 'error', text }]);
@@ -88,7 +107,7 @@ const UpdateSection = () => {
   };
 
   const requiredUninstallText = purgeInstall ? 'delete all asyncat data' : 'uninstall asyncat';
-  const canUninstall = uninstallConfirm.trim().toLowerCase() === requiredUninstallText && !uninstalling;
+  const canUninstall = uninstallConfirm.trim().toLowerCase() === requiredUninstallText && !uninstalling && localInfo?.canUninstall !== false;
 
   const handleUninstall = async () => {
     setUninstalling(true);
@@ -121,6 +140,9 @@ const UpdateSection = () => {
 
   const upToDate = checkResult && checkResult.behind === 0;
   const hasPending = checkResult && checkResult.behind > 0;
+  const requiredMissing = missingChecks(readiness, true);
+  const optionalMissing = missingChecks(readiness, false);
+  const readyForUpdates = readiness && requiredMissing.length === 0;
 
   return (
     <div className={`space-y-6 ${soraFontBase}`}>
@@ -141,7 +163,7 @@ const UpdateSection = () => {
         )}
 
         {localInfo ? (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Version</p>
               <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">v{localInfo.version}</p>
@@ -159,11 +181,61 @@ const UpdateSection = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 animate-pulse" />
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <HardDrive size={18} className="text-gray-500 dark:text-gray-400" />
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
+            System Readiness
+          </h3>
+        </div>
+
+        {readinessError && (
+          <div className="p-3 mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-300">
+            {readinessError}
+          </div>
+        )}
+
+        {readiness ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Core Tools</p>
+              <p className={`text-sm font-medium ${readyForUpdates ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {readyForUpdates ? 'Ready' : `${requiredMissing.length} missing`}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Optional Runtimes</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {optionalMissing.length === 0 ? 'Ready' : `${optionalMissing.length} optional missing`}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Platform</p>
+              <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">
+                {readiness.platform}/{readiness.arch}
+              </p>
+            </div>
+          </div>
+        ) : !readinessError && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 animate-pulse" />
+            ))}
+          </div>
+        )}
+
+        {requiredMissing.length > 0 && (
+          <p className="mt-3 text-xs leading-5 text-red-600 dark:text-red-300 midnight:text-red-300">
+            Missing required tools: {requiredMissing.map(item => item.id).join(', ')}.
+          </p>
         )}
       </div>
 
@@ -363,6 +435,11 @@ const UpdateSection = () => {
               {localInfo?.installDir && (
                 <p className="text-xs font-mono text-red-700/70 dark:text-red-300/70 midnight:text-red-300/70 mt-2 truncate">
                   {localInfo.installDir}
+                </p>
+              )}
+              {localInfo?.canUninstall === false && (
+                <p className="text-xs text-red-700/80 dark:text-red-300/80 midnight:text-red-300/80 mt-2">
+                  This install does not include the local uninstall script. Use your package manager or remove the install directory manually.
                 </p>
               )}
             </div>

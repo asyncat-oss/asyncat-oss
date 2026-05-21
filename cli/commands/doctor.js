@@ -21,6 +21,16 @@ function checkCmd(cmd) {
   } catch { return false; }
 }
 
+function nodeVersionSupported(version) {
+  const [major = 0, minor = 0] = String(version || '')
+    .replace(/^v/, '')
+    .split('.')
+    .map(Number);
+  return (major === 20 && minor >= 19) ||
+    (major === 22 && minor >= 13) ||
+    major >= 24;
+}
+
 function portRunning(port) {
   if (process.platform === 'win32') {
     try {
@@ -67,9 +77,8 @@ export function run() {
   // 1. Node.js >= 20
   try {
     const nodeVer = execSync('node --version').toString().trim();
-    const major = parseInt(nodeVer.replace('v', '').split('.')[0], 10);
-    if (major >= 20) pass(`Node.js ${nodeVer} (>= 20 required)`);
-    else fail(`Node.js ${nodeVer} — version 20+ required`);
+    if (nodeVersionSupported(nodeVer)) pass(`Node.js ${nodeVer} (supported engine)`);
+    else fail(`Node.js ${nodeVer} — version 20.19+, 22.13+, or 24+ required`);
   } catch (_) { fail('Node.js not found'); }
 
   // 2. npm >= 8

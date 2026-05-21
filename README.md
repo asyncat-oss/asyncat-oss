@@ -35,11 +35,30 @@ The goal is not only "chat with files." The goal is an agent harness that can sa
 - Node.js `20.19+`, `22.13+`, `24+`, `25+`, or `26+`
 - npm
 - git
-- Optional: a local model runtime or an API key
+- Optional: Python `3.10+`, ffmpeg, archive tools, and C++ build tools for local audio/GPU runtimes
+- Optional: a local model runtime or a cloud provider API key
+
+### Install The App
+
+macOS / Linux:
+
+```bash
+curl -fsSL https://asyncat.com/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://asyncat.com/install.ps1 | iex
+```
+
+The installer clones Asyncat into your user profile, installs dependencies, builds the web app, and creates a local launcher for first run. Account, workspace, preferences, provider choice, and runtime readiness are finished in the Welcome flow and Settings.
 
 ### Install From Source
 
 ```bash
+git clone https://github.com/asyncat-oss/asyncat-oss.git
+cd asyncat-oss
 npm install
 ```
 

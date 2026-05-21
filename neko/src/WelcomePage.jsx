@@ -6,8 +6,10 @@ import {
   Loader2,
   Activity,
   Zap,
-  Database,
   ChevronRight,
+  AlertCircle,
+  GitBranch,
+  HardDrive,
   Sun,
   Moon,
   Monitor,
@@ -31,6 +33,17 @@ const fieldClassName = "w-full px-1 py-2 bg-transparent border-b border-gray-200
 const primaryButtonClassName = "flex-1 py-3 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:hover:bg-slate-200 text-white dark:text-gray-900 midnight:text-slate-950 rounded-full font-bold text-[13px] transition-all disabled:opacity-30 disabled:hover:bg-gray-900 dark:disabled:hover:bg-gray-100 midnight:disabled:hover:bg-slate-100 shadow-sm";
 const backButtonClassName = "text-[11px] font-bold text-gray-300 dark:text-gray-600 midnight:text-slate-600 hover:text-gray-900 dark:hover:text-gray-100 midnight:hover:text-slate-100 transition-colors uppercase tracking-widest";
 const labelClassName = "text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest ml-1";
+
+const setupFetchJson = async (url) => {
+  const response = await authService.authenticatedFetch(url);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || data.message || `Request failed: ${response.status}`);
+  return data;
+};
+
+const countMissing = (items = [], required) => (
+  items.filter(item => Boolean(item.required) === required && !item.ok).length
+);
 
 const ConnectionRow = ({ label, status, detail, icon: Icon }) => (
   <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 last:border-0">
@@ -114,23 +127,50 @@ const WelcomePage = ({ session, onTeamCreated }) => {
 
   const [config, setConfig] = useState({});
   const [configStatus, setConfigStatus] = useState('loading');
+  const [readiness, setReadiness] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [providerConfig, setProviderConfig] = useState(null);
+  const [setupError, setSetupError] = useState('');
 
   useEffect(() => {
-    const loadConfig = async () => {
+    let cancelled = false;
+    const loadSetupStatus = async () => {
+      setSetupError('');
       try {
-        const response = await authService.authenticatedFetch(`${API_URL}/api/config`);
-        if (response.ok) {
-          const data = await response.json();
-          setConfig(data.config || {});
-          setTimeout(() => setConfigStatus('online'), 600);
+        const [configResult, readinessResult, updateResult, providerResult] = await Promise.allSettled([
+          setupFetchJson(`${API_URL}/api/config`),
+          setupFetchJson(`${API_URL}/api/install/readiness`),
+          setupFetchJson(`${API_URL}/api/update/status`),
+          setupFetchJson(`${API_URL}/api/ai/providers/config`),
+        ]);
+
+        if (cancelled) return;
+
+        if (configResult.status === 'fulfilled') {
+          setConfig(configResult.value.config || {});
+          setTimeout(() => {
+            if (!cancelled) setConfigStatus('online');
+          }, 350);
         } else {
           setConfigStatus('error');
         }
-      } catch {
+
+        if (readinessResult.status === 'fulfilled') setReadiness(readinessResult.value);
+        if (updateResult.status === 'fulfilled') setUpdateInfo(updateResult.value);
+        if (providerResult.status === 'fulfilled') setProviderConfig(providerResult.value);
+
+        const failed = [readinessResult, updateResult].find(result => result.status === 'rejected');
+        if (failed) setSetupError(failed.reason?.message || 'Some setup checks could not be read.');
+      } catch (err) {
+        if (cancelled) return;
         setConfigStatus('error');
+        setSetupError(err.message || 'Could not load setup checks.');
       }
     };
-    loadConfig();
+    loadSetupStatus();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleNext = () => setStep(s => s + 1);
@@ -142,6 +182,19 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                          accountPassword.length >= 8;
   
   const isWorkspaceValid = workspaceName.trim().length >= 2;
+  const requiredMissing = readiness?.requiredMissing?.length ?? countMissing(readiness?.checks || [], true);
+  const optionalMissing = readiness?.optionalMissing?.length ?? countMissing(readiness?.checks || [], false);
+  const readinessLoaded = Boolean(readiness);
+  const runtimeStatus = readinessLoaded && requiredMissing === 0 ? 'online' : configStatus;
+  const providerReady = Boolean(providerConfig?.model || providerConfig?.base_url);
+  const updateDetail = updateInfo
+    ? `v${updateInfo.version || 'local'} · ${updateInfo.branch || 'source'} · ${updateInfo.currentHash || 'unknown'}`
+    : 'Reading local repository';
+  const runtimeDetail = readinessLoaded
+    ? requiredMissing === 0
+      ? `${optionalMissing} optional tool${optionalMissing === 1 ? '' : 's'} missing`
+      : `${requiredMissing} required tool${requiredMissing === 1 ? '' : 's'} missing`
+    : 'Checking Node, npm, git, and local runtimes';
 
   // Instant Theme Preview
   useEffect(() => {
@@ -420,8 +473,8 @@ const WelcomePage = ({ session, onTeamCreated }) => {
           {step === 4 && (
             <PageWrapper
               key="connect"
-              title="System Check"
-              subtitle="Confirming local service availability before launch."
+              title="Release Setup"
+              subtitle="Asyncat is local-first. These checks make sure this machine is ready."
             >
               <div className="space-y-4 text-left">
                 <div className="py-2">
@@ -432,21 +485,35 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                     icon={Zap}
                   />
                   <ConnectionRow
-                    label="Local Database"
+                    label="Install Source"
                     status={configStatus}
-                    detail="SQLite · encrypted at rest"
-                    icon={Database}
+                    detail={updateDetail}
+                    icon={GitBranch}
                   />
                   <ConnectionRow
-                    label="AI Engine"
-                    status={configStatus}
-                    detail="Local or cloud — configure on Models page"
+                    label="Machine Readiness"
+                    status={runtimeStatus}
+                    detail={runtimeDetail}
+                    icon={HardDrive}
+                  />
+                  <ConnectionRow
+                    label="AI Provider"
+                    status={providerReady ? 'online' : 'offline'}
+                    detail={providerReady ? `${providerConfig.provider_id || 'provider'} · ${providerConfig.model || 'configured'}` : 'Choose local or cloud on Models after setup'}
                     icon={Activity}
                   />
                 </div>
+                {setupError && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-200 dark:border-amber-900/60 midnight:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/20 midnight:bg-amber-950/20 px-3 py-2">
+                    <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                    <p className="text-[10px] leading-5 text-amber-700 dark:text-amber-300 midnight:text-amber-300">
+                      {setupError}
+                    </p>
+                  </div>
+                )}
                 {configStatus === 'online' && (
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 text-center pt-1">
-                    All systems ready. You can connect your AI provider after setup.
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 text-center pt-1 leading-5">
+                    Account and workspace finish here. Models, API keys, updates, and optional local engines stay in Settings.
                   </p>
                 )}
                 <div className="flex gap-4 pt-6">
@@ -484,7 +551,15 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest">AI Engine</span>
-                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Configure after setup</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${providerReady ? 'text-emerald-500' : 'text-blue-500'}`}>
+                      {providerReady ? 'Ready' : 'Models page next'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest">Install</span>
+                    <span className="text-[13px] font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                      {readinessLoaded && requiredMissing === 0 ? 'Ready' : 'Needs review'}
+                    </span>
                   </div>
                 </div>
 

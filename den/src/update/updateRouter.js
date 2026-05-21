@@ -3,6 +3,7 @@ import { execFileSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
+import os from 'os';
 import { auth } from '../users/middleware/auth.js';
 
 const router = express.Router();
@@ -10,7 +11,9 @@ router.use(auth);
 
 // den/src/update/updateRouter.js → root is 3 levels up
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const UNINSTALL_SCRIPT = join(ROOT, 'uninstall.sh');
+const IS_WIN = process.platform === 'win32';
+const UNINSTALL_SCRIPT = join(ROOT, IS_WIN ? 'uninstall.ps1' : 'uninstall.sh');
+const RELAUNCH_SCRIPT = join(ROOT, 'scripts', 'relaunch.js');
 
 function getLocalInfo() {
   const currentHash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim();
@@ -32,6 +35,7 @@ function getLocalInfo() {
     version: pkg.version,
     installDir: ROOT,
     canUninstall: existsSync(UNINSTALL_SCRIPT),
+    canRestart: existsSync(RELAUNCH_SCRIPT),
   };
 }
 
@@ -128,19 +132,39 @@ router.post('/apply', (req, res) => {
   })();
 });
 
-// POST /api/update/restart — graceful self-restart.
-// Touches den/.restart so nodemon (dev mode) detects a file change and restarts.
-// Also sends SIGTERM directly as a fallback for pm2/launchd/asyncat-CLI deployments.
-// The frontend polls /health to detect when the server is back up.
+// POST /api/update/restart — restart app services from a detached helper.
+// The helper survives this backend exiting, starts the backend again, ensures
+// the frontend is available, then the frontend health-poll reloads the page.
 const RESTART_SENTINEL = join(ROOT, 'den', '.restart');
 router.post('/restart', (req, res) => {
-  res.json({ success: true, message: 'Server is restarting...' });
-  setTimeout(() => {
-    // Touch the sentinel file so nodemon sees a watched-file change and restarts.
+  if (!existsSync(RELAUNCH_SCRIPT)) {
+    return res.status(500).json({ success: false, error: 'Restart helper is missing from this installation.' });
+  }
+
+  try {
     try { writeFileSync(RESTART_SENTINEL, Date.now().toString()); } catch { /* ignore */ }
-    // Send SIGTERM directly as well — handles pm2/launchd/CLI deployments that don't use nodemon.
-    process.kill(process.pid, 'SIGTERM');
-  }, 150);
+    const isDevRestart = process.env.npm_lifecycle_event === 'dev' || /nodemon/i.test(process.env.npm_lifecycle_script || '');
+    const child = spawn(process.execPath, [RELAUNCH_SCRIPT], {
+      cwd: ROOT,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      env: {
+        ...process.env,
+        ASYNCAT_RESTART_ROOT: ROOT,
+        ASYNCAT_INSTALL_DIR: process.env.ASYNCAT_INSTALL_DIR || ROOT,
+        ASYNCAT_OLD_BACKEND_PID: String(process.pid),
+        ASYNCAT_DEN_PORT: String(process.env.PORT || 8716),
+        ASYNCAT_NEKO_PORT: String(process.env.ASYNCAT_FRONTEND_PORT || 8717),
+        ASYNCAT_DEV_RESTART: isDevRestart ? '1' : '0',
+        ASYNCAT_REOPEN_APP: req.body?.reopen ? '1' : '0',
+      },
+    });
+    child.unref();
+    res.json({ success: true, message: 'Asyncat services are restarting...' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // POST /api/update/uninstall — schedule local uninstall after responding.
@@ -157,16 +181,24 @@ router.post('/uninstall', (req, res) => {
   }
 
   if (!existsSync(UNINSTALL_SCRIPT)) {
-    return res.status(404).json({ success: false, error: 'uninstall.sh not found in this installation.' });
+    return res.status(404).json({ success: false, error: `${IS_WIN ? 'uninstall.ps1' : 'uninstall.sh'} not found in this installation.` });
   }
 
-  const args = [UNINSTALL_SCRIPT, ...(purge ? ['--purge'] : [])];
+  const command = IS_WIN ? 'powershell.exe' : 'sh';
+  const args = IS_WIN
+    ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', UNINSTALL_SCRIPT, ...(purge ? ['-Purge'] : [])]
+    : [UNINSTALL_SCRIPT, ...(purge ? ['--purge'] : [])];
   try {
-    const child = spawn('sh', args, {
+    const child = spawn(command, args, {
       cwd: ROOT,
       detached: true,
       stdio: 'ignore',
-      env: { ...process.env, ASYNCAT_INSTALL_DIR: ROOT },
+      windowsHide: true,
+      env: {
+        ...process.env,
+        ASYNCAT_INSTALL_DIR: ROOT,
+        ASYNCAT_HOME: process.env.ASYNCAT_HOME || join(os.homedir(), IS_WIN ? 'AppData/Local/Asyncat' : '.asyncat'),
+      },
     });
     child.unref();
     res.json({

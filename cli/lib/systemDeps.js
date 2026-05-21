@@ -72,6 +72,14 @@ function versionAtLeast(actual, required) {
   return a.patch >= r.patch;
 }
 
+function nodeVersionSupported(version) {
+  const parsed = parseSemver(version);
+  if (!parsed) return false;
+  return (parsed.major === 20 && parsed.minor >= 19) ||
+    (parsed.major === 22 && parsed.minor >= 13) ||
+    parsed.major >= 24;
+}
+
 function versionFor(command, args = ['--version']) {
   const probe = run(command, args);
   if (!probe.ok) return null;
@@ -167,10 +175,10 @@ function nodeCheck() {
   return {
     id: 'node',
     found: Boolean(command),
-    ok: Boolean(command) && versionAtLeast(version, '20.0.0'),
+    ok: Boolean(command) && nodeVersionSupported(version),
     command,
     version,
-    minVersion: '20',
+    minVersion: '20.19 / 22.13 / 24',
     required: true,
     scope: 'core',
     reason: 'Runs the Asyncat backend, frontend tooling, and CLI.',

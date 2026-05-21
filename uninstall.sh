@@ -16,10 +16,24 @@ echo ""
 
 BIN_DIR="$HOME/.local/bin"
 INSTALL_DIR="${ASYNCAT_INSTALL_DIR:-$HOME/.asyncat}"
+ASYNCAT_HOME_DIR="${ASYNCAT_HOME:-$HOME/.asyncat}"
+LEGACY_MACHINE_TOKEN="$HOME/.asyncat_machine_token"
 PURGE=0
 if [ "${1:-}" = "--purge" ] || [ "${1:-}" = "--all" ]; then
   PURGE=1
 fi
+
+remove_path_entry() {
+  rc="$1"
+  [ -f "$rc" ] || return 0
+  tmp="${rc}.asyncat-clean"
+  awk -v bin="$BIN_DIR" '
+    $0 == "fish_add_path " bin { next }
+    $0 == "export PATH=\"$HOME/.local/bin:$PATH\"" { next }
+    $0 == "export PATH=\"" bin ":$PATH\"" { next }
+    { print }
+  ' "$rc" > "$tmp" && mv "$tmp" "$rc"
+}
 
 # ── Stop services ──────────────────────────────────────────────────────────
 info "Stopping services..."
@@ -27,7 +41,7 @@ info "Stopping services..."
 UNAME_S="$(uname -s 2>/dev/null || echo unknown)"
 
 if command -v lsof >/dev/null 2>&1; then
-  for port in 8716 8717 8765 8766; do
+  for port in 8716 8717 8765 8766 8767 8768; do
     pids="$(lsof -ti :"$port" 2>/dev/null || true)"
     if [ -n "$pids" ]; then
       echo "$pids" | xargs kill 2>/dev/null || true
@@ -104,8 +118,27 @@ if command -v npm >/dev/null 2>&1; then
   npm uninstall -g @asyncat/asyncat >/dev/null 2>&1 || true
 fi
 
+# ── Remove PATH entries added by the installer ─────────────────────────────
+remove_path_entry "$HOME/.zshrc"
+remove_path_entry "$HOME/.bashrc"
+remove_path_entry "$HOME/.bash_profile"
+remove_path_entry "$HOME/.profile"
+remove_path_entry "$HOME/.config/fish/config.fish"
+
 # ── Optional full data cleanup ─────────────────────────────────────────────
 if [ "$PURGE" = "1" ]; then
+  if [ -f "$LEGACY_MACHINE_TOKEN" ]; then
+    rm -f "$LEGACY_MACHINE_TOKEN"
+    ok "Removed legacy machine token"
+  fi
+  if [ -d "$HOME/.cache/asyncat" ]; then
+    rm -rf "$HOME/.cache/asyncat"
+    ok "Removed cache directory"
+  fi
+  if [ "$ASYNCAT_HOME_DIR" != "$INSTALL_DIR" ] && [ -d "$ASYNCAT_HOME_DIR" ]; then
+    rm -rf "$ASYNCAT_HOME_DIR"
+    ok "Removed data/runtime directory: $ASYNCAT_HOME_DIR"
+  fi
   if [ -d "$INSTALL_DIR" ]; then
     rm -rf "$INSTALL_DIR"
     ok "Removed installation/data directory: $INSTALL_DIR"

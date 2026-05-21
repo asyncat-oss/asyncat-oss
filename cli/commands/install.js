@@ -40,6 +40,16 @@ function checkCmd(cmd) {
 	}
 }
 
+function nodeVersionSupported(version) {
+	const [major = 0, minor = 0] = String(version || '')
+		.replace(/^v/, '')
+		.split('.')
+		.map(Number);
+	return (major === 20 && minor >= 19) ||
+		(major === 22 && minor >= 13) ||
+		major >= 24;
+}
+
 function importantMissingChecks(report) {
 	const important = new Set([
 		"node",
@@ -507,10 +517,9 @@ export async function run(args = []) {
 		return;
 	}
 	const nodeVer = execSync("node --version").toString().trim();
-	const nodeMajor = parseInt(nodeVer.replace("v", "").split(".")[0], 10);
-	if (nodeMajor < 20) {
+	if (!nodeVersionSupported(nodeVer)) {
 		err(
-			`Node.js ${nodeVer} found — version 20+ required. Install from https://nodejs.org`,
+			`Node.js ${nodeVer} found — version 20.19+, 22.13+, or 24+ required. Install from https://nodejs.org`,
 		);
 		return;
 	}
