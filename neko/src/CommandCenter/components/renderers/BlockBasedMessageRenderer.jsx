@@ -1429,7 +1429,7 @@ const createId = () => `block-${Date.now()}-${Math.random().toString(36).substr(
 
 // Enhanced AI response parser
 // eslint-disable-next-line react-refresh/only-export-components
-export const parseAIResponseToBlocks = (content) => {
+export const parseAIResponseToBlocks = (content, options = {}) => {
   if (!content || !content.trim()) {
     return [{ id: createId(), type: BlockType.TEXT, content: '', properties: {} }];
   }
@@ -1787,6 +1787,28 @@ export const parseAIResponseToBlocks = (content) => {
       type: BlockType.MATH,
       content: mathContent.join('\n'),
       properties: {}
+    });
+  }
+
+  if (inCodeBlock) {
+    blocks.push({
+      id: createId(),
+      type: BlockType.CODE,
+      content: codeContent.join('\n'),
+      properties: {
+        language: codeLanguage || 'text',
+        showLineNumbers: codeContent.length > 10,
+        streaming: Boolean(options.streaming)
+      }
+    });
+  }
+
+  if (inDetailsBlock) {
+    blocks.push({
+      id: createId(),
+      type: options.streaming ? BlockType.DETAILS : BlockType.TEXT,
+      content: detailsContent.join('\n').trim(),
+      properties: { summary: detailsSummary || 'Details', streaming: Boolean(options.streaming) }
     });
   }
 

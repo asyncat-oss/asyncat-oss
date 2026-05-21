@@ -1850,10 +1850,18 @@ function SkillSuggestedEvent({ data }) {
 
 // Live streaming preview — shown while LLM is generating
 function StreamingPreview({ text }) {
-  if (!text?.trim()) return null;
-
   const { thinking, answer } = extractReasoningFromText(text);
   const clean = answer.trim();
+  const blocks = useMemo(() => {
+    if (!clean) return [];
+    try {
+      return parseAIResponseToBlocks(clean, { streaming: true });
+    } catch {
+      return [{ type: 'text', content: clean, properties: {} }];
+    }
+  }, [clean]);
+
+  if (!text?.trim()) return null;
 
   if (!clean) {
     return (
@@ -1877,10 +1885,19 @@ function StreamingPreview({ text }) {
 
   return (
     <FeedFrame className="mb-3">
-    <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-      {clean}
-      <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-text-bottom" />
-    </div>
+      <div className="text-sm text-gray-800 dark:text-gray-200 midnight:text-slate-200 leading-relaxed [&_.mb-3]:mb-2.5 [&_.mb-5]:mb-3 [&_.mb-6]:mb-3.5 [&_h1]:text-2xl [&_h1]:mb-3 [&_h1]:mt-5 [&_h2]:text-xl [&_h2]:mb-2.5 [&_h2]:mt-4 [&_h3]:text-lg [&_h3]:mb-2 [&_h3]:mt-3 [&_p]:mb-3 [&_ul]:mb-3 [&_ol]:mb-3">
+        {blocks.length > 0
+          ? blocks.map((block, i) => (
+            <div
+              key={`${block.type}-${i}`}
+              className={i === blocks.length - 1 ? 'animate-in fade-in duration-150' : ''}
+            >
+              <BlockRenderer block={block} />
+            </div>
+          ))
+          : <p className="whitespace-pre-wrap">{clean}</p>}
+        <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-text-bottom" />
+      </div>
     </FeedFrame>
   );
 }
