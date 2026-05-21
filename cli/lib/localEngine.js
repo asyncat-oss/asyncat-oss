@@ -21,12 +21,21 @@ export function asyncatHome() {
   return path.join(os.homedir(), '.asyncat');
 }
 
-export function managedEngineDir() {
-  return path.join(asyncatHome(), 'llama.cpp', 'current');
+export function managedEngineRootDir() {
+  return path.join(asyncatHome(), 'llama.cpp');
 }
 
-export function managedLlamaBinaryPath() {
-  return path.join(managedEngineDir(), isWin ? 'llama-server.exe' : 'llama-server');
+export function managedEngineProfileSlug(profile = 'cpu_safe') {
+  return String(profile || 'cpu_safe').replace(/_/g, '-');
+}
+
+export function managedEngineDir(profile = 'current') {
+  if (!profile || profile === 'current') return path.join(managedEngineRootDir(), 'current');
+  return path.join(managedEngineRootDir(), 'profiles', managedEngineProfileSlug(profile));
+}
+
+export function managedLlamaBinaryPath(profile = 'current') {
+  return path.join(managedEngineDir(profile), isWin ? 'llama-server.exe' : 'llama-server');
 }
 
 export function managedEngineMetadataPath(root = managedEngineDir()) {
@@ -61,6 +70,59 @@ export function readManagedEngineMetadata(root = managedEngineDir()) {
 
 function writeManagedEngineMetadata(metadata, root = managedEngineDir()) {
   fs.writeFileSync(managedEngineMetadataPath(root), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+}
+
+export function listManagedEngineInstalls() {
+  const roots = new Set();
+  const profilesDir = path.join(managedEngineRootDir(), 'profiles');
+  try {
+    for (const entry of fs.readdirSync(profilesDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) roots.add(path.join(profilesDir, entry.name));
+    }
+  } catch {}
+
+  const currentDir = managedEngineDir();
+  try {
+    if (fs.existsSync(currentDir)) roots.add(fs.realpathSync(currentDir));
+  } catch {
+    if (fs.existsSync(currentDir)) roots.add(currentDir);
+  }
+
+  return [...roots].map(root => {
+    const binary = path.join(root, isWin ? 'llama-server.exe' : 'llama-server');
+    const metadata = readManagedEngineMetadata(root);
+    return {
+      root,
+      binary,
+      metadata,
+      profile: metadata?.profile || null,
+      exists: fs.existsSync(binary),
+    };
+  }).filter(item => item.exists);
+}
+
+function pointCurrentManagedEngine(targetDir) {
+  const currentDir = managedEngineDir();
+  if (path.resolve(currentDir) === path.resolve(targetDir)) return;
+  try {
+    const stat = fs.lstatSync(currentDir);
+    if (stat.isDirectory() && !stat.isSymbolicLink()) {
+      const metadata = readManagedEngineMetadata(currentDir);
+      const legacyProfile = metadata?.profile;
+      const legacyDir = legacyProfile ? managedEngineDir(legacyProfile) : null;
+      if (legacyDir && path.resolve(legacyDir) !== path.resolve(targetDir) && !fs.existsSync(legacyDir)) {
+        fs.mkdirSync(path.dirname(legacyDir), { recursive: true });
+        fs.cpSync(currentDir, legacyDir, { recursive: true });
+      }
+    }
+  } catch {}
+  fs.rmSync(currentDir, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(currentDir), { recursive: true });
+  try {
+    fs.symlinkSync(targetDir, currentDir, isWin ? 'junction' : 'dir');
+  } catch {
+    fs.cpSync(targetDir, currentDir, { recursive: true });
+  }
 }
 
 export function commandExists(cmd) {
@@ -107,6 +169,10 @@ export function knownLlamaPaths() {
   const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
   return [
     managedLlamaBinaryPath(),
+    managedLlamaBinaryPath('cpu_safe'),
+    managedLlamaBinaryPath('apple_metal'),
+    managedLlamaBinaryPath('nvidia_gpu'),
+    managedLlamaBinaryPath('amd_rocm'),
     path.join(home, 'AppData', 'Local', 'Microsoft', 'WindowsApps', 'llama-server.exe'),
     path.join(localAppData, 'Microsoft', 'WindowsApps', 'llama-server.exe'),
     path.join(localAppData, 'Microsoft', 'WinGet', 'Packages', '*', 'llama-server.exe'),
@@ -482,6 +548,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-llama-'));
   const archivePath = path.join(tmpRoot, asset.name);
   const extractDir = path.join(tmpRoot, 'extract');
+  const targetDir = managedEngineDir(profile);
   try {
     onProgress?.({
       phase: 'downloading',
@@ -519,29 +586,29 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    fs.rmSync(managedEngineDir(), { recursive: true, force: true });
-    fs.mkdirSync(managedEngineDir(), { recursive: true });
-    fs.cpSync(extractDir, managedEngineDir(), { recursive: true });
-    ensureLinuxSonameLinks(managedEngineDir());
-    ensureDarwinDylibLinks(managedEngineDir());
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.cpSync(extractDir, targetDir, { recursive: true });
+    ensureLinuxSonameLinks(targetDir);
+    ensureDarwinDylibLinks(targetDir);
 
-    const installed = managedLlamaBinaryPath();
-    const copiedServer = findLlamaServerBinary(managedEngineDir());
+    const installed = managedLlamaBinaryPath(profile);
+    const copiedServer = findLlamaServerBinary(targetDir);
     if (!copiedServer) {
-      throw new Error(`Archive did not install ${isWin ? 'llama-server.exe' : 'llama-server'} into ${managedEngineDir()}.`);
+      throw new Error(`Archive did not install ${isWin ? 'llama-server.exe' : 'llama-server'} into ${targetDir}.`);
     }
 
     if (!isWin) {
       let realServer = copiedServer;
       if (path.resolve(copiedServer) === path.resolve(installed)) {
-        realServer = path.join(managedEngineDir(), 'llama-server.real');
+        realServer = path.join(targetDir, 'llama-server.real');
         fs.renameSync(copiedServer, realServer);
       }
-      installUnixLauncher(installed, realServer, managedEngineDir());
+      installUnixLauncher(installed, realServer, targetDir);
     }
 
     if (!fs.existsSync(installed)) {
-      throw new Error(`Archive did not install ${isWin ? 'llama-server.exe' : 'llama-server'} into ${managedEngineDir()}.`);
+      throw new Error(`Archive did not install ${isWin ? 'llama-server.exe' : 'llama-server'} into ${targetDir}.`);
     }
     if (!isWin) fs.chmodSync(installed, 0o755);
     onProgress?.({
@@ -554,7 +621,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     const verification = verifyBinaryDetailed(installed);
     if (!verification.ok) {
       const detail = verification.detail || verifyBinaryError(installed);
-      fs.rmSync(managedEngineDir(), { recursive: true, force: true });
+      fs.rmSync(targetDir, { recursive: true, force: true });
       const err = new Error(`Installed ${installed}, but llama-server verification failed:\n${detail}`);
       err.diagnostics = {
         type: 'llama-server-verification',
@@ -572,7 +639,8 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       asset: asset.name,
       version: release.tag_name || release.name || 'latest',
       installedAt: new Date().toISOString(),
-    });
+    }, targetDir);
+    pointCurrentManagedEngine(targetDir);
     setKey('den/.env', 'LLAMA_BINARY_PATH', installed);
     onProgress?.({
       phase: 'complete',
@@ -854,8 +922,8 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
   const failures = [];
   const diagnostics = [];
   for (const asset of candidates) {
+    const assetProfile = inferProfileFromAssetName(asset.name, effectiveProfile);
     try {
-      const assetProfile = inferProfileFromAssetName(asset.name, effectiveProfile);
       return await installManagedAsset(asset, release, assetProfile, options.onProgress);
     } catch (e) {
       failures.push(`${asset.name}: ${e.message}`);
@@ -864,7 +932,7 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
         message: e.message,
         diagnostics: e.diagnostics || null,
       });
-      fs.rmSync(managedEngineDir(), { recursive: true, force: true });
+      fs.rmSync(managedEngineDir(assetProfile), { recursive: true, force: true });
     }
   }
 

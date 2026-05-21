@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { SlidersHorizontal, Lock, Moon, Star, Sun, Server, LogOut, ArrowUpCircle, HardDrive, Plug } from 'lucide-react';
+import { SlidersHorizontal, Lock, Moon, Star, Sun, Server, LogOut, ArrowUpCircle, HardDrive, Plug, Cpu } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 
 // Import our components
@@ -11,6 +11,7 @@ import ServerSection from './ServerSection';
 import UpdateSection from './UpdateSection';
 import StorageSection from './StorageSection';
 import IntegrationsSection from './IntegrationsSection';
+import RuntimeSection from './RuntimeSection';
 
 const SettingsPage = () => {
   const { tab } = useParams();
@@ -106,6 +107,11 @@ const SettingsPage = () => {
       icon: <Server className="w-4 h-4" />,
     },
     {
+      id: 'runtime',
+      label: 'Runtime',
+      icon: <Cpu className="w-4 h-4" />,
+    },
+    {
       id: 'storage',
       label: 'Storage',
       icon: <HardDrive className="w-4 h-4" />,
@@ -140,6 +146,7 @@ const SettingsPage = () => {
       case 'security':    return <SecuritySection session={session} />;
       case 'appearance':  return <AppearanceSection theme={theme} setThemeMode={setThemeMode} />;
       case 'server':      return <ServerSection session={session} />;
+      case 'runtime':     return <RuntimeSection />;
       case 'storage':      return <StorageSection />;
       case 'integrations': return <IntegrationsSection />;
       case 'updates':      return <UpdateSection />;

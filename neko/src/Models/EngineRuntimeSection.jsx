@@ -13,6 +13,8 @@ const INSTALL_PROFILE_LABELS = {
   amd_rocm: 'AMD ROCm build',
 };
 
+const INSTALL_PROFILE_ORDER = ['cpu_safe', 'apple_metal', 'nvidia_gpu', 'amd_rocm'];
+
 const capabilityBadgeColor = (hint) => {
   if (hint === 'nvidia') return 'green';
   if (hint === 'apple') return 'blue';
@@ -139,7 +141,7 @@ const EngineRuntimeSection = ({
 
   const recommendation = engineData?.recommendation || null;
   const current = engineData?.current || null;
-  const candidates = engineData?.candidates || [];
+  const candidates = useMemo(() => engineData?.candidates || [], [engineData?.candidates]);
   const releases = useMemo(() => engineCatalog?.releases || [], [engineCatalog]);
   const canRetry = Boolean(retryModel);
   const actionError = switchError || installError || pythonBuildError;
@@ -152,14 +154,48 @@ const EngineRuntimeSection = ({
     ? recommendation.recommendedInstallProfile
     : null;
 
-  const bestManagedAsset = useMemo(() => {
-    if (!installProfile) return null;
-    for (const release of releases) {
-      const asset = release.assets?.find(item => item.compatible && item.supportedProfiles?.includes(installProfile));
-      if (asset) return { release, asset };
+  const managedAssetsByProfile = useMemo(() => {
+    const map = new Map();
+    for (const profile of INSTALL_PROFILE_ORDER) {
+      for (const release of releases) {
+        const asset = release.assets?.find(item => item.compatible && item.supportedProfiles?.includes(profile));
+        if (asset) {
+          map.set(profile, { profile, release, asset });
+          break;
+        }
+      }
     }
-    return null;
-  }, [installProfile, releases]);
+    return map;
+  }, [releases]);
+  const bestManagedAsset = installProfile ? managedAssetsByProfile.get(installProfile) || null : null;
+  const installedManagedProfiles = useMemo(() => {
+    const map = new Map();
+    for (const candidate of [current, ...candidates].filter(Boolean)) {
+      const profile = candidate.managedProfile || candidate.managedMetadata?.profile;
+      if (candidate.managed && profile && !map.has(profile)) map.set(profile, candidate);
+    }
+    if (current?.managed && current.capabilityHint && ![...map.values()].some(candidate => candidate.id === current.id)) {
+      const fallbackProfile = {
+        cpu_safe: 'cpu_safe',
+        apple: 'apple_metal',
+        nvidia: 'nvidia_gpu',
+        amd: 'amd_rocm',
+      }[current.capabilityHint];
+      if (fallbackProfile && !map.has(fallbackProfile)) map.set(fallbackProfile, current);
+    }
+    return map;
+  }, [candidates, current]);
+  const managedBuildRows = useMemo(() => {
+    const profiles = new Set([
+      ...INSTALL_PROFILE_ORDER.filter(profile => managedAssetsByProfile.has(profile)),
+      ...installedManagedProfiles.keys(),
+    ]);
+    return [...profiles].map(profile => ({
+      profile,
+      assetInfo: managedAssetsByProfile.get(profile) || null,
+      installed: installedManagedProfiles.get(profile) || null,
+    }));
+  }, [installedManagedProfiles, managedAssetsByProfile]);
 
   const primaryAction = useMemo(() => {
     if (recommendationCandidate && !recommendationCandidate.isCurrent) {
@@ -173,7 +209,7 @@ const EngineRuntimeSection = ({
         }, false),
       };
     }
-    if (bestManagedAsset) {
+    if (bestManagedAsset && recommendation?.state !== 'current_ok') {
       return {
         key: `install:${installProfile}`,
         label: 'Install',
@@ -186,7 +222,7 @@ const EngineRuntimeSection = ({
       };
     }
     return null;
-  }, [bestManagedAsset, installProfile, onInstall, onSwitch, recommendationCandidate]);
+  }, [bestManagedAsset, installProfile, onInstall, onSwitch, recommendation?.state, recommendationCandidate]);
 
   const selectableCandidates = candidates.length > 0 ? candidates : (current ? [current] : []);
   const currentKey = engineKey(current);
@@ -336,8 +372,8 @@ const EngineRuntimeSection = ({
 
       <SettingGroup>
         <SettingRow
-          label="Runtime updates"
-          detail={bestManagedAsset ? `${bestManagedAsset.release.tagName} / ${formatBytes(bestManagedAsset.asset.size)}` : 'Stable channel for managed runtime packages.'}
+          label="Managed builds"
+          detail="Install CPU-safe and hardware builds side by side, then switch between them below."
         >
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
@@ -355,42 +391,81 @@ const EngineRuntimeSection = ({
           </div>
         </SettingRow>
 
-        {bestManagedAsset && (
+        {managedBuildRows.length === 0 && (
           <SettingRow
-            label={INSTALL_PROFILE_LABELS[installProfile]}
-            detail={bestManagedAsset.asset.name}
+            label="No managed downloads"
+            detail="No compatible release asset was found for this machine."
             divider={false}
           >
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => onInstall?.({
-                  profile: installProfile,
-                  releaseTag: bestManagedAsset.release.tagName,
-                  assetName: bestManagedAsset.asset.name,
-                }, false)}
-                disabled={Boolean(installingKey)}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Install
-              </button>
-              <button
-                type="button"
-                onClick={() => onInstall?.({
-                  profile: installProfile,
-                  releaseTag: bestManagedAsset.release.tagName,
-                  assetName: bestManagedAsset.asset.name,
-                }, true)}
-                disabled={!canRetry || Boolean(installingKey)}
-                className="inline-flex items-center gap-2 rounded-lg bg-gray-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-950"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Install and retry
-              </button>
-            </div>
+            <Badge color="gray">Check updates</Badge>
           </SettingRow>
         )}
+
+        {managedBuildRows.map((row, index) => {
+          const installed = Boolean(row.installed);
+          const isCurrent = Boolean(row.installed?.isCurrent);
+          const assetInfo = row.assetInfo;
+          const installedVersion = row.installed?.managedMetadata?.version;
+          const installedAsset = row.installed?.managedMetadata?.asset;
+          const detail = installed
+            ? [installedVersion, installedAsset].filter(Boolean).join(' / ') || row.installed.path
+            : assetInfo
+              ? `${assetInfo.release.tagName} / ${formatBytes(assetInfo.asset.size)} / ${assetInfo.asset.name}`
+              : 'Installed manually or from an older Asyncat layout.';
+          return (
+            <SettingRow
+              key={row.profile}
+              label={INSTALL_PROFILE_LABELS[row.profile] || row.profile}
+              detail={detail}
+              divider={index < managedBuildRows.length - 1}
+            >
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {isCurrent && <Badge color="green">Selected</Badge>}
+                {installed && !isCurrent && <Badge color="blue">Installed</Badge>}
+                {installed && !isCurrent && (
+                  <button
+                    type="button"
+                    onClick={() => onSwitch?.({ runtime: row.installed.runtime, path: row.installed.path }, false)}
+                    disabled={Boolean(switchingKey) || Boolean(installingKey)}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Switch
+                  </button>
+                )}
+                {assetInfo && !installed && (
+                  <button
+                    type="button"
+                    onClick={() => onInstall?.({
+                      profile: row.profile,
+                      releaseTag: assetInfo.release.tagName,
+                      assetName: assetInfo.asset.name,
+                    }, false)}
+                    disabled={Boolean(installingKey)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Install
+                  </button>
+                )}
+                {assetInfo && installed && !isCurrent && (
+                  <button
+                    type="button"
+                    onClick={() => onInstall?.({
+                      profile: row.profile,
+                      releaseTag: assetInfo.release.tagName,
+                      assetName: assetInfo.asset.name,
+                    }, false)}
+                    disabled={Boolean(installingKey)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Reinstall
+                  </button>
+                )}
+              </div>
+            </SettingRow>
+          );
+        })}
 
         {installProfile && !bestManagedAsset && (
           <SettingRow

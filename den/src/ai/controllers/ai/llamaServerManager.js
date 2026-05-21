@@ -20,6 +20,7 @@ import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import {
   installManagedLlamaServer,
+  listManagedEngineInstalls,
   readManagedEngineMetadata,
   profileCapabilityHint,
   LLAMA_ENGINE_PROFILES,
@@ -56,6 +57,14 @@ function asyncatHome() {
 
 function managedLlamaBinaryPath() {
   return path.join(asyncatHome(), 'llama.cpp', 'current', IS_WIN ? 'llama-server.exe' : 'llama-server');
+}
+
+function managedEngineProfileDir(profile = 'cpu_safe') {
+  return path.join(asyncatHome(), 'llama.cpp', 'profiles', String(profile || 'cpu_safe').replace(/_/g, '-'));
+}
+
+function managedLlamaBinaryProfilePath(profile = 'cpu_safe') {
+  return path.join(managedEngineProfileDir(profile), IS_WIN ? 'llama-server.exe' : 'llama-server');
 }
 
 function managedPythonBinaryPath() {
@@ -165,8 +174,11 @@ function normalizeCandidatePath(candidatePath) {
 
 function managedCapabilityHintFor(runtime, candidatePath) {
   if (runtime !== 'binary') return null;
-  if (normalizeCandidatePath(candidatePath) !== normalizeCandidatePath(managedLlamaBinaryPath())) return null;
-  const metadata = readManagedEngineMetadata();
+  const normalized = normalizeCandidatePath(candidatePath);
+  const install = listManagedEngineInstalls()
+    .find(item => normalizeCandidatePath(item.binary) === normalized);
+  if (!install && normalized !== normalizeCandidatePath(managedLlamaBinaryPath())) return null;
+  const metadata = install?.metadata || readManagedEngineMetadata(install?.root);
   const hint = metadata?.capabilityHint || profileCapabilityHint(metadata?.profile || 'cpu_safe');
   if (!hint) return null;
   return {
@@ -193,6 +205,27 @@ function capabilityLabelFor(hint) {
   return 'CPU-safe';
 }
 
+function managedInstallForPath(candidatePath) {
+  const normalized = normalizeCandidatePath(candidatePath);
+  return listManagedEngineInstalls()
+    .find(item => normalizeCandidatePath(item.binary) === normalized) || null;
+}
+
+function isManagedBinaryPath(candidatePath) {
+  return Boolean(managedInstallForPath(candidatePath)) ||
+    normalizeCandidatePath(candidatePath) === normalizeCandidatePath(managedLlamaBinaryPath());
+}
+
+function binarySourceLabel(candidatePath, fallback = 'auto-detected') {
+  const install = managedInstallForPath(candidatePath);
+  if (install?.metadata?.profile) {
+    return `Asyncat managed llama.cpp (${capabilityLabelFor(profileCapabilityHint(install.metadata.profile))})`;
+  }
+  return normalizeCandidatePath(candidatePath) === normalizeCandidatePath(managedLlamaBinaryPath())
+    ? 'Asyncat managed llama.cpp'
+    : fallback;
+}
+
 function addEngineCandidate(map, candidate) {
   const normalizedPath = normalizeCandidatePath(candidate.path);
   const key = `${candidate.runtime}:${normalizedPath}`;
@@ -214,6 +247,8 @@ function addEngineCandidate(map, candidate) {
   existing.configured = existing.configured || next.configured;
   existing.managed = existing.managed || next.managed;
   existing.isCurrent = existing.isCurrent || next.isCurrent;
+  existing.managedProfile = existing.managedProfile || next.managedProfile;
+  existing.managedMetadata = existing.managedMetadata || next.managedMetadata;
   if (!existing.path && next.path) existing.path = next.path;
   if (existing.capabilityHint === 'cpu_safe' && next.capabilityHint !== 'cpu_safe') {
     existing.capabilityHint = next.capabilityHint;
@@ -232,6 +267,10 @@ function absoluteBinaryCandidatePaths() {
     path.join(home, 'AppData', 'Local', 'Programs', 'llama.cpp', 'llama-server.exe'),
     path.join(home, '.local', 'bin', 'llama-server.exe'),
     path.join(process.env.LOCALAPPDATA || '', 'Programs', 'llama.cpp', 'llama-server.exe'),
+    managedLlamaBinaryProfilePath('cpu_safe'),
+    managedLlamaBinaryProfilePath('apple_metal'),
+    managedLlamaBinaryProfilePath('nvidia_gpu'),
+    managedLlamaBinaryProfilePath('amd_rocm'),
     path.join(home, '.unsloth', 'llama.cpp', 'build', 'bin', 'llama-server'),
     path.join(home, '.unsloth', 'llama.cpp', 'llama-server'),
     path.join(home, '.local', 'bin', 'llama-server'),
@@ -348,7 +387,9 @@ function buildCurrentEngine(currentInfo, currentEnv) {
     configured: runtime === 'binary'
       ? normalizeCandidatePath(currentEnv.LLAMA_BINARY_PATH) === normalizeCandidatePath(currentInfo.path || currentInfo.binary)
       : normalizeCandidatePath(currentEnv.LLAMA_PYTHON_PATH) === normalizeCandidatePath(currentInfo.path || currentInfo.binary),
-    managed: normalizeCandidatePath(currentInfo.path || currentInfo.binary) === normalizeCandidatePath(runtime === 'binary' ? managedLlamaBinaryPath() : managedPythonBinaryPath()),
+    managed: runtime === 'binary'
+      ? isManagedBinaryPath(currentInfo.path || currentInfo.binary)
+      : normalizeCandidatePath(currentInfo.path || currentInfo.binary) === normalizeCandidatePath(managedPythonBinaryPath()),
     capabilityHint,
     capabilityLabel: capabilityLabelFor(capabilityHint),
     isCurrent: true,
@@ -368,7 +409,17 @@ async function listEngineCandidates(currentEngine = null) {
       path: configuredBinary,
       source: 'LLAMA_BINARY_PATH env var',
       configured: true,
-      managed: normalizeCandidatePath(configuredBinary) === normalizeCandidatePath(managedLlamaBinaryPath()),
+      managed: isManagedBinaryPath(configuredBinary),
+    });
+  }
+
+  for (const install of listManagedEngineInstalls()) {
+    addEngineCandidate(map, {
+      runtime: 'binary',
+      path: install.binary,
+      source: binarySourceLabel(install.binary),
+      configured: normalizeCandidatePath(install.binary) === normalizeCandidatePath(configuredBinary),
+      managed: true,
     });
   }
 
@@ -378,9 +429,9 @@ async function listEngineCandidates(currentEngine = null) {
       addEngineCandidate(map, {
         runtime: 'binary',
         path: candidate,
-        source: normalizeCandidatePath(candidate) === normalizeCandidatePath(managedLlamaBinaryPath()) ? 'Asyncat managed llama.cpp' : 'auto-detected',
+        source: binarySourceLabel(candidate),
         configured: normalizeCandidatePath(candidate) === normalizeCandidatePath(configuredBinary),
-        managed: normalizeCandidatePath(candidate) === normalizeCandidatePath(managedLlamaBinaryPath()),
+        managed: isManagedBinaryPath(candidate),
       });
     }
   }
@@ -395,7 +446,7 @@ async function listEngineCandidates(currentEngine = null) {
         path: candidate,
         source: 'PATH',
         configured: normalizeCandidatePath(candidate) === normalizeCandidatePath(configuredBinary),
-        managed: normalizeCandidatePath(candidate) === normalizeCandidatePath(managedLlamaBinaryPath()),
+        managed: isManagedBinaryPath(candidate),
       });
     }
   }
