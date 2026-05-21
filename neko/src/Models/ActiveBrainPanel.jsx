@@ -1,4 +1,4 @@
-import { Square, Cpu, Gauge, MessageSquare, Mic, Volume2, Eye, Image } from 'lucide-react';
+import { Square, Cpu, Gauge, MessageSquare, Mic, Volume2, Eye, Image, BarChart3 } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
 
 const STATUS_DOT = {
@@ -37,6 +37,8 @@ const ActiveBrainPanel = ({
   installingEngine,
   voiceState,
   visualModels,
+  usageRequestCount = 0,
+  usageTokensK = 0,
   onStop,
   onDeactivateProvider,
 }) => {
@@ -187,6 +189,18 @@ const ActiveBrainPanel = ({
             {serverStatus?.ctxSize && (
               <div className="flex items-center gap-2">
                 <span>{Number(serverStatus.ctxSize).toLocaleString()} ctx</span>
+              </div>
+            )}
+            {usageRequestCount > 0 && (
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{usageRequestCount.toLocaleString()} request{usageRequestCount === 1 ? '' : 's'}</span>
+                {usageTokensK > 0 && (
+                  <>
+                    <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">·</span>
+                    <span>{usageTokensK}k tokens</span>
+                  </>
+                )}
               </div>
             )}
           </div>

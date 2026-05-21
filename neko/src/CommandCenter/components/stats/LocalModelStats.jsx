@@ -121,6 +121,17 @@ const LocalModelStats = ({ isStreaming }) => {
   const ram = hwStats?.hardware?.ram;
   const modelActive = llamaStatus.status === 'ready' || llamaStatus.status === 'loading';
 
+  const gpuPct = gpu?.utilizationPercent ?? 0;
+  const ramPct = ram?.usagePercent ?? 0;
+  const gpuTextColor = gpuPct > 85
+    ? 'text-red-500 dark:text-red-400'
+    : gpuPct > 60 ? 'text-amber-500 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400';
+  const gpuBarColor = gpuPct > 85 ? 'bg-red-500' : gpuPct > 60 ? 'bg-amber-500' : 'bg-green-500';
+  const ramTextColor = ramPct > 85
+    ? 'text-red-500 dark:text-red-400'
+    : ramPct > 60 ? 'text-amber-500 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400';
+  const ramBarColor = ramPct > 85 ? 'bg-red-500' : ramPct > 60 ? 'bg-amber-500' : 'bg-blue-400';
+
   // Built-in server loading state — show progress bar instead of stats
   if (llamaStatus.status === 'loading') {
     return (
@@ -150,35 +161,44 @@ const LocalModelStats = ({ isStreaming }) => {
       {/* ── Compact bar ── */}
       <div className="flex items-center gap-3 px-4 py-1.5 text-xs">
 
-        {/* GPU quick stat — always visible when available */}
-        {gpu && (
-          <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-            <Activity className="w-3 h-3 text-green-500" />
-            <span className="font-mono">GPU {gpu.utilizationPercent ?? '—'}%</span>
-            {gpu.vramTotalGb > 0 && (
-              <span className="font-mono text-gray-400 dark:text-gray-600">
-                · {gpu.vramUsedGb}/{gpu.vramTotalGb}G
-              </span>
+        {/* Hardware group: GPU + RAM with mini progress bars */}
+        {(gpu || ram) && (
+          <div className="flex items-center gap-2.5">
+            {gpu && (
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-3 h-3 text-green-500 flex-shrink-0" />
+                <span className={`font-mono ${gpuTextColor}`}>GPU {gpu.utilizationPercent ?? '—'}%</span>
+                <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
+                  <div className={`h-full rounded-full transition-all ${gpuBarColor}`} style={{ width: `${Math.min(100, gpuPct)}%` }} />
+                </div>
+                {gpu.vramTotalGb > 0 && (
+                  <span className="font-mono text-gray-400 dark:text-gray-600">
+                    {gpu.vramUsedGb}/{gpu.vramTotalGb}G
+                  </span>
+                )}
+              </div>
+            )}
+            {gpu && ram && <span className="text-gray-300 dark:text-gray-700">·</span>}
+            {ram && (
+              <div className="flex items-center gap-1.5">
+                <Cpu className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                <span className={`font-mono ${ramTextColor}`}>{ram.usedGb}/{ram.totalGb}G</span>
+                <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
+                  <div className={`h-full rounded-full transition-all ${ramBarColor}`} style={{ width: `${Math.min(100, ramPct)}%` }} />
+                </div>
+              </div>
             )}
           </div>
         )}
 
-        {/* RAM quick stat */}
-        {ram && (
-          <>
-            {gpu && <span className="text-gray-300 dark:text-gray-700">·</span>}
-            <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-              <Cpu className="w-3 h-3 text-blue-400" />
-              <span className="font-mono">{ram.usedGb}/{ram.totalGb}G RAM</span>
-            </div>
-          </>
+        {/* Group separator */}
+        {(gpu || ram) && modelActive && (
+          <span className="text-gray-200 dark:text-gray-700 select-none">|</span>
         )}
 
-        {/* Model-specific stats — only when a model is active */}
+        {/* Perf group: tok/s + first token — only when model is active */}
         {modelActive && (
-          <>
-            {(gpu || ram) && <span className="text-gray-300 dark:text-gray-700">·</span>}
-            {/* Tokens/sec */}
+          <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
               <Zap className="w-3 h-3 text-yellow-500" />
               {isStreaming && tokensPerSec !== null
@@ -186,26 +206,25 @@ const LocalModelStats = ({ isStreaming }) => {
                 : <span className="text-gray-400 dark:text-gray-600">— tok/s</span>
               }
             </div>
-
-            {/* TTFT */}
             {ttft !== null && (
               <>
                 <span className="text-gray-300 dark:text-gray-700">·</span>
                 <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
                   <Clock className="w-3 h-3" />
-                  <span className="font-mono">{ttft < 1000 ? `${ttft}ms` : `${(ttft / 1000).toFixed(1)}s`} TTFT</span>
+                  <span className="font-mono">{ttft < 1000 ? `${ttft}ms` : `${(ttft / 1000).toFixed(1)}s`} first token</span>
                 </div>
               </>
             )}
-          </>
+          </div>
         )}
 
         {/* Expand toggle */}
         <button
           onClick={() => setExpanded(v => !v)}
-          className="ml-auto flex items-center gap-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          className="ml-auto flex items-center gap-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           title={expanded ? 'Hide hardware stats' : 'Show hardware stats'}
         >
+          <span className="text-[10px]">hardware</span>
           {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         </button>
       </div>

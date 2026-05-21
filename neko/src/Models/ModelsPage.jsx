@@ -338,9 +338,18 @@ const ModelsPage = () => {
   const audioAssetCount = audioModels.whisper.length + audioModels.tts.length;
   const chatReady = status === 'ready' || Boolean(providerConfig?.model);
   const usageRequestCount = modelUsage?.totals?.request_count || 0;
+  const usageTokensK = Math.round((modelUsage?.totals?.total_tokens || 0) / 1000);
+
+  const audioMeta = (() => {
+    if (!voiceState.loaded) return audioAssetCount ? String(audioAssetCount) : null;
+    if (voiceState.sttStatus === 'error' || voiceState.ttsStatus === 'error') return 'Error';
+    if (voiceState.sttStatus === 'ready' || voiceState.ttsStatus === 'ready') return 'Active';
+    return audioAssetCount ? String(audioAssetCount) : null;
+  })();
+
   const tabItems = [
-    { key: 'chat', label: 'Chat', icon: MessageSquare, meta: chatReady ? 'Active' : String(providerProfiles.length + models.length) },
-    { key: 'audio', label: 'Audio', icon: Mic, meta: audioAssetCount ? String(audioAssetCount) : null },
+    { key: 'chat', label: 'LLM', icon: MessageSquare, meta: chatReady ? 'Active' : String(providerProfiles.length + models.length) },
+    { key: 'audio', label: 'Audio', icon: Mic, meta: audioMeta },
     { key: 'vision', label: 'Vision', icon: Eye, meta: visualModels.vision.length ? String(visualModels.vision.length) : null },
     { key: 'image', label: 'Image', icon: Image, meta: visualModels.image.length ? String(visualModels.image.length) : null },
     { key: 'usage', label: 'Usage', icon: BarChart3, meta: usageRequestCount ? String(usageRequestCount) : usageRange },
@@ -430,6 +439,8 @@ const ModelsPage = () => {
             installingEngine={installingEngine}
             voiceState={voiceState}
             visualModels={visualModels}
+            usageRequestCount={usageRequestCount}
+            usageTokensK={usageTokensK}
             onStop={handleStop}
             onDeactivateProvider={handleProviderDeactivate}
           />
@@ -464,7 +475,7 @@ const ModelsPage = () => {
               <>
                 <TabHeader
                   icon={MessageSquare}
-                  title="Chat and Agent Models"
+                  title="Language Models"
                   subtitle={`${providerProfiles.length} provider profile${providerProfiles.length === 1 ? '' : 's'} · ${models.length} local LLM${models.length === 1 ? '' : 's'}${activeProviderName ? ` · ${activeProviderName} active` : ''}`}
                   badge={<Badge color={chatReady ? 'green' : 'gray'}>{chatReady ? 'Active' : 'Choose one'}</Badge>}
                 />
