@@ -2753,6 +2753,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onGitChanged={handleGitChanged}
               onAttachGitFile={handleAttachGitFile}
               workingDir={workingContext?.workingDir || null}
+              workingContext={workingContext}
               recentConversations={recentConversations}
               recentConversationsLoading={recentConversationsLoading}
               recentConversationsError={recentConversationsError}
@@ -2796,6 +2797,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onGitChanged={handleGitChanged}
               onAttachGitFile={handleAttachGitFile}
               workingDir={workingContext?.workingDir || null}
+              workingContext={workingContext}
               recentConversations={recentConversations}
               recentConversationsLoading={recentConversationsLoading}
               recentConversationsError={recentConversationsError}

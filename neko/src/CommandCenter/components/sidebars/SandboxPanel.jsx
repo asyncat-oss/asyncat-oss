@@ -61,6 +61,10 @@ function shortPath(value = '') {
   return `.../${parts.slice(-3).join('/')}`;
 }
 
+function isMissingSandboxPathError(value = '') {
+  return /sandbox path no longer exists/i.test(String(value || ''));
+}
+
 export default function SandboxPanel() {
   const [sandboxes, setSandboxes] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -98,13 +102,23 @@ export default function SandboxPanel() {
       setJobs([]);
       return;
     }
+    if (selected?.id === id && selected.exists === false) {
+      setDiff(null);
+      setJobs([]);
+      setError('Sandbox path no longer exists.');
+      return;
+    }
     setError('');
     const [diffRes, jobsRes] = await Promise.all([
       sandboxesApi.diff(id, { file: file || null }).catch(err => ({ success: false, error: err.message })),
       sandboxesApi.listJobs(id).catch(() => ({ jobs: [] })),
     ]);
-    if (diffRes.success === false) setError(diffRes.error || 'Could not load sandbox diff');
-    else setDiff(diffRes);
+    if (diffRes.success === false) {
+      setDiff(null);
+      setError(diffRes.error || 'Could not load sandbox diff');
+    } else {
+      setDiff(diffRes);
+    }
     setJobs(jobsRes.jobs || []);
   }
 
@@ -132,7 +146,11 @@ export default function SandboxPanel() {
   }, [selected?.sandboxPath, sandboxRoot]);
 
   async function loadBrowser(pathValue = browserPath) {
-    if (!sandboxRelativePath) return;
+    if (!sandboxRelativePath || selected?.exists === false) {
+      setBrowserEntry(null);
+      setOpenFile(null);
+      return;
+    }
     const rel = [sandboxRelativePath, pathValue === '.' ? '' : pathValue].filter(Boolean).join('/');
     const entry = await filesApi.loadEntry('sandboxes', rel, false, { limit: 500 });
     setBrowserEntry(entry);
@@ -142,7 +160,7 @@ export default function SandboxPanel() {
 
   useEffect(() => {
     loadBrowser(browserPath).catch(err => setError(err.message || 'Could not load sandbox files'));
-  }, [sandboxRelativePath, browserPath]);
+  }, [sandboxRelativePath, browserPath, selected?.exists]);
 
   async function runAction(action) {
     if (!selected?.id || busy) return;
@@ -187,6 +205,7 @@ export default function SandboxPanel() {
   const promoteScope = selectedPaths.length > 0
     ? `${selectedPaths.length} selected file${selectedPaths.length === 1 ? '' : 's'}`
     : 'all changes';
+  const staleSandbox = Boolean(selected && (selected.exists === false || isMissingSandboxPathError(error)));
 
   useEffect(() => {
     if (!files.length || selectedPaths.length === 0) return;
@@ -275,9 +294,37 @@ export default function SandboxPanel() {
         </div>
       </div>
 
-      {error && (
+      {error && !staleSandbox && (
         <div className="mx-3 mt-3 rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-300">
           {error}
+        </div>
+      )}
+      {staleSandbox && selected && (
+        <div className="mx-3 mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 dark:border-amber-950/50 dark:bg-amber-950/20">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Sandbox path no longer exists</p>
+              <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-300/80">
+                This sandbox record points to a folder that was already removed. Delete it from the list to clean up the stale entry.
+              </p>
+              <button
+                type="button"
+                onClick={() => setModal({
+                  title: 'Remove stale sandbox',
+                  message: 'This removes the sandbox record from Asyncat. The folder is already gone.',
+                  confirmLabel: 'Remove',
+                  confirmClass: 'inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-rose-500',
+                  onConfirm: () => { setModal(null); runAction(id => sandboxesApi.delete(id, { force: true })); },
+                })}
+                disabled={busy}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-amber-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-800 disabled:opacity-60 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove stale sandbox
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {notice && (
@@ -288,7 +335,7 @@ export default function SandboxPanel() {
 
           {selected ? (
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <section className="mb-4">
+          {!staleSandbox && <section className="mb-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Files</h3>
               <button
@@ -373,9 +420,9 @@ export default function SandboxPanel() {
                 )}
               </div>
             )}
-          </section>
+          </section>}
 
-          <section className="mb-4">
+          {!staleSandbox && <section className="mb-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Changes</h3>
               <button
@@ -431,9 +478,9 @@ export default function SandboxPanel() {
                 </div>
               )}
             </div>
-          </section>
+          </section>}
 
-          {selectedFile && (
+          {!staleSandbox && selectedFile && (
             <section className="mb-4">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h3 className="min-w-0 truncate text-xs font-semibold text-gray-700 dark:text-slate-200">{shortPath(selectedFile)}</h3>
@@ -452,7 +499,7 @@ export default function SandboxPanel() {
             </section>
           )}
 
-          <section className="mb-4">
+          {!staleSandbox && <section className="mb-4">
             <h3 className="mb-2 text-xs font-semibold text-gray-700 dark:text-slate-200">Run</h3>
             <div className="flex gap-1.5">
               <input
@@ -471,9 +518,9 @@ export default function SandboxPanel() {
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
               </button>
             </div>
-          </section>
+          </section>}
 
-          <section className="mb-4">
+          {!staleSandbox && <section className="mb-4">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Promote</h3>
               <span className="truncate text-[10px] text-gray-400 dark:text-slate-500">{promoteScope}</span>
@@ -535,7 +582,7 @@ export default function SandboxPanel() {
                 Reject
               </button>
             </div>
-          </section>
+          </section>}
 
           <section>
             <div className="mb-2 flex items-center justify-between">

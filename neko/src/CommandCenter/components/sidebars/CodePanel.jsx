@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useState, Suspense, lazy } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import {
-  ChevronRight, Code2, File, Folder, GitBranch, Loader2, RefreshCw,
+  ChevronRight, Code2, Folder, GitBranch, Loader2, RefreshCw,
   Search, List, FileCode
 } from 'lucide-react';
 import { filesApi } from '../../api';
@@ -32,37 +32,91 @@ function FileIcon({ name, isDir }) {
 
 // ── Workspace file browser ────────────────────────────────────────────────────
 
-function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
+function basename(pathValue = '') {
+  const parts = String(pathValue || '').split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || 'workspace';
+}
+
+function joinRelativePath(parent = '.', child = '') {
+  const cleanParent = !parent || parent === '.' ? '' : String(parent).replace(/\/+$/, '');
+  const cleanChild = !child || child === '.' ? '' : String(child).replace(/^\/+/, '');
+  if (!cleanParent) return cleanChild || '.';
+  if (!cleanChild) return cleanParent;
+  return `${cleanParent}/${cleanChild}`;
+}
+
+function relativeToContext(entryPath = '.', contextPath = '.') {
+  if (!contextPath || contextPath === '.') return entryPath || '.';
+  const prefix = `${String(contextPath).replace(/\/+$/, '')}/`;
+  if (entryPath === contextPath) return '.';
+  return String(entryPath || '').startsWith(prefix)
+    ? String(entryPath).slice(prefix.length) || '.'
+    : entryPath || '.';
+}
+
+function contextKeyFor(workingContext, workingDir) {
+  if (workingContext?.rootId === 'none' || workingContext?.noWorkspace) return 'none:.';
+  return `${workingContext?.rootId || 'workspace'}:${workingContext?.relativePath || '.'}:${workingDir || ''}`;
+}
+
+function WorkspaceFilesBrowser({ onFileOpen, navigateTo, workingContext = null }) {
+  const rootId = workingContext?.rootId || 'workspace';
+  const basePath = workingContext?.relativePath || '.';
+  const contextLabel = workingContext?.relativePath && workingContext.relativePath !== '.'
+    ? basename(workingContext.relativePath)
+    : workingContext?.rootLabel || 'workspace';
+  const noWorkspace = rootId === 'none' || workingContext?.noWorkspace;
   const [entryPath, setEntryPath] = useState('.');
   const [entry, setEntry] = useState(null);
   const [openFile, setOpenFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const onFileOpenRef = useRef(onFileOpen);
 
-  async function load(pathValue = entryPath) {
+  useEffect(() => {
+    onFileOpenRef.current = onFileOpen;
+  }, [onFileOpen]);
+
+  const load = useCallback(async (pathValue = entryPath) => {
+    if (noWorkspace) {
+      setEntry(null);
+      setOpenFile(null);
+      setError('');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const res = await filesApi.loadEntry('workspace', pathValue || '.', false, { limit: 800 });
+      const res = await filesApi.loadEntry(rootId, joinRelativePath(basePath, pathValue || '.'), false, { limit: 800 });
       setEntry(res);
       if (res.type === 'file') {
-        setOpenFile(res);
-        onFileOpen?.(res);
+        const contextPath = relativeToContext(res.path, basePath);
+        setOpenFile({ ...res, contextPath });
+        onFileOpenRef.current?.({ ...res, contextPath });
       } else {
         setOpenFile(null);
+        onFileOpenRef.current?.(null);
       }
     } catch (err) {
       setError(err.message || 'Could not load files');
     } finally {
       setLoading(false);
     }
-  }
+  }, [basePath, entryPath, noWorkspace, rootId]);
 
-  useEffect(() => { load(entryPath); }, [entryPath]);
+  useEffect(() => { load(entryPath); }, [entryPath, load]);
 
   useEffect(() => {
     if (navigateTo) setEntryPath(navigateTo);
   }, [navigateTo]);
+
+  useEffect(() => {
+    setEntryPath('.');
+    setEntry(null);
+    setOpenFile(null);
+    onFileOpen?.(null);
+  }, [basePath, rootId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const entries = entry?.type === 'dir' ? (entry.entries || []) : [];
   const parts = entryPath === '.' ? [] : entryPath.split('/').filter(Boolean);
@@ -79,7 +133,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
       <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950 midnight:border-slate-800 midnight:bg-slate-950">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md bg-gray-50 px-2 py-1 text-[11px] text-gray-500 dark:bg-slate-800/60 dark:text-slate-400 midnight:bg-slate-900/70 midnight:text-slate-400">
           <button type="button" onClick={() => setEntryPath('.')} className="shrink-0 hover:text-gray-900 dark:hover:text-slate-100 midnight:hover:text-slate-100">
-            workspace
+            {contextLabel}
           </button>
           {parts.map((part, index) => {
             const nextPath = parts.slice(0, index + 1).join('/');
@@ -103,13 +157,23 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
         </button>
       </div>
 
+      {noWorkspace && (
+        <div className="flex h-full items-center justify-center px-6 text-center">
+          <div>
+            <Folder className="mx-auto mb-3 h-7 w-7 text-gray-300 dark:text-slate-700 midnight:text-slate-700" />
+            <p className="text-sm font-medium text-gray-500 dark:text-slate-400 midnight:text-slate-400">No workspace selected</p>
+            <p className="mt-1 text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">Choose a working folder to browse files.</p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="m-3 rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-300 midnight:border-rose-950/50 midnight:bg-rose-950/20 midnight:text-rose-300">
           {error}
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      {!noWorkspace && <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {openFile ? (
           <div className="flex h-full min-h-0 flex-col gap-2">
             <div className="flex shrink-0 items-center gap-2">
@@ -130,7 +194,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
               </div>
             }>
               <SyntaxFileViewer
-                filePath={openFile.path}
+                filePath={openFile.contextPath || openFile.path}
                 content={openFile.content || ''}
                 tooLarge={openFile.tooLarge}
                 binary={openFile.binary}
@@ -156,7 +220,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
               <button
                 key={item.path}
                 type="button"
-                onClick={() => setEntryPath(item.path)}
+                onClick={() => setEntryPath(relativeToContext(item.path, basePath))}
                 className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-800/60 midnight:border-slate-800 midnight:hover:bg-slate-800/60"
               >
                 <FileIcon name={item.name} isDir={item.type === 'dir'} />
@@ -181,7 +245,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo }) {
             )}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -196,6 +260,7 @@ export default function CodePanel({
   onGitChanged,
   onAttachGitFile,
   workingDir,
+  workingContext = null,
 }) {
   const [section, setSection] = useState(() => {
     try { return localStorage.getItem('asyncat_code_panel_section') || 'files'; }
@@ -203,6 +268,15 @@ export default function CodePanel({
   });
   const [openFilePath, setOpenFilePath] = useState(null);
   const [navigateTarget, setNavigateTarget] = useState(null);
+  const contextKey = useMemo(
+    () => contextKeyFor(workingContext, workingDir),
+    [workingContext, workingDir],
+  );
+
+  useEffect(() => {
+    setOpenFilePath(null);
+    setNavigateTarget(null);
+  }, [contextKey]);
 
   const selectSection = (next) => {
     setSection(next);
@@ -251,12 +325,16 @@ export default function CodePanel({
       <div className="min-h-0 flex-1 overflow-hidden">
         {section === 'files' && (
           <WorkspaceFilesBrowser
-            onFileOpen={(f) => setOpenFilePath(f.path)}
+            key={contextKey}
+            workingContext={workingContext}
+            onFileOpen={(f) => setOpenFilePath(f?.contextPath || null)}
             navigateTo={navigateTarget}
           />
         )}
         {section === 'search' && (
           <CodeSearchPanel
+            workingDir={workingDir}
+            disabled={workingContext?.rootId === 'none' || workingContext?.noWorkspace}
             onLocateResult={(r) => {
               setNavigateTarget(r.file);
               selectSection('files');
@@ -264,7 +342,11 @@ export default function CodePanel({
           />
         )}
         {section === 'outline' && (
-          <SymbolOutlinePanel filePath={openFilePath} />
+          <SymbolOutlinePanel
+            filePath={openFilePath}
+            workingDir={workingDir}
+            disabled={workingContext?.rootId === 'none' || workingContext?.noWorkspace}
+          />
         )}
         {section === 'git' && (
           <GitPanel

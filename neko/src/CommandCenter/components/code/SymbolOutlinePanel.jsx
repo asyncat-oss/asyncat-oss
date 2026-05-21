@@ -4,7 +4,7 @@
  * Calls list_definitions backend and groups by kind.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Box, RefreshCw } from 'lucide-react';
 import { codeApi } from '../../api';
 
@@ -44,17 +44,17 @@ function kindIcon(kind) {
   return KIND_ICON[kind] || KIND_ICON.default;
 }
 
-export default function SymbolOutlinePanel({ filePath }) {
+export default function SymbolOutlinePanel({ filePath, workingDir = null, disabled = false }) {
   const [symbols, setSymbols] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const load = async (fp) => {
-    if (!fp) { setSymbols(null); return; }
+  const load = useCallback(async (fp) => {
+    if (!fp || disabled) { setSymbols(null); return; }
     setLoading(true);
     setError(null);
     try {
-      const res = await codeApi.listDefinitions(fp);
+      const res = await codeApi.listDefinitions(fp, { path: workingDir || undefined });
       if (!res?.success) throw new Error(res?.error || 'Failed to load outline');
       // Flatten grouped definitions into a flat array sorted by line number
       const groups = res?.definitions || {};
@@ -77,14 +77,14 @@ export default function SymbolOutlinePanel({ filePath }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [disabled, workingDir]);
 
-  useEffect(() => { load(filePath); }, [filePath]);
+  useEffect(() => { load(filePath); }, [filePath, load]);
 
-  if (!filePath) {
+  if (!filePath || disabled) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">
-        Open a file to see its outline
+        {disabled ? 'Choose a working folder to see outlines' : 'Open a file to see its outline'}
       </div>
     );
   }

@@ -4,7 +4,7 @@
  * Calls the backend code search endpoint and shows results with file + line.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, Loader2, FileCode, Hash, Box, AlertCircle } from 'lucide-react';
 import { codeApi } from '../../api';
 
@@ -51,7 +51,7 @@ function ResultRow({ result, onLocate }) {
   );
 }
 
-export default function CodeSearchPanel({ onLocateResult }) {
+export default function CodeSearchPanel({ onLocateResult, workingDir = null, disabled = false }) {
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('any');
   const [lang, setLang] = useState('');
@@ -60,12 +60,12 @@ export default function CodeSearchPanel({ onLocateResult }) {
   const [error, setError] = useState(null);
   const searchTimer = useRef(null);
 
-  const doSearch = useCallback(async (q, k, l) => {
-    if (!q.trim()) { setResults(null); setError(null); return; }
+  const doSearch = useCallback(async (q, k, l, wd = workingDir) => {
+    if (!q.trim() || disabled) { setResults(null); setError(null); return; }
     setLoading(true);
     setError(null);
     try {
-      const res = await codeApi.search(q, { kind: k, language: l || undefined, limit: 40 });
+      const res = await codeApi.search(q, { kind: k, language: l || undefined, limit: 40, path: wd || undefined });
       setResults(res?.results || []);
     } catch (err) {
       setError(err.message || 'Search failed');
@@ -73,23 +73,30 @@ export default function CodeSearchPanel({ onLocateResult }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [disabled, workingDir]);
+
+  useEffect(() => {
+    clearTimeout(searchTimer.current);
+    if (!query.trim() || disabled) {
+      setResults(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    searchTimer.current = setTimeout(() => doSearch(query, kind, lang, workingDir), 350);
+    return () => clearTimeout(searchTimer.current);
+  }, [disabled, doSearch, kind, lang, query, workingDir]);
 
   const onQueryChange = (e) => {
-    const q = e.target.value;
-    setQuery(q);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => doSearch(q, kind, lang), 350);
+    setQuery(e.target.value);
   };
 
   const onKindChange = (e) => {
     setKind(e.target.value);
-    if (query.trim()) doSearch(query, e.target.value, lang);
   };
 
   const onLangChange = (e) => {
     setLang(e.target.value);
-    if (query.trim()) doSearch(query, kind, e.target.value);
   };
 
   return (
@@ -105,6 +112,7 @@ export default function CodeSearchPanel({ onLocateResult }) {
             type="text"
             value={query}
             onChange={onQueryChange}
+            disabled={disabled}
             placeholder="Search symbols or text…"
             className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-600 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100 midnight:focus:border-indigo-500"
           />
@@ -140,7 +148,9 @@ export default function CodeSearchPanel({ onLocateResult }) {
         {results === null && !loading && !error && (
           <div className="py-8 text-center">
             <Hash className="mx-auto h-6 w-6 text-gray-200 dark:text-slate-700 midnight:text-slate-700 mb-2" />
-            <p className="text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">Search symbols, functions, classes…</p>
+            <p className="text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">
+              {disabled ? 'Choose a working folder to search code.' : 'Search symbols, functions, classes…'}
+            </p>
           </div>
         )}
 
