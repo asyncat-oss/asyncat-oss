@@ -172,17 +172,65 @@ All autonomously, all on your machine.
 
 ```text
 asyncat-oss/
-├── cat              # CLI launcher
+├── cat              # CLI launcher — just imports cli/index.js
 ├── cli/             # CLI commands
-├── den/             # Backend API + Agent Runtime
-│   ├── src/agent/   # Agent loop, tools, permissions
-│   ├── src/ai/      # Provider integration
-│   ├── src/db/      # SQLite database
+│   ├── bin/         # Entry point (first-run handler, clone, install, update)
+│   ├── commands/    # 17 commands: agent, chat, config, doctor, install, etc.
+│   └── lib/         # Den API client, local engine, system deps, etc.
+├── den/             # Backend monolith — Express API + Agent Runtime
+│   ├── src/
+│   │   ├── index.js # Server entry (Express, routes, DB, CORS)
+│   │   ├── agent/   # AgentRuntime, tools, sessions, skills, souls, permissions
+│   │   ├── ai/      # Model provider integration (OpenAI, local, etc.)
+│   │   ├── auth/    # Authentication
+│   │   ├── calendar/ # Calendar integration
+│   │   ├── db/      # SQLite client + schema
+│   │   ├── files/   # File explorer service
+│   │   ├── integrations/ # GitHub, Google, Outlook, RSS, Obsidian
+│   │   ├── kanban/  # Kanban board
+│   │   ├── notes/   # Notes system
+│   │   ├── storage/ # Storage service
+│   │   └── users/   # Users & teams
+│   ├── data/        # DB + models + generated files
 │   └── test/        # Tests + evals
-├── neko/            # React frontend
-│   └── src/         # Command Center, Tools, Models, Health
-├── data/            # Local database + models
-└── logs/            # Runtime logs
+├── neko/            # React frontend (Vite)
+│   ├── src/
+│   │   ├── main.jsx         # Entry point
+│   │   ├── App.jsx / App.css
+│   │   ├── index.css        # Global styles
+│   │   ├── router/          # AppRouter
+│   │   ├── CommandCenter/   # Main chat UI (api/, components/)
+│   │   ├── Agent/           # Agent page
+│   │   ├── AgentHealth/     # Agent health dashboard
+│   │   ├── Models/          # Model/provider config
+│   │   ├── Profiles/        # Agent profiles
+│   │   ├── Scheduler/       # Scheduled task UI
+│   │   ├── Settings/        # App settings
+│   │   ├── Tools/           # Tools & skills browser
+│   │   ├── auth/            # Login/auth screens
+│   │   ├── calendar/        # Calendar integration
+│   │   ├── files/           # File explorer
+│   │   ├── notes/           # Notes system
+│   │   ├── projects/        # Projects view
+│   │   ├── views/           # Kanban, list, network, tasks
+│   │   ├── contexts/        # UserContext, WorkspaceContext
+│   │   ├── hooks/           # useAuth, useGlobal401Handler, etc.
+│   │   ├── services/        # authService
+│   │   ├── components/      # Shared (Portal, TopMenuBar)
+│   │   ├── utils/           # eventBus, sanitizer, keyboard, etc.
+│   │   ├── sidebar/         # Sidebar navigation
+│   │   ├── appcontainer/    # App shell
+│   │   ├── error/           # Error boundaries
+│   │   └── assets/          # Static assets
+│   ├── public/       # Public assets
+│   ├── dist/         # Production build
+│   ├── index.html
+│   └── vite.config.js
+├── data/            # Root database + uploads
+├── logs/            # Runtime logs
+├── scripts/         # Postinstall + relaunch scripts
+├── install.sh       # macOS/Linux installer
+└── install.ps1      # Windows installer
 ```
 
 ### Agent Flow
