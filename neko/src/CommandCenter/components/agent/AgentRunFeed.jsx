@@ -2691,7 +2691,7 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
 
 function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction }) {
   const hasPendingPermission = workEvents.some(ev => ev.type === 'permission_request' && !ev.data?.resolved);
-  const hasPendingQuestion = workEvents.some(ev => ev.type === 'ask_user' && !ev.data?.answered);
+  const hasPendingQuestion = workEvents.some(ev => ev.type === 'ask_user' && !ev.data?.answered && !ev.data?._inferred_answered);
   const hasBlocker = hasPendingPermission || hasPendingQuestion;
   const hasError = workEvents.some(ev => ev.type === 'error' || ev.type === 'stop_reason');
 

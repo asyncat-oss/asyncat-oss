@@ -418,6 +418,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const pendingInputInteraction = useMemo(() => {
     for (let i = agentEvents.length - 1; i >= 0; i--) {
       const event = agentEvents[i];
+      // An answer event means the agent resolved this turn — no pending interactions before it
+      if (event?.type === 'answer') break;
       if (event?.type === 'ask_user' && !event.data?.answered && !event.data?._inferred_answered) {
         return { type: 'ask_user', data: event.data };
       }
