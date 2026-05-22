@@ -302,7 +302,129 @@ export const consoleReadTool = {
   },
 };
 
+export const dependencyAuditTool = {
+  name: 'dependency_audit',
+  description: 'Run a security audit on project dependencies. Auto-detects npm/pnpm/yarn audit, cargo audit, or pip-audit. Returns severity counts, CVE IDs, and affected packages.',
+  category: 'dev',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Project directory (default: working directory).' },
+      min_severity: {
+        type: 'string',
+        enum: ['info', 'low', 'moderate', 'high', 'critical'],
+        description: 'Minimum severity to include in results (default: low).',
+      },
+      timeout: { type: 'number', description: 'Timeout in seconds (default: 60).' },
+    },
+  },
+  execute: async (args, context) => {
+    const cwd = args.path ? path.join(context.workingDir, args.path) : context.workingDir;
+    const timeout = (args.timeout || 60) * 1000;
+    const minSev = args.min_severity || 'low';
+    const sevOrder = ['info', 'low', 'moderate', 'high', 'critical'];
+    const minIdx = sevOrder.indexOf(minSev);
+
+    const pm = detectPackageManager(cwd);
+    if (!pm) return { success: false, error: 'No package manager detected.' };
+
+    let result, parsed;
+
+    // ── npm / pnpm ──
+    if (pm === 'npm' || pm === 'pnpm') {
+      result = await runProcess(`${pm} audit --json 2>&1`, [], { cwd, timeout });
+      try {
+        const json = JSON.parse(result.stdout.trim());
+        const vulns = json.vulnerabilities || json.advisories || {};
+        const findings = Object.values(vulns).map(v => ({
+          name: v.name || v.module_name,
+          severity: v.severity,
+          title: v.title || v.overview || '',
+          via: Array.isArray(v.via) ? v.via.filter(x => typeof x === 'string').join(', ') : '',
+          range: v.range || v.vulnerable_versions || '',
+          fixAvailable: Boolean(v.fixAvailable),
+          url: v.url || (v.references?.split('\n')[0]) || '',
+        })).filter(v => sevOrder.indexOf(v.severity) >= minIdx);
+        const counts = { critical: 0, high: 0, moderate: 0, low: 0, info: 0 };
+        findings.forEach(f => { if (counts[f.severity] !== undefined) counts[f.severity]++; });
+        return { success: true, package_manager: pm, severity_counts: counts, total: findings.length, findings: findings.slice(0, 50), fixable: findings.filter(f => f.fixAvailable).length };
+      } catch {
+        return { success: result.success, package_manager: pm, raw_output: result.stdout.slice(0, 4000), error: 'Could not parse audit JSON — see raw_output.' };
+      }
+    }
+
+    // ── yarn ──
+    if (pm === 'yarn') {
+      result = await runProcess('yarn audit --json 2>&1', [], { cwd, timeout });
+      const findings = [];
+      for (const line of result.stdout.split('\n')) {
+        try {
+          const obj = JSON.parse(line);
+          if (obj.type === 'auditAdvisory') {
+            const a = obj.data?.advisory || {};
+            if (sevOrder.indexOf(a.severity) >= minIdx) {
+              findings.push({ name: a.module_name, severity: a.severity, title: a.title, url: a.url, range: a.vulnerable_versions });
+            }
+          }
+        } catch { /* skip non-JSON lines */ }
+      }
+      const counts = { critical: 0, high: 0, moderate: 0, low: 0, info: 0 };
+      findings.forEach(f => { if (counts[f.severity] !== undefined) counts[f.severity]++; });
+      return { success: true, package_manager: 'yarn', severity_counts: counts, total: findings.length, findings: findings.slice(0, 50) };
+    }
+
+    // ── cargo ──
+    if (pm === 'cargo') {
+      result = await runProcess('cargo audit --json 2>&1', [], { cwd, timeout });
+      try {
+        const json = JSON.parse(result.stdout.trim());
+        const vulns = (json.vulnerabilities?.list || []).filter(v => sevOrder.indexOf((v.advisory?.severity || 'low').toLowerCase()) >= minIdx);
+        const findings = vulns.map(v => ({
+          name: v.package?.name,
+          version: v.package?.version,
+          severity: (v.advisory?.severity || 'unknown').toLowerCase(),
+          title: v.advisory?.title,
+          id: v.advisory?.id,
+          url: v.advisory?.url,
+        }));
+        const counts = { critical: 0, high: 0, moderate: 0, low: 0 };
+        findings.forEach(f => { if (counts[f.severity] !== undefined) counts[f.severity]++; });
+        return { success: true, package_manager: 'cargo', severity_counts: counts, total: findings.length, findings: findings.slice(0, 50) };
+      } catch {
+        return { success: false, package_manager: 'cargo', raw_output: result.stdout.slice(0, 4000), error: 'cargo audit not installed or returned non-JSON. Run: cargo install cargo-audit' };
+      }
+    }
+
+    // ── pip-audit ──
+    if (pm === 'pip' || pm === 'pip (poetry)') {
+      result = await runProcess('pip-audit --format=json 2>&1', [], { cwd, timeout });
+      if (result.exit_code === 127 || result.stderr?.includes('not found')) {
+        // Fallback: try safety
+        result = await runProcess('safety check --json 2>&1', [], { cwd, timeout });
+      }
+      try {
+        const json = JSON.parse(result.stdout.trim());
+        const deps = Array.isArray(json) ? json : (json.dependencies || []);
+        const findings = [];
+        for (const dep of deps) {
+          for (const vuln of (dep.vulns || [])) {
+            findings.push({ name: dep.name, version: dep.version, severity: (vuln.fix_versions?.length ? 'moderate' : 'low'), id: vuln.id, description: vuln.description?.slice(0, 300) });
+          }
+        }
+        const counts = { critical: 0, high: 0, moderate: 0, low: 0 };
+        findings.forEach(f => { if (counts[f.severity] !== undefined) counts[f.severity]++; });
+        return { success: true, package_manager: pm, severity_counts: counts, total: findings.length, findings: findings.slice(0, 50) };
+      } catch {
+        return { success: false, package_manager: pm, raw_output: result.stdout.slice(0, 4000), error: 'pip-audit not installed. Run: pip install pip-audit' };
+      }
+    }
+
+    return { success: false, error: `No audit support for package manager: ${pm}` };
+  },
+};
+
 export const devTools = [
-  linterRunTool, codeFixTool, packageManagerTool, buildRunnerTool, consoleReadTool,
+  linterRunTool, codeFixTool, packageManagerTool, buildRunnerTool, consoleReadTool, dependencyAuditTool,
 ];
 export default devTools;

@@ -187,6 +187,8 @@ export const integrationsApi = {
 			body: JSON.stringify(channel ? { channel } : {}),
 		}),
 		discoverTelegramChatId: async () => apiCall(`${MAIN_URL}/api/integrations/notifications/telegram/discover`),
+		fetchLog: async (limit = 50) => apiCall(`${MAIN_URL}/api/integrations/notifications/log?limit=${limit}`),
+		clearLog: async () => apiCall(`${MAIN_URL}/api/integrations/notifications/log`, { method: 'DELETE' }),
 	},
 };
 

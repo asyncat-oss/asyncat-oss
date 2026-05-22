@@ -211,6 +211,9 @@ const SKILL_PATTERNS = [
   ['log-analysis',              /\b(log\s+analysis|parse\s+log|analyze\s+log|search\s+log|grep\s+log|log\s+pattern)\b/],
   ['cron-jobs',                 /\b(cron\b|schedule(?:d)?\s+job|recurring\s+task|timer|interval\s+job|cron\s+expression)\b/],
   ['outbound-notifications',    /\b(notify|notification|ping\s+(?:me|user)|alert\s+(?:me|user)|discord|slack|telegram|webhook|long\s+task\s+finish)\b/],
+  ['test-runner',               /\b(run\s+tests?|test\s+suite|unit\s+tests?|jest|vitest|pytest|mocha|cargo\s+test|go\s+test|passing\s+tests|failing\s+tests|test\s+results?|spec\s+files?)\b/],
+  ['dependency-audit',          /\b(dependency\s+audit|security\s+audit|npm\s+audit|pip.?audit|cargo\s+audit|vulnerabilit(?:y|ies)|cve\b|security\s+vuln|outdated\s+dep)\b/],
+  ['codebase-metrics',          /\b(codebase\s+metrics?|lines\s+of\s+code|loc\b|tech\s+stack|most.?changed\s+files?|largest\s+files?|codebase\s+size|repo\s+stats|code\s+stats)\b/],
   // Docs / writing
   ['effective-documentation',   /\b(document(?:ation)?|readme|wiki|jsdoc|docstring|api\s+docs|write\s+docs|add\s+comments)\b/],
   ['report-writing',            /\b(report|write\s+(?:a\s+)?report|generate\s+report|executive\s+summary)\b/],

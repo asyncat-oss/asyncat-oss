@@ -33,6 +33,8 @@ import { schedulerTools } from './tools/schedulerTools.js';
 import { codeSearchTools } from './tools/codeSearchTools.js';
 import { apiExplorerTools } from './tools/apiExplorerTools.js';
 import { localRagTools } from './tools/localRagTools.js';
+import { testRunnerTools } from './tools/testRunnerTools.js';
+import { codebaseMetricsTools } from './tools/codebaseMetricsTools.js';
 import { sandboxTools } from './tools/sandboxTools.js';
 import { astTools } from './tools/astTools.js';
 import { lspTools } from './tools/lspTools.js';
@@ -90,6 +92,8 @@ export async function initializeAgent() {
   toolRegistry.registerAll(codeSearchTools);
   toolRegistry.registerAll(apiExplorerTools);
   toolRegistry.registerAll(localRagTools);
+  toolRegistry.registerAll(testRunnerTools);
+  toolRegistry.registerAll(codebaseMetricsTools);
   toolRegistry.registerAll(sandboxTools);
   toolRegistry.registerAll(astTools);
   toolRegistry.registerAll(lspTools);

@@ -1,4 +1,23 @@
 import { sendMailMessage, getMailStatus } from '../mail/mailService.js';
+import db from '../../db/client.js';
+
+function logNotification({ channel, title, message, severity, success, error }) {
+  try {
+    db.prepare(
+      `INSERT INTO notification_log (channel, title, message, severity, success, error)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      String(channel || ''),
+      String(title || '').slice(0, 500),
+      String(message || '').slice(0, 2000),
+      String(severity || 'info'),
+      success ? 1 : 0,
+      error ? String(error).slice(0, 500) : null,
+    );
+  } catch {
+    // Logging failures must never crash the notification flow.
+  }
+}
 
 const CHANNEL_LABELS = {
   email: 'Email',
@@ -147,8 +166,10 @@ export async function notifyChannels({ channels, title, message, severity = 'inf
       else if (channel === 'discord') await notifyDiscord({ title, message, severity });
       else if (channel === 'slack') await notifySlack({ title, message, severity });
       else if (channel === 'telegram') await notifyTelegram({ title, message, severity });
+      logNotification({ channel, title, message, severity, success: true });
       results.push({ channel, success: true });
     } catch (err) {
+      logNotification({ channel, title, message, severity, success: false, error: err.message });
       results.push({ channel, success: false, error: err.message });
     }
   }

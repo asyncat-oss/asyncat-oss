@@ -551,6 +551,10 @@ export default function IntegrationsSection() {
   const [telegramDiscovering, setTelegramDiscovering] = useState(false);
   const [telegramChatId,      setTelegramChatId]      = useState(null);
   const [telegramSaving,      setTelegramSaving]      = useState(false);
+  const [notifyLog,           setNotifyLog]           = useState(null);
+  const [notifyLogLoading,    setNotifyLogLoading]    = useState(false);
+  const [notifyLogOpen,       setNotifyLogOpen]       = useState(false);
+  const [notifyLogClearing,   setNotifyLogClearing]   = useState(false);
 
   // ── Hugging Face ───────────────────────────────────────────────────────────
   const [hfConfigured,      setHfConfigured]      = useState(false);
@@ -859,6 +863,33 @@ export default function IntegrationsSection() {
       flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to save chat ID') });
     } finally {
       setTelegramSaving(false);
+    }
+  };
+
+  const handleNotifyLogOpen = async () => {
+    setNotifyLogOpen(true);
+    if (notifyLog !== null) return; // already loaded
+    setNotifyLogLoading(true);
+    try {
+      const result = await integrationsApi.notifications.fetchLog(50);
+      setNotifyLog(result.entries || []);
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to load notification log') });
+    } finally {
+      setNotifyLogLoading(false);
+    }
+  };
+
+  const handleNotifyLogClear = async () => {
+    setNotifyLogClearing(true);
+    try {
+      await integrationsApi.notifications.clearLog();
+      setNotifyLog([]);
+      flash({ type: 'success', text: 'Notification log cleared.' });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to clear log') });
+    } finally {
+      setNotifyLogClearing(false);
     }
   };
 
@@ -1219,6 +1250,71 @@ export default function IntegrationsSection() {
                 </a>
               </div>
             )}
+
+            {/* Delivery history log */}
+            <div>
+              <button
+                type="button"
+                onClick={notifyLogOpen ? () => setNotifyLogOpen(false) : handleNotifyLogOpen}
+                className="inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors"
+              >
+                {notifyLogOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                Delivery history
+              </button>
+
+              {notifyLogOpen && (
+                <div className="mt-2 space-y-1.5">
+                  {notifyLogLoading && (
+                    <div className="flex items-center gap-2 py-3 text-[11px] text-gray-400">
+                      <Loader2 size={12} className="animate-spin" /> Loading…
+                    </div>
+                  )}
+                  {!notifyLogLoading && notifyLog?.length === 0 && (
+                    <p className="py-2 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-gray-500">No notifications sent yet.</p>
+                  )}
+                  {!notifyLogLoading && notifyLog?.length > 0 && (
+                    <>
+                      <div className="rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-gray-800">
+                        {notifyLog.slice(0, 20).map((entry) => (
+                          <div key={entry.id} className="flex items-start gap-2.5 px-3 py-2">
+                            <span className={`mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${entry.success ? 'bg-green-500' : 'bg-red-400'}`} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[11px] font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200 truncate">{entry.title}</span>
+                                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                                  entry.severity === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                  : entry.severity === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                  : entry.severity === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                                }`}>{entry.severity}</span>
+                                <span className="capitalize text-[10px] text-gray-500 dark:text-gray-400">{entry.channel}</span>
+                              </div>
+                              {entry.error && (
+                                <p className="mt-0.5 text-[10px] text-red-500 dark:text-red-400 midnight:text-red-400 truncate">{entry.error}</p>
+                              )}
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-gray-500">
+                                {new Date(entry.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-end pt-0.5">
+                        <button
+                          type="button"
+                          onClick={handleNotifyLogClear}
+                          disabled={notifyLogClearing}
+                          className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+                        >
+                          {notifyLogClearing ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                          Clear history
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </IntegrationCard>
 

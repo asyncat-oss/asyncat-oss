@@ -637,3 +637,18 @@ CREATE TABLE IF NOT EXISTS read_later_items (
   UNIQUE(user_id, url)
 );
 CREATE INDEX IF NOT EXISTS idx_read_later_user ON read_later_items(user_id, archived_at, updated_at);
+
+-- ─── Notification Log ──────────────────────────────────────────────────────────
+-- Persists every outbound notification attempt so users can review delivery history.
+
+CREATE TABLE IF NOT EXISTS notification_log (
+  id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  channel    TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  message    TEXT NOT NULL,
+  severity   TEXT NOT NULL DEFAULT 'info',
+  success    INTEGER NOT NULL DEFAULT 0,
+  error      TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notification_log_created ON notification_log(created_at);

@@ -2,6 +2,7 @@ import express from 'express';
 import { verifyUser } from '../../auth/authMiddleware.js';
 import { attachDb } from '../../db/sqlite.js';
 import { getNotificationStatus, notifyChannels } from './notificationService.js';
+import db from '../../db/client.js';
 
 const router = express.Router();
 
@@ -67,6 +68,30 @@ router.get('/telegram/discover', async (_req, res) => {
     res.json({ success: true, chatId: String(chatId) });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/log', (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(200, parseInt(req.query.limit) || 50));
+    const rows = db.prepare(
+      `SELECT id, channel, title, message, severity, success, error, created_at
+       FROM notification_log
+       ORDER BY created_at DESC
+       LIMIT ?`
+    ).all(limit);
+    res.json({ success: true, count: rows.length, entries: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/log', (req, res) => {
+  try {
+    db.prepare('DELETE FROM notification_log').run();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
