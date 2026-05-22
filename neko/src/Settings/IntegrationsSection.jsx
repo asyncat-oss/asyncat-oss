@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2, ExternalLink, Loader2, Plug, Unplug,
   AlertTriangle, ChevronDown, ChevronUp, Save, Github,
-  Rss, Mail, Bookmark, RefreshCw, Plus, Trash2,
+  Rss, Mail, Bookmark, RefreshCw, Plus, Trash2, Bell,
 } from 'lucide-react';
 import { integrationsApi, configApi, apiUtils } from './settingApi';
 
@@ -305,6 +305,10 @@ const MailLogo = () => (
   <Mail size={22} className="text-sky-600 dark:text-sky-400 midnight:text-sky-400" />
 );
 
+const NotificationLogo = () => (
+  <Bell size={22} className="text-violet-600 dark:text-violet-400 midnight:text-violet-400" />
+);
+
 const HuggingFaceLogo = () => (
   <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden="true">
     <circle cx="12" cy="12" r="10" fill="#FFD21E" />
@@ -539,6 +543,15 @@ export default function IntegrationsSection() {
   const [mailDisconnecting, setMailDisconnecting] = useState(false);
   const [mailTesting,       setMailTesting]       = useState(null);
 
+  // ── Outbound Notifications ────────────────────────────────────────────────
+  const [notifyStatus,        setNotifyStatus]        = useState(null);
+  const [notifyLoading,       setNotifyLoading]       = useState(true);
+  const [notifyDisconnecting, setNotifyDisconnecting] = useState(false);
+  const [notifyTesting,       setNotifyTesting]       = useState(null);
+  const [telegramDiscovering, setTelegramDiscovering] = useState(false);
+  const [telegramChatId,      setTelegramChatId]      = useState(null);
+  const [telegramSaving,      setTelegramSaving]      = useState(false);
+
   // ── Hugging Face ───────────────────────────────────────────────────────────
   const [hfConfigured,      setHfConfigured]      = useState(false);
   const [hfLoading,         setHfLoading]         = useState(true);
@@ -587,6 +600,12 @@ export default function IntegrationsSection() {
     finally { setMailLoading(false); }
   }, []);
 
+  const loadNotifyStatus = useCallback(async () => {
+    try { setNotifyStatus(await integrationsApi.notifications.fetchStatus()); }
+    catch { setNotifyStatus({ connected: false, configured: false, channels: {} }); }
+    finally { setNotifyLoading(false); }
+  }, []);
+
   const loadHfStatus = useCallback(async () => {
     try {
       const res = await configApi.getSecrets();
@@ -605,8 +624,9 @@ export default function IntegrationsSection() {
     loadObStatus();
     loadRssStatus();
     loadMailStatus();
+    loadNotifyStatus();
     loadHfStatus();
-  }, [loadGcStatus, loadGhStatus, loadOlStatus, loadObStatus, loadRssStatus, loadMailStatus, loadHfStatus]);
+  }, [loadGcStatus, loadGhStatus, loadOlStatus, loadObStatus, loadRssStatus, loadMailStatus, loadNotifyStatus, loadHfStatus]);
 
   // ── Handle OAuth redirect-back params ───────────────────────────────────────
 
@@ -772,6 +792,73 @@ export default function IntegrationsSection() {
       flash({ type: 'error', text: apiUtils.handleError(err, `${kind === 'imap' ? 'IMAP' : 'SMTP'} test failed`) });
     } finally {
       setMailTesting(null);
+    }
+  };
+
+  const handleNotifyDisconnect = async () => {
+    setNotifyDisconnecting(true);
+    try {
+      const keys = [
+        'NOTIFY_EMAIL_TO',
+        'NOTIFY_DEFAULT_CHANNELS',
+        'NOTIFY_DISCORD_WEBHOOK',
+        'NOTIFY_SLACK_WEBHOOK',
+        'NOTIFY_TELEGRAM_BOT_TOKEN',
+        'NOTIFY_TELEGRAM_CHAT_ID',
+      ];
+      for (const key of keys) {
+        await configApi.updateConfig(key, '');
+      }
+      await loadNotifyStatus();
+      flash({ type: 'success', text: 'Outbound notifications disconnected.' });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect notifications') });
+    } finally {
+      setNotifyDisconnecting(false);
+    }
+  };
+
+  const handleNotifyTest = async (channel) => {
+    setNotifyTesting(channel);
+    try {
+      await integrationsApi.notifications.test(channel);
+      flash({ type: 'success', text: `Test notification sent to ${channel}.` });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, `${channel} test failed`) });
+    } finally {
+      setNotifyTesting(null);
+    }
+  };
+
+  const handleTelegramDiscover = async () => {
+    setTelegramDiscovering(true);
+    setTelegramChatId(null);
+    try {
+      const result = await integrationsApi.notifications.discoverTelegramChatId();
+      if (result.chatId) {
+        setTelegramChatId(result.chatId);
+      } else {
+        flash({ type: 'error', text: result.message || 'No chat found. Send a message to your bot first.' });
+      }
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Telegram discovery failed') });
+    } finally {
+      setTelegramDiscovering(false);
+    }
+  };
+
+  const handleTelegramSaveChatId = async () => {
+    if (!telegramChatId) return;
+    setTelegramSaving(true);
+    try {
+      await configApi.updateConfig('NOTIFY_TELEGRAM_CHAT_ID', telegramChatId);
+      setTelegramChatId(null);
+      await loadNotifyStatus();
+      flash({ type: 'success', text: 'Telegram chat ID saved. Channel is ready.' });
+    } catch (err) {
+      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to save chat ID') });
+    } finally {
+      setTelegramSaving(false);
     }
   };
 
@@ -1005,6 +1092,133 @@ export default function IntegrationsSection() {
               {mailTesting === 'smtp' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
               Test SMTP
             </button>
+          </div>
+        </IntegrationCard>
+
+        {/* Outbound Notifications */}
+        <IntegrationCard
+          logo={<NotificationLogo />}
+          name="Outbound Notifications"
+          description="Let the agent ping you when long work finishes or needs attention. Supports Discord, Slack, Telegram, and email via configured channels."
+          status={notifyStatus}
+          configured={notifyStatus?.configured ?? false}
+          loading={notifyLoading}
+          onDisconnect={handleNotifyDisconnect}
+          disconnecting={notifyDisconnecting}
+          onCredsSaved={loadNotifyStatus}
+          noOAuth
+          setupFields={[
+            { key: 'NOTIFY_DEFAULT_CHANNELS', label: 'Default channels', configType: 'config', placeholder: 'discord,slack,telegram,email' },
+            { key: 'NOTIFY_EMAIL_TO', label: 'Default email recipient', configType: 'config', placeholder: 'you@example.com' },
+            { key: 'NOTIFY_DISCORD_WEBHOOK', label: 'Discord webhook URL', configType: 'secret', placeholder: 'https://discord.com/api/webhooks/...' },
+            { key: 'NOTIFY_SLACK_WEBHOOK', label: 'Slack webhook URL', configType: 'secret', placeholder: 'https://hooks.slack.com/services/...' },
+            { key: 'NOTIFY_TELEGRAM_BOT_TOKEN', label: 'Telegram bot token', configType: 'secret', placeholder: '123456:ABC...' },
+            { key: 'NOTIFY_TELEGRAM_CHAT_ID', label: 'Telegram chat ID', configType: 'config', placeholder: '123456789' },
+          ]}
+          setupHelpUrl="https://core.telegram.org/bots/tutorial"
+          setupHelpText="Telegram BotFather guide"
+        >
+          <div className="space-y-3">
+            {/* Channel status badges */}
+            <div className="flex flex-wrap items-center gap-2">
+              {['discord', 'slack', 'telegram', 'email'].map((channel) => {
+                const ready = Boolean(notifyStatus?.channels?.[channel]);
+                return (
+                  <span
+                    key={channel}
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${
+                      ready
+                        ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300 midnight:border-green-800/40 midnight:bg-green-900/20 midnight:text-green-300'
+                        : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-gray-800 midnight:bg-gray-950 midnight:text-gray-400'
+                    }`}
+                  >
+                    {channel} {ready ? 'ready' : 'off'}
+                  </span>
+                );
+              })}
+              {notifyStatus?.defaultChannels?.length > 0 && (
+                <span className="text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">
+                  Default: {notifyStatus.defaultChannels.join(', ')}
+                </span>
+              )}
+            </div>
+
+            {/* Test buttons — one per ready channel */}
+            {['discord', 'slack', 'telegram', 'email'].some((ch) => notifyStatus?.channels?.[ch]) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {['discord', 'slack', 'telegram', 'email'].map((channel) => {
+                  if (!notifyStatus?.channels?.[channel]) return null;
+                  return (
+                    <button
+                      key={channel}
+                      type="button"
+                      onClick={() => handleNotifyTest(channel)}
+                      disabled={!!notifyTesting}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-gray-700 midnight:text-gray-300 midnight:hover:bg-gray-900 capitalize transition-colors"
+                    >
+                      {notifyTesting === channel ? <Loader2 size={12} className="animate-spin" /> : <Bell size={12} />}
+                      Test {channel}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Telegram guide: shown when token is saved but chat ID is missing */}
+            {notifyStatus?.telegramTokenSet && !notifyStatus?.channels?.telegram && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 midnight:border-amber-800/40 midnight:bg-amber-900/10 px-3 py-2.5 space-y-2">
+                <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 midnight:text-amber-300">
+                  Telegram: bot token saved — chat ID needed
+                </p>
+                <ol className="text-[11px] text-amber-700 dark:text-amber-400 midnight:text-amber-400 space-y-0.5 list-decimal list-inside">
+                  <li>Open Telegram and find your bot by its username</li>
+                  <li>Send it any message (e.g. &quot;hello&quot;)</li>
+                  <li>Click <strong>Discover chat ID</strong> — it auto-fills your ID</li>
+                </ol>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={handleTelegramDiscover}
+                    disabled={telegramDiscovering || telegramSaving}
+                    className="inline-flex items-center gap-1 rounded-md border border-amber-300 dark:border-amber-700 midnight:border-amber-700 bg-white dark:bg-gray-800 midnight:bg-gray-800 px-2 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-300 midnight:text-amber-300 hover:bg-amber-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                  >
+                    {telegramDiscovering ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    Discover chat ID
+                  </button>
+                  {telegramChatId && (
+                    <>
+                      <span className="font-mono text-[11px] text-green-700 dark:text-green-400 midnight:text-green-400">
+                        Found: {telegramChatId}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleTelegramSaveChatId}
+                        disabled={telegramSaving}
+                        className="inline-flex items-center gap-1 rounded-md bg-green-600 hover:bg-green-500 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50 transition-colors"
+                      >
+                        {telegramSaving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                        Save &amp; activate
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Quick-setup links shown when nothing is configured yet */}
+            {!notifyStatus?.configured && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <a href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 midnight:hover:text-indigo-400 underline underline-offset-2">
+                  Discord webhook guide <ExternalLink size={9} />
+                </a>
+                <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 midnight:hover:text-indigo-400 underline underline-offset-2">
+                  Slack webhook guide <ExternalLink size={9} />
+                </a>
+                <a href="https://core.telegram.org/bots/tutorial" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 midnight:hover:text-indigo-400 underline underline-offset-2">
+                  Telegram BotFather <ExternalLink size={9} />
+                </a>
+              </div>
+            )}
           </div>
         </IntegrationCard>
 

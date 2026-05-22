@@ -13,6 +13,10 @@ import {
   listImapMessages,
   sendMailMessage,
 } from '../../integrations/mail/mailService.js';
+import {
+  getNotificationStatus,
+  notifyChannels,
+} from '../../integrations/notifications/notificationService.js';
 
 export const integrationTools = [
   {
@@ -176,6 +180,47 @@ export const integrationTools = [
     execute: async (args) => {
       try {
         return await sendMailMessage(args);
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    },
+  },
+  {
+    name: 'notification_status',
+    description: 'Check configured outbound notification channels for Discord, Slack, Telegram, and email.',
+    category: 'integrations',
+    permission: PermissionLevel.SAFE,
+    parameters: { type: 'object', properties: {} },
+    execute: async () => ({ success: true, ...getNotificationStatus() }),
+  },
+  {
+    name: 'notify_channel',
+    description: 'Send an outbound notification to configured channels such as Discord, Slack, Telegram, or email. Use when a long task finishes or needs user attention. Externally visible and approval-gated.',
+    category: 'integrations',
+    permission: PermissionLevel.DANGEROUS,
+    parameters: {
+      type: 'object',
+      properties: {
+        channels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Channels to notify: email, discord, slack, telegram. Defaults to NOTIFY_DEFAULT_CHANNELS or all configured channels.',
+        },
+        title: { type: 'string', description: 'Short notification title.' },
+        message: { type: 'string', description: 'Notification body.' },
+        severity: {
+          type: 'string',
+          enum: ['info', 'success', 'warning', 'error'],
+          description: 'Notification severity. Default info.',
+        },
+        email_to: { type: 'string', description: 'Optional email override for the email channel.' },
+        dry_run: { type: 'boolean', description: 'When true, report selected channels without sending.' },
+      },
+      required: ['title', 'message'],
+    },
+    execute: async (args) => {
+      try {
+        return await notifyChannels(args);
       } catch (err) {
         return { success: false, error: err.message };
       }

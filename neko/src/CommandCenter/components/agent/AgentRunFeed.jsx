@@ -5,7 +5,7 @@ import {
   Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
-  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette
+  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
@@ -106,6 +106,12 @@ const TOOL_META = {
   list_tasks:        { icon: List,        label: 'List tasks' },
   create_note:       { icon: FileText,    label: 'Create note' },
   list_notes:        { icon: FileText,    label: 'List notes' },
+  notification_status:{ icon: Bell,        label: 'Notification status' },
+  notify_channel:    { icon: Bell,        label: 'Notify channel' },
+  local_rag_index:   { icon: BookMarked,  label: 'Index local context' },
+  local_rag_search:  { icon: Search,      label: 'Search local context' },
+  local_rag_list:    { icon: List,        label: 'List local indexes' },
+  map_api_endpoints: { icon: FileText,    label: 'Map API endpoints' },
   create_event:      { icon: Calendar,    label: 'Create event' },
   list_events:       { icon: Calendar,    label: 'List events' },
   // Artifact tools
@@ -117,6 +123,7 @@ const TOOL_META = {
   list_artifacts:    { icon: FolderOpen,  label: 'List artifacts' },
   inspect_design_system: { icon: Palette, label: 'Inspect design system' },
   create_design_canvas:  { icon: Palette, label: 'Create design canvas' },
+  create_code_animation:  { icon: Zap,     label: 'Create code animation' },
   create_design_handoff: { icon: FileDown, label: 'Create design handoff' },
   // Audio tools
   speak_text:        { icon: Volume2,     label: 'Generated speech' },
@@ -526,8 +533,8 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
 }
 
 // ── Artifact tool result inline card ────────────────────────────────────────
-const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page', 'create_design_canvas', 'create_design_handoff', 'create_note', 'update_note', 'append_to_note']);
-const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'design', 'mermaid', 'note']);
+const ARTIFACT_TOOLS = new Set(['create_artifact', 'create_markdown', 'create_diagram', 'create_csv', 'create_html_page', 'create_design_canvas', 'create_code_animation', 'create_design_handoff', 'map_api_endpoints', 'create_note', 'update_note', 'append_to_note']);
+const AUTO_EXPAND_ARTIFACT_TYPES = new Set(['svg', 'html', 'design', 'animation', 'mermaid', 'note']);
 
 function ArtifactResultCard({ result, prominent = false, onViewInPanel }) {
   if (!result?.artifact) return null;

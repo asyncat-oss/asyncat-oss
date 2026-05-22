@@ -31,6 +31,8 @@ import { dbQueryTools } from './tools/dbQueryTools.js';
 import { modelStatusTools } from './tools/modelStatusTools.js';
 import { schedulerTools } from './tools/schedulerTools.js';
 import { codeSearchTools } from './tools/codeSearchTools.js';
+import { apiExplorerTools } from './tools/apiExplorerTools.js';
+import { localRagTools } from './tools/localRagTools.js';
 import { sandboxTools } from './tools/sandboxTools.js';
 import { astTools } from './tools/astTools.js';
 import { lspTools } from './tools/lspTools.js';
@@ -86,6 +88,8 @@ export async function initializeAgent() {
   toolRegistry.registerAll(modelStatusTools);
   toolRegistry.registerAll(schedulerTools);
   toolRegistry.registerAll(codeSearchTools);
+  toolRegistry.registerAll(apiExplorerTools);
+  toolRegistry.registerAll(localRagTools);
   toolRegistry.registerAll(sandboxTools);
   toolRegistry.registerAll(astTools);
   toolRegistry.registerAll(lspTools);

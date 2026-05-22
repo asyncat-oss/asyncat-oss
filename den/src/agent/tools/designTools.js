@@ -334,6 +334,208 @@ function defaultDesignBody(title, brief, format) {
     </main>`;
 }
 
+function defaultAnimationBody(title, brief, animationType) {
+  const label = animationType || 'interactive';
+  return `
+    <main class="animation-shell">
+      <section class="animation-stage" aria-label="${escapeHtml(title)}">
+        <canvas id="asyncat-animation-canvas"></canvas>
+        <div class="animation-caption">
+          <p>${escapeHtml(label)}</p>
+          <h1>${escapeHtml(title)}</h1>
+          <span>${escapeHtml(brief || 'Move the pointer across the stage to explore the motion system.')}</span>
+        </div>
+      </section>
+    </main>`;
+}
+
+function defaultAnimationCss() {
+  return `
+    :root {
+      --motion-speed: 1;
+      --motion-density: 52;
+      --motion-glow: 0.75;
+      --motion-scale: 1;
+    }
+    body {
+      overflow: hidden;
+      background: #f6f4ef;
+    }
+    .animation-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .animation-stage {
+      position: relative;
+      width: min(900px, calc(100vw - 32px));
+      height: min(640px, calc(100vh - 32px));
+      min-height: 360px;
+      overflow: hidden;
+      border: 1px solid rgba(17, 17, 17, 0.12);
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.92), transparent 32%),
+        linear-gradient(135deg, #111, #3a3a3a 42%, #f7f4ec 43%, #ffffff);
+      box-shadow: 0 32px 90px rgba(17, 17, 17, 0.22);
+    }
+    #asyncat-animation-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      filter: contrast(1.08) saturate(1.12);
+    }
+    .animation-caption {
+      position: absolute;
+      left: 24px;
+      bottom: 22px;
+      max-width: 420px;
+      color: white;
+      mix-blend-mode: difference;
+      pointer-events: none;
+    }
+    .animation-caption p {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .animation-caption h1 {
+      margin: 0;
+      font-size: clamp(32px, 7vw, 82px);
+      line-height: 0.94;
+      letter-spacing: 0;
+    }
+    .animation-caption span {
+      display: block;
+      margin-top: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+      opacity: 0.78;
+    }
+    @media (max-width: 720px) {
+      .animation-shell { padding: 12px; }
+      .animation-stage { width: 100%; height: min(620px, calc(100vh - 24px)); border-radius: 14px; }
+      .animation-caption { left: 18px; right: 18px; bottom: 92px; }
+    }`;
+}
+
+function defaultAnimationJs() {
+  return `
+    (() => {
+      const canvas = document.getElementById('asyncat-animation-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const stage = canvas.parentElement;
+      const pointer = { x: 0.5, y: 0.5, down: false };
+      const particles = [];
+      const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+      const readNumber = (name, fallback) => {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+        const parsed = parseFloat(raw);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+
+      const resize = () => {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = Math.max(1, Math.floor(rect.width * DPR));
+        canvas.height = Math.max(1, Math.floor(rect.height * DPR));
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      };
+
+      const syncPointer = (event) => {
+        const rect = stage.getBoundingClientRect();
+        pointer.x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        pointer.y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+        stage.style.setProperty('--mx', String(pointer.x * 100) + '%');
+        stage.style.setProperty('--my', String(pointer.y * 100) + '%');
+      };
+
+      const seed = () => {
+        particles.length = 0;
+        const density = Math.round(readNumber('--motion-density', 52));
+        for (let i = 0; i < density; i += 1) {
+          particles.push({
+            x: Math.random(),
+            y: Math.random(),
+            r: 4 + Math.random() * 26,
+            v: 0.18 + Math.random() * 0.9,
+            a: Math.random() * Math.PI * 2,
+          });
+        }
+      };
+
+      let lastDensity = 0;
+      const draw = (time) => {
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        const speed = readNumber('--motion-speed', 1);
+        const density = Math.round(readNumber('--motion-density', 52));
+        const glow = readNumber('--motion-glow', 0.75);
+        const scale = readNumber('--motion-scale', 1);
+        if (density !== lastDensity) {
+          lastDensity = density;
+          seed();
+        }
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(246, 244, 239, 0.22)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalCompositeOperation = 'multiply';
+
+        particles.forEach((p, index) => {
+          const drift = time * 0.00008 * speed * p.v;
+          const pullX = (pointer.x - 0.5) * 0.18;
+          const pullY = (pointer.y - 0.5) * 0.18;
+          const x = ((p.x + Math.cos(p.a + drift) * 0.08 + pullX + 1) % 1) * w;
+          const y = ((p.y + Math.sin(p.a * 1.7 + drift) * 0.08 + pullY + 1) % 1) * h;
+          const radius = p.r * scale * (pointer.down ? 1.45 : 1);
+          const hue = (index * 29 + time * 0.018 + pointer.x * 160) % 360;
+          const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius * (3 + glow));
+          gradient.addColorStop(0, 'hsla(' + hue + ', 88%, 72%, ' + (0.34 + glow * 0.22) + ')');
+          gradient.addColorStop(0.42, 'hsla(' + ((hue + 74) % 360) + ', 82%, 58%, ' + (0.14 + glow * 0.1) + ')');
+          gradient.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(x, y, radius * (3 + glow), 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        ctx.globalCompositeOperation = 'screen';
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 8; i += 1) {
+          const t = time * 0.00018 * speed + i;
+          ctx.beginPath();
+          ctx.ellipse(
+            w * (0.5 + Math.cos(t) * 0.12 * pointer.x),
+            h * (0.5 + Math.sin(t * 0.9) * 0.1 * pointer.y),
+            w * (0.18 + i * 0.035),
+            h * (0.08 + i * 0.018),
+            t,
+            0,
+            Math.PI * 2
+          );
+          ctx.stroke();
+        }
+
+        requestAnimationFrame(draw);
+      };
+
+      window.addEventListener('resize', resize);
+      stage.addEventListener('pointermove', syncPointer);
+      stage.addEventListener('pointerdown', (event) => { pointer.down = true; syncPointer(event); });
+      stage.addEventListener('pointerup', () => { pointer.down = false; });
+      resize();
+      seed();
+      requestAnimationFrame(draw);
+    })();`;
+}
+
 function wrapDesignHtml({ title, brief, html, css, js, sliders, format, viewport }) {
   const controls = buildSliderControls(sliders);
   const baseCss = `
@@ -592,12 +794,12 @@ export const createDesignCanvasTool = {
       filename: { type: 'string', description: 'Optional output filename. Should end in .html.' },
       format: {
         type: 'string',
-        enum: ['prototype', 'mockup', 'wireframe', 'deck', 'one-pager', 'landing-page', 'flow', 'design-system'],
+        enum: ['prototype', 'mockup', 'wireframe', 'deck', 'one-pager', 'landing-page', 'flow', 'design-system', 'animation', 'shader', 'particle-effect', 'loader'],
         description: 'Design output type.',
       },
       viewport: {
         type: 'string',
-        enum: ['responsive', 'desktop', 'tablet', 'mobile', 'deck', 'social'],
+        enum: ['responsive', 'desktop', 'tablet', 'mobile', 'deck', 'social', 'square'],
         description: 'Primary viewport target.',
       },
       html: { type: 'string', description: 'Body markup or a full HTML document.' },
@@ -664,6 +866,100 @@ export const createDesignCanvasTool = {
       };
     } catch (err) {
       return { success: false, error: err.message || 'Failed to create design canvas.' };
+    }
+  },
+};
+
+export const createCodeAnimationTool = {
+  name: 'create_code_animation',
+  description:
+    'Create a self-contained HTML/CSS/JavaScript animation artifact. Use for shader wallpapers, particle effects, rich hover cards, animated loaders, streaming text demos, sprite-style explainers, and other interactive code prototypes.',
+  category: 'design',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Human-readable animation title.' },
+      brief: { type: 'string', description: 'Short intent or behavior summary.' },
+      filename: { type: 'string', description: 'Optional output filename. Should end in .html.' },
+      animation_type: {
+        type: 'string',
+        enum: ['hover-effect', 'shader', 'particles', 'loader', 'text-stream', 'sprite', 'canvas', 'svg', 'css', 'interactive'],
+        description: 'The animation/prototype family.',
+      },
+      html: { type: 'string', description: 'Body markup or a full HTML document.' },
+      css: { type: 'string', description: 'CSS animation, layout, and visual styling.' },
+      js: { type: 'string', description: 'JavaScript for canvas, shader-like effects, particles, pointer interactions, clicks, or streaming states.' },
+      sliders: {
+        type: 'array',
+        items: { type: 'object' },
+        description: 'Optional live CSS-variable controls: { label, variable, min, max, value, step, unit }. Good defaults include --motion-speed, --motion-density, --motion-glow, --motion-scale.',
+      },
+      tweak_notes: { type: 'string', description: 'Notes about onscreen tweaks or controls embedded directly in the animation.' },
+      viewport: {
+        type: 'string',
+        enum: ['responsive', 'desktop', 'tablet', 'mobile', 'square'],
+        description: 'Primary viewport target.',
+      },
+    },
+    required: ['title'],
+  },
+  execute: async (args, context) => {
+    try {
+      const artifactsDir = ensureArtifactsDir(context.workingDir);
+      const id = randomUUID().slice(0, 10);
+      const rawFilename = normalizeFilename(args.filename, args.title, 'html');
+      const parsed = path.parse(rawFilename);
+      const filename = `${parsed.name}_${id}.html`;
+      const filePath = path.join(artifactsDir, filename);
+      const defaultSliders = [
+        { label: 'Speed', variable: '--motion-speed', min: 0.1, max: 3, step: 0.1, value: 1 },
+        { label: 'Density', variable: '--motion-density', min: 12, max: 120, step: 1, value: 52 },
+        { label: 'Glow', variable: '--motion-glow', min: 0, max: 1.5, step: 0.05, value: 0.75 },
+        { label: 'Scale', variable: '--motion-scale', min: 0.5, max: 2, step: 0.05, value: 1 },
+      ];
+      const content = wrapDesignHtml({
+        title: args.title,
+        brief: args.brief,
+        html: args.html || defaultAnimationBody(args.title, args.brief, args.animation_type),
+        css: `${defaultAnimationCss()}\n${args.css || ''}`,
+        js: `${args.js || defaultAnimationJs()}`,
+        sliders: Array.isArray(args.sliders) && args.sliders.length ? args.sliders : defaultSliders,
+        format: args.animation_type || 'animation',
+        viewport: args.viewport || 'responsive',
+      });
+
+      fs.writeFileSync(filePath, content, 'utf8');
+      const stat = fs.statSync(filePath);
+      const relativePath = artifactRelativePath(context.workingDir, filePath);
+
+      return {
+        success: true,
+        artifact: {
+          id,
+          title: args.title,
+          filename,
+          path: relativePath,
+          absolutePath: filePath,
+          type: 'animation',
+          originalType: 'html',
+          description: args.brief || args.tweak_notes || 'Interactive code animation',
+          size: stat.size,
+          createdAt: new Date().toISOString(),
+          animationType: args.animation_type || 'interactive',
+          viewport: args.viewport || 'responsive',
+        },
+        animation: {
+          title: args.title,
+          animationType: args.animation_type || 'interactive',
+          viewport: args.viewport || 'responsive',
+          sliders: (Array.isArray(args.sliders) && args.sliders.length ? args.sliders : defaultSliders).map(normalizeSlider).filter(Boolean),
+          tweakNotes: args.tweak_notes || '',
+        },
+        message: `Code animation "${args.title}" created: ${relativePath} (${formatSize(stat.size)})`,
+      };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to create code animation.' };
     }
   },
 };
@@ -793,6 +1089,7 @@ export const createDesignHandoffTool = {
 export const designTools = [
   inspectDesignSystemTool,
   createDesignCanvasTool,
+  createCodeAnimationTool,
   createDesignHandoffTool,
 ];
 

@@ -269,6 +269,13 @@ const DynamicSidebar = ({
     return localStorage.getItem('sidebarVisibility') !== 'hover';
   });
   const [shortcuts, setShortcuts] = useState(loadKeyboardShortcuts);
+  const [navItemsVisibility, setNavItemsVisibility] = useState(() => {
+    try {
+      const stored = localStorage.getItem('navItemsVisibility');
+      const defaults = { history: true, projects: true, calendar: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
+      return stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
+    } catch { return { history: true, projects: true, calendar: true, models: true, tools: true, agentHealth: true, agent: true, trash: true }; }
+  });
 
   // Profile state (for dock avatar only)
   const API_URL = import.meta.env.VITE_USER_URL;
@@ -307,7 +314,15 @@ const DynamicSidebar = ({
       setIsDockVisible(nextDockVisibility !== 'hover');
       setIsSidebarVisible(nextSidebarVisibility !== 'hover');
     };
+    const syncNavItems = () => {
+      try {
+        const stored = localStorage.getItem('navItemsVisibility');
+        const defaults = { history: true, projects: true, calendar: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
+        setNavItemsVisibility(stored ? { ...defaults, ...JSON.parse(stored) } : defaults);
+      } catch { /* keep current */ }
+    };
     window.addEventListener('storage', syncNavigationPreferences);
+    window.addEventListener('storage', syncNavItems);
     window.addEventListener('navigation-style-changed', syncNavigationPreferences);
     window.addEventListener('dock-visibility-changed', syncNavigationPreferences);
     window.addEventListener('dock-position-changed', syncNavigationPreferences);
@@ -315,8 +330,10 @@ const DynamicSidebar = ({
     window.addEventListener('sidebar-state-changed', syncNavigationPreferences);
     window.addEventListener('sidebar-visibility-changed', syncNavigationPreferences);
     window.addEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
+    window.addEventListener('nav-items-visibility-changed', syncNavItems);
     return () => {
       window.removeEventListener('storage', syncNavigationPreferences);
+      window.removeEventListener('storage', syncNavItems);
       window.removeEventListener('navigation-style-changed', syncNavigationPreferences);
       window.removeEventListener('dock-visibility-changed', syncNavigationPreferences);
       window.removeEventListener('dock-position-changed', syncNavigationPreferences);
@@ -324,6 +341,7 @@ const DynamicSidebar = ({
       window.removeEventListener('sidebar-state-changed', syncNavigationPreferences);
       window.removeEventListener('sidebar-visibility-changed', syncNavigationPreferences);
       window.removeEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
+      window.removeEventListener('nav-items-visibility-changed', syncNavItems);
     };
   }, []);
 
@@ -509,17 +527,17 @@ const DynamicSidebar = ({
   );
 
   const primaryItems = [
-    { label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
-    { label: "Projects", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
-    { label: "Calendar", action: "navCalendar", onClick: () => navigate("/calendar"), active: isOnCalendar, icon: calendarIcon },
-  ];
+    { key: "history", label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
+    { key: "projects", label: "Projects", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
+    { key: "calendar", label: "Calendar", action: "navCalendar", onClick: () => navigate("/calendar"), active: isOnCalendar, icon: calendarIcon },
+  ].filter(item => navItemsVisibility[item.key] !== false);
 
   const appItems = [
-    { label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
-    { label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
-    { label: "Agent Health", action: "navAgentHealth", onClick: () => navigate("/agent-health"), active: isOnAgentHealth, icon: <Activity className="w-5 h-5" /> },
-    { label: "Agent", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
-  ];
+    { key: "models", label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
+    { key: "tools", label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
+    { key: "agentHealth", label: "Agent Health", action: "navAgentHealth", onClick: () => navigate("/agent-health"), active: isOnAgentHealth, icon: <Activity className="w-5 h-5" /> },
+    { key: "agent", label: "Agent", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
+  ].filter(item => navItemsVisibility[item.key] !== false);
 
   const settingsIcon = profilePictureUrl || profileInitials ? (
     <ProfileImage
@@ -648,13 +666,15 @@ const DynamicSidebar = ({
                   collapsed={sidebarState === 'collapsed'}
                 />
               ))}
-              <SidebarNavItem
-                icon={<Trash2 className="w-5 h-5" />}
-                label="Trash"
-                onClick={() => navigate("/trash")}
-                isActive={isOnTrash}
-                collapsed={sidebarState === 'collapsed'}
-              />
+              {navItemsVisibility.trash !== false && (
+                <SidebarNavItem
+                  icon={<Trash2 className="w-5 h-5" />}
+                  label="Trash"
+                  onClick={() => navigate("/trash")}
+                  isActive={isOnTrash}
+                  collapsed={sidebarState === 'collapsed'}
+                />
+              )}
             </div>
           </nav>
 
@@ -725,85 +745,93 @@ const DynamicSidebar = ({
           )}
         </DockItem>
 
-        {/* History — navigates to all chats history */}
-        <DockItem
-          label={labelWithShortcut("History", "navChat")}
-          onClick={() => navigate("/all-chats")}
-          isActive={isOnConversations}
-          dockPosition={dockPosition}
-        >
-          <ChatIcon className="w-5 h-5" />
-        </DockItem>
+        {navItemsVisibility.history !== false && (
+          <DockItem
+            label={labelWithShortcut("History", "navChat")}
+            onClick={() => navigate("/all-chats")}
+            isActive={isOnConversations}
+            dockPosition={dockPosition}
+          >
+            <ChatIcon className="w-5 h-5" />
+          </DockItem>
+        )}
 
-        {/* Workspace — navigates directly to projects page */}
-        <DockItem
-          label={labelWithShortcut("Projects", "navWorkspace")}
-          onClick={() => navigate("/workspace")}
-          isActive={isOnWorkspace}
-          dockPosition={dockPosition}
-        >
-          {workspaceIcon}
-        </DockItem>
+        {navItemsVisibility.projects !== false && (
+          <DockItem
+            label={labelWithShortcut("Projects", "navWorkspace")}
+            onClick={() => navigate("/workspace")}
+            isActive={isOnWorkspace}
+            dockPosition={dockPosition}
+          >
+            {workspaceIcon}
+          </DockItem>
+        )}
 
-        {/* Calendar — direct navigate */}
-        <DockItem
-          label={labelWithShortcut("Calendar", "navCalendar")}
-          onClick={() => navigate("/calendar")}
-          isActive={isOnCalendar}
-          dockPosition={dockPosition}
-        >
-          {calendarIcon}
-        </DockItem>
+        {navItemsVisibility.calendar !== false && (
+          <DockItem
+            label={labelWithShortcut("Calendar", "navCalendar")}
+            onClick={() => navigate("/calendar")}
+            isActive={isOnCalendar}
+            dockPosition={dockPosition}
+          >
+            {calendarIcon}
+          </DockItem>
+        )}
 
-        {/* Models — standalone app */}
-        <DockItem
-          label={labelWithShortcut("Models", "navModels")}
-          onClick={() => navigate("/models")}
-          isActive={isOnModels}
-          dockPosition={dockPosition}
-        >
-          <Cpu className="w-5 h-5" />
-        </DockItem>
+        {navItemsVisibility.models !== false && (
+          <DockItem
+            label={labelWithShortcut("Models", "navModels")}
+            onClick={() => navigate("/models")}
+            isActive={isOnModels}
+            dockPosition={dockPosition}
+          >
+            <Cpu className="w-5 h-5" />
+          </DockItem>
+        )}
 
-        {/* Tools & Skills — standalone app */}
-        <DockItem
-          label={labelWithShortcut("Tools & Skills", "navTools")}
-          onClick={() => navigate("/tools")}
-          isActive={isOnTools}
-          dockPosition={dockPosition}
-        >
-          <Wrench className="w-5 h-5" />
-        </DockItem>
+        {navItemsVisibility.tools !== false && (
+          <DockItem
+            label={labelWithShortcut("Tools & Skills", "navTools")}
+            onClick={() => navigate("/tools")}
+            isActive={isOnTools}
+            dockPosition={dockPosition}
+          >
+            <Wrench className="w-5 h-5" />
+          </DockItem>
+        )}
 
-        {/* Agent Health */}
-        <DockItem
-          label={labelWithShortcut("Agent Health", "navAgentHealth")}
-          onClick={() => navigate("/agent-health")}
-          isActive={isOnAgentHealth}
-          dockPosition={dockPosition}
-        >
-          <Activity className="w-5 h-5" />
-        </DockItem>
+        {navItemsVisibility.agentHealth !== false && (
+          <DockItem
+            label={labelWithShortcut("Agent Health", "navAgentHealth")}
+            onClick={() => navigate("/agent-health")}
+            isActive={isOnAgentHealth}
+            dockPosition={dockPosition}
+          >
+            <Activity className="w-5 h-5" />
+          </DockItem>
+        )}
 
-        {/* Agent (Profiles + Scheduler) */}
-        <DockItem
-          label={labelWithShortcut("Agent", "navAgent")}
-          onClick={() => navigate("/agent")}
-          isActive={isOnAgent}
-          dockPosition={dockPosition}
-        >
-          <BrainCircuit className="w-5 h-5" />
-        </DockItem>
+        {navItemsVisibility.agent !== false && (
+          <DockItem
+            label={labelWithShortcut("Agent", "navAgent")}
+            onClick={() => navigate("/agent")}
+            isActive={isOnAgent}
+            dockPosition={dockPosition}
+          >
+            <BrainCircuit className="w-5 h-5" />
+          </DockItem>
+        )}
 
-        {/* Trash */}
-        <DockItem
-          label="Trash"
-          onClick={() => navigate("/trash")}
-          isActive={isOnTrash}
-          dockPosition={dockPosition}
-        >
-          <Trash2 className="w-5 h-5" />
-        </DockItem>
+        {navItemsVisibility.trash !== false && (
+          <DockItem
+            label="Trash"
+            onClick={() => navigate("/trash")}
+            isActive={isOnTrash}
+            dockPosition={dockPosition}
+          >
+            <Trash2 className="w-5 h-5" />
+          </DockItem>
+        )}
 
         {/* Settings/Profile — navigates to unified settings page */}
         <DockItem

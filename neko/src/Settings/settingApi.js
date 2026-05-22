@@ -176,6 +176,18 @@ export const integrationsApi = {
 		testSmtp: async () => apiCall(`${MAIN_URL}/api/integrations/mail/test-smtp`, { method: 'POST' }),
 		listMessages: async (limit = 5) => apiCall(`${MAIN_URL}/api/integrations/mail/messages?limit=${encodeURIComponent(String(limit))}`),
 	},
+	notifications: {
+		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/notifications/status`),
+		send: async (payload) => apiCall(`${MAIN_URL}/api/integrations/notifications/send`, {
+			method: 'POST',
+			body: JSON.stringify(payload || {}),
+		}),
+		test: async (channel) => apiCall(`${MAIN_URL}/api/integrations/notifications/test`, {
+			method: 'POST',
+			body: JSON.stringify(channel ? { channel } : {}),
+		}),
+		discoverTelegramChatId: async () => apiCall(`${MAIN_URL}/api/integrations/notifications/telegram/discover`),
+	},
 };
 
 // ===========================================

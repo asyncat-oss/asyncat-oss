@@ -1,6 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Palette, Rss, Send, SlidersHorizontal, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, ArrowUp, Check, Folder } from "lucide-react";
+import { Bell, Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
@@ -31,6 +31,7 @@ const ToggleSwitch = ({ checked, onChange, disabled }) => {
     </button>
   );
 };
+
 
 
 function getAgentTrigger(value, cursor) {
@@ -196,6 +197,13 @@ const INTEGRATION_TOOL_PACKS = [
     description: "Inbox headers and send",
     icon: Mail,
     tools: ["mail_status", "mail_list_messages", "mail_send_message"],
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    description: "Ping external channels",
+    icon: Bell,
+    tools: ["notification_status", "notify_channel"],
   },
 ];
 
@@ -526,9 +534,6 @@ export const MessageInputV2 = ({
   pendingInteraction = null,
   onPermissionDecision,
   onAskUserAnswer,
-  onOpenRuntimePanel,
-  runtimeStatus = null,
-  runtimePanelOpen = false,
 }) => {
   const [value, setValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -650,6 +655,7 @@ export const MessageInputV2 = ({
   }, [activeBrain.capabilities, supportsReasoningControl]);
 
   const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || (activeBrain.isLocal ? 8192 : 128000);
+
   const localModelSendBlockReason = useMemo(() => {
     if (!activeBrain.isBuiltin) return null;
     if (activeBrain.loading) return "Checking model status...";
@@ -734,30 +740,6 @@ export const MessageInputV2 = ({
 
     return () => {
       cancelled = true;
-    };
-  }, []);
-
-  // Provider profiles + active config
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [profilesRes, configRes] = await Promise.all([
-          aiProviderApi.listProfiles().catch(() => ({ profiles: [] })),
-          aiProviderApi.getConfig().catch(() => null),
-        ]);
-        if (cancelled) return;
-        setProviderProfiles(profilesRes.profiles || []);
-        setActiveProfileId(configRes?.profile_id || null);
-      } catch {
-        if (!cancelled) setProviderProfiles([]);
-      }
-    };
-    load();
-    window.addEventListener('asyncat-model-runtime-updated', load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('asyncat-model-runtime-updated', load);
     };
   }, []);
 
@@ -1056,7 +1038,6 @@ export const MessageInputV2 = ({
 
   const canSubmit = value.trim() && !disabled && !isRunning && !localModelSendBlockReason;
   const isActionMode = agentMode === 'action';
-  const isDesignMode = agentMode === 'design';
   const setAgentMode = useCallback((mode) => {
     if (onAgentModeChange) {
       onAgentModeChange(mode);
@@ -1065,12 +1046,10 @@ export const MessageInputV2 = ({
     if (mode === 'plan' && isActionMode && (onToggleAgentMode || onToggleTools)) {
       (onToggleAgentMode || onToggleTools)();
     }
-    if ((mode === 'action' || mode === 'design') && !isActionMode && (onToggleAgentMode || onToggleTools)) {
+    if (mode === 'action' && !isActionMode && (onToggleAgentMode || onToggleTools)) {
       (onToggleAgentMode || onToggleTools)();
     }
   }, [isActionMode, onAgentModeChange, onToggleAgentMode, onToggleTools]);
-  const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
-  const currentReasoningOption = currentReasoningOptions.find(option => option.value === reasoningEffort) || currentReasoningOptions[0] || { label: "Auto", short: "Think auto" };
   const enabledIntegrationSet = useMemo(
     () => new Set(Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : []),
     [enabledIntegrationTools],
@@ -1090,15 +1069,15 @@ export const MessageInputV2 = ({
     }
     onEnabledIntegrationToolsChange([...next]);
   }, [enabledIntegrationSet, onEnabledIntegrationToolsChange]);
+
+  const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
   const modelLabel = activeBrain.isLoadingModel
-    ? "Loading"
+    ? "Loading…"
     : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
-  const loadedRuntimeCount = runtimeStatus?.counts?.loaded || 0;
 
   const allModelOptions = useMemo(() => {
     const opts = [];
     const cloudProfiles = providerProfiles.filter(p => p.provider_id !== "llamacpp-builtin");
-
     if (cloudProfiles.length > 0) {
       opts.push({ type: "section", label: "Providers" });
       for (const profile of cloudProfiles) {
@@ -1112,7 +1091,6 @@ export const MessageInputV2 = ({
         });
       }
     }
-
     if (localModels.length > 0 || (activeBrain.isBuiltin && localModel.model)) {
       if (opts.length > 0) opts.push({ type: "divider" });
       opts.push({ type: "section", label: "Local LLMs" });
@@ -1134,52 +1112,49 @@ export const MessageInputV2 = ({
         });
       }
     }
-
     return opts;
   }, [providerProfiles, activeProfileId, localModels, localModel.model, activeBrain.isBuiltin]);
+
+  // Provider profiles + active config
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [profilesRes, configRes] = await Promise.all([
+          aiProviderApi.listProfiles().catch(() => ({ profiles: [] })),
+          aiProviderApi.getConfig().catch(() => null),
+        ]);
+        if (cancelled) return;
+        setProviderProfiles(profilesRes.profiles || []);
+        setActiveProfileId(configRes?.profile_id || null);
+      } catch {
+        if (!cancelled) setProviderProfiles([]);
+      }
+    };
+    load();
+    window.addEventListener('asyncat-model-runtime-updated', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('asyncat-model-runtime-updated', load);
+    };
+  }, []);
 
   useEffect(() => {
     if (modelsLoaded) return;
     let cancelled = false;
-
     localModelsApi
       .listModels()
-      .then((res) => {
-        if (!cancelled) setLocalModels(res.models || []);
-      })
-      .catch(() => {
-        if (!cancelled) setLocalModels([]);
-      })
-      .finally(() => {
-        if (!cancelled) setModelsLoaded(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .then((res) => { if (!cancelled) setLocalModels(res.models || []); })
+      .catch(() => { if (!cancelled) setLocalModels([]); })
+      .finally(() => { if (!cancelled) setModelsLoaded(true); });
+    return () => { cancelled = true; };
   }, [modelsLoaded]);
-
-  useEffect(() => {
-    const handlePointerDown = (event) => {
-      if (!toolbarRef.current?.contains(event.target)) setOpenMenu(null);
-      if (!modeMenuRef.current?.contains(event.target)) setModeMenuOpen(false);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, []);
 
   const handleModelSelect = useCallback(
     async (nextModel) => {
       setOpenMenu(null);
-
-      if (nextModel === "__manage__") {
-        window.location.href = "/models";
-        return;
-      }
-
+      if (nextModel === "__manage__") { window.location.href = "/models"; return; }
       if (!nextModel || isSwitchingModel) return;
-
       if (nextModel.startsWith("provider:")) {
         const profileId = nextModel.slice("provider:".length);
         if (profileId === activeProfileId) return;
@@ -1196,7 +1171,6 @@ export const MessageInputV2 = ({
         }
         return;
       }
-
       if (nextModel === localModel.model) return;
       setModelSwitchError(null);
       setIsSwitchingModel(true);
@@ -1210,6 +1184,16 @@ export const MessageInputV2 = ({
     },
     [ctxSize, isSwitchingModel, localModel.model, activeProfileId],
   );
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!toolbarRef.current?.contains(event.target)) setOpenMenu(null);
+      if (!modeMenuRef.current?.contains(event.target)) setModeMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   const openWorkingContextMenu = useCallback(() => {
     setContextModalOpen(true);
@@ -1390,10 +1374,7 @@ export const MessageInputV2 = ({
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setError(null);
-                      setModelSwitchError(null);
-                    }}
+                    onClick={() => { setError(null); setModelSwitchError(null); }}
                     className="text-red-400 hover:text-red-600"
                   >
                     <X className="w-4 h-4" />
@@ -1401,7 +1382,7 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
-              {localModelSendBlockReason && (
+              {localModelSendBlockReason && !disabled && (
                 <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200 midnight:border-amber-900/50 midnight:bg-amber-900/20 midnight:text-amber-200">
                   <div className="flex min-w-0 items-center gap-2">
                     {activeBrain.isLoadingModel || activeBrain.loading ? (
@@ -1411,15 +1392,6 @@ export const MessageInputV2 = ({
                     )}
                     <span className="min-w-0 truncate">{localModelSendBlockReason}</span>
                   </div>
-                  {!activeBrain.loading && !activeBrain.isLoadingModel && (
-                    <button
-                      type="button"
-                      onClick={() => setOpenMenu("model")}
-                      className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/30 midnight:hover:bg-amber-900/30"
-                    >
-                      Models
-                    </button>
-                  )}
                 </div>
               )}
 
@@ -1573,6 +1545,7 @@ export const MessageInputV2 = ({
                 </div>
               )}
 
+
             <div ref={toolbarRef} className="mt-2.5 flex items-center justify-between gap-2 bg-transparent text-gray-500 select-none">
               <div className="flex items-center gap-1.5">
                 <div className="relative">
@@ -1694,27 +1667,27 @@ export const MessageInputV2 = ({
                     type="button"
                     onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
                     disabled={disabled || activeBrain.loading || isSwitchingModel}
-                    title={`${activeBrain.label}${activeBrain.supportsTools ? " native tools enabled" : ""}`}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
-                      activeBrain.isLoadingModel
-                        ? "text-amber-500 dark:text-amber-400"
+                    title={`${activeBrain.label}${activeBrain.supportsTools ? " · tools enabled" : ""}`}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 disabled:cursor-not-allowed ${
+                      activeBrain.isLoadingModel || isSwitchingModel
+                        ? "text-amber-500 dark:text-amber-400 midnight:text-amber-400"
                         : activeBrain.isReady
                           ? activeBrain.isLocal
-                            ? "text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 hover:text-emerald-700 dark:hover:text-emerald-300 midnight:hover:text-emerald-300"
-                            : "text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 hover:text-indigo-700 dark:hover:text-indigo-300 midnight:hover:text-indigo-300"
+                            ? "text-emerald-600 hover:text-emerald-700 hover:bg-gray-100 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-gray-800 midnight:text-emerald-400 midnight:hover:text-emerald-300 midnight:hover:bg-slate-800"
+                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-gray-100 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:text-slate-100 midnight:hover:bg-slate-800"
                           : "text-gray-400 dark:text-gray-500 midnight:text-slate-500"
-                    } disabled:cursor-not-allowed`}
+                    }`}
                   >
                     {activeBrain.isLoadingModel || activeBrain.loading || isSwitchingModel ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <BrainIcon className="w-3.5 h-3.5" />
                     )}
-                    <span className="truncate max-w-[12rem]">{modelLabel}</span>
-                    <ChevronDown className="w-3 h-3 opacity-60" />
+                    <span className="truncate max-w-[14rem]">{modelLabel}</span>
+                    <ChevronDown className="w-3 h-3 opacity-50" />
                   </button>
                   {openMenu === "model" && (
-                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
+                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-700 midnight:bg-slate-900">
                       <div className="max-h-72 overflow-y-auto p-1">
                         {allModelOptions.length === 0 ? (
                           <div className="px-2.5 py-4 text-center text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
@@ -1739,8 +1712,8 @@ export const MessageInputV2 = ({
                               onClick={() => handleModelSelect(item.value)}
                               className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-default ${
                                 item.active
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-900/20 midnight:text-emerald-300"
-                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
+                                  ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
+                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                               }`}
                             >
                               <span className="flex items-center gap-2">
@@ -1772,29 +1745,6 @@ export const MessageInputV2 = ({
                   )}
                 </div>
 
-                {onOpenRuntimePanel && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenMenu(null);
-                      onOpenRuntimePanel();
-                    }}
-                    title="Runtime status"
-                    className={`inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors ${
-                      runtimePanelOpen
-                        ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
-                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                    }`}
-                  >
-                    <Cpu className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Runtime</span>
-                    {loadedRuntimeCount > 0 && (
-                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
-                        {loadedRuntimeCount}
-                      </span>
-                    )}
-                  </button>
-                )}
               </div>
 
               <div className="flex items-center gap-2.5">
@@ -1909,12 +1859,7 @@ export const MessageInputV2 = ({
                   disabled={disabled}
                   className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200"
                 >
-                  {isDesignMode ? (
-                    <>
-                      <Palette className="h-3.5 w-3.5 shrink-0 text-fuchsia-500 dark:text-fuchsia-400" />
-                      <span>Design</span>
-                    </>
-                  ) : !isActionMode ? (
+                  {!isActionMode ? (
                     <>
                       <ClipboardPen className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
                       <span>Plan</span>
@@ -1943,7 +1888,7 @@ export const MessageInputV2 = ({
                         setModeMenuOpen(false);
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                        !isActionMode && !isDesignMode
+                        !isActionMode
                           ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-900/20 midnight:text-emerald-300"
                           : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
@@ -1953,28 +1898,7 @@ export const MessageInputV2 = ({
                         <span className="block font-medium">Plan</span>
                         <span className="block text-[10px] opacity-60">Read-only, no tool execution</span>
                       </div>
-                      {!isActionMode && !isDesignMode && <Check className="h-3.5 w-3.5 shrink-0" />}
-                    </button>
-
-                    {/* Design */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAgentMode('design');
-                        setModeMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                        isDesignMode
-                          ? "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-300 midnight:bg-fuchsia-900/20 midnight:text-fuchsia-300"
-                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                      }`}
-                    >
-                      <Palette className="h-3.5 w-3.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="block font-medium">Design</span>
-                        <span className="block text-[10px] opacity-60">Canvas, prototype, handoff</span>
-                      </div>
-                      {isDesignMode && <Check className="h-3.5 w-3.5 shrink-0" />}
+                      {!isActionMode && <Check className="h-3.5 w-3.5 shrink-0" />}
                     </button>
 
                     {/* Action */}
@@ -1986,7 +1910,7 @@ export const MessageInputV2 = ({
                         setModeMenuOpen(false);
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                        isActionMode && !isDesignMode && !autoApprove
+                        isActionMode && !autoApprove
                           ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 midnight:bg-blue-900/20 midnight:text-blue-300"
                           : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
@@ -1996,7 +1920,7 @@ export const MessageInputV2 = ({
                         <span className="block font-medium">Action</span>
                         <span className="block text-[10px] opacity-60">Ask before each tool call</span>
                       </div>
-                      {isActionMode && !isDesignMode && !autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
+                      {isActionMode && !autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
                     </button>
 
                     {/* Yolo */}
@@ -2009,7 +1933,7 @@ export const MessageInputV2 = ({
                           setModeMenuOpen(false);
                         }}
                         className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                          isActionMode && !isDesignMode && autoApprove
+                          isActionMode && autoApprove
                             ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-900/20 midnight:text-amber-300"
                             : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         }`}
@@ -2019,7 +1943,7 @@ export const MessageInputV2 = ({
                           <span className="block font-medium">Yolo</span>
                           <span className="block text-[10px] opacity-60">Auto-approve all tools</span>
                         </div>
-                        {isActionMode && !isDesignMode && autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
+                        {isActionMode && autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
                       </button>
                     )}
                   </div>

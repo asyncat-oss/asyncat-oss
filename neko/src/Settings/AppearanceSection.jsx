@@ -1,4 +1,8 @@
 import {
+  Activity,
+  BrainCircuit,
+  Calendar,
+  Cpu,
   Layout,
   Moon,
   MousePointer,
@@ -9,6 +13,10 @@ import {
   Sparkles,
   Star,
   Sun,
+  Trash2,
+  Wrench,
+  MessageSquare,
+  Globe,
 } from 'lucide-react';
 import { useState } from 'react';
 import KeyboardShortcutsSection from './KeyboardShortcutsSection.jsx';
@@ -54,6 +62,43 @@ const RadioRow = ({ name, checked, onChange, icon: Icon, label }) => (
   </label>
 );
 
+const CheckboxRow = ({ checked, onChange, icon: Icon, label, locked }) => (
+  <label className={`flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent transition-colors ${locked ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-300/70 dark:hover:border-gray-600/70 midnight:hover:border-gray-600/70 hover:bg-gray-200/70 dark:hover:bg-gray-700/70 midnight:hover:bg-gray-700/70 cursor-pointer'}`}>
+    <span className="flex min-w-0 items-center gap-3">
+      {Icon ? <Icon className="w-5 h-5 flex-shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" /> : null}
+      <span className={`${textClasses} truncate`}>{label}</span>
+      {locked && <span className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500 ml-1">(always shown)</span>}
+    </span>
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      disabled={locked}
+      className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-400 midnight:focus:ring-blue-400 rounded"
+    />
+  </label>
+);
+
+const DEFAULT_NAV_ITEMS = {
+  history: true,
+  projects: true,
+  calendar: true,
+  models: true,
+  tools: true,
+  agentHealth: true,
+  agent: true,
+  trash: true,
+};
+
+const loadNavItemsVisibility = () => {
+  try {
+    const stored = localStorage.getItem('navItemsVisibility');
+    return stored ? { ...DEFAULT_NAV_ITEMS, ...JSON.parse(stored) } : { ...DEFAULT_NAV_ITEMS };
+  } catch {
+    return { ...DEFAULT_NAV_ITEMS };
+  }
+};
+
 const AppearanceSection = ({ theme, setThemeMode }) => {
   const [navigationStyle, setNavigationStyle] = useState(() => {
     return localStorage.getItem('navigationStyle') || 'dock';
@@ -79,6 +124,7 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
   const [pageTransitions, setPageTransitions] = useState(() => {
     return localStorage.getItem('pageTransitions') || 'on';
   });
+  const [navItemsVisibility, setNavItemsVisibility] = useState(loadNavItemsVisibility);
 
   const handleNavigationStyleChange = (value) => {
     setNavigationStyle(value);
@@ -126,6 +172,13 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
     setPageTransitions(value);
     localStorage.setItem('pageTransitions', value);
     dispatchPreferenceChange('page-transitions-changed');
+  };
+
+  const handleNavItemToggle = (key) => {
+    const next = { ...navItemsVisibility, [key]: !navItemsVisibility[key] };
+    setNavItemsVisibility(next);
+    localStorage.setItem('navItemsVisibility', JSON.stringify(next));
+    dispatchPreferenceChange('nav-items-visibility-changed');
   };
 
   return (
@@ -184,6 +237,21 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           checked={navigationStyle === 'sidebar'}
           onChange={() => handleNavigationStyleChange('sidebar')}
         />
+      </PreferenceCard>
+
+      <PreferenceCard
+        icon={Layout}
+        title="Visible Nav Items"
+        description="Command Center is always shown. Toggle everything else."
+      >
+        <CheckboxRow icon={MessageSquare} label="History" checked={navItemsVisibility.history} onChange={() => handleNavItemToggle('history')} />
+        <CheckboxRow icon={Globe} label="Projects" checked={navItemsVisibility.projects} onChange={() => handleNavItemToggle('projects')} />
+        <CheckboxRow icon={Calendar} label="Calendar" checked={navItemsVisibility.calendar} onChange={() => handleNavItemToggle('calendar')} />
+        <CheckboxRow icon={Cpu} label="Models" checked={navItemsVisibility.models} onChange={() => handleNavItemToggle('models')} />
+        <CheckboxRow icon={Wrench} label="Tools & Skills" checked={navItemsVisibility.tools} onChange={() => handleNavItemToggle('tools')} />
+        <CheckboxRow icon={Activity} label="Agent Health" checked={navItemsVisibility.agentHealth} onChange={() => handleNavItemToggle('agentHealth')} />
+        <CheckboxRow icon={BrainCircuit} label="Agent" checked={navItemsVisibility.agent} onChange={() => handleNavItemToggle('agent')} />
+        <CheckboxRow icon={Trash2} label="Trash" checked={navItemsVisibility.trash} onChange={() => handleNavItemToggle('trash')} />
       </PreferenceCard>
 
       {navigationStyle === 'sidebar' && (
@@ -356,6 +424,14 @@ RadioRow.propTypes = {
   onChange: PropTypes.func.isRequired,
   icon: PropTypes.elementType,
   label: PropTypes.string.isRequired,
+};
+
+CheckboxRow.propTypes = {
+  checked: PropTypes.bool.isRequired,
+  onChange: PropTypes.func.isRequired,
+  icon: PropTypes.elementType,
+  label: PropTypes.string.isRequired,
+  locked: PropTypes.bool,
 };
 
 AppearanceSection.propTypes = {

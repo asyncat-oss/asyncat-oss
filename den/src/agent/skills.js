@@ -210,6 +210,7 @@ const SKILL_PATTERNS = [
   ['effective-logging',         /\b(log(?:ger|ging)?\b|winston|pino|structured\s+log|log\s+level|log\s+format)\b/],
   ['log-analysis',              /\b(log\s+analysis|parse\s+log|analyze\s+log|search\s+log|grep\s+log|log\s+pattern)\b/],
   ['cron-jobs',                 /\b(cron\b|schedule(?:d)?\s+job|recurring\s+task|timer|interval\s+job|cron\s+expression)\b/],
+  ['outbound-notifications',    /\b(notify|notification|ping\s+(?:me|user)|alert\s+(?:me|user)|discord|slack|telegram|webhook|long\s+task\s+finish)\b/],
   // Docs / writing
   ['effective-documentation',   /\b(document(?:ation)?|readme|wiki|jsdoc|docstring|api\s+docs|write\s+docs|add\s+comments)\b/],
   ['report-writing',            /\b(report|write\s+(?:a\s+)?report|generate\s+report|executive\s+summary)\b/],
@@ -221,8 +222,10 @@ const SKILL_PATTERNS = [
   // Planning / architecture
   ['plan',                      /\b(plan\b|planning|roadmap|design\s+doc|breakdown\s+(?:the\s+)?task|step.?by.?step)\b/],
   ['architecture-review',       /\b(architecture|system\s+design|trade.?off|design\s+decision|scalab|coupling|microservice|monolith)\b/],
+  ['api-endpoint-explorer',     /\b(api\s+(?:map|endpoint|route|explorer|docs?)|endpoint\s+map|route\s+director(?:y|ies)|express\s+router)\b/],
   // UX / research
-  ['design-workspace',          /\b(design|prototype|mockup|wireframe|canvas|one[-\s]?pager|pitch\s+deck|landing\s+page|visual\s+exploration|handoff|figma|ui\s+flow|user\s+flow)\b/],
+  ['design-workspace',          /\b(design|prototype|mockup|wireframe|canvas|one[-\s]?pager|pitch\s+deck|landing\s+page|visual\s+exploration|handoff|figma|ui\s+flow|user\s+flow|animation|animated|shader|particle|particles|loader|loading\s+indicator|hover\s+effect|text\s+stream|streaming\s+animation|sprite|wallpaper|iridescent|calculator\s+construction\s+kit|onboarding)\b/],
+  ['browser-utility-artifacts', /\b(regex\s+tester|palette\s+extractor|color\s+palette|json\s+schema\s+generator|dependency\s+graph\s+viewer|browser\s+utility|in-browser\s+tool)\b/],
   ['ui-ux-review',              /\b(ui\b|ux\b|user\s+interface|user\s+experience|design\s+review|figma|wireframe)\b/],
   ['accessibility-audit',       /\b(accessib|a11y\b|aria\b|wcag|screen\s+reader|contrast\s+ratio|keyboard\s+nav)\b/],
   ['web-research',              /\b(web\s+research|search\s+(?:the\s+)?web|browse|scrape|crawl|look\s+up\s+online|fetch\s+url)\b/],
@@ -232,6 +235,7 @@ const SKILL_PATTERNS = [
   // Ops
   ['incident-response',         /\b(incident|outage|production\s+down|on.?call|postmortem|root\s+cause|sev\d|pager|escalat)\b/],
   ['onboarding-new-codebase',   /\b(onboard|new\s+(?:to\s+(?:the\s+)?)?(?:repo|codebase|project)|explore\s+(?:the\s+)?(?:repo|code)|understand\s+(?:the\s+)?(?:codebase|project|repo))\b/],
+  ['local-rag',                 /\b(local\s+rag|offline\s+rag|retrieval\s+index|index\s+(?:the\s+)?(?:docs|codebase|folder)|knowledge\s+base|ingest\s+(?:the\s+)?(?:docs|codebase|folder))\b/],
   // Data engineering
   ['data-engineering',          /\b(etl\b|pipeline\s+(?:data|ingestion)|dbt\b|airflow|spark\b|kafka\b|data\s+warehouse|ingestion|transformation\s+pipeline)\b/],
 ];

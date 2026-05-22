@@ -98,6 +98,7 @@ const PLAN_BLOCKED_SAFE_TOOLS = new Set([
   'create_csv',
   'create_html_page',
   'create_design_canvas',
+  'create_code_animation',
   'create_design_handoff',
 ]);
 const DESIGN_ALLOWED_CATEGORIES = new Set([
@@ -135,20 +136,20 @@ const TOOL_PROFILE_PATTERNS = {
   design: /\b(design|prototype|mockup|wireframe|one[-\s]?pager|pitch\s+deck|landing\s+page|canvas|visual\s+exploration|handoff|figma|ui\s+flow|user\s+flow)\b/i,
   coding: /\b(code|implement|fix|bug|refactor|test|build|component|route|api|schema|migration|repo|frontend|backend|package|dependency)\b/i,
   writing: /\b(write|draft|document|report|summary|email|note|markdown|copy|proposal|article|blog)\b/i,
-  research: /\b(research|web|search|browse|look\s+up|source|citation|latest|current)\b/i,
+  research: /\b(research|web|search|browse|look\s+up|source|citation|latest|current|rag|retrieval|index\s+(?:docs|codebase)|knowledge\s+base)\b/i,
   data: /\b(data|csv|json|sql|query|chart|analy[sz]e|spreadsheet|table|statistics)\b/i,
   schedule: /\b(schedule|scheduled|cron|remind|reminder|every\s+\d*|hourly|daily|tomorrow|later)\b/i,
   navigation: /\b(open|browser|page|website|screenshot|click|navigate|inspect\s+page|localhost)\b/i,
 };
 const TOOL_CATEGORY_PRIORITY = {
   design: ['plan', 'design', 'artifact', 'visual', 'browser', 'file', 'code', 'lsp', 'search', 'web', 'workspace', 'skill', 'memory'],
-  coding: ['plan', 'file', 'code', 'lsp', 'git', 'shell', 'workspace', 'dev', 'docker', 'skill', 'memory'],
+  coding: ['plan', 'file', 'code', 'lsp', 'rag', 'git', 'shell', 'workspace', 'dev', 'docker', 'skill', 'memory'],
   writing: ['plan', 'artifact', 'note', 'memory', 'search', 'web', 'file', 'skill'],
-  research: ['plan', 'search', 'web', 'browser', 'memory', 'artifact', 'file', 'skill'],
+  research: ['plan', 'rag', 'search', 'web', 'browser', 'memory', 'artifact', 'file', 'skill'],
   data: ['plan', 'data', 'database', 'artifact', 'file', 'shell', 'skill'],
   schedule: ['plan', 'schedule', 'system', 'memory', 'skill'],
   navigation: ['plan', 'browser', 'screen', 'web', 'file', 'shell', 'skill'],
-  default: ['plan', 'file', 'search', 'schedule', 'memory', 'skill', 'artifact', 'shell', 'system'],
+  default: ['plan', 'file', 'rag', 'search', 'schedule', 'memory', 'skill', 'artifact', 'shell', 'system'],
 };
 
 function applyReasoningEffort(params, effort, providerInfo, model) {

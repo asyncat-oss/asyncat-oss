@@ -20,6 +20,7 @@ const TYPE_META = {
   markdown: { icon: FileText,  label: 'Document',   accent: 'bg-blue-500' },
   html:     { icon: Globe,     label: 'HTML',        accent: 'bg-orange-500' },
   design:   { icon: Palette,   label: 'Design',      accent: 'bg-fuchsia-500' },
+  animation:{ icon: Palette,   label: 'Animation',   accent: 'bg-cyan-500' },
   mermaid:  { icon: BarChart3, label: 'Diagram',     accent: 'bg-violet-500' },
   csv:      { icon: Table2,    label: 'CSV Data',    accent: 'bg-emerald-500' },
   json:     { icon: Code2,     label: 'JSON',        accent: 'bg-amber-500' },
@@ -140,7 +141,7 @@ function MarkdownPreview({ content }) {
 }
 
 // ── HTML iframe ─────────────────────────────────────────────────────────────
-function HtmlPreview({ content, title, fullHeight = false }) {
+function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = true }) {
   const [fullscreen, setFullscreen] = useState(false);
   const blob = useMemo(() => {
     if (!content) return null;
@@ -162,13 +163,15 @@ function HtmlPreview({ content, title, fullHeight = false }) {
           className={`w-full bg-white ${fullHeight ? 'h-full' : 'h-56'}`}
           sandbox="allow-scripts allow-same-origin"
         />
-        <button
-          onClick={() => setFullscreen(true)}
-          className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/40 text-white/80 hover:bg-black/60 transition-colors"
-          title="Full screen"
-        >
-          <Maximize2 className="w-3 h-3" />
-        </button>
+        {allowFullscreen && (
+          <button
+            onClick={() => setFullscreen(true)}
+            className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/40 text-white/80 hover:bg-black/60 transition-colors"
+            title="Full screen"
+          >
+            <Maximize2 className="w-3 h-3" />
+          </button>
+        )}
       </div>
       {fullscreen && (
         <div className="fixed inset-0 z-[9999] flex flex-col bg-black/80 backdrop-blur-sm">
@@ -182,6 +185,65 @@ function HtmlPreview({ content, title, fullHeight = false }) {
         </div>
       )}
     </>
+  );
+}
+
+function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) {
+  const renderFullscreenContent = () => {
+    switch (type) {
+      case 'note':
+        return <NotePanel html={content} noteId={artifact.noteId} title={title} fullHeight />;
+      case 'markdown':
+      case 'pdf_source':
+        return (
+          <div className="h-full overflow-auto bg-white px-8 py-7 dark:bg-gray-950">
+            <MarkdownPreview content={content} />
+          </div>
+        );
+      case 'html':
+      case 'design':
+      case 'animation':
+      case 'mermaid':
+        return <HtmlPreview content={content} title={title} fullHeight allowFullscreen={false} />;
+      case 'csv':
+        return (
+          <div className="h-full overflow-auto bg-white p-6 dark:bg-gray-950">
+            <CsvPreview content={content} maxRows={500} />
+          </div>
+        );
+      case 'svg':
+        return (
+          <div className="flex h-full items-center justify-center overflow-auto bg-white p-6 dark:bg-gray-950">
+            <div dangerouslySetInnerHTML={{ __html: content }} className="max-h-full max-w-full" />
+          </div>
+        );
+      case 'json':
+      case 'code':
+      default:
+        return <CodePreview content={content} fullHeight />;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9998] flex flex-col bg-gray-950/90 backdrop-blur-sm">
+      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-gray-950 px-4">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">{title}</p>
+          <p className="truncate text-[10px] text-gray-400">{artifact.path || artifact.filename || type}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+          title="Close full screen"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 bg-white dark:bg-gray-950">
+        {renderFullscreenContent()}
+      </div>
+    </div>
   );
 }
 
@@ -209,6 +271,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   const type = artifactData.type || artifactData.originalType || 'text';
   const meta = getTypeMeta(type);
@@ -218,21 +281,31 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const filename = artifactData.filename || '';
   const artifactPath = artifactData.path || '';
   const downloadOnly = type === 'zip' || type === 'pdf';
+  const canFullscreen = !downloadOnly;
 
   const loadContent = async () => {
-    if (downloadOnly) return;
-    if (content || loading) return;
+    if (downloadOnly) return null;
+    if (content) return content;
+    if (loading) return null;
     setLoading(true);
     setFetchError(null);
     try {
       if (artifactData.content) {
         setContent(artifactData.content);
+        return artifactData.content;
       } else if (type === 'note' && artifactData.noteId) {
         const note = await notesApi.fetchNoteWithContent(artifactData.noteId);
-        if (note) setContent(note.content || '');
+        if (note) {
+          const nextContent = note.content || '';
+          setContent(nextContent);
+          return nextContent;
+        }
       } else if (filename) {
         const data = await agentApi.getArtifact(filename);
-        if (data.success) setContent(data.content);
+        if (data.success) {
+          setContent(data.content);
+          return data.content;
+        }
       }
     } catch (err) {
       console.error('Failed to load artifact:', err);
@@ -240,6 +313,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
     } finally {
       setLoading(false);
     }
+    return null;
   };
 
   useEffect(() => {
@@ -305,6 +379,13 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
     }
   };
 
+  const handleFullscreen = async (e) => {
+    e?.stopPropagation?.();
+    if (!canFullscreen) return;
+    const loadedContent = content || await loadContent();
+    if (loadedContent != null || type === 'note') setFullscreenOpen(true);
+  };
+
   const renderPreview = () => {
     if (loading) {
       return (
@@ -362,6 +443,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         return <MarkdownPreview content={content} />;
       case 'html':
       case 'design':
+      case 'animation':
       case 'mermaid':
         return <HtmlPreview content={content} title={title} fullHeight={fullHeight} />;
       case 'csv':
@@ -432,6 +514,17 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
               {downloading ? <span className="block h-3.5 w-3.5 animate-pulse rounded-full bg-current opacity-50" /> : <Download className="h-3.5 w-3.5" />}
             </button>
           )}
+          {canFullscreen && (
+            <button
+              type="button"
+              onClick={handleFullscreen}
+              disabled={loading}
+              className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              title="Open full screen"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           {onOpen ? (
             <button
               type="button"
@@ -487,6 +580,16 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         <div className={`border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 overflow-y-auto ${fullHeight ? 'flex-1 min-h-0' : 'max-h-80'}`}>
           {renderPreview()}
         </div>
+      )}
+
+      {fullscreenOpen && (
+        <ArtifactFullscreenOverlay
+          artifact={artifactData}
+          content={content}
+          type={type}
+          title={title}
+          onClose={() => setFullscreenOpen(false)}
+        />
       )}
     </div>
   );
