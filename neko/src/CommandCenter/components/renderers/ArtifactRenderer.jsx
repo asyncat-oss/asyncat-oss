@@ -22,6 +22,7 @@ const TYPE_META = {
   html:     { icon: Globe,       label: 'HTML',        accent: 'bg-orange-500' },
   design:   { icon: Palette,     label: 'Design',      accent: 'bg-fuchsia-500' },
   animation:{ icon: Film,        label: 'Animation',   accent: 'bg-cyan-500' },
+  image:    { icon: Image,       label: 'Image',       accent: 'bg-pink-500' },
   video:    { icon: Video,       label: 'Video',       accent: 'bg-rose-500' },
   audio:    { icon: Music,       label: 'Audio',       accent: 'bg-violet-500' },
   mermaid:  { icon: BarChart3,   label: 'Diagram',     accent: 'bg-violet-500' },
@@ -246,6 +247,33 @@ function AudioPreview({ filename }) {
   );
 }
 
+// ── Image preview ─────────────────────────────────────────────────────────────
+function ImagePreview({ filename, fullHeight = false }) {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let objectUrl = null;
+    agentApi.downloadArtifact(filename)
+      .then(({ blob }) => {
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(err => setError(err.message));
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [filename]);
+
+  if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
+  if (!src) return (
+    <div className="py-4 flex items-center justify-center text-[11px] text-gray-400">Loading image…</div>
+  );
+  return (
+    <div className={`rounded overflow-hidden bg-gray-100 dark:bg-gray-900 flex items-center justify-center ${fullHeight ? 'h-full' : ''}`}>
+      <img src={src} alt={filename} className={`object-contain ${fullHeight ? 'max-h-full max-w-full' : 'max-h-64 w-full'}`} />
+    </div>
+  );
+}
+
 function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) {
   const renderFullscreenContent = () => {
     switch (type) {
@@ -263,6 +291,12 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
       case 'animation':
       case 'mermaid':
         return <HtmlPreview content={content} title={title} fullHeight allowFullscreen={false} />;
+      case 'image':
+        return (
+          <div className="flex h-full items-center justify-center bg-gray-950">
+            <ImagePreview filename={artifact.filename} fullHeight />
+          </div>
+        );
       case 'video':
         return (
           <div className="flex h-full items-center justify-center bg-black">
@@ -347,7 +381,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   const type = artifactData.type || artifactData.originalType || 'text';
-  const isBinaryType = type === 'audio' || type === 'video';
+  const isBinaryType = type === 'audio' || type === 'video' || type === 'image';
   const meta = getTypeMeta(type);
   const Icon = meta.icon;
   const title = artifactData.title || artifactData.filename || 'Untitled';
@@ -492,6 +526,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         </div>
       );
     }
+    if (type === 'image') return <ImagePreview filename={filename} fullHeight={fullHeight} />;
     if (type === 'video') return <VideoPreview filename={filename} fullHeight={fullHeight} />;
     if (type === 'audio') return <AudioPreview filename={filename} />;
     if (!content) {
