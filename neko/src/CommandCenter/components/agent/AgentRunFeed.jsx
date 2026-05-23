@@ -2265,6 +2265,14 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
     return null;
   }, [events]);
 
+  // Must be declared before any early returns to satisfy Rules of Hooks
+  const runArtifacts = useMemo(() =>
+    (events || []).filter(ev =>
+      ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact
+    ),
+    [events]
+  );
+
   const refreshState = useCallback(() => {
     if (!sessionId) return;
     setStateLoading(true);
@@ -2282,13 +2290,6 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   const elapsedMs = runStartedAt && completedAt > runStartedAt ? completedAt - runStartedAt : 0;
   const topTools = Object.entries(toolsSeen).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name, count]) => ({ name, count }));
 
-  // Collect artifacts created in this run
-  const runArtifacts = useMemo(() =>
-    (events || []).filter(ev =>
-      ev.type === 'tool_start' && ARTIFACT_TOOLS.has(ev.data?.tool) && ev.result?.success && ev.result?.artifact
-    ),
-    [events]
-  );
   const hasArtifacts = runArtifacts.length > 0;
 
   const handleRevert = async () => {
