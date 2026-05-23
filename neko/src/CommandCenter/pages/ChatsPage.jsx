@@ -298,6 +298,29 @@ const ChatsPage = () => {
     else unfiledConversations.push(c);
   });
 
+  // Unified top-level items sorted by recency so the latest activity always floats to top,
+  // regardless of whether it's a project folder or a standalone chat.
+  const topLevelItems = [];
+  workedFolderGroups.forEach(group => {
+    topLevelItems.push({ kind: 'worked-folder', sortMs: group.updatedAtMs, data: group });
+  });
+  activeRunsWithoutWorkedFolder.forEach(run => {
+    topLevelItems.push({ kind: 'active-run', sortMs: getItemUpdatedMs(run), data: run });
+  });
+  folders.forEach(folder => {
+    const folderChats = folderMap[folder.id];
+    if (!folderChats || folderChats.length === 0) return;
+    const sortMs = Math.max(...folderChats.map(c => getItemUpdatedMs(c)));
+    topLevelItems.push({ kind: 'named-folder', sortMs, data: { folder, chats: folderChats } });
+  });
+  unfiledConversations.forEach(c => {
+    topLevelItems.push({ kind: 'chat', sortMs: getItemUpdatedMs(c), data: c });
+  });
+  taskAgentRunsWithoutWorkedFolder.forEach(run => {
+    topLevelItems.push({ kind: 'task-run', sortMs: getItemUpdatedMs(run), data: run });
+  });
+  topLevelItems.sort((a, b) => b.sortMs - a.sortMs);
+
   const selectableItems = filteredConversations;
   const selectedList = Object.values(selectedItems);
   const selectedCount = selectedList.length;
@@ -577,87 +600,52 @@ const ChatsPage = () => {
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No conversations found</p>
             </div>
           ) : (
-            <div className="space-y-4 text-left">
-              {workedFolderGroups.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="mb-3 px-1 text-xs font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">Projects</h3>
-                  <div className="space-y-5">
-                    {workedFolderGroups.map(group => {
-                      const isExpanded = expandedFolders[group.expandedKey] ?? true;
-                      return (
-                        <div key={group.key}>
-                          <button
-                            type="button"
-                            onClick={() => toggleFolder(group.expandedKey)}
-                            className="mb-1.5 flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
-                            title={group.title}
-                          >
-                            {isExpanded
-                              ? <FolderOpen className="h-4 w-4 flex-shrink-0 text-gray-500" />
-                              : <Folder className="h-4 w-4 flex-shrink-0 text-gray-500" />
-                            }
-                            <span className="truncate">{group.label}</span>
-                          </button>
-                          {isExpanded && renderChatList(group.items)}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {(workedFolderGroups.length > 0 || activeRunsWithoutWorkedFolder.length > 0 || conversationsWithoutWorkedFolder.length > 0 || taskAgentRunsWithoutWorkedFolder.length > 0) && (
-                <div className="mb-6">
-                  <h3 className="mb-3 px-1 text-xs font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">Chats</h3>
-                  {activeRunsWithoutWorkedFolder.length === 0 && conversationsWithoutWorkedFolder.length === 0 && taskAgentRunsWithoutWorkedFolder.length === 0 ? (
-                    <p className="px-1 text-sm text-gray-400 dark:text-gray-500 midnight:text-slate-500">No chats</p>
-                  ) : (
-                    <>
-                      {activeRunsWithoutWorkedFolder.length > 0 && (
-                        <div className="mb-6">
-                          <h4 className="mb-3 px-1 text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300">Active</h4>
-                          {renderChatList(activeRunsWithoutWorkedFolder)}
-                        </div>
-                      )}
-                      {folders.map(folder => {
-                        const folderChats = folderMap[folder.id];
-                        if (!folderChats || folderChats.length === 0) return null;
-                        const isExpanded = expandedFolders[folder.id];
-                        return (
-                          <div key={folder.id} className="mb-6">
-                            <button
-                              type="button"
-                              onClick={() => toggleFolder(folder.id)}
-                              className="mb-1.5 flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
-                            >
-                              {isExpanded
-                                ? <FolderOpen className="h-4 w-4 text-gray-500" />
-                                : <Folder className="h-4 w-4 text-gray-500" />
-                              }
-                              {folder.name}
-                              <span className="text-xs font-normal text-gray-400">({folderChats.length})</span>
-                            </button>
-                            {isExpanded && renderChatList(folderChats)}
-                          </div>
-                        );
-                      })}
-                      {unfiledConversations.length > 0 && (
-                        <div className="mb-6">
-                          {folders.length > 0 && (
-                            <h4 className="mb-3 px-1 text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300">Unfiled</h4>
-                          )}
-                          {renderChatList(unfiledConversations)}
-                        </div>
-                      )}
-                      {taskAgentRunsWithoutWorkedFolder.length > 0 && (
-                        <div className="mb-6">
-                          <h4 className="mb-3 px-1 text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-slate-300">Task agent runs</h4>
-                          {renderChatList(taskAgentRunsWithoutWorkedFolder)}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+            <div className="space-y-2 text-left">
+              {topLevelItems.map(item => {
+                if (item.kind === 'worked-folder') {
+                  const group = item.data;
+                  const isExpanded = expandedFolders[group.expandedKey] ?? true;
+                  return (
+                    <div key={group.key} className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleFolder(group.expandedKey)}
+                        className="mb-1.5 flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
+                        title={group.title}
+                      >
+                        {isExpanded
+                          ? <FolderOpen className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                          : <Folder className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                        }
+                        <span className="truncate">{group.label}</span>
+                      </button>
+                      {isExpanded && renderChatList(group.items)}
+                    </div>
+                  );
+                }
+                if (item.kind === 'named-folder') {
+                  const { folder, chats } = item.data;
+                  const isExpanded = expandedFolders[folder.id];
+                  return (
+                    <div key={`folder-${folder.id}`} className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleFolder(folder.id)}
+                        className="mb-1.5 flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
+                      >
+                        {isExpanded
+                          ? <FolderOpen className="h-4 w-4 text-gray-500" />
+                          : <Folder className="h-4 w-4 text-gray-500" />
+                        }
+                        {folder.name}
+                        <span className="text-xs font-normal text-gray-400">({chats.length})</span>
+                      </button>
+                      {isExpanded && renderChatList(chats)}
+                    </div>
+                  );
+                }
+                return renderChatItem(item.data);
+              })}
             </div>
           )}
         </div>
