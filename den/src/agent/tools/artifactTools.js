@@ -435,6 +435,8 @@ function extToType(ext) {
     '.pdf': 'pdf',
     '.zip': 'zip',
     '.txt': 'text',
+    '.mp4': 'video', '.webm': 'video', '.mov': 'video', '.avi': 'video',
+    '.wav': 'audio', '.mp3': 'audio', '.ogg': 'audio', '.aac': 'audio', '.flac': 'audio',
     '.js': 'code', '.ts': 'code', '.py': 'code', '.sh': 'code',
     '.css': 'code', '.jsx': 'code', '.tsx': 'code',
   };

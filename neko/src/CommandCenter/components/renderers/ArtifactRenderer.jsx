@@ -8,6 +8,7 @@ import {
   Download, FileText, Table2, Code2,
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
   X, Maximize2, Copy, Check, FileDown, PanelRight, BookOpen, Palette, FileArchive,
+  Film, Music, Video,
 } from 'lucide-react';
 import { parseAIResponseToBlocks, BlockRenderer, headingId } from './BlockBasedMessageRenderer';
 import { agentApi } from '../../api';
@@ -17,19 +18,21 @@ import ModernNoteEditor from '../../../notes/modern/ModernNoteEditor';
 
 // ── Type config ─────────────────────────────────────────────────────────────
 const TYPE_META = {
-  markdown: { icon: FileText,  label: 'Document',   accent: 'bg-blue-500' },
-  html:     { icon: Globe,     label: 'HTML',        accent: 'bg-orange-500' },
-  design:   { icon: Palette,   label: 'Design',      accent: 'bg-fuchsia-500' },
-  animation:{ icon: Palette,   label: 'Animation',   accent: 'bg-cyan-500' },
-  mermaid:  { icon: BarChart3, label: 'Diagram',     accent: 'bg-violet-500' },
-  csv:      { icon: Table2,    label: 'CSV Data',    accent: 'bg-emerald-500' },
-  json:     { icon: Code2,     label: 'JSON',        accent: 'bg-amber-500' },
-  code:     { icon: Code2,     label: 'Code',        accent: 'bg-cyan-500' },
-  svg:      { icon: Image,     label: 'SVG',         accent: 'bg-pink-500' },
-  pdf:      { icon: FileDown,  label: 'PDF',         accent: 'bg-red-500' },
-  zip:      { icon: FileArchive, label: 'Bundle',    accent: 'bg-fuchsia-500' },
-  text:     { icon: FileText,  label: 'Text',        accent: 'bg-gray-500' },
-  note:     { icon: BookOpen,  label: 'Note',        accent: 'bg-indigo-500' },
+  markdown: { icon: FileText,    label: 'Document',   accent: 'bg-blue-500' },
+  html:     { icon: Globe,       label: 'HTML',        accent: 'bg-orange-500' },
+  design:   { icon: Palette,     label: 'Design',      accent: 'bg-fuchsia-500' },
+  animation:{ icon: Film,        label: 'Animation',   accent: 'bg-cyan-500' },
+  video:    { icon: Video,       label: 'Video',       accent: 'bg-rose-500' },
+  audio:    { icon: Music,       label: 'Audio',       accent: 'bg-violet-500' },
+  mermaid:  { icon: BarChart3,   label: 'Diagram',     accent: 'bg-violet-500' },
+  csv:      { icon: Table2,      label: 'CSV Data',    accent: 'bg-emerald-500' },
+  json:     { icon: Code2,       label: 'JSON',        accent: 'bg-amber-500' },
+  code:     { icon: Code2,       label: 'Code',        accent: 'bg-cyan-500' },
+  svg:      { icon: Image,       label: 'SVG',         accent: 'bg-pink-500' },
+  pdf:      { icon: FileDown,    label: 'PDF',         accent: 'bg-red-500' },
+  zip:      { icon: FileArchive, label: 'Bundle',      accent: 'bg-fuchsia-500' },
+  text:     { icon: FileText,    label: 'Text',        accent: 'bg-gray-500' },
+  note:     { icon: BookOpen,    label: 'Note',        accent: 'bg-indigo-500' },
 };
 
 function getTypeMeta(type) {
@@ -161,7 +164,8 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
           src={blob}
           title={title || 'Preview'}
           className={`w-full bg-white ${fullHeight ? 'h-full' : 'h-56'}`}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-downloads allow-popups allow-presentation"
+          allow="autoplay"
         />
         {allowFullscreen && (
           <button
@@ -181,10 +185,64 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
               <X className="w-4 h-4" />
             </button>
           </div>
-          <iframe src={blob} title={title} className="flex-1 w-full bg-white" sandbox="allow-scripts allow-same-origin" />
+          <iframe src={blob} title={title} className="flex-1 w-full bg-white" sandbox="allow-scripts allow-same-origin allow-downloads allow-popups allow-presentation" allow="autoplay" />
         </div>
       )}
     </>
+  );
+}
+
+// ── Video player ─────────────────────────────────────────────────────────────
+function VideoPreview({ filename, fullHeight = false }) {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let objectUrl = null;
+    agentApi.downloadArtifact(filename)
+      .then(({ blob }) => {
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(err => setError(err.message));
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [filename]);
+
+  if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
+  if (!src) return (
+    <div className="py-4 flex items-center justify-center text-[11px] text-gray-400">Loading video…</div>
+  );
+  return (
+    <div className={`rounded overflow-hidden bg-black ${fullHeight ? 'h-full flex items-center justify-center' : ''}`}>
+      <video controls src={src} className={`w-full block ${fullHeight ? 'max-h-full' : 'max-h-64'}`} />
+    </div>
+  );
+}
+
+// ── Audio player ─────────────────────────────────────────────────────────────
+function AudioPreview({ filename }) {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let objectUrl = null;
+    agentApi.downloadArtifact(filename)
+      .then(({ blob }) => {
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(err => setError(err.message));
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [filename]);
+
+  if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
+  if (!src) return (
+    <div className="py-3 flex items-center justify-center text-[11px] text-gray-400">Loading audio…</div>
+  );
+  return (
+    <div className="py-2 px-1">
+      <audio controls src={src} className="w-full" />
+    </div>
   );
 }
 
@@ -205,6 +263,21 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
       case 'animation':
       case 'mermaid':
         return <HtmlPreview content={content} title={title} fullHeight allowFullscreen={false} />;
+      case 'video':
+        return (
+          <div className="flex h-full items-center justify-center bg-black">
+            <VideoPreview filename={artifact.filename} fullHeight />
+          </div>
+        );
+      case 'audio':
+        return (
+          <div className="flex h-full items-center justify-center bg-gray-900 p-8">
+            <div className="w-full max-w-lg">
+              <p className="mb-4 text-center text-sm font-medium text-gray-300">{title}</p>
+              <AudioPreview filename={artifact.filename} />
+            </div>
+          </div>
+        );
       case 'csv':
         return (
           <div className="h-full overflow-auto bg-white p-6 dark:bg-gray-950">
@@ -274,6 +347,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   const type = artifactData.type || artifactData.originalType || 'text';
+  const isBinaryType = type === 'audio' || type === 'video';
   const meta = getTypeMeta(type);
   const Icon = meta.icon;
   const title = artifactData.title || artifactData.filename || 'Untitled';
@@ -284,7 +358,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const canFullscreen = !downloadOnly;
 
   const loadContent = async () => {
-    if (downloadOnly) return null;
+    if (downloadOnly || isBinaryType) return null;
     if (content) return content;
     if (loading) return null;
     setLoading(true);
@@ -317,7 +391,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   };
 
   useEffect(() => {
-    if (expanded) loadContent();
+    if (expanded && !isBinaryType) loadContent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, filename]);
 
@@ -337,7 +411,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
 
   const handleToggle = async (e) => {
     if (onOpen) { e?.stopPropagation(); onOpen(); return; }
-    if (!expanded) loadContent();
+    if (!expanded && !isBinaryType) loadContent();
     setExpanded(v => !v);
   };
 
@@ -382,6 +456,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const handleFullscreen = async (e) => {
     e?.stopPropagation?.();
     if (!canFullscreen) return;
+    if (isBinaryType) { setFullscreenOpen(true); return; }
     const loadedContent = content || await loadContent();
     if (loadedContent != null || type === 'note') setFullscreenOpen(true);
   };
@@ -417,6 +492,8 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         </div>
       );
     }
+    if (type === 'video') return <VideoPreview filename={filename} fullHeight={fullHeight} />;
+    if (type === 'audio') return <AudioPreview filename={filename} />;
     if (!content) {
       return (
         <div className="py-3 text-center">

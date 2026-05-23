@@ -5,8 +5,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
-import { safePath } from './shared.js';
+import { safePath, formatSize } from './shared.js';
+import { getArtifactsDir } from '../workspacePaths.js';
 import {
   getStatus as getWhisperStatus,
   transcribe,
@@ -123,28 +125,53 @@ export const speakTextTool = {
       return { success: false, error: 'Text cannot be empty.' };
     }
 
-    // Limit text length for safety
-    if (args.text.length > 10000) {
-      return { success: false, error: 'Text too long (>10,000 characters). Split into smaller segments.' };
+    if (args.text.length > 50000) {
+      return { success: false, error: 'Text too long (>50,000 characters). Split into smaller segments.' };
     }
 
     try {
       const audioBuffer = await synthesize(args.text);
 
-      // Determine output path
-      const outputName = args.output_path || `speech_${Date.now()}.wav`;
-      const outputPath = safePath(outputName, context.workingDir);
+      // Save to artifacts dir so the UI can display it inline
+      const artifactsDir = getArtifactsDir(context.workingDir);
+      fs.mkdirSync(artifactsDir, { recursive: true });
 
-      // Ensure directory exists
-      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-      fs.writeFileSync(outputPath, audioBuffer);
+      const id = randomUUID().slice(0, 12);
+      const baseName = args.output_path
+        ? path.basename(args.output_path, path.extname(args.output_path))
+        : `speech_${Date.now()}`;
+      const artifactFilename = `${baseName}_${id}.wav`;
+      const artifactPath = path.join(artifactsDir, artifactFilename);
+      fs.writeFileSync(artifactPath, audioBuffer);
 
-      const relPath = path.relative(context.workingDir, outputPath);
+      // Also write to the requested output path if specified
+      if (args.output_path) {
+        const outputPath = safePath(args.output_path, context.workingDir);
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.writeFileSync(outputPath, audioBuffer);
+      }
+
+      const relArtifactPath = path.relative(context.workingDir, artifactPath);
+      const label = args.text.slice(0, 60) + (args.text.length > 60 ? '…' : '');
+
       return {
         success: true,
-        path: relPath,
+        path: args.output_path || relArtifactPath,
+        artifact: {
+          id,
+          title: `Audio: ${label}`,
+          filename: artifactFilename,
+          path: relArtifactPath,
+          absolutePath: artifactPath,
+          type: 'audio',
+          size: audioBuffer.length,
+          createdAt: new Date().toISOString(),
+          voice: ttsStatus.model,
+          format: 'WAV',
+          textLength: args.text.length,
+        },
         text_length: args.text.length,
-        audio_size: `${(audioBuffer.length / 1024).toFixed(1)} KB`,
+        audio_size: formatSize(audioBuffer.length),
         audio_bytes: audioBuffer.length,
         voice: ttsStatus.model,
         format: 'WAV (16-bit PCM, 22050 Hz, mono)',

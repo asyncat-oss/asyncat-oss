@@ -884,8 +884,8 @@ export const createCodeAnimationTool = {
       filename: { type: 'string', description: 'Optional output filename. Should end in .html.' },
       animation_type: {
         type: 'string',
-        enum: ['hover-effect', 'shader', 'particles', 'loader', 'text-stream', 'sprite', 'canvas', 'svg', 'css', 'interactive'],
-        description: 'The animation/prototype family.',
+        enum: ['hover-effect', 'shader', 'particles', 'loader', 'text-stream', 'sprite', 'canvas', 'svg', 'css', 'interactive', 'presentation', 'slideshow', 'narrated'],
+        description: 'The animation/prototype family. Use "presentation" for slide decks, "slideshow" for timed image shows, "narrated" for voiceover-driven content.',
       },
       html: { type: 'string', description: 'Body markup or a full HTML document.' },
       css: { type: 'string', description: 'CSS animation, layout, and visual styling.' },
@@ -924,7 +924,7 @@ export const createCodeAnimationTool = {
         html: args.html || defaultAnimationBody(args.title, args.brief, args.animation_type),
         css: `${defaultAnimationCss()}\n${args.css || ''}`,
         js: `${args.js || defaultAnimationJs()}`,
-        sliders: Array.isArray(args.sliders) && args.sliders.length ? args.sliders : defaultSliders,
+        sliders: args.sliders !== undefined ? args.sliders : defaultSliders,
         format: args.animation_type || 'animation',
         viewport: args.viewport || 'responsive',
       });
@@ -1086,11 +1086,465 @@ export const createDesignHandoffTool = {
   },
 };
 
+// ── Narrated Slideshow HTML builder ──────────────────────────────────────────
+
+function buildNarratedSlideshowHtml({ title, slides, theme, autoplay, loop, transition }) {
+  const themes = {
+    dark:  { bg: '#0a0a0a', text: '#f5f5f5', accent: '#4f46e5', cap: 'rgba(0,0,0,0.72)', ctrl: 'rgba(255,255,255,0.08)', ctrlH: 'rgba(255,255,255,0.18)' },
+    light: { bg: '#ffffff', text: '#111111', accent: '#4f46e5', cap: 'rgba(255,255,255,0.84)', ctrl: 'rgba(0,0,0,0.06)', ctrlH: 'rgba(0,0,0,0.12)' },
+    brand: { bg: '#0f172a', text: '#f1f5f9', accent: '#6366f1', cap: 'rgba(15,23,42,0.84)', ctrl: 'rgba(99,102,241,0.15)', ctrlH: 'rgba(99,102,241,0.3)' },
+  };
+  const c = themes[theme] || themes.dark;
+
+  const slidesMarkup = slides.map((slide, i) => {
+    const bg = slide.bg_color || (i % 2 === 0 ? c.bg : 'inherit');
+    const fg = slide.text_color || c.text;
+    return `    <div class="slide${i === 0 ? ' active' : ''}" data-index="${i}" data-duration="${slide.duration_ms || 5000}" data-caption="${escapeHtml(slide.caption || '')}" style="background:${escapeHtml(bg)};color:${escapeHtml(fg)}">
+      <div class="slide-inner">
+        ${slide.title ? `<h2 class="slide-title">${escapeHtml(slide.title)}</h2>` : ''}
+        ${slide.subtitle ? `<p class="slide-sub">${escapeHtml(slide.subtitle)}</p>` : ''}
+        ${slide.body ? `<div class="slide-body">${slide.body}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('\n');
+
+  const audioDataJson = JSON.stringify(slides.map(s => s._audioBase64 || null));
+
+  const transitionCss = transition === 'none'
+    ? '.slide { display: none; } .slide.active { display: flex; }'
+    : '.slide { opacity: 0; transition: opacity 0.45s ease; pointer-events: none; } .slide.active { opacity: 1; pointer-events: auto; }';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: ${c.bg}; color: ${c.text}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; width: 100vw; height: 100vh; }
+    #slideshow { position: relative; width: 100%; height: 100%; overflow: hidden; }
+    .slide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 48px 56px 112px; }
+    ${transitionCss}
+    .slide-inner { max-width: 820px; width: 100%; text-align: center; }
+    .slide-title { font-size: clamp(26px, 5vw, 62px); font-weight: 700; line-height: 1.08; margin-bottom: 18px; letter-spacing: -0.02em; }
+    .slide-sub { font-size: clamp(15px, 2.2vw, 26px); opacity: 0.65; margin-bottom: 20px; font-weight: 400; }
+    .slide-body { font-size: clamp(13px, 1.8vw, 18px); line-height: 1.65; opacity: 0.82; }
+    #caption-bar { position: absolute; bottom: 64px; left: 0; right: 0; padding: 10px 24px; text-align: center; pointer-events: none; }
+    #caption-text { display: inline-block; background: ${c.cap}; backdrop-filter: blur(10px); color: ${c.text}; font-size: 14px; line-height: 1.5; padding: 7px 14px; border-radius: 8px; max-width: 720px; }
+    #caption-text:empty { display: none; }
+    #controls { position: absolute; bottom: 0; left: 0; right: 0; height: 56px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 16px; background: ${c.cap}; backdrop-filter: blur(10px); }
+    .cbtn { width: 34px; height: 34px; border: none; border-radius: 50%; background: ${c.ctrl}; color: ${c.text}; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: background 0.18s; flex-shrink: 0; }
+    .cbtn:hover { background: ${c.ctrlH}; }
+    .cbtn:disabled { opacity: 0.28; cursor: default; }
+    #slide-counter { font-size: 11px; opacity: 0.45; min-width: 44px; text-align: center; }
+    #progress-bar { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(128,128,128,0.15); }
+    #progress-fill { height: 100%; background: ${c.accent}; width: 0%; }
+    #vol-btn { font-size: 14px; }
+  </style>
+</head>
+<body>
+<div id="slideshow">
+  <div id="slides-container">
+${slidesMarkup}
+  </div>
+  <div id="caption-bar"><p id="caption-text"></p></div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <div id="controls">
+    <button class="cbtn" id="btn-prev" title="Previous (←)">&#9664;</button>
+    <button class="cbtn" id="btn-pp" title="Play / Pause (Space)">&#9654;</button>
+    <button class="cbtn" id="btn-next" title="Next (→)">&#9654;</button>
+    <span id="slide-counter">1 / ${slides.length}</span>
+    <button class="cbtn" id="vol-btn" title="Mute / Unmute">&#128266;</button>
+  </div>
+</div>
+<audio id="slide-audio" preload="auto"></audio>
+<script>
+  const audioData = ${audioDataJson};
+  const TOTAL = ${slides.length};
+  const LOOP = ${loop ? 'true' : 'false'};
+  const slideEls = document.querySelectorAll('.slide');
+  const audio = document.getElementById('slide-audio');
+  const captionEl = document.getElementById('caption-text');
+  const counterEl = document.getElementById('slide-counter');
+  const pfill = document.getElementById('progress-fill');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnPP = document.getElementById('btn-pp');
+  const btnVol = document.getElementById('vol-btn');
+
+  let cur = 0, playing = false, muted = false;
+  let rafId = null, timerStart = 0, timerDur = 0, timerHandle = null;
+
+  function dur(i) { return parseInt(slideEls[i]?.dataset.duration || '5000', 10); }
+  function cap(i) { return slideEls[i]?.dataset.caption || ''; }
+
+  function updateUI() {
+    captionEl.textContent = cap(cur);
+    counterEl.textContent = (cur + 1) + ' / ' + TOTAL;
+    btnPrev.disabled = cur === 0;
+    btnNext.disabled = cur === TOTAL - 1 && !LOOP;
+    btnPP.innerHTML = playing ? '&#9646;&#9646;' : '&#9654;';
+    btnVol.innerHTML = muted ? '&#128263;' : '&#128266;';
+  }
+
+  function startProgressRaf(duration) {
+    if (rafId) cancelAnimationFrame(rafId);
+    timerStart = performance.now();
+    timerDur = duration;
+    function tick() {
+      const pct = Math.min(100, ((performance.now() - timerStart) / timerDur) * 100);
+      pfill.style.width = pct + '%';
+      if (pct < 100) rafId = requestAnimationFrame(tick);
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function stopProgress() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    clearTimeout(timerHandle);
+  }
+
+  function resetProgress() { stopProgress(); pfill.style.width = '0%'; }
+
+  function goTo(index, fromAdvance) {
+    stopProgress();
+    const prev = slideEls[cur];
+    if (prev) prev.classList.remove('active');
+    cur = ((index % TOTAL) + TOTAL) % TOTAL;
+    slideEls[cur].classList.add('active');
+
+    const src = audioData[cur];
+    audio.pause();
+    if (src) { audio.src = src; audio.muted = muted; audio.load(); }
+    else audio.src = '';
+
+    updateUI();
+
+    if (playing) {
+      const d = dur(cur);
+      if (src) {
+        audio.play().catch(() => {});
+        startProgressRaf(d);
+      } else {
+        startProgressRaf(d);
+        timerHandle = setTimeout(() => {
+          if (cur < TOTAL - 1 || LOOP) goTo(cur + 1, true);
+          else pause();
+        }, d);
+      }
+    } else {
+      resetProgress();
+    }
+  }
+
+  function play() {
+    playing = true;
+    const src = audioData[cur];
+    const d = dur(cur);
+    if (src) { audio.muted = muted; audio.play().catch(() => {}); startProgressRaf(d); }
+    else { startProgressRaf(d); timerHandle = setTimeout(() => { if(cur < TOTAL-1||LOOP) goTo(cur+1,true); else pause(); }, d); }
+    updateUI();
+  }
+
+  function pause() {
+    playing = false;
+    audio.pause();
+    stopProgress();
+    updateUI();
+  }
+
+  audio.addEventListener('ended', () => {
+    if (!playing) return;
+    if (cur < TOTAL - 1 || LOOP) goTo(cur + 1, true);
+    else pause();
+  });
+
+  audio.addEventListener('timeupdate', () => {
+    if (audio.duration > 0 && playing) {
+      pfill.style.width = ((audio.currentTime / audio.duration) * 100) + '%';
+    }
+  });
+
+  btnPrev.addEventListener('click', () => { if (cur > 0) goTo(cur - 1); });
+  btnNext.addEventListener('click', () => { if (cur < TOTAL - 1 || LOOP) goTo(cur + 1); });
+  btnPP.addEventListener('click', () => { if (playing) pause(); else play(); });
+  btnVol.addEventListener('click', () => { muted = !muted; audio.muted = muted; updateUI(); });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ') { e.preventDefault(); if (playing) pause(); else play(); }
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { if(cur<TOTAL-1||LOOP) goTo(cur+1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { if(cur>0) goTo(cur-1); }
+    else if (e.key === 'm') { muted = !muted; audio.muted = muted; updateUI(); }
+  });
+
+  updateUI();
+  resetProgress();
+  ${autoplay ? 'setTimeout(() => play(), 600);' : ''}
+</script>
+</body>
+</html>`;
+}
+
+// ── create_narrated_slideshow ─────────────────────────────────────────────────
+
+export const createNarratedSlideshowTool = {
+  name: 'create_narrated_slideshow',
+  description:
+    'Create a self-contained narrated slideshow as an HTML artifact. Combines slide content (title, subtitle, body HTML) with optional per-slide TTS audio files that are base64-embedded for offline playback. Includes a progress bar, play/pause/next/prev controls, caption overlays, and keyboard shortcuts. Ideal for 30–60 second explainer videos, product demos, and presentations. Use speak_text first to generate the audio files, then pass their paths here.',
+  category: 'design',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Slideshow title.' },
+      filename: { type: 'string', description: 'Output filename. Should end in .html.' },
+      slides: {
+        type: 'array',
+        description: 'Ordered list of slides.',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Slide headline.' },
+            subtitle: { type: 'string', description: 'Slide sub-headline or tagline.' },
+            body: { type: 'string', description: 'Main slide content (can include simple HTML tags).' },
+            caption: { type: 'string', description: 'Closed-caption / subtitle text shown at the bottom during this slide.' },
+            audio_path: { type: 'string', description: 'Relative path to a WAV/MP3 audio file for this slide (generated by speak_text). Embedded as base64.' },
+            duration_ms: { type: 'number', description: 'Slide duration in milliseconds when no audio is present (default: 5000).' },
+            bg_color: { type: 'string', description: 'CSS background color for this slide.' },
+            text_color: { type: 'string', description: 'CSS text color for this slide.' },
+          },
+        },
+      },
+      theme: {
+        type: 'string',
+        enum: ['dark', 'light', 'brand'],
+        description: 'Color theme (default: dark).',
+      },
+      transition: {
+        type: 'string',
+        enum: ['fade', 'none'],
+        description: 'Slide transition (default: fade).',
+      },
+      autoplay: { type: 'boolean', description: 'Start playing automatically on load (default: false).' },
+      loop: { type: 'boolean', description: 'Loop back to slide 1 after the last slide (default: false).' },
+    },
+    required: ['title', 'slides'],
+  },
+  execute: async (args, context) => {
+    try {
+      if (!Array.isArray(args.slides) || args.slides.length === 0) {
+        return { success: false, error: 'At least one slide is required.' };
+      }
+
+      const artifactsDir = ensureArtifactsDir(context.workingDir);
+      const id = randomUUID().slice(0, 10);
+      const rawFilename = normalizeFilename(args.filename, args.title, 'html');
+      const parsed = path.parse(rawFilename);
+      const filename = `${parsed.name}_${id}.html`;
+      const filePath = path.join(artifactsDir, filename);
+
+      // Load and base64-encode audio files
+      const slidesWithAudio = args.slides.map(slide => {
+        if (!slide.audio_path) return slide;
+        try {
+          const audioAbs = path.resolve(context.workingDir, slide.audio_path);
+          if (!isPathInside(audioAbs, context.workingDir)) return slide;
+          if (!fs.existsSync(audioAbs)) return slide;
+          const buf = fs.readFileSync(audioAbs);
+          const ext = path.extname(slide.audio_path).toLowerCase().slice(1);
+          const mime = ext === 'mp3' ? 'audio/mpeg' : ext === 'ogg' ? 'audio/ogg' : 'audio/wav';
+          return { ...slide, _audioBase64: `data:${mime};base64,${buf.toString('base64')}` };
+        } catch {
+          return slide;
+        }
+      });
+
+      const content = buildNarratedSlideshowHtml({
+        title: args.title,
+        slides: slidesWithAudio,
+        theme: args.theme || 'dark',
+        autoplay: args.autoplay || false,
+        loop: args.loop || false,
+        transition: args.transition || 'fade',
+      });
+
+      fs.writeFileSync(filePath, content, 'utf8');
+      const stat = fs.statSync(filePath);
+      const relativePath = artifactRelativePath(context.workingDir, filePath);
+      const audioCount = slidesWithAudio.filter(s => s._audioBase64).length;
+
+      return {
+        success: true,
+        artifact: {
+          id,
+          title: args.title,
+          filename,
+          path: relativePath,
+          absolutePath: filePath,
+          type: 'animation',
+          originalType: 'html',
+          description: `Narrated slideshow: ${args.slides.length} slides${audioCount ? `, ${audioCount} with audio` : ''}`,
+          size: stat.size,
+          createdAt: new Date().toISOString(),
+        },
+        slideshow: {
+          slideCount: args.slides.length,
+          audioEmbedded: audioCount,
+          theme: args.theme || 'dark',
+          transition: args.transition || 'fade',
+        },
+        message: `Narrated slideshow "${args.title}" created: ${relativePath} (${formatSize(stat.size)}, ${args.slides.length} slides, ${audioCount} audio tracks)`,
+      };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to create narrated slideshow.' };
+    }
+  },
+};
+
+// ── render_video ──────────────────────────────────────────────────────────────
+
+export const renderVideoTool = {
+  name: 'render_video',
+  description:
+    'Render an MP4 video using FFmpeg. Requires FFmpeg to be installed (brew install ffmpeg / apt install ffmpeg). ' +
+    'Modes: "image-audio" combines a still image with an audio narration track into an MP4; "image-sequence" converts an ordered list of image frames into a video (optionally with audio). ' +
+    'Returns a video artifact that can be played and downloaded from the UI.',
+  category: 'design',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Video title.' },
+      filename: { type: 'string', description: 'Output filename. Should end in .mp4.' },
+      mode: {
+        type: 'string',
+        enum: ['image-audio', 'image-sequence'],
+        description: '"image-audio": still image + audio → MP4. "image-sequence": ordered image frames → MP4.',
+      },
+      image: { type: 'string', description: 'Path to still image (for image-audio mode, relative to working dir).' },
+      images: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Ordered list of image paths (for image-sequence mode, relative to working dir).',
+      },
+      audio: { type: 'string', description: 'Path to audio file (WAV, MP3) to add as the video soundtrack.' },
+      fps: { type: 'number', description: 'Frames per second for image-sequence mode (default: 24).' },
+      width: { type: 'number', description: 'Output width in pixels, must be even (default: 1280).' },
+      height: { type: 'number', description: 'Output height in pixels, must be even (default: 720).' },
+    },
+    required: ['title', 'mode'],
+  },
+  execute: async (args, context) => {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const execFileAsync = promisify(execFile);
+
+    // Verify ffmpeg is available
+    try {
+      await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+    } catch {
+      return {
+        success: false,
+        error: 'FFmpeg not found. Install it first: macOS → "brew install ffmpeg", Ubuntu → "sudo apt install ffmpeg", then restart the server.',
+      };
+    }
+
+    try {
+      const artifactsDir = ensureArtifactsDir(context.workingDir);
+      const id = randomUUID().slice(0, 10);
+      const baseName = slugify(args.filename ? path.parse(args.filename).name : args.title);
+      const filename = `${baseName}_${id}.mp4`;
+      const filePath = path.join(artifactsDir, filename);
+
+      const w = Math.round((args.width || 1280) / 2) * 2;
+      const h = Math.round((args.height || 720) / 2) * 2;
+      const scaleFilter = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`;
+
+      let ffArgs;
+      let tmpList = null;
+
+      if (args.mode === 'image-audio') {
+        if (!args.image) return { success: false, error: '"image-audio" mode requires an "image" path.' };
+        if (!args.audio) return { success: false, error: '"image-audio" mode requires an "audio" path.' };
+        const imgPath = safePath(args.image, context.workingDir);
+        const audPath = safePath(args.audio, context.workingDir);
+        if (!fs.existsSync(imgPath)) return { success: false, error: `Image not found: ${args.image}` };
+        if (!fs.existsSync(audPath)) return { success: false, error: `Audio not found: ${args.audio}` };
+        ffArgs = [
+          '-loop', '1', '-i', imgPath,
+          '-i', audPath,
+          '-c:v', 'libx264', '-tune', 'stillimage',
+          '-c:a', 'aac', '-b:a', '192k',
+          '-pix_fmt', 'yuv420p',
+          '-vf', scaleFilter,
+          '-shortest', '-movflags', '+faststart',
+          '-y', filePath,
+        ];
+      } else if (args.mode === 'image-sequence') {
+        if (!Array.isArray(args.images) || args.images.length === 0) {
+          return { success: false, error: '"image-sequence" mode requires an "images" array.' };
+        }
+        const fps = args.fps || 24;
+        tmpList = path.join(context.workingDir, `.ffmpeg_list_${id}.txt`);
+        const dur = (1 / fps).toFixed(6);
+        const lastImg = safePath(args.images[args.images.length - 1], context.workingDir);
+        const listContent = args.images
+          .map(img => `file '${safePath(img, context.workingDir)}'\nduration ${dur}`)
+          .join('\n') + `\nfile '${lastImg}'`;
+        fs.writeFileSync(tmpList, listContent, 'utf8');
+        ffArgs = [
+          '-f', 'concat', '-safe', '0', '-i', tmpList,
+          ...(args.audio ? ['-i', safePath(args.audio, context.workingDir)] : []),
+          '-c:v', 'libx264',
+          '-pix_fmt', 'yuv420p',
+          '-vf', scaleFilter,
+          '-r', String(fps),
+          ...(args.audio ? ['-c:a', 'aac', '-b:a', '192k', '-shortest'] : []),
+          '-movflags', '+faststart',
+          '-y', filePath,
+        ];
+      } else {
+        return { success: false, error: `Unknown mode: ${args.mode}. Use "image-audio" or "image-sequence".` };
+      }
+
+      try {
+        await execFileAsync('ffmpeg', ffArgs, { timeout: 300000 });
+      } finally {
+        if (tmpList) { try { fs.unlinkSync(tmpList); } catch {} }
+      }
+
+      const stat = fs.statSync(filePath);
+      const relativePath = artifactRelativePath(context.workingDir, filePath);
+
+      return {
+        success: true,
+        artifact: {
+          id,
+          title: args.title,
+          filename,
+          path: relativePath,
+          absolutePath: filePath,
+          type: 'video',
+          size: stat.size,
+          createdAt: new Date().toISOString(),
+          mode: args.mode,
+        },
+        message: `Video "${args.title}" rendered: ${relativePath} (${formatSize(stat.size)})`,
+      };
+    } catch (err) {
+      return { success: false, error: `FFmpeg render failed: ${err.stderr?.toString() || err.message}` };
+    }
+  },
+};
+
 export const designTools = [
   inspectDesignSystemTool,
   createDesignCanvasTool,
   createCodeAnimationTool,
   createDesignHandoffTool,
+  createNarratedSlideshowTool,
+  renderVideoTool,
 ];
 
 export default designTools;
