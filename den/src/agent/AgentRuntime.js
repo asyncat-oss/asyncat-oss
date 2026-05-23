@@ -622,6 +622,20 @@ export class AgentRuntime {
           responseText = result.text;
           apiToolCalls = result.toolCalls;
           streamedReasoning = result.reasoning || '';
+
+          // If the model was cut off by the token budget, any in-flight tool call
+          // arguments will be truncated JSON that gets silently dropped.  Emit an
+          // explicit warning so the user knows the response was incomplete instead
+          // of wondering why the agent "said it did something" but nothing happened.
+          if (result.finishReason === 'length') {
+            const hadPendingToolCalls = Object.keys(result.rawToolCalls ?? {}).length > 0 && !result.toolCalls;
+            const warnMsg = hadPendingToolCalls
+              ? 'Response was cut off by the token limit while generating a tool call. The tool was not executed. Try asking the agent to create the file in smaller pieces.'
+              : 'Response was cut off by the token limit. The output may be incomplete.';
+            console.warn('[agent] finish_reason=length:', warnMsg);
+            this.onEvent({ type: 'thinking', data: { thought: `⚠️ ${warnMsg}`, round } });
+          }
+
           const estimatedInputTokens = promptTokens;
           const estimatedOutputTokens = this._estimateTokens(responseText);
           const hasRealUsage = Boolean(
@@ -1393,7 +1407,12 @@ export class AgentRuntime {
     let params = {
       model: this.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
-      max_tokens: this.isLocal ? 2048 : 4096,
+      // Use a generous token budget so tool call argument JSON (which may embed
+      // hundreds of lines of file content) is never truncated mid-stream.
+      // Truncated JSON → silent tool call drop → "agent says it wrote the file
+      // but nothing happened."  Providers that cap lower than this value will
+      // return an error which is handled by the retry block above.
+      max_tokens: this.isLocal ? 8192 : 32768,
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -1457,9 +1476,14 @@ export class AgentRuntime {
       }
 
       if (delta.content) {
-        fullText += delta.content;
-        // Emit delta event for real-time streaming
-        this.onEvent({ type: 'delta', data: { content: delta.content } });
+        // Use appendReasoningText dedup logic so models that send cumulative
+        // text per chunk (e.g. DeepSeek via OpenRouter) don't produce doubled output.
+        const prev = fullText;
+        fullText = appendReasoningText(fullText, delta.content);
+        const emitted = fullText.slice(prev.length);
+        if (emitted) {
+          this.onEvent({ type: 'delta', data: { content: emitted } });
+        }
       }
 
       if (delta.tool_calls) {
@@ -1489,6 +1513,9 @@ export class AgentRuntime {
       text: fullText,
       reasoning: reasoningText,
       toolCalls: apiToolCalls,
+      // rawToolCalls: the accumulated-but-not-yet-normalized tool calls; used by
+      // the finish_reason=length warning to detect silently-dropped tool calls.
+      rawToolCalls: toolCalls,
       finishReason: finishReason,
       usage: streamUsage,
     };
