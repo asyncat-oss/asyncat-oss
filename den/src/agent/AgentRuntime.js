@@ -719,15 +719,15 @@ export class AgentRuntime {
       // Add assistant response to thread. Native tool-calling providers expect
       // the assistant tool_call message followed by role=tool result messages.
       const nativeToolCallsForThread = normalizeNativeToolCalls(apiToolCalls);
-      if (nativeToolCallsForThread) {
-        messages.push({
-          role: 'assistant',
-          content: responseText || null,
-          tool_calls: nativeToolCallsForThread,
-        });
-      } else {
-        messages.push({ role: 'assistant', content: responseText });
+      const assistantThreadMsg = nativeToolCallsForThread
+        ? { role: 'assistant', content: responseText || null, tool_calls: nativeToolCallsForThread }
+        : { role: 'assistant', content: responseText };
+      // DeepSeek requires reasoning_content to be echoed back in every subsequent
+      // turn when the model is in thinking mode — omitting it causes a 400 error.
+      if (streamedReasoning && this._requiresReasoningEcho()) {
+        assistantThreadMsg.reasoning_content = streamedReasoning;
       }
+      messages.push(assistantThreadMsg);
 
       // Parse for tool calls (handles all model formats)
       const toolCalls = ToolCallFormatter.parseToolCalls(responseText, apiToolCalls, knownTools);
@@ -2474,6 +2474,17 @@ export class AgentRuntime {
     // Timeout
     if (msg.includes('timeout') && !msg.includes('context')) return true;
     return false;
+  }
+
+  // Returns true when the provider requires reasoning_content echoed back in the
+  // conversation thread (DeepSeek thinking mode). Without it the next turn gets
+  // a 400: "reasoning_content in thinking mode must be passed back to the API".
+  _requiresReasoningEcho() {
+    const model = String(this.model || '').toLowerCase();
+    const providerId = String(
+      this.providerInfo?.providerId || this.providerInfo?.provider_id || ''
+    ).toLowerCase();
+    return model.includes('deepseek') || providerId === 'deepseek';
   }
 
   // ── Phase 3a: Structured error classification ────────────────────────────
