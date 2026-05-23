@@ -1016,6 +1016,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
     let runKey = currentRunKey;
     let runConversationId = currentConversationId;
+    const isFirstExchangeOfNewConversation = !currentConversationId && messages.length === 0;
     const runMessages = Array.isArray(runOptions.baseMessages) ? runOptions.baseMessages : messages;
     const effectiveAgentMode = requestedChatOnly
       ? 'chat'
@@ -1088,10 +1089,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         branchId: runBranchId,
       },
     ];
-
-    if (!currentConversationId && messages.length === 0) {
-      generateAndSetTitle(submittedGoal);
-    }
 
     setError(null);
     runStartedAtRef.current = Date.now();
@@ -1434,6 +1431,19 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           });
         }
 
+        // Generate an AI title after the first exchange of a new conversation
+        if (isFirstExchangeOfNewConversation && runConversationId && !isGhostMode) {
+          chatApi.generateTitle(submittedGoal, capturedFinalAnswer)
+            .then(res => {
+              if (res?.title) {
+                setConversationTitle(res.title);
+                return chatApi.updateConversation(runConversationId, { title: res.title });
+              }
+            })
+            .then(() => triggerConversationRefresh())
+            .catch(() => {}); // non-fatal — instant title stays if this fails
+        }
+
         if (effectiveAgentMode === 'plan' && isLikelyToolActionRequest(submittedGoal)) {
           updateChatRun(runKey, prev => ({
             ...prev,
@@ -1485,7 +1495,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     currentConversationId,
     messages,
     isGhostMode,
-    generateAndSetTitle,
     setError,
     setConversationHistory,
     setMessages,
