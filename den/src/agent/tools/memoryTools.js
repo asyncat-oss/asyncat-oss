@@ -8,6 +8,70 @@ import { randomUUID } from 'crypto';
 
 export const MEMORY_KINDS = ['user', 'feedback', 'project', 'reference', 'fact', 'preference', 'context', 'task_state'];
 
+// ── Memory cap & eviction ─────────────────────────────────────────────────────
+const MAX_MEMORIES_PER_WORKSPACE = 750;
+const EVICT_PROTECT_IMPORTANCE = 0.8; // never auto-evict high-importance memories
+const EVICT_PROTECT_ACCESS = 5;       // never auto-evict well-used memories
+// Types always protected from eviction regardless of score
+const EVICT_PROTECTED_TYPES = new Set(['user', 'feedback']);
+
+// ── TTL by memory type ────────────────────────────────────────────────────────
+const MEMORY_TTL_DAYS = {
+  task_state: 7,
+  context: 30,
+};
+
+function computeExpiresAt(kind) {
+  const days = MEMORY_TTL_DAYS[kind];
+  if (!days) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+}
+
+/**
+ * Enforce per-workspace memory cap via scored eviction.
+ * Protected: importance >= 0.8 OR access_count >= 5 OR type in (user, feedback).
+ * Returns the number of rows deleted.
+ */
+export function enforceMemoryCap(userId, workspaceId) {
+  try {
+    const count = db.prepare(
+      'SELECT COUNT(*) AS cnt FROM agent_memory WHERE user_id = ? AND workspace_id = ?'
+    ).get(userId, workspaceId)?.cnt || 0;
+
+    if (count <= MAX_MEMORIES_PER_WORKSPACE) return 0;
+
+    const excess = count - MAX_MEMORIES_PER_WORKSPACE;
+    // Select eviction candidates — lowest composite score, excluding protected rows
+    const victims = db.prepare(`
+      SELECT id,
+        (importance * 0.5
+          + MIN(CAST(access_count AS REAL) / 10.0, 1.0) * 0.3
+          + CASE WHEN last_accessed_at IS NOT NULL
+                 THEN MAX(0.0, 0.2 - MIN(CAST((julianday('now') - julianday(last_accessed_at)) AS REAL), 30.0) / 150.0)
+                 ELSE 0.0 END
+        ) AS eviction_score
+      FROM agent_memory
+      WHERE user_id = ? AND workspace_id = ?
+        AND importance < ? AND access_count < ?
+        AND memory_type NOT IN ('user', 'feedback')
+      ORDER BY eviction_score ASC
+      LIMIT ?
+    `).all(userId, workspaceId, EVICT_PROTECT_IMPORTANCE, EVICT_PROTECT_ACCESS, excess + 20);
+
+    if (!victims.length) return 0;
+    const toDelete = victims.slice(0, excess);
+    const ids = toDelete.map(v => v.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const result = db.prepare(`DELETE FROM agent_memory WHERE id IN (${placeholders})`).run(...ids);
+    if (result.changes > 0) {
+      console.log(`[memory] Evicted ${result.changes} low-score memories for ${userId} (cap: ${MAX_MEMORIES_PER_WORKSPACE})`);
+    }
+    return result.changes;
+  } catch { return 0; }
+}
+
 const memoryColumnNames = [
   'id', 'key', 'content', 'memory_type', 'tags', 'importance',
   'last_accessed_at', 'access_count', 'created_at', 'updated_at',
@@ -291,12 +355,15 @@ export const saveMemoryTool = {
         action = 'updated';
       } else {
         memoryId = randomUUID();
+        const expiresAt = computeExpiresAt(kind);
         db.prepare(`
           INSERT INTO agent_memory
-            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId);
+            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId, expiresAt);
         action = 'stored';
+        // Enforce cap asynchronously so the tool call doesn't block
+        setImmediate(() => enforceMemoryCap(context.userId, context.workspaceId));
       }
 
       // Fire-and-forget embedding computation — stored asynchronously, won't block the agent

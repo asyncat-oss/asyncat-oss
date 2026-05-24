@@ -202,6 +202,7 @@ function ensureAgentMemorySchema() {
   addColumn('access_count', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('embedding', 'TEXT'); // JSON float array for vector similarity search
   addColumn('profile_id', 'TEXT'); // agent profile namespace — NULL means shared across all profiles
+  addColumn('expires_at', 'TEXT'); // ISO datetime; NULL = permanent; set for transient types (task_state, context)
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_agent_memory_user       ON agent_memory(user_id);
@@ -311,6 +312,12 @@ ensureAgentMemorySchema();
 ensureModelPathsSchema();
 ensureCheckpointSchema();
 ensureConversationFts();
+
+// Delete expired transient memories on every server boot
+try {
+  const expired = db.prepare("DELETE FROM agent_memory WHERE expires_at IS NOT NULL AND expires_at < datetime('now')").run();
+  if (expired.changes > 0) logger.info(`[memory] Removed ${expired.changes} expired memories at startup`);
+} catch { /* non-critical */ }
 
 function ensureCheckpointSchema() {
   db.exec(`

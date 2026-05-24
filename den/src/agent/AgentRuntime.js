@@ -18,7 +18,8 @@ import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } from './skills.js';
-import { listMemories, searchMemories } from './tools/memoryTools.js';
+import { listMemories, searchMemories, enforceMemoryCap } from './tools/memoryTools.js';
+import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { appendReasoningText, cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
@@ -2297,7 +2298,7 @@ export class AgentRuntime {
       if ((recentCorrections?.cnt || 0) >= 10) return; // Rate limit
 
       db.prepare(
-        'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         randomUUID(),
         this.userId,
@@ -2306,7 +2307,8 @@ export class AgentRuntime {
         key,
         correctionContent,
         JSON.stringify(['correction', 'auto-extracted']),
-        0.9 // High importance so it surfaces in future runs
+        0.9, // High importance so it surfaces in future runs
+        null  // feedback: permanent, no TTL
       );
 
       this.onEvent({
@@ -2322,22 +2324,78 @@ export class AgentRuntime {
   }
 
   _loadMemories(goal) {
+    // ── C: Token-aware injection budget ──────────────────────────────────────
+    // Instead of a fixed count limit, we pack memories until we consume a token
+    // budget. Short memories → more fit; verbose memories → fewer.
+    const MEMORY_TOKEN_BUDGET = 1500;
+    // ── G: Tiered injection ───────────────────────────────────────────────────
+    // Priority 1 — always include user + feedback (continuity-critical).
+    // Priority 2 — fill remaining budget with other relevant types by score.
+    const PRIORITY_KINDS = ['user', 'feedback'];
+
+    function memTokenCost(mem) {
+      return Math.ceil((`${mem.key || ''}: ${mem.content || ''}`).length / 4.5) + 8;
+    }
+
     try {
-      const rows = searchMemories({
-        userId: this.userId,
-        workspaceId: this.workspaceId,
-        query: goal,
-        kind: 'all',
-        limit: 10,
-        bumpAccess: true,
-      });
-      if (rows.length > 0) return rows;
-      return listMemories({
-        userId: this.userId,
-        workspaceId: this.workspaceId,
-        kind: 'all',
-        limit: 5,
-      });
+      const collected = [];
+      let usedTokens = 0;
+      const seenIds = new Set();
+
+      // Tier 1: user + feedback — always prioritised
+      for (const kind of PRIORITY_KINDS) {
+        const rows = searchMemories({
+          userId: this.userId,
+          workspaceId: this.workspaceId,
+          query: goal,
+          kind,
+          limit: 6,
+          bumpAccess: true,
+        });
+        for (const row of rows) {
+          if (seenIds.has(row.id)) continue;
+          const cost = memTokenCost(row);
+          if (usedTokens + cost > MEMORY_TOKEN_BUDGET) break;
+          collected.push(row);
+          seenIds.add(row.id);
+          usedTokens += cost;
+        }
+      }
+
+      // Tier 2: fill remaining budget with any other relevant memories
+      if (usedTokens < MEMORY_TOKEN_BUDGET) {
+        const fillRows = searchMemories({
+          userId: this.userId,
+          workspaceId: this.workspaceId,
+          query: goal,
+          kind: 'all',
+          limit: 15,
+          bumpAccess: true,
+        });
+        for (const row of fillRows) {
+          if (seenIds.has(row.id)) continue;
+          if (PRIORITY_KINDS.includes(row.kind || row.memory_type)) continue;
+          const cost = memTokenCost(row);
+          // Skip oversized individual memories rather than cutting the loop — a
+          // smaller memory later in the list might still fit.
+          if (usedTokens + cost > MEMORY_TOKEN_BUDGET) continue;
+          collected.push(row);
+          seenIds.add(row.id);
+          usedTokens += cost;
+        }
+      }
+
+      // Fallback: if search returned nothing, grab the most important recent ones
+      if (collected.length === 0) {
+        return listMemories({
+          userId: this.userId,
+          workspaceId: this.workspaceId,
+          kind: 'all',
+          limit: 5,
+        });
+      }
+
+      return collected;
     } catch {
       return [];
     }
@@ -2376,11 +2434,9 @@ export class AgentRuntime {
   async _extractMemories(goal, answer, messages) {
     if (!this.aiClient?.messages?.create && !this.aiClient?.client?.chat?.completions?.create) return;
     if (!answer || answer.length < 50) return;
-    // Don't extract for trivial sessions (< 2 tool calls)
     if ((this.session?.toolHistory?.length || 0) < 2) return;
 
     try {
-      // Build a concise summary of what happened
       const toolSummary = (this.session.toolHistory || []).slice(-10).map(t =>
         `${t.tool}(${Object.keys(t.args || {}).join(', ')}) → ${t.result?.success === false ? 'FAILED' : 'ok'}`
       ).join('\n');
@@ -2416,7 +2472,6 @@ export class AgentRuntime {
         raw = response.choices?.[0]?.message?.content || '';
       }
 
-      // Parse and save memories
       const cleaned = raw.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
       let parsed;
       try { parsed = JSON.parse(cleaned); } catch {
@@ -2426,30 +2481,90 @@ export class AgentRuntime {
       }
 
       const memories = Array.isArray(parsed?.memories) ? parsed.memories : [];
+      let saved = 0;
       for (const mem of memories.slice(0, 3)) {
         if (!mem.content || mem.content.length < 5) continue;
         const kind = ['user', 'feedback', 'project', 'reference', 'preference', 'context'].includes(mem.kind) ? mem.kind : 'fact';
         const key = mem.key || `auto_${kind}_${randomUUID().slice(0, 8)}`;
         const importance = Math.max(0, Math.min(1, Number(mem.importance || 0.5)));
 
-        // Check if a similar memory already exists
-        const existing = db.prepare(
-          'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
+        // ── E: Key-based dedup ──────────────────────────────────────────────
+        const existingByKey = db.prepare(
+          'SELECT id, importance FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
         ).get(this.userId, this.workspaceId, key);
 
-        if (existing) {
+        if (existingByKey) {
           db.prepare(
             "UPDATE agent_memory SET content = ?, importance = ?, updated_at = datetime('now') WHERE id = ?"
-          ).run(mem.content, importance, existing.id);
-        } else {
-          db.prepare(
-            'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-          ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance);
+          ).run(mem.content, Math.max(importance, Number(existingByKey.importance || 0.5)), existingByKey.id);
+          continue;
         }
+
+        // ── E: Content-based FTS dedup ──────────────────────────────────────
+        // Build FTS terms from the first meaningful words of the content.
+        // If we get a strong match of the same kind, update instead of inserting.
+        const ftsTerms = mem.content
+          .slice(0, 120)
+          .split(/\s+/)
+          .map(w => w.replace(/[^a-zA-Z0-9]/g, ''))
+          .filter(w => w.length > 3)
+          .slice(0, 5)
+          .map(w => `${w}*`)
+          .join(' OR ');
+
+        if (ftsTerms) {
+          try {
+            const dupRow = db.prepare(`
+              SELECT m.id, m.importance
+              FROM agent_memory_fts fts
+              JOIN agent_memory m ON m.id = fts.memory_id
+              WHERE fts.agent_memory_fts MATCH ?
+                AND m.user_id = ? AND m.workspace_id = ? AND m.memory_type = ?
+              LIMIT 1
+            `).get(ftsTerms, this.userId, this.workspaceId, kind);
+
+            if (dupRow) {
+              db.prepare(
+                "UPDATE agent_memory SET content = ?, importance = ?, updated_at = datetime('now') WHERE id = ?"
+              ).run(mem.content, Math.max(importance, Number(dupRow.importance || 0.5)), dupRow.id);
+              continue;
+            }
+          } catch { /* FTS unavailable — fall through to insert */ }
+        }
+
+        // ── B: Set TTL for transient types ──────────────────────────────────
+        const TTL_DAYS = { task_state: 7, context: 30 };
+        let expiresAt = null;
+        if (TTL_DAYS[kind]) {
+          const d = new Date();
+          d.setDate(d.getDate() + TTL_DAYS[kind]);
+          expiresAt = d.toISOString().replace('T', ' ').slice(0, 19);
+        }
+
+        db.prepare(
+          'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance, expiresAt);
+        saved++;
       }
 
-      if (memories.length > 0) {
-        console.log(`[agent] Auto-extracted ${memories.length} memories from run`);
+      if (saved > 0) {
+        console.log(`[agent] Auto-extracted ${saved} memories from run`);
+      }
+
+      // ── A: Enforce cap after batch insert ──────────────────────────────────
+      if (saved > 0) {
+        setImmediate(() => enforceMemoryCap(this.userId, this.workspaceId));
+      }
+
+      // ── D: Trigger consolidation if memory count is high ───────────────────
+      // Runs asynchronously so it never delays the response to the user.
+      if (memoryConsolidator.shouldConsolidate(this.userId, this.workspaceId)) {
+        memoryConsolidator.consolidate({
+          userId: this.userId,
+          workspaceId: this.workspaceId,
+          aiClient: this.aiClient,
+          model: this.model,
+        }).catch(err => console.warn('[memory-consolidator] Error:', err.message));
       }
     } catch (err) {
       console.warn('[agent] Memory extraction error:', err.message);

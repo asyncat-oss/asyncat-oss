@@ -10,6 +10,7 @@ import path from 'path';
 
 const MIN_PATTERN_COUNT = 3;
 const PATTERN_WINDOW_HOURS = 72;
+const MAX_AUTO_SKILLS = 50; // cap on auto-generated skill files
 
 class BasalGanglia {
   constructor() {
@@ -188,6 +189,12 @@ class BasalGanglia {
       const skillPath = path.join(userSkillsDir, `${skillName}.md`);
       if (fs.existsSync(skillPath)) return;
 
+      // Enforce auto-skill cap: prune the lowest-quality auto skill if at the limit
+      const autoSkills = fs.readdirSync(userSkillsDir).filter(f => f.startsWith('auto-') && f.endsWith('.md'));
+      if (autoSkills.length >= MAX_AUTO_SKILLS) {
+        await this._pruneLowestQualitySkill(userId, userSkillsDir, autoSkills);
+      }
+
       const skillContent = `---
 name: ${skillName}
 description: Auto-generated skill from workflow patterns
@@ -223,6 +230,34 @@ ${skillBody}
       }
     } catch (err) {
       console.error('[basal-ganglia] Failed to create skill:', err.message);
+    }
+  }
+
+  async _pruneLowestQualitySkill(userId, skillsDir, autoSkillFiles) {
+    try {
+      // Map filenames to quality scores from agent_patterns
+      const scored = autoSkillFiles.map(filename => {
+        const nameWithoutExt = filename.replace(/\.md$/, '');
+        const row = db.prepare(`
+          SELECT (success_count - failure_count * 2) AS quality_score
+          FROM agent_patterns
+          WHERE user_id = ? AND auto_skill_created = 1
+            AND pattern_summary LIKE ?
+          ORDER BY quality_score ASC
+          LIMIT 1
+        `).get(userId, `%${nameWithoutExt.replace('auto-', '').split('-').slice(0, 2).join(' ')}%`);
+        return { filename, score: row?.quality_score ?? 0 };
+      });
+
+      scored.sort((a, b) => a.score - b.score);
+      const victim = scored[0];
+      if (!victim) return;
+
+      const victimPath = path.join(skillsDir, victim.filename);
+      fs.unlinkSync(victimPath);
+      console.log(`[basal-ganglia] Pruned low-quality auto-skill: ${victim.filename} (score: ${victim.score})`);
+    } catch (err) {
+      console.warn('[basal-ganglia] Skill prune failed:', err.message);
     }
   }
 
