@@ -4,6 +4,64 @@ import rawDb from '../../../db/client.js';
 import { deleteCheckpoint } from '../../../agent/AgentRuntime.js';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Parse a conversation's messages JSON and extract all note IDs created by
+ * the agent (create_note tool results). These notes must be deleted when the
+ * conversation is permanently removed.
+ */
+function extractAgentNoteIds(messagesData) {
+  const noteIds = new Set();
+  try {
+    const messages = typeof messagesData === 'string'
+      ? JSON.parse(messagesData)
+      : (messagesData || []);
+    if (!Array.isArray(messages)) return noteIds;
+    for (const msg of messages) {
+      for (const event of (msg.agentEvents || [])) {
+        // Tool result path: event.result.artifact.noteId (live events)
+        const fromResult = event?.result?.artifact?.noteId || event?.result?.artifact?.id;
+        // Persisted path: event.data.result.artifact.noteId
+        const fromData = event?.data?.result?.artifact?.noteId || event?.data?.result?.artifact?.id;
+        const fromArtifact = event?.artifact?.noteId;
+        if (fromResult) noteIds.add(fromResult);
+        if (fromData) noteIds.add(fromData);
+        if (fromArtifact) noteIds.add(fromArtifact);
+      }
+    }
+  } catch { /* ignore parse errors */ }
+  return noteIds;
+}
+
+/**
+ * Delete all agent-created notes belonging to a conversation.
+ * Covers both the new conversation_id column (going forward) and legacy notes
+ * identified by scanning the messages JSON for create_note artifacts.
+ */
+function deleteConversationNotes(conversationId, userId, messagesData) {
+  try {
+    // Delete by conversation_id (new schema — notes created after this migration)
+    rawDb.prepare(`
+      DELETE FROM notes
+      WHERE conversation_id = ?
+        AND createdby = ?
+    `).run(conversationId, userId);
+
+    // Delete legacy notes identified from message agentEvents JSON
+    const noteIds = extractAgentNoteIds(messagesData);
+    if (noteIds.size > 0) {
+      const placeholders = [...noteIds].map(() => '?').join(', ');
+      rawDb.prepare(`
+        DELETE FROM notes
+        WHERE id IN (${placeholders})
+          AND createdby = ?
+          AND json_extract(metadata, '$.source') = 'agent'
+      `).run([...noteIds, userId]);
+    }
+  } catch (err) {
+    console.warn('[chatService] deleteConversationNotes failed:', err.message);
+  }
+}
+
 const SQLITE_UTC_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
 
 class ChatService {
@@ -926,6 +984,9 @@ class ChatService {
 
       this.cleanupAgentCheckpointsForMessages(userId, existing.messages || []);
 
+      // Delete agent-created notes associated with this conversation
+      deleteConversationNotes(conversationId, userId, existing.messages);
+
       // Soft-delete: set deleted_at without trying to SELECT back
       await dbClient
         .from('conversations')
@@ -1000,6 +1061,9 @@ class ChatService {
       }
 
       this.cleanupAgentCheckpointsForMessages(userId, existing.messages || []);
+
+      // Delete agent-created notes associated with this conversation
+      deleteConversationNotes(conversationId, userId, existing.messages);
 
       const { data, error } = await dbClient
         .schema('aichats')

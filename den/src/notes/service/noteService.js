@@ -79,7 +79,7 @@ const getNotes = async (userId, excludeContent = false, db = null) => {
 // Create a standalone user-owned note.
 const createNote = async (noteData, userId, db = null) => {
   try {
-    const { title, content, metadata } = noteData;
+    const { title, content, metadata, conversation_id, agent_session_id } = noteData;
     const dbClient = db || getSupabase();
 
     const noteToCreate = {
@@ -91,6 +91,10 @@ const createNote = async (noteData, userId, db = null) => {
       metadata: metadata || {},
       createdat: new Date().toISOString(),
       updatedat: new Date().toISOString(),
+      // Track which conversation/session created this note so it can be
+      // cleaned up automatically when the conversation is deleted.
+      ...(conversation_id ? { conversation_id } : {}),
+      ...(agent_session_id ? { agent_session_id } : {}),
     };
 
     const { data: newNote, error } = await dbClient

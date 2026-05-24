@@ -15,7 +15,7 @@ const ProjectOverview = () => {
   // Redirect to kanban if invalid tab is provided
   useEffect(() => {
     if (tab && !VALID_PROJECT_TABS.includes(tab) && projectId) {
-      navigate(`/projects/${projectId}/kanban`, { replace: true });
+      navigate(`/workspace/${projectId}/kanban`, { replace: true });
     }
   }, [tab, projectId, navigate]);
 

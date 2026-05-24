@@ -1,7 +1,7 @@
 // router/AppRouter.jsx - AppRouter using Supabase Auth
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, useParams } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import { UserProvider } from '../contexts/UserContext';
 import { WorkspaceProvider } from '../contexts/WorkspaceContext';
@@ -16,7 +16,7 @@ import AuthContainer from '../auth/AuthContainer';
 import CommandCenterV2Enhanced from '../CommandCenter/CommandCenterV2EnhancedRouter';
 import ChatsPage from '../CommandCenter/pages/ChatsPage';
 import TrashPage from '../CommandCenter/pages/TrashPage';
-import ProjectsPage from '../projects/ProjectsPage';
+import WorkspaceLayout, { WorkspaceEmpty } from '../projects/WorkspaceLayout';
 import ProjectOverview from '../projects/ProjectOverview';
 import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
@@ -27,6 +27,12 @@ import AgentHealthPage from '../AgentHealth/AgentHealthPage';
 import SchedulerPage from '../Scheduler/SchedulerPage';
 import ProfilesPage from '../Profiles/ProfilesPage';
 import AgentPage from '../Agent/AgentPage';
+
+const ProjectsRedirect = () => {
+  const { projectId, tab } = useParams();
+  return <Navigate to={tab ? `/workspace/${projectId}/${tab}` : `/workspace/${projectId}`} replace />;
+};
+
 const loadingMessages = [
   "Waking up the cat AI...",
   "Paws initializing...",
@@ -172,32 +178,38 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "workspace",
-        element: <ProjectsPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "workspace/:projectId",
-        element: <ProjectOverview />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "workspace/:projectId/:tab",
-        element: <ProjectOverview />,
-        errorElement: <RouteErrorElement />
+        element: <WorkspaceLayout />,
+        errorElement: <RouteErrorElement />,
+        children: [
+          {
+            index: true,
+            element: <WorkspaceEmpty />,
+          },
+          {
+            path: ":projectId",
+            element: <ProjectOverview />,
+            errorElement: <RouteErrorElement />,
+          },
+          {
+            path: ":projectId/:tab",
+            element: <ProjectOverview />,
+            errorElement: <RouteErrorElement />,
+          },
+        ],
       },
       {
         path: "projects",
-        element: <ProjectsPage />,
+        element: <Navigate to="/workspace" replace />,
         errorElement: <RouteErrorElement />
       },
       {
         path: "projects/:projectId",
-        element: <ProjectOverview />,
+        element: <ProjectsRedirect />,
         errorElement: <RouteErrorElement />
       },
       {
         path: "projects/:projectId/:tab",
-        element: <ProjectOverview />,
+        element: <ProjectsRedirect />,
         errorElement: <RouteErrorElement />
       },
       {

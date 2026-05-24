@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import PropTypes from 'prop-types';
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
-import eventBus from '../utils/eventBus.js';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import { useUnauthorizedError } from '../error/ErrorBoundary.jsx';
 import { initializeTheme, setupThemeListener } from '../auth/utils.js';
@@ -10,7 +9,6 @@ import TopMenuBar from '../components/TopMenuBar.jsx';
 
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
-import CreateProjectFlow from '../projects/components/CreateProjectFlow.jsx';
 import WelcomePage from '../WelcomePage.jsx';
 
 const AppLayout = ({ session, onSignOut }) => {
@@ -31,7 +29,6 @@ const AppLayout = ({ session, onSignOut }) => {
   
   // UI state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [pageTransitionsEnabled, setPageTransitionsEnabled] = useState(() => {
     return localStorage.getItem('pageTransitions') !== 'off';
   });
@@ -138,19 +135,6 @@ const AppLayout = ({ session, onSignOut }) => {
     setSelectedProject(null);
     sessionStorage.removeItem('projectId');
   }, [currentWorkspace]);
-
-  // Listen for project creation event
-  useEffect(() => {
-    const handleOpenCreateProject = () => {
-      setIsCreateProjectModalOpen(true);
-    };
-
-    const unsubCreateProject = eventBus.on('openCreateProjectModal', handleOpenCreateProject);
-
-    return () => {
-      unsubCreateProject();
-    };
-  }, []);
 
   // Helper function to get project ID or full project as needed
   const getProjectValue = (needsFullObject = false) => {
@@ -276,15 +260,6 @@ const AppLayout = ({ session, onSignOut }) => {
   const handleOpenSettings = (tab = 'general') => {
     navigate(`/settings/${tab}`);
   };
-
-  // Handle project creation completion
-  const handleProjectCreated = useCallback((newProject) => {
-    setIsCreateProjectModalOpen(false);
-    handleProjectSelect(newProject);
-    refreshProjects();
-    // Notify other components about the new project
-    eventBus.emit('projectCreated', newProject);
-  }, [handleProjectSelect, refreshProjects]);
 
   // Enhanced new chat handler that also navigates to home and creates new conversation
   const handleNewChatWithNavigation = useCallback(async () => {
@@ -515,12 +490,6 @@ const AppLayout = ({ session, onSignOut }) => {
         </div>
       </main>
 
-      {/* Create Project Modal */}
-      <CreateProjectFlow
-        isOpen={isCreateProjectModalOpen}
-        onClose={() => setIsCreateProjectModalOpen(false)}
-        onProjectCreate={handleProjectCreated}
-      />
     </div>
   );
 };

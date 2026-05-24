@@ -533,6 +533,7 @@ export class AgentRuntime {
       profileId: this.agentProfileId,
       workingDir: this.workingDir,
       workspaceRoot: this.workspaceRoot,
+      conversationId: this.usageContext?.conversationId || null,
       session: this.session,
       emitEvent: (event) => this.onEvent(event),
       requestPermission: this.requestPermission

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-	ArrowLeft,
 	LayoutGrid,
 	KanbanSquare,
 	List,
@@ -286,13 +285,6 @@ const ProjectOverview = React.memo(({
 			{/* Section tab navigation */}
 			<div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
 				<div className="flex items-center gap-0.5 px-4 overflow-x-auto scrollbar-none">
-					<button
-						onClick={() => navigate("/projects")}
-						className="flex items-center gap-1.5 px-3 py-2.5 mr-2 text-sm font-medium border-b-2 border-transparent whitespace-nowrap text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white midnight:text-gray-300 midnight:hover:text-white transition-colors"
-					>
-						<ArrowLeft className="w-3.5 h-3.5" />
-						Projects
-					</button>
 					{PROJECT_VIEWS.map(({ key, label, Icon }) => {
 						const isActive = currentTab === key;
 						return (

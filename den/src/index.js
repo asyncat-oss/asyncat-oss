@@ -44,6 +44,9 @@ import updateRouter from './update/updateRouter.js';
 // ─── Install / Runtime Readiness ─────────────────────────────────────────────
 import installRouter from './install/installRouter.js';
 
+// ─── Search ───────────────────────────────────────────────────────────────────
+import searchRouter from './search/searchRouter.js';
+
 // ─── Integrations ─────────────────────────────────────────────────────────────
 import integrationsRouter from './integrations/integrationsRouter.js';
 
@@ -153,6 +156,9 @@ app.use('/api/install', installRouter);
 
 // ─── Routes: Integrations ─────────────────────────────────────────────────────
 app.use('/api/integrations', integrationsRouter);
+
+// ─── Routes: Search ───────────────────────────────────────────────────────────
+app.use('/api/search', searchRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

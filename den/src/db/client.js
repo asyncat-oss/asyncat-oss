@@ -142,6 +142,36 @@ function ensureNotesSchema() {
     DROP INDEX IF EXISTS idx_notes_projectid;
     CREATE INDEX IF NOT EXISTS idx_notes_createdby ON notes(createdby);
   `);
+
+  // ── Add conversation tracking columns (idempotent) ───────────────────────
+  const noteCols = tableColumns('notes');
+  if (!noteCols.has('conversation_id')) {
+    db.exec(`ALTER TABLE notes ADD COLUMN conversation_id TEXT`);
+  }
+  if (!noteCols.has('agent_session_id')) {
+    db.exec(`ALTER TABLE notes ADD COLUMN agent_session_id TEXT`);
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_notes_conversation_id
+      ON notes(conversation_id) WHERE conversation_id IS NOT NULL;
+  `);
+
+  // ── One-time orphan cleanup ───────────────────────────────────────────────
+  // Delete agent-created notes whose agent session no longer exists.
+  // This safely removes notes left behind by previously deleted conversations.
+  // json_extract works on the metadata TEXT column (stored as valid JSON).
+  try {
+    db.prepare(`
+      DELETE FROM notes
+      WHERE json_extract(metadata, '$.source') = 'agent'
+        AND conversation_id IS NULL
+        AND json_extract(metadata, '$.sessionId') IS NOT NULL
+        AND json_extract(metadata, '$.sessionId') NOT IN (SELECT id FROM agent_sessions)
+    `).run();
+  } catch {
+    // Non-fatal: agent_sessions may not exist yet on very first boot
+  }
 }
 
 function ensureAgentMemorySchema() {

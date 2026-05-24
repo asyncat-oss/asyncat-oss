@@ -173,6 +173,8 @@ Example:
         title: args.title || 'Untitled Note',
         content: htmlContent,
         metadata,
+        conversation_id: context.conversationId || null,
+        agent_session_id: context.session?.id || null,
       }, context.userId);
 
       return {
