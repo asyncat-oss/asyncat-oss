@@ -111,41 +111,11 @@ const router = express.Router();
 const providerStatusClients = new Map();
 const execFileAsync = promisify(execFile);
 
-function getHuggingFaceToken(userId) {
-  const envToken = String(process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || '').trim();
-  if (envToken) return envToken;
-  if (!userId) return '';
-  try {
-    const row = db.prepare(`
-      SELECT api_key
-      FROM ai_provider_profiles
-      WHERE user_id = ? AND provider_id = 'huggingface' AND api_key IS NOT NULL AND api_key <> ''
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `).get(userId);
-    return String(row?.api_key || '').trim();
-  } catch {
-    return '';
-  }
-}
-
-function huggingFaceHeaders(userId, extra = {}) {
-  const token = getHuggingFaceToken(userId);
-  return {
-    Accept: 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...extra,
-  };
-}
-
-function isHuggingFaceUrl(rawUrl = '') {
-  try {
-    const url = new URL(rawUrl);
-    return url.hostname === 'huggingface.co' || url.hostname.endsWith('.huggingface.co');
-  } catch {
-    return false;
-  }
-}
+import {
+  getHuggingFaceToken,
+  huggingFaceHeaders,
+  isHuggingFaceUrl,
+} from '../controllers/ai/huggingFaceAuth.js';
 
 function requiredEnv(name, providerName) {
   const value = String(process.env[name] || '').trim();
