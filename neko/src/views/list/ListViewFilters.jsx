@@ -11,13 +11,8 @@ const ListViewFilters = ({
 	onCreateTask,
 	searchContext = { isSearchActive: false, totalResults: 0 },
 }) => {
-	const hasActiveFilters =
-		filterConfig.running ||
-		(filterConfig.priority && filterConfig.priority.length > 0);
-
-	const activeFilterCount =
-		(filterConfig.running ? 1 : 0) +
-		(filterConfig.priority?.length || 0);
+	const hasActiveFilters = filterConfig.running;
+	const activeFilterCount = filterConfig.running ? 1 : 0;
 	return (
 		<div className="bg-white dark:bg-gray-900 midnight:bg-gray-950 border-b border-gray-200/60 dark:border-gray-700/60 midnight:border-gray-800/60">
 			<div className="px-6 py-4">
@@ -88,31 +83,6 @@ const ListViewFilters = ({
 									</span>
 								</div>
 							</button>
-
-							{/* Priority Filters */}
-							<div className="flex items-center gap-1">
-								{["High", "Medium", "Low"].map((priority) => (
-									<button
-										key={priority}
-										onClick={() =>
-											togglePriorityFilter(priority)
-										}
-										className={`px-3 py-2 text-xs font-medium border rounded-lg transition-all duration-200 whitespace-nowrap ${
-											filterConfig.priority.includes(
-												priority
-											)
-												? priority === "High"
-													? "bg-red-50 dark:bg-red-900/30 midnight:bg-red-900/20 text-red-700 dark:text-red-400 midnight:text-red-300 border-red-200 dark:border-red-600 midnight:border-red-700"
-													: priority === "Medium"
-													? "bg-amber-50 dark:bg-amber-900/30 midnight:bg-amber-900/20 text-amber-700 dark:text-amber-400 midnight:text-amber-300 border-amber-200 dark:border-amber-600 midnight:border-amber-700"
-													: "bg-emerald-50 dark:bg-emerald-900/30 midnight:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 midnight:text-emerald-300 border-emerald-200 dark:border-emerald-600 midnight:border-emerald-700"
-												: "bg-white dark:bg-gray-900 midnight:bg-gray-950 text-gray-600 dark:text-gray-400 midnight:text-gray-500 border-gray-200 dark:border-gray-600 midnight:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800"
-										}`}
-									>
-										{priority}
-									</button>
-								))}
-							</div>
 
 							{/* Clear Filters Button */}
 							{hasActiveFilters && (

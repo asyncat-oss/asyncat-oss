@@ -141,11 +141,11 @@ const ProjectOverview = React.memo(({
 	const navigate = useNavigate();
 	const [projectInfo, setProjectInfo] = useState(null);
 	const [loading, setLoading] = useState(true);
-	// Master loading state - true when any essential data is loading
-	const [masterLoading, setMasterLoading] = useState(true);
+	// Only show skeleton on cold load (no project in context yet) or when URL doesn't match
+	const [masterLoading, setMasterLoading] = useState(() => !selectedProject?.id);
 
-	// Calculate skeleton state
-	const shouldShowSkeleton = masterLoading || !selectedProject || (projectId && String(selectedProject.id) !== String(projectId));
+	// Calculate skeleton state — don't include masterLoading to avoid flash on nav
+	const shouldShowSkeleton = !selectedProject || (projectId && String(selectedProject.id) !== String(projectId));
 
 	const { getWorkspaceProjects } = useWorkspace();
 

@@ -16,7 +16,7 @@ import {
   Trash2,
   Wrench,
   MessageSquare,
-  Globe,
+  KanbanSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import KeyboardShortcutsSection from './KeyboardShortcutsSection.jsx';
@@ -245,7 +245,7 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
         description="Command Center is always shown. Toggle everything else."
       >
         <CheckboxRow icon={MessageSquare} label="History" checked={navItemsVisibility.history} onChange={() => handleNavItemToggle('history')} />
-        <CheckboxRow icon={Globe} label="Projects" checked={navItemsVisibility.projects} onChange={() => handleNavItemToggle('projects')} />
+        <CheckboxRow icon={KanbanSquare} label="Tasks" checked={navItemsVisibility.projects} onChange={() => handleNavItemToggle('projects')} />
         <CheckboxRow icon={Calendar} label="Calendar" checked={navItemsVisibility.calendar} onChange={() => handleNavItemToggle('calendar')} />
         <CheckboxRow icon={Cpu} label="Models" checked={navItemsVisibility.models} onChange={() => handleNavItemToggle('models')} />
         <CheckboxRow icon={Wrench} label="Tools & Skills" checked={navItemsVisibility.tools} onChange={() => handleNavItemToggle('tools')} />

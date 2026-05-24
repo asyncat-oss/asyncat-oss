@@ -1,1188 +1,341 @@
+import { useState, useEffect, useCallback } from 'react';
 import {
-	useState,
-	useEffect,
-	useCallback,
-	useRef,
-} from "react";
+  X, Bot, ExternalLink, RotateCcw, Play, Loader2,
+  CheckCircle2, AlertCircle, Clock, MessageCircle,
+  ChevronDown, ChevronUp, Trash2,
+} from 'lucide-react';
+import { agentTaskRunsApi, profilesApi } from '../../../CommandCenter/api';
+import { cardAPI } from '../../viewsApi';
 
-import {
- 	FileText,
- 	File,
- 	Image,
- 	FileSpreadsheet,
- 	ClipboardList,
- 	Clock,
- 	Trash2,
- 	Save,
- 	ChevronUp,
- 	ChevronDown,
- 	Paperclip,
- 	Edit3,
- 	Loader,
-	Bot,
-	ExternalLink,
-	Play,
-	RotateCcw,
-} from "lucide-react";
-import { useCardActions } from "../../hooks/useCardActions";
-import { useColumnContext } from "../../context/viewContexts";
-import { useCardContext } from "../../context/viewContexts";
-import { agentTaskRunsApi, profilesApi } from "../../../CommandCenter/api";
-
-// Import needed components
-import CardSubtasksSection from "../subtask/CardSubtasksSection";
-import CardAttachmentsSection from "../attachments/CardAttachmentsSection";
-
-import { InteractiveStatusBadge } from "../../list/ListViewCard";
-import DropdownBar from "../../kanban/features/shared/components/DropdownBar";
-
-// Collapsible Section Component
-const CollapsibleSection = ({
-	title,
-	icon,
-	isExpanded,
-	onToggle,
-	children,
-	summary = null,
-	count = null,
-}) => {
-	return (
-		<div className="border-b border-gray-100 dark:border-gray-800 midnight:border-gray-900/80 last:border-b-0">
-			<button
-				onClick={onToggle}
-				className="w-full flex items-center justify-between py-4 px-2 text-left hover:bg-gray-50/70 dark:hover:bg-gray-900/40 midnight:hover:bg-gray-950/40 rounded-lg transition-all duration-200 hover:shadow-sm"
-			>
-				<div className="flex items-center space-x-3">
-					{icon}
-					<span className="font-medium text-gray-900 dark:text-gray-400 midnight:text-gray-300">
-						{title}
-					</span>
-					{count !== null && (
-						<span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 px-2 py-0.5 rounded-full">
-							{count}
-						</span>
-					)}
-				</div>
-				<div className="flex items-center space-x-2">
-					{summary && !isExpanded && (
-						<span className="text-sm text-gray-500">{summary}</span>
-					)}
-					{isExpanded ? (
-						<ChevronUp className="w-4 h-4 text-gray-400" />
-					) : (
-						<ChevronDown className="w-4 h-4 text-gray-400" />
-					)}
-				</div>
-			</button>
-
-			<div
-				className={`transition-all duration-200 overflow-hidden ${
-					isExpanded ? "max-h-[2000px] pb-6" : "max-h-0"
-				}`}
-			>
-				{children}
-			</div>
-		</div>
-	);
+const PROFILE_COLOR_MAP = {
+  indigo:  'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+  blue:    'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+  violet:  'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300',
+  emerald: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+  amber:   'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+  rose:    'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300',
+  cyan:    'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300',
+  gray:    'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
 };
 
-const getAgentRunDisplayStatus = (run) => {
-	const status = run?.displayStatus || run?.status || "";
-	if (status === "needs_input" || run?.needsInput) {
-		return {
-			label: "Needs input",
-			badge: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
-			message: "Reply in the agent session with the missing details.",
-		};
-	}
-	if (status === "failed") {
-		return {
-			label: "Failed",
-			badge: "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
-			message: null,
-		};
-	}
-	return {
-		label: status || "queued",
-		badge: "bg-white text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-		message: null,
-	};
+function profileColorClass(color) {
+  return PROFILE_COLOR_MAP[color] || PROFILE_COLOR_MAP.gray;
+}
+
+function StatusIcon({ status }) {
+  if (status === 'queued') return <Clock className="w-4 h-4 text-gray-400" />;
+  if (status === 'running') return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
+  if (status === 'needs_input') return <MessageCircle className="w-4 h-4 text-amber-500" />;
+  if (status === 'completed') return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+  if (status === 'failed') return <AlertCircle className="w-4 h-4 text-red-500" />;
+  return <Bot className="w-4 h-4 text-gray-400" />;
+}
+
+function statusLabel(status) {
+  const labels = {
+    queued: 'Queued',
+    running: 'Running',
+    needs_input: 'Needs Input',
+    completed: 'Done',
+    failed: 'Failed',
+  };
+  return labels[status] || status || 'Unknown';
+}
+
+const AgentTaskDetail = ({ task, onClose, onRefresh }) => {
+  const [profiles, setProfiles] = useState([]);
+  const [selectedProfileId, setSelectedProfileId] = useState(
+    task.agentRun?.profileId || ''
+  );
+  const [runs, setRuns] = useState(
+    task.agentRun
+      ? [task.agentRun, ...(task.agentRun.agentRuns || []).slice(1)]
+      : []
+  );
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [acting, setActing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [dispatchError, setDispatchError] = useState(null);
+
+  const latestRun = runs[0] || null;
+  const latestStatus = latestRun ? (latestRun.displayStatus || latestRun.status) : null;
+  const isLive = latestStatus === 'running' || latestStatus === 'queued';
+
+  useEffect(() => {
+    profilesApi.listProfiles()
+      .then(r => {
+        const list = r.profiles || [];
+        setProfiles(list);
+        if (!selectedProfileId && list.length > 0) {
+          setSelectedProfileId(list[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadRuns = useCallback(async () => {
+    try {
+      const result = await agentTaskRunsApi.list({ cardId: task.id });
+      const found = (result.tasks || []).find(t => String(t.id) === String(task.id));
+      if (found) {
+        const allRuns = found.agentRuns || (found.agentRun ? [found.agentRun] : []);
+        setRuns(allRuns);
+      }
+    } catch {}
+  }, [task.id]);
+
+  useEffect(() => { loadRuns(); }, [loadRuns]);
+
+  useEffect(() => {
+    if (!isLive) return;
+    const timer = setInterval(loadRuns, 3000);
+    return () => clearInterval(timer);
+  }, [isLive, loadRuns]);
+
+  const handleDispatch = async () => {
+    if (!selectedProfileId) return;
+    setActing(true);
+    setDispatchError(null);
+    try {
+      await agentTaskRunsApi.create({ cardId: task.id, profileId: selectedProfileId });
+      await loadRuns();
+      onRefresh?.();
+    } catch (err) {
+      setDispatchError(err.message || 'Failed to dispatch');
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!latestRun?.id) return;
+    setActing(true);
+    try {
+      await agentTaskRunsApi.cancel(latestRun.id);
+      await loadRuns();
+      onRefresh?.();
+    } catch {}
+    finally { setActing(false); }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await cardAPI.delete(task.id);
+      onRefresh?.();
+      onClose();
+    } catch {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/20 dark:bg-black/50 midnight:bg-black/70 backdrop-blur-[2px]"
+        onClick={e => e.target === e.currentTarget && onClose()}
+      />
+      <div className="relative z-10 w-full max-w-xl mx-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-white/10 flex flex-col overflow-hidden max-h-[85vh]">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-white/10">
+          <div className="flex items-start gap-3 min-w-0">
+            {latestRun?.profile ? (
+              <span className={`w-9 h-9 flex items-center justify-center rounded-xl text-base flex-shrink-0 ${profileColorClass(latestRun.profile.color)}`}>
+                {latestRun.profile.icon || '🤖'}
+              </span>
+            ) : (
+              <span className="w-9 h-9 flex items-center justify-center rounded-xl flex-shrink-0 bg-gray-100 dark:bg-gray-800">
+                <Bot className="w-4 h-4 text-gray-400" />
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight line-clamp-2">
+                {task.title || 'Untitled task'}
+              </p>
+              <div className="flex items-center gap-1.5 mt-1">
+                {latestRun && <StatusIcon status={latestStatus} />}
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {latestRun
+                    ? `${latestRun.profile?.name || 'Agent'} · ${statusLabel(latestStatus)}`
+                    : 'No agent assigned yet'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {!confirmDelete ? (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                title="Delete task"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Delete?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-2.5 py-1 text-xs rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? '…' : 'Yes'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2.5 py-1 text-xs rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  No
+                </button>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+          {/* Goal / description */}
+          {task.description && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Goal</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{task.description}</p>
+            </div>
+          )}
+
+          {/* Current run details */}
+          {latestRun && (
+            <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-gray-800/40 p-4 space-y-3">
+              {isLive && latestRun.lastEventLabel && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate">{latestRun.lastEventLabel}</p>
+              )}
+
+              {latestStatus === 'completed' && latestRun.summary && (
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{latestRun.summary}</p>
+              )}
+
+              {latestStatus === 'needs_input' && (latestRun.error || latestRun.summary) && (
+                <p className="text-sm text-amber-700 dark:text-amber-300">{latestRun.error || latestRun.summary}</p>
+              )}
+
+              {latestStatus === 'failed' && latestRun.error && (
+                <p className="text-sm text-red-600 dark:text-red-400">{latestRun.error}</p>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                {latestRun.sessionId && (
+                  <a
+                    href={`/agents/${latestRun.sessionId}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    {latestStatus === 'needs_input' ? 'Reply to agent' : 'View session'}
+                  </a>
+                )}
+                {isLive && (
+                  <button
+                    onClick={handleCancel}
+                    disabled={acting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border border-gray-200 dark:border-white/10 transition-colors disabled:opacity-50"
+                  >
+                    {acting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Dispatch controls */}
+          {!isLive && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2.5">
+                {latestRun ? 'Run again' : 'Dispatch agent'}
+              </p>
+              <div className="flex gap-2">
+                <select
+                  value={selectedProfileId}
+                  onChange={e => setSelectedProfileId(e.target.value)}
+                  disabled={acting || profiles.length === 0}
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white/30 disabled:opacity-50"
+                >
+                  {profiles.length === 0
+                    ? <option value="">No agents available</option>
+                    : profiles.map(p => (
+                        <option key={p.id} value={p.id}>{p.icon ? `${p.icon} ` : ''}{p.name}</option>
+                      ))
+                  }
+                </select>
+                <button
+                  onClick={handleDispatch}
+                  disabled={!selectedProfileId || acting || profiles.length === 0}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                >
+                  {acting
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : latestStatus === 'failed'
+                      ? <RotateCcw className="w-4 h-4" />
+                      : <Play className="w-4 h-4" />
+                  }
+                  {latestStatus === 'failed' ? 'Retry' : 'Dispatch'}
+                </button>
+              </div>
+              {dispatchError && (
+                <p className="mt-2 text-xs text-red-500 dark:text-red-400">{dispatchError}</p>
+              )}
+            </div>
+          )}
+
+          {/* Run history */}
+          {runs.length > 1 && (
+            <div>
+              <button
+                onClick={() => setHistoryOpen(p => !p)}
+                className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                {historyOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                {runs.length - 1} previous run{runs.length > 2 ? 's' : ''}
+              </button>
+              {historyOpen && (
+                <div className="mt-2 space-y-1.5">
+                  {runs.slice(1).map(run => {
+                    const s = run.displayStatus || run.status;
+                    return (
+                      <div key={run.id} className="flex items-center justify-between rounded-lg border border-gray-100 dark:border-white/10 px-3 py-2 bg-gray-50 dark:bg-gray-800/20">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <StatusIcon status={s} />
+                          <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
+                            {run.profile?.name || 'Agent'} · {statusLabel(s)}
+                          </span>
+                        </div>
+                        {run.sessionId && (
+                          <a
+                            href={`/agents/${run.sessionId}`}
+                            className="ml-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex-shrink-0"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-/**
- * CardDetailModal Component with Real-time Editing Features
- */
-const CardDetailModal = ({
-	card: initialCard,
-	onClose,
-	onDeleteStart,
-	onOptimisticUpdate = () => {},
-}) => {
-	const { columns, setColumns } = useColumnContext();
-	const {
-		handleCardUpdate,
-		handleCardDelete,
-		addAttachment,
-		removeAttachment,
-		moveCard,
-	} = useCardActions();
-
-	const handleSaveRef = useRef();
-
-	// UI feedback states
-	const [saveStatus, setSaveStatus] = useState(null);
-	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-	const [isDeletingCard, setIsDeletingCard] = useState(false);
-	const [isUploadingFiles, setIsUploadingFiles] = useState(false);
-	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [isEntering, setIsEntering] = useState(true);
-	const [isLeaving, setIsLeaving] = useState(false);
-
-	// Unsaved subtask text state
-	const [hasUnsavedSubtaskText, setHasUnsavedSubtaskText] = useState(false);
-	const [shouldBounceSaveAll, setShouldBounceSaveAll] = useState(false);
-
-	// Real-time state
-	const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-	const [isLocallyEditing, setIsLocallyEditing] = useState(false);
-	const modalRef = useRef(null);
-	const editingStartTimeRef = useRef(null);
-
-	// FREEZE initial card data to prevent external prop changes from affecting modal state
-	const frozenInitialCard = useRef(null);
-	if (!frozenInitialCard.current) {
-		frozenInitialCard.current = { ...initialCard };
-	}
-
-	// Section expansion states
-	const [expandedSections, setExpandedSections] = useState({
-		subtasks: true,
-		attachments: false,
-		agentWork: true,
-	});
-
-	// Initialize from FROZEN card data to prevent external prop updates
-	const [localCard, setLocalCard] = useState({
-		...frozenInitialCard.current,
-		tasks: frozenInitialCard.current.tasks || { completed: 0, total: 0 },
-		checklist: frozenInitialCard.current.checklist || [],
-		files: [], // attachments disabled
-		attachments: frozenInitialCard.current.attachments || [],
-	});
-
-	const { setSelectedCard } = useCardContext();
-	const [fileError, setFileError] = useState(null);
-
-	const [agentProfiles, setAgentProfiles] = useState([]);
-	const [agentRuns, setAgentRuns] = useState([]);
-	const [isLoadingAgentRuns, setIsLoadingAgentRuns] = useState(false);
-	const [assigningAgent, setAssigningAgent] = useState(false);
-	const [selectedAgentProfileId, setSelectedAgentProfileId] = useState("");
-
-	useEffect(() => {
-		setIsEntering(false);
-	}, []);
-
-	// Track editing session
-	useEffect(() => {
-		editingStartTimeRef.current = Date.now();
-		setIsLocallyEditing(true);
-	}, []);
-
-	// Enhanced close handler
-	const handleClose = useCallback(
-		(e) => {
-			if (e?.target === e?.currentTarget || !e) {
-				setIsLeaving(true);
-				setTimeout(() => {
-					onClose();
-				}, 200);
-			}
-		},
-		[onClose]
-	);
-
-	// Handle escape key
-	useEffect(() => {
-		const handleEscape = (e) => {
-			if (e.key === "Escape") {
-				handleClose();
-			}
-		};
-
-		document.addEventListener("keydown", handleEscape);
-		return () => document.removeEventListener("keydown", handleEscape);
-	}, [handleClose]);
-
-	// Handle optimistic updates
-	const handleOptimisticUpdate = (updates) => {
-		setHasUnsavedChanges(true);
-		if (onOptimisticUpdate) {
-			onOptimisticUpdate(localCard.id, updates);
-		}
-	};
-
-	// Separate handlers for title and description to prevent cursor jumping
-	const handleTitleChange = useCallback((e) => {
-		const value = e.target.value;
-		setLocalCard((prev) => ({ ...prev, title: value }));
-		setHasUnsavedChanges(true);
-	}, []);
-
-	const handleDescriptionChange = useCallback((e) => {
-		const value = e.target.value;
-		setLocalCard((prev) => ({ ...prev, description: value }));
-		setHasUnsavedChanges(true);
-	}, []);
-
-	const handleSave = useCallback(async () => {
-		try {
-			setSaveStatus("saving");
-			setIsSubmitting(true);
-			const columnId = String(localCard.columnId);
-			const cardId = String(localCard.id);
-
-			const cardUpdateData = {
-				id: localCard.id,
-				title: localCard.title,
-				description: localCard.description,
-				priority: localCard.priority,
-				progress: localCard.progress,
-				columnId: localCard.columnId,
-				checklist: localCard.checklist,
-				tasks: localCard.tasks,
-				attachments: localCard.attachments,
-				createdAt: localCard.createdAt,
-			};
-
-			const processedUpdateData = { ...cardUpdateData };
-
-			const updatedCard = {
-				...processedUpdateData,
-				updatedAt: new Date().toISOString(),
-			};
-
-			setColumns((prevColumns) =>
-				prevColumns.map((column) => {
-					if (column.id === columnId) {
-						return {
-							...column,
-							Cards: Array.isArray(column.Cards)
-								? column.Cards.map((card) =>
-										String(card.id) === cardId
-											? updatedCard
-											: card
-								  )
-								: [],
-						};
-					}
-					return column;
-				})
-			);
-
-			const backendUpdatedCard = await handleCardUpdate(
-				columnId,
-				cardId,
-				processedUpdateData
-			);
-
-			if (backendUpdatedCard) {
-				setLocalCard((prev) => ({
-					...prev,
-					...backendUpdatedCard,
-					files: prev.files,
-				}));
-			}
-
-			setSaveStatus("saved");
-			setHasUnsavedChanges(false);
-			setTimeout(() => setSaveStatus(null), 2000);
-			setIsSubmitting(false);
-		} catch (error) {
-			setSaveStatus("error");
-			setTimeout(() => setSaveStatus(null), 2000);
-			setIsSubmitting(false);
-		}
-	}, [localCard, handleCardUpdate, setColumns]);
-
-	useEffect(() => {
-		handleSaveRef.current = handleSave;
-	}, [handleSave]);
-
-	const loadAgentRuns = useCallback(async () => {
-		if (!localCard?.id) return;
-		setIsLoadingAgentRuns(true);
-		try {
-			const result = await agentTaskRunsApi.list({ cardId: localCard.id });
-			const task = (result.tasks || []).find((item) => item.id === localCard.id);
-			setAgentRuns(task?.agentRuns || (task?.agentRun ? [task.agentRun] : []));
-		} catch (error) {
-			console.error("Error loading agent work:", error);
-			setAgentRuns([]);
-		} finally {
-			setIsLoadingAgentRuns(false);
-		}
-	}, [localCard?.id]);
-
-	useEffect(() => {
-		profilesApi
-			.listProfiles()
-			.then((result) => {
-				const profiles = result.profiles || [];
-				setAgentProfiles(profiles);
-				if (!selectedAgentProfileId && profiles[0]) {
-					setSelectedAgentProfileId(profiles[0].id);
-				}
-			})
-			.catch((error) => console.error("Error loading agent profiles:", error));
-	}, [selectedAgentProfileId]);
-
-	useEffect(() => {
-		loadAgentRuns();
-	}, [loadAgentRuns]);
-
-	useEffect(() => {
-		const active = agentRuns.some((run) =>
-			["queued", "running"].includes(run?.status)
-		);
-		if (!active) return;
-		const timer = setInterval(loadAgentRuns, 3000);
-		return () => clearInterval(timer);
-	}, [agentRuns, loadAgentRuns]);
-
-	const handleAssignAgent = async (profileId = selectedAgentProfileId) => {
-		if (!localCard?.id || !profileId) return;
-		setAssigningAgent(true);
-		try {
-			const result = await agentTaskRunsApi.create({
-				cardId: localCard.id,
-				profileId,
-			});
-			setAgentRuns(result.run ? [result.run] : []);
-		} catch (error) {
-			console.error("Error assigning agent:", error);
-		} finally {
-			setAssigningAgent(false);
-		}
-	};
-
-	const latestAgentRun = agentRuns[0] || null;
-	const latestAgentRunDisplay = getAgentRunDisplayStatus(latestAgentRun);
-
-	const handleBlockedSaveClick = useCallback(() => {
-		setShouldBounceSaveAll(true);
-		setTimeout(() => setShouldBounceSaveAll(false), 1000);
-	}, []);
-
-	const handleChecklistUpdate = useCallback(
-		(newChecklist, shouldImmediateSave = false) => {
-			const processedChecklist = newChecklist.map((item) => {
-				const normalized = { ...item };
-				delete normalized.assignees;
-				delete normalized.assigneeDetails;
-				delete normalized.assignee_id;
-				return normalized;
-			});
-
-			const completedTasks = processedChecklist.filter(
-				(task) => task.completed
-			).length;
-
-			const updates = {
-				checklist: processedChecklist,
-				progress:
-					Math.round(
-						(completedTasks / processedChecklist.length) * 100
-					) || 0,
-				tasks: {
-					completed: completedTasks,
-					total: processedChecklist.length,
-				},
-			};
-
-			// Handle optimistic update for real-time sync
-			handleOptimisticUpdate(updates);
-
-			setLocalCard((prev) => {
-				const updatedCard = { ...prev, ...updates };
-
-				if (shouldImmediateSave && handleSaveRef.current) {
-					setTimeout(() => {
-						handleSaveRef.current();
-					}, 0);
-				}
-
-				return updatedCard;
-			});
-		},
-		[localCard.id]
-	);
-
-	const handleDeleteCard = useCallback(() => {
-		setIsConfirmingDelete((prev) => !prev);
-	}, []);
-
-	const handleConfirmDelete = useCallback(async () => {
-		const columnId = String(localCard.columnId);
-		const cardId = String(localCard.id);
-
-		try {
-			setIsDeletingCard(true);
-
-			if (onDeleteStart) {
-				onDeleteStart(cardId);
-			}
-
-			setColumns((prevColumns) =>
-				prevColumns.map((column) => {
-					if (column.id === columnId) {
-						return {
-							...column,
-							Cards: Array.isArray(column.Cards)
-								? column.Cards.filter(
-										(card) => String(card.id) !== cardId
-								  )
-								: [],
-						};
-					}
-					return column;
-				})
-			);
-
-			setIsLeaving(true);
-			setTimeout(() => {
-				onClose();
-			}, 200);
-
-			setTimeout(async () => {
-				await handleCardDelete(columnId, cardId);
-				setSelectedCard(null);
-			}, 300);
-		} catch (error) {
-			setIsDeletingCard(false);
-		}
-	}, [
-		localCard,
-		onDeleteStart,
-		onClose,
-		handleCardDelete,
-		setSelectedCard,
-		setColumns,
-	]);
-
-	const toggleSection = (sectionName) => {
-		setExpandedSections((prev) => ({
-			...prev,
-			[sectionName]: !prev[sectionName],
-		}));
-	};
-
-	const getPriorityColor = () => {
-		switch (localCard.priority) {
-			case "High":
-				return "text-red-600";
-			case "Medium":
-				return "text-amber-600";
-			case "Low":
-				return "text-gray-600";
-			default:
-				return "text-gray-500";
-		}
-	};
-
-	useEffect(() => {
-		for (const column of columns) {
-			const foundCard = column.Cards?.find(
-				(card) => String(card.id) === String(localCard.id)
-			);
-			if (foundCard && column.id !== localCard.columnId) {
-				setLocalCard((prev) => ({
-					...prev,
-					columnId: column.id,
-					Column: column,
-				}));
-				break;
-			}
-		}
-	}, [columns, localCard.id, localCard.columnId]);
-
-	if (!localCard) return null;
-
-	return (
-		<div
-			className={`fixed inset-0 z-50 overflow-hidden transition-all duration-200 ${
-				isLeaving ? "opacity-0" : "opacity-100"
-			}`}
-		>
-			<div
-				className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-				onClick={handleClose}
-			/>
-
-			<div className="flex items-center justify-center min-h-full p-4">
-				<div
-					ref={modalRef}
-					className={`
-            relative bg-white dark:bg-gray-900 midnight:bg-gray-950 
-            rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 midnight:border-gray-800/50 
-            w-full max-w-4xl max-h-[90vh] 
-            overflow-hidden transform transition-all duration-200
-            ${isLeaving ? "scale-95 opacity-0" : "scale-100 opacity-100"}
-          `}
-				>
-					{/* Enhanced Header */}
-					<div
-						className={`
-            sticky top-0 z-10 px-6 py-4 bg-gradient-to-b from-white via-white/95 to-transparent dark:from-gray-900 dark:via-gray-900/95 dark:to-transparent midnight:from-gray-950 midnight:via-gray-950/95 midnight:to-transparent
-          `}
-					>
-						<div className="flex items-center justify-between">
-							<div className="flex-1 min-w-0">
-								<div className="flex items-center justify-between gap-3 mb-2">
-									<input
-										type="text"
-										name="title"
-										value={localCard.title || ""}
-										onChange={handleTitleChange}
-										className="text-2xl font-semibold bg-transparent border-none focus:outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 flex-1 transition-colors duration-200"
-										placeholder="Untitled"
-									/>
-
-									{/* Status Indicators - moved to right side */}
-									<div className="flex items-center gap-1.5">
-										{isLocallyEditing && (
-											<div className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/20 midnight:bg-green-950/20 rounded-md">
-												<Edit3 className="w-3 h-3 text-green-600 dark:text-green-400 midnight:text-green-400" />
-												<span className="text-xs font-medium text-green-700 dark:text-green-400 midnight:text-green-400">
-													Editing
-												</span>
-											</div>
-										)}
-
-										{hasUnsavedChanges && (
-											<div className="flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/20 midnight:bg-orange-950/20 rounded-md">
-												<Clock className="w-3 h-3 text-orange-600 dark:text-orange-400 midnight:text-orange-400" />
-												<span className="text-xs text-orange-700 dark:text-orange-400 midnight:text-orange-400">
-													Unsaved
-												</span>
-											</div>
-										)}
-
-									</div>
-								</div>
-
-							</div>
-
-							{/* Action Buttons */}
-							<div className="ml-4 flex items-center space-x-2">
-									{!isConfirmingDelete ? (
-										<button
-											onClick={handleDeleteCard}
-											className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 rounded-md transition-colors"
-										>
-											<Trash2 className="w-4 h-4" />
-										</button>
-									) : (
-										<div className="flex items-center space-x-2">
-											<span className="text-sm text-gray-500">
-												Are you sure?
-											</span>
-											<button
-												onClick={handleConfirmDelete}
-												disabled={isDeletingCard}
-												className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
-											>
-												{isDeletingCard
-													? "Deleting..."
-													: "Delete"}
-											</button>
-											<button
-												onClick={handleDeleteCard}
-												disabled={isDeletingCard}
-												className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-											>
-												Cancel
-											</button>
-										</div>
-									)}
-
-									<button
-										onClick={
-											hasUnsavedSubtaskText
-												? handleBlockedSaveClick
-												: handleSave
-										}
-										disabled={
-											isSubmitting ||
-											isUploadingFiles
-										}
-										className="px-5 py-2.5 bg-gray-900 dark:bg-gray-600 midnight:bg-gray-400 hover:bg-gray-800 dark:hover:bg-gray-500 midnight:hover:bg-gray-300 disabled:bg-gray-300 dark:disabled:bg-gray-700 midnight:disabled:bg-gray-800 disabled:cursor-not-allowed text-white dark:text-gray-100 midnight:text-gray-900 text-sm font-medium rounded-lg transition-all duration-200 hover:shadow-md flex items-center space-x-2"
-									>
-										{isSubmitting ? (
-											<>
-												<div className="animate-spin w-4 h-4 border-2 border-white/30 rounded-full border-t-white"></div>
-												<span>Saving...</span>
-											</>
-										) : (
-											<>
-												<Save className="w-4 h-4" />
-												<span>Save</span>
-											</>
-										)}
-									</button>
-								</div>
-						</div>
-					</div>
-
-					{/* Modal Content */}
-					<div className="overflow-auto max-h-[calc(90vh-120px)]">
-						<div className="flex-1 flex overflow-hidden min-w-0">
-							{/* Left Column - Main Content */}
-							<div className="flex-1 overflow-y-auto min-w-0">
-									<div className="p-6 space-y-6">
-										{/* Description */}
-										<div>
-											<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-200 mb-2">
-												Description
-											</label>
-											<textarea
-												name="description"
-												value={
-													localCard.description || ""
-												}
-												onChange={
-													handleDescriptionChange
-												}
-												onKeyDown={(e) => {
-													// Prevent event propagation for space key
-													if (e.key === ' ' || e.code === 'Space') {
-														e.stopPropagation();
-													}
-												}}
-												
-												rows="4"
-												className="w-full p-4 border border-gray-200 dark:border-gray-600 midnight:border-gray-700 bg-gray-50/30 dark:bg-gray-800/50 midnight:bg-gray-900/50 rounded-xl resize-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400 focus:bg-white dark:focus:bg-gray-800 midnight:focus:bg-gray-900 disabled:opacity-75 disabled:bg-gray-50 dark:disabled:bg-gray-700 midnight:disabled:bg-gray-800 transition-all duration-200"
-												placeholder="Add a description..."
-											/>
-										</div>
-
-										{/* Collapsible Sections */}
-										<div className="space-y-0">
-											<CollapsibleSection
-												title="Subtasks"
-												icon={
-													<ClipboardList className="w-4 h-4 text-gray-600" />
-												}
-												isExpanded={
-													expandedSections.subtasks
-												}
-												onToggle={() =>
-													toggleSection("subtasks")
-												}
-												count={
-													localCard.checklist
-														?.length || 0
-												}
-												summary={
-													localCard.tasks?.total > 0
-														? `${localCard.tasks.completed}/${localCard.tasks.total} completed`
-														: null
-												}
-											>
-												<div className="relative">
-													<CardSubtasksSection
-														checklist={
-															localCard.checklist ||
-															[]
-														}
-														tasks={
-															localCard.tasks || {
-																completed: 0,
-																total: 0,
-															}
-														}
-														onChecklistUpdate={
-															handleChecklistUpdate
-														}
-														onUnsavedTextChange={
-															setHasUnsavedSubtaskText
-														}
-														shouldBounceSaveAll={
-															shouldBounceSaveAll
-														}
-														
-													/>
-												</div>
-											</CollapsibleSection>
-
-											<CollapsibleSection
-												title="Attachments"
-												icon={
-													<Paperclip className="w-4 h-4 text-gray-600" />
-												}
-												isExpanded={
-													expandedSections.attachments
-												}
-												onToggle={() =>
-													toggleSection("attachments")
-												}
-												count={
-													(localCard.attachments
-														?.length || 0) +
-													(localCard.files?.length ||
-														0)
-												}
-											>
-												<CardAttachmentsSection
-													files={
-														localCard.files || []
-													}
-													attachments={
-														localCard.attachments ||
-														[]
-													}
-													fileError={fileError}
-													
-													isUploading={
-														isUploadingFiles
-													}
-													onFileChange={async (e) => {
-														
-														const newFiles =
-															Array.from(
-																e.target.files
-															);
-
-														if (
-															newFiles.length ===
-															0
-														)
-															return;
-
-														// Show files as uploading immediately
-														setLocalCard(
-															(prev) => ({
-																...prev,
-																files: [
-																	...(prev.files ||
-																		[]),
-																	...newFiles,
-																],
-															})
-														);
-
-														// Upload files immediately
-														setIsUploadingFiles(
-															true
-														);
-														try {
-															const cardId =
-																String(
-																	localCard.id
-																);
-															const result =
-																await addAttachment(
-																	cardId,
-																	newFiles
-																);
-
-															// Update card with new attachments and clear pending files
-															setLocalCard(
-																(prev) => ({
-																	...prev,
-																	files: [], // Clear pending files
-																	attachments:
-																		result.attachments ||
-																		[],
-																})
-															);
-
-															setFileError(null);
-														} catch (error) {
-															console.error(
-																"Error uploading files:",
-																error
-															);
-															setFileError(
-																error.message ||
-																	"Failed to upload files. Please try again."
-															);
-															// Remove failed files from pending list
-															setLocalCard(
-																(prev) => ({
-																	...prev,
-																	files: [],
-																})
-															);
-														} finally {
-															setIsUploadingFiles(
-																false
-															);
-														}
-													}}
-													onDeleteFile={(
-														fileToDelete
-													) => {
-														
-														setLocalCard(
-															(prev) => ({
-																...prev,
-																files: prev.files.filter(
-																	(file) =>
-																		file !==
-																		fileToDelete
-																),
-															})
-														);
-													}}
-													onDeleteAttachment={async (
-														attachmentId
-													) => {
-														
-														try {
-															setSaveStatus(
-																"saving"
-															);
-															const cardId =
-																String(
-																	localCard.id
-																);
-															const updatedCard =
-																await removeAttachment(
-																	cardId,
-																	attachmentId
-																);
-															setLocalCard(
-																(prev) => ({
-																	...prev,
-																	attachments:
-																		updatedCard.attachments ||
-																		[],
-																})
-															);
-															setSaveStatus(
-																"saved"
-															);
-															setTimeout(
-																() =>
-																	setSaveStatus(
-																		null
-																	),
-																2000
-															);
-														} catch (error) {
-															setSaveStatus(
-																"error"
-															);
-															setTimeout(
-																() =>
-																	setSaveStatus(
-																		null
-																	),
-																2000
-															);
-														}
-													}}
-													getFileIcon={(type) => {
-														if (!type)
-															return (
-																<File className="w-4 h-4 text-gray-400" />
-															);
-														if (
-															type.includes("pdf")
-														)
-															return (
-																<FileText className="w-4 h-4 text-red-500" />
-															);
-														if (
-															type.includes(
-																"image"
-															)
-														)
-															return (
-																<Image className="w-4 h-4 text-blue-500" />
-															);
-														if (
-															type.includes(
-																"spreadsheet"
-															) ||
-															type.includes(
-																"excel"
-															)
-														)
-															return (
-																<FileSpreadsheet className="w-4 h-4 text-green-500" />
-															);
-														if (
-															type.includes(
-																"word"
-															)
-														)
-															return (
-																<FileText className="w-4 h-4 text-blue-600" />
-															);
-														return (
-															<File className="w-4 h-4 text-gray-400" />
-														);
-													}}
-												/>
-											</CollapsibleSection>
-
-											<CollapsibleSection
-												title="Agent Work"
-												icon={<Bot className="w-4 h-4 text-gray-600" />}
-												isExpanded={expandedSections.agentWork}
-												onToggle={() => toggleSection("agentWork")}
-												count={isLoadingAgentRuns ? <Loader className="w-3 h-3 animate-spin" /> : agentRuns.length}
-											>
-												<div className="space-y-4">
-													<div className="flex items-center gap-2">
-														<select
-															value={selectedAgentProfileId}
-															onChange={(event) => setSelectedAgentProfileId(event.target.value)}
-															disabled={assigningAgent || !agentProfiles.length}
-															className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-														>
-															{agentProfiles.length ? agentProfiles.map((profile) => (
-																<option key={profile.id} value={profile.id}>{profile.icon || ""} {profile.name}</option>
-															)) : <option value="">No agents available</option>}
-														</select>
-														<button
-															type="button"
-															onClick={() => handleAssignAgent()}
-															disabled={assigningAgent || !selectedAgentProfileId}
-															className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:bg-gray-300 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 dark:disabled:bg-gray-700"
-														>
-															{assigningAgent ? <Loader className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-															Assign
-														</button>
-													</div>
-
-													{isLoadingAgentRuns ? (
-														<div className="flex items-center justify-center py-6"><Loader className="h-5 w-5 animate-spin text-gray-400" /></div>
-													) : latestAgentRun ? (
-														<>
-														<div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
-															<div className="flex items-start justify-between gap-3">
-																<div className="min-w-0">
-																	<div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-																		<span>{latestAgentRun.profile?.icon || ""}</span>
-																		<span>{latestAgentRun.profile?.name || "Agent"}</span>
-																		<span className={`rounded-md px-2 py-0.5 text-xs ${latestAgentRunDisplay.badge}`}>
-																			{latestAgentRunDisplay.label}
-																		</span>
-																	</div>
-																	<p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{latestAgentRun.lastEventLabel || "Queued"}</p>
-																	{latestAgentRunDisplay.message && (
-																		<p className="mt-1 text-xs text-amber-600 dark:text-amber-300">{latestAgentRunDisplay.message}</p>
-																	)}
-																</div>
-																<div className="flex items-center gap-1">
-																	{latestAgentRun.sessionId && (
-																		<a href={"/agents/" + latestAgentRun.sessionId} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title={latestAgentRun.needsInput || latestAgentRun.displayStatus === "needs_input" ? "Reply to agent" : "Open session"}>
-																			<ExternalLink className="h-4 w-4" />
-																		</a>
-																	)}
-																	{latestAgentRun.status === "failed" && (
-																		<button type="button" onClick={() => handleAssignAgent(latestAgentRun.profileId)} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title="Retry">
-																			<RotateCcw className="h-4 w-4" />
-																		</button>
-																	)}
-																</div>
-															</div>
-															{(latestAgentRun.needsInput || latestAgentRun.displayStatus === "needs_input") && latestAgentRun.sessionId && (
-																<a
-																	href={"/agents/" + latestAgentRun.sessionId}
-																	className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
-																>
-																	Reply to agent
-																	<ExternalLink className="h-3.5 w-3.5" />
-																</a>
-															)}
-															{latestAgentRun.summary && <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{latestAgentRun.summary}</p>}
-															{latestAgentRun.error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{latestAgentRun.error}</p>}
-														</div>
-														{agentRuns.length > 1 && (
-															<div className="space-y-2">
-																<p className="text-xs font-medium uppercase tracking-wide text-gray-400">Previous Runs</p>
-																{agentRuns.slice(1, 5).map((run) => (
-																	<div key={run.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 text-xs dark:border-gray-700">
-																		<span className="truncate text-gray-600 dark:text-gray-300">{run.profile?.name || "Agent"} · {run.status}</span>
-																		{run.sessionId && (
-																			<a href={"/agents/" + run.sessionId} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-																				<ExternalLink className="h-3.5 w-3.5" />
-																			</a>
-																		)}
-																	</div>
-																))}
-															</div>
-														)}
-														</>
-													) : (
-														<div className="rounded-lg border border-dashed border-gray-200 p-5 text-center dark:border-gray-700">
-															<Bot className="mx-auto mb-2 h-6 w-6 text-gray-400" />
-															<p className="text-sm text-gray-500 dark:text-gray-400">No agent has worked on this task yet.</p>
-														</div>
-													)}
-												</div>
-											</CollapsibleSection>
-										</div>
-									</div>
-								</div>
-								{/* Right Column - Sidebar */}
-								<div className="w-80 min-w-0 border-l border-gray-150 dark:border-gray-750 midnight:border-gray-850 bg-gray-50/80 dark:bg-gray-900/60 midnight:bg-gray-950/80 overflow-y-auto overflow-x-hidden backdrop-blur-sm">
-									<div className="p-6 space-y-7 min-w-0">
-										{/* Status */}
-										<div className="space-y-4">
-											<h4 className="text-sm font-semibold text-gray-800 dark:text-gray-300 midnight:text-gray-200 tracking-wide">
-												Status
-											</h4>
-
-											{/* Interactive Column Badge */}
-											{(() => {
-												let currentColumnId =
-													localCard.columnId;
-												let currentColumn =
-													columns.find(
-														(col) =>
-															col.id ===
-															currentColumnId
-													);
-
-												if (!currentColumn) {
-													for (const column of columns) {
-														const foundCard =
-															column.Cards?.find(
-																(card) =>
-																	String(
-																		card.id
-																	) ===
-																	String(
-																		localCard.id
-																	)
-															);
-														if (foundCard) {
-															currentColumn =
-																column;
-															currentColumnId =
-																column.id;
-															break;
-														}
-													}
-												}
-
-												return currentColumn ? (
-													<div>
-														<InteractiveStatusBadge
-															columnId={
-																currentColumnId
-															}
-															columnTitle={
-																currentColumn.title
-															}
-															cardId={
-																localCard.id
-															}
-															columns={columns}
-															
-														/>
-													</div>
-												) : null;
-											})()}
-
-											{/* Progress */}
-											<div className="space-y-2">
-												<div className="flex items-center justify-between">
-													<span className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-300">
-														Progress
-													</span>
-													<span className="text-sm font-medium text-gray-900 dark:text-gray-400 midnight:text-gray-300">
-														{localCard.progress ||
-															0}
-														%
-													</span>
-												</div>
-												<div className="w-full h-2 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 rounded-full overflow-hidden">
-													<div
-														className="h-full bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 midnight:from-blue-300 midnight:to-blue-400 rounded-full transition-all duration-500 ease-out"
-														style={{
-															width: `${
-																localCard.progress ||
-																0
-															}%`,
-														}}
-													/>
-												</div>
-											</div>
-
-										</div>
-
-										{/* Priority */}
-										<div>
-											<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-200 mb-2">
-												Priority
-											</label>
-											<DropdownBar
-												value={localCard.priority || ""}
-												onChange={(value) => {
-													
-													const updates = {
-														priority: value,
-													};
-													setLocalCard((prev) => ({
-														...prev,
-														...updates,
-													}));
-													handleOptimisticUpdate(
-														updates
-													);
-												}}
-												options={[
-													{
-														value: "High",
-														label: "High",
-													},
-													{
-														value: "Medium",
-														label: "Medium",
-													},
-													{
-														value: "Low",
-														label: "Low",
-													},
-												]}
-												type="priority"
-												placeholder="Select priority..."
-												
-											/>
-											{localCard.priority && (
-												<div className="mt-2 text-xs">
-													<span
-														className={`font-medium ${getPriorityColor()}`}
-													>
-														{localCard.priority}{" "}
-														Priority
-													</span>
-												</div>
-											)}
-										</div>
-
-									</div>
-							</div>
-						</div>
-							{/* Optimistic update overlay for main content area */}
-						{hasUnsavedChanges && (
-							<div className="absolute top-4 right-4 bg-orange-100 dark:bg-orange-900/20 midnight:bg-orange-950/20 px-3 py-1 rounded-full">
-								<span className="text-xs font-medium text-orange-700 dark:text-orange-400 midnight:text-orange-400">
-									Changes pending...
-								</span>
-							</div>
-						)}
-					</div>
-				</div>
-			</div>
-		</div>
-	);
-};
-
-export default CardDetailModal;
+export default AgentTaskDetail;

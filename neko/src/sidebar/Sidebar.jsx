@@ -18,6 +18,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  KanbanSquare,
 } from "lucide-react";
 
 import UniversalSearch from "./UniversalSearch";
@@ -509,13 +510,7 @@ const DynamicSidebar = ({
     return shortcut ? `${label}  ${shortcut}` : label;
   }, [shortcutByAction]);
 
-  const workspaceIcon = (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  );
+  const workspaceIcon = <KanbanSquare className="w-5 h-5" />;
 
   const calendarIcon = (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
@@ -528,7 +523,7 @@ const DynamicSidebar = ({
 
   const primaryItems = [
     { key: "history", label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
-    { key: "projects", label: "Projects", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
+    { key: "projects", label: "Tasks", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
     { key: "calendar", label: "Calendar", action: "navCalendar", onClick: () => navigate("/calendar"), active: isOnCalendar, icon: calendarIcon },
   ].filter(item => navItemsVisibility[item.key] !== false);
 
@@ -758,7 +753,7 @@ const DynamicSidebar = ({
 
         {navItemsVisibility.projects !== false && (
           <DockItem
-            label={labelWithShortcut("Projects", "navWorkspace")}
+            label={labelWithShortcut("Tasks", "navWorkspace")}
             onClick={() => navigate("/workspace")}
             isActive={isOnWorkspace}
             dockPosition={dockPosition}

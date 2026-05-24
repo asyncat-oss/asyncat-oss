@@ -16,10 +16,7 @@ const ListView = ({ selectedProject }) => {
 		key: "title",
 		direction: "asc",
 	});
-	const [filterConfig, setFilterConfig] = useState({
-		priority: [],
-		running: false,
-	});
+	const [filterConfig, setFilterConfig] = useState({ running: false });
 	const [cards, setCards] = useState([]);
 	const [expandedCards, setExpandedCards] = useState(new Set());
 	const [showCreateTask, setShowCreateTask] = useState(false);
@@ -118,13 +115,6 @@ const ListView = ({ selectedProject }) => {
 			);
 		}
 
-		// Apply priority filter
-		if (filterConfig.priority.length > 0) {
-			filteredCards = filteredCards.filter((card) =>
-				filterConfig.priority.includes(card.priority)
-			);
-		}
-
 		// Apply sorting
 		filteredCards.sort((a, b) => {
 			const { key, direction } = sortConfig;
@@ -139,11 +129,6 @@ const ListView = ({ selectedProject }) => {
 				case "runStatus":
 					valueA = a.agentRun?.status || "unassigned";
 					valueB = b.agentRun?.status || "unassigned";
-					break;
-				case "priority":
-					const priorityValue = { High: 3, Medium: 2, Low: 1 };
-					valueA = priorityValue[a[key]] || 0;
-					valueB = priorityValue[b[key]] || 0;
 					break;
 				default:
 					valueA = a[key] || "";
@@ -180,24 +165,8 @@ const ListView = ({ selectedProject }) => {
 		}));
 	};
 
-	const togglePriorityFilter = (priority) => {
-		setFilterConfig((prev) => {
-			if (prev.priority.includes(priority)) {
-				return {
-					...prev,
-					priority: prev.priority.filter((p) => p !== priority),
-				};
-			} else {
-				return {
-					...prev,
-					priority: [...prev.priority, priority],
-				};
-			}
-		});
-	};
-
 	const clearFilters = () => {
-		setFilterConfig({ priority: [], running: false });
+		setFilterConfig({ running: false });
 	};
 
 	const handleAssignAgent = async (card, profileId) => {
@@ -307,7 +276,6 @@ const ListView = ({ selectedProject }) => {
 				setSearchTerm={setSearchTerm}
 				filterConfig={filterConfig}
 				toggleRunningFilter={toggleRunningFilter}
-				togglePriorityFilter={togglePriorityFilter}
 				onClearFilters={clearFilters}
 				onCreateTask={() => setShowCreateTask(true)}
 				searchContext={{
@@ -334,8 +302,9 @@ const ListView = ({ selectedProject }) => {
 					/>
 				</div>
 			</div>
-			{showCreateTask && (
+			{showCreateTask && columns[0] && (
 				<AddCardModal
+					column={columns[0]}
 					onClose={() => setShowCreateTask(false)}
 					onSuccess={() => setShowCreateTask(false)}
 				/>

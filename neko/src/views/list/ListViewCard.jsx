@@ -314,9 +314,6 @@ const ListViewCard = ({
 						{run?.lastEventLabel || "Ready for assignment"}
 					</div>
 				</td>
-				<td className="px-3 py-4 text-center">
-					<PriorityBadge priority={card.priority} />
-				</td>
 				<td className="px-3 py-4 text-right">
 					<div className="flex items-center justify-end gap-2">
 						{run?.id && (
@@ -369,7 +366,7 @@ const ListViewCard = ({
 			</tr>
 			{isExpanded && hasSubtasks && (
 				<tr className="border-b border-gray-100 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/30">
-					<td colSpan="7" className="px-6 py-5">
+					<td colSpan="5" className="px-6 py-5">
 						<div className="pl-8">
 							<InteractiveChecklistRenderer
 								checklist={card.checklist}
