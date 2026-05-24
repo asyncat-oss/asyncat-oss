@@ -5,28 +5,29 @@ import { getMainWindow } from './window.js';
 import { isBackendRunning } from './backend.js';
 
 let tray = null;
+let _callbacks = {};
 
 /**
- * Create the system tray icon with context menu.
+ * Create the system tray icon.
  * @param {object} opts
- * @param {Function} opts.onQuit — Called when user clicks Quit
- * @param {Function} opts.onShow — Called when user clicks Show
- * @param {Function} opts.onRestartBackend — Called when user clicks Restart Backend
- * @param {Function} opts.onTrayClick — Called with (tray) on left-click; defaults to show window
+ * @param {Function} opts.onQuit
+ * @param {Function} opts.onShow
+ * @param {Function} opts.onRestartBackend
+ * @param {Function} opts.onTrayClick — Called with (tray) on left-click
  */
 export function createTray({ onQuit, onShow, onRestartBackend, onTrayClick }) {
   if (tray) return tray;
 
-  // Use a smaller icon for the tray (16x16 on macOS, 32x32 elsewhere)
+  _callbacks = { onQuit, onShow, onRestartBackend, onTrayClick };
+
   const icon = nativeImage.createFromPath(ICONS.tray);
   const trayIcon = IS_MAC ? icon.resize({ width: 18, height: 18 }) : icon;
 
   tray = new Tray(trayIcon);
   tray.setToolTip('Asyncat — AI Agent OS');
 
-  updateTrayMenu({ onQuit, onShow, onRestartBackend });
-
-  // Left-click → popup panel (or show window if no popup handler)
+  // macOS: setContextMenu fires on both left AND right click — don't use it.
+  // Handle each side explicitly so left-click is always the popup.
   tray.on('click', () => {
     if (onTrayClick) {
       onTrayClick(tray);
@@ -37,28 +38,32 @@ export function createTray({ onQuit, onShow, onRestartBackend, onTrayClick }) {
     }
   });
 
+  tray.on('right-click', () => {
+    tray.popUpContextMenu(buildContextMenu());
+  });
+
   return tray;
 }
 
 /**
- * Update the tray context menu (e.g. after backend status changes).
+ * Rebuild and re-register the context menu (call after backend status changes).
  */
-export function updateTrayMenu({ onQuit, onShow, onRestartBackend } = {}) {
-  if (!tray) return;
+export function updateTrayMenu(callbacks = {}) {
+  Object.assign(_callbacks, callbacks);
+  // No-op for menu content — it's built fresh on each right-click via buildContextMenu()
+}
 
+function buildContextMenu() {
   const backendRunning = isBackendRunning();
+  const { onQuit, onShow, onRestartBackend } = _callbacks;
 
-  const contextMenu = Menu.buildFromTemplate([
+  return Menu.buildFromTemplate([
     {
       label: 'Show Asyncat',
       click: () => {
         const win = getMainWindow();
-        if (win) {
-          win.show();
-          win.focus();
-        } else if (onShow) {
-          onShow();
-        }
+        if (win) { win.show(); win.focus(); }
+        else if (onShow) { onShow(); }
       },
     },
     { type: 'separator' },
@@ -76,16 +81,8 @@ export function updateTrayMenu({ onQuit, onShow, onRestartBackend } = {}) {
       click: () => onQuit?.(),
     },
   ]);
-
-  tray.setContextMenu(contextMenu);
 }
 
-/**
- * Destroy the tray icon (cleanup on app quit).
- */
 export function destroyTray() {
-  if (tray) {
-    tray.destroy();
-    tray = null;
-  }
+  if (tray) { tray.destroy(); tray = null; }
 }

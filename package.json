@@ -15,9 +15,8 @@
     "dev:backend": "npm run dev -w den",
     "dev:frontend": "npm run dev -w neko",
     "start": "npm run start -w den",
-
     "build": "npm run build -w neko",
-    "electron:dev": "npm run dev:backend & npm run dev:frontend & npx electron .",
+    "electron:dev": "concurrently --kill-others --names den,neko,electron 'npm run dev:backend' 'npm run dev:frontend' 'npx electron .'",
     "electron:start": "npm run build -w neko && npx electron .",
     "electron:build": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --config electron-builder.yml",
     "electron:build:mac": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --mac --config electron-builder.yml",
@@ -25,11 +24,11 @@
     "electron:build:linux": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --linux --config electron-builder.yml",
     "electron:rebuild": "npx electron-rebuild"
   },
-
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || ^24.0.0 || ^25.0.0 || ^26.0.0"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.9"

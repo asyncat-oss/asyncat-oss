@@ -8,8 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const POPUP_PRELOAD = path.join(__dirname, 'popup-preload.js');
 const POPUP_HTML    = path.join(__dirname, 'popup.html');
 
-const W = 360;
-const H = 196;
+const W = 640;
+const H = 168;
 
 let popup = null;
 
@@ -52,7 +52,7 @@ export function togglePopup(tray) {
   popup.loadFile(POPUP_HTML, { query: { iconPath: ICONS.svg } });
 
   popup.once('ready-to-show', () => {
-    positionNearTray(tray);
+    positionBottomCenter(tray);
     popup.show();
   });
 
@@ -70,22 +70,16 @@ export function closePopup() {
 
 // ─── Positioning ──────────────────────────────────────────────────────────────
 
-function positionNearTray(tray) {
+function positionBottomCenter(tray) {
   if (!popup || popup.isDestroyed()) return;
 
+  // Use the display containing the tray icon, fall back to primary
   const trayBounds = tray.getBounds();
-  const { workArea } = screen.getDisplayMatching(trayBounds);
+  const display = screen.getDisplayMatching(trayBounds);
+  const { workArea } = display;
 
-  // Center horizontally under/above the tray icon
-  let x = Math.round(trayBounds.x + trayBounds.width / 2 - W / 2);
+  const x = Math.round(workArea.x + workArea.width / 2 - W / 2);
+  const y = Math.round(workArea.y + workArea.height - H - 56);
 
-  // macOS menu bar is at the top; Windows/Linux taskbar is usually at the bottom
-  const y = IS_MAC
-    ? trayBounds.y + trayBounds.height + 4
-    : trayBounds.y - H - 4;
-
-  // Clamp so the popup doesn't go off-screen
-  x = Math.max(workArea.x + 8, Math.min(x, workArea.x + workArea.width - W - 8));
-
-  popup.setPosition(Math.round(x), Math.round(y), false);
+  popup.setPosition(x, y, false);
 }

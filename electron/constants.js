@@ -39,9 +39,9 @@ export const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 
 /** Icon paths */
 export const ICONS = {
-  png:  path.join(ROOT, 'neko', 'public', 'pwa-512x512.png'),
-  tray: path.join(ROOT, 'neko', 'public', 'pwa-96x96.png'),
-  svg:  path.join(ROOT, 'neko', 'public', 'cat.svg'),
+  png:  path.join(ROOT, 'neko', 'public', 'cat-icon-512.png'), // dock — white bg
+  tray: path.join(ROOT, 'neko', 'public', 'pwa-96x96.png'),   // menu bar — original (no bg)
+  svg:  path.join(ROOT, 'neko', 'public', 'cat-icon.svg'),
 };
 
 // ─── Ports ────────────────────────────────────────────────────────────────────
