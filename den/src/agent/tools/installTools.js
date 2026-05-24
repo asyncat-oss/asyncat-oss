@@ -4,7 +4,7 @@
 import {
   inspectSystemDependencies,
   recommendedInstallCommands,
-} from '../../../../cli/lib/systemDeps.js';
+} from '../../lib/systemDeps.js';
 import { PermissionLevel } from './toolRegistry.js';
 
 export const asyncatInstallReadinessTool = {

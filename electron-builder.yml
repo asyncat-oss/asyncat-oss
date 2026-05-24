@@ -1,0 +1,133 @@
+# ─── Asyncat Desktop — electron-builder config ────────────────────────────────
+# Builds .dmg (macOS), .exe/.msi (Windows), .AppImage/.deb (Linux)
+
+appId: com.asyncat.desktop
+productName: Asyncat
+copyright: Copyright © 2025-2026 Asyncat Contributors
+
+# ─── Packaging strategy ───────────────────────────────────────────────────────
+# asar: false — keep files on the real filesystem so the bundled Node.js binary
+#   (resources/node-bin/node) can require() them directly. ELECTRON_RUN_AS_NODE
+#   is not used because better-sqlite3 v12.x (NAN-based) cannot compile against
+#   Electron 42's modified V8 pointer-sandbox headers.
+#
+# npmRebuild: false — prevent electron-builder from trying (and failing) to
+#   recompile better-sqlite3 for Electron's ABI. We use the same Node binary
+#   that compiled the native modules during npm install, so no rebuild is needed.
+
+asar: false
+npmRebuild: false
+
+# ─── Directories ──────────────────────────────────────────────────────────────
+directories:
+  output: release
+  buildResources: neko/public
+
+# ─── What goes into the package ───────────────────────────────────────────────
+files:
+  - electron/**/*
+  - den/**/*
+  - neko/dist/**/*
+  - "!den/node_modules/.cache"
+  - "!den/test"
+  - "!den/scripts"
+  - "!den/data/**/*.db"
+  - "!neko/src"
+  - "!neko/node_modules"
+  - "!.git"
+  - "!.claude"
+  - "!.asyncat"
+  - "!logs"
+  - "!data"
+  - "!resources/node-bin"
+
+# ─── Extra resources (outside the app directory, next to it) ──────────────────
+# node-bin/ holds the Node.js binary bundled by scripts/bundle-node.js.
+# .env.example is used for first-run credential generation in userData.
+extraResources:
+  - from: resources/node-bin/
+    to: node-bin
+  - from: den/.env.example
+    to: .env.example
+
+# ─── macOS ────────────────────────────────────────────────────────────────────
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  icon: neko/public/pwa-512x512.png
+  darkModeSupport: true
+  hardenedRuntime: false         # No code signing for OSS — see README
+  gatekeeperAssess: false
+  entitlements: null
+  entitlementsInherit: null
+
+dmg:
+  title: "Asyncat"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ─── Windows ──────────────────────────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  icon: neko/public/pwa-512x512.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: neko/public/pwa-512x512.png
+  uninstallerIcon: neko/public/pwa-512x512.png
+  deleteAppDataOnUninstall: false
+  menuCategory: true
+
+# ─── Linux ────────────────────────────────────────────────────────────────────
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+        - arm64
+  icon: neko/public/pwa-512x512.png
+  category: Utility
+  maintainer: Asyncat Contributors
+  synopsis: AI Agent OS that runs locally
+  description: >
+    Asyncat is a local-first AI Agent OS with built-in kanban, calendar, notes,
+    and a brain-inspired agent runtime. It gives your local model superpowers.
+
+deb:
+  depends:
+    - gconf2
+    - gconf-service
+    - libnotify4
+    - libappindicator1
+    - libxtst6
+    - libnss3
+
+# ─── Publish (GitHub Releases — when you're ready) ────────────────────────────
+# Uncomment when you want auto-updates:
+# publish:
+#   provider: github
+#   owner: asyncat
+#   repo: asyncat-oss

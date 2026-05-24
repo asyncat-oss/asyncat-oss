@@ -27,7 +27,7 @@ import {
   fetchLlamaReleases,
   buildReleaseCatalog,
   installPythonVenvFallback,
-} from '../../../../../cli/lib/localEngine.js';
+} from '../../../lib/localEngine.js';
 
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';

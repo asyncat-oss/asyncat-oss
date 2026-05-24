@@ -5,7 +5,11 @@ import winston from 'winston';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
-const LOG_ROOT = path.join(ROOT, 'logs', 'backend');
+// ASYNCAT_LOG_DIR is set by Electron in packaged builds to a writable OS path,
+// because __dirname resolves into the read-only asar archive in production.
+const LOG_ROOT = process.env.ASYNCAT_LOG_DIR
+  ? path.join(process.env.ASYNCAT_LOG_DIR, 'backend')
+  : path.join(ROOT, 'logs', 'backend');
 
 const SENSITIVE_KEY_RE = /^(apikey|api_key|key|token|password|secret|bearer|authorization|database_url|connection_string)$/i;
 const SENSITIVE_PATTERNS = [

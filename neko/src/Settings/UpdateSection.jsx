@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal, Trash2, AlertTriangle, RotateCcw, HardDrive } from 'lucide-react';
+import { RefreshCw, GitBranch, GitCommit, ArrowUpCircle, CheckCircle2, XCircle, Loader2, Terminal, Trash2, AlertTriangle, RotateCcw, HardDrive, ExternalLink, Package } from 'lucide-react';
 import { updateApi } from './settingApi';
 import { installApi } from '../CommandCenter/api/installApi.js';
+
+const RELEASES_URL = 'https://github.com/asyncat/asyncat-oss/releases';
+
+const isPackagedBuild = window.electronAPI?.isPackaged === true;
 
 const soraFontBase = 'font-sora';
 
@@ -144,6 +148,66 @@ const UpdateSection = () => {
   const optionalMissing = missingChecks(readiness, false);
   const readyForUpdates = readiness && requiredMissing.length === 0;
 
+  // ─── Packaged (installer) build ───────────────────────────────────────────
+  // git commands are unavailable; updates come from GitHub Releases.
+  if (isPackagedBuild) {
+    return (
+      <div className={`space-y-6 ${soraFontBase}`}>
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Package size={18} className="text-gray-500 dark:text-gray-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
+              Current Version
+            </h3>
+          </div>
+          {localInfo ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Version</p>
+                <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">v{localInfo.version}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Install type</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Desktop app</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[1, 2].map(i => (
+                <div key={i} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 animate-pulse" />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
+          <div className="flex items-center gap-2 mb-2">
+            <ArrowUpCircle size={18} className="text-gray-500 dark:text-gray-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
+              Updates
+            </h3>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Download the latest installer from GitHub Releases and run it — your data is kept.
+          </p>
+          <a
+            href={RELEASES_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+              bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600
+              text-white transition-colors"
+          >
+            <ExternalLink size={14} />
+            View latest releases
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Source install (git clone + npm run electron:dev) ────────────────────
+
   return (
     <div className={`space-y-6 ${soraFontBase}`}>
 
@@ -170,14 +234,14 @@ const UpdateSection = () => {
             </div>
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Commit</p>
-              <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">{localInfo.currentHash}</p>
+              <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">{localInfo.currentHash ?? '—'}</p>
             </div>
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
               <div className="flex items-center gap-1 mb-1">
                 <GitBranch size={11} className="text-gray-400 dark:text-gray-500" />
                 <p className="text-xs text-gray-400 dark:text-gray-500">Branch</p>
               </div>
-              <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100 truncate">{localInfo.branch}</p>
+              <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100 truncate">{localInfo.branch ?? '—'}</p>
             </div>
           </div>
         ) : (

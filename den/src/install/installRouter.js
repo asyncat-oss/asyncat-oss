@@ -3,7 +3,7 @@ import { auth } from '../users/middleware/auth.js';
 import {
   inspectSystemDependencies,
   recommendedInstallCommands,
-} from '../../../cli/lib/systemDeps.js';
+} from '../lib/systemDeps.js';
 
 const router = express.Router();
 router.use(auth);

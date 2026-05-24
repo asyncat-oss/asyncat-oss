@@ -1,0 +1,359 @@
+// electron/main.js — Asyncat Desktop App entry point
+//
+// This is the Electron main process. It:
+// 1. Starts the Express backend (den) as a child process
+// 2. Creates a BrowserWindow to load the React frontend (neko)
+// 3. Sets up system tray, native menu, and global shortcuts
+// 4. Manages the full app lifecycle
+//
+import { app, ipcMain, globalShortcut, Notification, dialog } from 'electron';
+import { IS_MAC, IS_DEV, APP_NAME, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, ICONS } from './constants.js';
+import { togglePopup, closePopup } from './popup.js';
+import { startBackend, stopBackend, isBackendRunning } from './backend.js';
+import http from 'http';
+import net from 'net';
+import fs from 'fs';
+import path from 'path';
+
+/** Check if something is already listening on a port */
+function isPortListening(port) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(500);
+    socket.once('connect', () => { socket.destroy(); resolve(true); });
+    socket.once('error', () => { socket.destroy(); resolve(false); });
+    socket.once('timeout', () => { socket.destroy(); resolve(false); });
+    socket.connect(port, '127.0.0.1');
+  });
+}
+import { createWindow, getMainWindow, showLoadingScreen } from './window.js';
+import { createTray, updateTrayMenu, destroyTray } from './tray.js';
+import { buildAppMenu } from './menu.js';
+
+// ─── Single Instance Lock ─────────────────────────────────────────────────────
+// Prevent multiple instances of the app from running.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const win = getMainWindow();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+}
+
+// ─── App Lifecycle ────────────────────────────────────────────────────────────
+
+app.setName(APP_NAME);
+
+// macOS: keep app running when all windows closed (tray icon stays)
+app.on('window-all-closed', () => {
+  if (!IS_MAC) {
+    quitApp();
+  }
+});
+
+// macOS: re-create window when dock icon clicked
+app.on('activate', () => {
+  if (!getMainWindow()) {
+    bootApp();
+  }
+});
+
+// ─── IPC Handlers ─────────────────────────────────────────────────────────────
+
+function setupPopupIPC() {
+  ipcMain.handle('popup:status', () => ({ running: isBackendRunning() }));
+
+  ipcMain.on('popup:new-chat', (_e, text) => {
+    closePopup();
+    const win = getMainWindow();
+    if (win) {
+      win.show();
+      win.focus();
+      win.webContents.send('menu:new-chat', text || '');
+    } else {
+      bootApp();
+    }
+  });
+
+  ipcMain.on('popup:open-app', () => {
+    closePopup();
+    const win = getMainWindow();
+    if (win) { win.show(); win.focus(); }
+    else { bootApp(); }
+  });
+
+  ipcMain.on('popup:quit', () => {
+    closePopup();
+    quitApp();
+  });
+}
+
+function setupIPC() {
+  ipcMain.handle('app:version', () => app.getVersion());
+  ipcMain.handle('app:platform', () => process.platform);
+  ipcMain.on('app:is-packaged', (event) => { event.returnValue = app.isPackaged; });
+
+  ipcMain.handle('backend:status', () => ({
+    running: isBackendRunning(),
+    url: BACKEND_URL,
+  }));
+
+  ipcMain.handle('backend:restart', async () => {
+    await stopBackend();
+    await startBackend();
+    refreshTray();
+    return { running: isBackendRunning() };
+  });
+
+  ipcMain.on('window:minimize', () => getMainWindow()?.minimize());
+  ipcMain.on('window:maximize', () => {
+    const win = getMainWindow();
+    if (win) win.isMaximized() ? win.unmaximize() : win.maximize();
+  });
+  ipcMain.on('window:close', () => getMainWindow()?.close());
+  ipcMain.on('window:toggle-fullscreen', () => {
+    const win = getMainWindow();
+    if (win) win.setFullScreen(!win.isFullScreen());
+  });
+
+  ipcMain.on('notify', (_e, { title, body }) => {
+    if (Notification.isSupported()) {
+      new Notification({ title, body }).show();
+    }
+  });
+}
+
+// ─── Tray Helpers ─────────────────────────────────────────────────────────────
+
+function refreshTray() {
+  updateTrayMenu({
+    onQuit: quitApp,
+    onShow: () => bootApp(),
+    onRestartBackend: async () => {
+      await stopBackend();
+      await startBackend();
+      refreshTray();
+    },
+  });
+}
+
+// ─── Frontend Static Server (production only) ────────────────────────────────
+// In production, we serve neko/dist/ via a tiny HTTP server instead of using
+// file:// protocol. This is because the frontend's API calls to localhost:8716
+// are blocked by the browser when loaded from file:// (cross-origin).
+
+let frontendServer = null;
+
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.js':   'application/javascript',
+  '.css':  'text/css',
+  '.json': 'application/json',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif',
+  '.svg':  'image/svg+xml',
+  '.ico':  'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2':'font/woff2',
+  '.ttf':  'font/ttf',
+  '.webmanifest': 'application/manifest+json',
+};
+
+function startFrontendServer() {
+  return new Promise((resolve, reject) => {
+    if (frontendServer) { resolve(); return; }
+
+    frontendServer = http.createServer((req, res) => {
+      let urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      if (urlPath === '/') urlPath = '/index.html';
+
+      const filePath = path.join(NEKO_DIST, urlPath);
+      // Security: prevent directory traversal
+      if (!filePath.startsWith(NEKO_DIST)) {
+        res.writeHead(403); res.end(); return;
+      }
+
+      fs.readFile(filePath, (err, data) => {
+        if (err) {
+          // SPA fallback: serve index.html for any non-file route
+          fs.readFile(path.join(NEKO_DIST, 'index.html'), (err2, html) => {
+            if (err2) { res.writeHead(404); res.end('Not Found'); return; }
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(html);
+          });
+          return;
+        }
+        const ext = path.extname(filePath).toLowerCase();
+        res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+
+    frontendServer.listen(FRONTEND_PORT, '127.0.0.1', () => {
+      console.log(`[Asyncat] Frontend server on http://127.0.0.1:${FRONTEND_PORT}`);
+      resolve();
+    });
+
+    frontendServer.on('error', (err) => {
+      console.warn(`[Asyncat] Frontend server error: ${err.message}`);
+      // Port might be in use from a previous run — try to load anyway
+      resolve();
+    });
+  });
+}
+
+function stopFrontendServer() {
+  return new Promise((resolve) => {
+    if (!frontendServer) { resolve(); return; }
+    frontendServer.close(() => resolve());
+    frontendServer = null;
+  });
+}
+
+// ─── Boot Sequence ────────────────────────────────────────────────────────────
+
+async function bootApp() {
+  // 1. Create the window immediately (shows loading screen)
+  const win = createWindow();
+  showLoadingScreen();
+
+  // 2. Start the backend
+  try {
+    await startBackend();
+    console.log('[Asyncat] Backend is healthy ✓');
+  } catch (err) {
+    console.error('[Asyncat] Failed to start backend:', err.message);
+    dialog.showErrorBox(
+      'Backend Start Failed',
+      `Asyncat couldn't start the backend server.\n\n${err.message}\n\nTry restarting the app or check the logs.`
+    );
+  }
+
+  // 3. Start the frontend server if no dev server is running on the frontend port
+  const viteRunning = await isPortListening(FRONTEND_PORT);
+  if (!viteRunning) {
+    console.log('[Asyncat] No Vite dev server detected, starting static frontend server...');
+    await startFrontendServer();
+  } else {
+    console.log('[Asyncat] Vite dev server detected on port', FRONTEND_PORT);
+  }
+
+  // 4. Load the frontend (always via HTTP to avoid file:// CORS issues)
+  win.loadURL(`http://localhost:${FRONTEND_PORT}`);
+
+  // 5. Notify the renderer that backend is ready
+  win.webContents.once('did-finish-load', () => {
+    win.webContents.send('backend:ready');
+  });
+
+  refreshTray();
+}
+
+// ─── Quit Handler ─────────────────────────────────────────────────────────────
+
+let isQuitting = false;
+
+async function quitApp() {
+  if (isQuitting) return;
+  isQuitting = true;
+
+  console.log('[Asyncat] Shutting down...');
+
+  // Unregister global shortcuts
+  globalShortcut.unregisterAll();
+
+  // Stop servers gracefully
+  await stopFrontendServer();
+  await stopBackend();
+
+  // Cleanup tray
+  destroyTray();
+
+  // Quit
+  app.quit();
+}
+
+// Handle Cmd+Q / window close properly
+app.on('before-quit', (event) => {
+  if (!isQuitting) {
+    event.preventDefault();
+    quitApp();
+  }
+});
+
+// ─── App Ready ────────────────────────────────────────────────────────────────
+
+app.whenReady().then(async () => {
+  // macOS dock icon (needed in dev mode; packaged builds use the app bundle icon)
+  if (IS_MAC && app.dock) {
+    app.dock.setIcon(ICONS.png);
+  }
+
+  // Setup IPC handlers
+  setupIPC();
+  setupPopupIPC();
+
+  // Build native menu
+  buildAppMenu({
+    onNewChat: () => {
+      const win = getMainWindow();
+      if (win) {
+        win.webContents.send('menu:new-chat');
+        win.show();
+        win.focus();
+      }
+    },
+    onSettings: async () => {
+      const win = getMainWindow();
+      if (win) {
+        // Use JS navigation to handle SPA routing properly
+        win.webContents.executeJavaScript(`window.location.hash = ''; window.history.pushState({}, '', '/settings');window.dispatchEvent(new PopStateEvent('popstate'));`).catch(() => {});
+        win.show();
+        win.focus();
+      }
+    },
+    onRestartBackend: async () => {
+      await stopBackend();
+      await startBackend();
+      refreshTray();
+    },
+  });
+
+  // Create tray
+  createTray({
+    onQuit: quitApp,
+    onShow: () => bootApp(),
+    onRestartBackend: async () => {
+      await stopBackend();
+      await startBackend();
+      refreshTray();
+    },
+    onTrayClick: (tray) => togglePopup(tray),
+  });
+
+  // Register global shortcut: Cmd/Ctrl+Shift+A → toggle window
+  globalShortcut.register('CmdOrCtrl+Shift+A', () => {
+    const win = getMainWindow();
+    if (win) {
+      if (win.isVisible() && win.isFocused()) {
+        win.hide();
+      } else {
+        win.show();
+        win.focus();
+      }
+    } else {
+      bootApp();
+    }
+  });
+
+  // Boot the app
+  await bootApp();
+});

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asyncat</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 196px;
+      overflow: hidden;
+      border-radius: 13px;
+    }
+
+    body {
+      background: rgba(13, 18, 30, 0.97);
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      -webkit-app-region: no-drag;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 13px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 14px 8px;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      flex-shrink: 0;
+    }
+
+    .app-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+      letter-spacing: -0.01em;
+      flex: 1;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10.5px;
+      font-weight: 500;
+      padding: 2px 8px 2px 6px;
+      border-radius: 99px;
+      background: rgba(34, 197, 94, 0.13);
+      color: #4ade80;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .status-pill.stopped {
+      background: rgba(239, 68, 68, 0.13);
+      color: #f87171;
+    }
+
+    .status-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .input-area {
+      padding: 0 12px 12px;
+      flex-shrink: 0;
+    }
+
+    .input-wrapper {
+      display: flex;
+      align-items: center;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 10px;
+      padding: 7px 7px 7px 12px;
+      gap: 6px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .input-wrapper:focus-within {
+      border-color: rgba(129, 140, 248, 0.45);
+      background: rgba(30, 41, 59, 0.9);
+    }
+
+    input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-family: inherit;
+      min-width: 0;
+    }
+
+    input::placeholder { color: #475569; }
+
+    .send-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: rgba(129, 140, 248, 0.2);
+      color: #818cf8;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .send-btn.active {
+      background: #818cf8;
+      color: white;
+    }
+
+    .send-btn:hover {
+      background: #6366f1;
+      color: white;
+    }
+
+    .send-btn svg { width: 14px; height: 14px; }
+
+    .divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.06);
+      flex-shrink: 0;
+    }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .open-btn {
+      flex: 1;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      font-weight: 500;
+      background: rgba(129, 140, 248, 0.14);
+      color: #818cf8;
+      transition: background 0.15s;
+    }
+
+    .open-btn:hover { background: rgba(129, 140, 248, 0.26); }
+
+    .quit-btn {
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.06);
+      color: #64748b;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .quit-btn:hover {
+      background: rgba(239, 68, 68, 0.13);
+      color: #f87171;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img id="logoImg" class="logo" alt="" style="display:none" />
+    <span id="logoFallback" style="font-size:18px;line-height:1">🐱</span>
+    <span class="app-name">Asyncat</span>
+    <div class="status-pill" id="statusPill">
+      <div class="status-dot"></div>
+      <span id="statusText">...</span>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-wrapper">
+      <input id="chatInput" type="text" placeholder="What can I help you with?" autocomplete="off" spellcheck="false" />
+      <button class="send-btn" id="sendBtn" title="New Chat (↵)">
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M2.5 8h11M9.5 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="footer">
+    <button class="open-btn" id="openBtn">Open Asyncat</button>
+    <button class="quit-btn" id="quitBtn">Quit</button>
+  </div>
+
+  <script>
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn   = document.getElementById('sendBtn');
+    const statusPill = document.getElementById('statusPill');
+    const statusText = document.getElementById('statusText');
+    const logoImg    = document.getElementById('logoImg');
+    const logoFallback = document.getElementById('logoFallback');
+
+    // Load logo from query param (passed by popup.js as a file:// path)
+    const iconPath = new URLSearchParams(location.search).get('iconPath');
+    if (iconPath) {
+      logoImg.src = iconPath;
+      logoImg.onload = () => { logoImg.style.display = 'block'; logoFallback.style.display = 'none'; };
+    }
+
+    chatInput.focus();
+
+    chatInput.addEventListener('input', () => {
+      sendBtn.classList.toggle('active', chatInput.value.trim().length > 0);
+    });
+
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+      if (e.key === 'Escape') window.close();
+    });
+
+    sendBtn.addEventListener('click', submit);
+    document.getElementById('openBtn').addEventListener('click', () => window.asyncat.openApp());
+    document.getElementById('quitBtn').addEventListener('click', () => window.asyncat.quit());
+
+    function submit() {
+      window.asyncat.newChat(chatInput.value.trim());
+    }
+
+    // Check backend status
+    (async () => {
+      try {
+        const { running } = await window.asyncat.getStatus();
+        statusPill.className = 'status-pill' + (running ? '' : ' stopped');
+        statusText.textContent = running ? 'Running' : 'Stopped';
+      } catch {
+        statusText.textContent = '?';
+      }
+    })();
+  </script>
+</body>
+</html>

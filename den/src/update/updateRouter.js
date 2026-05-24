@@ -16,26 +16,32 @@ const UNINSTALL_SCRIPT = join(ROOT, IS_WIN ? 'uninstall.ps1' : 'uninstall.sh');
 const RELAUNCH_SCRIPT = join(ROOT, 'scripts', 'relaunch.js');
 
 function getLocalInfo() {
-  const currentHash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim();
-  const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: ROOT }).toString().trim();
-  const upstream = (() => {
-    try {
-      return execFileSync('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd: ROOT }).toString().trim();
-    } catch {
-      return null;
-    }
-  })();
-  const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: ROOT }).toString().trim().length > 0;
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+
+  // Git info is unavailable in packaged (installer) builds — .git directory
+  // doesn't exist there. Fall back to package.json version only.
+  const tryGit = (args) => {
+    try { return execFileSync('git', args, { cwd: ROOT, stdio: 'pipe' }).toString().trim(); }
+    catch { return null; }
+  };
+
+  const currentHash = tryGit(['rev-parse', '--short', 'HEAD']);
+  const branch      = tryGit(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const upstream    = tryGit(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+  const dirtyOut    = tryGit(['status', '--porcelain']);
+  const dirty       = dirtyOut !== null && dirtyOut.length > 0;
+  const isSourceInstall = currentHash !== null;
+
   return {
-    currentHash,
-    branch,
-    upstream,
+    currentHash: currentHash ?? null,
+    branch:      branch      ?? null,
+    upstream:    upstream    ?? null,
     dirty,
-    version: pkg.version,
-    installDir: ROOT,
+    version:        pkg.version,
+    installDir:     ROOT,
+    isSourceInstall,
     canUninstall: existsSync(UNINSTALL_SCRIPT),
-    canRestart: existsSync(RELAUNCH_SCRIPT),
+    canRestart:   existsSync(RELAUNCH_SCRIPT),
   };
 }
 
