@@ -18,7 +18,7 @@ import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } from './skills.js';
-import { listMemories, searchMemories, enforceMemoryCap } from './tools/memoryTools.js';
+import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance } from './tools/memoryTools.js';
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
@@ -2294,7 +2294,15 @@ export class AgentRuntime {
         `Goal was: ${goal.slice(0, 100)}`,
       ].filter(Boolean).join('\n');
 
-      const key = `correction_${Date.now().toString(36)}`;
+      // Build a readable key from the first meaningful words of the correction
+      const keySlug = text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 3)
+        .slice(0, 4)
+        .join('_') || randomUUID().slice(0, 8);
+      const key = `correction_${keySlug}`.slice(0, 80);
 
       // Check we haven't saved too many corrections recently
       const recentCorrections = db.prepare(
@@ -2304,7 +2312,7 @@ export class AgentRuntime {
       if ((recentCorrections?.cnt || 0) >= 10) return; // Rate limit
 
       db.prepare(
-        'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT OR IGNORE INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, expires_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         randomUUID(),
         this.userId,
@@ -2313,8 +2321,9 @@ export class AgentRuntime {
         key,
         correctionContent,
         JSON.stringify(['correction', 'auto-extracted']),
-        0.9, // High importance so it surfaces in future runs
-        null  // feedback: permanent, no TTL
+        0.9,
+        null,         // feedback: permanent, no TTL
+        'correction'  // source: auto-detected correction
       );
 
       this.onEvent({
@@ -2491,8 +2500,16 @@ export class AgentRuntime {
       for (const mem of memories.slice(0, 3)) {
         if (!mem.content || mem.content.length < 5) continue;
         const kind = ['user', 'feedback', 'project', 'reference', 'preference', 'context'].includes(mem.kind) ? mem.kind : 'fact';
-        const key = mem.key || `auto_${kind}_${randomUUID().slice(0, 8)}`;
-        const importance = Math.max(0, Math.min(1, Number(mem.importance || 0.5)));
+        // Build a readable slug from the LLM-provided key or from content words
+        const rawKey = mem.key
+          ? String(mem.key).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80)
+          : null;
+        const contentSlug = mem.content
+          .toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+          .filter(w => w.length > 3).slice(0, 5).join('_').slice(0, 52);
+        const key = rawKey || `${kind}_${contentSlug || randomUUID().slice(0, 8)}`;
+        // Auto-extracted memories start at slightly lower importance so agent-stated ones win dedup
+        const importance = Math.max(0, Math.min(1, Number(mem.importance || 0.45)));
 
         // ── E: Key-based dedup ──────────────────────────────────────────────
         const existingByKey = db.prepare(
@@ -2548,8 +2565,8 @@ export class AgentRuntime {
         }
 
         db.prepare(
-          'INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance, expiresAt);
+          'INSERT OR IGNORE INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, expires_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance, expiresAt, 'auto');
         saved++;
       }
 

@@ -75,7 +75,7 @@ export function enforceMemoryCap(userId, workspaceId) {
 
 const memoryColumnNames = [
   'id', 'key', 'content', 'memory_type', 'tags', 'importance',
-  'last_accessed_at', 'access_count', 'created_at', 'updated_at',
+  'last_accessed_at', 'access_count', 'created_at', 'updated_at', 'source',
 ];
 const memoryColumns = memoryColumnNames.join(', ');
 const prefixedMemoryColumns = memoryColumnNames.map(name => `m.${name}`).join(', ');
@@ -104,18 +104,27 @@ function parseTags(tags) {
   }
 }
 
+const KEY_STOP_WORDS = new Set([
+  'a','an','the','to','of','and','or','in','on','at','is','it','that','this',
+  'i','you','me','we','they','my','your','our','their','be','do','have','was',
+  'are','has','had','not','but','by','for','with','as','from','user','agent',
+]);
+
 function slugifyKey(content) {
   return String(content || 'memory')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 48) || 'memory';
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !KEY_STOP_WORDS.has(w))
+    .slice(0, 6)
+    .join('_')
+    .slice(0, 52) || 'memory';
 }
 
 export function buildMemoryKey(args = {}) {
-  if (args.key) return String(args.key).trim();
+  if (args.key) return String(args.key).trim().slice(0, 80);
   const base = slugifyKey(args.content);
-  return `${normalizeKind(args.kind || args.memory_type)}_${base}_${randomUUID().slice(0, 8)}`;
+  return `${normalizeKind(args.kind || args.memory_type)}_${base}`;
 }
 
 export function buildFtsQuery(query) {
@@ -149,6 +158,7 @@ export function normalizeMemoryRow(row) {
     access_count: Number(row.access_count || 0),
     created_at: row.created_at,
     updated_at: row.updated_at,
+    source: row.source || 'agent',
     score: row.score === undefined ? undefined : Number(row.score),
   };
 }
@@ -359,8 +369,8 @@ export const saveMemoryTool = {
         const expiresAt = computeExpiresAt(kind);
         db.prepare(`
           INSERT INTO agent_memory
-            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, expires_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, expires_at, source)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent')
         `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId, expiresAt);
         action = 'stored';
         // Enforce cap asynchronously so the tool call doesn't block
@@ -508,6 +518,28 @@ export const forgetMemoryTool = {
   },
 };
 
+/**
+ * Decay importance for zero-access memories older than 14 days.
+ * Protected: user + feedback types. Floor: 0.1. Rate: −10% per call.
+ */
+export function decayMemoryImportance(userId, workspaceId) {
+  try {
+    const result = db.prepare(`
+      UPDATE agent_memory
+      SET importance = MAX(0.1, ROUND(importance * 0.9, 4))
+      WHERE user_id = ? AND workspace_id = ?
+        AND access_count = 0
+        AND julianday('now') - julianday(COALESCE(last_accessed_at, created_at)) > 14
+        AND importance > 0.1
+        AND memory_type NOT IN ('user', 'feedback')
+    `).run(userId, workspaceId);
+    if (result.changes > 0) {
+      console.log(`[memory] Decayed importance for ${result.changes} zero-access memories`);
+    }
+    return result.changes;
+  } catch { return 0; }
+}
+
 export const optimizeMemoryTool = {
   name: 'optimize_memory',
   description: 'Run a memory maintenance pass: evict over-limit/expired entries, then consolidate low-value clusters into compact summaries. Call when the agent feels bloated or when memory quality seems degraded.',
@@ -516,10 +548,13 @@ export const optimizeMemoryTool = {
   parameters: { type: 'object', properties: {}, required: [] },
   execute: async (_args, context) => {
     try {
-      // Delete expired transient memories first
+      // Delete expired transient memories
       const expired = db.prepare(
         "DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND expires_at IS NOT NULL AND expires_at < datetime('now')"
       ).run(context.userId, context.workspaceId);
+
+      // Decay importance for stale zero-access memories
+      const decayed = decayMemoryImportance(context.userId, context.workspaceId);
 
       // Enforce hard cap
       const evicted = enforceMemoryCap(context.userId, context.workspaceId);
@@ -535,6 +570,7 @@ export const optimizeMemoryTool = {
       return {
         success: true,
         expired: expired.changes,
+        decayed,
         evicted,
         merged: consolidation?.merged ?? 0,
         deleted: consolidation?.deleted ?? 0,

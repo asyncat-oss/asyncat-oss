@@ -1625,12 +1625,21 @@ function MemoryRow({ mem, onDelete, deleting }) {
 
   return (
     <div className="px-6 py-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 midnight:hover:bg-slate-800/30 transition-colors group">
-      {/* Header row: kind badge + key + importance dots + delete */}
+      {/* Header row: kind badge + key + source + importance dots + delete */}
       <div className="flex items-center gap-2 flex-wrap mb-1.5">
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${kindColor}`}>
           {mem.kind || mem.memory_type || 'fact'}
         </span>
         <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 midnight:text-slate-300 font-mono truncate flex-1">{mem.key}</span>
+        {mem.source && mem.source !== 'agent' && (
+          <span className={`text-[9px] px-1 py-0.5 rounded flex-shrink-0 ${
+            mem.source === 'correction'
+              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
+          }`} title={mem.source === 'correction' ? 'Auto-detected correction' : 'Auto-extracted from conversation'}>
+            {mem.source === 'correction' ? 'correction' : 'auto'}
+          </span>
+        )}
         {tags.map(tag => (
           <span key={tag} className="text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 text-gray-500 dark:text-gray-500 midnight:text-slate-500">{tag}</span>
         ))}

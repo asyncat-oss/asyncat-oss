@@ -203,6 +203,7 @@ function ensureAgentMemorySchema() {
   addColumn('embedding', 'TEXT'); // JSON float array for vector similarity search
   addColumn('profile_id', 'TEXT'); // agent profile namespace — NULL means shared across all profiles
   addColumn('expires_at', 'TEXT'); // ISO datetime; NULL = permanent; set for transient types (task_state, context)
+  addColumn("source", "TEXT NOT NULL DEFAULT 'agent'"); // 'agent'=explicit tool call, 'auto'=post-run extraction, 'correction'=correction detection
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_agent_memory_user       ON agent_memory(user_id);
@@ -317,6 +318,20 @@ ensureConversationFts();
 try {
   const expired = db.prepare("DELETE FROM agent_memory WHERE expires_at IS NOT NULL AND expires_at < datetime('now')").run();
   if (expired.changes > 0) logger.info(`[memory] Removed ${expired.changes} expired memories at startup`);
+} catch { /* non-critical */ }
+
+// Decay importance for zero-access memories older than 14 days (−10% per boot, floor 0.1)
+// Protected types (user, feedback) are never decayed.
+try {
+  const decayed = db.prepare(`
+    UPDATE agent_memory
+    SET importance = MAX(0.1, ROUND(importance * 0.9, 4))
+    WHERE access_count = 0
+      AND julianday('now') - julianday(COALESCE(last_accessed_at, created_at)) > 14
+      AND importance > 0.1
+      AND memory_type NOT IN ('user', 'feedback')
+  `).run();
+  if (decayed.changes > 0) logger.info(`[memory] Decayed importance for ${decayed.changes} zero-access memories`);
 } catch { /* non-critical */ }
 
 function ensureCheckpointSchema() {
