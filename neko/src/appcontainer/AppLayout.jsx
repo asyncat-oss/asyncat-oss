@@ -99,14 +99,20 @@ const AppLayout = ({ session, onSignOut }) => {
           if (project) {
             // If we had a selectedProject with matching ID, merge the metadata
             const enrichedProject = (selectedProject && String(selectedProject.id) === String(projectId))
-              ? { ...project, ...selectedProject } 
+              ? { ...project, ...selectedProject }
               : project;
-            
+
             setSelectedProject(enrichedProject);
             sessionStorage.setItem('projectId', projectId);
+          } else {
+            // Project not found in workspace — clear stale session data
+            sessionStorage.removeItem('projectId');
+            setSelectedProject(null);
           }
         } catch (error) {
           console.error('Failed to load project:', error);
+          // On error, clear selectedProject so the UI doesn't hang on skeleton indefinitely
+          setSelectedProject(null);
         }
       };
       loadProject();

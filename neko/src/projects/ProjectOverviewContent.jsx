@@ -156,7 +156,7 @@ const ProjectOverview = React.memo(({
 				setMasterLoading(true);
 				setLoading(true);
 
-				let projectData = { 
+				let projectData = {
 					...selectedProject,
 					owner_id: selectedProject.owner_id,
 				};
@@ -172,6 +172,15 @@ const ProjectOverview = React.memo(({
 
 		loadProjectData();
 	}, [selectedProject?.id]);  // Only depend on selectedProject.id, not projectId prop
+
+	// Safety net: if masterLoading is still true after 5s, the parent context likely
+	// failed to load (network error, project not found). Clear it so we don't show
+	// the skeleton forever — the component will fall through to the empty/error state.
+	useEffect(() => {
+		if (!masterLoading) return;
+		const timer = setTimeout(() => setMasterLoading(false), 5000);
+		return () => clearTimeout(timer);
+	}, [masterLoading]);
 
 	const refreshProjectData = async () => {
 		if (!selectedProject?.id) return;
