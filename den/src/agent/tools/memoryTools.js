@@ -5,6 +5,7 @@
 import { PermissionLevel } from './toolRegistry.js';
 import db from '../../db/client.js';
 import { randomUUID } from 'crypto';
+import { memoryConsolidator } from '../MemoryConsolidator.js';
 
 export const MEMORY_KINDS = ['user', 'feedback', 'project', 'reference', 'fact', 'preference', 'context', 'task_state'];
 
@@ -378,6 +379,10 @@ export const saveMemoryTool = {
         }).catch(() => {});
       }
 
+      if (typeof context.emitEvent === 'function') {
+        context.emitEvent({ type: 'memory_saved', data: { action, key, kind, importance } });
+      }
+
       return { success: true, action, key, kind, importance };
     } catch (err) {
       return { success: false, error: err.message };
@@ -503,5 +508,43 @@ export const forgetMemoryTool = {
   },
 };
 
-export const memoryTools = [saveMemoryTool, recallMemoryTool, listMemoryTool, forgetMemoryTool];
+export const optimizeMemoryTool = {
+  name: 'optimize_memory',
+  description: 'Run a memory maintenance pass: evict over-limit/expired entries, then consolidate low-value clusters into compact summaries. Call when the agent feels bloated or when memory quality seems degraded.',
+  category: 'memory',
+  permission: PermissionLevel.SAFE,
+  parameters: { type: 'object', properties: {}, required: [] },
+  execute: async (_args, context) => {
+    try {
+      // Delete expired transient memories first
+      const expired = db.prepare(
+        "DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND expires_at IS NOT NULL AND expires_at < datetime('now')"
+      ).run(context.userId, context.workspaceId);
+
+      // Enforce hard cap
+      const evicted = enforceMemoryCap(context.userId, context.workspaceId);
+
+      // Consolidate low-importance clusters
+      const consolidation = await memoryConsolidator.consolidate({
+        userId: context.userId,
+        workspaceId: context.workspaceId,
+        aiClient: context.aiClient,
+        model: context.model,
+      });
+
+      return {
+        success: true,
+        expired: expired.changes,
+        evicted,
+        merged: consolidation?.merged ?? 0,
+        deleted: consolidation?.deleted ?? 0,
+        skipped: consolidation?.skipped ?? false,
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+};
+
+export const memoryTools = [saveMemoryTool, recallMemoryTool, listMemoryTool, forgetMemoryTool, optimizeMemoryTool];
 export default memoryTools;

@@ -2538,6 +2538,71 @@ router.get('/memory', authenticate, async (req, res) => {
   }
 });
 
+// ── Memory stats ─────────────────────────────────────────────────────────────
+router.get('/memory/stats', authenticate, async (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
+
+    const CAP = 750;
+    const total = db.prepare(
+      'SELECT COUNT(*) AS cnt FROM agent_memory WHERE user_id = ? AND workspace_id = ?'
+    ).get(req.user.id, workspaceId)?.cnt || 0;
+
+    const byTypeRows = db.prepare(
+      'SELECT memory_type, COUNT(*) AS cnt FROM agent_memory WHERE user_id = ? AND workspace_id = ? GROUP BY memory_type ORDER BY cnt DESC'
+    ).all(req.user.id, workspaceId);
+
+    const oldest = db.prepare(
+      "SELECT key, memory_type, created_at FROM agent_memory WHERE user_id = ? AND workspace_id = ? ORDER BY created_at ASC LIMIT 1"
+    ).get(req.user.id, workspaceId);
+
+    const mostAccessed = db.prepare(
+      'SELECT key, memory_type, access_count FROM agent_memory WHERE user_id = ? AND workspace_id = ? ORDER BY access_count DESC LIMIT 1'
+    ).get(req.user.id, workspaceId);
+
+    res.json({
+      success: true,
+      total,
+      cap: CAP,
+      pctUsed: Math.round((total / CAP) * 100),
+      byType: byTypeRows.reduce((acc, r) => ({ ...acc, [r.memory_type]: r.cnt }), {}),
+      oldest: oldest || null,
+      mostAccessed: mostAccessed || null,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Memory consolidate (manual trigger) ──────────────────────────────────────
+router.post('/memory/consolidate', authenticate, async (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
+
+    const { memoryConsolidator } = await import('../../agent/MemoryConsolidator.js');
+    const { enforceMemoryCap } = await import('../../agent/tools/memoryTools.js');
+
+    const expired = db.prepare(
+      "DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND expires_at IS NOT NULL AND expires_at < datetime('now')"
+    ).run(req.user.id, workspaceId);
+
+    const evicted = enforceMemoryCap(req.user.id, workspaceId);
+
+    const result = await memoryConsolidator.consolidate({
+      userId: req.user.id,
+      workspaceId,
+    });
+
+    res.json({ success: true, expired: expired.changes, evicted, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/memory/:key', authenticate, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||

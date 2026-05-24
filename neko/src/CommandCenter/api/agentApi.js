@@ -273,6 +273,14 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/memory?${params}`);
   },
 
+  getMemoryStats: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/memory/stats`);
+  },
+
+  consolidateMemory: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/memory/consolidate`, { method: 'POST' });
+  },
+
   deleteMemory: async (key) => {
     return await apiRequest(`${API_BASE_URL}/agent/memory/${encodeURIComponent(key)}`, {
       method: 'DELETE',

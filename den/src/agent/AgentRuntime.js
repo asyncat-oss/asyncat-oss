@@ -311,6 +311,10 @@ export class AgentRuntime {
     basalGanglia.aiClient = this.aiClient;
     basalGanglia.model = this.model;
 
+    // Wire MemoryConsolidator LLM client (LLM-backed cluster merging)
+    memoryConsolidator.aiClient = this.aiClient;
+    memoryConsolidator.model = this.model;
+
     // ── Compaction budget ──────────────────────────────────────────────────
     // Use the model's real context window from the existing resolver system.
     // Priority: user settings > model metadata > model registry > provider preset > fallback
@@ -541,6 +545,8 @@ export class AgentRuntime {
       // Uses any OpenAI-compatible embeddings endpoint; returns null gracefully
       // if the provider doesn't support it (e.g. Anthropic native, local models
       // without an embed endpoint).
+      aiClient: this.aiClient,
+      model: this.model,
       computeEmbedding: async (text) => {
         if (!this.aiClient?.client?.embeddings?.create) return null;
         try {

@@ -100,8 +100,11 @@ const TOOL_META = {
   edit_image:        { icon: Image,       label: 'Edited image' },
   screenshot_page:   { icon: Image,       label: 'Screenshot page' },
   remember:          { icon: BookMarked,  label: 'Remember' },
+  save_memory:       { icon: BookMarked,  label: 'Save memory' },
   recall_memory:     { icon: BookMarked,  label: 'Recall memory' },
   list_memories:     { icon: BookMarked,  label: 'List memories' },
+  forget_memory:     { icon: BookMarked,  label: 'Forget memory' },
+  optimize_memory:   { icon: Brain,       label: 'Optimize memory' },
   create_task:       { icon: LayoutList,  label: 'Create task' },
   list_tasks:        { icon: List,        label: 'List tasks' },
   create_note:       { icon: FileText,    label: 'Create note' },
@@ -1844,6 +1847,22 @@ function CorrectionLearnedEvent({ data }) {
   );
 }
 
+// Memory saved/updated notification
+function MemorySavedEvent({ data }) {
+  const label = data?.action === 'updated' ? 'Memory updated' : 'Memory saved';
+  const detail = [data?.key, data?.kind ? `(${data.kind})` : null].filter(Boolean).join(' ');
+  return (
+    <FeedFrame className="mb-2">
+      <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-sky-50/50 dark:bg-sky-900/10 border border-sky-200/30 dark:border-sky-800/20">
+        <BookMarked className="w-3 h-3 text-sky-500 dark:text-sky-400 flex-shrink-0" />
+        <span className="text-[11px] text-sky-600 dark:text-sky-400 truncate">
+          {label}{detail ? `: ${detail}` : ''}
+        </span>
+      </div>
+    </FeedFrame>
+  );
+}
+
 // Skill auto-discovery notification
 function SkillSuggestedEvent({ data }) {
   return (
@@ -2535,6 +2554,9 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
         break;
       case 'correction_learned':
         rendered.push(<CorrectionLearnedEvent key={i} data={ev.data} />);
+        break;
+      case 'memory_saved':
+        rendered.push(<MemorySavedEvent key={i} data={ev.data} />);
         break;
       case 'skill_suggested':
         rendered.push(<SkillSuggestedEvent key={i} data={ev.data} />);
