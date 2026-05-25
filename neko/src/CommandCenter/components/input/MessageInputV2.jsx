@@ -618,8 +618,18 @@ export const MessageInputV2 = ({
   const activeRoot = useMemo(() => {
     if (!allowWorkspaceAccess) return null;
     const rootId = workingContext?.rootId || "workspace";
+    if (rootId === "_abs" && workingContext?.workingDir) {
+      // Synthesize a root from the absolute path chosen via native picker
+      const absPath = workingContext.workingDir;
+      return {
+        id: "_abs",
+        label: absPath.split("/").filter(Boolean).pop() || absPath,
+        kind: "dir",
+        path: absPath,
+      };
+    }
     return fileRoots.find(root => root.id === rootId) || fileRoot || fileRoots[0] || null;
-  }, [allowWorkspaceAccess, fileRoot, fileRoots, workingContext?.rootId]);
+  }, [allowWorkspaceAccess, fileRoot, fileRoots, workingContext?.rootId, workingContext?.workingDir]);
   const activeWorkingContext = useMemo(() => {
     if (!allowWorkspaceAccess) return null;
     if (!activeRoot) return null;
