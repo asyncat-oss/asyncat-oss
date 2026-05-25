@@ -152,6 +152,26 @@ export function getRoot(rootId = 'workspace') {
 }
 
 export function resolveExplorerPath(rootId = 'workspace', relativePath = '.') {
+  // ── Absolute-path sentinel ────────────────────────────────────────────────
+  // When rootId is '_abs' and relativePath is an absolute path, treat
+  // relativePath as the root itself (no further traversal).
+  if (rootId === '_abs') {
+    const cleanRelative = relativePath || '.';
+    const rootPath = normalizeRootPath(cleanRelative);
+    const syntheticRoot = {
+      id: '_abs',
+      label: path.basename(rootPath),
+      kind: 'dir',
+      path: rootPath,
+    };
+    return {
+      root: syntheticRoot,
+      rootPath,
+      absolutePath: rootPath,
+      relativePath: '.',
+    };
+  }
+
   const root = getRoot(rootId);
   if (!root) throw new Error('No file roots are available');
 
@@ -176,6 +196,40 @@ export function resolveExplorerPath(rootId = 'workspace', relativePath = '.') {
 
 export function resolveWorkingDirectoryContext(context = {}) {
   const rootId = context?.rootId || 'workspace';
+
+  // ── Absolute-path context (e.g. from native OS folder picker in Electron) ──
+  // rootId '_abs' means the frontend picked an arbitrary folder that is not
+  // under any of the configured file roots.  Use workingDir / rootPath directly.
+  if (rootId === '_abs') {
+    const absPath = context.workingDir || context.rootPath;
+    if (!absPath) {
+      throw createRouteError('Absolute-path context is missing workingDir', 400, 'MISSING_WORKING_DIR');
+    }
+    const resolvedAbsPath = path.resolve(absPath);
+    if (!fs.existsSync(resolvedAbsPath)) {
+      throw createRouteError('Working directory not found', 404, 'NOT_FOUND');
+    }
+    if (!fs.statSync(resolvedAbsPath).isDirectory()) {
+      throw createRouteError('Working context must be a directory', 400, 'NOT_DIRECTORY');
+    }
+    const folderName = path.basename(resolvedAbsPath);
+    const syntheticRoot = {
+      id: '_abs',
+      label: context.rootLabel || folderName,
+      kind: context.rootKind || 'dir',
+      path: resolvedAbsPath,
+    };
+    return {
+      root: syntheticRoot,
+      rootId: '_abs',
+      rootLabel: syntheticRoot.label,
+      rootKind: syntheticRoot.kind,
+      rootPath: resolvedAbsPath,
+      relativePath: '.',
+      workingDir: resolvedAbsPath,
+    };
+  }
+
   const relativePath = context?.relativePath || context?.path || '.';
   const resolved = resolveExplorerPath(rootId, relativePath);
 
