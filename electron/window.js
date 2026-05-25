@@ -98,39 +98,56 @@ export function showLoadingScreen() {
     <html>
     <head>
       <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-          background: #111827;
-          color: #e5e7eb;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+          background: #0d1117;
           display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
           height: 100vh;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
           -webkit-app-region: drag;
+          user-select: none;
         }
-        .container { text-align: center; }
-        .spinner {
-          width: 40px; height: 40px;
-          margin: 0 auto 24px;
-          border: 4px solid #1e3a5f;
-          border-top-color: #818cf8;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
+        .wordmark {
+          font-size: 18px;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          color: #e2e8f0;
+          opacity: 0;
+          animation: fade-in 0.6s ease 0.1s forwards;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        h1 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
-        p { font-size: 14px; color: #9ca3af; }
-        .cat { font-size: 48px; margin-bottom: 16px; }
+        .bar-track {
+          margin-top: 20px;
+          width: 48px;
+          height: 2px;
+          border-radius: 1px;
+          background: #1e293b;
+          overflow: hidden;
+          opacity: 0;
+          animation: fade-in 0.6s ease 0.3s forwards;
+        }
+        .bar-fill {
+          height: 100%;
+          width: 40%;
+          border-radius: 1px;
+          background: #818cf8;
+          animation: slide 1.2s ease-in-out infinite;
+        }
+        @keyframes slide {
+          0%   { transform: translateX(-100%); }
+          50%  { transform: translateX(150%); }
+          100% { transform: translateX(150%); }
+        }
+        @keyframes fade-in {
+          to { opacity: 1; }
+        }
       </style>
     </head>
     <body>
-      <div class="container">
-        <div class="cat">🐱</div>
-        <div class="spinner"></div>
-        <h1>Asyncat is waking up...</h1>
-        <p>Starting the backend, warming up the neurons</p>
-      </div>
+      <span class="wordmark">asyncat</span>
+      <div class="bar-track"><div class="bar-fill"></div></div>
     </body>
     </html>
   `)}`);

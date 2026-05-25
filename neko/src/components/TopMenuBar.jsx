@@ -366,8 +366,8 @@ const ModelActivityIndicators = () => {
             </div>
           </div>
           <div className="py-1">
-            {items.map((item) => (
-              <ModelStatusRow key={item.key} {...item} />
+            {items.map(({ key, ...item }) => (
+              <ModelStatusRow key={key} {...item} />
             ))}
           </div>
         </div>
