@@ -127,7 +127,7 @@ export function buildAppMenu({ onNewChat, onSettings, onRestartBackend } = {}) {
       submenu: [
         {
           label: 'Asyncat on GitHub',
-          click: () => shell.openExternal('https://github.com/asyncat'),
+          click: () => shell.openExternal('https://github.com/asyncat-oss/asyncat-oss'),
         },
         {
           label: 'Report an Issue',

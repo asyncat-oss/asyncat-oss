@@ -1278,7 +1278,14 @@ function SourceChip({ source }) {
             </div>
             <div className="flex gap-2 px-5 pb-5">
               <button onClick={() => setOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors">Close</button>
-              <button onClick={() => { window.open(source.url, '_blank', 'noopener,noreferrer'); setOpen(false); }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5">Open ↗</button>
+              <button onClick={() => {
+                if (window?.electronAPI) {
+                  window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url: source.url } }));
+                } else {
+                  window.open(source.url, '_blank', 'noopener,noreferrer');
+                }
+                setOpen(false);
+              }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5">{window?.electronAPI ? 'Open in Preview' : 'Open ↗'}</button>
             </div>
           </div>
         </div>
@@ -1302,11 +1309,17 @@ function SourcesPanel({ searchEvent }) {
           </div>
           <div className="flex flex-wrap gap-2.5">
             {images.map((img, i) => (
-              <a
+              <button
+                type="button"
                 key={img.image || img.thumbnail || img.url || i}
-                href={img.url}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => {
+                  const url = img.url || img.image;
+                  if (window?.electronAPI) {
+                    window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url } }));
+                  } else {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
                 className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-700 midnight:border-slate-700 midnight:bg-slate-800 midnight:hover:border-blue-700"
                 title={img.title}
               >
@@ -1319,7 +1332,7 @@ function SourcesPanel({ searchEvent }) {
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                 <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-white/90 p-0.5 text-gray-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:bg-gray-900/90 dark:text-gray-200 midnight:bg-slate-900/90 midnight:text-slate-200" />
-              </a>
+              </button>
             ))}
           </div>
         </div>

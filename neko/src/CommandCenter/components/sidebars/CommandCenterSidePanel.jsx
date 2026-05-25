@@ -1,11 +1,12 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List } from 'lucide-react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List, SquareTerminal } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import HistoryPanel from './HistoryPanel';
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import CodePanel from './CodePanel';
+import TerminalPanel from './TerminalPanel';
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
@@ -17,34 +18,48 @@ const panelMeta = {
   artifacts: { label: 'Artifacts', icon: FilePlus },
   artifact: { label: 'Artifact', icon: FilePlus },
   nav: { label: 'Jump to', icon: List },
+  terminal: { label: 'Terminal', icon: SquareTerminal },
 };
 
 // ── Preview panel ─────────────────────────────────────────────────────────────
 
 const isElectron = Boolean(window?.electronAPI);
 
-function ElectronWebview({ url, onLoadStart, onLoadStop }) {
+function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash }) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const start = () => onLoadStart?.();
-    const stop = () => onLoadStop?.();
+    const stop  = () => onLoadStop?.();
+    // Block new windows / popups so scareware can't spawn download dialogs
+    const blockPopup = (e) => e.preventDefault();
+    // Catch renderer crashes — surface them in UI instead of killing the app
+    const handleCrash = () => onCrash?.();
+    const handleGone  = () => onCrash?.();
     el.addEventListener('did-start-loading', start);
     el.addEventListener('did-stop-loading', stop);
+    el.addEventListener('new-window', blockPopup);
+    el.addEventListener('crashed', handleCrash);
+    el.addEventListener('render-process-gone', handleGone);
     return () => {
       el.removeEventListener('did-start-loading', start);
       el.removeEventListener('did-stop-loading', stop);
+      el.removeEventListener('new-window', blockPopup);
+      el.removeEventListener('crashed', handleCrash);
+      el.removeEventListener('render-process-gone', handleGone);
     };
-  }, [onLoadStart, onLoadStop]);
+  }, [onLoadStart, onLoadStop, onCrash]);
+  // partition="sandbox" isolates cookies/storage from the main app session
   // eslint-disable-next-line react/no-unknown-property
-  return <webview ref={ref} src={url} style={{ width: '100%', height: '100%', display: 'flex', border: 'none' }} />;
+  return <webview ref={ref} src={url} partition="sandbox" style={{ width: '100%', height: '100%', display: 'flex', border: 'none' }} />;
 }
 
 function PreviewPanel({ initialUrl }) {
   const [url, setUrl] = useState(initialUrl || '');
   const [inputUrl, setInputUrl] = useState(initialUrl || '');
   const [loading, setLoading] = useState(Boolean(initialUrl));
+  const [crashed, setCrashed] = useState(false);
   const iframeRef = useRef(null);
   const [key, setKey] = useState(0);
 
@@ -65,6 +80,7 @@ function PreviewPanel({ initialUrl }) {
     setUrl(full);
     setInputUrl(full);
     setLoading(true);
+    setCrashed(false);
     setKey(k => k + 1);
   };
 
@@ -78,7 +94,7 @@ function PreviewPanel({ initialUrl }) {
       <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-2 py-1.5">
         <button
           type="button"
-          onClick={() => { setKey(k => k + 1); setLoading(true); }}
+          onClick={() => { setKey(k => k + 1); setLoading(true); setCrashed(false); }}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
           title="Reload"
         >
@@ -123,9 +139,25 @@ function PreviewPanel({ initialUrl }) {
           </div>
         ) : (
           <>
-            {loading && (
+            {loading && !crashed && (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-gray-950/80 midnight:bg-slate-950/80">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
+              </div>
+            )}
+            {crashed && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white dark:bg-gray-950 midnight:bg-slate-950 p-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 dark:bg-red-950/30">
+                  <AlertTriangle className="h-6 w-6 text-red-500" />
+                </div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Page crashed</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs">This site caused the preview renderer to crash. It may be running malicious scripts or consuming too much memory.</p>
+                <button
+                  type="button"
+                  onClick={() => { setCrashed(false); setLoading(true); setKey(k => k + 1); }}
+                  className="mt-1 rounded-lg bg-gray-100 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Try again
+                </button>
               </div>
             )}
             {isElectron ? (
@@ -134,6 +166,7 @@ function PreviewPanel({ initialUrl }) {
                 url={url}
                 onLoadStart={() => setLoading(true)}
                 onLoadStop={() => setLoading(false)}
+                onCrash={() => { setCrashed(true); setLoading(false); }}
               />
             ) : (
               <iframe
@@ -404,6 +437,9 @@ export default function CommandCenterSidePanel({
         )}
         {currentTab === 'nav' && (
           <ChatNavPanel items={chatNavItems} />
+        )}
+        {currentTab === 'terminal' && (
+          <TerminalPanel workingDir={workingDir} />
         )}
       </div>
     </div>

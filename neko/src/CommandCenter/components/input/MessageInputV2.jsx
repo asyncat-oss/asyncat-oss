@@ -1195,11 +1195,29 @@ export const MessageInputV2 = ({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, []);
 
-  const openWorkingContextMenu = useCallback(() => {
-    setContextModalOpen(true);
-  }, []);
-
   const selectWorkingContext = useCallback((rootId, relativePath = ".") => {
+    if (rootId === "_abs") {
+      // Absolute path picked via native dialog — not mapped to any configured root
+      const absPath = relativePath;
+      const folderName = absPath.split('/').filter(Boolean).pop() || absPath;
+      const nextContext = {
+        rootId: "_abs",
+        rootLabel: folderName,
+        rootKind: "dir",
+        rootPath: absPath,
+        relativePath: ".",
+        workingDir: absPath,
+      };
+      const currentKey = `${activeWorkingContext?.rootId || ""}:${activeWorkingContext?.relativePath || "."}`;
+      const nextKey = `_abs:${absPath}`;
+      if (hasMessages && currentKey !== nextKey) {
+        setPendingContextSwitch(nextContext);
+        return;
+      }
+      onWorkingContextChange(nextContext);
+      setContextModalOpen(false);
+      return;
+    }
     if (rootId === "none") {
       const nextContext = {
         rootId: "none",
@@ -1239,6 +1257,18 @@ export const MessageInputV2 = ({
     onWorkingContextChange(nextContext);
     setContextModalOpen(false);
   }, [activeRoot, activeWorkingContext?.relativePath, activeWorkingContext?.rootId, chatOnlyMode, fileRoots, hasMessages, onWorkingContextChange]);
+
+  const openWorkingContextMenu = useCallback(async () => {
+    if (window?.electronAPI?.openDirectory) {
+      const result = await window.electronAPI.openDirectory({
+        defaultPath: activeWorkingContext?.workingDir || undefined,
+      });
+      if (result.canceled || !result.filePaths?.[0]) return;
+      selectWorkingContext('_abs', result.filePaths[0]);
+      return;
+    }
+    setContextModalOpen(true);
+  }, [activeWorkingContext?.workingDir, selectWorkingContext]);
 
   const confirmContextSwitch = useCallback(() => {
     if (!pendingContextSwitch) return;

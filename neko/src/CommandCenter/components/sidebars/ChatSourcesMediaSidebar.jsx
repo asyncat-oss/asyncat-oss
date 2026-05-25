@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Image, Link2, ExternalLink } from 'lucide-react';
 
+const isElectron = Boolean(window?.electronAPI);
+
+function openUrl(url) {
+  if (isElectron) {
+    window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url } }));
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
 export default function ChatSourcesMediaSidebar({ catalog }) {
   const [tab, setTab] = useState(catalog.imageCount > 0 ? 'images' : 'sources');
   const hasImages = catalog.imageCount > 0;
@@ -54,12 +64,11 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
         {tab === 'images' && (
           <div className="grid grid-cols-2 gap-2">
             {catalog.images.map((img, i) => (
-              <a
+              <button
+                type="button"
                 key={`${img.image || img.thumbnail || img.url}-${i}`}
-                href={img.url || img.image}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700"
+                onClick={() => openUrl(img.url || img.image)}
+                className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700 text-left"
                 title={img.title}
               >
                 <div className="relative aspect-square bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
@@ -76,7 +85,7 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
                   <p className="truncate text-[11px] font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">{img.title}</p>
                   <p className="truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{img.answerLabel}</p>
                 </div>
-              </a>
+              </button>
             ))}
           </div>
         )}
@@ -84,12 +93,11 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
         {tab === 'sources' && (
           <div className="space-y-2">
             {catalog.sources.map((source, i) => (
-              <a
+              <button
+                type="button"
                 key={`${source.url}-${i}`}
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700 midnight:hover:bg-blue-950/20"
+                onClick={() => openUrl(source.url)}
+                className="block w-full text-left rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700 midnight:hover:bg-blue-950/20"
               >
                 <div className="flex min-w-0 items-start gap-2">
                   <img
@@ -110,7 +118,7 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
                   </div>
                   <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-300 midnight:text-slate-600" />
                 </div>
-              </a>
+              </button>
             ))}
           </div>
         )}

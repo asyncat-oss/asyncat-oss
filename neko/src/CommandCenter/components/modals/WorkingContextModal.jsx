@@ -119,9 +119,20 @@ export function WorkingContextModal({
     });
     if (result.canceled || !result.filePaths?.[0]) return;
     const picked = result.filePaths[0];
-    setManualPath(picked);
-    applyManualPath(picked);
-  }, [manualPath, applyManualPath]);
+    const ctx = contextFromAbsolutePath(picked, fileRoots);
+    if (ctx) {
+      // Path is inside a configured root — navigate the browser to it
+      const newRoot = fileRoots.find(r => r.id === ctx.rootId);
+      setRootId(ctx.rootId);
+      setBrowsePath(ctx.relativePath);
+      setManualPath(absoluteFromRoot(newRoot?.path || '', ctx.relativePath));
+      setManualError(null);
+    } else {
+      // Path is outside configured roots — select it directly as an absolute path
+      onSelect('_abs', picked);
+      onClose();
+    }
+  }, [manualPath, fileRoots, onSelect, onClose]);
 
   if (!isOpen) return null;
 

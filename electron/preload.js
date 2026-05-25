@@ -40,6 +40,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloaded:   (cb) => ipcRenderer.on('update:downloaded', (_e, info) => cb(info)),
   onUpdateError:        (cb) => ipcRenderer.on('update:error', (_e, msg) => cb(msg)),
 
+  // ─── Terminal ─────────────────────────────────────────────────────────────
+  terminalCreate:    (opts) => ipcRenderer.invoke('terminal:create', opts),
+  terminalInput:     (id, data) => ipcRenderer.send('terminal:input', id, data),
+  terminalResize:    (id, cols, rows) => ipcRenderer.send('terminal:resize', id, cols, rows),
+  terminalKill:      (id) => ipcRenderer.send('terminal:kill', id),
+  onTerminalData:    (id, cb) => ipcRenderer.on(`terminal:data:${id}`, (_e, data) => cb(data)),
+  onTerminalExit:    (id, cb) => ipcRenderer.on(`terminal:exit:${id}`, () => cb()),
+
   // ─── Cleanup ──────────────────────────────────────────────────────────
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
 });

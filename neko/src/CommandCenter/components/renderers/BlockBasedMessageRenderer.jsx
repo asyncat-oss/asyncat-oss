@@ -1347,8 +1347,15 @@ const HtmlPreviewBlock = ({ content }) => {
   };
 
   const handleOpenPreview = () => {
-    const blobUrl = URL.createObjectURL(new Blob([content || ''], { type: 'text/html' }));
-    window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url: blobUrl } }));
+    let previewUrl;
+    if (window?.electronAPI) {
+      // Blob URLs are renderer-process-specific; data URLs cross the webview boundary
+      const b64 = btoa(unescape(encodeURIComponent(content || '')));
+      previewUrl = `data:text/html;base64,${b64}`;
+    } else {
+      previewUrl = URL.createObjectURL(new Blob([content || ''], { type: 'text/html' }));
+    }
+    window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url: previewUrl } }));
   };
 
   return (

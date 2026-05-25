@@ -8,6 +8,8 @@
 //
 import { app, ipcMain, globalShortcut, Notification, dialog } from 'electron';
 import { IS_MAC, IS_DEV, APP_NAME, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, ICONS } from './constants.js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
 import { setupAutoUpdater, setupUpdaterIPC } from './updater.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
@@ -136,6 +138,52 @@ function setupIPC() {
     if (Notification.isSupported()) {
       new Notification({ title, body }).show();
     }
+  });
+}
+
+// ─── Terminal IPC ─────────────────────────────────────────────────────────────
+
+const terminals = new Map(); // id → { pty, webContentsId }
+
+function setupTerminalIPC() {
+  let nodePty;
+  try { nodePty = require('node-pty'); } catch { return; } // skip if not built
+
+  ipcMain.handle('terminal:create', (event, opts = {}) => {
+    const id = `term_${Date.now()}`;
+    const shell = opts.shell || (IS_MAC ? '/bin/zsh' : process.env.COMSPEC || 'cmd.exe');
+    const cwd = opts.cwd || process.env.HOME || process.cwd();
+    const pty = nodePty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols: opts.cols || 80,
+      rows: opts.rows || 24,
+      cwd,
+      env: { ...process.env, TERM: 'xterm-256color' },
+    });
+    pty.onData((data) => {
+      const wc = event.sender;
+      if (!wc.isDestroyed()) wc.send(`terminal:data:${id}`, data);
+    });
+    pty.onExit(() => {
+      const wc = event.sender;
+      if (!wc.isDestroyed()) wc.send(`terminal:exit:${id}`);
+      terminals.delete(id);
+    });
+    terminals.set(id, pty);
+    return id;
+  });
+
+  ipcMain.on('terminal:input', (_event, id, data) => {
+    terminals.get(id)?.write(data);
+  });
+
+  ipcMain.on('terminal:resize', (_event, id, cols, rows) => {
+    terminals.get(id)?.resize(cols, rows);
+  });
+
+  ipcMain.on('terminal:kill', (_event, id) => {
+    terminals.get(id)?.kill();
+    terminals.delete(id);
   });
 }
 
@@ -310,6 +358,7 @@ app.whenReady().then(async () => {
 
   // Setup IPC handlers
   setupIPC();
+  setupTerminalIPC();
   setupPopupIPC();
   setupUpdaterIPC();
 
