@@ -22,7 +22,9 @@
     "electron:build:mac": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --mac --config electron-builder.yml",
     "electron:build:win": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --win --config electron-builder.yml",
     "electron:build:linux": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --linux --config electron-builder.yml",
-    "electron:rebuild": "npx electron-rebuild"
+    "electron:rebuild": "npx electron-rebuild",
+    "electron:publish": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --publish always --config electron-builder.yml",
+    "electron:publish:mac": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --mac --publish always --config electron-builder.yml"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || ^24.0.0 || ^25.0.0 || ^26.0.0"
@@ -32,5 +34,8 @@
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.9"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
   }
 }

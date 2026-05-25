@@ -1,0 +1,58 @@
+# ─── Asyncat Desktop — Release workflow ──────────────────────────────────────
+#
+# Triggered by pushing a version tag:
+#   git tag v0.7.4 && git push origin v0.7.4
+#
+# Builds on macOS, Windows, and Linux in parallel and uploads the installers
+# to the GitHub Release created for that tag automatically.
+#
+# No extra secrets needed — GITHUB_TOKEN is provided by Actions automatically.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # allows uploading release assets
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform_flag: --mac
+          - os: windows-latest
+            platform_flag: --win
+          - os: ubuntu-latest
+            platform_flag: --linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bundle portable Node binary
+        run: node scripts/bundle-node.js
+
+      - name: Build frontend
+        run: npm run build -w neko
+
+      - name: Build & publish Electron app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder ${{ matrix.platform_flag }} --publish always --config electron-builder.yml

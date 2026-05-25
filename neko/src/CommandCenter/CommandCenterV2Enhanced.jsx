@@ -2019,7 +2019,22 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return null;
   }, [persistedAgentEvents]);
 
-  const effectivePreviewUrl = detectedPreviewUrl;
+  const [manualPreviewUrl, setManualPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const url = e.detail?.url;
+      if (!url) return;
+      setManualPreviewUrl(url);
+      setShowActivitySidebar(true);
+      setSidePanelTab('preview');
+      try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch {}
+    };
+    window.addEventListener('asyncat-open-preview', handler);
+    return () => window.removeEventListener('asyncat-open-preview', handler);
+  }, []);
+
+  const effectivePreviewUrl = manualPreviewUrl || detectedPreviewUrl;
 
   const conversationHighlights = useMemo(
     () => buildConversationHighlights(messages),

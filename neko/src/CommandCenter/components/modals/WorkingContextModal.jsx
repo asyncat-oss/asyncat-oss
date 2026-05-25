@@ -98,10 +98,11 @@ export function WorkingContextModal({
     setManualError(null);
   }, [activeRoot]);
 
-  const applyManualPath = useCallback(() => {
-    const ctx = contextFromAbsolutePath(manualPath, fileRoots);
+  const applyManualPath = useCallback((pathOverride) => {
+    const target = pathOverride !== undefined ? pathOverride : manualPath;
+    const ctx = contextFromAbsolutePath(target, fileRoots);
     if (!ctx) {
-      setManualError("Path must be inside one of your listed workspaces.");
+      setManualError("Path must be inside one of your configured workspaces. Add it as a workspace root in Settings first.");
       return;
     }
     setManualError(null);
@@ -110,6 +111,17 @@ export function WorkingContextModal({
     setBrowsePath(ctx.relativePath);
     setManualPath(absoluteFromRoot(newRoot?.path || "", ctx.relativePath));
   }, [fileRoots, manualPath]);
+
+  const handleNativeBrowse = useCallback(async () => {
+    if (!window?.electronAPI?.openDirectory) return;
+    const result = await window.electronAPI.openDirectory({
+      defaultPath: manualPath || undefined,
+    });
+    if (result.canceled || !result.filePaths?.[0]) return;
+    const picked = result.filePaths[0];
+    setManualPath(picked);
+    applyManualPath(picked);
+  }, [manualPath, applyManualPath]);
 
   if (!isOpen) return null;
 
@@ -243,6 +255,16 @@ export function WorkingContextModal({
 
                 {/* Manual path input */}
                 <div className="flex gap-2">
+                  {window?.electronAPI?.openDirectory && (
+                    <button
+                      type="button"
+                      onClick={handleNativeBrowse}
+                      className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700"
+                      title="Open native folder picker"
+                    >
+                      Browse…
+                    </button>
+                  )}
                   <input
                     value={manualPath}
                     onChange={e => { setManualPath(e.target.value); setManualError(null); }}
@@ -253,7 +275,7 @@ export function WorkingContextModal({
                   />
                   <button
                     type="button"
-                    onClick={applyManualPath}
+                    onClick={() => applyManualPath()}
                     className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700"
                   >
                     Go

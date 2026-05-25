@@ -21,13 +21,31 @@ const panelMeta = {
 
 // ── Preview panel ─────────────────────────────────────────────────────────────
 
+const isElectron = Boolean(window?.electronAPI);
+
+function ElectronWebview({ url, onLoadStart, onLoadStop }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const start = () => onLoadStart?.();
+    const stop = () => onLoadStop?.();
+    el.addEventListener('did-start-loading', start);
+    el.addEventListener('did-stop-loading', stop);
+    return () => {
+      el.removeEventListener('did-start-loading', start);
+      el.removeEventListener('did-stop-loading', stop);
+    };
+  }, [onLoadStart, onLoadStop]);
+  // eslint-disable-next-line react/no-unknown-property
+  return <webview ref={ref} src={url} style={{ width: '100%', height: '100%', display: 'flex', border: 'none' }} />;
+}
+
 function PreviewPanel({ initialUrl }) {
   const [url, setUrl] = useState(initialUrl || '');
   const [inputUrl, setInputUrl] = useState(initialUrl || '');
-  const [blocked, setBlocked] = useState(false);
   const [loading, setLoading] = useState(Boolean(initialUrl));
   const iframeRef = useRef(null);
-  const reloadKey = useRef(0);
   const [key, setKey] = useState(0);
 
   // Sync when a new URL comes in from the agent
@@ -35,7 +53,6 @@ function PreviewPanel({ initialUrl }) {
     if (initialUrl && initialUrl !== url) {
       setUrl(initialUrl);
       setInputUrl(initialUrl);
-      setBlocked(false);
       setLoading(true);
       setKey(k => k + 1);
     }
@@ -47,27 +64,12 @@ function PreviewPanel({ initialUrl }) {
     const full = trimmed.startsWith('http') ? trimmed : `http://${trimmed}`;
     setUrl(full);
     setInputUrl(full);
-    setBlocked(false);
     setLoading(true);
     setKey(k => k + 1);
   };
 
-  const handleLoad = () => {
+  const handleIframeLoad = () => {
     setLoading(false);
-    // Detect blank iframe (X-Frame-Options block): try accessing contentDocument
-    try {
-      const doc = iframeRef.current?.contentDocument;
-      // If we get a document but it's completely empty, it was blocked
-      if (doc && doc.body && doc.body.innerHTML === '' && doc.title === '') {
-        setBlocked(true);
-      } else {
-        setBlocked(false);
-      }
-    } catch {
-      // Cross-origin access denied — iframe loaded (or was blocked by CSP)
-      // We can't tell definitively; just clear blocked state
-      setBlocked(false);
-    }
   };
 
   return (
@@ -76,7 +78,7 @@ function PreviewPanel({ initialUrl }) {
       <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-2 py-1.5">
         <button
           type="button"
-          onClick={() => { setKey(k => k + 1); setLoading(true); setBlocked(false); }}
+          onClick={() => { setKey(k => k + 1); setLoading(true); }}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
           title="Reload"
         >
@@ -126,35 +128,24 @@ function PreviewPanel({ initialUrl }) {
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
               </div>
             )}
-            {blocked && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-gray-950 midnight:bg-slate-950 px-6">
-                <div className="text-center">
-                  <AlertTriangle className="mx-auto mb-3 h-7 w-7 text-amber-400" />
-                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">Can't embed this page</p>
-                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 leading-relaxed">
-                    The server set headers that prevent embedding (X-Frame-Options). Open it in your browser instead.
-                  </p>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Open in browser
-                  </a>
-                </div>
-              </div>
+            {isElectron ? (
+              <ElectronWebview
+                key={key}
+                url={url}
+                onLoadStart={() => setLoading(true)}
+                onLoadStop={() => setLoading(false)}
+              />
+            ) : (
+              <iframe
+                key={key}
+                ref={iframeRef}
+                src={url}
+                onLoad={handleIframeLoad}
+                className="h-full w-full border-0"
+                title="Preview"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+              />
             )}
-            <iframe
-              key={key}
-              ref={iframeRef}
-              src={url}
-              onLoad={handleLoad}
-              className="h-full w-full border-0"
-              title="Preview"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-            />
           </>
         )}
       </div>

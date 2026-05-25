@@ -9,6 +9,7 @@
 import { app, ipcMain, globalShortcut, Notification, dialog } from 'electron';
 import { IS_MAC, IS_DEV, APP_NAME, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, ICONS } from './constants.js';
 import { togglePopup, closePopup } from './popup.js';
+import { setupAutoUpdater, setupUpdaterIPC } from './updater.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import http from 'http';
 import net from 'net';
@@ -97,6 +98,16 @@ function setupIPC() {
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.on('app:is-packaged', (event) => { event.returnValue = app.isPackaged; });
+
+  ipcMain.handle('dialog:openDirectory', async (_event, opts = {}) => {
+    const win = getMainWindow();
+    return dialog.showOpenDialog(win, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: opts.title || 'Select workspace folder',
+      buttonLabel: opts.buttonLabel || 'Use as Workspace',
+      defaultPath: opts.defaultPath || undefined,
+    });
+  });
 
   ipcMain.handle('backend:status', () => ({
     running: isBackendRunning(),
@@ -300,6 +311,10 @@ app.whenReady().then(async () => {
   // Setup IPC handlers
   setupIPC();
   setupPopupIPC();
+  setupUpdaterIPC();
+
+  // Auto-update (packaged builds only — no-op in dev)
+  setupAutoUpdater();
 
   // Build native menu
   buildAppMenu({

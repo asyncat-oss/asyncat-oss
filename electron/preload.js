@@ -18,13 +18,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBackendStatus: () => ipcRenderer.invoke('backend:status'),
   restartBackend:   () => ipcRenderer.invoke('backend:restart'),
 
+  // ─── Native Dialogs ───────────────────────────────────────────────────
+  openDirectory: (opts) => ipcRenderer.invoke('dialog:openDirectory', opts),
+
   // ─── Native Notifications ─────────────────────────────────────────────
   showNotification: (title, body) => ipcRenderer.send('notify', { title, body }),
 
+  // ─── Auto-update ──────────────────────────────────────────────────────
+  checkForUpdates:   () => ipcRenderer.invoke('update:check'),
+  downloadUpdate:    () => ipcRenderer.invoke('update:download'),
+  installUpdate:     () => ipcRenderer.invoke('update:install'),
+  openReleasesPage:  () => ipcRenderer.invoke('update:open-releases'),
+
   // ─── Event Listeners ──────────────────────────────────────────────────
-  onBackendReady:    (cb) => ipcRenderer.on('backend:ready', () => cb()),
-  onBackendError:    (cb) => ipcRenderer.on('backend:error', (_e, msg) => cb(msg)),
-  onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, info) => cb(info)),
+  onBackendReady:       (cb) => ipcRenderer.on('backend:ready', () => cb()),
+  onBackendError:       (cb) => ipcRenderer.on('backend:error', (_e, msg) => cb(msg)),
+  onUpdateChecking:     (cb) => ipcRenderer.on('update:checking', () => cb()),
+  onUpdateAvailable:    (cb) => ipcRenderer.on('update:available', (_e, info) => cb(info)),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update:not-available', (_e, info) => cb(info)),
+  onUpdateProgress:     (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
+  onUpdateDownloaded:   (cb) => ipcRenderer.on('update:downloaded', (_e, info) => cb(info)),
+  onUpdateError:        (cb) => ipcRenderer.on('update:error', (_e, msg) => cb(msg)),
 
   // ─── Cleanup ──────────────────────────────────────────────────────────
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),

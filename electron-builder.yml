@@ -125,9 +125,12 @@ deb:
     - libxtst6
     - libnss3
 
-# ─── Publish (GitHub Releases — when you're ready) ────────────────────────────
-# Uncomment when you want auto-updates:
-# publish:
-#   provider: github
-#   owner: asyncat
-#   repo: asyncat-oss
+# ─── Publish (GitHub Releases) ────────────────────────────────────────────────
+# electron-builder uploads binaries + latest.yml to a GitHub Release.
+# Run via: GH_TOKEN=<pat> npm run electron:publish
+# The PAT needs "repo" scope (Contents: write).
+publish:
+  provider: github
+  owner: asyncat-oss
+  repo: asyncat-oss
+  releaseType: release

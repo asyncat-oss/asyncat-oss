@@ -1331,15 +1331,9 @@ const CollapsibleBlock = ({ summary, content, onTermClick }) => {
   );
 };
 
-// ─── HTML Preview block (sandboxed iframe) ──────────────────────────────────
+// ─── HTML block — code view + open in Preview panel ─────────────────────────
 const HtmlPreviewBlock = ({ content }) => {
-  const [showCode, setShowCode] = useState(false);
   const [copyStatus, setCopyStatus] = useState(null);
-
-  const blobUrl = useMemo(() => {
-    if (!content) return null;
-    return URL.createObjectURL(new Blob([content], { type: 'text/html' }));
-  }, [content]);
 
   const handleCopy = async () => {
     try {
@@ -1352,13 +1346,18 @@ const HtmlPreviewBlock = ({ content }) => {
     }
   };
 
+  const handleOpenPreview = () => {
+    const blobUrl = URL.createObjectURL(new Blob([content || ''], { type: 'text/html' }));
+    window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url: blobUrl } }));
+  };
+
   return (
     <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
       <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
         <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">
-          HTML Preview
+          HTML
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={handleCopy}
             className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
@@ -1370,25 +1369,15 @@ const HtmlPreviewBlock = ({ content }) => {
             )}
           </button>
           <button
-            onClick={() => setShowCode(v => !v)}
-            className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            onClick={handleOpenPreview}
+            className="flex items-center gap-1 text-[10px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors font-medium"
           >
-            {showCode ? 'Show preview' : 'View code'}
+            <ExternalLink className="w-3 h-3" />
+            Open in Preview
           </button>
         </div>
       </div>
-      {showCode ? (
-        <CodeBlock content={content} language="html" />
-      ) : (
-        <div className="bg-white dark:bg-gray-950 midnight:bg-slate-950">
-          <iframe
-            src={blobUrl}
-            title="HTML Preview"
-            className="w-full h-64 border-0"
-            sandbox="allow-scripts"
-          />
-        </div>
-      )}
+      <CodeBlock content={content} language="html" />
     </div>
   );
 };
