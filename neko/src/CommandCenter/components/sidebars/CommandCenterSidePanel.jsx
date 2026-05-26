@@ -1,13 +1,12 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List, SquareTerminal, Bug, Camera, Wifi } from 'lucide-react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List, SquareTerminal, Bug, Camera } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import HistoryPanel from './HistoryPanel';
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import CodePanel from './CodePanel';
 import TerminalPanel from './TerminalPanel';
-import ServersPanel from './ServersPanel';
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
@@ -20,7 +19,6 @@ const panelMeta = {
   artifact: { label: 'Artifact', icon: FilePlus },
   nav: { label: 'Jump to', icon: List },
   terminal: { label: 'Terminal', icon: SquareTerminal },
-  servers: { label: 'Servers', icon: Wifi },
 };
 
 // ── Preview panel ─────────────────────────────────────────────────────────────
@@ -498,9 +496,6 @@ export default function CommandCenterSidePanel({
         )}
         {currentTab === 'terminal' && (
           <TerminalPanel workingDir={workingDir} agentOutput={agentTerminalOutput} />
-        )}
-        {currentTab === 'servers' && (
-          <ServersPanel detectedPreviewUrl={previewUrl} />
         )}
       </div>
     </div>

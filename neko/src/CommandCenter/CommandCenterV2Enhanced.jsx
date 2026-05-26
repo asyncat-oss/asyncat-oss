@@ -55,7 +55,6 @@ import {
   Globe,
   List,
   SquareTerminal,
-  Wifi,
 } from "lucide-react";
 
 import {
@@ -2358,7 +2357,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     || sidePanelTab === 'nav'
     || sidePanelTab === 'code'
     || sidePanelTab === 'runtime'
-    || sidePanelTab === 'terminal' || sidePanelTab === 'servers'
+    || sidePanelTab === 'terminal'
     || gitState?.detected
     || sourceCatalog.totalCount > 0
     || persistedAgentEvents.length > 0
@@ -2667,35 +2666,19 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         </button>
                       )}
 
-                      {window?.electronAPI && (
-                        <button
-                          type="button"
-                          onClick={() => toggleSidePanelTab('terminal')}
-                          className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                            showActivitySidebar && sidePanelTab === 'terminal'
-                              ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                          }`}
-                          title="Open terminal"
-                        >
-                          <SquareTerminal className="h-4 w-4" />
-                          <span className="hidden sm:inline">Terminal</span>
-                        </button>
-                      )}
-
                       <button
                         type="button"
-                        onClick={() => toggleSidePanelTab('servers')}
+                        onClick={() => toggleSidePanelTab('terminal')}
                         className={`relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                          showActivitySidebar && sidePanelTab === 'servers'
+                          showActivitySidebar && sidePanelTab === 'terminal'
                             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
                         }`}
-                        title="Active servers & processes"
+                        title="Terminal & active processes"
                       >
-                        <Wifi className="h-4 w-4" />
-                        <span className="hidden sm:inline">Servers</span>
-                        {detectedPreviewUrl && (
+                        <SquareTerminal className="h-4 w-4" />
+                        <span className="hidden sm:inline">Terminal</span>
+                        {detectedPreviewUrl && sidePanelTab !== 'terminal' && (
                           <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                             <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
@@ -3039,7 +3022,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || sidePanelTab === 'servers' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside
           style={{ width: sidePanelWidth }}
           className="hidden xl:flex xl:shrink-0 relative border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700"
@@ -3091,7 +3074,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || sidePanelTab === 'servers' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"
