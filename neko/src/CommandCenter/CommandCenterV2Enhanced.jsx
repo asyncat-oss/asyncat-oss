@@ -55,6 +55,7 @@ import {
   Globe,
   List,
   SquareTerminal,
+  Wifi,
 } from "lucide-react";
 
 import {
@@ -782,6 +783,53 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     });
   }, [workingContext?.relativePath, workingContext?.rootId]);
 
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files || []);
+    if (!files.length) return;
+    const file = files[0]; // handle one file at a time — matches externalFileAttachment (single)
+    // Electron exposes the real absolute path; browsers don't have .path
+    const absPath = file.path || null;
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setExternalFileAttachment({
+          name: file.name,
+          type: 'image',
+          dataUrl: ev.target.result,
+          path: absPath,
+          nonce: Date.now(),
+          promptOnly: true,
+        });
+      };
+      reader.readAsDataURL(file);
+    } else if (file.size < 500_000 && (file.type.startsWith('text/') || file.name.match(/\.(md|txt|js|ts|jsx|tsx|py|json|yaml|yml|sh|css|html|xml|csv|log|conf|env|toml|rs|go|java|cpp|c|h)$/i))) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setExternalFileAttachment({
+          name: file.name,
+          type: 'text',
+          content: ev.target.result,
+          path: absPath,
+          nonce: Date.now(),
+          promptOnly: true,
+        });
+      };
+      reader.readAsText(file);
+    } else {
+      // Binary or large file — pass path/name only
+      setExternalFileAttachment({
+        name: file.name,
+        type: 'file',
+        path: absPath,
+        size: file.size,
+        mimeType: file.type,
+        nonce: Date.now(),
+        promptOnly: true,
+      });
+    }
+  }, []);
+
   const ConversationSwitcher = useCallback(({ compact = false } = {}) => (
     <button
       type="button"
@@ -1309,6 +1357,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           continue;
         }
         // Skill learned — fire the in-app toast
+        if (event.type === 'preview_url') {
+          const url = event.data?.url;
+          if (url) {
+            setManualPreviewUrl(url);
+            setShowActivitySidebar(true);
+            setSidePanelTab('preview');
+            try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch {}
+          }
+        }
+
         if (event.type === 'skill_suggested') {
           const toast = {
             id: Date.now(),
@@ -2005,20 +2063,35 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   );
 
   // Auto-detect a localhost server URL from the most recent run_command result
+  const SHELL_URL_TOOLS = new Set(['run_command', 'run_shell_command', 'shell_session_run', 'run_python', 'run_node', 'open_preview']);
+
   const detectedPreviewUrl = useMemo(() => {
     for (let i = persistedAgentEvents.length - 1; i >= 0; i--) {
       const ev = persistedAgentEvents[i];
-      if (ev?.type === 'tool_start' && ev.data?.tool === 'run_command' && ev.result) {
-        const output = typeof ev.result?.output === 'string' ? ev.result.output
-          : typeof ev.result?.stdout === 'string' ? ev.result.stdout : null;
-        if (output) {
-          const url = extractLocalhostUrl(output);
+      if (ev?.type === 'tool_start' && SHELL_URL_TOOLS.has(ev.data?.tool)) {
+        // Explicit preview_url from the open_preview tool
+        if (ev.data?.tool === 'open_preview' && ev.data?.args?.url) return ev.data.args.url;
+        // Check completed result output
+        if (ev.result) {
+          const output = typeof ev.result?.output === 'string' ? ev.result.output
+            : typeof ev.result?.stdout === 'string' ? ev.result.stdout
+            : typeof ev.result?.message === 'string' ? ev.result.message : null;
+          if (output) {
+            const url = extractLocalhostUrl(output);
+            if (url) return url;
+          }
+        }
+        // Also check streaming progress (catches URL before tool completes)
+        if (ev.progress) {
+          const url = extractLocalhostUrl(ev.progress);
           if (url) return url;
         }
       }
+      // Handle the preview_url SSE event type emitted by the open_preview tool
+      if (ev?.type === 'preview_url' && ev.data?.url) return ev.data.url;
     }
     return null;
-  }, [persistedAgentEvents]);
+  }, [persistedAgentEvents]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [manualPreviewUrl, setManualPreviewUrl] = useState(null);
 
@@ -2036,6 +2109,47 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, []);
 
   const effectivePreviewUrl = manualPreviewUrl || detectedPreviewUrl;
+
+  // Auto-open preview tab when agent first detects a localhost URL
+  const prevDetectedUrlRef = useRef(null);
+  useEffect(() => {
+    if (detectedPreviewUrl && prevDetectedUrlRef.current === null) {
+      setShowActivitySidebar(true);
+      setSidePanelTab('preview');
+      try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch {}
+    }
+    prevDetectedUrlRef.current = detectedPreviewUrl;
+  }, [detectedPreviewUrl]);
+
+  // Dock badge + tray tooltip: reflect active agent run count
+  useEffect(() => {
+    if (window.electronAPI?.setDockBadge) {
+      window.electronAPI.setDockBadge(agentRunning ? 1 : 0);
+    }
+  }, [agentRunning]);
+
+  // Collect agent shell command output for the terminal panel's Agent Output tab
+  const [agentTerminalOutput, setAgentTerminalOutput] = useState([]);
+  useEffect(() => {
+    const shellTools = new Set(['run_command', 'run_shell_command', 'shell_session_run', 'run_python', 'run_node']);
+    const newLines = [];
+    persistedAgentEvents.forEach(ev => {
+      if (ev.type !== 'tool_start') return;
+      const tool = ev.data?.tool;
+      if (!shellTools.has(tool)) return;
+      const cmd = ev.data?.args?.command || ev.data?.args?.code || '';
+      if (cmd) newLines.push(`\x1b[90m$ ${cmd}\x1b[0m`);
+      if (ev.progress) {
+        newLines.push(...String(ev.progress).split('\n').filter(Boolean));
+      }
+      if (ev.result?.output) {
+        newLines.push(...String(ev.result.output).split('\n').filter(Boolean));
+      } else if (ev.result?.stdout) {
+        newLines.push(...String(ev.result.stdout).split('\n').filter(Boolean));
+      }
+    });
+    setAgentTerminalOutput(newLines);
+  }, [persistedAgentEvents]);
 
   const conversationHighlights = useMemo(
     () => buildConversationHighlights(messages),
@@ -2244,7 +2358,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     || sidePanelTab === 'nav'
     || sidePanelTab === 'code'
     || sidePanelTab === 'runtime'
-    || sidePanelTab === 'terminal'
+    || sidePanelTab === 'terminal' || sidePanelTab === 'servers'
     || gitState?.detected
     || sourceCatalog.totalCount > 0
     || persistedAgentEvents.length > 0
@@ -2568,6 +2682,26 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                           <span className="hidden sm:inline">Terminal</span>
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('servers')}
+                        className={`relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
+                          showActivitySidebar && sidePanelTab === 'servers'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Active servers & processes"
+                      >
+                        <Wifi className="h-4 w-4" />
+                        <span className="hidden sm:inline">Servers</span>
+                        {detectedPreviewUrl && (
+                          <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                          </span>
+                        )}
+                      </button>
                     </div>
 
                     {/* Non-scrollable section — dropdown buttons must live outside overflow-x-auto */}
@@ -2805,7 +2939,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden relative">
+            <div
+              className="min-h-0 flex-1 overflow-hidden relative"
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+              onDrop={handleDrop}
+            >
               <ChatFloatingNav items={chatNavItems} scrollContainerRef={scrollContainerRef} />
               <div
                 ref={scrollContainerRef}
@@ -2887,6 +3025,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onStop={handleAgentStop}
                 runStartedAt={runStartedAtRef.current}
                 externalFileAttachment={externalFileAttachment}
+                onNativeFileAttach={setExternalFileAttachment}
                 workingContext={workingContext}
                 onWorkingContextChange={setWorkingContext}
                 tokenUsage={latestTokenUsage}
@@ -2900,7 +3039,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         )}
       </div>
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || sidePanelTab === 'servers' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <aside
           style={{ width: sidePanelWidth }}
           className="hidden xl:flex xl:shrink-0 relative border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700"
@@ -2946,12 +3085,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               runtimeStatus={runtimeStatus}
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
+              agentTerminalOutput={agentTerminalOutput}
             />
           </div>
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || sidePanelTab === 'servers' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"
@@ -2993,6 +3133,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               runtimeStatus={runtimeStatus}
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
+              agentTerminalOutput={agentTerminalOutput}
             />
           </div>
         </div>

@@ -19,7 +19,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restartBackend:   () => ipcRenderer.invoke('backend:restart'),
 
   // ─── Native Dialogs ───────────────────────────────────────────────────
-  openDirectory: (opts) => ipcRenderer.invoke('dialog:openDirectory', opts),
+  openDirectory:    (opts) => ipcRenderer.invoke('dialog:openDirectory', opts),
+  saveFileDialog:   (opts) => ipcRenderer.invoke('dialog:saveFile', opts),
+  openFilesDialog:  (opts) => ipcRenderer.invoke('dialog:openFiles', opts),
+
+  // ─── Shell ────────────────────────────────────────────────────────────
+  shellOpen:        (filePath) => ipcRenderer.invoke('shell:open', filePath),
+  shellShowInFolder:(filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
+
+  // ─── Clipboard ────────────────────────────────────────────────────────
+  clipboardRead:    () => ipcRenderer.invoke('clipboard:read'),
+  clipboardWrite:   (text) => ipcRenderer.invoke('clipboard:write', text),
+
+  // ─── Screen Capture ───────────────────────────────────────────────────
+  captureScreen:    () => ipcRenderer.invoke('screen:captureWindow'),
+
+  // ─── Dock Badge ───────────────────────────────────────────────────────
+  setDockBadge:     (count) => ipcRenderer.send('app:badge', count),
 
   // ─── Native Notifications ─────────────────────────────────────────────
   showNotification: (title, body) => ipcRenderer.send('notify', { title, body }),

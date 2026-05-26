@@ -448,4 +448,14 @@ export const profilesApi = {
       method: 'DELETE',
     });
   },
+
+  getProcesses: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/processes`);
+  },
+
+  killProcess: async (key) => {
+    return await apiRequest(`${API_BASE_URL}/agent/processes/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+  },
 };

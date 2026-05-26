@@ -41,6 +41,7 @@ import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
+import { shellSessionManager } from '../../agent/ShellSessionManager.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -1154,6 +1155,23 @@ router.get('/capabilities/multimodal', authenticate, async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to load multimodal capabilities' });
   }
+});
+
+// ─── Shell process / server management ───────────────────────────────────────
+
+router.get('/processes', authenticate, (req, res) => {
+  try {
+    const sessions = shellSessionManager.list(null);
+    res.json({ success: true, sessions });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/processes/:key', authenticate, (req, res) => {
+  const key = decodeURIComponent(req.params.key);
+  const killed = shellSessionManager.killByKey(key);
+  res.json({ success: killed, key });
 });
 
 router.get('/runtime/status', authenticate, async (req, res) => {

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { SquareTerminal, Plus, X } from 'lucide-react';
+import { SquareTerminal, Plus, X, Bot } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 
 // ─── Theme detection ──────────────────────────────────────────────────────────
@@ -193,11 +193,82 @@ function TermTab({ label, isActive, onActivate, onClose }) {
   );
 }
 
+// ─── Agent Output (display-only xterm, no pty) ───────────────────────────────
+
+function AgentOutputInstance({ lines, visible }) {
+  const containerRef = useRef(null);
+  const termRef = useRef(null);
+  const writtenRef = useRef(0);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    let disposed = false;
+
+    loadXterm().then(({ Terminal, FitAddon }) => {
+      if (disposed || !containerRef.current) return;
+      const term = new Terminal({
+        cursorBlink: false,
+        fontSize: 12,
+        fontFamily: '"Cascadia Code", "Fira Mono", Menlo, Monaco, monospace',
+        theme: getXtermTheme(),
+        allowProposedApi: true,
+        scrollback: 10000,
+        disableStdin: true,
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(containerRef.current);
+      fitAddon.fit();
+      termRef.current = term;
+      termRef._fit = fitAddon;
+
+      const observer = new MutationObserver(() => { term.options.theme = getXtermTheme(); });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      termRef._themeObserver = observer;
+    });
+
+    return () => {
+      disposed = true;
+      termRef._themeObserver?.disconnect();
+      termRef.current?.dispose();
+      termRef.current = null;
+      writtenRef.current = 0;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Write any new lines from the agent and scroll to bottom
+  useEffect(() => {
+    if (!termRef.current || !lines?.length) return;
+    const newLines = lines.slice(writtenRef.current);
+    if (!newLines.length) return;
+    newLines.forEach(line => termRef.current.writeln(line));
+    writtenRef.current = lines.length;
+    termRef.current.scrollToBottom();
+  }, [lines]);
+
+  // Refit on visibility change
+  useEffect(() => {
+    if (!visible || !termRef._fit || !termRef.current) return;
+    const id = setTimeout(() => { try { termRef._fit?.fit(); } catch {} }, 60);
+    return () => clearTimeout(id);
+  }, [visible]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="h-full w-full"
+      style={{ display: visible ? 'block' : 'none' }}
+    />
+  );
+}
+
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 let counter = 0;
 
-export default function TerminalPanel({ workingDir = null }) {
+const AGENT_TAB_ID = '__agent_output__';
+
+export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
   const [tabs, setTabs] = useState([]);
   const [activeId, setActiveId] = useState(null);
 
@@ -220,11 +291,29 @@ export default function TerminalPanel({ workingDir = null }) {
   useEffect(() => { addTab(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!window.electronAPI?.terminalCreate) {
+    // In non-Electron (web) environments, show agent output only if there is any
+    if (agentOutput.length === 0) {
+      return (
+        <div className="flex h-full items-center justify-center p-6">
+          <div className="text-center">
+            <SquareTerminal className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-600 midnight:text-slate-600" />
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Terminal requires the desktop app</p>
+          </div>
+        </div>
+      );
+    }
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="text-center">
-          <SquareTerminal className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-600 midnight:text-slate-600" />
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Terminal requires the desktop app</p>
+      <div className="flex h-full min-h-0 flex-col bg-white dark:bg-gray-900 midnight:bg-[#0d1117]">
+        <div className="flex shrink-0 items-center gap-1 border-b border-gray-200 bg-gray-50 px-2 py-1 dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-[#161b22]">
+          <button type="button" className="group flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-[11px] font-medium bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100 midnight:bg-slate-700 midnight:text-slate-100">
+            <Bot className="h-3 w-3 shrink-0" />
+            Agent Output
+          </button>
+        </div>
+        <div className="relative min-h-0 flex-1 p-1">
+          <div className="absolute inset-1">
+            <AgentOutputInstance lines={agentOutput} visible />
+          </div>
         </div>
       </div>
     );
@@ -234,6 +323,23 @@ export default function TerminalPanel({ workingDir = null }) {
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-gray-900 midnight:bg-[#0d1117]">
       {/* Tab bar */}
       <div className="flex shrink-0 items-center gap-1 border-b border-gray-200 bg-gray-50 px-2 py-1 dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-[#161b22]">
+        {/* Agent Output permanent tab — always visible */}
+        <button
+          type="button"
+          onClick={() => setActiveId(AGENT_TAB_ID)}
+          className={`group flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+            activeId === AGENT_TAB_ID
+              ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100 midnight:bg-slate-700 midnight:text-slate-100'
+              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-200'
+          }`}
+        >
+          <Bot className="h-3 w-3 shrink-0" />
+          <span className="max-w-[6rem] truncate">Agent</span>
+          {agentOutput.length > 0 && activeId !== AGENT_TAB_ID && (
+            <span className="ml-0.5 flex h-1.5 w-1.5 rounded-full bg-indigo-500" />
+          )}
+        </button>
+
         {tabs.map(tab => (
           <TermTab
             key={tab.id}
@@ -255,12 +361,17 @@ export default function TerminalPanel({ workingDir = null }) {
 
       {/* Terminal area — each tab is always mounted so its PTY stays alive */}
       <div className="relative min-h-0 flex-1 p-1">
+        {/* Agent Output xterm (no pty, display-only) */}
+        <div className="absolute inset-1">
+          <AgentOutputInstance lines={agentOutput} visible={activeId === AGENT_TAB_ID} />
+        </div>
+
         {tabs.map(tab => (
           <div key={tab.id} className="absolute inset-1">
             <XtermInstance cwd={tab.cwd} visible={tab.id === activeId} />
           </div>
         ))}
-        {tabs.length === 0 && (
+        {tabs.length === 0 && activeId !== AGENT_TAB_ID && (
           <div className="flex h-full items-center justify-center">
             <button
               type="button"

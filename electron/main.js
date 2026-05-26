@@ -6,7 +6,7 @@
 // 3. Sets up system tray, native menu, and global shortcuts
 // 4. Manages the full app lifecycle
 //
-import { app, ipcMain, globalShortcut, Notification, dialog } from 'electron';
+import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage } from 'electron';
 import { IS_MAC, IS_DEV, APP_NAME, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, ICONS } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -30,7 +30,7 @@ function isPortListening(port) {
   });
 }
 import { createWindow, getMainWindow, showLoadingScreen } from './window.js';
-import { createTray, updateTrayMenu, destroyTray } from './tray.js';
+import { createTray, updateTrayMenu, destroyTray, setAgentRunCount } from './tray.js';
 import { buildAppMenu } from './menu.js';
 
 // ─── Single Instance Lock ─────────────────────────────────────────────────────
@@ -184,6 +184,68 @@ function setupTerminalIPC() {
   ipcMain.on('terminal:kill', (_event, id) => {
     terminals.get(id)?.kill();
     terminals.delete(id);
+  });
+}
+
+// ─── Desktop IPC (shell, clipboard, dialogs, screen capture, badge) ───────────
+
+function setupDesktopIPC() {
+  // Open a file/folder with the default OS app
+  ipcMain.handle('shell:open', (_event, filePath) => shell.openPath(filePath));
+
+  // Reveal a file in Finder / Explorer
+  ipcMain.handle('shell:showInFolder', (_event, filePath) => {
+    shell.showItemInFolder(filePath);
+    return true;
+  });
+
+  // Read current clipboard text
+  ipcMain.handle('clipboard:read', () => clipboard.readText());
+
+  // Write to clipboard
+  ipcMain.handle('clipboard:write', (_event, text) => {
+    clipboard.writeText(text);
+    return true;
+  });
+
+  // Native save-file dialog
+  ipcMain.handle('dialog:saveFile', async (_event, opts = {}) => {
+    const win = getMainWindow();
+    return dialog.showSaveDialog(win, {
+      title: opts.title || 'Save file',
+      defaultPath: opts.defaultPath,
+      filters: opts.filters,
+      buttonLabel: opts.buttonLabel || 'Save',
+    });
+  });
+
+  // Native open-files dialog (supports multi-select)
+  ipcMain.handle('dialog:openFiles', async (_event, opts = {}) => {
+    const win = getMainWindow();
+    const props = ['openFile'];
+    if (opts.multiSelections) props.push('multiSelections');
+    return dialog.showOpenDialog(win, {
+      title: opts.title || 'Open files',
+      defaultPath: opts.defaultPath,
+      filters: opts.filters,
+      properties: props,
+      buttonLabel: opts.buttonLabel || 'Open',
+    });
+  });
+
+  // Capture the main window contents as a PNG data-URL
+  ipcMain.handle('screen:captureWindow', async () => {
+    const win = getMainWindow();
+    if (!win) return null;
+    const image = await win.webContents.capturePage();
+    return image.toDataURL();
+  });
+
+  // Set the macOS dock badge count + tray tooltip
+  ipcMain.on('app:badge', (_event, count) => {
+    const n = count || 0;
+    if (app.setBadgeCount) app.setBadgeCount(n);
+    setAgentRunCount(n);
   });
 }
 
@@ -359,6 +421,7 @@ app.whenReady().then(async () => {
   // Setup IPC handlers
   setupIPC();
   setupTerminalIPC();
+  setupDesktopIPC();
   setupPopupIPC();
   setupUpdaterIPC();
 
@@ -401,6 +464,11 @@ app.whenReady().then(async () => {
       refreshTray();
     },
     onTrayClick: (tray) => togglePopup(tray),
+  });
+
+  // Register global shortcut: Cmd/Ctrl+Shift+Space → toggle popup (quick agent)
+  globalShortcut.register('CmdOrCtrl+Shift+Space', () => {
+    togglePopup(null);
   });
 
   // Register global shortcut: Cmd/Ctrl+Shift+A → toggle window

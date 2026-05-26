@@ -53,6 +53,19 @@ export function updateTrayMenu(callbacks = {}) {
   // No-op for menu content — it's built fresh on each right-click via buildContextMenu()
 }
 
+/**
+ * Update tray tooltip to reflect active agent run count.
+ * @param {number} count  — number of active agent runs (0 = idle)
+ */
+export function setAgentRunCount(count) {
+  if (!tray) return;
+  if (count > 0) {
+    tray.setToolTip(`Asyncat — ${count} agent run${count > 1 ? 's' : ''} active`);
+  } else {
+    tray.setToolTip('Asyncat — AI Agent OS');
+  }
+}
+
 function buildContextMenu() {
   const backendRunning = isBackendRunning();
   const { onQuit, onShow, onRestartBackend } = _callbacks;

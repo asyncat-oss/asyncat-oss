@@ -43,6 +43,8 @@ import { sandboxTools } from './tools/sandboxTools.js';
 import { astTools } from './tools/astTools.js';
 import { lspTools } from './tools/lspTools.js';
 import { searchReplaceBlockTools } from './tools/searchReplaceBlockTool.js';
+import { desktopTools } from './tools/desktopTools.js';
+import { previewTools } from './tools/previewTool.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -106,6 +108,8 @@ export async function initializeAgent() {
   toolRegistry.registerAll(astTools);
   toolRegistry.registerAll(lspTools);
   toolRegistry.registerAll(searchReplaceBlockTools);
+  toolRegistry.registerAll(desktopTools);
+  toolRegistry.registerAll(previewTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

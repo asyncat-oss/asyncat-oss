@@ -1,12 +1,13 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List, SquareTerminal } from 'lucide-react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List, SquareTerminal, Bug, Camera, Wifi } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import HistoryPanel from './HistoryPanel';
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import CodePanel from './CodePanel';
 import TerminalPanel from './TerminalPanel';
+import ServersPanel from './ServersPanel';
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
@@ -19,14 +20,16 @@ const panelMeta = {
   artifact: { label: 'Artifact', icon: FilePlus },
   nav: { label: 'Jump to', icon: List },
   terminal: { label: 'Terminal', icon: SquareTerminal },
+  servers: { label: 'Servers', icon: Wifi },
 };
 
 // ── Preview panel ─────────────────────────────────────────────────────────────
 
 const isElectron = Boolean(window?.electronAPI);
 
-function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash }) {
-  const ref = useRef(null);
+function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, webviewRef }) {
+  const internalRef = useRef(null);
+  const ref = webviewRef || internalRef;
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -61,6 +64,7 @@ function PreviewPanel({ initialUrl }) {
   const [loading, setLoading] = useState(Boolean(initialUrl));
   const [crashed, setCrashed] = useState(false);
   const iframeRef = useRef(null);
+  const webviewRef = useRef(null);
   const [key, setKey] = useState(0);
 
   // Sync when a new URL comes in from the agent
@@ -113,15 +117,67 @@ function PreviewPanel({ initialUrl }) {
           />
         </form>
         {url && (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-            title="Open in browser"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </a>
+          <>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(url).catch(() => {})}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+              title="Copy URL"
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+              title="Open in browser"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </>
+        )}
+        {isElectron && url && (
+          <>
+            <button
+              type="button"
+              onClick={() => webviewRef.current?.openDevTools()}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+              title="Open DevTools"
+            >
+              <Bug className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  // capturePage() on the webview element captures only the webview content
+                  const image = await webviewRef.current?.capturePage();
+                  const dataUrl = image?.toDataURL?.();
+                  if (!dataUrl) return;
+                  const a = document.createElement('a');
+                  a.href = dataUrl;
+                  a.download = `preview-${Date.now()}.png`;
+                  a.click();
+                } catch {
+                  // Fallback to full app capture
+                  const dataUrl = await window.electronAPI.captureScreen();
+                  if (!dataUrl) return;
+                  const a = document.createElement('a');
+                  a.href = dataUrl;
+                  a.download = `preview-${Date.now()}.png`;
+                  a.click();
+                }
+              }}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+              title="Capture screenshot of preview"
+            >
+              <Camera className="h-3 w-3" />
+            </button>
+          </>
         )}
       </div>
 
@@ -164,6 +220,7 @@ function PreviewPanel({ initialUrl }) {
               <ElectronWebview
                 key={key}
                 url={url}
+                webviewRef={webviewRef}
                 onLoadStart={() => setLoading(true)}
                 onLoadStop={() => setLoading(false)}
                 onCrash={() => { setCrashed(true); setLoading(false); }}
@@ -358,6 +415,7 @@ export default function CommandCenterSidePanel({
   onSelectArtifact,
   selectedArtifact = null,
   chatNavItems = [],
+  agentTerminalOutput = [],
 }) {
   const currentTab = activeTab === 'git' || activeTab === 'sandboxes' ? 'code' : (activeTab || 'steps');
   const meta = panelMeta[currentTab] || panelMeta.steps;
@@ -439,7 +497,10 @@ export default function CommandCenterSidePanel({
           <ChatNavPanel items={chatNavItems} />
         )}
         {currentTab === 'terminal' && (
-          <TerminalPanel workingDir={workingDir} />
+          <TerminalPanel workingDir={workingDir} agentOutput={agentTerminalOutput} />
+        )}
+        {currentTab === 'servers' && (
+          <ServersPanel detectedPreviewUrl={previewUrl} />
         )}
       </div>
     </div>

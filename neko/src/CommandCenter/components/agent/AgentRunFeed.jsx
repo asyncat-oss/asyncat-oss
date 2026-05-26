@@ -77,8 +77,14 @@ const TOOL_META = {
   run_command:       { icon: Terminal,    label: 'Run command' },
   run_python:        { icon: Terminal,    label: 'Run Python' },
   run_node:          { icon: Terminal,    label: 'Run Node' },
-  run_shell_command: { icon: Terminal,    label: 'Run command' },
-  execute_shell:     { icon: Terminal,    label: 'Run command' },
+  run_shell_command:   { icon: Terminal,    label: 'Run command' },
+  shell_session_start: { icon: Terminal,    label: 'Start shell session' },
+  shell_session_run:   { icon: Terminal,    label: 'Run in session' },
+  execute_shell:       { icon: Terminal,    label: 'Run command' },
+  clipboard_read:      { icon: Copy,        label: 'Read clipboard' },
+  clipboard_write:     { icon: Copy,        label: 'Write clipboard' },
+  reveal_in_finder:    { icon: FolderOpen,  label: 'Reveal in Finder' },
+  open_preview:        { icon: Globe,       label: 'Open preview' },
   git_clone:         { icon: GitBranch,   label: 'Clone repo' },
   git_pull:          { icon: GitBranch,   label: 'Git pull' },
   git_status:        { icon: GitBranch,   label: 'Git status' },
@@ -461,6 +467,8 @@ function ThinkingEvent({ data }) {
   );
 }
 
+const FILE_WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_file', 'search_replace', 'apply_search_replace']);
+
 function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) {
   const [expanded, setExpanded] = useState(false);
   const { icon: Icon, label } = getToolMeta(data?.tool);
@@ -471,6 +479,11 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
   const isMalformed = result?.code === 'invalid_tool_arguments';
   const summary = getResultSummary(result, data?.tool);
   const intent = getToolIntent(data);
+
+  const canReveal = window.electronAPI?.shellShowInFolder
+    && !isPending && !isError
+    && intent.kind === 'path' && intent.value
+    && FILE_WRITE_TOOLS.has(data?.tool);
 
   const content = (
     <div className="group rounded-md px-2 py-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 midnight:hover:bg-slate-900/50">
@@ -494,9 +507,22 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             )}
           </button>
 
-          <p className="mt-0.5 truncate pl-5 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-            {intent.value}
-          </p>
+          <div className="mt-0.5 flex items-center gap-2 pl-5">
+            <p className="min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+              {intent.value}
+            </p>
+            {canReveal && (
+              <button
+                type="button"
+                onClick={() => window.electronAPI.shellShowInFolder(intent.value)}
+                className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-300"
+                title="Reveal in Finder"
+              >
+                <FolderOpen className="h-2.5 w-2.5" />
+                Show
+              </button>
+            )}
+          </div>
 
           {/* Streaming progress output (shown while running) */}
           {isPending && progress && (
@@ -2541,6 +2567,16 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
         break;
       case 'status':
         rendered.push(<StatusEvent key={i} data={ev.data} onRunWithAction={onRunWithAction} />);
+        break;
+      case 'preview_url':
+        rendered.push(
+          <FeedFrame key={i} className="mb-1.5">
+            <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 midnight:text-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/20 midnight:bg-indigo-950/20">
+              <Globe className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>Preview panel opened at <strong>{ev.data?.url}</strong></span>
+            </div>
+          </FeedFrame>
+        );
         break;
       case 'stop_reason':
         rendered.push(<StopReasonBanner key={i} data={ev.data} toolResults={[...allToolsSeen]} />);

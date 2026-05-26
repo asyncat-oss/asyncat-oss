@@ -520,6 +520,7 @@ export const MessageInputV2 = ({
   isRunning = false,
   onStop,
   externalFileAttachment = null,
+  onNativeFileAttach = null,
   workingContext = null,
   onWorkingContextChange,
   reasoningEffort = "auto",
@@ -1611,6 +1612,26 @@ export const MessageInputV2 = ({
                         <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
                         <span className="flex-1 font-medium">{chatOnlyMode ? "Attach prompt files" : "Add photos & files"}</span>
                       </button>
+
+                      {window?.electronAPI?.openFilesDialog && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setOpenMenu(null);
+                            const result = await window.electronAPI.openFilesDialog({ multiSelections: false });
+                            if (result?.canceled || !result?.filePaths?.length) return;
+                            const filePath = result.filePaths[0];
+                            const name = filePath.split('/').pop() || filePath.split('\\').pop() || 'file';
+                            if (onNativeFileAttach) {
+                              onNativeFileAttach({ name, path: filePath, type: 'file', nonce: Date.now() });
+                            }
+                          }}
+                          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
+                        >
+                          <Folder className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+                          <span className="flex-1 font-medium">Browse with Finder</span>
+                        </button>
+                      )}
 
 
 

@@ -24,6 +24,10 @@ class ShellSession {
     this.id = id;
     this.cwd = cwd;
     this.alive = false;
+    this.pid = null;
+    this.lastCommand = '';
+    this.lastOutput = '';
+    this.startedAt = Date.now();
     this._proc = null;
     this._outputBuf = '';
     this._resolveFn = null;
@@ -49,6 +53,7 @@ class ShellSession {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.alive = true;
+    this.pid = this._proc.pid;
     this._outputBuf = '';
 
     this._proc.stdout.on('data', d => this._onData(d.toString()));
@@ -125,6 +130,7 @@ class ShellSession {
       ? raw.slice(0, MAX_OUTPUT_CHARS) + '\n... [output truncated]'
       : raw;
 
+    this.lastOutput = trimmed.trimEnd().slice(-2000); // keep last 2k chars for display
     resolve({ output: trimmed.trimEnd(), exitCode, success: exitCode === 0 });
   }
 
@@ -143,6 +149,7 @@ class ShellSession {
     if (!this.alive) return Promise.resolve({ success: false, error: 'Session has closed.', output: '', exitCode: -1 });
     if (this._resolveFn) return Promise.resolve({ success: false, error: 'Another command is already running in this session.', output: '', exitCode: -1 });
 
+    this.lastCommand = command;
     this._sentinel = `${SENTINEL_PREFIX}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     this._outputBuf = '';
     this._lastStreamedLen = 0;
@@ -248,11 +255,27 @@ class ShellSessionManager {
     const results = [];
     for (const [key, s] of this._sessions) {
       if (!agentSessionId || key.startsWith(`${agentSessionId}::`)) {
-        const name = key.split('::')[1] || 'default';
-        results.push({ name, alive: s.alive, cwd: s.cwd });
+        const [sessionId, name] = key.split('::');
+        results.push({
+          key,
+          name: name || 'default',
+          agentSessionId: sessionId,
+          alive: s.alive,
+          cwd: s.cwd,
+          pid: s.pid,
+          lastCommand: s.lastCommand,
+          lastOutput: s.lastOutput,
+          startedAt: s.startedAt,
+        });
       }
     }
     return results;
+  }
+
+  killByKey(key) {
+    const s = this._sessions.get(key);
+    if (s) { s.close('explicit'); this._sessions.delete(key); return true; }
+    return false;
   }
 }
 
