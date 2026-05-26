@@ -402,7 +402,28 @@ function TermTab({ label, isActive, onActivate, onClose }) {
   );
 }
 
-function AgentSessionTab({ session, isActive, onActivate, onDismiss }) {
+function AgentSessionTab({ session, isActive, onActivate, onStopAndClose, onDismiss }) {
+  const [confirmStop, setConfirmStop] = useState(false);
+
+  // Inline confirm state when trying to close a running process
+  if (confirmStop) {
+    return (
+      <div className="flex shrink-0 items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 dark:border-red-900/40 dark:bg-red-950/20 midnight:border-red-900/30 midnight:bg-red-950/10">
+        <span className="whitespace-nowrap text-[10px] font-medium text-red-600 dark:text-red-400">Stop {session.name}?</span>
+        <button
+          type="button"
+          onClick={() => { onStopAndClose(session.key); setConfirmStop(false); }}
+          className="rounded bg-red-500 px-1.5 py-px text-[10px] text-white hover:bg-red-600"
+        >Stop</button>
+        <button
+          type="button"
+          onClick={() => setConfirmStop(false)}
+          className="rounded px-1 py-px text-[10px] text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+        >Cancel</button>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -413,20 +434,29 @@ function AgentSessionTab({ session, isActive, onActivate, onDismiss }) {
           : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-200'
       }`}
     >
-      {/* Alive/stopped indicator dot */}
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
         session.alive
           ? 'bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.7)]'
           : 'bg-gray-400 dark:bg-gray-600'
       }`} />
       <span className="max-w-[7rem] truncate">{session.name}</span>
-      {/* Dismiss (X) — only closes the tab view, does not kill the process */}
+      {/* X on alive → confirm stop; X on stopped → just dismiss */}
       <span
         role="button"
         tabIndex={0}
-        title="Hide tab (does not stop the process)"
-        onClick={(e) => { e.stopPropagation(); onDismiss(); }}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onDismiss(); } }}
+        title={session.alive ? 'Stop process & close' : 'Close'}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (session.alive) setConfirmStop(true);
+          else onDismiss(session.key);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.stopPropagation();
+            if (session.alive) setConfirmStop(true);
+            else onDismiss(session.key);
+          }
+        }}
         className="ml-0.5 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-400/20"
       >
         <X className="h-2.5 w-2.5" />
@@ -527,6 +557,12 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
     setKillingKeys(prev => { const next = new Set(prev); next.delete(key); return next; });
   }, []);
 
+  // Stop the process AND remove the tab
+  const handleStopAndClose = useCallback(async (key) => {
+    await handleKillSession(key);
+    dismissAgentSession(key);
+  }, [handleKillSession, dismissAgentSession]);
+
   const visibleAgentSessions = agentSessions.filter(s => !dismissedSessions.has(s.key));
   const hasElectron = Boolean(window.electronAPI?.terminalCreate);
   const hasAgentSessions = visibleAgentSessions.length > 0;
@@ -558,7 +594,8 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
           session={s}
           isActive={activeId === s.key}
           onActivate={() => setActiveId(s.key)}
-          onDismiss={() => dismissAgentSession(s.key)}
+          onStopAndClose={handleStopAndClose}
+          onDismiss={dismissAgentSession}
         />
       ))}
 

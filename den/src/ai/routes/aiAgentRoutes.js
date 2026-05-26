@@ -42,6 +42,7 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
 import { shellSessionManager } from '../../agent/ShellSessionManager.js';
+import { resolveBrowserCommand } from '../../agent/browserCommandQueue.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -1172,6 +1173,15 @@ router.delete('/processes/:key', authenticate, (req, res) => {
   const key = decodeURIComponent(req.params.key);
   const killed = shellSessionManager.killByKey(key);
   res.json({ success: killed, key });
+});
+
+// ── Preview browser command result (called by the frontend after executing
+//    a browser_command SSE event on the live webview) ──────────────────────
+// No authenticate — this is always called from the local Electron renderer.
+router.post('/browser/result/:commandId', (req, res) => {
+  const { commandId } = req.params;
+  const found = resolveBrowserCommand(commandId, req.body || {});
+  res.json({ success: found, commandId });
 });
 
 router.get('/runtime/status', authenticate, async (req, res) => {

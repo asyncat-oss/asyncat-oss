@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
-import { useState, useRef, useEffect } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, FilePlus, ArrowLeft, List, SquareTerminal, Bug, Camera } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, List, SquareTerminal, Bug, Camera } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import HistoryPanel from './HistoryPanel';
@@ -25,7 +25,7 @@ const panelMeta = {
 
 const isElectron = Boolean(window?.electronAPI);
 
-function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, webviewRef }) {
+function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, onLoadError, webviewRef }) {
   const internalRef = useRef(null);
   const ref = webviewRef || internalRef;
   useEffect(() => {
@@ -38,29 +38,51 @@ function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, webviewRef }) 
     // Catch renderer crashes — surface them in UI instead of killing the app
     const handleCrash = () => onCrash?.();
     const handleGone  = () => onCrash?.();
+    // Catch network/connection errors (ERR_CONNECTION_REFUSED etc.)
+    const handleFailLoad = (e) => {
+      // errorCode -3 (ERR_ABORTED) happens on navigation cancel — ignore it
+      if (e.errorCode === -3) return;
+      // Only care about the main frame failing, not sub-resources
+      if (e.isMainFrame === false) return;
+      onLoadError?.(e.errorCode, e.errorDescription);
+    };
     el.addEventListener('did-start-loading', start);
     el.addEventListener('did-stop-loading', stop);
+    el.addEventListener('did-fail-load', handleFailLoad);
     el.addEventListener('new-window', blockPopup);
     el.addEventListener('crashed', handleCrash);
     el.addEventListener('render-process-gone', handleGone);
     return () => {
       el.removeEventListener('did-start-loading', start);
       el.removeEventListener('did-stop-loading', stop);
+      el.removeEventListener('did-fail-load', handleFailLoad);
       el.removeEventListener('new-window', blockPopup);
       el.removeEventListener('crashed', handleCrash);
       el.removeEventListener('render-process-gone', handleGone);
     };
-  }, [onLoadStart, onLoadStop, onCrash]);
+  }, [onLoadStart, onLoadStop, onCrash, onLoadError]);
   // partition="sandbox" isolates cookies/storage from the main app session
   // eslint-disable-next-line react/no-unknown-property
   return <webview ref={ref} src={url} partition="sandbox" style={{ width: '100%', height: '100%', display: 'flex', border: 'none' }} />;
 }
 
-function PreviewPanel({ initialUrl }) {
+function getNetworkErrorMessage(code) {
+  switch (code) {
+    case -102: return 'Connection refused — the server may not be running yet.';
+    case -105: return 'Hostname not found — check the URL.';
+    case -118: return 'Connection timed out — the server isn\'t responding.';
+    case -6:   return 'Page not found.';
+    case -21:  return 'Network changed — try reloading.';
+    default:   return 'The page couldn\'t be loaded.';
+  }
+}
+
+function PreviewPanel({ initialUrl, browserExecutorRef }) {
   const [url, setUrl] = useState(initialUrl || '');
   const [inputUrl, setInputUrl] = useState(initialUrl || '');
   const [loading, setLoading] = useState(Boolean(initialUrl));
   const [crashed, setCrashed] = useState(false);
+  const [loadError, setLoadError] = useState(null); // { code, description }
   const iframeRef = useRef(null);
   const webviewRef = useRef(null);
   const [key, setKey] = useState(0);
@@ -71,6 +93,7 @@ function PreviewPanel({ initialUrl }) {
       setUrl(initialUrl);
       setInputUrl(initialUrl);
       setLoading(true);
+      setLoadError(null);
       setKey(k => k + 1);
     }
   }, [initialUrl]);
@@ -83,6 +106,14 @@ function PreviewPanel({ initialUrl }) {
     setInputUrl(full);
     setLoading(true);
     setCrashed(false);
+    setLoadError(null);
+    setKey(k => k + 1);
+  };
+
+  const reload = () => {
+    setLoading(true);
+    setCrashed(false);
+    setLoadError(null);
     setKey(k => k + 1);
   };
 
@@ -90,13 +121,78 @@ function PreviewPanel({ initialUrl }) {
     setLoading(false);
   };
 
+  // ── Register browser executor for the agent's preview_* tools ────────────
+  // The executor is called by CommandCenterV2Enhanced when a browser_command
+  // SSE event arrives from the agent.
+  const executeBrowserCommand = useCallback(async ({ action, selector, value, url: navUrl, code }) => {
+    const webview = webviewRef.current;
+    if (!webview) {
+      return { success: false, error: 'Preview webview not mounted. Use preview_navigate to load a URL first.' };
+    }
+    try {
+      switch (action) {
+        case 'screenshot': {
+          const image = await webview.capturePage();
+          if (!image) return { success: false, error: 'capturePage returned null' };
+          return { success: true, dataUrl: image.toDataURL(), format: 'image/png;base64', url: webview.getURL?.() || '' };
+        }
+        case 'navigate': {
+          webview.loadURL(navUrl);
+          await new Promise((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error('Navigation timed out after 10s')), 10000);
+            webview.addEventListener('did-stop-loading', () => { clearTimeout(t); resolve(); }, { once: true });
+          });
+          return { success: true, url: navUrl };
+        }
+        case 'click': {
+          return webview.executeJavaScript(`(function(){
+            const el = document.querySelector(${JSON.stringify(selector)});
+            if (!el) return { success: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
+            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+            el.click();
+            return { success: true, tag: el.tagName, text: (el.textContent||'').trim().slice(0,80) };
+          })()`);
+        }
+        case 'fill': {
+          return webview.executeJavaScript(`(function(){
+            const el = document.querySelector(${JSON.stringify(selector)});
+            if (!el) return { success: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
+            el.focus();
+            el.value = ${JSON.stringify(value)};
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return { success: true };
+          })()`);
+        }
+        case 'get_text': {
+          const text = await webview.executeJavaScript('document.body.innerText');
+          return { success: true, text: (text || '').slice(0, 8000), url: webview.getURL?.() || '' };
+        }
+        case 'evaluate': {
+          const result = await webview.executeJavaScript(code);
+          return { success: true, result: JSON.stringify(result)?.slice(0, 4000) };
+        }
+        default:
+          return { success: false, error: `Unknown browser action: ${action}` };
+      }
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }, []); // webviewRef is a stable ref — access .current at call time
+
+  useEffect(() => {
+    if (!browserExecutorRef || !isElectron) return;
+    browserExecutorRef.current = executeBrowserCommand;
+    return () => { if (browserExecutorRef.current === executeBrowserCommand) browserExecutorRef.current = null; };
+  }, [browserExecutorRef, executeBrowserCommand]);
+
   return (
     <div className="flex h-full flex-col min-h-0">
       {/* Address bar */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-2 py-1.5">
         <button
           type="button"
-          onClick={() => { setKey(k => k + 1); setLoading(true); setCrashed(false); }}
+          onClick={reload}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
           title="Reload"
         >
@@ -193,11 +289,35 @@ function PreviewPanel({ initialUrl }) {
           </div>
         ) : (
           <>
-            {loading && !crashed && (
+            {/* Spinner — shown during load, hidden once done or errored */}
+            {loading && !crashed && !loadError && (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-gray-950/80 midnight:bg-slate-950/80">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
               </div>
             )}
+
+            {/* Connection / network error */}
+            {loadError && !crashed && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white dark:bg-gray-950 midnight:bg-slate-950 p-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 dark:bg-amber-950/30">
+                  <WifiOff className="h-6 w-6 text-amber-500" />
+                </div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Can't connect</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs leading-relaxed">
+                  {getNetworkErrorMessage(loadError.code)}
+                </p>
+                <p className="text-[10px] font-mono text-gray-400 dark:text-gray-600 break-all max-w-xs">{url}</p>
+                <button
+                  type="button"
+                  onClick={reload}
+                  className="mt-1 rounded-lg bg-gray-100 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Renderer crash */}
             {crashed && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white dark:bg-gray-950 midnight:bg-slate-950 p-6 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 dark:bg-red-950/30">
@@ -207,21 +327,23 @@ function PreviewPanel({ initialUrl }) {
                 <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs">This site caused the preview renderer to crash. It may be running malicious scripts or consuming too much memory.</p>
                 <button
                   type="button"
-                  onClick={() => { setCrashed(false); setLoading(true); setKey(k => k + 1); }}
+                  onClick={reload}
                   className="mt-1 rounded-lg bg-gray-100 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
                   Try again
                 </button>
               </div>
             )}
+
             {isElectron ? (
               <ElectronWebview
                 key={key}
                 url={url}
                 webviewRef={webviewRef}
-                onLoadStart={() => setLoading(true)}
+                onLoadStart={() => { setLoading(true); setLoadError(null); }}
                 onLoadStop={() => setLoading(false)}
                 onCrash={() => { setCrashed(true); setLoading(false); }}
+                onLoadError={(code, description) => { setLoadError({ code, description }); setLoading(false); }}
               />
             ) : (
               <iframe
@@ -414,6 +536,7 @@ export default function CommandCenterSidePanel({
   selectedArtifact = null,
   chatNavItems = [],
   agentTerminalOutput = [],
+  browserExecutorRef = null,
 }) {
   const currentTab = activeTab === 'git' || activeTab === 'sandboxes' ? 'code' : (activeTab || 'steps');
   const meta = panelMeta[currentTab] || panelMeta.steps;
@@ -483,7 +606,7 @@ export default function CommandCenterSidePanel({
           <SavedMessagesPanel highlights={highlights} onOpenMessage={onOpenSavedMessage} />
         )}
         {currentTab === 'preview' && (
-          <PreviewPanel initialUrl={previewUrl} />
+          <PreviewPanel initialUrl={previewUrl} browserExecutorRef={browserExecutorRef} />
         )}
         {currentTab === 'artifacts' && (
           <ArtifactsPanel artifacts={artifacts} onSelectArtifact={onSelectArtifact} />

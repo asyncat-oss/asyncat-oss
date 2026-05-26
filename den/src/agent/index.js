@@ -45,6 +45,7 @@ import { lspTools } from './tools/lspTools.js';
 import { searchReplaceBlockTools } from './tools/searchReplaceBlockTool.js';
 import { desktopTools } from './tools/desktopTools.js';
 import { previewTools } from './tools/previewTool.js';
+import { previewBrowserTools } from './tools/previewBrowserTools.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -110,6 +111,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(searchReplaceBlockTools);
   toolRegistry.registerAll(desktopTools);
   toolRegistry.registerAll(previewTools);
+  toolRegistry.registerAll(previewBrowserTools);
 
   // Browser tools are optional — puppeteer may not be installed
   try {

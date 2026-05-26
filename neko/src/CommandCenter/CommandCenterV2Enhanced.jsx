@@ -272,6 +272,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  // Ref to the live preview webview executor — set by PreviewPanel when mounted
+  const browserExecutorRef = useRef(null);
 
   const exportMenuRef = useRef(null);
   const branchMenuRef = useRef(null);
@@ -1363,6 +1365,44 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             setShowActivitySidebar(true);
             setSidePanelTab('preview');
             try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch {}
+          }
+        }
+
+        // browser_command — execute on the live preview webview and POST result back to den
+        if (event.type === 'browser_command') {
+          const { commandId, action, ...params } = event.data || {};
+          if (commandId) {
+            (async () => {
+              let result = { success: false, error: 'Preview panel not open or webview not loaded. Use preview_navigate first.' };
+              try {
+                // Wait up to 3s for the executor to be available (Preview tab may still be mounting)
+                let executor = browserExecutorRef.current;
+                if (!executor) {
+                  for (let i = 0; i < 6; i++) {
+                    await new Promise(r => setTimeout(r, 500));
+                    executor = browserExecutorRef.current;
+                    if (executor) break;
+                  }
+                }
+                if (executor) {
+                  result = await executor({ action, ...params });
+                }
+              } catch (err) {
+                result = { success: false, error: err.message };
+              }
+              // POST result back to den so the pending promise resolves
+              try {
+                const token = (await import('../services/authService.js')).default.getAccessToken();
+                await fetch(`${import.meta.env.VITE_MAIN_URL}/api/agent/browser/result/${commandId}`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify(result),
+                });
+              } catch { /* if POST fails, the agent tool will time out gracefully */ }
+            })();
           }
         }
 
@@ -3069,6 +3109,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
+              browserExecutorRef={browserExecutorRef}
             />
           </div>
         </aside>
@@ -3117,6 +3158,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
+              browserExecutorRef={browserExecutorRef}
             />
           </div>
         </div>
