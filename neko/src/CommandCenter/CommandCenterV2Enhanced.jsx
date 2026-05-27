@@ -362,6 +362,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   // Skill-learned toast
   const [skillToast, setSkillToast] = useState(null);
+  // Track whether we're on an xl+ (≥1280px) viewport so we can skip mounting
+  // the mobile-overlay SidePanel on desktop. CSS display:none alone is NOT
+  // enough — a hidden <webview> still runs JS and plays audio in Electron.
+  const [isXLScreen, setIsXLScreen] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1280px)').matches : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)');
+    const handler = (e) => setIsXLScreen(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const skillToastTimerRef = useRef(null);
   // Brain stats (welcome screen ambient indicator)
   const [brainStats, setBrainStats] = useState(null);
@@ -2347,17 +2359,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }, 250);
   }, [exportEntries, exportTitle]);
 
-  const TopBar = isGhostMode ? (
-    <div className="flex items-center justify-end px-4 py-2">
-      <button
-        onClick={toggleGhostMode}
-        className="p-1.5 rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-800/50"
-        title="Exit Ghost Mode"
-      >
-        <Ghost className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-      </button>
-    </div>
-  ) : null;
+  const TopBar = null;
 
   if (!commandCenterContext) {
     return (
@@ -2408,9 +2410,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const welcomeScreenJSX =
     !hasConversationContent ? (
       <div className="flex flex-col min-h-full relative">
-        {!isGhostMode && (
-          <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
-            <ConversationSwitcher compact />
+        <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
+          {!isGhostMode && <ConversationSwitcher compact />}
+          {!isGhostMode && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('code')}
@@ -2419,7 +2421,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                   ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                   : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
               }`}
-              title="Code"
+              title="Code & Git"
             >
               <Code2 className="w-4 h-4" />
               {gitState?.detected && (
@@ -2431,8 +2433,53 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 </span>
               )}
             </button>
-          </div>
-        )}
+          )}
+          {!isGhostMode && (
+            <button
+              type="button"
+              onClick={() => toggleSidePanelTab('preview')}
+              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
+                showActivitySidebar && sidePanelTab === 'preview'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+              }`}
+              title="Web browser"
+            >
+              <Globe className="w-4 h-4" />
+            </button>
+          )}
+          {!isGhostMode && (
+            <button
+              type="button"
+              onClick={() => toggleSidePanelTab('terminal')}
+              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
+                showActivitySidebar && sidePanelTab === 'terminal'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+              }`}
+              title="Terminal"
+            >
+              <SquareTerminal className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (isGhostMode) {
+                setCurrentChatRun({ events: [], running: false, streamingText: '', streamingReasoning: '', goal: '' });
+              }
+              toggleGhostMode();
+            }}
+            className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
+              isGhostMode
+                ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300'
+                : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800'
+            }`}
+            title={isGhostMode ? 'Exit Ghost Mode — history saving will resume' : 'Ghost Mode — chat without saving history'}
+          >
+            <Ghost className="w-4 h-4" />
+          </button>
+        </div>
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
           <div className="max-w-3xl w-full">
             <div className="flex flex-col items-center gap-3 mb-6 text-center">
@@ -2513,7 +2560,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 runtimeStatus={runtimeStatus}
                 runtimePanelOpen={showActivitySidebar && sidePanelTab === 'runtime'}
               />
-
 
           </div>
         </div>
@@ -2687,24 +2733,23 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         </button>
                       )}
 
-                      {effectivePreviewUrl && (
-                        <button
-                          type="button"
-                          onClick={() => toggleSidePanelTab('preview')}
-                          className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                            showActivitySidebar && sidePanelTab === 'preview'
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 midnight:bg-emerald-950/30'
-                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                          }`}
-                          title={`Preview: ${effectivePreviewUrl}`}
-                        >
-                          <span className="relative flex items-center">
-                            <Globe className="h-4 w-4" />
-                            <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          </span>
-                          <span className="hidden sm:inline">Preview</span>
-                        </button>
-                      )}
+                      {/* Web panel — always visible; dot badge when a URL is loaded */}
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('preview')}
+                        className={`relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
+                          showActivitySidebar && sidePanelTab === 'preview'
+                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title={effectivePreviewUrl ? `Web — ${effectivePreviewUrl}` : 'Open web browser'}
+                      >
+                        <Globe className="h-4 w-4" />
+                        <span className="hidden sm:inline">Web</span>
+                        {effectivePreviewUrl && !(showActivitySidebar && sidePanelTab === 'preview') && (
+                          <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        )}
+                      </button>
 
                       <button
                         type="button"
@@ -2875,9 +2920,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       {isGhostMode && (
                         <button
                           type="button"
-                          onClick={toggleGhostMode}
+                          onClick={() => {
+                            // Clear the draft run (events, streaming state) before toggling off
+                            // so persistedAgentEvents becomes empty and the welcome screen shows
+                            setCurrentChatRun({ events: [], running: false, streamingText: '', streamingReasoning: '', goal: '' });
+                            toggleGhostMode();
+                          }}
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-gray-800/50"
-                          title="Exit Incognito Mode"
+                          title="Exit Ghost Mode"
                         >
                           <Ghost className="w-5 h-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400" />
                         </button>
@@ -3115,7 +3165,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         </aside>
       )}
 
-      {showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+      {/* Mobile overlay — only mount on non-xl screens. CSS display:none alone is not
+          enough because Electron <webview> elements stay alive (play audio, run JS) even
+          when hidden. By gating on !isXLScreen we guarantee only ONE webview mounts. */}
+      {!isXLScreen && showActivitySidebar && (sidePanelTab === 'history' || sidePanelTab === 'saved' || sidePanelTab === 'preview' || sidePanelTab === 'artifacts' || sidePanelTab === 'artifact' || sidePanelTab === 'nav' || sidePanelTab === 'code' || sidePanelTab === 'runtime' || sidePanelTab === 'terminal' || gitState?.detected || sourceCatalog.totalCount > 0 || persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
         <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
           <button
             type="button"

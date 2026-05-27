@@ -2158,6 +2158,9 @@ export class AgentRuntime {
     const maxString = TOOL_CONTEXT_LIMITS[toolName] || 3000;
     const compact = Array.isArray(result) ? [...result] : { ...result };
     for (const [key, value] of Object.entries(compact)) {
+      // Skip dataUrl — it is a base64 image that gets passed as an image content
+      // block in _toolResultMessage. Truncating it here would destroy it.
+      if (key === 'dataUrl') continue;
       if (typeof value === 'string' && value.length > maxString) {
         compact[key] = `${value.slice(0, maxString)}\n... [truncated for model context: ${value.length - maxString} more chars]`;
         compact.truncated_for_context = true;
@@ -2167,7 +2170,27 @@ export class AgentRuntime {
   }
 
   _toolResultMessage(toolCall, result, nativeTools = false) {
+    // If the result contains a dataUrl (e.g. from preview_screenshot), pass the
+    // image as a proper content block so vision-capable models can actually SEE it.
+    // Strip dataUrl from the text portion to avoid sending a giant base64 string as text.
+    const dataUrl = result?.dataUrl;
+    const textResult = dataUrl
+      ? (() => { const { dataUrl: _omit, ...rest } = result; return rest; })()
+      : result;
+
     if (nativeTools) {
+      if (dataUrl) {
+        // Multimodal tool result: text summary + image the model can see
+        return {
+          role: 'tool',
+          tool_call_id: toolCall.call_id,
+          name: toolCall.tool_name,
+          content: [
+            { type: 'text', text: typeof textResult === 'string' ? textResult : JSON.stringify(textResult) },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        };
+      }
       const content = typeof result === 'string' ? result : JSON.stringify(result);
       return {
         role: 'tool',
@@ -2177,9 +2200,13 @@ export class AgentRuntime {
       };
     }
 
+    // Non-native (XML-in-user-message format) — strip dataUrl, add a note
+    const nonNativeResult = dataUrl
+      ? { ...textResult, note: 'Screenshot captured — image available in the Web panel.' }
+      : result;
     return {
       role: 'user',
-      content: ToolCallFormatter.formatToolResult(toolCall.tool_name, toolCall.call_id, result),
+      content: ToolCallFormatter.formatToolResult(toolCall.tool_name, toolCall.call_id, nonNativeResult),
     };
   }
 

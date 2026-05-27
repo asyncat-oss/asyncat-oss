@@ -150,4 +150,120 @@ that don't have a simple CSS selector. Result is JSON-serialised (max 4000 chars
       return execBrowserCommand('evaluate', { code }, context);
     },
   },
+
+  // ── Wait for reload ───────────────────────────────────────────────────────
+  {
+    name: 'preview_wait_for_reload',
+    description: `Wait for the Preview panel page to reload and finish loading (up to 30 s).
+Use this AFTER editing source files when a dev server with hot-module replacement (Vite,
+webpack, etc.) is running. The tool blocks until the webview fires a load-complete event.
+
+Typical iterate loop:
+  1. preview_screenshot → see current state
+  2. Edit source files with file tools
+  3. preview_wait_for_reload → wait for HMR to apply
+  4. preview_screenshot → see the new result
+  5. Evaluate and repeat if needed
+
+Returns { success: true, url } on reload, or { success: true, note: 'timeout' } if 30 s elapsed.`,
+    permission: PermissionLevel.SAFE,
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+    async execute(_params, context) {
+      return execBrowserCommand('wait_for_reload', {}, context, 32000);
+    },
+  },
+
+  // ── Tab management ────────────────────────────────────────────────────────
+  {
+    name: 'preview_list_tabs',
+    description: `List all open tabs in the Web panel with their index, URL, title, and active status.
+Use this before preview_switch_tab or preview_close_tab to discover tab indices.`,
+    permission: PermissionLevel.SAFE,
+    parameters: { type: 'object', properties: {}, required: [] },
+    async execute(_params, context) {
+      return execBrowserCommand('list_tabs', {}, context, 5000);
+    },
+  },
+
+  {
+    name: 'preview_open_tab',
+    description: `Open a new tab in the Web panel, optionally navigating to a URL.
+The new tab becomes the active tab. All subsequent preview tools (screenshot, click, fill, etc.)
+will operate on this new tab until you call preview_switch_tab.
+Useful when you need to open a second page alongside an existing one.`,
+    permission: PermissionLevel.SAFE,
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'URL to open in the new tab (optional — omit for a blank tab)' },
+      },
+    },
+    async execute({ url }, context) {
+      return execBrowserCommand('open_tab', { url: url || '' }, context, 8000);
+    },
+  },
+
+  {
+    name: 'preview_switch_tab',
+    description: `Switch the active tab in the Web panel by index (0-based) or by URL substring.
+Use preview_list_tabs first to discover available tabs and their indices.`,
+    permission: PermissionLevel.SAFE,
+    parameters: {
+      type: 'object',
+      properties: {
+        index: { type: 'number', description: '0-based tab index to switch to' },
+        url:   { type: 'string', description: 'Switch to the tab whose URL contains this string (used if index is not provided)' },
+      },
+    },
+    async execute({ index, url }, context) {
+      return execBrowserCommand('switch_tab', { index: index ?? null, url: url ?? null }, context, 4000);
+    },
+  },
+
+  {
+    name: 'preview_close_tab',
+    description: `Close a tab in the Web panel by index. If no index is given, closes the active tab.
+Cannot close the last remaining tab (it will be cleared to a blank state instead).`,
+    permission: PermissionLevel.SAFE,
+    parameters: {
+      type: 'object',
+      properties: {
+        index: { type: 'number', description: '0-based index of the tab to close (defaults to active tab)' },
+      },
+    },
+    async execute({ index }, context) {
+      return execBrowserCommand('close_tab', { index: index ?? null }, context, 4000);
+    },
+  },
+
+  // ── Scroll ────────────────────────────────────────────────────────────────
+  {
+    name: 'preview_scroll',
+    description: `Scroll the Preview panel page up or down by a given number of pixels.
+Useful for inspecting pages taller than the visible viewport before taking a screenshot,
+or for triggering scroll-triggered animations or lazy-loading.`,
+    permission: PermissionLevel.SAFE,
+    parameters: {
+      type: 'object',
+      properties: {
+        direction: {
+          type: 'string',
+          enum: ['up', 'down'],
+          description: 'Direction to scroll',
+        },
+        amount: {
+          type: 'number',
+          description: 'Pixels to scroll (default 400)',
+        },
+      },
+      required: ['direction'],
+    },
+    async execute({ direction, amount = 400 }, context) {
+      return execBrowserCommand('scroll', { direction, amount }, context, 5000);
+    },
+  },
 ];

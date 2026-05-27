@@ -626,6 +626,7 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
           <Plus className="h-3.5 w-3.5" />
         </button>
       )}
+
     </div>
   );
 
