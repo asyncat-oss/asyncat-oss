@@ -1,6 +1,6 @@
 # asyncat
 
-**A local-first AI agent desktop app.** 155 tools. 49 skills. Self-improving. Desktop automation. Fully offline.
+**A local-first AI agent desktop app.** 211 tools. 49 skills. Self-improving. Desktop automation. Fully offline.
 
 > **v0.7.3** · MIT · [Install](#quick-start) · [Website](https://asyncat.com)
 
@@ -20,7 +20,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 | | |
 |---|---|
-| **155 tools** | Files, shell, git, browser, Docker, screen, keyboard, memory, RAG, notes, calendar, kanban, system, network, audio, image, code analysis, sandboxes, scheduler |
+| **211 tools** | Files, shell, git, browser, Docker, screen, keyboard, memory, RAG, notes, calendar, kanban, system, network, audio, image, code analysis, sandboxes, scheduler |
 | **49 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
 | **Basal Ganglia** | Watches tool patterns across sessions. After 3 successful runs of the same sequence it synthesizes a new skill automatically. No annotation, no config |
 | **4 agent modes** | `chat` (no tools), `plan` (no mutations), `action` (full ReAct loop), `design` (reads only) |
@@ -107,6 +107,25 @@ npm run electron:build:linux
 Output packages go into the `release/` directory.
 
 > Cross-platform note: macOS builds must be done on macOS. Windows builds can be done on macOS/Linux with Wine, or on Windows natively. Linux builds work on any platform.
+
+---
+
+## Upgrading
+
+### Source installs
+
+```bash
+git pull
+npm install
+npm run electron:rebuild
+npm run electron:dev
+```
+
+Run `electron:rebuild` after every `npm install` when Electron or any native module (`better-sqlite3`, `canvas`, `node-pty`) changes version. If you skip it the app will crash on launch with a native module error.
+
+### Pre-built installers
+
+Download the new release from the Releases page and reinstall. In-app updates (`Settings → Updates`) also work for source installs only.
 
 ---
 
