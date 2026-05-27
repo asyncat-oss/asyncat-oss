@@ -16,6 +16,35 @@ const PERM_META = {
   dangerous: { label: 'Dangerous', dot: 'bg-red-500 midnight:bg-red-600/80',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-400/75' },
 };
 
+const OS_META = {
+  mac:   { label: 'macOS',   badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300' },
+  linux: { label: 'Linux',   badge: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 midnight:bg-blue-950/30 midnight:text-blue-400/75' },
+  win:   { label: 'Windows', badge: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 midnight:bg-indigo-950/30 midnight:text-indigo-400/75' },
+};
+
+const ALL_OS = ['mac', 'linux', 'win'];
+
+// Tools with non-trivial platform info. Absence = works on all platforms, no special deps.
+// platforms: which OSes support this tool (subset = restricted)
+// deps: per-OS dependency note shown in the inspector
+const TOOL_OS_INFO = {
+  // macOS + Linux only — no Windows implementation
+  screen_key:         { platforms: ['mac', 'linux'], deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)' } },
+  key_sequence:       { platforms: ['mac', 'linux'], deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)' } },
+  // All platforms — needs external tool on some
+  take_screenshot:    { platforms: ALL_OS, deps: { mac: 'screencapture (built-in)', linux: 'scrot or gnome-screenshot', win: 'PowerShell (built-in)' } },
+  screen_read:        { platforms: ALL_OS, deps: { mac: 'Tesseract (brew install tesseract)', linux: 'Tesseract (apt install tesseract-ocr)', win: 'Tesseract (installer)' } },
+  screen_click:       { platforms: ALL_OS, deps: { mac: 'cliclick (brew install cliclick)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
+  screen_type:        { platforms: ALL_OS, deps: { mac: 'cliclick (brew install cliclick)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
+  screen_find_window: { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
+  window_list:        { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
+  window_focus:       { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
+  active_app:         { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
+  notify:             { platforms: ALL_OS, deps: { mac: 'osascript — grant Notifications in System Settings', linux: 'notify-send (apt install libnotify-bin)', win: 'PowerShell (built-in)' } },
+  app_open:           { platforms: ALL_OS, deps: { mac: 'open (built-in)', linux: 'xdg-open (built-in)', win: 'Start-Process (built-in)' } },
+  app_list:           { platforms: ALL_OS, deps: { mac: '/Applications (built-in)', linux: '.desktop files (built-in)', win: 'Get-StartApps (built-in)' } },
+};
+
 const BRAIN_REGION_META = {
   prefrontal:    { label: 'Planning',      icon: Brain,       color: 'text-violet-500 midnight:text-violet-400/85', desc: 'Goal shaping and step-by-step reasoning' },
   cerebellum:    { label: 'Workflow',      icon: BookOpen,    color: 'text-blue-500 midnight:text-blue-400/85',   desc: 'Procedures, craft patterns, and repeatable execution' },
@@ -274,6 +303,8 @@ MarkdownPanel.propTypes = {
 
 function ToolCard({ tool, isFirst, selected, onSelect }) {
   const perm = PERM_META[tool.permission] || PERM_META.moderate;
+  const osInfo = TOOL_OS_INFO[tool.name];
+  const isRestricted = osInfo?.platforms && osInfo.platforms.length < ALL_OS.length;
 
   return (
     <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800'}>
@@ -288,9 +319,14 @@ function ToolCard({ tool, isFirst, selected, onSelect }) {
         <div className="flex items-start gap-3">
           <span className={'mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full ' + perm.dot} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="truncate font-mono text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{tool.name}</span>
               <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${perm.badge}`}>{perm.label}</span>
+              {isRestricted && osInfo.platforms.map(os => (
+                <span key={os} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${OS_META[os]?.badge}`}>
+                  {OS_META[os]?.label}
+                </span>
+              ))}
             </div>
             <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{tool.description || 'No description'}</p>
           </div>
@@ -474,6 +510,51 @@ function ToolInspector({ tool }) {
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Description</p>
         <MarkdownPanel content={tool.description} />
       </div>
+
+      {(() => {
+        const osInfo = TOOL_OS_INFO[tool.name];
+        if (!osInfo) {
+          return (
+            <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Platform Support</p>
+              <div className="flex gap-2">
+                {ALL_OS.map(os => (
+                  <span key={os} className={`rounded px-2 py-1 text-[10px] font-medium ${OS_META[os].badge}`}>
+                    ✓ {OS_META[os].label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        const supported = osInfo.platforms || ALL_OS;
+        return (
+          <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Platform Support</p>
+            <div className="space-y-2">
+              {ALL_OS.map(os => {
+                const isSupported = supported.includes(os);
+                const dep = osInfo.deps?.[os];
+                return (
+                  <div key={os} className="flex items-start gap-2">
+                    <span className={`mt-0.5 flex-shrink-0 text-[11px] font-semibold w-14 ${isSupported ? 'text-gray-700 dark:text-gray-300 midnight:text-slate-300' : 'text-gray-300 dark:text-gray-600 midnight:text-slate-600'}`}>
+                      {isSupported ? '✓' : '✗'} {OS_META[os].label}
+                    </span>
+                    {isSupported && dep && (
+                      <span className="text-[11px] leading-4 text-gray-500 dark:text-gray-400 midnight:text-slate-400 font-mono bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-800/50 rounded px-1.5 py-0.5">
+                        {dep}
+                      </span>
+                    )}
+                    {!isSupported && (
+                      <span className="text-[11px] leading-4 text-gray-400 dark:text-gray-600 midnight:text-slate-600 italic">Not supported</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {tool.parameters && (
         <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
@@ -739,6 +820,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deletingSkill, setDeletingSkill] = useState(false);
 
+  const [osFilter, setOsFilter] = useState('all');
   const [toolsSidebarOpen, setToolsSidebarOpen] = useState(true);
   const [skillsSidebarOpen, setSkillsSidebarOpen] = useState(true);
   const [soulSidebarOpen, setSoulSidebarOpen] = useState(true);
@@ -926,14 +1008,23 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   }
 
   const filteredTools = useMemo(() => {
-    if (!toolSearch.trim()) return tools;
+    let result = tools;
+    // OS filter — tools without an entry in TOOL_OS_INFO support all platforms
+    if (osFilter !== 'all') {
+      result = result.filter(t => {
+        const info = TOOL_OS_INFO[t.name];
+        if (!info?.platforms) return true; // no restriction = works everywhere
+        return info.platforms.includes(osFilter);
+      });
+    }
+    if (!toolSearch.trim()) return result;
     const q = toolSearch.toLowerCase();
-    return tools.filter(t =>
+    return result.filter(t =>
       t.name.toLowerCase().includes(q) ||
       (t.description || '').toLowerCase().includes(q) ||
       (t.category || '').toLowerCase().includes(q)
     );
-  }, [tools, toolSearch]);
+  }, [tools, toolSearch, osFilter]);
 
   const filteredSkills = useMemo(() => {
     const byOrigin = skillOriginFilter === 'all'
@@ -1084,6 +1175,25 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Safe</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{safeCount}</span></div>
                     <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Moderate</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{modCount}</span></div>
                     <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500" />Dangerous</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{dangerCount}</span></div>
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Operating System</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {[{ id: 'all', label: 'All' }, { id: 'mac', label: 'macOS' }, { id: 'linux', label: 'Linux' }, { id: 'win', label: 'Windows' }].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setOsFilter(opt.id)}
+                        className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                          osFilter === opt.id
+                            ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white midnight:bg-slate-700 midnight:text-slate-100'
+                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
