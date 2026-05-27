@@ -9,7 +9,7 @@ const POPUP_PRELOAD = path.join(__dirname, 'popup-preload.js');
 const POPUP_HTML    = path.join(__dirname, 'popup.html');
 
 const W = 640;
-const H = 168;
+const H = 148;
 
 let popup = null;
 

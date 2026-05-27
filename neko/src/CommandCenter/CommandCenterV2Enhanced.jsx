@@ -2577,375 +2577,333 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           welcomeScreenJSX
         ) : (
           <>
-            <div className="shrink-0 border-b border-transparent bg-white dark:bg-gray-900 midnight:bg-slate-950">
-              <div className={`mx-auto px-3 py-2.5 sm:px-4 md:px-6 ${shouldRenderSidePanel ? 'max-w-[min(100vw,96rem)]' : 'max-w-5xl'}`}>
-                <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex min-w-0 overflow-hidden items-center gap-2 lg:w-[min(28rem,34vw)] lg:shrink-0">
-                    <div className="hidden h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 sm:block" />
+            <div className="shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+              <div className={`mx-auto px-3 sm:px-4 md:px-6 ${shouldRenderSidePanel ? 'max-w-[min(100vw,96rem)]' : 'max-w-5xl'}`}>
 
-                    <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                      {isEditingTitle ? (
-                        <input
-                          type="text"
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          onKeyDown={handleKeyDown}
-                          onBlur={handleSaveRename}
-                          className="h-8 min-w-0 w-full max-w-full rounded-md border border-gray-300 bg-gray-50 px-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
-                          autoFocus
-                        />
-                      ) : currentConversationId && conversationTitle ? (
-                        <button
-                          onClick={handleStartRename}
-                          className="group flex min-w-0 max-w-full flex-1 items-center gap-1.5 overflow-hidden rounded-md px-1 py-1 text-left text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/60 dark:hover:text-white midnight:text-gray-300 midnight:hover:bg-slate-800/60"
-                          title="Click to rename"
-                        >
-                          <span className="block min-w-0 flex-1 truncate">
-                            {conversationTitle}
-                          </span>
-                          <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
-                        </button>
-                      ) : (
-                        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-gray-300">
-                          {conversationTitle || "Untitled Chat"}
-                        </h1>
-                      )}
+                {/* ── Row 1: Title + conversation-level actions ──────────────── */}
+                <div className="flex min-w-0 items-center gap-2 py-2">
+                  <div className="hidden h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 sm:block" />
 
-                      {isGhostMode && (
-                        <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-600 dark:text-gray-300 midnight:text-gray-300 rounded text-xs font-medium">
-                          <Ghost className="w-3 h-3" />
-                          Ghost
-                        </div>
-                      )}
-                    </div>
+                  {/* Title */}
+                  <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                    {isEditingTitle ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        onBlur={handleSaveRename}
+                        className="h-8 min-w-0 w-full max-w-full rounded-md border border-gray-300 bg-gray-50 px-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
+                        autoFocus
+                      />
+                    ) : currentConversationId && conversationTitle ? (
+                      <button
+                        onClick={handleStartRename}
+                        className="group flex min-w-0 max-w-full flex-1 items-center gap-1.5 overflow-hidden rounded-md px-1 py-1 text-left text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/60 dark:hover:text-white midnight:text-gray-300 midnight:hover:bg-slate-800/60"
+                        title="Click to rename"
+                      >
+                        <span className="block min-w-0 flex-1 truncate">{conversationTitle}</span>
+                        <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
+                      </button>
+                    ) : (
+                      <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-gray-300">
+                        {conversationTitle || "Untitled Chat"}
+                      </h1>
+                    )}
+                    {isGhostMode && (
+                      <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-600 dark:text-gray-300 midnight:text-gray-300 rounded text-xs font-medium shrink-0">
+                        <Ghost className="w-3 h-3" />
+                        Ghost
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex min-w-0 flex-1 items-center gap-1">
-                    {/* Scrollable section — no dropdown menus here (overflow-x-auto clips absolute children) */}
-                    <div className="-mx-1 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {!isGhostMode && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={handleStartNewConversation}
-                            className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 sm:px-2.5 sm:text-sm dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
-                            title="Start new conversation"
-                          >
-                            <Plus className="h-4 w-4" />
-                            <span className="hidden sm:inline">New</span>
-                          </button>
-                          <ConversationSwitcher />
-                        </>
-                      )}
-
+                  {/* Conversation actions — non-scrollable so dropdowns aren't clipped */}
+                  <div className="flex shrink-0 items-center gap-1">
+                    {!isGhostMode && (
                       <button
                         type="button"
-                        onClick={() => toggleSidePanelTab('code')}
-                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                          showActivitySidebar && sidePanelTab === 'code'
-                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
-                        title="Show code files, Git, and sandboxes"
+                        onClick={handleStartNewConversation}
+                        className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 sm:px-2.5 sm:text-sm dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
+                        title="Start new conversation"
                       >
-                        <Code2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Code</span>
-                        {gitState?.detected && (
-                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                            {gitState.changedCount || 0}
-                            {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
-                          </span>
-                        )}
+                        <Plus className="h-4 w-4" />
+                        <span className="hidden sm:inline">New</span>
                       </button>
+                    )}
+                    {!isGhostMode && <ConversationSwitcher />}
 
-                      {conversationArtifacts.length > 0 && (
+                    {!isGhostMode && hasConversationBranches && (
+                      <div ref={branchMenuRef} className="relative">
                         <button
                           type="button"
-                          onClick={() => toggleSidePanelTab('artifacts')}
+                          onClick={() => setShowBranchMenu(v => !v)}
                           className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                            showActivitySidebar && sidePanelTab === 'artifacts'
+                            showBranchMenu
                               ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                               : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
                           }`}
-                          title="Show artifacts"
+                          title="Conversation branches"
                         >
-                          <FilePlus className="h-4 w-4" />
-                          <span className="hidden sm:inline">Artifacts</span>
+                          <GitBranch className="h-4 w-4" />
+                          <span className="hidden sm:inline">Branches</span>
                           <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                            {conversationArtifacts.length}
+                            {conversationBranches.length}
                           </span>
                         </button>
-                      )}
-
-                      {sourceCatalog.totalCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => toggleSidePanelTab('media')}
-                          className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                            showActivitySidebar && sidePanelTab === 'media'
-                              ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                          }`}
-                          title="Show all sources and media"
-                        >
-                          <Image className="h-4 w-4" />
-                          <span className="hidden sm:inline">Media</span>
-                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                            {sourceCatalog.totalCount}
-                          </span>
-                        </button>
-                      )}
-
-                      {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            toggleSidePanelTab('steps');
-                          }}
-                          className={`hidden h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-sm font-medium transition-colors xl:inline-flex ${
-                            showActivitySidebar && sidePanelTab === 'steps'
-                              ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                          }`}
-                          title="Show steps"
-                        >
-                          <PanelRightOpen className="h-4 w-4" />
-                          Steps
-                        </button>
-                      )}
-
-                      {savedItemsCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => toggleSidePanelTab('saved')}
-                          className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                            showActivitySidebar && sidePanelTab === 'saved'
-                              ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                          }`}
-                          title="Show bookmarked messages"
-                        >
-                          <BookMarked className="h-4 w-4" />
-                          <span className="hidden sm:inline">Saved</span>
-                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                            {savedItemsCount}
-                          </span>
-                        </button>
-                      )}
-
-                      {/* Web panel — always visible; dot badge when a URL is loaded */}
-                      <button
-                        type="button"
-                        onClick={() => toggleSidePanelTab('preview')}
-                        className={`relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                          showActivitySidebar && sidePanelTab === 'preview'
-                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
-                        title={effectivePreviewUrl ? `Web — ${effectivePreviewUrl}` : 'Open web browser'}
-                      >
-                        <Globe className="h-4 w-4" />
-                        <span className="hidden sm:inline">Web</span>
-                        {effectivePreviewUrl && !(showActivitySidebar && sidePanelTab === 'preview') && (
-                          <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => toggleSidePanelTab('terminal')}
-                        className={`relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                          showActivitySidebar && sidePanelTab === 'terminal'
-                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
-                        title="Terminal & active processes"
-                      >
-                        <SquareTerminal className="h-4 w-4" />
-                        <span className="hidden sm:inline">Terminal</span>
-                        {detectedPreviewUrl && sidePanelTab !== 'terminal' && (
-                          <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-                          </span>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Non-scrollable section — dropdown buttons must live outside overflow-x-auto */}
-                    <div className="flex shrink-0 items-center gap-1">
-                      {!isGhostMode && hasConversationBranches && (
-                        <div ref={branchMenuRef} className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setShowBranchMenu(v => !v)}
-                            className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                              showBranchMenu
-                                ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                            }`}
-                            title="Conversation branches"
-                          >
-                            <GitBranch className="h-4 w-4" />
-                            <span className="hidden sm:inline">Branches</span>
-                            <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                              {conversationBranches.length}
-                            </span>
-                          </button>
-                          {showBranchMenu && (
-                            <div className="absolute right-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                              <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
-                                <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">Conversation branches</div>
-                                <div className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Switch between alternate continuations.</div>
-                              </div>
-                              <div className="max-h-72 overflow-y-auto p-1">
-                                {conversationBranches.map(branch => (
-                                  <div
-                                    key={branch.id}
-                                    className={`group flex w-full items-start gap-2 rounded-md px-2 py-2 transition-colors ${
-                                      branch.active
-                                        ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/70 dark:hover:text-gray-100'
-                                    }`}
-                                  >
-                                    <GitBranch className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${branch.active ? 'text-blue-500' : 'text-gray-400'}`} />
-                                    {editingBranchId === branch.id ? (
-                                      <span className="min-w-0 flex-1">
-                                        <input
-                                          value={branchNameDraft}
-                                          onChange={(e) => setBranchNameDraft(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleRenameBranch(branch.id, branchNameDraft);
-                                            if (e.key === 'Escape') {
-                                              setEditingBranchId(null);
-                                              setBranchNameDraft('');
-                                            }
-                                          }}
-                                          onBlur={() => handleRenameBranch(branch.id, branchNameDraft)}
-                                          className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-800 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:focus:ring-gray-800"
-                                          autoFocus
-                                        />
-                                      </span>
-                                    ) : (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSwitchBranch(branch.id)}
-                                          disabled={branch.active || agentRunning}
-                                          className="min-w-0 flex-1 text-left disabled:cursor-default"
-                                        >
-                                          <span className="block truncate text-xs font-semibold">{branch.label}</span>
-                                          <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">
-                                            {branch.messageCount} messages{branch.active ? ' · current' : ''}
-                                          </span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setEditingBranchId(branch.id);
-                                            setBranchNameDraft(branch.label || '');
-                                          }}
-                                          className="mt-0.5 rounded p-1 text-gray-300 opacity-0 transition-colors hover:bg-white hover:text-gray-600 group-hover:opacity-100 dark:hover:bg-gray-950 dark:hover:text-gray-200"
-                                          title="Rename branch"
-                                        >
-                                          <Edit2 className="h-3.5 w-3.5" />
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
+                        {showBranchMenu && (
+                          <div className="absolute right-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+                            <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
+                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">Conversation branches</div>
+                              <div className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Switch between alternate continuations.</div>
                             </div>
-                          )}
-                        </div>
-                      )}
-
-                      {hasConversationContent && (
-                        <div ref={exportMenuRef} className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setShowExportMenu((v) => !v)}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-gray-800"
-                            title="Export conversation"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-                          {showExportMenu && (
-                            <div className="absolute right-0 top-full mt-1.5 z-50 w-40 bg-white dark:bg-gray-900 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg shadow-xl overflow-hidden">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleExportMarkdown();
-                                  setShowExportMenu(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                              >
-                                Markdown (.md)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleExportHTML();
-                                  setShowExportMenu(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                              >
-                                HTML (.html)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleExportJSON();
-                                  setShowExportMenu(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                              >
-                                JSON (.json)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleExportPDF();
-                                  setShowExportMenu(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                              >
-                                PDF (print)
-                              </button>
+                            <div className="max-h-72 overflow-y-auto p-1">
+                              {conversationBranches.map(branch => (
+                                <div
+                                  key={branch.id}
+                                  className={`group flex w-full items-start gap-2 rounded-md px-2 py-2 transition-colors ${
+                                    branch.active
+                                      ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+                                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/70 dark:hover:text-gray-100'
+                                  }`}
+                                >
+                                  <GitBranch className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${branch.active ? 'text-blue-500' : 'text-gray-400'}`} />
+                                  {editingBranchId === branch.id ? (
+                                    <span className="min-w-0 flex-1">
+                                      <input
+                                        value={branchNameDraft}
+                                        onChange={(e) => setBranchNameDraft(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleRenameBranch(branch.id, branchNameDraft);
+                                          if (e.key === 'Escape') {
+                                            setEditingBranchId(null);
+                                            setBranchNameDraft('');
+                                          }
+                                        }}
+                                        onBlur={() => handleRenameBranch(branch.id, branchNameDraft)}
+                                        className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-800 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:focus:ring-gray-800"
+                                        autoFocus
+                                      />
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSwitchBranch(branch.id)}
+                                        disabled={branch.active || agentRunning}
+                                        className="min-w-0 flex-1 text-left disabled:cursor-default"
+                                      >
+                                        <span className="block truncate text-xs font-semibold">{branch.label}</span>
+                                        <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">
+                                          {branch.messageCount} messages{branch.active ? ' · current' : ''}
+                                        </span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingBranchId(branch.id);
+                                          setBranchNameDraft(branch.label || '');
+                                        }}
+                                        className="mt-0.5 rounded p-1 text-gray-300 opacity-0 transition-colors hover:bg-white hover:text-gray-600 group-hover:opacity-100 dark:hover:bg-gray-950 dark:hover:text-gray-200"
+                                        title="Rename branch"
+                                      >
+                                        <Edit2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              ))}
                             </div>
-                          )}
-                        </div>
-                      )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                      {isGhostMode && (
+                    {hasConversationContent && (
+                      <div ref={exportMenuRef} className="relative">
                         <button
                           type="button"
-                          onClick={() => {
-                            // Clear the draft run (events, streaming state) before toggling off
-                            // so persistedAgentEvents becomes empty and the welcome screen shows
-                            setCurrentChatRun({ events: [], running: false, streamingText: '', streamingReasoning: '', goal: '' });
-                            toggleGhostMode();
-                          }}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-gray-800/50"
-                          title="Exit Ghost Mode"
+                          onClick={() => setShowExportMenu((v) => !v)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-gray-800"
+                          title="Export conversation"
                         >
-                          <Ghost className="w-5 h-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400" />
+                          <Download className="w-4 h-4" />
                         </button>
-                      )}
+                        {showExportMenu && (
+                          <div className="absolute right-0 top-full mt-1.5 z-50 w-40 bg-white dark:bg-gray-900 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg shadow-xl overflow-hidden">
+                            <button type="button" onClick={() => { handleExportMarkdown(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Markdown (.md)</button>
+                            <button type="button" onClick={() => { handleExportHTML(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">HTML (.html)</button>
+                            <button type="button" onClick={() => { handleExportJSON(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">JSON (.json)</button>
+                            <button type="button" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">PDF (print)</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                      {currentConversationId && conversationTitle && (
-                        <button
-                          type="button"
-                          onClick={() => setShowDeleteConfirm(true)}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-800 dark:hover:text-red-400 midnight:hover:bg-slate-800"
-                          title="Delete conversation"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
+                    {isGhostMode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentChatRun({ events: [], running: false, streamingText: '', streamingReasoning: '', goal: '' });
+                          toggleGhostMode();
+                        }}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-gray-800/50"
+                        title="Exit Ghost Mode"
+                      >
+                        <Ghost className="w-5 h-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400" />
+                      </button>
+                    )}
+
+                    {currentConversationId && conversationTitle && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-800 dark:hover:text-red-400 midnight:hover:bg-slate-800"
+                        title="Delete conversation"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* ── Row 2: Panel openers (scrollable) ─────────────────────── */}
+                <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+                  <div className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <button
+                      type="button"
+                      onClick={() => toggleSidePanelTab('code')}
+                      className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
+                        showActivitySidebar && sidePanelTab === 'code'
+                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                      }`}
+                      title="Show code files, Git, and sandboxes"
+                    >
+                      <Code2 className="h-3.5 w-3.5" />
+                      Code
+                      {gitState?.detected && (
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {gitState.changedCount || 0}
+                          {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Web — always visible */}
+                    <button
+                      type="button"
+                      onClick={() => toggleSidePanelTab('preview')}
+                      className={`relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
+                        showActivitySidebar && sidePanelTab === 'preview'
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                      }`}
+                      title={effectivePreviewUrl ? `Web — ${effectivePreviewUrl}` : 'Open web browser'}
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      Web
+                      {effectivePreviewUrl && !(showActivitySidebar && sidePanelTab === 'preview') && (
+                        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      )}
+                    </button>
+
+                    {/* Terminal — always visible */}
+                    <button
+                      type="button"
+                      onClick={() => toggleSidePanelTab('terminal')}
+                      className={`relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
+                        showActivitySidebar && sidePanelTab === 'terminal'
+                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                      }`}
+                      title="Terminal & active processes"
+                    >
+                      <SquareTerminal className="h-3.5 w-3.5" />
+                      Terminal
+                      {detectedPreviewUrl && sidePanelTab !== 'terminal' && (
+                        <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                        </span>
+                      )}
+                    </button>
+
+                    {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('steps')}
+                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'steps'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Show steps"
+                      >
+                        <PanelRightOpen className="h-3.5 w-3.5" />
+                        Steps
+                      </button>
+                    )}
+
+                    {conversationArtifacts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('artifacts')}
+                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'artifacts'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Show artifacts"
+                      >
+                        <FilePlus className="h-3.5 w-3.5" />
+                        Artifacts
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {conversationArtifacts.length}
+                        </span>
+                      </button>
+                    )}
+
+                    {sourceCatalog.totalCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('media')}
+                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'media'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Show all sources and media"
+                      >
+                        <Image className="h-3.5 w-3.5" />
+                        Media
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {sourceCatalog.totalCount}
+                        </span>
+                      </button>
+                    )}
+
+                    {savedItemsCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('saved')}
+                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
+                          showActivitySidebar && sidePanelTab === 'saved'
+                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title="Show bookmarked messages"
+                      >
+                        <BookMarked className="h-3.5 w-3.5" />
+                        Saved
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          {savedItemsCount}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {agentTaskRun && (
                   <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/70 px-3.5 py-3 dark:border-gray-700 dark:bg-gray-800/50 midnight:border-slate-700 midnight:bg-slate-900/50">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

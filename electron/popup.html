@@ -4,51 +4,57 @@
   <meta charset="UTF-8">
   <title>Asyncat</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     html, body {
       width: 640px;
-      height: 168px;
+      height: 148px;
       overflow: hidden;
-      border-radius: 18px;
+      border-radius: 14px;
+      -webkit-font-smoothing: antialiased;
     }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: #07091280;
-      -webkit-app-region: no-drag;
+      /* transparent lets macOS vibrancy show through; on Windows the window bg color takes over */
+      background: transparent;
+      border-radius: 14px;
+      color: #e2e8f0;
+      padding: 14px 16px 12px;
       display: flex;
       flex-direction: column;
-      padding: 18px 20px 16px;
-      gap: 11px;
-      color: #e2e8f0;
-      /* Deep dark with subtle cool gradient */
-      background: linear-gradient(160deg, #0b0f1f 0%, #0d1426 60%, #090c18 100%);
-      border: 1px solid rgba(148, 163, 184, 0.08);
-      border-radius: 18px;
-      /* Subtle top glow */
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), inset 0 0 40px rgba(99,102,241,0.03);
+      gap: 10px;
+      -webkit-app-region: no-drag;
     }
 
-    /* ── Header ── */
-    .header {
+    /* ── Top row ── */
+    .top {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 7px;
     }
 
-    .logo {
-      width: 18px;
-      height: 18px;
-      border-radius: 5px;
-      flex-shrink: 0;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
-    .app-name {
-      font-size: 12.5px;
+    #logoFb { font-size: 13px; line-height: 1; }
+
+    #logoImg {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .name {
+      font-size: 12px;
       font-weight: 600;
-      color: #94a3b8;
-      letter-spacing: 0.01em;
+      color: #4b5563;
+      letter-spacing: 0.02em;
+      user-select: none;
     }
 
     .spacer { flex: 1; }
@@ -58,41 +64,40 @@
       align-items: center;
       gap: 5px;
       font-size: 11px;
-      color: #475569;
+      color: #374151;
+      user-select: none;
     }
 
     .dot {
-      width: 6px;
-      height: 6px;
+      width: 5px;
+      height: 5px;
       border-radius: 50%;
       background: #22c55e;
-      box-shadow: 0 0 7px rgba(34,197,94,0.7);
       flex-shrink: 0;
     }
-    .dot.stopped {
-      background: #ef4444;
-      box-shadow: 0 0 7px rgba(239,68,68,0.7);
-    }
+
+    .dot.stopped { background: #ef4444; }
 
     /* ── Input ── */
-    .input-wrap {
+    .input-row {
       display: flex;
       align-items: center;
-      background: rgba(15, 20, 40, 0.6);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 13px;
-      padding: 9px 9px 9px 16px;
-      gap: 8px;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 10px;
+      padding: 0 8px 0 14px;
+      height: 42px;
+      gap: 6px;
+      transition: border-color 0.16s;
     }
 
-    .input-wrap:focus-within {
-      border-color: rgba(129, 140, 248, 0.45);
-      box-shadow: 0 0 0 3px rgba(99,102,241,0.07), 0 4px 24px rgba(99,102,241,0.08);
+    .input-row:focus-within {
+      border-color: rgba(99, 102, 241, 0.5);
     }
 
     input {
       flex: 1;
+      height: 100%;
       background: none;
       border: none;
       outline: none;
@@ -102,65 +107,61 @@
       caret-color: #818cf8;
     }
 
-    input::placeholder { color: #2d3a52; }
+    input::placeholder { color: #2d3a50; }
 
     .send {
-      width: 34px;
-      height: 34px;
-      border-radius: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
       border: none;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      background: rgba(99,102,241,0.15);
-      color: #4f46e5;
-      transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+      background: transparent;
+      color: #374151;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
     }
 
-    .send.on {
-      background: linear-gradient(135deg, #6366f1, #818cf8);
-      color: #fff;
-      box-shadow: 0 3px 14px rgba(99,102,241,0.45);
-    }
-
-    .send:hover { background: linear-gradient(135deg, #6366f1, #818cf8); color: #fff; }
-    .send:active { transform: scale(0.93); }
+    .send.on,
+    .send:hover { background: #6366f1; color: #fff; }
+    .send:active { transform: scale(0.88); }
 
     /* ── Footer ── */
     .footer {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
     }
 
     .btn-open {
       flex: 1;
-      padding: 6px 0;
-      border-radius: 9px;
-      border: 1px solid rgba(99,102,241,0.22);
-      background: rgba(99,102,241,0.09);
+      height: 26px;
+      border-radius: 7px;
+      border: 1px solid rgba(99, 102, 241, 0.22);
+      background: rgba(99, 102, 241, 0.09);
       color: #818cf8;
       font-size: 12px;
       font-family: inherit;
       font-weight: 500;
       cursor: pointer;
-      text-align: center;
-      transition: background 0.15s, border-color 0.15s;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
 
     .btn-open:hover {
-      background: rgba(99,102,241,0.18);
-      border-color: rgba(129,140,248,0.4);
+      background: rgba(99, 102, 241, 0.18);
+      border-color: rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
     }
 
     .btn-quit {
-      padding: 6px 16px;
-      border-radius: 9px;
-      border: 1px solid rgba(255,255,255,0.05);
-      background: rgba(255,255,255,0.03);
-      color: #334155;
+      height: 26px;
+      padding: 0 12px;
+      border-radius: 7px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: transparent;
+      color: #374151;
       font-size: 12px;
       font-family: inherit;
       font-weight: 500;
@@ -169,18 +170,27 @@
     }
 
     .btn-quit:hover {
-      background: rgba(239,68,68,0.1);
-      border-color: rgba(239,68,68,0.18);
+      background: rgba(239, 68, 68, 0.09);
+      border-color: rgba(239, 68, 68, 0.2);
       color: #f87171;
+    }
+
+    .hint {
+      margin-left: 4px;
+      font-size: 10.5px;
+      color: #1f2937;
+      user-select: none;
     }
   </style>
 </head>
 <body>
 
-  <div class="header">
-    <img id="logoImg" class="logo" alt="" style="display:none" />
-    <span id="logoFb" style="font-size:15px;line-height:1">🐱</span>
-    <span class="app-name">Asyncat</span>
+  <div class="top">
+    <div class="brand">
+      <span id="logoFb">🐱</span>
+      <img id="logoImg" alt="" />
+      <span class="name">Asyncat</span>
+    </div>
     <div class="spacer"></div>
     <div class="status">
       <div class="dot" id="dot"></div>
@@ -188,10 +198,10 @@
     </div>
   </div>
 
-  <div class="input-wrap">
+  <div class="input-row">
     <input id="inp" type="text" placeholder="What can I help you with?" autocomplete="off" spellcheck="false" />
-    <button class="send" id="sendBtn">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+    <button class="send" id="sendBtn" aria-label="Send">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <path d="M2.5 8h11M9.5 4l4 4-4 4" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
@@ -200,15 +210,16 @@
   <div class="footer">
     <button class="btn-open" id="btnOpen">Open Asyncat</button>
     <button class="btn-quit" id="btnQuit">Quit</button>
+    <span class="hint">esc to close</span>
   </div>
 
   <script>
-    const inp     = document.getElementById('inp');
-    const sendBtn = document.getElementById('sendBtn');
-    const dot     = document.getElementById('dot');
+    const inp       = document.getElementById('inp');
+    const sendBtn   = document.getElementById('sendBtn');
+    const dot       = document.getElementById('dot');
     const statusTxt = document.getElementById('statusTxt');
-    const logoImg = document.getElementById('logoImg');
-    const logoFb  = document.getElementById('logoFb');
+    const logoImg   = document.getElementById('logoImg');
+    const logoFb    = document.getElementById('logoFb');
 
     const iconPath = new URLSearchParams(location.search).get('iconPath');
     if (iconPath) {
@@ -219,7 +230,6 @@
     inp.focus();
 
     inp.addEventListener('input', () => sendBtn.classList.toggle('on', inp.value.trim().length > 0));
-
     inp.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); go(); }
       if (e.key === 'Escape') window.close();

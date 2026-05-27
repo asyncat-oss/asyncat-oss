@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, List, SquareTerminal, Bug, Camera, Plus } from 'lucide-react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, SquareTerminal, Bug, Camera, Plus } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import HistoryPanel from './HistoryPanel';
@@ -25,7 +25,7 @@ const panelMeta = {
 
 const isElectron = Boolean(window?.electronAPI);
 
-function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, onLoadError, onNavigate, onTitle, webviewRef }) {
+function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, onLoadError, onNavigate, onTitle, onNavStateChange, webviewRef }) {
   const internalRef = useRef(null);
   const ref = webviewRef || internalRef;
 
@@ -33,20 +33,25 @@ function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, onLoadError, o
   // (on mount). Inline arrow functions passed as props are recreated every render,
   // so putting them in deps would detach/re-attach listeners constantly.
   const cbs = useRef({});
-  cbs.current = { onLoadStart, onLoadStop, onCrash, onLoadError, onNavigate, onTitle };
+  cbs.current = { onLoadStart, onLoadStop, onCrash, onLoadError, onNavigate, onTitle, onNavStateChange };
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const reportNavState = () => {
+      try {
+        cbs.current.onNavStateChange?.({ canGoBack: el.canGoBack(), canGoForward: el.canGoForward() });
+      } catch { /* dom-ready not fired yet */ }
+    };
     const start       = () => cbs.current.onLoadStart?.();
-    const stop        = () => cbs.current.onLoadStop?.();
+    const stop        = () => { cbs.current.onLoadStop?.(); reportNavState(); };
     const handleTitle = (e) => cbs.current.onTitle?.(e.title);
     // Route target="_blank" / popup links back into same webview instead of dropping them.
     const handleNewWindow = (e) => {
       e.preventDefault();
       if (e.url && !e.url.startsWith('about:')) el.loadURL(e.url);
     };
-    const handleNavigate = (e) => cbs.current.onNavigate?.(e.url);
+    const handleNavigate = (e) => { cbs.current.onNavigate?.(e.url); reportNavState(); };
     const handleCrash    = () => cbs.current.onCrash?.();
     const handleGone     = () => cbs.current.onCrash?.();
     const handleFailLoad = (e) => {
@@ -59,18 +64,20 @@ function ElectronWebview({ url, onLoadStart, onLoadStop, onCrash, onLoadError, o
     el.addEventListener('did-fail-load',        handleFailLoad);
     el.addEventListener('new-window',           handleNewWindow);
     el.addEventListener('did-navigate',         handleNavigate);
+    el.addEventListener('did-navigate-in-page', handleNavigate);
     el.addEventListener('page-title-updated',   handleTitle);
     el.addEventListener('crashed',              handleCrash);
     el.addEventListener('render-process-gone',  handleGone);
     return () => {
-      el.removeEventListener('did-start-loading',   start);
-      el.removeEventListener('did-stop-loading',    stop);
-      el.removeEventListener('did-fail-load',       handleFailLoad);
-      el.removeEventListener('new-window',          handleNewWindow);
-      el.removeEventListener('did-navigate',        handleNavigate);
-      el.removeEventListener('page-title-updated',  handleTitle);
-      el.removeEventListener('crashed',             handleCrash);
-      el.removeEventListener('render-process-gone', handleGone);
+      el.removeEventListener('did-start-loading',    start);
+      el.removeEventListener('did-stop-loading',     stop);
+      el.removeEventListener('did-fail-load',        handleFailLoad);
+      el.removeEventListener('new-window',           handleNewWindow);
+      el.removeEventListener('did-navigate',         handleNavigate);
+      el.removeEventListener('did-navigate-in-page', handleNavigate);
+      el.removeEventListener('page-title-updated',   handleTitle);
+      el.removeEventListener('crashed',              handleCrash);
+      el.removeEventListener('render-process-gone',  handleGone);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount — latest callbacks always read from cbs ref
@@ -129,6 +136,11 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
     } catch {}
     return 't-1';
   });
+
+  // ── Per-tab back/forward state ────────────────────────────────────────────
+  const [tabNavStates, setTabNavStates] = useState({});
+  const updateTabNavState = useCallback((id, state) =>
+    setTabNavStates(prev => ({ ...prev, [id]: state })), []);
 
   // ── Per-tab webview refs ──────────────────────────────────────────────────
   // Initialise from the actual tabs array (which may be restored from sessionStorage)
@@ -368,7 +380,26 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
       </div>
 
       {/* ── Address bar ───────────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-1 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-2 py-1.5">
+        {/* Back / Forward */}
+        <button
+          type="button"
+          disabled={!tabNavStates[activeTabId]?.canGoBack}
+          onClick={() => { try { tabRefs.current[activeTabId]?.current?.goBack(); } catch {} }}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 disabled:cursor-default dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+          title="Go back"
+        >
+          <ArrowLeft className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          disabled={!tabNavStates[activeTabId]?.canGoForward}
+          onClick={() => { try { tabRefs.current[activeTabId]?.current?.goForward(); } catch {} }}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 disabled:cursor-default dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+          title="Go forward"
+        >
+          <ArrowRight className="h-3 w-3" />
+        </button>
         <button
           type="button"
           onClick={() => reloadTab(activeTabId)}
@@ -506,6 +537,7 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
               onLoadError={(code, desc) => updateTab(tab.id, { error: { code, description: desc }, loading: false })}
               onNavigate={newUrl => { if (newUrl && !newUrl.startsWith('about:')) updateTab(tab.id, { inputUrl: newUrl, error: null }); }}
               onTitle={title => { if (title) updateTab(tab.id, { title }); }}
+              onNavStateChange={state => updateTabNavState(tab.id, state)}
             />
           </div>
         ))}
