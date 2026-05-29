@@ -240,8 +240,8 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
   if (loading) {
     return (
       <div className="space-y-3">
-        {['h-20', 'h-16', 'h-16'].map(h => (
-          <div key={h} className={`${h} animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800`} />
+        {['h-20', 'h-16', 'h-16'].map((h, i) => (
+          <div key={i} className={`${h} animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800`} />
         ))}
       </div>
     );
