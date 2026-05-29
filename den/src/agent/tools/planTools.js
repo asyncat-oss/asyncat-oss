@@ -22,7 +22,18 @@ function normalizeItem(raw, existingById = new Map()) {
   const status = STATUSES.has(raw.status) ? raw.status : 'pending';
   const activeForm = String(raw.activeForm ?? raw.active_form ?? content).trim();
 
-  return { id, content, status, activeForm };
+  // Optional dependency edges: ids of items that must complete before this one.
+  // Accepts `dependencies` or `blockedBy`. Lets the agent express a DAG so
+  // independent branches can be parallelised (e.g. delegated to sub-agents).
+  const depsRaw = Array.isArray(raw.dependencies) ? raw.dependencies
+    : Array.isArray(raw.blockedBy) ? raw.blockedBy
+      : null;
+  const item = { id, content, status, activeForm };
+  // Only attach dependencies when explicitly provided so merge-mode updates
+  // don't clobber an item's existing edges with an empty array.
+  if (depsRaw) item.dependencies = depsRaw.map(d => String(d || '').trim()).filter(Boolean);
+
+  return item;
 }
 
 function enforceSingleInProgress(items) {
@@ -48,12 +59,26 @@ function planSnapshot(session) {
   const pending = items.filter(i => i.status === 'pending').length;
   const in_progress = items.filter(i => i.status === 'in_progress').length;
   const completed = items.filter(i => i.status === 'completed').length;
+
+  // Dependency-aware readiness: an item is "ready" when every dependency it
+  // names is completed; "blocked" when a named dependency is still open.
+  const byId = new Map(items.map(i => [i.id, i]));
+  const isDone = id => byId.get(id)?.status === 'completed';
+  const ready = items
+    .filter(i => i.status === 'pending' && (i.dependencies || []).every(d => !byId.has(d) || isDone(d)))
+    .map(i => i.id);
+  const blocked = items
+    .filter(i => i.status !== 'completed' && (i.dependencies || []).some(d => byId.has(d) && !isDone(d)))
+    .map(i => i.id);
+
   return {
     items,
     total,
     pending,
     in_progress,
     completed,
+    ready,
+    blocked,
     completionPercentage: total > 0 ? Math.round((completed / total) * 100) : 100,
   };
 }
@@ -63,8 +88,11 @@ export const todoWriteTool = {
   description:
     'Create or replace the current plan (TODO list) for this run. Send the FULL list each time — this is an atomic replace. ' +
     'Use for any non-trivial multi-step task so the user can follow along. ' +
-    'Each item: { content, status: pending|in_progress|completed, activeForm }. ' +
-    'Mark exactly one item in_progress while you work on it, then completed before moving on.',
+    'Each item: { id, content, status: pending|in_progress|completed, activeForm, dependencies }. ' +
+    'Mark exactly one item in_progress while you work on it, then completed before moving on. ' +
+    'Optionally give items stable ids and a `dependencies` array of the ids that must finish first — ' +
+    'independent items (no shared dependencies) can be worked or delegated in parallel. ' +
+    'The result reports which items are `ready` vs `blocked`.',
   category: 'planning',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -76,10 +104,11 @@ export const todoWriteTool = {
         items: {
           type: 'object',
           properties: {
-            id: { type: 'string', description: 'Stable id (optional — server assigns if missing).' },
+            id: { type: 'string', description: 'Stable id (optional — server assigns if missing). Provide one if other items depend on it.' },
             content: { type: 'string', description: 'What needs to be done (imperative form).' },
             status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
             activeForm: { type: 'string', description: 'Present-continuous form shown while running, e.g. "Running tests".' },
+            dependencies: { type: 'array', description: 'Optional ids of items that must complete before this one can start.', items: { type: 'string' } },
           },
           required: ['content', 'status'],
         },

@@ -79,7 +79,7 @@ const SNAPSHOT_SKIP = new Set([
 const MUTATING_FILE_TOOLS = new Set([
   'write_file', 'create_file', 'edit_file', 'patch_file', 'create_directory',
   'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
-  'search_replace_block',
+  'search_replace_block', 'apply_patch',
 ]);
 const MUTATING_SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
 const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify|look at|review)\b/i;
@@ -287,6 +287,12 @@ export class AgentRuntime {
     this.agentMode = ['chat', 'plan', 'action', 'design'].includes(opts.agentMode) ? opts.agentMode : 'action';
     this.enabledIntegrationTools = Array.isArray(opts.enabledIntegrationTools)
       ? new Set(opts.enabledIntegrationTools.filter(Boolean).map(String))
+      : null;
+    // Optional hard allow-list of tool names (used to scope sub-agents to a
+    // focused toolset). Planning + ask_user are always kept available so the
+    // sub-agent can still organise itself and request clarification.
+    this.allowedTools = Array.isArray(opts.allowedTools) && opts.allowedTools.length
+      ? new Set(opts.allowedTools.filter(Boolean).map(String))
       : null;
     this.abortSignal = opts.abortSignal || null;
     this.capabilitiesSection = opts.capabilitiesSection || '';
@@ -583,9 +589,38 @@ export class AgentRuntime {
     // In plan mode, agent should converge quickly — fewer nudges, less looping
     const MAX_PLAN_NUDGES = this.agentMode === 'plan' || this.agentMode === 'chat' ? 1 : 3;
 
-    for (let round = 0; round < this.maxRounds; round++) {
+    // ── Adaptive round budget ──────────────────────────────────────────────
+    // Start at the configured cap but allow it to grow (up to a hard ceiling)
+    // while the agent is still completing real plan items, so genuinely long
+    // tasks aren't truncated mid-flight. A stuck agent never advances the plan,
+    // so it can't keep extending.
+    let effectiveMaxRounds = this.maxRounds;
+    const HARD_ROUND_CEILING = Math.min(this.maxRounds * 2, this.maxRounds + 40);
+    let lastPlanProgressRound = 0;
+    let lastCompletedCount = (this.session.plan || []).filter(i => i.status === 'completed').length;
+
+    // ── Deferred (non-blocking) verification ───────────────────────────────
+    // Lint/type/LSP checks after edits run in the background and are drained at
+    // the next round boundary instead of blocking inside the edit loop.
+    let pendingVerification = null;
+    let verificationFinding = null;
+
+    for (let round = 0; round < effectiveMaxRounds; round++) {
       this._throwIfAborted();
       this.session.nextRound();
+
+      // Drain any background verification from the previous round's edits.
+      if (pendingVerification) {
+        try { await pendingVerification; } catch { /* verification failures are non-fatal */ }
+        pendingVerification = null;
+      }
+      if (verificationFinding) {
+        messages.push({
+          role: 'user',
+          content: `[Auto-verification detected issues after your edits]\n${verificationFinding}\n\nPlease review and fix these issues.`,
+        });
+        verificationFinding = null;
+      }
 
       // Compact before the LLM call if we're over budget.
       // LLM-backed when aiClient is present; mechanical fallback otherwise.
@@ -1225,19 +1260,18 @@ export class AgentRuntime {
             this._advanceAutoPlan(this._isMutatingTool(tc.tool_name, tc.arguments) ? 'mutated' : 'inspected', round);
           }
 
-          // ── Self-verification after file mutations (3.2) ─────────────────
+          // ── Self-verification after file mutations (3.2, non-blocking) ───
+          // Kick off lint/type/LSP checks in the background instead of awaiting
+          // them inline. Results are drained at the top of the next round (or on
+          // finish), so a chain of edits isn't stalled by per-file verification.
           if (this._isMutatingTool(tc.tool_name, tc.arguments)) {
             const mutatedFile = tc.arguments?.path || tc.arguments?.file || tc.arguments?.filename || null;
             if (mutatedFile) {
               const absPath = path.isAbsolute(mutatedFile) ? mutatedFile : path.resolve(this.workingDir, mutatedFile);
-              const verifyResult = await this._autoVerify([absPath], toolContext);
-              if (verifyResult?.hasErrors) {
-                // Inject verification errors into context so the agent can self-correct
-                messages.push({
-                  role: 'user',
-                  content: `[Auto-verification detected issues after your edit]\n${verifyResult.summary}\n\nPlease review and fix these issues.`,
-                });
-              }
+              pendingVerification = Promise.resolve(pendingVerification)
+                .then(() => this._autoVerify([absPath], toolContext))
+                .then(verifyResult => { if (verifyResult?.hasErrors) verificationFinding = verifyResult.summary; })
+                .catch(() => { /* verification failures are non-fatal */ });
             }
           }
         }
@@ -1264,8 +1298,41 @@ export class AgentRuntime {
         }
       }
 
+      // ── Adaptive round budget ──────────────────────────────────────────
+      // Extend the budget if the agent is still completing plan items as it
+      // nears the cap. Bounded by HARD_ROUND_CEILING so a stuck agent can't
+      // run forever (it stops advancing the plan, so it stops earning rounds).
+      const completedNow = (this.session.plan || []).filter(i => i.status === 'completed').length;
+      if (completedNow > lastCompletedCount) {
+        lastCompletedCount = completedNow;
+        lastPlanProgressRound = round;
+      }
+      if (
+        round >= effectiveMaxRounds - 1 &&
+        effectiveMaxRounds < HARD_ROUND_CEILING &&
+        !this.session.isPlanComplete() &&
+        (round - lastPlanProgressRound) <= 4
+      ) {
+        const extension = Math.min(10, HARD_ROUND_CEILING - effectiveMaxRounds);
+        effectiveMaxRounds += extension;
+        this.onEvent({
+          type: 'thinking',
+          data: { thought: `Plan still progressing near the round cap — extending budget by ${extension} (to ${effectiveMaxRounds}/${HARD_ROUND_CEILING}).`, round },
+        });
+      }
+
       // Save session periodically
       if (round % 3 === 0) this.session.save();
+    }
+
+    // Final drain: never finish on top of unverified, broken edits.
+    if (pendingVerification) {
+      try { await pendingVerification; } catch { /* non-fatal */ }
+      pendingVerification = null;
+    }
+    if (verificationFinding && answer) {
+      answer += `\n\n---\n⚠️ Auto-verification after the last edits found issues you may want to fix:\n${verificationFinding}`;
+      verificationFinding = null;
     }
 
     // If we exhausted all rounds without an answer
@@ -1273,7 +1340,7 @@ export class AgentRuntime {
       answer = 'I reached the maximum number of steps. Here is what I accomplished:\n\n' +
         this.session.toolHistory.map(t => `- ${t.tool}: ${t.result?.message || (t.result?.success ? 'success' : 'failed')}`).join('\n');
       stopReason = 'max_rounds';
-      this.onEvent({ type: 'answer', data: { answer, round: this.maxRounds } });
+      this.onEvent({ type: 'answer', data: { answer, round: effectiveMaxRounds } });
     }
 
     this.session.setScratchpad('finalAnswer', answer);
@@ -1408,6 +1475,65 @@ export class AgentRuntime {
 
     return { allowed: true, decision: 'local_auto' };
   }
+  // ── Prompt caching ─────────────────────────────────────────────────────────
+  // Caching is NOT uniform across providers, so we do the right thing per family
+  // instead of one blunt flag:
+  //
+  //   • Stable-prefix automatic caching (OpenAI, DeepSeek, Gemini implicit,
+  //     local llama.cpp/Ollama/LM Studio KV reuse) needs no API change — it just
+  //     needs the prompt prefix to stay byte-stable across rounds, which this
+  //     runtime already guarantees (one fixed system prompt + append-only
+  //     messages + deterministic tool order). Those providers benefit for free.
+  //
+  //   • Anthropic-family (Claude) requires EXPLICIT cache_control breakpoints, and
+  //     only over transports that forward them (Anthropic direct, OpenRouter).
+  //     We add a breakpoint on the big stable system prompt (tools + skills +
+  //     memory) and one on the latest plain-text user turn so the growing
+  //     conversation prefix is cached too.
+  //
+  //   • OpenAI accepts an optional prompt_cache_key that improves cache routing.
+  //
+  // Everything is strictly provider-gated so a cache field never reaches a
+  // provider that would reject it with a 400.
+  _applyPromptCaching(params) {
+    try {
+      const providerId = String(this.providerInfo?.providerId || this.providerInfo?.provider_id || '').toLowerCase();
+      const model = String(this.model || '').toLowerCase();
+      const isAnthropicFamily = providerId === 'anthropic' || model.includes('claude');
+      const forwardsCacheControl = providerId === 'anthropic' || providerId === 'openrouter';
+
+      if (isAnthropicFamily && forwardsCacheControl && Array.isArray(params.messages)) {
+        const markString = (msg) => {
+          if (!msg || typeof msg.content !== 'string') return false;
+          msg.content = [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } }];
+          return true;
+        };
+        // Breakpoint 1: the system prompt (largest stable block).
+        markString(params.messages[0]);
+        // Breakpoint 2: the most recent plain-text user turn. Skip messages whose
+        // content is already an array (multimodal / tool results) to stay safe —
+        // Anthropic allows up to 4 breakpoints, we use at most 2.
+        for (let i = params.messages.length - 1; i >= 1; i--) {
+          const m = params.messages[i];
+          if (m.role === 'user' && typeof m.content === 'string') {
+            markString(m);
+            break;
+          }
+        }
+        return params;
+      }
+
+      // OpenAI auto-caches stable prefixes ≥1024 tokens; a stable key improves
+      // hit-rate. Only OpenAI accepts this field, so gate it tightly.
+      if (providerId === 'openai' && this.session?.id) {
+        params.prompt_cache_key = this.session.id;
+      }
+    } catch (err) {
+      console.warn('[agent] prompt caching setup skipped:', err.message);
+    }
+    return params;
+  }
+
   async _callLLM(systemPrompt, messages, options = {}) {
     this._throwIfAborted();
     const useNativeTools = this.supportsNativeTools;
@@ -1439,6 +1565,7 @@ export class AgentRuntime {
     }
 
     params = applyReasoningEffort(params, options.reasoningEffort || this.reasoningEffort, this.providerInfo, this.model);
+    params = this._applyPromptCaching(params);
 
     const requestOptions = this.abortSignal ? { signal: this.abortSignal } : undefined;
     let stream;
@@ -1946,7 +2073,14 @@ export class AgentRuntime {
     })
       : modeTools;
 
-    return this._rankToolsForGoal(visibleTools, goal);
+    // Sub-agent tool scoping: keep only the requested tools plus the
+    // always-on coordination tools (planning + clarification).
+    const ALWAYS_AVAILABLE = new Set(['todo_write', 'list_plan', 'ask_user']);
+    const scopedTools = this.allowedTools
+      ? visibleTools.filter(tool => this.allowedTools.has(tool.name) || ALWAYS_AVAILABLE.has(tool.name))
+      : visibleTools;
+
+    return this._rankToolsForGoal(scopedTools, goal);
   }
 
   _rankToolsForGoal(tools, goal = '') {
@@ -2147,7 +2281,12 @@ export class AgentRuntime {
     const TOOL_CONTEXT_LIMITS = {
       list_directory: 1800,
       find_files: 2000,
-      read_file: 4000,       // File contents are high-signal for edits
+      // read_file is the basis for every subsequent edit — keep enough of it in
+      // context that the model edits against what it actually saw, not a stub.
+      // The read_file tool already caps its own output (~20k chars) and supports
+      // start_line/end_line, so this only trims pathological cases.
+      read_file: 16000,
+      apply_patch: 4000,
       code_search: 3500,     // Search results are high-signal
       list_definitions: 3000,
       run_command: 2500,     // Command output is informational

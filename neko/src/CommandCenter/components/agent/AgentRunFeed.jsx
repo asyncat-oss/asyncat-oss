@@ -5,7 +5,7 @@ import {
   Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
   FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
-  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell
+  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
@@ -1983,6 +1983,8 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
   const [editing, setEditing] = useState(false);
   const [editLines, setEditLines] = useState('');
   const [saving, setSaving] = useState(false);
+  // Click a blocked item to highlight the dependencies it is waiting on.
+  const [highlightDeps, setHighlightDeps] = useState(null); // Set<id> | null
 
   const openEditor = () => {
     setEditLines(plan.map(i => i.content).join('\n'));
@@ -2014,6 +2016,26 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
   const isStaleActivePlan = hasActiveItem && !isRunning && completed < total;
   const isDone = completed === total && total > 0;
   const pct = Math.round((completed / total) * 100);
+
+  // ── Dependency-aware readiness ──────────────────────────────────────────
+  // Only engages when the plan actually declares dependencies, so ordinary
+  // flat plans render exactly as before.
+  const hasDeps = plan.some(i => Array.isArray(i.dependencies) && i.dependencies.length > 0);
+  const byId = new Map(plan.map(i => [i.id, i]));
+  const isDoneId = (id) => byId.get(id)?.status === 'completed';
+  const blockedIds = new Set(
+    hasDeps
+      ? plan
+          .filter(i => i.status !== 'completed' && (i.dependencies || []).some(d => byId.has(d) && !isDoneId(d)))
+          .map(i => i.id)
+      : []
+  );
+  const blockedCount = blockedIds.size;
+  const readyCount = hasDeps ? plan.filter(i => i.status === 'pending' && !blockedIds.has(i.id)).length : 0;
+  const waitingOn = (item) => (item.dependencies || [])
+    .filter(d => byId.has(d) && !isDoneId(d))
+    .map(d => byId.get(d)?.content)
+    .filter(Boolean);
 
   if (editing) {
     return (
@@ -2087,6 +2109,15 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
           {isStaleActivePlan && (
             <span className="text-[10px] font-medium text-amber-500">Stopped</span>
           )}
+          {hasDeps && blockedCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+              title={`${readyCount} ready to start · ${blockedCount} waiting on dependencies`}
+            >
+              <GitBranch className="h-3 w-3" />
+              {readyCount} ready · {blockedCount} blocked
+            </span>
+          )}
           {total > 0 && (
             <span className="ml-auto text-[10px] tabular-nums font-medium text-gray-400 dark:text-gray-500">
               {pct}%
@@ -2112,14 +2143,37 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
           </div>
         )}
         <ul className="space-y-1.5">
-          {plan.map((item, i) => (
-            <li key={item.id || i} className="flex items-start gap-2.5 text-[12px] leading-snug">
+          {plan.map((item, i) => {
+            const blocked = blockedIds.has(item.id);
+            const waits = blocked ? waitingOn(item) : [];
+            const isReady = hasDeps && item.status === 'pending' && !blocked;
+            const isHighlighted = highlightDeps?.has(item.id);
+            // Clicking a blocked item highlights the items it's waiting on.
+            const onItemClick = blocked
+              ? () => setHighlightDeps(prev => {
+                  const next = new Set((item.dependencies || []).filter(d => byId.has(d) && !isDoneId(d)));
+                  if (prev && prev.size === next.size && [...next].every(d => prev.has(d))) return null;
+                  return next;
+                })
+              : undefined;
+            return (
+            <li
+              key={item.id || i}
+              onClick={onItemClick}
+              className={`flex items-start gap-2.5 rounded-md -mx-1 px-1 py-0.5 text-[12px] leading-snug transition-colors ${
+                blocked ? 'cursor-pointer' : ''
+              } ${
+                isHighlighted ? 'bg-amber-50 dark:bg-amber-950/20 midnight:bg-amber-950/20 ring-1 ring-amber-200 dark:ring-amber-900/40 midnight:ring-amber-900/40' : ''
+              }`}
+            >
               <span className={`mt-0.5 shrink-0 ${
                 item.status === 'completed'
                   ? 'text-emerald-500 dark:text-emerald-400'
                   : item.status === 'in_progress'
                     ? (isRunning ? 'text-gray-700 dark:text-gray-200' : 'text-amber-500 dark:text-amber-400')
-                    : 'text-gray-300 dark:text-gray-600 midnight:text-gray-600'
+                    : isReady
+                      ? 'text-emerald-400 dark:text-emerald-500 midnight:text-emerald-500'
+                      : 'text-gray-300 dark:text-gray-600 midnight:text-gray-600'
               }`}>
                 {item.status === 'completed' ? (
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -2127,21 +2181,36 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
                   <span className="block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                 ) : item.status === 'in_progress' ? (
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" d="M9 12h6" /></svg>
+                ) : blocked ? (
+                  <Lock className="w-3 h-3 mt-px" />
+                ) : isReady ? (
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24" stroke="none"><circle cx="12" cy="12" r="4" /></svg>
                 ) : (
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /></svg>
                 )}
               </span>
-              <span className={`min-w-0 flex-1 ${
-                item.status === 'completed'
-                  ? 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
-                  : item.status === 'in_progress'
-                    ? 'font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100'
-                    : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'
-              }`}>
-                {item.status === 'in_progress' && item.activeForm ? item.activeForm : item.content}
+              <span className="min-w-0 flex-1">
+                <span className={`block ${
+                  item.status === 'completed'
+                    ? 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
+                    : item.status === 'in_progress'
+                      ? 'font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100'
+                      : blocked
+                        ? 'text-gray-400 dark:text-gray-500 midnight:text-slate-500'
+                        : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'
+                }`}>
+                  {item.status === 'in_progress' && item.activeForm ? item.activeForm : item.content}
+                </span>
+                {waits.length > 0 && (
+                  <span className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500" title={`Waiting on: ${waits.join(', ')} — click to highlight`}>
+                    <GitBranch className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">Waiting on: {waits.join(', ')}</span>
+                  </span>
+                )}
               </span>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </div>
     </div>
@@ -2683,6 +2752,22 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
                     )}
                   </div>
                 </div>
+                {data?.readOnly && (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-400"
+                    title="Read-only sub-agent — inspects and searches only, makes no changes"
+                  >
+                    <Eye className="h-3 w-3" /> Read-only
+                  </span>
+                )}
+                {data?.scopedToolCount > 0 && (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-400"
+                    title="Restricted to a focused toolset"
+                  >
+                    <Wrench className="h-3 w-3" /> {data.scopedToolCount} tools
+                  </span>
+                )}
                 <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusClass}`}>
                   <AccentIcon className={`h-3 w-3 ${pending ? 'animate-spin' : ''}`} />
                   {statusLabel}
