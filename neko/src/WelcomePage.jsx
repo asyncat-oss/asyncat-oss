@@ -24,6 +24,7 @@ import {
   Star,
 } from 'lucide-react';
 import authService from './services/authService.js';
+import RuntimeSetupPanel from './Models/RuntimeSetupPanel.jsx';
 
 const API_URL = import.meta.env.VITE_USER_URL || 'http://localhost:8716';
 const EMOJI_OPTIONS = ['🏠', '🧭', '⚙️', '🧪', '🚀', '🧠', '🗂️', '💼', '🎨', '🔒'];
@@ -513,7 +514,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                 )}
                 {configStatus === 'online' && (
                   <p className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 text-center pt-1 leading-5">
-                    Account and workspace finish here. Models, API keys, updates, and optional local engines stay in Settings.
+                    Set up local engines on the next step. Models, API keys, and updates stay in Settings.
                   </p>
                 )}
                 <div className="flex gap-4 pt-6">
@@ -530,7 +531,28 @@ const WelcomePage = ({ session, onTeamCreated }) => {
           )}
 
           {step === 5 && (
-            <PageWrapper 
+            <PageWrapper
+              key="engines"
+              title="Local Engines"
+              subtitle="Optional. Set up the on-device engines now, or skip and do it later in Settings."
+            >
+              <div className="space-y-6">
+                <RuntimeSetupPanel compact />
+                <div className="flex gap-4 pt-2">
+                  <button onClick={handleBack} className={backButtonClassName}>Back</button>
+                  <button
+                    onClick={handleNext}
+                    className={primaryButtonClassName}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </PageWrapper>
+          )}
+
+          {step === 6 && (
+            <PageWrapper
               key="finish"
               title="Initialization"
               subtitle="Review your parameters before finalizing the installation."
@@ -587,7 +609,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
       {/* Zen Progress */}
       <div className="h-24 flex flex-col items-center justify-center gap-4">
          <div className="flex gap-1">
-            {Array.from({ length: 6 }).map((_, i) => (
+            {Array.from({ length: 7 }).map((_, i) => (
               <div key={i} className={`h-1 rounded-full transition-all duration-500 ${i === step ? 'w-6 bg-blue-500' : 'w-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800'}`} />
             ))}
          </div>

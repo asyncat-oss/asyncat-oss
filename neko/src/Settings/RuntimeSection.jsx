@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Cpu, RefreshCw } from 'lucide-react';
 import EngineRuntimeSection from '../Models/EngineRuntimeSection.jsx';
+import RuntimeSetupPanel from '../Models/RuntimeSetupPanel.jsx';
 import { useModelsPageController } from '../Models/useModelsPageController.js';
 import { installApi } from '../CommandCenter/api/installApi.js';
 
@@ -95,6 +96,8 @@ const RuntimeSection = () => {
           Refresh
         </button>
       </div>
+
+      <RuntimeSetupPanel />
 
       <EngineRuntimeSection
         engineData={engineData}
