@@ -4,14 +4,15 @@
 //   • WelcomePage onboarding (compact) — first-run "set up the local engines" step
 //   • Settings → Runtime (full) — same controls, alongside the engine advisor
 //
-// Responsibilities:
-//   1. One-click install of the local chat engine (managed llama.cpp build) using
-//      the background install-job API, with live progress.
-//   2. Surface the system tools the optional cpps need (ffmpeg for Whisper,
-//      whisper-server, piper, C++ compiler) with readiness status and a copyable
-//      package-manager command for whatever is missing — the app cannot install
-//      system binaries itself.
-//   3. Point users at the Models page, where the actual model weights are pulled.
+// What it does:
+//   1. One-click install of the local chat engine (managed llama.cpp build).
+//   2. One-click install of the optional engines — Whisper (STT), Piper (TTS),
+//      stable-diffusion.cpp (image) — by downloading a prebuilt release binary
+//      for this platform. Where no prebuilt asset exists, the install reports an
+//      error and the package-manager commands below are the fallback.
+//   3. Surfaces remaining system tools (ffmpeg, C++ compiler) with copyable
+//      package-manager commands.
+//   4. Points users at the Models page, where the actual model weights are pulled.
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -19,7 +20,7 @@ import {
   Download, Copy, AlertCircle, Terminal, RefreshCw,
 } from 'lucide-react';
 import { installApi } from '../CommandCenter/api/installApi.js';
-import { llamaServerApi } from '../Settings/settingApi.js';
+import { llamaServerApi, runtimeApi } from '../Settings/settingApi.js';
 
 const PROFILE_LABELS = {
   cpu_safe: 'CPU',
@@ -28,9 +29,7 @@ const PROFILE_LABELS = {
   amd_rocm: 'AMD ROCm',
 };
 
-// Map detected GPU vendor → managed-install profile. The install job downloads a
-// prebuilt release asset for the profile (it never compiles), so this is safe to
-// run during onboarding.
+// Map detected GPU vendor → managed-install profile (prebuilt download, never compiles).
 const profileForGpu = (gpu) => {
   switch (gpu?.vendor) {
     case 'NVIDIA': return 'nvidia_gpu';
@@ -40,17 +39,119 @@ const profileForGpu = (gpu) => {
   }
 };
 
-// Which readiness checks back each optional capability (the "cpps").
-const CAPABILITY_TOOLS = [
-  { key: 'stt',   icon: Mic,       label: 'Speech-to-Text', detail: 'Whisper', checks: ['whisper-server', 'ffmpeg'] },
-  { key: 'tts',   icon: Volume2,   label: 'Text-to-Speech', detail: 'Piper',   checks: ['piper'] },
-  { key: 'image', icon: ImageIcon, label: 'Image Generation', detail: 'stable-diffusion.cpp / ComfyUI', checks: ['cxx-compiler'] },
+// Optional engines: each maps a readiness check id → a managed-runtime install id.
+const OPTIONAL_ENGINES = [
+  { runtime: 'whisper', icon: Mic,       label: 'Speech-to-Text',   detail: 'Whisper',                 checkId: 'whisper-server', needs: ['ffmpeg'] },
+  { runtime: 'piper',   icon: Volume2,   label: 'Text-to-Speech',   detail: 'Piper',                   checkId: 'piper' },
+  { runtime: 'sd',      icon: ImageIcon, label: 'Image Generation', detail: 'stable-diffusion.cpp',    checkId: 'sd' },
 ];
 
 const StatusDot = ({ ok }) => (
   <span className={`inline-block h-2 w-2 flex-shrink-0 rounded-full ${ok ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600'}`} />
 );
 StatusDot.propTypes = { ok: PropTypes.bool };
+
+const ProgressBar = ({ percent, message }) => (
+  <div className="mt-2">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
+      <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min(100, Math.max(2, percent))}%` }} />
+    </div>
+    <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">{message || 'Working…'}</p>
+  </div>
+);
+ProgressBar.propTypes = { percent: PropTypes.number, message: PropTypes.string };
+
+// ── One optional engine (Whisper / Piper / sd) with its own install lifecycle ──
+const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
+  const [installing, setInstalling] = useState(false);
+  const [job, setJob] = useState(null);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+  const cleanup = useRef(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; cleanup.current?.(); };
+  }, []);
+
+  const isReady = done || ready;
+  const Icon = engine.icon;
+
+  const handleInstall = async () => {
+    setInstalling(true);
+    setError('');
+    setJob(null);
+    try {
+      const res = await runtimeApi.install(engine.runtime);
+      setJob(res.job);
+      cleanup.current?.();
+      cleanup.current = runtimeApi.pollJob(
+        res.job.id,
+        (j) => mounted.current && setJob(j),
+        async (j) => {
+          if (!mounted.current) return;
+          setJob(j); setInstalling(false); setDone(true); cleanup.current = null;
+          onInstalled?.();
+        },
+        (j) => {
+          if (!mounted.current) return;
+          setInstalling(false); setError(j?.error || 'Install failed.'); cleanup.current = null;
+        },
+      );
+    } catch (err) {
+      setInstalling(false);
+      setError(err.message || 'Could not start the install.');
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-800/30 midnight:border-slate-800 midnight:bg-slate-900/40">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Icon className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{engine.label}</span>
+          <span className="truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{engine.detail}</span>
+        </div>
+        {isReady ? (
+          <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+            <Check className="h-3 w-3" /> Ready
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={handleInstall}
+            disabled={installing}
+            className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200"
+          >
+            {installing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            {installing ? 'Installing…' : 'Download'}
+          </button>
+        )}
+      </div>
+
+      {isReady && ffmpegMissing && (
+        <p className="mt-1.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400">
+          Whisper also needs <code className="font-mono">ffmpeg</code> for recording — install it with the command below.
+        </p>
+      )}
+
+      {installing && <ProgressBar percent={job?.progress?.percent ?? 2} message={job?.progress?.message} />}
+
+      {error && (
+        <p className="mt-1.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400">
+          {error} If no prebuilt build exists for your system, use the command below.
+        </p>
+      )}
+    </div>
+  );
+};
+EngineRow.propTypes = {
+  engine: PropTypes.object.isRequired,
+  ready: PropTypes.bool,
+  ffmpegMissing: PropTypes.bool,
+  onInstalled: PropTypes.func,
+};
 
 const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
   const [readiness, setReadiness] = useState(null);
@@ -71,7 +172,6 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
   const recommendedProfile = profileForGpu(readiness?.gpu);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setLoadError('');
     try {
       const [readinessRes, enginesRes] = await Promise.allSettled([
@@ -90,15 +190,10 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
   useEffect(() => {
     mounted.current = true;
     load();
-    return () => {
-      mounted.current = false;
-      installCleanup.current?.();
-    };
+    return () => { mounted.current = false; installCleanup.current?.(); };
   }, [load]);
 
-  useEffect(() => {
-    onReadyChange?.(engineInstalled);
-  }, [engineInstalled, onReadyChange]);
+  useEffect(() => { onReadyChange?.(engineInstalled); }, [engineInstalled, onReadyChange]);
 
   const handleInstallEngine = async () => {
     setInstalling(true);
@@ -106,25 +201,19 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
     setInstallJob(null);
     try {
       const res = await llamaServerApi.startInstallJob({ profile: recommendedProfile });
-      const job = res.job;
-      setInstallJob(job);
+      setInstallJob(res.job);
       installCleanup.current?.();
       installCleanup.current = llamaServerApi.pollInstallJob(
-        job.id,
+        res.job.id,
         (j) => mounted.current && setInstallJob(j),
         async (j) => {
           if (!mounted.current) return;
-          setInstallJob(j);
-          setInstalling(false);
-          setInstallDone(true);
-          installCleanup.current = null;
+          setInstallJob(j); setInstalling(false); setInstallDone(true); installCleanup.current = null;
           await load();
         },
         (j) => {
           if (!mounted.current) return;
-          setInstalling(false);
-          setInstallError(j?.error || 'Failed to install the local engine.');
-          installCleanup.current = null;
+          setInstalling(false); setInstallError(j?.error || 'Failed to install the local engine.'); installCleanup.current = null;
         },
       );
     } catch (err) {
@@ -141,15 +230,12 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
     } catch { /* clipboard unavailable */ }
   };
 
-  // Readiness check lookup by id.
   const checkById = (id) => (readiness?.checks || []).find(c => c.id === id) || null;
-  const capabilityReady = (tool) => tool.checks.every(id => checkById(id)?.ok);
-
-  // Package-manager commands for whatever is still missing.
+  const ffmpegMissing = !checkById('ffmpeg')?.ok;
   const installCommands = (readiness?.commands || []).filter(c => c.kind === 'packages' || c.kind === 'compiler' || c.kind === 'node');
 
   const cardCls = 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-900/60';
-  const progressPct = installJob?.progress?.percent ?? (installing ? 2 : 0);
+  const llamaPct = installJob?.progress?.percent ?? (installing ? 2 : 0);
 
   if (loading) {
     return (
@@ -163,7 +249,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
 
   return (
     <div className="space-y-4 text-left">
-      {/* ── Local chat engine ─────────────────────────────────────────────── */}
+      {/* ── Local chat engine (llama.cpp) ─────────────────────────────────── */}
       <div className={cardCls}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
@@ -197,14 +283,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
         </div>
 
         {(installing || installJob) && !engineInstalled && (
-          <div className="mt-3">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
-              <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min(100, Math.max(2, progressPct))}%` }} />
-            </div>
-            <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-              {installJob?.progress?.message || 'Preparing download…'}
-            </p>
-          </div>
+          <ProgressBar percent={llamaPct} message={installJob?.progress?.message || 'Preparing download…'} />
         )}
 
         {installError && (
@@ -217,36 +296,29 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
         )}
       </div>
 
-      {/* ── Optional capability tools (the cpps) ──────────────────────────── */}
+      {/* ── Optional engines (Whisper / Piper / sd) ───────────────────────── */}
       <div className={cardCls}>
         <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Optional local engines</p>
         <p className="mt-0.5 mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-          Voice and image need a few system tools. Anything missing can be installed with your package manager below.
+          Download voice and image engines for this machine. Each grabs a prebuilt build when one exists for your platform.
         </p>
         <div className="space-y-2">
-          {CAPABILITY_TOOLS.map((tool) => {
-            const ready = capabilityReady(tool);
-            const Icon = tool.icon;
-            return (
-              <div key={tool.key} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/30 midnight:border-slate-800 midnight:bg-slate-900/40">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <Icon className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{tool.label}</span>
-                  <span className="truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{tool.detail}</span>
-                </div>
-                <span className="flex flex-shrink-0 items-center gap-1.5">
-                  <StatusDot ok={ready} />
-                  <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                    {ready ? 'Ready' : 'Needs tools'}
-                  </span>
-                </span>
-              </div>
-            );
-          })}
+          {OPTIONAL_ENGINES.map((engine) => (
+            <EngineRow
+              key={engine.runtime}
+              engine={engine}
+              ready={Boolean(checkById(engine.checkId)?.ok)}
+              ffmpegMissing={engine.runtime === 'whisper' && ffmpegMissing}
+              onInstalled={load}
+            />
+          ))}
         </div>
 
         {installCommands.length > 0 && (
           <div className="mt-3 space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              System tools (ffmpeg, compilers) — install with your package manager
+            </p>
             {installCommands.map((cmd, i) => (
               <div key={`${cmd.manager}-${i}`} className="rounded-lg border border-gray-200 bg-gray-950 p-2.5 dark:border-gray-700 midnight:border-slate-700">
                 <div className="mb-1 flex items-center justify-between">
@@ -287,9 +359,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
         )}
       </div>
 
-      {loadError && (
-        <p className="text-[11px] text-amber-600 dark:text-amber-400">{loadError}</p>
-      )}
+      {loadError && <p className="text-[11px] text-amber-600 dark:text-amber-400">{loadError}</p>}
     </div>
   );
 };

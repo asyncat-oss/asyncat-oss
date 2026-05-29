@@ -1005,3 +1005,183 @@ export function installPythonVenvFallback(pythonCmd, { profile = 'cpu_safe' } = 
   persistLlamaEnv('LLAMA_PYTHON_PATH', python);
   return python;
 }
+
+// ─── Generic managed runtime installer (Piper / Whisper / stable-diffusion.cpp) ─
+// These engines, unlike llama.cpp, used to be detect-only. This installer
+// downloads a prebuilt GitHub release binary where one exists for the current
+// platform/arch, extracts it into ~/.asyncat/<dir>, links bundled libs, and
+// persists the binary path to the DB-backed config (the same key the manager
+// reads). If no prebuilt asset matches the platform, it throws — the caller
+// falls back to the package-manager command shown in the UI.
+
+export const MANAGED_RUNTIME_SPECS = {
+  piper: {
+    id: 'piper',
+    label: 'Piper (Text-to-Speech)',
+    repo: 'rhasspy/piper',
+    dir: 'piper',
+    binaryNames: ['piper'],
+    envKey: 'PIPER_BINARY_PATH',
+  },
+  whisper: {
+    id: 'whisper',
+    label: 'Whisper (Speech-to-Text)',
+    repo: 'ggml-org/whisper.cpp',
+    dir: 'whisper.cpp',
+    binaryNames: ['whisper-server', 'server', 'main'],
+    envKey: 'WHISPER_BINARY_PATH',
+  },
+  sd: {
+    id: 'sd',
+    label: 'Image (stable-diffusion.cpp)',
+    repo: 'leejet/stable-diffusion.cpp',
+    dir: 'stable-diffusion.cpp',
+    binaryNames: ['sd', 'sd-cli', 'stable-diffusion'],
+    envKey: 'IMAGEGEN_BINARY_PATH',
+  },
+};
+
+export function listManagedRuntimes() {
+  return Object.values(MANAGED_RUNTIME_SPECS).map(({ id, label, envKey }) => ({ id, label, envKey }));
+}
+
+// Score a release asset for the current platform/arch. Returns null if it can't
+// run here. Generic across the three runtimes (token-based, tolerant of naming).
+function scoreRuntimeAsset(name, platform = process.platform, arch = process.arch) {
+  const lower = String(name || '').toLowerCase();
+  if (!/\.(zip|tar\.gz|tgz)$/.test(lower)) return null;
+  if (/sha256|checksums?|\.sig$|source|\.asc$|debug/.test(lower)) return null;
+
+  let score = 0;
+  if (platform === 'win32') {
+    if (!/(win|windows)/.test(lower)) return null;
+    score += 40;
+  } else if (platform === 'darwin') {
+    if (!/(macos|darwin|osx|apple)/.test(lower)) return null;
+    score += 40;
+  } else if (platform === 'linux') {
+    if (!/linux/.test(lower)) return null;
+    score += 40;
+  }
+
+  if (arch === 'x64') {
+    if (/(x64|x86_64|amd64)/.test(lower)) score += 25;
+    else if (/(arm64|aarch64)/.test(lower)) return null;
+  } else if (arch === 'arm64') {
+    if (/(arm64|aarch64)/.test(lower)) score += 25;
+    else if (/(x64|x86_64|amd64)/.test(lower)) return null;
+  }
+
+  // Default to a portable CPU build; avoid vendor GPU builds during a one-click install.
+  if (/cuda|cublas|hip|rocm|vulkan|sycl|openvino/.test(lower)) score -= 60;
+  if (/avx2/.test(lower)) score += 3;
+  if (/noavx/.test(lower)) score -= 2;
+  if (/server/.test(lower)) score += 2;
+  return score;
+}
+
+function findBinaryByNames(root, baseNames) {
+  const wanted = [];
+  for (const base of baseNames) {
+    wanted.push(base);
+    if (isWin) wanted.push(`${base}.exe`);
+  }
+  const matchesByPriority = new Map();
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries = [];
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) { stack.push(full); continue; }
+      const idx = wanted.indexOf(entry.name);
+      if (idx !== -1 && !matchesByPriority.has(idx)) matchesByPriority.set(idx, full);
+    }
+  }
+  for (let i = 0; i < wanted.length; i++) {
+    if (matchesByPriority.has(i)) return matchesByPriority.get(i);
+  }
+  return null;
+}
+
+export async function installManagedRuntime(runtimeId, { onProgress = null } = {}) {
+  const spec = MANAGED_RUNTIME_SPECS[runtimeId];
+  if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
+
+  const report = (phase, message, percent, extra = {}) =>
+    onProgress?.({ phase, message, percent, runtime: spec.id, ...extra });
+
+  report('resolving', `Finding a ${spec.label} build for your system`, 2);
+  const res = await fetch(`https://api.github.com/repos/${spec.repo}/releases/latest`, {
+    headers: githubApiHeaders(),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`GitHub releases API returned ${res.status} for ${spec.repo}`);
+  const release = await res.json();
+
+  const ranked = (release.assets || [])
+    .map(asset => ({ asset, score: scoreRuntimeAsset(asset.name) }))
+    .filter(item => item.score !== null)
+    .sort((a, b) => b.score - a.score);
+
+  if (ranked.length === 0) {
+    throw new Error(
+      `No prebuilt ${spec.label} download is available for ${process.platform}-${process.arch}. ` +
+      `Install it with your package manager or set ${spec.envKey}.`
+    );
+  }
+
+  const asset = ranked[0].asset;
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `asyncat-${spec.id}-`));
+  const archivePath = path.join(tmpRoot, asset.name);
+  const extractDir = path.join(tmpRoot, 'extract');
+  const targetDir = path.join(asyncatHome(), spec.dir);
+
+  try {
+    report('downloading', `Downloading ${asset.name}`, 5, { assetName: asset.name });
+    await downloadFile(asset.browser_download_url, archivePath, p => {
+      report('downloading', `Downloading ${asset.name}`, Math.max(5, Math.min(72, p.percent ?? 0)), {
+        assetName: asset.name, downloadedBytes: p.downloadedBytes, totalBytes: p.totalBytes,
+      });
+    });
+
+    report('extracting', `Extracting ${asset.name}`, 80, { assetName: asset.name });
+    extractArchive(archivePath, extractDir);
+
+    const staged = findBinaryByNames(extractDir, spec.binaryNames);
+    if (!staged) {
+      throw new Error(`The ${spec.label} archive did not contain ${spec.binaryNames.join(' / ')}.`);
+    }
+
+    report('installing', 'Installing engine files', 88);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.cpSync(extractDir, targetDir, { recursive: true });
+    ensureLinuxSonameLinks(targetDir);
+    ensureDarwinDylibLinks(targetDir);
+
+    let installed = findBinaryByNames(targetDir, spec.binaryNames);
+    if (!installed) throw new Error(`Could not locate the installed ${spec.label} binary in ${targetDir}.`);
+
+    if (!isWin) {
+      // Wrap with a launcher that exports bundled lib dirs so the binary can find
+      // its .so/.dylib siblings regardless of the caller's working directory.
+      const realBinary = `${installed}.real`;
+      fs.renameSync(installed, realBinary);
+      installUnixLauncher(installed, realBinary, targetDir);
+      fs.chmodSync(realBinary, 0o755);
+      fs.chmodSync(installed, 0o755);
+    }
+
+    // Best-effort verification (these binaries don't all support --version cleanly).
+    let verified = false;
+    try { verified = verifyBinaryDetailed(installed).ok; } catch { /* non-fatal */ }
+
+    persistLlamaEnv(spec.envKey, installed);
+    report('complete', `${spec.label} installed`, 100, { binary: installed, verified });
+    return { runtime: spec.id, binary: installed, envKey: spec.envKey, version: release.tag_name || 'latest', verified };
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+}
