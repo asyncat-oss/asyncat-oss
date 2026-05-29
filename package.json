@@ -16,6 +16,7 @@
     "dev:frontend": "npm run dev -w neko",
     "start": "npm run start -w den",
     "build": "npm run build -w neko",
+    "icons:generate": "node scripts/generate-icons.cjs",
     "electron:dev": "concurrently --kill-others --names den,neko,electron 'npm run dev:backend' 'npm run dev:frontend' 'npx electron .'",
     "electron:start": "npm run build -w neko && npx electron .",
     "electron:build": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --config electron-builder.yml",

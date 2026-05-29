@@ -49,7 +49,7 @@ export function togglePopup(tray) {
     },
   });
 
-  popup.loadFile(POPUP_HTML, { query: { iconPath: ICONS.svg } });
+  popup.loadFile(POPUP_HTML, { query: { iconPath: ICONS.logo } });
 
   popup.once('ready-to-show', () => {
     positionBottomCenter(tray);

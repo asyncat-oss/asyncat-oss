@@ -239,7 +239,7 @@ const DraggableEvent = ({
 							</div>
 						) : (
 							<div className="flex items-center px-1 py-1 rounded-full bg-white/70 dark:bg-gray-800/70 shadow-sm">
-								<img src="cat.svg" className="w-4 h-4" />
+								<img src="/app-tray.png" alt="" className="w-4 h-4" />
 							</div>
 						)}
 					</div>

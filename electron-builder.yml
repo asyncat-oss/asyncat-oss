@@ -62,7 +62,7 @@ mac:
       arch:
         - x64
         - arm64
-  icon: neko/public/cat-icon-512.png
+  icon: icon.icns
   darkModeSupport: true
   hardenedRuntime: false         # No code signing for OSS — see README
   gatekeeperAssess: false
@@ -86,14 +86,14 @@ win:
       arch:
         - x64
         - arm64
-  icon: neko/public/cat-icon-512.png
+  icon: icon.ico
 
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  installerIcon: neko/public/cat-icon-512.png
-  uninstallerIcon: neko/public/cat-icon-512.png
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
   deleteAppDataOnUninstall: false
   menuCategory: true
 
@@ -108,7 +108,7 @@ linux:
       arch:
         - x64
         - arm64
-  icon: neko/public/cat-icon-512.png
+  icon: icons
   category: Utility
   maintainer: Asyncat Contributors
   synopsis: AI Agent OS that runs locally

@@ -7,7 +7,7 @@
 // 4. Manages the full app lifecycle
 //
 import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage } from 'electron';
-import { IS_MAC, IS_DEV, APP_NAME, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, ICONS } from './constants.js';
+import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, APP_ID, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, ICONS } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
@@ -51,6 +51,9 @@ if (!gotLock) {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.setName(APP_NAME);
+if (IS_WIN) {
+  app.setAppUserModelId(APP_ID);
+}
 
 // macOS: keep app running when all windows closed (tray icon stays)
 app.on('window-all-closed', () => {

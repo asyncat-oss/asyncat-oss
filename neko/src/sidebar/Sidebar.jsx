@@ -613,7 +613,7 @@ const DynamicSidebar = ({
                   ? 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
                   : 'text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-gray-500 midnight:group-hover:text-gray-300'
               }`}>
-                <img src="/cat.svg" alt="Asyncat" className="h-5 w-5" />
+                <img src="/app-tray.png" alt="Asyncat" className="h-5 w-5" />
                 {hasActiveRuns && (
                   <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
                 )}
@@ -731,7 +731,7 @@ const DynamicSidebar = ({
           isActive={isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")}
           dockPosition={dockPosition}
         >
-          <img src="/cat.svg" alt="Asyncat" className="w-5 h-5" />
+          <img src="/app-tray.png" alt="Asyncat" className="w-5 h-5" />
           {hasActiveRuns && (
             <span
               className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-gray-950 animate-pulse"

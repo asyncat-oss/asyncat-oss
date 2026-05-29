@@ -20,6 +20,11 @@ export const NEKO_DIST = path.join(ROOT, 'neko', 'dist');
 /** Frontend index.html (built) */
 export const NEKO_INDEX = path.join(NEKO_DIST, 'index.html');
 
+/** Static frontend assets copied by Vite into dist for packaged builds. */
+export const NEKO_ASSETS = app.isPackaged
+  ? NEKO_DIST
+  : path.join(ROOT, 'neko', 'public');
+
 /** User data directory (OS-specific: ~/Library/Application Support/Asyncat, etc.) */
 export const USER_DATA = app.getPath('userData');
 
@@ -39,9 +44,9 @@ export const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 
 /** Icon paths */
 export const ICONS = {
-  png:  path.join(ROOT, 'neko', 'public', 'cat-icon-512.png'), // dock — white bg
-  tray: path.join(ROOT, 'neko', 'public', 'pwa-96x96.png'),   // menu bar — original (no bg)
-  svg:  path.join(ROOT, 'neko', 'public', 'cat-icon.svg'),
+  png:  path.join(NEKO_ASSETS, 'app-icon-512.png'),
+  tray: path.join(NEKO_ASSETS, 'app-tray.png'),
+  logo: path.join(NEKO_ASSETS, 'app-icon-512.png'),
 };
 
 // ─── Ports ────────────────────────────────────────────────────────────────────
