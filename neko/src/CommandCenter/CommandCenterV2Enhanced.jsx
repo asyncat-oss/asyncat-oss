@@ -327,7 +327,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     try { return localStorage.getItem('asyncat_voice_mode') === 'true'; }
     catch { return false; }
   });
-  const chatOnlyMode = workingContext?.rootId === 'none' || workingContext?.noWorkspace === true;
   const [selectedAgentMode, setSelectedAgentMode] = useState(() => {
     try {
       const saved = localStorage.getItem('asyncat_agent_mode');
@@ -379,7 +378,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [brainStats, setBrainStats] = useState(null);
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
-  const agentMode = chatOnlyMode ? 'chat' : (selectedAgentMode || (toolsEnabled ? 'action' : 'plan'));
+  const agentMode = selectedAgentMode || (toolsEnabled ? 'action' : 'plan');
   const agentRunning = Boolean(currentRun.running);
   const agentEvents = currentRun.events || EMPTY_AGENT_EVENTS;
   const agentCurrentGoal = currentRun.goal || '';
@@ -404,14 +403,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return null;
   }, [agentEvents]);
   useEffect(() => {
-    if (chatOnlyMode) return;
     if (selectedAgentMode === 'design') {
       if (!toolsEnabled) setToolsEnabled(true);
       return;
     }
     const derivedMode = toolsEnabled ? 'action' : 'plan';
     if (selectedAgentMode !== derivedMode) setSelectedAgentMode(derivedMode);
-  }, [chatOnlyMode, selectedAgentMode, setToolsEnabled, toolsEnabled]);
+  }, [selectedAgentMode, setToolsEnabled, toolsEnabled]);
   const handleAgentModeChange = useCallback((nextMode) => {
     const mode = ['plan', 'action', 'design'].includes(nextMode) ? nextMode : 'action';
     setSelectedAgentMode(mode);
@@ -1063,12 +1061,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     const goal = typeof messageObj === 'string' ? messageObj : messageObj?.content;
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
-    const requestedChatOnly = runOptions.agentMode === 'chat' || messageObj?.chatOnly === true || chatOnlyMode;
-    const agentMentions = requestedChatOnly ? [] : Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : [];
+    const agentMentions = Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : [];
     const fileAttachments = Array.isArray(messageObj?.fileAttachments) ? messageObj.fileAttachments : [];
-    const runEnabledIntegrationTools = requestedChatOnly
-      ? []
-      : Array.isArray(runOptions.enabledIntegrationTools)
+    const runEnabledIntegrationTools = Array.isArray(runOptions.enabledIntegrationTools)
       ? runOptions.enabledIntegrationTools
       : Array.isArray(messageObj?.enabledIntegrationTools)
         ? messageObj.enabledIntegrationTools
@@ -1080,11 +1075,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let runConversationId = currentConversationId;
     const isFirstExchangeOfNewConversation = !currentConversationId && messages.length === 0;
     const runMessages = Array.isArray(runOptions.baseMessages) ? runOptions.baseMessages : messages;
-    const effectiveAgentMode = requestedChatOnly
-      ? 'chat'
-      : runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
+    const effectiveAgentMode = runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
     const effectiveToolsEnabled = effectiveAgentMode === 'action' || effectiveAgentMode === 'design';
-    const activeWorkingContext = effectiveAgentMode === 'chat' ? null : workingContext || null;
+    const activeWorkingContext = workingContext || null;
     const activeConversationHistory = Array.isArray(runOptions.baseConversationHistory)
       ? runOptions.baseConversationHistory
       : agentConversationHistory.length > 0
@@ -1615,7 +1608,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     updateChatRun,
     refreshGitState,
     workingContext,
-    chatOnlyMode,
   ]);
 
   const handleEditConversationTurn = useCallback(async (messageId, nextContent) => {
@@ -2542,7 +2534,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               agentMode={agentMode}
               onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
               onAgentModeChange={handleAgentModeChange}
-              chatOnlyMode={chatOnlyMode}
               autoApprove={agentAutoApprove}
               onToggleAutoApprove={handleToggleAgentAutoApprove}
               enabledIntegrationTools={enabledIntegrationTools}
@@ -3045,8 +3036,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 agentMode={agentMode}
                 onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
                 onAgentModeChange={handleAgentModeChange}
-                chatOnlyMode={chatOnlyMode}
-                autoApprove={agentAutoApprove}
+                  autoApprove={agentAutoApprove}
                 onToggleAutoApprove={handleToggleAgentAutoApprove}
                 enabledIntegrationTools={enabledIntegrationTools}
                 onEnabledIntegrationToolsChange={handleEnabledIntegrationToolsChange}

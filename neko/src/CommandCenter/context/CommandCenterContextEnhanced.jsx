@@ -48,6 +48,9 @@ const initialState = {
 
 function normalizeWorkingContext(context) {
   if (!context || typeof context !== 'object') return null;
+  // Migrate the retired "No workspace" (chat-only) context to the default
+  // workspace so conversations saved before chat-only mode was removed still load.
+  if (context.rootId === 'none' || context.noWorkspace) return null;
   const rootId = context.rootId || context.root?.id || 'workspace';
   const relativePath = context.relativePath || context.path || '.';
   return {

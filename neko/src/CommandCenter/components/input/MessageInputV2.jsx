@@ -116,45 +116,6 @@ function safeAttachmentName(name = "attachment") {
   return cleaned || "attachment";
 }
 
-function isPromptTextFile(file) {
-  const mime = String(file?.type || "").toLowerCase();
-  const ext = String(file?.name || "").split(".").pop()?.toLowerCase() || "";
-  return mime.startsWith("text/")
-    || ["json", "csv", "tsv", "md", "txt", "log", "js", "jsx", "ts", "tsx", "py", "html", "css", "xml", "yaml", "yml", "toml", "sql"].includes(ext);
-}
-
-function readAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function createPromptOnlyAttachment(file) {
-  const ext = file.name.split(".").pop() || "";
-  const base = {
-    id: `prompt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    rootId: "none",
-    path: `prompt://${file.name}`,
-    name: file.name,
-    ext,
-    mime: file.type || "",
-    size: file.size,
-    promptOnly: true,
-  };
-
-  if (isPromptTextFile(file) && file.size <= 512 * 1024) {
-    return { ...base, content: await file.text() };
-  }
-
-  if (String(file.type || "").startsWith("image/") && file.size <= 6 * 1024 * 1024) {
-    return { ...base, dataUrl: await readAsDataUrl(file) };
-  }
-
-  return base;
-}
 
 function labelForWorkingContext(context, root) {
   if (context?.relativePath && context.relativePath !== ".") return basename(context.relativePath);
@@ -512,7 +473,6 @@ export const MessageInputV2 = ({
   agentMode = toolsEnabled ? 'action' : 'plan',
   onToggleAgentMode,
   onAgentModeChange,
-  chatOnlyMode = false,
   autoApprove = false,
   onToggleAutoApprove,
   enabledIntegrationTools = [],
@@ -585,10 +545,9 @@ export const MessageInputV2 = ({
     () => getAgentTrigger(value, cursorPosition),
     [value, cursorPosition],
   );
-  const allowWorkspaceAccess = !chatOnlyMode;
   const rawFileTrigger = useMemo(
-    () => allowWorkspaceAccess ? getFileTrigger(value, cursorPosition) : null,
-    [allowWorkspaceAccess, value, cursorPosition],
+    () => getFileTrigger(value, cursorPosition),
+    [value, cursorPosition],
   );
   const agentTrigger = dismissedTrigger?.kind === "agent"
     && dismissedTrigger.value === value
@@ -617,7 +576,6 @@ export const MessageInputV2 = ({
     [agentProfiles, value],
   );
   const activeRoot = useMemo(() => {
-    if (!allowWorkspaceAccess) return null;
     const rootId = workingContext?.rootId || "workspace";
     if (rootId === "_abs" && workingContext?.workingDir) {
       // Synthesize a root from the absolute path chosen via native picker
@@ -630,9 +588,8 @@ export const MessageInputV2 = ({
       };
     }
     return fileRoots.find(root => root.id === rootId) || fileRoot || fileRoots[0] || null;
-  }, [allowWorkspaceAccess, fileRoot, fileRoots, workingContext?.rootId, workingContext?.workingDir]);
+  }, [fileRoot, fileRoots, workingContext?.rootId, workingContext?.workingDir]);
   const activeWorkingContext = useMemo(() => {
-    if (!allowWorkspaceAccess) return null;
     if (!activeRoot) return null;
     const relativePath = workingContext?.relativePath || ".";
     return {
@@ -643,7 +600,7 @@ export const MessageInputV2 = ({
       relativePath,
       workingDir: workingContext?.workingDir || absoluteFromRoot(activeRoot.path, relativePath),
     };
-  }, [activeRoot, allowWorkspaceAccess, workingContext?.relativePath, workingContext?.workingDir]);
+  }, [activeRoot, workingContext?.relativePath, workingContext?.workingDir]);
   const activeContextLabel = labelForWorkingContext(activeWorkingContext, activeRoot);
   const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {
@@ -701,7 +658,6 @@ export const MessageInputV2 = ({
   }, [prefillValue]);
 
   useEffect(() => {
-    if (chatOnlyMode) return;
     if (!externalFileAttachment?.path) return;
     setFileAttachments(prev => {
       const rootId = externalFileAttachment.rootId || activeWorkingContext?.rootId || "workspace";
@@ -714,7 +670,7 @@ export const MessageInputV2 = ({
       }];
     });
     requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [chatOnlyMode, externalFileAttachment?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [externalFileAttachment?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false;
@@ -900,10 +856,6 @@ export const MessageInputV2 = ({
     try {
       const uploaded = [];
       for (const file of picked.slice(0, 8)) {
-        if (chatOnlyMode) {
-          uploaded.push(await createPromptOnlyAttachment(file));
-          continue;
-        }
         const safeName = safeAttachmentName(file.name);
         const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const targetPath = joinRelativePath(uploadDir, `${stamp}-${safeName}`);
@@ -934,7 +886,7 @@ export const MessageInputV2 = ({
     } finally {
       setUploadingAttachment(false);
     }
-  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, chatOnlyMode, disabled]);
+  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, disabled]);
 
   const handleSubmit = useCallback(
     async (e, overrideText = null) => {
@@ -960,15 +912,14 @@ export const MessageInputV2 = ({
             resolvedInline.push({ ...meta, inline: true });
           }
         }
-        const allFileAttachments = chatOnlyMode ? fileAttachments : [...resolvedInline, ...fileAttachments];
+        const allFileAttachments = [...resolvedInline, ...fileAttachments];
 
         const messageToSend = {
           content: textToSend.trim(),
-          chatOnly: chatOnlyMode,
-          agentMentions: chatOnlyMode ? [] : detectedAgentMentions,
+          agentMentions: detectedAgentMentions,
           fileAttachments: allFileAttachments.length > 0 ? allFileAttachments : undefined,
           reasoningEffort: activeBrain.supportsReasoning ? reasoningEffort : "auto",
-          enabledIntegrationTools: chatOnlyMode ? [] : Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : [],
+          enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : [],
         };
 
         await onSubmit(messageToSend, []);
@@ -982,7 +933,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, localModelSendBlockReason, onSubmit, chatOnlyMode, detectedAgentMentions, fileAttachments, inlineMentions, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
+    [value, disabled, localModelSendBlockReason, onSubmit, detectedAgentMentions, fileAttachments, inlineMentions, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
   );
 
   const handleKeyDown = useCallback(
@@ -1229,26 +1180,6 @@ export const MessageInputV2 = ({
       setContextModalOpen(false);
       return;
     }
-    if (rootId === "none") {
-      const nextContext = {
-        rootId: "none",
-        rootLabel: "No workspace",
-        rootKind: "none",
-        rootPath: "",
-        relativePath: ".",
-        workingDir: null,
-        noWorkspace: true,
-      };
-      const currentKey = `${activeWorkingContext?.rootId || (chatOnlyMode ? "none" : "")}:${activeWorkingContext?.relativePath || "."}`;
-      const nextKey = "none:.";
-      if (hasMessages && currentKey !== nextKey) {
-        setPendingContextSwitch(nextContext);
-        return;
-      }
-      onWorkingContextChange(nextContext);
-      setContextModalOpen(false);
-      return;
-    }
     const root = fileRoots.find(item => item.id === rootId) || activeRoot;
     if (!root || !onWorkingContextChange) return;
     const nextContext = {
@@ -1267,7 +1198,7 @@ export const MessageInputV2 = ({
     }
     onWorkingContextChange(nextContext);
     setContextModalOpen(false);
-  }, [activeRoot, activeWorkingContext?.relativePath, activeWorkingContext?.rootId, chatOnlyMode, fileRoots, hasMessages, onWorkingContextChange]);
+  }, [activeRoot, activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileRoots, hasMessages, onWorkingContextChange]);
 
   const openWorkingContextMenu = useCallback(async () => {
     if (window?.electronAPI?.openDirectory) {
@@ -1610,7 +1541,7 @@ export const MessageInputV2 = ({
                         className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       >
                         <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
-                        <span className="flex-1 font-medium">{chatOnlyMode ? "Attach prompt files" : "Add photos & files"}</span>
+                        <span className="flex-1 font-medium">Add photos & files</span>
                       </button>
 
                       {window?.electronAPI?.openFilesDialog && (
@@ -1879,19 +1810,7 @@ export const MessageInputV2 = ({
               {(activeWorkingContext || onWorkingContextChange) && (
                 <div className="-mx-4 px-4 pt-2.5 pb-3 mt-2 -mb-3 bg-gray-50/80 dark:bg-gray-800/40 midnight:bg-slate-800/40 flex flex-wrap items-center gap-3 select-none">
             {/* Workspace & Folder Combined Button */}
-            {chatOnlyMode ? (
-              <button
-                type="button"
-                onClick={openWorkingContextMenu}
-                disabled={disabled || !onWorkingContextChange}
-                title="No workspace selected. Prompt attachments are allowed; local folders, commands, and edits are disabled."
-                className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-60 dark:text-emerald-400 dark:hover:text-emerald-300"
-              >
-                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>No workspace</span>
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </button>
-            ) : activeWorkingContext && (
+            {activeWorkingContext && (
               <button
                 type="button"
                 onClick={openWorkingContextMenu}
@@ -1912,7 +1831,7 @@ export const MessageInputV2 = ({
             )}
 
             {/* Mode Selector Dropdown */}
-            {!chatOnlyMode && (onAgentModeChange || onToggleAgentMode || onToggleTools) && (
+            {(onAgentModeChange || onToggleAgentMode || onToggleTools) && (
               <div ref={modeMenuRef} className="relative">
                 <button
                   type="button"
@@ -2031,9 +1950,9 @@ export const MessageInputV2 = ({
         onClose={() => setContextModalOpen(false)}
         onSelect={selectWorkingContext}
         fileRoots={fileRoots}
-        initialRootId={chatOnlyMode ? "none" : activeWorkingContext?.rootId || "workspace"}
-        initialRelativePath={chatOnlyMode ? "." : activeWorkingContext?.relativePath || "."}
-        activeWorkingDir={chatOnlyMode ? "" : activeWorkingContext?.workingDir || ""}
+        initialRootId={activeWorkingContext?.rootId || "workspace"}
+        initialRelativePath={activeWorkingContext?.relativePath || "."}
+        activeWorkingDir={activeWorkingContext?.workingDir || ""}
       />
 
       <ConfirmModal

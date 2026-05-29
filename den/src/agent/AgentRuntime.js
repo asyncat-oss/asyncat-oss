@@ -284,7 +284,7 @@ export class AgentRuntime {
     this.providerInfo = opts.providerInfo || null;
     this.reasoningEffort = opts.reasoningEffort || 'auto';
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
-    this.agentMode = ['chat', 'plan', 'action', 'design'].includes(opts.agentMode) ? opts.agentMode : 'action';
+    this.agentMode = ['plan', 'action', 'design'].includes(opts.agentMode) ? opts.agentMode : 'action';
     this.enabledIntegrationTools = Array.isArray(opts.enabledIntegrationTools)
       ? new Set(opts.enabledIntegrationTools.filter(Boolean).map(String))
       : null;
@@ -587,7 +587,7 @@ export class AgentRuntime {
     // Plan-driven continuation: limits how many times we nudge the agent
     let planContinuationNudges = 0;
     // In plan mode, agent should converge quickly — fewer nudges, less looping
-    const MAX_PLAN_NUDGES = this.agentMode === 'plan' || this.agentMode === 'chat' ? 1 : 3;
+    const MAX_PLAN_NUDGES = this.agentMode === 'plan' ? 1 : 3;
 
     // ── Adaptive round budget ──────────────────────────────────────────────
     // Start at the configured cap but allow it to grow (up to a hard ceiling)
@@ -1661,7 +1661,6 @@ export class AgentRuntime {
   }
 
   _ensureAutoPlan(goal, round = 0) {
-    if (this.agentMode === 'chat') return;
     if (!ACTION_GOAL_RE.test(String(goal || ''))) return;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return;
 
@@ -1825,7 +1824,6 @@ export class AgentRuntime {
   }
 
   _shouldPrimePlan(goal, round) {
-    if (this.agentMode === 'chat') return false;
     if (!this.supportsNativeTools) return false;
     if (round > 2) return false;
     if (Array.isArray(this.session?.plan) && this.session.plan.length > 0) return false;
@@ -2046,7 +2044,6 @@ export class AgentRuntime {
   }
 
   _toolDefinitionsForMode(goal = this.currentGoal || '') {
-    if (this.agentMode === 'chat') return [];
     const allTools = toolRegistry.all();
     const modeTools = this.agentMode === 'plan'
       ? allTools.filter(tool => {

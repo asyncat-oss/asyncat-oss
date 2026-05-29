@@ -431,7 +431,7 @@ function injectFileAttachments(goal, fileAttachments = []) {
         'Scope: prompt-only upload; not stored in or read from the workspace.',
         `MIME: ${f.mime || 'application/octet-stream'}`,
         f.size ? `Size: ${f.size} bytes` : null,
-        'This file type is available as metadata only in No workspace mode.',
+        'This file type is available as prompt metadata only.',
         '',
       ].filter(Boolean).join('\n');
     }
@@ -1587,13 +1587,11 @@ router.post('/run', authenticate, async (req, res) => {
       clientTimestamp = null,
       clientTimezone = null,
     } = req.body;
-    const resolvedAgentMode = agentMode === 'chat'
-      ? 'chat'
-      : agentMode === 'design'
-        ? 'design'
-        : agentMode === 'plan' || enableTools === false
-          ? 'plan'
-          : 'action';
+    const resolvedAgentMode = agentMode === 'design'
+      ? 'design'
+      : agentMode === 'plan' || enableTools === false
+        ? 'plan'
+        : 'action';
     const baseGoal = (rawGoal || rawMessage || '').trim();
 
     if (!baseGoal) {
@@ -1632,14 +1630,9 @@ router.post('/run', authenticate, async (req, res) => {
       heartbeatInterval = null;
     });
 
-    const resolvedWorkingContext = resolvedAgentMode === 'chat'
-      ? resolveAgentWorkingContext({ workingContext: null, workingDir: null, profile: null })
-      : resolveAgentWorkingContext({ workingContext, workingDir, profile });
+    const resolvedWorkingContext = resolveAgentWorkingContext({ workingContext, workingDir, profile });
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
-    const resolvedFiles = resolveFileAttachments(
-      fileAttachments,
-      resolvedAgentMode === 'chat' ? null : resolvedWorkingContext,
-    );
+    const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext);
     const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
     // Capabilities go into the system prompt via AgentRuntime — NOT prepended to the user's goal.
     const capabilitiesSection = formatMultimodalCapabilityPrompt(multimodalCapabilities);

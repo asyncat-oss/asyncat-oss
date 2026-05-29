@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { X, ChevronRight, FolderOpen, Check, Loader2, ArrowLeft, MessageCircle } from "lucide-react";
+import { X, ChevronRight, FolderOpen, Check, Loader2, ArrowLeft } from "lucide-react";
 import Portal from "../../../components/Portal";
 import { filesApi } from "../../api";
 import { dirname, basename, rootIcon } from "../../../files/fileUtils.js";
@@ -45,17 +45,16 @@ export function WorkingContextModal({
   initialRelativePath = ".",
   activeWorkingDir = "",
 }) {
-  const [rootId, setRootId] = useState(initialRootId);
+  const [rootId, setRootId] = useState(initialRootId === "none" ? "workspace" : initialRootId);
   const [browsePath, setBrowsePath] = useState(initialRelativePath);
   const [manualPath, setManualPath] = useState(activeWorkingDir);
   const [manualError, setManualError] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
-  const noWorkspaceSelected = rootId === "none";
 
   useEffect(() => {
     if (!isOpen) return;
-    setRootId(initialRootId);
+    setRootId(initialRootId === "none" ? "workspace" : initialRootId);
     setBrowsePath(initialRelativePath);
     setManualPath(activeWorkingDir);
     setManualError(null);
@@ -63,11 +62,6 @@ export function WorkingContextModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (rootId === "none") {
-      setEntries([]);
-      setLoading(false);
-      return undefined;
-    }
     let cancelled = false;
     setLoading(true);
     filesApi
@@ -87,10 +81,10 @@ export function WorkingContextModal({
     return () => document.removeEventListener("keydown", handle);
   }, [isOpen, onClose]);
 
-  const activeRoot = noWorkspaceSelected ? null : fileRoots.find(r => r.id === rootId) || fileRoots[0];
+  const activeRoot = fileRoots.find(r => r.id === rootId) || fileRoots[0];
   const workingDir = activeRoot ? absoluteFromRoot(activeRoot.path, browsePath) : "";
-  const breadcrumbs = useMemo(() => noWorkspaceSelected ? [] : buildBreadcrumbs(browsePath), [browsePath, noWorkspaceSelected]);
-  const folderLabel = noWorkspaceSelected ? "No workspace" : browsePath === "." ? (activeRoot?.label || "Root") : basename(browsePath);
+  const breadcrumbs = useMemo(() => buildBreadcrumbs(browsePath), [browsePath]);
+  const folderLabel = browsePath === "." ? (activeRoot?.label || "Root") : basename(browsePath);
 
   const navigateTo = useCallback((path, root = activeRoot) => {
     setBrowsePath(path);
@@ -172,25 +166,8 @@ export function WorkingContextModal({
             {/* Root / workspace list */}
             <div className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-gray-100 p-2 dark:border-gray-800 midnight:border-slate-800">
               <p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
-                Context
+                Workspaces
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setRootId("none");
-                  setBrowsePath(".");
-                  setManualPath("");
-                  setManualError(null);
-                }}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
-                  noWorkspaceSelected
-                    ? "bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
-                }`}
-              >
-                <MessageCircle className="h-4 w-4 shrink-0" />
-                <span className="truncate">No workspace</span>
-              </button>
               {fileRoots.map(root => {
                 const RootIcon = rootIcon(root.kind);
                 const active = root.id === rootId;
@@ -220,17 +197,6 @@ export function WorkingContextModal({
 
             {/* Folder browser */}
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              {noWorkspaceSelected ? (
-                <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
-                    <MessageCircle className="h-6 w-6" />
-                  </div>
-                  <h3 className="mt-4 text-sm font-semibold text-gray-900 dark:text-gray-100">No workspace selected</h3>
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">
-                    The agent can use the conversation, selected skills, and prompt-only attachments, but it will not inspect folders, run commands, or modify files.
-                  </p>
-                </div>
-              ) : (
               <>
                 {/* Path bar */}
                 <div className="border-b border-gray-100 px-4 pb-3 pt-3 dark:border-gray-800 midnight:border-slate-800">
@@ -325,7 +291,6 @@ export function WorkingContextModal({
                 )}
                 </div>
               </>
-              )}
             </div>
           </div>
 

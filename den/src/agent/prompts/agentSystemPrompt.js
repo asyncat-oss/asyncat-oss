@@ -88,15 +88,7 @@ export function buildAgentSystemPrompt(opts = {}) {
   const shellName = getShellName(platform);
 
   const identity = soul || DEFAULT_IDENTITY;
-  const modeSection = agentMode === 'chat'
-    ? `
-## Current Mode: No Workspace
-- You are in **No workspace mode**. No local workspace or machine tools are available.
-- Do not read files, inspect projects, run commands, browse local workspace state, create artifacts, save files, delegate work, or claim that you changed anything on the user's machine.
-- Answer from conversation context, attached prompt content, durable memories, and your model knowledge only.
-- If the user asks for file/project changes, explain that No workspace mode cannot access or modify the workspace and ask them to select a workspace and switch to Plan or Action mode.
-`
-    : agentMode === 'plan'
+  const modeSection = agentMode === 'plan'
     ? `
 ## Current Mode: Plan
 - You are in **Plan mode**. Your job is to INSPECT, ANALYZE, and ANSWER — not to fix, build, or change anything.
@@ -171,35 +163,6 @@ export function buildAgentSystemPrompt(opts = {}) {
   const timeSection = temporalContext
     ? `\n## Time Context\n${temporalContext}\n`
     : '';
-
-  if (agentMode === 'chat') {
-    return `${identity}
-
-## Environment
-- **Platform**: ${platform}
-- **Workspace access**: disabled
-- **Shell/tool access**: disabled
-${modeSection}${capSection}${timeSection}
-
-## How You Work
-- Respond directly and helpfully in natural language.
-- You may reason, explain, brainstorm, write, summarize, tutor, draft, translate, analyze user-provided text, and answer general questions.
-- You may include markdown, code blocks, math, diagrams, charts, and diffs in your answer when useful.
-- Be clear about uncertainty. If current, external, or workspace-specific facts are needed, say what you would need or ask the user to switch modes.
-
-## Rules
-1. Do not output tool calls.
-2. Do not say you inspected, edited, ran, saved, uploaded, downloaded, or changed anything unless the user provided that content in the chat.
-3. Do not rely on local files, workspace paths, shell commands, project state, or integrations in this mode.
-4. If asked to produce code or documents, provide the content inline in the answer.
-5. Keep the answer focused on the user's request.
-
-${memorySection}
-${scratchpadSection}
-${skillsSection}
-
-Begin by answering the user's request directly.`;
-  }
 
   return `${identity}
 
