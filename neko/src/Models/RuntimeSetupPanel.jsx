@@ -27,6 +27,8 @@ const PROFILE_LABELS = {
   nvidia_gpu: 'NVIDIA CUDA',
   apple_metal: 'Apple Metal',
   amd_rocm: 'AMD ROCm',
+  vulkan: 'Vulkan',
+  intel_sycl: 'Intel (SYCL)',
 };
 
 // Map detected GPU vendor → managed-install profile (prebuilt download, never compiles).
@@ -35,6 +37,7 @@ const profileForGpu = (gpu) => {
     case 'NVIDIA': return 'nvidia_gpu';
     case 'Apple':  return 'apple_metal';
     case 'AMD':    return 'amd_rocm';
+    case 'Intel':  return 'vulkan';
     default:       return 'cpu_safe';
   }
 };

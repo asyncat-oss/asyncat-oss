@@ -144,6 +144,23 @@ export async function detectGpuInfo() {
     };
   }
 
+  // Best-effort Intel GPU probe (checked last so a discrete NVIDIA/AMD wins).
+  const intelAdvice = 'Intel GPU detected. Install the Vulkan build for cross-vendor GPU acceleration, or build a SYCL runtime with the Intel oneAPI toolkit.';
+  try {
+    if (process.platform === 'linux') {
+      const { stdout } = await execAsync('lspci', { timeout: 3000 });
+      const line = stdout.split('\n').find(l => /vga|3d|display/i.test(l) && /intel/i.test(l));
+      if (line) {
+        const name = /(arc|iris|xe|uhd)[^\]]*/i.exec(line)?.[0]?.trim() || 'Intel GPU';
+        return { vendor: 'Intel', name, vramGb: null, advice: intelAdvice };
+      }
+    } else if (IS_WIN) {
+      const { stdout } = await execAsync('wmic path win32_VideoController get name', { timeout: 4000 });
+      const line = stdout.split('\n').map(l => l.trim()).find(l => /intel/i.test(l));
+      if (line) return { vendor: 'Intel', name: line, vramGb: null, advice: intelAdvice };
+    }
+  } catch {}
+
   return null;
 }
 
@@ -195,6 +212,8 @@ function capabilityHintFor(runtime, source, candidatePath) {
   if (/cuda|cublas/.test(text)) return 'nvidia';
   if (/rocm|hip/.test(text)) return 'amd';
   if (/metal/.test(text)) return 'apple';
+  if (/vulkan/.test(text)) return 'vulkan';
+  if (/sycl|openvino|oneapi/.test(text)) return 'intel';
   return 'cpu_safe';
 }
 
@@ -202,6 +221,8 @@ function capabilityLabelFor(hint) {
   if (hint === 'nvidia') return 'NVIDIA';
   if (hint === 'amd') return 'AMD';
   if (hint === 'apple') return 'Apple';
+  if (hint === 'vulkan') return 'Vulkan';
+  if (hint === 'intel') return 'Intel';
   return 'CPU-safe';
 }
 
@@ -348,7 +369,7 @@ function recommendationKindForGpu(gpu) {
   if (gpu.vendor === 'NVIDIA') return 'nvidia_gpu';
   if (gpu.vendor === 'Apple') return 'apple_metal';
   if (gpu.vendor === 'AMD') return 'amd_rocm';
-  return 'custom_gpu_needed';
+  return 'vulkan'; // Intel / unknown GPU: Vulkan has prebuilt cross-vendor binaries.
 }
 
 function targetCapabilityForGpu(gpu) {
@@ -356,12 +377,12 @@ function targetCapabilityForGpu(gpu) {
   if (gpu.vendor === 'NVIDIA') return 'nvidia';
   if (gpu.vendor === 'Apple') return 'apple';
   if (gpu.vendor === 'AMD') return 'amd';
-  return 'cpu_safe';
+  return 'vulkan'; // Intel / unknown GPU
 }
 
 function suggestedGpuLayers(capabilityHint, gpu) {
-  if (!gpu || capabilityHint === 'cpu_safe') return 0;
-  if (gpu.vendor === 'NVIDIA') {
+  if (capabilityHint === 'cpu_safe') return 0;
+  if (gpu?.vendor === 'NVIDIA') {
     if (typeof gpu.vramGb === 'number') {
       if (gpu.vramGb < 10) return 20;
       if (gpu.vramGb < 20) return 35;
@@ -369,6 +390,10 @@ function suggestedGpuLayers(capabilityHint, gpu) {
     }
     return 20;
   }
+  // Vulkan/Intel target GPUs that detectGpuInfo() can't always identify, so
+  // offer a conservative offload even when no GPU was detected.
+  if (capabilityHint === 'vulkan' || capabilityHint === 'intel') return 20;
+  if (!gpu) return 0;
   if (gpu.vendor === 'Apple' || gpu.vendor === 'AMD') return 20;
   return 20;
 }
@@ -555,7 +580,7 @@ function sanitizeInstallProfile(profile, hardware = null) {
   if (hardware.gpu.vendor === 'NVIDIA') return 'nvidia_gpu';
   if (hardware.gpu.vendor === 'Apple') return 'apple_metal';
   if (hardware.gpu.vendor === 'AMD') return 'amd_rocm';
-  return 'cpu_safe';
+  return 'vulkan'; // Intel / unknown GPU
 }
 
 const RELEASE_CATALOG_TTL_MS = 5 * 60 * 1000;
@@ -956,6 +981,8 @@ const PYTHON_GPU_CAPABILITY = {
   nvidia_gpu:  'nvidia',
   apple_metal: 'apple',
   amd_rocm:    'amd',
+  vulkan:      'vulkan',
+  intel_sycl:  'intel',
 };
 
 function runCommandStreaming(cmd, args, options = {}, timeoutMs = 120000, onLine = null) {
@@ -1134,9 +1161,9 @@ async function installPythonEngine({ profile, retryModel, ctxSize, modelsDir, on
     {}, 300000
   );
 
-  const cmakeArgs = { nvidia_gpu: '-DGGML_CUDA=on', apple_metal: '-DGGML_METAL=on', amd_rocm: '-DGGML_HIP=on' }[profile] || '';
+  const cmakeArgs = { nvidia_gpu: '-DGGML_CUDA=on', apple_metal: '-DGGML_METAL=on', amd_rocm: '-DGGML_HIP=on', vulkan: '-DGGML_VULKAN=on', intel_sycl: '-DGGML_SYCL=on' }[profile] || '';
   const env = { ...(cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env), ...cudaEnvOverrides };
-  const tag = profile === 'nvidia_gpu' ? 'CUDA' : profile === 'apple_metal' ? 'Metal' : profile === 'amd_rocm' ? 'ROCm' : 'CPU';
+  const tag = profile === 'nvidia_gpu' ? 'CUDA' : profile === 'apple_metal' ? 'Metal' : profile === 'amd_rocm' ? 'ROCm' : profile === 'vulkan' ? 'Vulkan' : profile === 'intel_sycl' ? 'SYCL' : 'CPU';
 
   onProgress?.({ phase: 'compile', message: `Compiling llama-cpp-python with ${tag} support — takes 10–30 min…`, percent: 30 });
   await runCommandStreaming(

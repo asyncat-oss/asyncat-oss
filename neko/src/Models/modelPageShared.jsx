@@ -5,6 +5,8 @@ export const Badge = ({ children, color = 'gray' }) => {
     amber: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/30 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-400',
     red:   'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/30 midnight:border-red-900/40 midnight:bg-red-950/25 midnight:text-red-400',
     blue:  'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/30 midnight:border-blue-900/40 midnight:bg-blue-950/25 midnight:text-blue-400',
+    purple: 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800/30 midnight:border-purple-900/40 midnight:bg-purple-950/25 midnight:text-purple-400',
+    cyan: 'bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:border-cyan-800/30 midnight:border-cyan-900/40 midnight:bg-cyan-950/25 midnight:text-cyan-400',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[color]}`}>
@@ -52,6 +54,8 @@ export const INSTALL_PROFILE_LABELS = {
   nvidia_gpu: 'NVIDIA CUDA build',
   apple_metal: 'Apple Metal build',
   amd_rocm: 'AMD ROCm build',
+  vulkan: 'Vulkan build',
+  intel_sycl: 'Intel (SYCL) build',
 };
 
 export const DEFAULT_LOAD_CTX_SIZE = 32768;
@@ -111,6 +115,8 @@ export const capabilityBadgeColor = (hint) => {
   if (hint === 'nvidia') return 'green';
   if (hint === 'apple') return 'blue';
   if (hint === 'amd') return 'amber';
+  if (hint === 'vulkan') return 'purple';
+  if (hint === 'intel') return 'cyan';
   return 'gray';
 };
 
