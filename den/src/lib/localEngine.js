@@ -4,6 +4,20 @@ import os from 'os';
 import { execFileSync, execSync, spawnSync } from 'child_process';
 import { once } from 'events';
 import { ROOT, readEnv, setKey } from './env.js';
+import { setConfigValue } from '../config/appConfig.js';
+
+// Persist a llama runtime path. These used to be written to den/.env; they now
+// live in the DB-backed app_config (hydrated into process.env at boot). We set
+// process.env immediately so the running process picks it up, then persist to
+// the DB, falling back to den/.env only if the DB write is unavailable.
+function persistLlamaEnv(key, value) {
+  process.env[key] = value;
+  try {
+    setConfigValue(key, value);
+  } catch {
+    setKey('den/.env', key, value);
+  }
+}
 
 export const LLAMA_RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
 export const LLAMA_RELEASES_LIST_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases';
@@ -641,7 +655,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       installedAt: new Date().toISOString(),
     }, targetDir);
     pointCurrentManagedEngine(targetDir);
-    setKey('den/.env', 'LLAMA_BINARY_PATH', installed);
+    persistLlamaEnv('LLAMA_BINARY_PATH', installed);
     onProgress?.({
       phase: 'complete',
       message: 'Managed engine installed successfully',
@@ -947,7 +961,7 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
 }
 
 export function writeLlamaBinaryEnv(binaryPath) {
-  setKey('den/.env', 'LLAMA_BINARY_PATH', binaryPath);
+  persistLlamaEnv('LLAMA_BINARY_PATH', binaryPath);
 }
 
 const PYTHON_GPU_CMAKE_ARGS = {
@@ -988,6 +1002,6 @@ export function installPythonVenvFallback(pythonCmd, { profile = 'cpu_safe' } = 
   } else {
     execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]'], { env, cwd: ROOT, stdio: 'ignore', timeout: 3600000 });
   }
-  setKey('den/.env', 'LLAMA_PYTHON_PATH', python);
+  persistLlamaEnv('LLAMA_PYTHON_PATH', python);
   return python;
 }

@@ -314,7 +314,8 @@ const ServerSection = () => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Current server settings (read-only). Edit the .env file to change these.
+          Current server settings (read-only). Engine paths and ports are managed from Runtime and
+          Models; bootstrap values (port, database, JWT secret) live in <code className="font-mono px-1">den/.env</code>.
         </p>
 
         <div className="space-y-3">

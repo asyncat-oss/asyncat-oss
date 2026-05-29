@@ -409,6 +409,24 @@ function ensureConversationFts() {
   `);
 }
 
+// ─── Hydrate DB-backed config into process.env ───────────────────────────────
+// app_config holds settings that used to live in den/.env (local-AI engine
+// paths/ports, capability providers, integration creds, …). The DB is
+// authoritative for any key it stores, so a value edited in the UI wins over a
+// stale .env entry. Inlined here (rather than importing config/appConfig.js) so
+// the very first import of this module hydrates env before any manager reads it,
+// and to avoid a circular import. See config/appConfig.js.
+try {
+  let hydrated = 0;
+  for (const row of db.prepare('SELECT key, value FROM app_config').all()) {
+    process.env[row.key] = row.value;
+    hydrated += 1;
+  }
+  if (hydrated > 0) logger.info(`Config: hydrated ${hydrated} setting(s) from app_config`);
+} catch (err) {
+  logger.warn('Config: could not hydrate app_config into env:', err.message);
+}
+
 logger.info(`Database: SQLite at ${DB_PATH}`);
 
 export default db;
