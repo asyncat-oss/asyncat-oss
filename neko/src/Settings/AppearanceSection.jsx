@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import KeyboardShortcutsSection from './KeyboardShortcutsSection.jsx';
+import AppIconSection from './AppIconSection.jsx';
 import PropTypes from 'prop-types';
 
 const cardClasses =
@@ -217,6 +218,8 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           onChange={() => setThemeMode('system')}
         />
       </PreferenceCard>
+
+      <AppIconSection />
 
       <PreferenceCard
         icon={Layout}

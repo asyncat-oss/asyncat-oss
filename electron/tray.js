@@ -96,6 +96,14 @@ function buildContextMenu() {
   ]);
 }
 
+/**
+ * Swap the tray icon image at runtime (used by app-icon customization).
+ * @param {Electron.NativeImage} image
+ */
+export function setTrayImage(image) {
+  if (tray && image && !image.isEmpty()) tray.setImage(image);
+}
+
 export function destroyTray() {
   if (tray) { tray.destroy(); tray = null; }
 }
