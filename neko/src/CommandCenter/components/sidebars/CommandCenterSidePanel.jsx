@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, SquareTerminal, Bug, Camera, Plus } from 'lucide-react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, SquareTerminal, Bug, Camera, Plus, Lock, ShieldAlert, FileText } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import HistoryPanel from './HistoryPanel';
@@ -191,7 +191,21 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
   const navigateTab = useCallback((id, rawUrl) => {
     const trimmed = rawUrl.trim();
     if (!trimmed) return;
-    const full = trimmed.startsWith('http') ? trimmed : `http://${trimmed}`;
+    let full;
+    if (/^(https?|file|about|data|blob|chrome):/.test(trimmed)) {
+      // Already has a recognised protocol — use as-is
+      full = trimmed;
+    } else if (
+      /^localhost(:\d+)?(\/|$)/.test(trimmed) ||            // localhost[:port]
+      /^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(trimmed) || // IPv4
+      /^[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+([/?#].*)?$/.test(trimmed) // domain.tld
+    ) {
+      // Looks like a URL — add https://
+      full = `https://${trimmed}`;
+    } else {
+      // Treat as a search query → Brave Search
+      full = `https://search.brave.com/search?q=${encodeURIComponent(trimmed)}`;
+    }
     setTabs(prev => prev.map(t => t.id === id
       ? { ...t, url: full, inputUrl: full, key: t.key + 1, loading: true, error: null, crashed: false, title: 'Loading…' }
       : t));
@@ -409,14 +423,31 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
           <RotateCcw className="h-3 w-3" />
         </button>
         <form
-          className="flex min-w-0 flex-1 items-center"
+          className="flex min-w-0 flex-1 items-center gap-1"
           onSubmit={e => { e.preventDefault(); navigateTab(activeTabId, activeTab?.inputUrl || ''); }}
         >
+          {/* ── Security indicator ── */}
+          {(() => {
+            const u = activeTab?.url || '';
+            const isLocal = /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+)(:\d+)?/.test(u);
+            if (u.startsWith('https://') || isLocal)
+              return <Lock className="h-3 w-3 shrink-0 text-green-500" title="Secure connection" />;
+            if (u.startsWith('http://'))
+              return (
+                <span className="flex shrink-0 items-center gap-0.5 text-amber-500" title="Connection not encrypted — avoid entering sensitive information">
+                  <ShieldAlert className="h-3 w-3" />
+                  <span className="text-[9px] font-semibold uppercase tracking-wide">Not Secure</span>
+                </span>
+              );
+            if (u.startsWith('file://'))
+              return <FileText className="h-3 w-3 shrink-0 text-gray-400" title="Local file" />;
+            return null;
+          })()}
           <input
             value={activeTab?.inputUrl || ''}
             onChange={e => updateTab(activeTabId, { inputUrl: e.target.value })}
             className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-mono text-gray-700 outline-none transition-colors focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200 midnight:focus:border-indigo-500 midnight:focus:ring-indigo-500/30"
-            placeholder="https://"
+            placeholder="Search or enter address"
             spellCheck={false}
           />
         </form>

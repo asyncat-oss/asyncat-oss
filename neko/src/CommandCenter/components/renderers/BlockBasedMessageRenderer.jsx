@@ -61,7 +61,7 @@ const MathSpan = ({ latex, displayMode = false }) => {
         throwOnError: false,
         errorColor: '#cc0000',
         trust: false,
-        strict: 'warn'
+        strict: 'ignore'
       });
     } catch {
       return `<span style="color:#cc0000">${latex}</span>`;
