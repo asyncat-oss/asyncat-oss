@@ -1,21 +1,29 @@
 // Settings/ServerSection.jsx — server config and secrets management
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Server, Eye, EyeOff, Loader2, RotateCcw, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { configApi, updateApi, apiUtils } from './settingApi';
+import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Server,
+  Eye,
+  EyeOff,
+  Loader2,
+  RotateCcw,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
+import { configApi, updateApi, apiUtils } from "./settingApi";
 
-const soraFontBase = 'font-sora';
+const soraFontBase = "font-sora";
 
 const inputCls =
-  'w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 ' +
-  'bg-white dark:bg-gray-800 midnight:bg-gray-800 ' +
-  'text-gray-900 dark:text-gray-100 midnight:text-gray-100 text-sm ' +
-  'focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 ' +
-  'transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500';
+  "w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 " +
+  "bg-white dark:bg-gray-800 midnight:bg-gray-800 " +
+  "text-gray-900 dark:text-gray-100 midnight:text-gray-100 text-sm " +
+  "focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 " +
+  "transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500";
 
 const readOnlyCls =
-  'w-full px-3 py-2 rounded-lg border border-gray-200/60 dark:border-gray-700/40 midnight:border-gray-700/40 ' +
-  'bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 ' +
-  'text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-sm cursor-default select-none';
+  "w-full px-3 py-2 rounded-lg border border-gray-200/60 dark:border-gray-700/40 midnight:border-gray-700/40 " +
+  "bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 " +
+  "text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-sm cursor-default select-none";
 
 const ServerSection = () => {
   const [config, setConfig] = useState({});
@@ -45,7 +53,10 @@ const ServerSection = () => {
         setRuntime(cfg.runtime || {});
       }
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to load config') });
+      flash({
+        type: "error",
+        text: apiUtils.handleError(err, "Failed to load config"),
+      });
     } finally {
       setLoading(false);
     }
@@ -58,7 +69,7 @@ const ServerSection = () => {
   const saveSecret = async (key) => {
     const value = editValues[key]?.trim();
     if (!value) {
-      flash({ type: 'error', text: `${key} cannot be empty` });
+      flash({ type: "error", text: `${key} cannot be empty` });
       return;
     }
 
@@ -67,11 +78,14 @@ const ServerSection = () => {
       const res = await configApi.updateSecret(key, value);
       if (!res.success) throw new Error(res.error);
 
-      setEditValues(prev => ({ ...prev, [key]: '' }));
+      setEditValues((prev) => ({ ...prev, [key]: "" }));
       await loadConfig();
-      flash({ type: 'success', text: res.message || `${key} updated` });
+      flash({ type: "success", text: res.message || `${key} updated` });
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to save') });
+      flash({
+        type: "error",
+        text: apiUtils.handleError(err, "Failed to save"),
+      });
     } finally {
       setSaving(false);
     }
@@ -80,7 +94,7 @@ const ServerSection = () => {
   const saveConfigValue = async (key) => {
     const value = editValues[key]?.trim();
     if (!value) {
-      flash({ type: 'error', text: `${key} cannot be empty` });
+      flash({ type: "error", text: `${key} cannot be empty` });
       return;
     }
 
@@ -89,74 +103,84 @@ const ServerSection = () => {
       const res = await configApi.updateConfig(key, value, true);
       if (!res.success) throw new Error(res.error);
 
-      setEditValues(prev => ({ ...prev, [key]: '' }));
+      setEditValues((prev) => ({ ...prev, [key]: "" }));
       await loadConfig();
-      flash({ type: 'success', text: res.message || `${key} updated` });
+      flash({ type: "success", text: res.message || `${key} updated` });
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to save') });
+      flash({
+        type: "error",
+        text: apiUtils.handleError(err, "Failed to save"),
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const toggleShow = (key) => {
-    setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
+    setShowPasswords((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleRestart = () => {
     restartCleanupRef.current?.();
-    setRestartPhase('restarting');
+    setRestartPhase("restarting");
     restartCleanupRef.current = updateApi.restart(
-      () => setRestartPhase('waiting'),
+      () => setRestartPhase("waiting"),
       () => {
-        setRestartPhase('done');
+        setRestartPhase("done");
         setTimeout(() => window.location.reload(), 800);
       },
-      () => setRestartPhase('timeout'),
+      () => setRestartPhase("timeout"),
     );
   };
 
   const editableSecrets = [
-    { key: 'JWT_SECRET', label: 'JWT Secret', placeholder: 'Enter JWT secret key' },
+    {
+      key: "JWT_SECRET",
+      label: "JWT Secret",
+      placeholder: "Enter JWT secret key",
+    },
   ];
 
   const nonEditableConfig = [
-    { key: 'PORT', label: 'Server Port' },
-    { key: 'NODE_ENV', label: 'Environment' },
-    { key: 'FRONTEND_URL', label: 'Frontend URL' },
-    { key: 'LOCAL_EMAIL', label: 'Seed Email' },
-    { key: 'DB_PATH', label: 'Database Path' },
-    { key: 'LLAMA_SERVER_PORT', label: 'LLM Server Port' },
-    { key: 'MODELS_PATH', label: 'Models Path' },
-    { key: 'STORAGE_PATH', label: 'Storage Path' },
-    { key: 'WHISPER_SERVER_PORT', label: 'Whisper STT Port' },
-    { key: 'WHISPER_BINARY_PATH', label: 'Whisper Binary Path' },
-    { key: 'TTS_SERVER_PORT', label: 'Piper TTS Port' },
-    { key: 'PIPER_BINARY_PATH', label: 'Piper Binary Path' },
-    { key: 'IMAGEGEN_BINARY_PATH', label: 'Simple Image Engine Binary Path' },
+    { key: "PORT", label: "Server Port" },
+    { key: "NODE_ENV", label: "Environment" },
+    { key: "FRONTEND_URL", label: "Frontend URL" },
+    { key: "LOCAL_EMAIL", label: "Seed Email" },
+    { key: "DB_PATH", label: "Database Path" },
+    { key: "LLAMA_SERVER_PORT", label: "LLM Server Port" },
+    { key: "MODELS_PATH", label: "Models Path" },
+    { key: "STORAGE_PATH", label: "Storage Path" },
+    { key: "WHISPER_SERVER_PORT", label: "Whisper STT Port" },
+    { key: "WHISPER_BINARY_PATH", label: "Whisper Binary Path" },
+    { key: "TTS_SERVER_PORT", label: "Piper TTS Port" },
+    { key: "PIPER_BINARY_PATH", label: "Piper Binary Path" },
+    { key: "IMAGEGEN_BINARY_PATH", label: "Simple Image Engine Binary Path" },
   ];
 
   const editableConfig = [
     {
-      key: 'ASYNCAT_WORKSPACE_ROOT',
-      label: 'Agent file workspace root',
-      placeholder: runtime.workspaceRoot || '/path/to/project',
-      help: 'Controls what @ file search and default agent tools can see. Restart the server after changing it.',
+      key: "ASYNCAT_WORKSPACE_ROOT",
+      label: "Agent file workspace root",
+      placeholder: runtime.workspaceRoot || "/path/to/project",
+      help: "Controls what @ file search and default agent tools can see. Restart the server after changing it.",
     },
     {
-      key: 'COMFYUI_BASE_URL',
-      label: 'ComfyUI base URL',
-      placeholder: 'http://127.0.0.1:8188',
-      help: 'Controls where the image generation tester looks for ComfyUI. Default is http://127.0.0.1:8188.',
+      key: "COMFYUI_BASE_URL",
+      label: "ComfyUI base URL",
+      placeholder: "http://127.0.0.1:8188",
+      help: "Controls where the image generation tester looks for ComfyUI. Default is http://127.0.0.1:8188.",
     },
   ];
 
   if (loading) {
-    const skeletonRows = ['h-10', 'h-8', 'h-6'];
+    const skeletonRows = ["h-10", "h-8", "h-6"];
     return (
       <div className={`space-y-3 ${soraFontBase}`}>
         {skeletonRows.map((heightClass) => (
-          <div key={heightClass} className={`${heightClass} bg-gray-100 dark:bg-gray-800 rounded`} />
+          <div
+            key={heightClass}
+            className={`${heightClass} bg-gray-100 dark:bg-gray-800 rounded`}
+          />
         ))}
       </div>
     );
@@ -165,11 +189,13 @@ const ServerSection = () => {
   return (
     <div className={`space-y-6 ${soraFontBase}`}>
       {message && (
-        <div className={`p-4 rounded-lg text-sm ${
-          message.type === 'success'
-            ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200 midnight:bg-green-900 midnight:text-green-300'
-            : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200 midnight:bg-red-900 midnight:text-red-300'
-        }`}>
+        <div
+          className={`p-4 rounded-lg text-sm ${
+            message.type === "success"
+              ? "bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200 midnight:bg-green-900 midnight:text-green-300"
+              : "bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200 midnight:bg-red-900 midnight:text-red-300"
+          }`}
+        >
           {message.text}
         </div>
       )}
@@ -183,7 +209,8 @@ const ServerSection = () => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Update server-level secrets. Account password changes belong in Profile or the setup walkthrough.
+          Update server-level secrets. Account password changes belong in
+          Profile or the setup walkthrough.
         </p>
 
         <div className="space-y-4">
@@ -194,9 +221,14 @@ const ServerSection = () => {
               </label>
               <div className="relative">
                 <input
-                  type={showPasswords[key] ? 'text' : 'password'}
-                  value={editValues[key] || ''}
-                  onChange={(e) => setEditValues(prev => ({ ...prev, [key]: e.target.value }))}
+                  type={showPasswords[key] ? "text" : "password"}
+                  value={editValues[key] || ""}
+                  onChange={(e) =>
+                    setEditValues((prev) => ({
+                      ...prev,
+                      [key]: e.target.value,
+                    }))
+                  }
                   placeholder={placeholder}
                   className={`${inputCls} pr-10`}
                 />
@@ -205,7 +237,11 @@ const ServerSection = () => {
                   onClick={() => toggleShow(key)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
-                  {showPasswords[key] ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPasswords[key] ? (
+                    <EyeOff size={16} />
+                  ) : (
+                    <Eye size={16} />
+                  )}
                 </button>
               </div>
               <div className="mt-2 flex gap-2">
@@ -219,7 +255,9 @@ const ServerSection = () => {
                     text-white dark:text-gray-900 midnight:text-gray-900
                     disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  {saving ? <Loader2 size={11} className="animate-spin" /> : null}
+                  {saving ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : null}
                   Save {label}
                 </button>
               </div>
@@ -237,70 +275,87 @@ const ServerSection = () => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Set the filesystem root used by @ file search and default agent tool runs.
+          Set the filesystem root used by @ file search and default agent tool
+          runs.
         </p>
 
         <div className="space-y-4">
           {editableConfig.map(({ key, label, placeholder, help }) => {
-            const currentValue = key === 'ASYNCAT_WORKSPACE_ROOT'
-              ? (runtime.workspaceRoot || config[key] || '(auto-detected)')
-              : (config[key] || '(not set)');
-            const canBrowse = key === 'ASYNCAT_WORKSPACE_ROOT' && window?.electronAPI?.openDirectory;
+            const currentValue =
+              key === "ASYNCAT_WORKSPACE_ROOT"
+                ? runtime.workspaceRoot || config[key] || "(auto-detected)"
+                : config[key] || "(not set)";
+            const canBrowse =
+              key === "ASYNCAT_WORKSPACE_ROOT" &&
+              window?.electronAPI?.openDirectory;
             return (
-            <div key={key}>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1.5">
-                {label}
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={editValues[key] ?? ''}
-                  onChange={(e) => setEditValues(prev => ({ ...prev, [key]: e.target.value }))}
-                  placeholder={config[key] || placeholder}
-                  className={inputCls}
-                />
-                {canBrowse && (
+              <div key={key}>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1.5">
+                  {label}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editValues[key] ?? ""}
+                    onChange={(e) =>
+                      setEditValues((prev) => ({
+                        ...prev,
+                        [key]: e.target.value,
+                      }))
+                    }
+                    placeholder={config[key] || placeholder}
+                    className={inputCls}
+                  />
+                  {canBrowse && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const result = await window.electronAPI.openDirectory({
+                          defaultPath:
+                            editValues[key] ||
+                            runtime.workspaceRoot ||
+                            undefined,
+                          title: "Select workspace root",
+                          buttonLabel: "Use as Workspace Root",
+                        });
+                        if (!result.canceled && result.filePaths?.[0]) {
+                          setEditValues((prev) => ({
+                            ...prev,
+                            [key]: result.filePaths[0],
+                          }));
+                        }
+                      }}
+                      className="shrink-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-100 transition-colors whitespace-nowrap"
+                    >
+                      Browse…
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+                  Current: {currentValue}
+                </p>
+                <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                  {help}
+                </p>
+                <div className="mt-2 flex gap-2">
                   <button
                     type="button"
-                    onClick={async () => {
-                      const result = await window.electronAPI.openDirectory({
-                        defaultPath: editValues[key] || runtime.workspaceRoot || undefined,
-                        title: 'Select workspace root',
-                        buttonLabel: 'Use as Workspace Root',
-                      });
-                      if (!result.canceled && result.filePaths?.[0]) {
-                        setEditValues(prev => ({ ...prev, [key]: result.filePaths[0] }));
-                      }
-                    }}
-                    className="shrink-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-100 transition-colors whitespace-nowrap"
-                  >
-                    Browse…
-                  </button>
-                )}
-              </div>
-              <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
-                Current: {currentValue}
-              </p>
-              <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                {help}
-              </p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => saveConfigValue(key)}
-                  disabled={saving || !editValues[key]}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5
+                    onClick={() => saveConfigValue(key)}
+                    disabled={saving || !editValues[key]}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5
                     bg-gray-900 hover:bg-gray-700 dark:bg-gray-100 dark:hover:bg-white
                     midnight:bg-gray-100 midnight:hover:bg-white
                     text-white dark:text-gray-900 midnight:text-gray-900
                     disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {saving ? <Loader2 size={11} className="animate-spin" /> : null}
-                  Save {label}
-                </button>
+                  >
+                    {saving ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : null}
+                    Save {label}
+                  </button>
+                </div>
               </div>
-            </div>
-          );
+            );
           })}
         </div>
       </div>
@@ -314,8 +369,9 @@ const ServerSection = () => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Current server settings (read-only). Engine paths and ports are managed from Runtime and
-          Models; bootstrap values (port, database, JWT secret) live in <code className="font-mono px-1">den/.env</code>.
+          Current server settings (read-only). Engine paths and ports are
+          managed from Runtime and Models; bootstrap values (port, database, JWT
+          secret) live in <code className="font-mono px-1">den/.env</code>.
         </p>
 
         <div className="space-y-3">
@@ -324,9 +380,7 @@ const ServerSection = () => {
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1">
                 {label}
               </label>
-              <div className={readOnlyCls}>
-                {config[key] || '(not set)'}
-              </div>
+              <div className={readOnlyCls}>{config[key] || "(not set)"}</div>
             </div>
           ))}
         </div>
@@ -341,47 +395,58 @@ const ServerSection = () => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Sends a graceful shutdown signal to the backend. With a process manager (pm2, the{' '}
-          <code className="font-mono px-1">asyncat</code> CLI) the server restarts automatically and
-          this page reloads. In <code className="font-mono px-1">npm run dev</code> mode it will not
-          come back on its own — restart the backend terminal manually after clicking.
+          Sends a graceful shutdown signal to the backend. With a process
+          manager (pm2, the <code className="font-mono px-1">asyncat</code> CLI)
+          the server restarts automatically and this page reloads. In{" "}
+          <code className="font-mono px-1">npm run dev</code> mode it will not
+          come back on its own — restart the backend terminal manually after
+          clicking.
         </p>
 
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
             onClick={handleRestart}
-            disabled={restartPhase === 'restarting' || restartPhase === 'waiting' || restartPhase === 'done'}
+            disabled={
+              restartPhase === "restarting" ||
+              restartPhase === "waiting" ||
+              restartPhase === "done"
+            }
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
               bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white
               midnight:bg-gray-100 midnight:hover:bg-white
               text-white dark:text-gray-900 midnight:text-gray-900
               disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {(restartPhase === 'restarting' || restartPhase === 'waiting') ? (
+            {restartPhase === "restarting" || restartPhase === "waiting" ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <RotateCcw size={14} />
             )}
-            {restartPhase === 'restarting' ? 'Restarting…'
-              : restartPhase === 'waiting' ? 'Waiting for server…'
-              : restartPhase === 'done' ? 'Reloading…'
-              : 'Restart server'}
+            {restartPhase === "restarting"
+              ? "Restarting…"
+              : restartPhase === "waiting"
+                ? "Waiting for server…"
+                : restartPhase === "done"
+                  ? "Reloading…"
+                  : "Restart server"}
           </button>
 
-          {restartPhase === 'done' && (
+          {restartPhase === "done" && (
             <span className="inline-flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400">
               <CheckCircle2 size={14} />
               Server is back — reloading page
             </span>
           )}
 
-          {restartPhase === 'timeout' && (
+          {restartPhase === "timeout" && (
             <span className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 flex-wrap">
-              <AlertTriangle size={14} className="flex-shrink-0" />
-              Server did not restart automatically. In dev mode, run{' '}
-              <code className="px-1 rounded bg-amber-100 dark:bg-amber-900/40 font-mono text-xs">npm run dev</code>
-              {' '}again in your backend terminal.
+              <AlertTriangle size={14} className="shrink-0" />
+              Server did not restart automatically. In dev mode, run{" "}
+              <code className="px-1 rounded bg-amber-100 dark:bg-amber-900/40 font-mono text-xs">
+                npm run dev
+              </code>{" "}
+              again in your backend terminal.
             </span>
           )}
         </div>
