@@ -21,6 +21,7 @@ import {
 import { useState } from 'react';
 import KeyboardShortcutsSection from './KeyboardShortcutsSection.jsx';
 import AppIconSection from './AppIconSection.jsx';
+import PetSection from './PetSection.jsx';
 import PropTypes from 'prop-types';
 
 const cardClasses =
@@ -220,6 +221,8 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
       </PreferenceCard>
 
       <AppIconSection />
+
+      <PetSection />
 
       <PreferenceCard
         icon={Layout}

@@ -33,6 +33,7 @@ import { createWindow, getMainWindow, showLoadingScreen } from './window.js';
 import { createTray, updateTrayMenu, destroyTray, setAgentRunCount } from './tray.js';
 import { buildAppMenu } from './menu.js';
 import { applyAppIcon, getAppIcon, setAppIcon, resetAppIcon } from './icon.js';
+import { initPet, destroyPetWindow, getPet, setPet, resetPet, setPetStatus } from './pet.js';
 
 // ─── Single Instance Lock ─────────────────────────────────────────────────────
 // Prevent multiple instances of the app from running.
@@ -250,13 +251,31 @@ function setupDesktopIPC() {
     return image.toDataURL();
   });
 
-  // Set the macOS dock badge count + tray tooltip
+  // Set the macOS dock badge count + tray tooltip, and drive the pet status.
   ipcMain.on('app:badge', (_event, count) => {
     const n = count || 0;
     if (app.setBadgeCount) app.setBadgeCount(n);
     setAgentRunCount(n);
+
+    if (n > 0) {
+      setPetStatus('working');
+    } else if (prevRunCount > 0) {
+      // A run just finished — flash a checkmark, then settle back to idle.
+      setPetStatus('done');
+      setTimeout(() => setPetStatus('idle'), 3000);
+    } else {
+      setPetStatus('idle');
+    }
+    prevRunCount = n;
   });
+
+  // App icon + pet customization
+  ipcMain.handle('pet:get', () => getPet());
+  ipcMain.handle('pet:set', (_e, payload) => setPet(payload));
+  ipcMain.handle('pet:reset', () => resetPet());
 }
+
+let prevRunCount = 0;
 
 // ─── Tray Helpers ─────────────────────────────────────────────────────────────
 
@@ -404,8 +423,9 @@ async function quitApp() {
   await stopFrontendServer();
   await stopBackend();
 
-  // Cleanup tray
+  // Cleanup tray + pet
   destroyTray();
+  destroyPetWindow();
 
   // Quit
   app.quit();
@@ -498,4 +518,7 @@ app.whenReady().then(async () => {
 
   // Re-apply the saved icon now that the window and tray exist.
   applyAppIcon();
+
+  // Spawn the pet overlay if the user enabled it.
+  initPet();
 });

@@ -95,6 +95,9 @@ const AppIconSection = () => {
   const choosePreset = (key) =>
     apply(() => api.setAppIcon({ type: 'preset', key }), 'App icon updated.');
 
+  const chooseCustom = () =>
+    apply(() => api.setAppIcon({ type: 'custom' }), 'App icon updated.');
+
   const uploadCustom = async () => {
     const result = await api.openFilesDialog({
       title: 'Choose an app icon',
@@ -139,8 +142,13 @@ const AppIconSection = () => {
             />
           ))}
 
-          {isCustom && current.dataUrl && (
-            <Tile src={current.dataUrl} name="Custom" selected onClick={() => {}} />
+          {current.dataUrl && (
+            <Tile
+              src={current.dataUrl}
+              name="Custom"
+              selected={isCustom}
+              onClick={() => !busy && chooseCustom()}
+            />
           )}
         </div>
 

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+    /* Whole surface is a drag handle so the pet can be repositioned anywhere. */
+    #wrap {
+      -webkit-app-region: drag;
+      cursor: grab;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 6px;
+      box-sizing: border-box;
+    }
+    #sprite {
+      width: 104px;
+      height: 104px;
+      object-fit: contain;
+      filter: drop-shadow(0 5px 9px rgba(0, 0, 0, 0.35));
+      animation: bob 2.6s ease-in-out infinite;
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-7px); }
+    }
+    #bubble {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      min-width: 28px;
+      height: 28px;
+      padding: 0 7px;
+      border-radius: 14px;
+      background: rgba(17, 24, 39, 0.92);
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 600;
+      box-shadow: 0 2px 7px rgba(0, 0, 0, 0.32);
+      animation: pop 0.18s ease-out;
+    }
+    #bubble.show { display: flex; }
+    @keyframes pop {
+      from { transform: scale(0.6); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="bubble"></div>
+    <img id="sprite" alt="pet" />
+  </div>
+  <script>
+    const sprite = document.getElementById('sprite');
+    const bubble = document.getElementById('bubble');
+
+    function setStatus(s) {
+      if (s === 'working') {
+        bubble.textContent = '⚙️';
+        bubble.style.background = 'rgba(37, 99, 235, 0.95)';
+        bubble.className = 'show';
+      } else if (s === 'done') {
+        bubble.textContent = '✓';
+        bubble.style.background = 'rgba(22, 163, 74, 0.95)';
+        bubble.className = 'show';
+      } else if (s === 'needs-approval') {
+        bubble.textContent = '⏰';
+        bubble.style.background = 'rgba(220, 38, 38, 0.95)';
+        bubble.className = 'show';
+      } else {
+        bubble.className = '';
+      }
+    }
+
+    window.petAPI?.onInit((d) => {
+      if (d && d.sprite) sprite.src = d.sprite;
+      setStatus((d && d.status) || 'idle');
+    });
+    window.petAPI?.onStatus((s) => setStatus(s));
+  </script>
+</body>
+</html>

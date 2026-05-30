@@ -100,14 +100,17 @@ export function applyAppIcon(cfg = readConfig()) {
   setTrayImage(IS_MAC ? img.resize({ width: 18, height: 18 }) : img);
 }
 
-/** Return the current selection (+ a data-URL preview for custom icons). */
+/** Return the current selection (+ a data-URL preview of any saved custom icon). */
 export function getAppIcon() {
   const cfg = readConfig();
+  const hasCustom = fs.existsSync(CUSTOM_PATH);
   let dataUrl = null;
-  if (cfg.type === 'custom' && fs.existsSync(CUSTOM_PATH)) {
+  if (hasCustom) {
+    // Always expose the saved custom icon so the UI can keep its tile around
+    // even while a preset is active (selecting a preset must not lose it).
     try { dataUrl = nativeImage.createFromPath(CUSTOM_PATH).toDataURL(); } catch { /* ignore */ }
   }
-  return { type: cfg.type || 'default', key: cfg.key || null, dataUrl };
+  return { type: cfg.type || 'default', key: cfg.key || null, hasCustom, dataUrl };
 }
 
 /**
@@ -122,16 +125,22 @@ export function setAppIcon(payload = {}) {
     writeConfig({ type: 'preset', key: payload.key });
   } else if (payload.type === 'custom') {
     const src = payload.path;
-    if (!src || !fs.existsSync(src)) return { success: false, error: 'Image file not found.' };
-    if (!ALLOWED_EXT.includes(path.extname(src).toLowerCase())) {
-      return { success: false, error: 'Use a PNG, JPG, or WebP image.' };
+    if (src) {
+      // New upload: validate, crop to a rounded square, and store as PNG in
+      // userData so the icon matches the bundled shape and survives the
+      // original being moved.
+      if (!fs.existsSync(src)) return { success: false, error: 'Image file not found.' };
+      if (!ALLOWED_EXT.includes(path.extname(src).toLowerCase())) {
+        return { success: false, error: 'Use a PNG, JPG, or WebP image.' };
+      }
+      const img = nativeImage.createFromPath(src);
+      if (img.isEmpty()) return { success: false, error: 'Could not read that image.' };
+      try { fs.writeFileSync(CUSTOM_PATH, roundedSquareIcon(img).toPNG()); }
+      catch { return { success: false, error: 'Failed to save icon.' }; }
+    } else if (!fs.existsSync(CUSTOM_PATH)) {
+      // Re-selecting the saved custom icon, but none exists.
+      return { success: false, error: 'No custom icon to use — upload one first.' };
     }
-    const img = nativeImage.createFromPath(src);
-    if (img.isEmpty()) return { success: false, error: 'Could not read that image.' };
-    // Crop to a rounded square and store as PNG in userData so the icon matches
-    // the bundled shape and survives the original being moved.
-    try { fs.writeFileSync(CUSTOM_PATH, roundedSquareIcon(img).toPNG()); }
-    catch { return { success: false, error: 'Failed to save icon.' }; }
     writeConfig({ type: 'custom' });
   } else {
     return { success: false, error: 'Invalid icon type.' };
