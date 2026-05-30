@@ -51,7 +51,7 @@ const PreferenceCard = ({ icon: Icon, title, description, children }) => (
 const RadioRow = ({ name, checked, onChange, icon: Icon, label }) => (
   <label className="flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent hover:border-gray-300/70 dark:hover:border-gray-600/70 midnight:hover:border-gray-600/70 hover:bg-gray-200/70 dark:hover:bg-gray-700/70 midnight:hover:bg-gray-700/70 cursor-pointer transition-colors">
     <span className="flex min-w-0 items-center gap-3">
-      {Icon ? <Icon className="w-5 h-5 flex-shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" /> : null}
+      {Icon ? <Icon className="w-5 h-5 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" /> : null}
       <span className={`${textClasses} truncate`}>{label}</span>
     </span>
     <input
@@ -67,7 +67,7 @@ const RadioRow = ({ name, checked, onChange, icon: Icon, label }) => (
 const CheckboxRow = ({ checked, onChange, icon: Icon, label, locked }) => (
   <label className={`flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent transition-colors ${locked ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-300/70 dark:hover:border-gray-600/70 midnight:hover:border-gray-600/70 hover:bg-gray-200/70 dark:hover:bg-gray-700/70 midnight:hover:bg-gray-700/70 cursor-pointer'}`}>
     <span className="flex min-w-0 items-center gap-3">
-      {Icon ? <Icon className="w-5 h-5 flex-shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" /> : null}
+      {Icon ? <Icon className="w-5 h-5 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" /> : null}
       <span className={`${textClasses} truncate`}>{label}</span>
       {locked && <span className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500 ml-1">(always shown)</span>}
     </span>
