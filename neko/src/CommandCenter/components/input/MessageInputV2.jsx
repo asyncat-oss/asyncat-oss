@@ -1,6 +1,7 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Bell, Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
+import eventBus from "../../../utils/eventBus.js";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
@@ -541,6 +542,10 @@ export const MessageInputV2 = ({
   const toolbarRef = useRef(null);
   const modeMenuRef = useRef(null);
   const filePickerRef = useRef(null);
+  // Workspace-access toggle UI is unfinished; keep it hidden. Declaring this
+  // avoids a ReferenceError when the tools menu renders (it was referenced in
+  // JSX without ever being defined).
+  const allowWorkspaceAccess = false;
   const rawAgentTrigger = useMemo(
     () => getAgentTrigger(value, cursorPosition),
     [value, cursorPosition],
@@ -656,6 +661,22 @@ export const MessageInputV2 = ({
     setValue(prefillValue);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [prefillValue]);
+
+  // Let other surfaces drop text into the composer (e.g. the browser's
+  // "Ask agent about this page"). Fills the box, focuses it, cursor at the end.
+  useEffect(() => {
+    const unsub = eventBus.on('composer:prefill', (text) => {
+      if (typeof text !== 'string' || !text.trim()) return;
+      setValue(text);
+      requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        try { el.setSelectionRange(el.value.length, el.value.length); } catch { /* not focusable yet */ }
+      });
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!externalFileAttachment?.path) return;

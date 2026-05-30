@@ -289,6 +289,22 @@ function runEvalProcess({ mode = 'deterministic', keepSandbox = false, userId = 
   });
 }
 
+function normalizeSessionRow(row) {
+  return {
+    id: row.id,
+    goal: row.goal,
+    status: row.status,
+    rounds: Number(row.total_rounds || 0),
+    workingDir: row.working_dir || null,
+    toolCalls: Number(row.tool_calls || 0),
+    failedCalls: Number(row.failed_calls || 0),
+    totalTokens: Number(row.total_tokens || 0),
+    modelRequests: Number(row.model_requests || 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function metricFailureSql() {
   return `
     success = 0
@@ -402,6 +418,124 @@ export function createAgentMetricsRouter({ authenticate }) {
           executionErrors,
         },
         recentFailures,
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ── Session traces (observability) ────────────────────────────────────────
+  // List recent agent sessions with tool-call + token aggregates.
+  router.get('/sessions', authenticate, (req, res) => {
+    try {
+      const days = boundedDays(req.query.days, 30);
+      const limit = boundedLimit(req.query.limit, 25, 100);
+      const rows = db.prepare(`
+        SELECT
+          s.id, s.goal, s.status, s.total_rounds, s.working_dir, s.created_at, s.updated_at,
+          (SELECT COUNT(*) FROM agent_tool_audit a WHERE a.session_id = s.id) AS tool_calls,
+          (SELECT COUNT(*) FROM agent_tool_audit a WHERE a.session_id = s.id AND (${metricFailureSql()})) AS failed_calls,
+          (SELECT COALESCE(SUM(u.total_tokens), 0) FROM ai_model_usage_events u WHERE u.agent_session_id = s.id) AS total_tokens,
+          (SELECT COUNT(*) FROM ai_model_usage_events u WHERE u.agent_session_id = s.id) AS model_requests
+        FROM agent_sessions s
+        WHERE s.user_id = ?
+          AND julianday(s.created_at) >= julianday('now', ?)
+        ORDER BY s.updated_at DESC
+        LIMIT ?
+      `).all(req.user.id, `-${days} days`, limit);
+      res.json({ success: true, windowDays: days, count: rows.length, sessions: rows.map(normalizeSessionRow) });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // One session's full trace: ordered tool-call timeline + per-model token usage.
+  router.get('/sessions/:id', authenticate, (req, res) => {
+    try {
+      const session = db.prepare(
+        'SELECT id, goal, status, total_rounds, working_dir, created_at, updated_at FROM agent_sessions WHERE id = ? AND user_id = ?'
+      ).get(req.params.id, req.user.id);
+      if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+
+      const audit = db.prepare(`
+        SELECT tool_name, permission_level, permission_decision, success, result, round, started_at, completed_at
+        FROM agent_tool_audit
+        WHERE session_id = ? AND user_id = ?
+        ORDER BY started_at ASC
+        LIMIT 1000
+      `).all(req.params.id, req.user.id);
+
+      const timeline = audit.map(row => {
+        const result = parseJson(row.result, {});
+        const ok = !(Number(row.success) === 0 || result?.success === 0 || result?.error);
+        const durationMs = (row.started_at && row.completed_at)
+          ? Math.max(0, Date.parse(row.completed_at) - Date.parse(row.started_at))
+          : null;
+        return {
+          tool: row.tool_name,
+          permission: row.permission_level,
+          decision: row.permission_decision,
+          ok,
+          error: ok ? null : (result?.error || result?.message || null),
+          code: result?.code || null,
+          round: row.round,
+          startedAt: row.started_at,
+          completedAt: row.completed_at,
+          durationMs,
+        };
+      });
+
+      const usage = db.prepare(`
+        SELECT model, provider_id,
+          COUNT(*) AS requests,
+          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+          COALESCE(SUM(output_tokens), 0) AS output_tokens,
+          COALESCE(SUM(total_tokens), 0) AS total_tokens,
+          AVG(latency_ms) AS avg_latency_ms,
+          AVG(tokens_per_second) AS avg_tps
+        FROM ai_model_usage_events
+        WHERE agent_session_id = ? AND user_id = ?
+        GROUP BY model, provider_id
+        ORDER BY total_tokens DESC
+      `).all(req.params.id, req.user.id);
+
+      const totals = timeline.reduce((acc, t) => {
+        acc.toolCalls += 1;
+        if (!t.ok) acc.failedCalls += 1;
+        if (t.durationMs != null) acc.totalDurationMs += t.durationMs;
+        return acc;
+      }, { toolCalls: 0, failedCalls: 0, totalDurationMs: 0 });
+      const tokenTotals = usage.reduce((acc, u) => {
+        acc.inputTokens += Number(u.input_tokens || 0);
+        acc.outputTokens += Number(u.output_tokens || 0);
+        acc.totalTokens += Number(u.total_tokens || 0);
+        acc.requests += Number(u.requests || 0);
+        return acc;
+      }, { inputTokens: 0, outputTokens: 0, totalTokens: 0, requests: 0 });
+
+      res.json({
+        success: true,
+        session: {
+          id: session.id,
+          goal: session.goal,
+          status: session.status,
+          rounds: Number(session.total_rounds || 0),
+          workingDir: session.working_dir || null,
+          createdAt: session.created_at,
+          updatedAt: session.updated_at,
+        },
+        timeline,
+        usage: usage.map(u => ({
+          model: u.model,
+          providerId: u.provider_id,
+          requests: Number(u.requests || 0),
+          inputTokens: Number(u.input_tokens || 0),
+          outputTokens: Number(u.output_tokens || 0),
+          totalTokens: Number(u.total_tokens || 0),
+          avgLatencyMs: u.avg_latency_ms != null ? Math.round(u.avg_latency_ms) : null,
+          avgTps: u.avg_tps != null ? Number(u.avg_tps.toFixed(1)) : null,
+        })),
+        totals: { ...totals, ...tokenTotals },
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });

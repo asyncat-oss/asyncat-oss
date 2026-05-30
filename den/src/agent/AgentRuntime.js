@@ -24,6 +24,7 @@ import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { appendReasoningText, cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
+import { embedText } from '../ai/embeddings/embeddingService.js';
 import { normalizeUsage, recordModelUsage } from '../ai/controllers/ai/modelUsageService.js';
 import { getSnapshotsDir } from './workspacePaths.js';
 import db from '../db/client.js';
@@ -548,21 +549,16 @@ export class AgentRuntime {
       askUser: this.askUser
         ? (request) => this.askUser({ ...request, round: this.session?.totalRounds || 0 })
         : null,
-      // Embedding computation for vector memory search.
-      // Uses any OpenAI-compatible embeddings endpoint; returns null gracefully
-      // if the provider doesn't support it (e.g. Anthropic native, local models
-      // without an embed endpoint).
+      // Embedding computation for vector memory search. Delegates to the shared
+      // embedding service, which uses the active provider's /embeddings endpoint
+      // when available and falls back to a deterministic local lexical vector
+      // otherwise — so semantic recall works for every provider, including local
+      // chat-only models and Anthropic native. Returns { vector, model, dim }.
       aiClient: this.aiClient,
       model: this.model,
       computeEmbedding: async (text) => {
-        if (!this.aiClient?.client?.embeddings?.create) return null;
         try {
-          const embModel = process.env.EMBED_MODEL || 'text-embedding-3-small';
-          const res = await this.aiClient.client.embeddings.create({
-            model: embModel,
-            input: String(text || '').slice(0, 8000),
-          });
-          return res.data?.[0]?.embedding || null;
+          return await embedText(text, { userId: this.userId });
         } catch { return null; }
       },
     };

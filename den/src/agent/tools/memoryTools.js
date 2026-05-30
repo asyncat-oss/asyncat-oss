@@ -192,7 +192,7 @@ function cosineSim(a, b) {
  * In-process vector search over all memories that have embeddings.
  * Safe for up to ~50,000 memories (O(n) cosine pass, well under 10ms at that scale).
  */
-function _vectorSearch({ userId, workspaceId, profileId, queryVec, kind, limit = 10 }) {
+function _vectorSearch({ userId, workspaceId, profileId, queryVec, queryModel, kind, limit = 10 }) {
   const params = [userId, workspaceId];
   let profileClause = '';
   if (profileId) {
@@ -204,12 +204,20 @@ function _vectorSearch({ userId, workspaceId, profileId, queryVec, kind, limit =
     kindClause = 'AND memory_type = ?';
     params.push(kind);
   }
+  // Only compare vectors from the same embedding space. Legacy rows with no
+  // recorded model are still allowed in — a dimension mismatch makes cosineSim
+  // return 0, so they cannot produce spurious matches.
+  let modelClause = '';
+  if (queryModel) {
+    modelClause = 'AND (embedding_model = ? OR embedding_model IS NULL)';
+    params.push(queryModel);
+  }
 
   // Load all embedded memories — embedding column excluded from standard memoryColumns
   const rows = db.prepare(`
     SELECT ${memoryColumns}, embedding
     FROM agent_memory
-    WHERE user_id = ? AND workspace_id = ? ${profileClause} ${kindClause} AND embedding IS NOT NULL
+    WHERE user_id = ? AND workspace_id = ? ${profileClause} ${kindClause} AND embedding IS NOT NULL ${modelClause}
     LIMIT 2000
   `).all(...params);
 
@@ -377,13 +385,15 @@ export const saveMemoryTool = {
         setImmediate(() => enforceMemoryCap(context.userId, context.workspaceId));
       }
 
-      // Fire-and-forget embedding computation — stored asynchronously, won't block the agent
+      // Fire-and-forget embedding computation — stored asynchronously, won't block the agent.
+      // computeEmbedding returns { vector, model, dim } (legacy: a bare array).
       if (typeof context.computeEmbedding === 'function') {
-        context.computeEmbedding(args.content).then(vec => {
-          if (vec) {
+        context.computeEmbedding(args.content).then(result => {
+          const vector = Array.isArray(result) ? result : result?.vector;
+          if (vector) {
             try {
-              db.prepare('UPDATE agent_memory SET embedding = ? WHERE id = ?')
-                .run(JSON.stringify(vec), memoryId);
+              db.prepare('UPDATE agent_memory SET embedding = ?, embedding_model = ?, embedding_dim = ? WHERE id = ?')
+                .run(JSON.stringify(vector), (Array.isArray(result) ? null : result?.model) || null, vector.length, memoryId);
             } catch { /* non-critical */ }
           }
         }).catch(() => {});
@@ -399,6 +409,47 @@ export const saveMemoryTool = {
     }
   },
 };
+
+/**
+ * Hybrid memory recall: BM25 keyword search, augmented with vector similarity
+ * when keyword search is thin (< 3 hits). Shared by recall_memory and
+ * semantic_search. `context.computeEmbedding` returns { vector, model, dim }.
+ */
+export async function hybridRecall(context, { query, kind = 'all', limit = 10 } = {}) {
+  const profileId = context.profileId || null;
+  const bm25Results = searchMemories({
+    userId: context.userId,
+    workspaceId: context.workspaceId,
+    profileId,
+    query,
+    kind,
+    limit,
+    bumpAccess: true,
+  });
+
+  if (bm25Results.length < 3 && typeof context.computeEmbedding === 'function') {
+    try {
+      const emb = await context.computeEmbedding(query);
+      const queryVec = Array.isArray(emb) ? emb : emb?.vector;
+      const queryModel = Array.isArray(emb) ? null : emb?.model;
+      if (queryVec) {
+        const vectorResults = _vectorSearch({
+          userId: context.userId,
+          workspaceId: context.workspaceId,
+          profileId,
+          queryVec,
+          queryModel,
+          kind,
+          limit,
+        });
+        const seen = new Set(bm25Results.map(r => r.id));
+        const extras = vectorResults.filter(r => !seen.has(r.id));
+        return { memories: [...bm25Results, ...extras].slice(0, limit), method: 'hybrid' };
+      }
+    } catch { /* fall back to BM25 below */ }
+  }
+  return { memories: bm25Results, method: 'bm25' };
+}
 
 export const recallMemoryTool = {
   name: 'recall_memory',
@@ -418,44 +469,8 @@ export const recallMemoryTool = {
     try {
       const kind = args.kind || args.memory_type || 'all';
       const limit = Math.max(1, Math.min(25, Number(args.limit || 10)));
-
-      const profileId = context.profileId || null;
-
-      // Primary: BM25 full-text search (fast, keyword-accurate)
-      const bm25Results = searchMemories({
-        userId: context.userId,
-        workspaceId: context.workspaceId,
-        profileId,
-        query: args.query,
-        kind,
-        limit,
-        bumpAccess: true,
-      });
-
-      // Vector augmentation: kicks in when keyword search finds < 3 results.
-      // Catches semantic matches that BM25 misses (e.g. "API key" vs "credentials").
-      if (bm25Results.length < 3 && typeof context.computeEmbedding === 'function') {
-        try {
-          const queryVec = await context.computeEmbedding(args.query);
-          if (queryVec) {
-            const vectorResults = _vectorSearch({
-              userId: context.userId,
-              workspaceId: context.workspaceId,
-              profileId,
-              queryVec,
-              kind,
-              limit,
-            });
-            // Merge: BM25 results first (higher confidence), then vector extras
-            const seen = new Set(bm25Results.map(r => r.id));
-            const extras = vectorResults.filter(r => !seen.has(r.id));
-            const memories = [...bm25Results, ...extras].slice(0, limit);
-            return { success: true, query: args.query, count: memories.length, memories, method: 'hybrid' };
-          }
-        } catch { /* fallback to BM25 results below */ }
-      }
-
-      return { success: true, query: args.query, count: bm25Results.length, memories: bm25Results, method: 'bm25' };
+      const { memories, method } = await hybridRecall(context, { query: args.query, kind, limit });
+      return { success: true, query: args.query, count: memories.length, memories, method };
     } catch (err) {
       return { success: false, error: err.message };
     }

@@ -8,9 +8,9 @@ import {
   forwardRef,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, FolderOpen, MessageSquare, FileText, SquareCheck } from 'lucide-react';
+import { Search, X, FolderOpen, MessageSquare, FileText, SquareCheck, Command, Sparkles, Workflow, Cpu, Wrench, Activity, Bell, Calendar, Settings } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { chatApi } from '../CommandCenter/api';
+import { chatApi, agentApi } from '../CommandCenter/api';
 import { searchApi } from '../CommandCenter/api/searchApi.js';
 
 // ─── Type config ──────────────────────────────────────────────────────────────
@@ -40,17 +40,42 @@ const TYPE_CONFIG = {
     bg: 'bg-gray-100 dark:bg-white/[0.05]',
     label: 'Tasks',
   },
+  command: {
+    icon: Command,
+    color: 'text-indigo-400 dark:text-indigo-400',
+    bg: 'bg-indigo-50 dark:bg-indigo-950/30',
+    label: 'Jump to',
+  },
+  memory: {
+    icon: Sparkles,
+    color: 'text-gray-400 dark:text-gray-500',
+    bg: 'bg-gray-100 dark:bg-white/[0.05]',
+    label: 'Memory',
+  },
 };
 
-const SECTION_ORDER = ['project', 'note', 'conversation', 'card'];
+const SECTION_ORDER = ['command', 'project', 'note', 'conversation', 'card', 'memory'];
+
+// Navigation commands surfaced in the palette (always available, filtered by query).
+const COMMANDS = [
+  { id: 'cmd-home',      label: 'Go to Chat',           to: '/home',         icon: MessageSquare },
+  { id: 'cmd-workflows', label: 'Go to Workflows',      to: '/workflows',    icon: Workflow },
+  { id: 'cmd-activity',  label: 'Go to Activity',       to: '/activity',     icon: Bell },
+  { id: 'cmd-health',    label: 'Go to Agent Health',   to: '/agent-health', icon: Activity },
+  { id: 'cmd-models',    label: 'Go to Models',         to: '/models',       icon: Cpu },
+  { id: 'cmd-tools',     label: 'Go to Tools & Skills', to: '/tools',        icon: Wrench },
+  { id: 'cmd-calendar',  label: 'Go to Calendar',       to: '/calendar',     icon: Calendar },
+  { id: 'cmd-tasks',     label: 'Go to Tasks',          to: '/workspace',    icon: SquareCheck },
+  { id: 'cmd-settings',  label: 'Go to Settings',       to: '/settings',     icon: Settings },
+];
 
 // ─── Result Item ──────────────────────────────────────────────────────────────
 
 const SearchResultItem = memo(
   forwardRef(({ item, isSelected, onSelect }, ref) => {
     const cfg = TYPE_CONFIG[item._type] || TYPE_CONFIG.project;
-    const Icon = cfg.icon;
-    const label = item.title || item.name || 'Untitled';
+    const Icon = item.icon || cfg.icon;
+    const label = item.title || item.name || item.label || 'Untitled';
 
     return (
       <div
@@ -130,6 +155,8 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const [localProjects, setLocalProjects] = useState([]);
   const [localConversations, setLocalConversations] = useState([]);
   const [serverResults, setServerResults] = useState(null); // null = not searched yet
+  const [memoryResults, setMemoryResults] = useState([]);
+  const [embStatus, setEmbStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -143,7 +170,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
 
   // ── Flat results list (drives keyboard nav + rendering) ───────────────────
 
-  const filteredResults = useMemo(() => {
+  const baseResults = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
     // With active server search — show server results only
@@ -190,6 +217,20 @@ const UniversalSearch = ({ isOpen, onClose }) => {
       .slice(0, 20);
   }, [localProjects, localConversations, searchTerm, serverResults]);
 
+  // Navigation/action commands, filtered by query (top few when empty).
+  const commandResults = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const cmds = COMMANDS.map(c => ({ ...c, _type: 'command' }));
+    if (!term) return cmds.slice(0, 5);
+    return cmds.filter(c => c.label.toLowerCase().includes(term));
+  }, [searchTerm]);
+
+  // Commands first, then content, then semantic memory matches.
+  const filteredResults = useMemo(
+    () => [...commandResults, ...baseResults, ...memoryResults],
+    [commandResults, baseResults, memoryResults],
+  );
+
   // Group by type for rendering
   const groupedResults = useMemo(() => {
     const groups = {};
@@ -206,14 +247,20 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const doServerSearch = useCallback(async (term) => {
     if (!term || term.trim().length < 2) {
       setServerResults(null);
+      setMemoryResults([]);
       return;
     }
     setSearching(true);
     try {
-      const data = await searchApi.search(term, { limit: 6 });
+      const [data, mem] = await Promise.all([
+        searchApi.search(term, { limit: 6 }).catch(() => null),
+        agentApi.semanticSearch(term, 5).catch(() => null),
+      ]);
       setServerResults(data?.results || []);
+      setMemoryResults((mem?.results || []).map(m => ({ _type: 'memory', id: m.key, title: m.key, snippet: m.content })));
     } catch {
       setServerResults(null); // fall back to local
+      setMemoryResults([]);
     } finally {
       setSearching(false);
     }
@@ -257,8 +304,10 @@ const UniversalSearch = ({ isOpen, onClose }) => {
       loadData();
       setSearchTerm('');
       setServerResults(null);
+      setMemoryResults([]);
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
+      agentApi.getEmbeddingStatus().then(setEmbStatus).catch(() => {});
     }
   }, [isOpen, loadData]);
 
@@ -312,6 +361,16 @@ const UniversalSearch = ({ isOpen, onClose }) => {
 
   const handleSelect = useCallback(
     (item) => {
+      if (item._type === 'command') {
+        if (item.to) navigate(item.to);
+        onClose();
+        return;
+      }
+      if (item._type === 'memory') {
+        navigate('/tools');
+        onClose();
+        return;
+      }
       if (item._type === 'project') {
         navigate(item._tab ? `/projects/${item.id}/${item._tab}` : `/projects/${item.id}`);
       } else if (item._type === 'conversation') {
@@ -347,7 +406,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search projects, notes, tasks, conversations…"
+            placeholder="Search or jump to anything…  ⌘K"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 bg-transparent border-none outline-none text-[15px] text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 midnight:placeholder-gray-600"
@@ -421,6 +480,15 @@ const UniversalSearch = ({ isOpen, onClose }) => {
               </span>
             </div>
             <div className="flex items-center gap-2">
+              {embStatus && (
+                <span
+                  className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-600 midnight:text-gray-600"
+                  title={`Embeddings: ${embStatus.model}${embStatus.dims ? ` · ${embStatus.dims}d` : ''} · ${embStatus.cacheCount || 0} cached`}
+                >
+                  <Sparkles className="w-2.5 h-2.5" />
+                  {embStatus.mode === 'provider' ? `semantic · ${embStatus.model}` : 'offline search'}
+                </span>
+              )}
               {showServerBadge && (
                 <span className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-gray-700">
                   full search

@@ -46,7 +46,9 @@ UnauthorizedErrorProvider.propTypes = {
 
 // Session Expired Page
 const UnauthorizedErrorPage = ({ details }) => {
-  const navigate = useNavigate();
+  // NOTE: This page is rendered by UnauthorizedErrorProvider, which sits ABOVE
+  // <RouterProvider> in the tree — so react-router hooks (useNavigate) are not
+  // available here. Use plain history navigation instead.
 
   const getTitle = () => {
     if (details?.reason === 'idle_timeout') return "Still there?";
@@ -116,7 +118,7 @@ const UnauthorizedErrorPage = ({ details }) => {
 
         <div className="flex items-center justify-center gap-6 pt-2">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => window.history.back()}
             className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors"
           >
             Go back
