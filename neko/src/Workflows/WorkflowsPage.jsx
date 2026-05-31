@@ -126,7 +126,7 @@ export default function WorkflowsPage() {
   }, []);
 
   useEffect(() => { loadWorkflows(); }, [loadWorkflows]);
-  useEffect(() => { profilesApi.list().then(r => setProfiles(r.profiles || [])).catch(() => {}); }, []);
+  useEffect(() => { profilesApi.listProfiles().then(r => setProfiles(r.profiles || [])).catch(() => {}); }, []);
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const loadRuns = useCallback(async (id) => {
