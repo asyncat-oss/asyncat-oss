@@ -20,7 +20,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 | | |
 |---|---|
-| **211 tools** | Files, shell, git, browser, Docker, screen, keyboard, memory, RAG, notes, calendar, kanban, system, network, audio, image, code analysis, sandboxes, scheduler |
+| **210 tools** | Files, shell, git, browser, Docker, screen, keyboard, memory, RAG, notes, kanban, system, network, audio, image, code analysis, sandboxes, scheduler |
 | **49 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
 | **Basal Ganglia** | Watches tool patterns across sessions. After 3 successful runs of the same sequence it synthesizes a new skill automatically. No annotation, no config |
 | **4 agent modes** | `chat` (no tools), `plan` (no mutations), `action` (full ReAct loop), `design` (reads only) |
@@ -31,7 +31,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Scheduler** | Cron-based recurring agent jobs. Pick a profile and a model per job |
 | **MCP support** | Configure MCP servers via `data/mcp.json`. Manage from the UI or API |
 | **Persistent memory** | SQLite-backed key-value memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state` |
-| **Workspace** | Notes (markdown, delta-based, export to DOCX/PDF), Kanban (columns, cards, checklists), Calendar (events) |
+| **Workspace** | Notes (markdown, delta-based, export to DOCX/PDF), Kanban (columns, cards, checklists) |
 | **System tray** | Lives in your menu bar. Close the window — the agent keeps running. Reopen with a click |
 | **Global shortcut** | `Cmd+Shift+A` / `Ctrl+Shift+A` summons Asyncat from any app, any context |
 | **Native notifications** | System-level alerts when your agent finishes a job or hits an error |
@@ -228,11 +228,10 @@ asyncat-oss/
 │   │   │                      #   sessions, SandboxManager, Scheduler, profiles
 │   │   ├── ai/                # Provider integration, providerRoutes, aiAgentRoutes
 │   │   ├── auth/              # JWT auth, bcrypt, authMiddleware
-│   │   ├── calendar/          # Events CRUD (/api/events)
 │   │   ├── config/            # Config + secrets API (/api/config)
 │   │   ├── db/                # SQLite client + schema
 │   │   ├── files/             # File explorer service
-│   │   ├── integrations/      # GitHub, Google, Outlook, RSS, Obsidian, email
+│   │   ├── integrations/      # GitHub, RSS, Obsidian, email
 │   │   ├── kanban/            # Cards + columns (/api/cards, /api/columns)
 │   │   ├── lib/               # Shared logic extracted from CLI (system deps, local engines)
 │   │   ├── notes/             # Delta-based notes, export (/api/notes)
@@ -249,8 +248,7 @@ asyncat-oss/
 │       ├── Scheduler/         # Scheduler UI
 │       ├── Tools/             # Tools & skills browser
 │       ├── notes/             # Notes editor
-│       ├── views/             # Kanban, list, tasks
-│       └── calendar/          # Calendar
+│       └── views/             # Kanban, list, tasks
 ├── data/            # Root database + uploads
 └── electron-builder.yml # Electron desktop packaging configuration
 ```

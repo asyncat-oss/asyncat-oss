@@ -13,7 +13,6 @@ The UI for the full Asyncat experience:
 - **Agent Chat** — streaming, function calling, memory
 - **Terminal** — in-browser command execution
 - **Notes** — block-based editor
-- **Calendar** — events
 - **Habits** — XP and streaks
 - **Settings** — profile, security, server config
 

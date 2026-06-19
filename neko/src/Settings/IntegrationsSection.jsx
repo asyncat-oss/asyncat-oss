@@ -261,28 +261,6 @@ function IntegrationCard({
 
 // ── Logos ──────────────────────────────────────────────────────────────────────
 
-const GoogleCalendarLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden="true">
-    <path fill="#4285F4" d="M19 3H5C3.9 3 3 3.9 3 5v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
-    <path fill="#fff" d="M17 12h-5v5h5v-5z" />
-    <path fill="#EA4335" d="M8 17H5v-5h3v5z" />
-    <path fill="#FBBC05" d="M17 7h-5V5h5v2z" />
-    <path fill="#34A853" d="M8 7H5V5h3v2z" />
-    <path fill="#fff" d="M8 12H5V9h3v3zm9 0h-5V9h5v3z" />
-  </svg>
-);
-
-const OutlookLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden="true">
-    <rect x="1" y="4" width="14" height="16" rx="2" fill="#0078D4" />
-    <rect x="8" y="7" width="14" height="10" rx="1.5" fill="#50E6FF" opacity="0.9" />
-    <rect x="8" y="7" width="14" height="10" rx="1.5" fill="none" stroke="#0078D4" strokeWidth="0.5" />
-    <path d="M8 7l7 5 7-5" stroke="#0078D4" strokeWidth="1" fill="none" />
-    <circle cx="5.5" cy="12" r="3.5" fill="#fff" />
-    <text x="5.5" y="14.2" textAnchor="middle" fontSize="5" fontWeight="bold" fill="#0078D4">O</text>
-  </svg>
-);
-
 const GitHubLogo = () => (
   <Github size={22} className="text-gray-800 dark:text-gray-200 midnight:text-gray-200" />
 );
@@ -510,23 +488,11 @@ export default function IntegrationsSection() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [message, setMessage] = useState(null);
 
-  // ── Google Calendar ─────────────────────────────────────────────────────────
-  const [gcStatus,        setGcStatus]        = useState(null);
-  const [gcLoading,       setGcLoading]       = useState(true);
-  const [gcConnecting,    setGcConnecting]    = useState(false);
-  const [gcDisconnecting, setGcDisconnecting] = useState(false);
-
   // ── GitHub ──────────────────────────────────────────────────────────────────
   const [ghStatus,        setGhStatus]        = useState(null);
   const [ghLoading,       setGhLoading]       = useState(true);
   const [ghConnecting,    setGhConnecting]    = useState(false);
   const [ghDisconnecting, setGhDisconnecting] = useState(false);
-
-  // ── Outlook ─────────────────────────────────────────────────────────────────
-  const [olStatus,        setOlStatus]        = useState(null);
-  const [olLoading,       setOlLoading]       = useState(true);
-  const [olConnecting,    setOlConnecting]    = useState(false);
-  const [olDisconnecting, setOlDisconnecting] = useState(false);
 
   // ── Obsidian ────────────────────────────────────────────────────────────────
   const [obStatus,        setObStatus]        = useState(null);
@@ -568,22 +534,10 @@ export default function IntegrationsSection() {
 
   // ── Load all statuses ───────────────────────────────────────────────────────
 
-  const loadGcStatus = useCallback(async () => {
-    try { setGcStatus(await integrationsApi.googleCalendar.fetchStatus()); }
-    catch { setGcStatus({ connected: false, configured: false }); }
-    finally { setGcLoading(false); }
-  }, []);
-
   const loadGhStatus = useCallback(async () => {
     try { setGhStatus(await integrationsApi.github.fetchStatus()); }
     catch { setGhStatus({ connected: false, configured: false }); }
     finally { setGhLoading(false); }
-  }, []);
-
-  const loadOlStatus = useCallback(async () => {
-    try { setOlStatus(await integrationsApi.outlook.fetchStatus()); }
-    catch { setOlStatus({ connected: false, configured: false }); }
-    finally { setOlLoading(false); }
   }, []);
 
   const loadObStatus = useCallback(async () => {
@@ -622,32 +576,19 @@ export default function IntegrationsSection() {
   }, []);
 
   useEffect(() => {
-    loadGcStatus();
     loadGhStatus();
-    loadOlStatus();
     loadObStatus();
     loadRssStatus();
     loadMailStatus();
     loadNotifyStatus();
     loadHfStatus();
-  }, [loadGcStatus, loadGhStatus, loadOlStatus, loadObStatus, loadRssStatus, loadMailStatus, loadNotifyStatus, loadHfStatus]);
+  }, [loadGhStatus, loadObStatus, loadRssStatus, loadMailStatus, loadNotifyStatus, loadHfStatus]);
 
   // ── Handle OAuth redirect-back params ───────────────────────────────────────
 
   useEffect(() => {
-    const gcConnected  = searchParams.get('google_connected');
-    const gcError      = searchParams.get('google_error');
     const ghConnected  = searchParams.get('github_connected');
     const ghError      = searchParams.get('github_error');
-    const olConnected  = searchParams.get('outlook_connected');
-    const olError      = searchParams.get('outlook_error');
-
-    if (gcConnected) {
-      flash({ type: 'success', text: 'Google Calendar connected successfully.' });
-      loadGcStatus();
-    } else if (gcError) {
-      flash({ type: 'error', text: `Google OAuth failed: ${gcError}` });
-    }
 
     if (ghConnected) {
       flash({ type: 'success', text: 'GitHub connected successfully.' });
@@ -656,44 +597,10 @@ export default function IntegrationsSection() {
       flash({ type: 'error', text: `GitHub OAuth failed: ${ghError}` });
     }
 
-    if (olConnected) {
-      flash({ type: 'success', text: 'Outlook Calendar connected successfully.' });
-      loadOlStatus();
-    } else if (olError) {
-      flash({ type: 'error', text: `Outlook OAuth failed: ${olError}` });
-    }
-
-    if (gcConnected || gcError || ghConnected || ghError || olConnected || olError) {
+    if (ghConnected || ghError) {
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams, flash, loadGcStatus, loadGhStatus, loadOlStatus]);
-
-  // ── Google actions ──────────────────────────────────────────────────────────
-
-  const handleGcConnect = async () => {
-    setGcConnecting(true);
-    try {
-      const res = await integrationsApi.googleCalendar.getConnectUrl();
-      if (!res.success || !res.url) throw new Error(res.error || 'No OAuth URL returned');
-      window.location.href = res.url;
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to start Google sign-in') });
-      setGcConnecting(false);
-    }
-  };
-
-  const handleGcDisconnect = async () => {
-    setGcDisconnecting(true);
-    try {
-      await integrationsApi.googleCalendar.disconnect();
-      await loadGcStatus();
-      flash({ type: 'success', text: 'Google Calendar disconnected.' });
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect') });
-    } finally {
-      setGcDisconnecting(false);
-    }
-  };
+  }, [searchParams, setSearchParams, flash, loadGhStatus]);
 
   // ── GitHub actions ──────────────────────────────────────────────────────────
 
@@ -719,33 +626,6 @@ export default function IntegrationsSection() {
       flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect') });
     } finally {
       setGhDisconnecting(false);
-    }
-  };
-
-  // ── Outlook actions ─────────────────────────────────────────────────────────
-
-  const handleOlConnect = async () => {
-    setOlConnecting(true);
-    try {
-      const res = await integrationsApi.outlook.getConnectUrl();
-      if (!res.success || !res.url) throw new Error(res.error || 'No OAuth URL returned');
-      window.location.href = res.url;
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to start Outlook sign-in') });
-      setOlConnecting(false);
-    }
-  };
-
-  const handleOlDisconnect = async () => {
-    setOlDisconnecting(true);
-    try {
-      await integrationsApi.outlook.disconnect();
-      await loadOlStatus();
-      flash({ type: 'success', text: 'Outlook Calendar disconnected.' });
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect') });
-    } finally {
-      setOlDisconnecting(false);
     }
   };
 
@@ -926,37 +806,6 @@ export default function IntegrationsSection() {
       </p>
 
       <div className="space-y-3">
-        {/* Google Calendar */}
-        <IntegrationCard
-          logo={<GoogleCalendarLogo />}
-          name="Google Calendar"
-          description="Sync your Google Calendar events into the Asyncat calendar view."
-          status={gcStatus}
-          configured={gcStatus?.configured ?? false}
-          loading={gcLoading}
-          onConnect={handleGcConnect}
-          onDisconnect={handleGcDisconnect}
-          connecting={gcConnecting}
-          disconnecting={gcDisconnecting}
-          onCredsSaved={loadGcStatus}
-          setupHelpUrl="https://console.cloud.google.com/apis/credentials"
-          setupHelpText="Create OAuth credentials"
-          setupFields={[
-            {
-              key: 'GOOGLE_CLIENT_ID',
-              label: 'Client ID',
-              configType: 'secret',
-              placeholder: '123456789-abc.apps.googleusercontent.com',
-            },
-            {
-              key: 'GOOGLE_CLIENT_SECRET',
-              label: 'Client Secret',
-              configType: 'secret',
-              placeholder: 'GOCSPX-…',
-            },
-          ]}
-        />
-
         {/* GitHub */}
         <IntegrationCard
           logo={<GitHubLogo />}
@@ -982,37 +831,6 @@ export default function IntegrationsSection() {
             {
               key: 'GITHUB_CLIENT_SECRET',
               label: 'Client Secret',
-              configType: 'secret',
-              placeholder: '…',
-            },
-          ]}
-        />
-
-        {/* Outlook Calendar */}
-        <IntegrationCard
-          logo={<OutlookLogo />}
-          name="Outlook Calendar"
-          description="Sync your Microsoft / Outlook calendar events into the Asyncat calendar view."
-          status={olStatus}
-          configured={olStatus?.configured ?? false}
-          loading={olLoading}
-          onConnect={handleOlConnect}
-          onDisconnect={handleOlDisconnect}
-          connecting={olConnecting}
-          disconnecting={olDisconnecting}
-          onCredsSaved={loadOlStatus}
-          setupHelpUrl="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
-          setupHelpText="Register Azure app"
-          setupFields={[
-            {
-              key: 'MICROSOFT_CLIENT_ID',
-              label: 'Application (client) ID',
-              configType: 'secret',
-              placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-            },
-            {
-              key: 'MICROSOFT_CLIENT_SECRET',
-              label: 'Client Secret value',
               configType: 'secret',
               placeholder: '…',
             },

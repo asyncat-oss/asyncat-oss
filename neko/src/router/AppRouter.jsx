@@ -18,7 +18,6 @@ import ChatsPage from '../CommandCenter/pages/ChatsPage';
 import TrashPage from '../CommandCenter/pages/TrashPage';
 import WorkspaceLayout, { WorkspaceEmpty } from '../projects/WorkspaceLayout';
 import ProjectOverview from '../projects/ProjectOverview';
-import CalIndex from '../calendar/CalIndex';
 import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Models/ModelsPage';
@@ -210,11 +209,6 @@ const createRouter = () => createBrowserRouter([
       {
         path: "projects/:projectId/:tab",
         element: <ProjectsRedirect />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "calendar",
-        element: <CalIndex />,
         errorElement: <RouteErrorElement />
       },
       {

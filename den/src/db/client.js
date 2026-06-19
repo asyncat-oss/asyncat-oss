@@ -43,59 +43,6 @@ function tableColumns(tableName) {
   return new Set(db.prepare(`PRAGMA table_info(${tableName})`).all().map(col => col.name));
 }
 
-function ensureCalendarSchema() {
-  const eventsTable = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'Events'").get();
-  if (!eventsTable) return;
-
-  const columns = tableColumns('Events');
-
-  if (columns.has('projectId') || columns.has('attendees')) {
-    db.exec(`
-      DROP INDEX IF EXISTS idx_events_projectId;
-      DROP TABLE IF EXISTS event_attendees;
-
-      CREATE TABLE IF NOT EXISTS Events_next (
-        id          TEXT PRIMARY KEY,
-        title       TEXT NOT NULL,
-        description TEXT,
-        startTime   TEXT NOT NULL,
-        endTime     TEXT NOT NULL,
-        color       TEXT NOT NULL DEFAULT 'purple',
-        location    TEXT,
-        isAllDay    INTEGER NOT NULL DEFAULT 0,
-        recurrence  TEXT,
-        reminders   TEXT NOT NULL DEFAULT '[]',
-        status      TEXT NOT NULL DEFAULT 'confirmed'
-                      CHECK (status IN ('confirmed','tentative','cancelled')),
-        timezone    TEXT NOT NULL DEFAULT 'UTC',
-        createdBy   TEXT NOT NULL REFERENCES users(id),
-        createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
-        updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-
-      INSERT OR REPLACE INTO Events_next (
-        id, title, description, startTime, endTime, color, location, isAllDay,
-        recurrence, reminders, status, timezone, createdBy, createdAt, updatedAt
-      )
-      SELECT
-        id, title, description, startTime, endTime, color, location, isAllDay,
-        recurrence, COALESCE(reminders, '[]'),
-        COALESCE(status, 'confirmed'), COALESCE(timezone, 'UTC'), createdBy, createdAt, updatedAt
-      FROM Events;
-
-      DROP TABLE Events;
-      ALTER TABLE Events_next RENAME TO Events;
-      CREATE INDEX IF NOT EXISTS idx_events_createdBy ON Events(createdBy);
-    `);
-  } else {
-    db.exec(`
-      DROP INDEX IF EXISTS idx_events_projectId;
-      DROP TABLE IF EXISTS event_attendees;
-      CREATE INDEX IF NOT EXISTS idx_events_createdBy ON Events(createdBy);
-    `);
-  }
-}
-
 function ensureNotesSchema() {
   const notesTable = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notes'").get();
   if (!notesTable) return;
@@ -271,6 +218,9 @@ function ensureAgentMemorySchema() {
 
 function cleanupDeadTables() {
   db.exec(`
+    DROP INDEX IF EXISTS idx_events_createdBy;
+    DROP TABLE IF EXISTS event_attendees;
+    DROP TABLE IF EXISTS Events;
     DROP TABLE IF EXISTS project_folder_items;
     DROP TABLE IF EXISTS project_folders;
     DROP TABLE IF EXISTS project_members;
@@ -279,6 +229,7 @@ function cleanupDeadTables() {
     DROP TABLE IF EXISTS mcp_auth_codes;
     DROP TABLE IF EXISTS mcp_access_tokens;
     DROP TABLE IF EXISTS TaskDependencies;
+    DELETE FROM user_integrations WHERE provider IN ('google_calendar', 'outlook');
   `);
 }
 
@@ -337,7 +288,6 @@ function ensureModelPathsSchema() {
 cleanupDeadTables();
 ensureProjectSchema();
 ensureKanbanSchema();
-ensureCalendarSchema();
 ensureNotesSchema();
 ensureAgentMemorySchema();
 ensureModelPathsSchema();

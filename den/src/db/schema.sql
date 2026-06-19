@@ -64,28 +64,6 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- ─── Calendar ─────────────────────────────────────────────────────────────────
--- Table name kept as "Events" (capital E) — matches existing controller queries.
-
-CREATE TABLE IF NOT EXISTS Events (
-  id          TEXT PRIMARY KEY,
-  title       TEXT NOT NULL,
-  description TEXT,
-  startTime   TEXT NOT NULL,
-  endTime     TEXT NOT NULL,
-  color       TEXT NOT NULL DEFAULT 'purple',
-  location    TEXT,
-  isAllDay    INTEGER NOT NULL DEFAULT 0,
-  recurrence  TEXT,              -- JSON
-  reminders   TEXT NOT NULL DEFAULT '[]',   -- JSON
-  status      TEXT NOT NULL DEFAULT 'confirmed'
-                CHECK (status IN ('confirmed','tentative','cancelled')),
-  timezone    TEXT NOT NULL DEFAULT 'UTC',
-  createdBy   TEXT NOT NULL REFERENCES users(id),
-  createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
-  updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
 -- ─── Notes ────────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS notes (
@@ -206,7 +184,6 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 CREATE INDEX IF NOT EXISTS idx_projects_team_id         ON projects(team_id);
 CREATE INDEX IF NOT EXISTS idx_projects_owner_id        ON projects(owner_id);
 CREATE INDEX IF NOT EXISTS idx_notes_createdby          ON notes(createdby);
-CREATE INDEX IF NOT EXISTS idx_events_createdBy         ON Events(createdBy);
 CREATE INDEX IF NOT EXISTS idx_Columns_projectId        ON Columns(projectId);
 CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);
 CREATE INDEX IF NOT EXISTS idx_Cards_createdBy          ON Cards(createdBy);

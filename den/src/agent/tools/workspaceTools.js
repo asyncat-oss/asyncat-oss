@@ -242,26 +242,5 @@ export const workspaceTools = [
         return { success: false, error: err.message };
       }
     }
-  },
-  {
-    name: 'get_events',
-    description: 'Retrieve calendar events for the user.',
-    permission: 'safe',
-    parameters: {
-      type: 'object',
-      properties: {
-        limit: { type: 'number', description: 'Max events. Default 5.' }
-      }
-    },
-    execute: async (args, context) => {
-      const limit = args.limit || 5;
-      try {
-        const rows = db.prepare('SELECT id, title, start, end FROM Events WHERE user_id = ? AND workspace_id = ? ORDER BY start DESC LIMIT ?')
-          .all(context.userId, context.workspaceId, limit);
-        return { success: true, count: rows.length, events: rows };
-      } catch (err) {
-        return { success: false, error: err.message };
-      }
-    }
   }
 ];

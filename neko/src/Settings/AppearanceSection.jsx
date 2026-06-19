@@ -1,7 +1,6 @@
 import {
   Activity,
   BrainCircuit,
-  Calendar,
   Cpu,
   Layout,
   Moon,
@@ -82,7 +81,6 @@ const CheckboxRow = ({ checked, onChange, icon: Icon, label, locked }) => (
 const DEFAULT_NAV_ITEMS = {
   history: true,
   projects: true,
-  calendar: true,
   models: true,
   tools: true,
   agentHealth: true,
@@ -246,7 +244,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
       >
         <CheckboxRow icon={MessageSquare} label="History" checked={navItemsVisibility.history} onChange={() => handleNavItemToggle('history')} />
         <CheckboxRow icon={KanbanSquare} label="Tasks" checked={navItemsVisibility.projects} onChange={() => handleNavItemToggle('projects')} />
-        <CheckboxRow icon={Calendar} label="Calendar" checked={navItemsVisibility.calendar} onChange={() => handleNavItemToggle('calendar')} />
         <CheckboxRow icon={Cpu} label="Models" checked={navItemsVisibility.models} onChange={() => handleNavItemToggle('models')} />
         <CheckboxRow icon={Wrench} label="Tools & Skills" checked={navItemsVisibility.tools} onChange={() => handleNavItemToggle('tools')} />
         <CheckboxRow icon={Activity} label="Agent Health" checked={navItemsVisibility.agentHealth} onChange={() => handleNavItemToggle('agentHealth')} />

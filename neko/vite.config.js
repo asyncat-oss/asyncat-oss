@@ -20,7 +20,7 @@ export default defineConfig({
       manifest: {
         name: 'Asyncat',
         short_name: 'Asyncat',
-        description: 'Your AI-powered workspace — tasks, notes, calendar and The Cat in one place.',
+        description: 'Your AI-powered workspace — tasks, notes and The Cat in one place.',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',

@@ -3,7 +3,6 @@ import authService from "../services/authService.js";
 
 const MAIN_URL = import.meta.env.VITE_USER_URL;
 const AUTH_API_URL = import.meta.env.VITE_AUTH_URL;
-const CALENDAR_URL = import.meta.env.VITE_CALENDAR_URL;
 
 // Helper function to handle API responses
 const handleResponse = async (response) => {
@@ -134,20 +133,10 @@ export const profileApi = {
 // ===========================================
 
 export const integrationsApi = {
-	googleCalendar: {
-		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/google/status`),
-		getConnectUrl: async () => apiCall(`${MAIN_URL}/api/integrations/google/connect`),
-		disconnect: async () => apiCall(`${MAIN_URL}/api/integrations/google/disconnect`, { method: 'DELETE' }),
-	},
 	github: {
 		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/github/status`),
 		getConnectUrl: async () => apiCall(`${MAIN_URL}/api/integrations/github/connect`),
 		disconnect: async () => apiCall(`${MAIN_URL}/api/integrations/github/disconnect`, { method: 'DELETE' }),
-	},
-	outlook: {
-		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/outlook/status`),
-		getConnectUrl: async () => apiCall(`${MAIN_URL}/api/integrations/outlook/connect`),
-		disconnect: async () => apiCall(`${MAIN_URL}/api/integrations/outlook/disconnect`, { method: 'DELETE' }),
 	},
 	obsidian: {
 		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/obsidian/status`),

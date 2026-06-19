@@ -17,7 +17,6 @@ Den is a single Express server that handles everything:
 | Config | `/api/config/*` |
 | Users | `/api/users/*` |
 | Workspaces | `/api/teams/*` |
-| Calendar | `/api/events/*` |
 | Habits | `/api/habits/*` |
 | Kanban | `/api/cards/*`, `/api/columns/*` |
 | Notes | `/api/notes/*` |

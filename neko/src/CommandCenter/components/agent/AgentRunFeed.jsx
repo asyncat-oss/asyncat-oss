@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
   Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
   Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
-  FileText, Calendar, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
+  FileText, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
   AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell
 } from 'lucide-react';
@@ -121,8 +121,6 @@ const TOOL_META = {
   local_rag_search:  { icon: Search,      label: 'Search local context' },
   local_rag_list:    { icon: List,        label: 'List local indexes' },
   map_api_endpoints: { icon: FileText,    label: 'Map API endpoints' },
-  create_event:      { icon: Calendar,    label: 'Create event' },
-  list_events:       { icon: Calendar,    label: 'List events' },
   // Artifact tools
   create_artifact:   { icon: FilePlus,    label: 'Create artifact' },
   create_markdown:   { icon: FileText,    label: 'Create document' },

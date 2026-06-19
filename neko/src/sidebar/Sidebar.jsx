@@ -273,9 +273,9 @@ const DynamicSidebar = ({
   const [navItemsVisibility, setNavItemsVisibility] = useState(() => {
     try {
       const stored = localStorage.getItem('navItemsVisibility');
-      const defaults = { history: true, projects: true, calendar: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
+      const defaults = { history: true, projects: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
       return stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
-    } catch { return { history: true, projects: true, calendar: true, models: true, tools: true, agentHealth: true, agent: true, trash: true }; }
+    } catch { return { history: true, projects: true, models: true, tools: true, agentHealth: true, agent: true, trash: true }; }
   });
 
   // Profile state (for dock avatar only)
@@ -318,7 +318,7 @@ const DynamicSidebar = ({
     const syncNavItems = () => {
       try {
         const stored = localStorage.getItem('navItemsVisibility');
-        const defaults = { history: true, projects: true, calendar: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
+        const defaults = { history: true, projects: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
         setNavItemsVisibility(stored ? { ...defaults, ...JSON.parse(stored) } : defaults);
       } catch { /* keep current */ }
     };
@@ -450,7 +450,6 @@ const DynamicSidebar = ({
         case 'navHome': openCommandCenter(); break;
         case 'navChat': navigate("/all-chats"); break;
         case 'navWorkspace': navigate("/workspace"); break;
-        case 'navCalendar': navigate("/calendar"); break;
         case 'navModels': navigate("/models"); break;
         case 'navTools': navigate("/tools"); break;
         case 'navAgentHealth': navigate("/agent-health"); break;
@@ -478,7 +477,6 @@ const DynamicSidebar = ({
   const isOnHome = basePage === "home";
   const isOnConversations = basePage === "all-chats";
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
-  const isOnCalendar = basePage === "calendar";
   const isOnModels = basePage === "models";
   const isOnAgent = (location.pathname.startsWith("/agent") && !location.pathname.startsWith("/agent-health")) || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
   const isOnTools = location.pathname.startsWith("/tools");
@@ -512,19 +510,9 @@ const DynamicSidebar = ({
 
   const workspaceIcon = <KanbanSquare className="w-5 h-5" />;
 
-  const calendarIcon = (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-
   const primaryItems = [
     { key: "history", label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
     { key: "projects", label: "Tasks", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
-    { key: "calendar", label: "Calendar", action: "navCalendar", onClick: () => navigate("/calendar"), active: isOnCalendar, icon: calendarIcon },
   ].filter(item => navItemsVisibility[item.key] !== false);
 
   const appItems = [
@@ -759,17 +747,6 @@ const DynamicSidebar = ({
             dockPosition={dockPosition}
           >
             {workspaceIcon}
-          </DockItem>
-        )}
-
-        {navItemsVisibility.calendar !== false && (
-          <DockItem
-            label={labelWithShortcut("Calendar", "navCalendar")}
-            onClick={() => navigate("/calendar")}
-            isActive={isOnCalendar}
-            dockPosition={dockPosition}
-          >
-            {calendarIcon}
           </DockItem>
         )}
 

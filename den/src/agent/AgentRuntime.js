@@ -129,9 +129,6 @@ const DESIGN_BLOCKED_TOOLS = new Set([
   'create_task',
   'update_task',
   'delete_task',
-  'create_event',
-  'update_event',
-  'delete_event',
 ]);
 const TOOL_PROFILE_PATTERNS = {
   design: /\b(design|prototype|mockup|wireframe|one[-\s]?pager|pitch\s+deck|landing\s+page|canvas|visual\s+exploration|handoff|figma|ui\s+flow|user\s+flow)\b/i,
