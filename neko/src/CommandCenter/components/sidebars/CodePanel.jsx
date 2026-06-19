@@ -55,7 +55,6 @@ function relativeToContext(entryPath = '.', contextPath = '.') {
 }
 
 function contextKeyFor(workingContext, workingDir) {
-  if (workingContext?.rootId === 'none' || workingContext?.noWorkspace) return 'none:.';
   return `${workingContext?.rootId || 'workspace'}:${workingContext?.relativePath || '.'}:${workingDir || ''}`;
 }
 
@@ -65,7 +64,10 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo, workingContext = null }
   const contextLabel = workingContext?.relativePath && workingContext.relativePath !== '.'
     ? basename(workingContext.relativePath)
     : workingContext?.rootLabel || 'workspace';
-  const noWorkspace = rootId === 'none' || workingContext?.noWorkspace;
+  // Defensive: a legacy "No workspace" context may still be persisted from
+  // before chat-only mode was retired. Treat it as "nothing to browse" rather
+  // than firing a listing against a root that no longer exists.
+  const noWorkspace = workingContext?.rootId === 'none' || workingContext?.noWorkspace === true;
   const [entryPath, setEntryPath] = useState('.');
   const [entry, setEntry] = useState(null);
   const [openFile, setOpenFile] = useState(null);
@@ -156,16 +158,6 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo, workingContext = null }
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
         </button>
       </div>
-
-      {noWorkspace && (
-        <div className="flex h-full items-center justify-center px-6 text-center">
-          <div>
-            <Folder className="mx-auto mb-3 h-7 w-7 text-gray-300 dark:text-slate-700 midnight:text-slate-700" />
-            <p className="text-sm font-medium text-gray-500 dark:text-slate-400 midnight:text-slate-400">No workspace selected</p>
-            <p className="mt-1 text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">Choose a working folder to browse files.</p>
-          </div>
-        </div>
-      )}
 
       {error && (
         <div className="m-3 rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-300 midnight:border-rose-950/50 midnight:bg-rose-950/20 midnight:text-rose-300">

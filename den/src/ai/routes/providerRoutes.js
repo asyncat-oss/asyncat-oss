@@ -102,6 +102,8 @@ import {
   synthesize as ttsSynthesize,
 } from '../controllers/ai/ttsServerManager.js';
 import db from '../../db/client.js';
+import { listManagedRuntimes } from '../../lib/localEngine.js';
+import { startRuntimeInstallJob, getRuntimeInstallJob } from '../../lib/runtimeInstallJobs.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
@@ -2112,6 +2114,31 @@ router.post('/server/engines/python-install-jobs', verifyUser, async (req, res) 
 router.get('/server/engines/python-install-jobs/:id', verifyUser, (req, res) => {
   const job = getPythonEngineInstallJob(req.params.id);
   if (!job) return res.status(404).json({ success: false, error: 'Python install job not found' });
+  res.json({ success: true, job });
+});
+
+// ── Managed runtimes (Piper / Whisper / stable-diffusion.cpp) ─────────────────
+// GET /runtimes — list installable managed runtimes.
+router.get('/runtimes', verifyUser, (_req, res) => {
+  res.json({ success: true, runtimes: listManagedRuntimes() });
+});
+
+// POST /runtimes/:id/install-jobs — download + install a prebuilt runtime binary.
+router.post('/runtimes/:id/install-jobs', verifyUser, (req, res) => {
+  try {
+    const job = startRuntimeInstallJob(req.params.id);
+    res.status(202).json({ success: true, job });
+  } catch (err) {
+    const status = /already running/i.test(err.message) ? 409
+      : /Unknown runtime/i.test(err.message) ? 404 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// GET /runtimes/install-jobs/:jobId — poll a runtime install job.
+router.get('/runtimes/install-jobs/:jobId', verifyUser, (req, res) => {
+  const job = getRuntimeInstallJob(req.params.jobId);
+  if (!job) return res.status(404).json({ success: false, error: 'Runtime install job not found' });
   res.json({ success: true, job });
 });
 

@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiRequest, addWorkspaceToUrl, getCurrentWorkspaceId } from './client.js';
+import { API_BASE_URL, apiRequest, addWorkspaceToUrl, getCurrentWorkspaceId, handleResponse } from './client.js';
 import authService from '../../services/authService.js';
 import eventBus from '../../utils/eventBus.js';
 
@@ -153,6 +153,52 @@ export const agentApi = {
 
   getActiveEval: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/metrics/evals/active`);
+  },
+
+  getSessionTraces: async ({ days = 30, limit = 25 } = {}) => {
+    const params = new URLSearchParams({ days: String(days), limit: String(limit) });
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/sessions?${params}`);
+  },
+
+  getSessionTrace: async (sessionId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/metrics/sessions/${encodeURIComponent(sessionId)}`);
+  },
+
+  // ── Workflows / automations ──────────────────────────────────────────────
+  listWorkflows: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/workflows`);
+  },
+  createWorkflow: async (body) => {
+    return await apiRequest(`${API_BASE_URL}/agent/workflows`, { method: 'POST', body: JSON.stringify(body) });
+  },
+  updateWorkflow: async (id, body) => {
+    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
+  },
+  deleteWorkflow: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  runWorkflow: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}/run`, { method: 'POST', body: JSON.stringify({}) });
+  },
+  getWorkflowRuns: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}/runs`);
+  },
+  getRecentWorkflowRuns: async (limit = 30) => {
+    return await apiRequest(`${API_BASE_URL}/agent/workflows/runs/recent?limit=${limit}`);
+  },
+
+  // ── Semantic search + embeddings status ──────────────────────────────────
+  semanticSearch: async (q, limit = 8) => {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    return await apiRequest(`${API_BASE_URL}/agent/semantic/search?${params}`);
+  },
+  getEmbeddingStatus: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/embeddings/status`);
+  },
+
+  // ── Notification / activity log ──────────────────────────────────────────
+  getNotificationLog: async (limit = 40) => {
+    return await apiRequest(`${API_BASE_URL}/integrations/notifications/log?limit=${limit}`);
   },
 
   clearDiagnostics: async ({ days = 30, all = false } = {}) => {

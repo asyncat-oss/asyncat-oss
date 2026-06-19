@@ -16,7 +16,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['cat.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon-16x16.png', 'favicon-32x32.png', 'icon.ico', 'apple-touch-icon.png', 'app-icon-512.png'],
       manifest: {
         name: 'Asyncat',
         short_name: 'Asyncat',

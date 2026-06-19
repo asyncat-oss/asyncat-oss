@@ -40,6 +40,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Native Notifications ─────────────────────────────────────────────
   showNotification: (title, body) => ipcRenderer.send('notify', { title, body }),
 
+  // ─── App Icon ─────────────────────────────────────────────────────────
+  getAppIcon:   () => ipcRenderer.invoke('app:get-icon'),
+  setAppIcon:   (payload) => ipcRenderer.invoke('app:set-icon', payload),
+  resetAppIcon: () => ipcRenderer.invoke('app:reset-icon'),
+
+  // ─── Pet (on-screen companion) ────────────────────────────────────────
+  getPet:   () => ipcRenderer.invoke('pet:get'),
+  setPet:   (payload) => ipcRenderer.invoke('pet:set', payload),
+  resetPet: () => ipcRenderer.invoke('pet:reset'),
+
   // ─── Auto-update ──────────────────────────────────────────────────────
   checkForUpdates:   () => ipcRenderer.invoke('update:check'),
   downloadUpdate:    () => ipcRenderer.invoke('update:download'),

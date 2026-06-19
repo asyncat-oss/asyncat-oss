@@ -191,6 +191,18 @@ const AppLayout = ({ session, onSignOut }) => {
     return cleanup;
   }, []);
 
+  // Global ⌘K / Ctrl+K opens the command palette (UniversalSearch).
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   useEffect(() => {
     const syncPageTransitions = () => {
       setPageTransitionsEnabled(localStorage.getItem('pageTransitions') !== 'off');

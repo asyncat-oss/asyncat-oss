@@ -149,6 +149,25 @@ function piperCandidates() {
   ].filter(Boolean);
 }
 
+function sdCandidates() {
+  const home = os.homedir();
+  const exe = isWin ? '.exe' : '';
+  const names = ['sd-cli', 'sd', 'stable-diffusion'];
+  const roots = [
+    path.join(asyncatHome(), 'stable-diffusion.cpp'),
+    path.join(home, '.local', 'bin'),
+    path.join(home, 'stable-diffusion.cpp', 'build', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+  ];
+  const list = [(process.env.IMAGEGEN_BINARY_PATH || '').trim()];
+  for (const root of roots) {
+    for (const name of names) list.push(path.join(root, name + exe));
+  }
+  return list.filter(Boolean);
+}
+
 export function detectPython() {
   let fallback = null;
   for (const command of pythonCandidates()) {
@@ -306,6 +325,14 @@ function gpuStatus() {
   if (commandExists('nvidia-smi')) return { vendor: 'NVIDIA', command: 'nvidia-smi' };
   if (commandExists('rocm-smi')) return { vendor: 'AMD', command: 'rocm-smi' };
   if (process.platform === 'darwin' && process.arch === 'arm64') return { vendor: 'Apple', command: 'system' };
+  // Best-effort Intel GPU probe (checked last so a discrete NVIDIA/AMD wins).
+  if (process.platform === 'linux') {
+    const probe = run('sh', ['-lc', 'lspci 2>/dev/null | grep -iE "vga|3d|display" | grep -i intel'], { timeout: 3000 });
+    if (probe.ok && probe.stdout) return { vendor: 'Intel', command: 'lspci' };
+  } else if (isWin) {
+    const probe = run('wmic', ['path', 'win32_VideoController', 'get', 'name'], { timeout: 4000 });
+    if (probe.ok && /intel/i.test(probe.stdout)) return { vendor: 'Intel', command: 'wmic' };
+  }
   return null;
 }
 
@@ -337,6 +364,11 @@ export function inspectSystemDependencies() {
       paths: piperCandidates(),
       scope: 'text-to-speech',
       reason: 'Local Piper TTS runtime.',
+    }),
+    binaryCheck('sd', isWin ? ['sd.exe', 'sd-cli.exe', 'sd'] : ['sd', 'sd-cli', 'stable-diffusion'], {
+      paths: sdCandidates(),
+      scope: 'image-generation',
+      reason: 'Local stable-diffusion.cpp image runtime.',
     }),
   ];
 

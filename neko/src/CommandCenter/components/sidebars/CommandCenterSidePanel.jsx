@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, SquareTerminal, Bug, Camera, Plus } from 'lucide-react';
+import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, SquareTerminal, Bug, Camera, Plus, Search, Sparkles, Lock, ShieldAlert, FileText } from 'lucide-react';
+import eventBus from '../../../utils/eventBus.js';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import HistoryPanel from './HistoryPanel';
@@ -98,6 +99,17 @@ function getNetworkErrorMessage(code) {
   }
 }
 
+const QUICK_LINKS = [
+  { label: 'Brave Search', url: 'https://search.brave.com' },
+  { label: 'GitHub', url: 'https://github.com' },
+  { label: 'MDN', url: 'https://developer.mozilla.org' },
+  { label: 'Stack Overflow', url: 'https://stackoverflow.com' },
+  { label: 'Wikipedia', url: 'https://wikipedia.org' },
+  { label: 'Hacker News', url: 'https://news.ycombinator.com' },
+  { label: 'npm', url: 'https://www.npmjs.com' },
+  { label: 'YouTube', url: 'https://youtube.com' },
+];
+
 function PreviewPanel({ initialUrl, browserExecutorRef }) {
   // ── Tab state ─────────────────────────────────────────────────────────────
   // Each tab: { id, url, inputUrl, title, key, loading, crashed, error }
@@ -191,7 +203,21 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
   const navigateTab = useCallback((id, rawUrl) => {
     const trimmed = rawUrl.trim();
     if (!trimmed) return;
-    const full = trimmed.startsWith('http') ? trimmed : `http://${trimmed}`;
+    let full;
+    if (/^(https?|file|about|data|blob|chrome):/.test(trimmed)) {
+      // Already has a recognised protocol — use as-is
+      full = trimmed;
+    } else if (
+      /^localhost(:\d+)?(\/|$)/.test(trimmed) ||            // localhost[:port]
+      /^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(trimmed) || // IPv4
+      /^[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+([/?#].*)?$/.test(trimmed) // domain.tld
+    ) {
+      // Looks like a URL — add https://
+      full = `https://${trimmed}`;
+    } else {
+      // Treat as a search query → Brave Search
+      full = `https://search.brave.com/search?q=${encodeURIComponent(trimmed)}`;
+    }
     setTabs(prev => prev.map(t => t.id === id
       ? { ...t, url: full, inputUrl: full, key: t.key + 1, loading: true, error: null, crashed: false, title: 'Loading…' }
       : t));
@@ -201,6 +227,50 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
     setTabs(prev => prev.map(t => t.id === id
       ? { ...t, key: t.key + 1, loading: true, error: null, crashed: false }
       : t)), []);
+
+  // ── Start page + find-in-page (browser UX) ────────────────────────────────
+  const [startQuery, setStartQuery] = useState('');
+  const [find, setFind] = useState({ open: false, query: '', active: 0, total: 0 });
+  const findInputRef = useRef(null);
+
+  const runFind = useCallback((query, opts = {}) => {
+    const wv = tabRefs.current[activeTabIdRef.current]?.current;
+    if (!wv?.findInPage) return;
+    if (!query) {
+      try { wv.stopFindInPage('clearSelection'); } catch { /* find not active */ }
+      setFind(f => ({ ...f, active: 0, total: 0 }));
+      return;
+    }
+    try { wv.findInPage(query, opts); } catch { /* webview not ready */ }
+  }, []);
+
+  const openFind = useCallback(() => {
+    setFind(f => ({ ...f, open: true }));
+    setTimeout(() => findInputRef.current?.focus(), 30);
+  }, []);
+
+  const closeFind = useCallback(() => {
+    const wv = tabRefs.current[activeTabIdRef.current]?.current;
+    try { wv?.stopFindInPage?.('clearSelection'); } catch { /* find not active */ }
+    setFind({ open: false, query: '', active: 0, total: 0 });
+  }, []);
+
+  const handlePanelKey = useCallback((e) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); openFind(); }
+  }, [openFind]);
+
+  // Track match counts as the webview reports them.
+  useEffect(() => {
+    if (!find.open || !isElectron) return undefined;
+    const wv = tabRefs.current[activeTabId]?.current;
+    if (!wv?.addEventListener) return undefined;
+    const onFound = (e) => {
+      const r = e.result || {};
+      setFind(f => ({ ...f, active: r.activeMatchOrdinal || 0, total: r.matches || 0 }));
+    };
+    wv.addEventListener('found-in-page', onFound);
+    return () => { try { wv.removeEventListener('found-in-page', onFound); } catch { /* detached */ } };
+  }, [find.open, activeTabId]);
 
   // ── Sync when agent calls preview_navigate ────────────────────────────────
   const prevInitialUrl = useRef(initialUrl || null);
@@ -336,7 +406,7 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full flex-col min-h-0">
+    <div className="flex h-full flex-col min-h-0" onKeyDown={handlePanelKey}>
 
       {/* ── Tab strip ─────────────────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50/80 dark:bg-gray-950 midnight:bg-slate-950 px-1 py-0.5 min-w-0">
@@ -402,21 +472,45 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
         </button>
         <button
           type="button"
-          onClick={() => reloadTab(activeTabId)}
+          onClick={() => {
+            if (activeTab?.loading) {
+              try { tabRefs.current[activeTabId]?.current?.stop(); } catch { /* not mounted */ }
+              updateTab(activeTabId, { loading: false });
+            } else {
+              reloadTab(activeTabId);
+            }
+          }}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-          title="Reload"
+          title={activeTab?.loading ? 'Stop' : 'Reload'}
         >
-          <RotateCcw className="h-3 w-3" />
+          {activeTab?.loading ? <X className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
         </button>
         <form
-          className="flex min-w-0 flex-1 items-center"
+          className="flex min-w-0 flex-1 items-center gap-1"
           onSubmit={e => { e.preventDefault(); navigateTab(activeTabId, activeTab?.inputUrl || ''); }}
         >
+          {/* ── Security indicator ── */}
+          {(() => {
+            const u = activeTab?.url || '';
+            const isLocal = /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+)(:\d+)?/.test(u);
+            if (u.startsWith('https://') || isLocal)
+              return <Lock className="h-3 w-3 shrink-0 text-green-500" title="Secure connection" />;
+            if (u.startsWith('http://'))
+              return (
+                <span className="flex shrink-0 items-center gap-0.5 text-amber-500" title="Connection not encrypted — avoid entering sensitive information">
+                  <ShieldAlert className="h-3 w-3" />
+                  <span className="text-[9px] font-semibold uppercase tracking-wide">Not Secure</span>
+                </span>
+              );
+            if (u.startsWith('file://'))
+              return <FileText className="h-3 w-3 shrink-0 text-gray-400" title="Local file" />;
+            return null;
+          })()}
           <input
             value={activeTab?.inputUrl || ''}
             onChange={e => updateTab(activeTabId, { inputUrl: e.target.value })}
             className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-mono text-gray-700 outline-none transition-colors focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200 midnight:focus:border-indigo-500 midnight:focus:ring-indigo-500/30"
-            placeholder="https://"
+            placeholder="Search or enter address"
             spellCheck={false}
           />
         </form>
@@ -446,6 +540,39 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
         )}
         {isElectron && activeTab?.url && (
           <>
+            <button
+              type="button"
+              onClick={async () => {
+                const wv = tabRefs.current[activeTabId]?.current;
+                let pageText = '';
+                try { pageText = await wv?.executeJavaScript('document.body.innerText'); } catch { /* cross-origin / not ready */ }
+                const url = activeTab.url;
+                const title = activeTab.title && activeTab.title !== 'Loading…' ? activeTab.title : '';
+                const clean = String(pageText || '').replace(/\n{3,}/g, '\n\n').trim();
+                const excerpt = clean.slice(0, 2000);
+                const prompt = [
+                  'Here is the web page I have open. Help me with it.',
+                  '',
+                  title ? `Title: ${title}` : null,
+                  `URL: ${url}`,
+                  excerpt ? `\n"""\n${excerpt}${clean.length > 2000 ? '\n…(truncated)' : ''}\n"""` : null,
+                  '',
+                ].filter(line => line !== null).join('\n');
+                eventBus.emit('composer:prefill', prompt);
+              }}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-indigo-600 dark:hover:bg-gray-800 dark:hover:text-indigo-400 midnight:hover:bg-slate-800 midnight:hover:text-indigo-300"
+              title="Ask agent about this page"
+            >
+              <Sparkles className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={openFind}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+              title="Find in page (⌘F)"
+            >
+              <Search className="h-3 w-3" />
+            </button>
             <button
               type="button"
               onClick={() => tabRefs.current[activeTabId]?.current?.openDevTools()}
@@ -482,16 +609,59 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
       {/* ── Webview area ──────────────────────────────────────────────────── */}
       <div className="relative min-h-0 flex-1 bg-white dark:bg-gray-950 midnight:bg-slate-950">
 
-        {/* Empty state — active tab has no URL yet */}
+        {/* Find-in-page overlay */}
+        {find.open && isElectron && (
+          <div className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+            <Search className="h-3 w-3 shrink-0 text-gray-400" />
+            <input
+              ref={findInputRef}
+              value={find.query}
+              onChange={e => { const q = e.target.value; setFind(f => ({ ...f, query: q })); runFind(q, { findNext: false }); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); runFind(find.query, { forward: !e.shiftKey, findNext: true }); }
+                else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+              }}
+              placeholder="Find in page"
+              spellCheck={false}
+              className="w-36 bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-gray-200 midnight:text-slate-200"
+            />
+            <span className="min-w-[40px] text-right text-[10px] tabular-nums text-gray-400">{find.total ? `${find.active}/${find.total}` : '0/0'}</span>
+            <button type="button" onClick={() => runFind(find.query, { forward: false, findNext: true })} className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300" title="Previous match"><ArrowLeft className="h-3 w-3 rotate-90" /></button>
+            <button type="button" onClick={() => runFind(find.query, { forward: true, findNext: true })} className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300" title="Next match"><ArrowLeft className="h-3 w-3 -rotate-90" /></button>
+            <button type="button" onClick={closeFind} className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300" title="Close (Esc)"><X className="h-3 w-3" /></button>
+          </div>
+        )}
+
+        {/* Start page — active tab has no URL yet */}
         {!activeTab?.url && (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center px-6">
-              <Globe className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-600" />
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">New tab</p>
-              <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                Type a URL in the address bar or ask the agent to browse the web.
-              </p>
+          <div className="flex h-full flex-col items-center justify-center gap-5 overflow-y-auto px-6 py-8">
+            <Globe className="h-8 w-8 text-gray-300 dark:text-gray-600" />
+            <form
+              className="w-full max-w-sm"
+              onSubmit={e => { e.preventDefault(); const v = startQuery.trim(); if (v) { navigateTab(activeTabId, v); setStartQuery(''); } }}
+            >
+              <input
+                value={startQuery}
+                onChange={e => setStartQuery(e.target.value)}
+                autoFocus
+                placeholder="Search or enter a URL"
+                spellCheck={false}
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200"
+              />
+            </form>
+            <div className="flex w-full max-w-sm flex-wrap justify-center gap-1.5">
+              {QUICK_LINKS.map(l => (
+                <button
+                  key={l.url}
+                  type="button"
+                  onClick={() => navigateTab(activeTabId, l.url)}
+                  className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-300 midnight:hover:bg-slate-800"
+                >
+                  {l.label}
+                </button>
+              ))}
             </div>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500">Or ask the agent to browse the web for you.</p>
           </div>
         )}
 

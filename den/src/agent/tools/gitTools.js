@@ -204,6 +204,54 @@ export const gitBranchTool = {
   },
 };
 
+export const reviewChangesTool = {
+  name: 'review_changes',
+  description: 'Review uncommitted changes before committing. Returns a per-file summary plus automated flags for risky patterns (leftover debug/print statements, TODO/FIXME markers, possible hard-coded secrets, unresolved merge markers, unusually large deletions). Call this before git_commit so issues are caught instead of shipped.',
+  category: 'git',
+  permission: PermissionLevel.SAFE,
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Path to git repo (default: working directory)' },
+      staged: { type: 'boolean', description: 'Review only staged changes (default: false — reviews all working-tree changes)' },
+    },
+    required: [],
+  },
+  execute: async (args, context) => {
+    const cwd = args.path || context.workingDir;
+    const state = getGitState(cwd);
+    if (!state.detected) return { success: false, error: state.reason || 'Not a git repository.' };
+
+    const diffRes = getGitDiff(cwd, { staged: args.staged === true });
+    const diff = diffRes.diff || diffRes.output || '';
+    const addedText = diff.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++')).join('\n');
+    const removedCount = diff.split('\n').filter(l => l.startsWith('-') && !l.startsWith('---')).length;
+
+    const flags = [];
+    const flag = (re, msg) => { if (re.test(addedText)) flags.push(msg); };
+    flag(/\bconsole\.(log|debug|trace)\b|\bdebugger\b|\bprint\(|\bconsole\.dir\b/, 'Debug/print statements added');
+    flag(/\b(TODO|FIXME|XXX|HACK)\b/, 'TODO/FIXME/HACK markers added');
+    flag(/(api[_-]?key|secret|password|passwd|token|access[_-]?key)\s*[:=]\s*['"][^'"]{8,}['"]/i, 'Possible hard-coded secret/credential');
+    flag(/^\+\s*(<<<<<<<|>>>>>>>|=======)\s*$/m, 'Unresolved merge conflict markers');
+    if (removedCount > 200) flags.push(`Large deletion (${removedCount} lines removed) — confirm this is intended`);
+
+    return {
+      success: true,
+      branch: state.branch || null,
+      changed_files: state.changedCount,
+      files: (state.changes?.all || []).map(f => ({ path: f.path, code: f.code })),
+      additions: diffRes.additions ?? null,
+      deletions: diffRes.deletions ?? null,
+      flags: flags.length ? flags : ['No risky patterns detected'],
+      review_passed: flags.length === 0,
+      diff_preview: diff.slice(0, 4000),
+      note: flags.length
+        ? 'Address the flagged items (or confirm they are intentional) before calling git_commit.'
+        : 'No automated concerns found. Safe to git_commit.',
+    };
+  },
+};
+
 export const gitCommitTool = {
   name: 'git_commit',
   description: 'Stage and commit files. Supports glob patterns for files to stage, or stage all changes with "all".',
@@ -326,7 +374,7 @@ export const gitRemoteTool = {
 
 export const gitTools = [
   gitCloneTool, gitPullTool, gitStatusTool, gitDiffTool,
-  gitLogTool, gitBranchTool, gitCommitTool, gitPushTool,
+  gitLogTool, gitBranchTool, reviewChangesTool, gitCommitTool, gitPushTool,
   gitStashTool, gitRemoteTool,
 ];
 export default gitTools;

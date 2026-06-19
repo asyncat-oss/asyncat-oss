@@ -11,14 +11,18 @@ const INSTALL_PROFILE_LABELS = {
   nvidia_gpu: 'NVIDIA CUDA build',
   apple_metal: 'Apple Metal build',
   amd_rocm: 'AMD ROCm build',
+  vulkan: 'Vulkan build',
+  intel_sycl: 'Intel (SYCL) build',
 };
 
-const INSTALL_PROFILE_ORDER = ['cpu_safe', 'apple_metal', 'nvidia_gpu', 'amd_rocm'];
+const INSTALL_PROFILE_ORDER = ['cpu_safe', 'apple_metal', 'nvidia_gpu', 'amd_rocm', 'vulkan', 'intel_sycl'];
 
 const capabilityBadgeColor = (hint) => {
   if (hint === 'nvidia') return 'green';
   if (hint === 'apple') return 'blue';
   if (hint === 'amd') return 'amber';
+  if (hint === 'vulkan') return 'purple';
+  if (hint === 'intel') return 'cyan';
   return 'gray';
 };
 
@@ -180,6 +184,8 @@ const EngineRuntimeSection = ({
         apple: 'apple_metal',
         nvidia: 'nvidia_gpu',
         amd: 'amd_rocm',
+        vulkan: 'vulkan',
+        intel: 'intel_sycl',
       }[current.capabilityHint];
       if (fallbackProfile && !map.has(fallbackProfile)) map.set(fallbackProfile, current);
     }

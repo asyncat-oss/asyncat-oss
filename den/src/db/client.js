@@ -178,6 +178,8 @@ function ensureAgentMemorySchema() {
   addColumn('last_accessed_at', 'TEXT');
   addColumn('access_count', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('embedding', 'TEXT'); // JSON float array for vector similarity search
+  addColumn('embedding_model', 'TEXT'); // embedding model that produced `embedding` — only same-model vectors are compared
+  addColumn('embedding_dim', 'INTEGER'); // vector dimensionality, for fast same-space filtering
   addColumn('profile_id', 'TEXT'); // agent profile namespace — NULL means shared across all profiles
   addColumn('expires_at', 'TEXT'); // ISO datetime; NULL = permanent; set for transient types (task_state, context)
   addColumn("source", "TEXT NOT NULL DEFAULT 'agent'"); // 'agent'=explicit tool call, 'auto'=post-run extraction, 'correction'=correction detection
@@ -293,6 +295,7 @@ ensureAgentMemorySchema();
 ensureModelPathsSchema();
 ensureCheckpointSchema();
 ensureConversationFts();
+ensureSemanticSchema();
 
 // Delete expired transient memories on every server boot
 try {
@@ -313,6 +316,23 @@ try {
   `).run();
   if (decayed.changes > 0) logger.info(`[memory] Decayed importance for ${decayed.changes} zero-access memories`);
 } catch { /* non-critical */ }
+
+function ensureSemanticSchema() {
+  // Shared embedding cache — keyed by sha256(model + text). Carries dim so the
+  // embedding service can report the active vector space, and created_at so the
+  // cache can be pruned oldest-first when it grows past its cap.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS embedding_cache (
+      hash        TEXT PRIMARY KEY,
+      model       TEXT NOT NULL,
+      dim         INTEGER NOT NULL,
+      vector      TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_embedding_cache_created ON embedding_cache(created_at);
+    CREATE INDEX IF NOT EXISTS idx_embedding_cache_model   ON embedding_cache(model);
+  `);
+}
 
 function ensureCheckpointSchema() {
   db.exec(`
@@ -357,6 +377,24 @@ function ensureConversationFts() {
       INSERT INTO conversations_fts(conversation_id, title) VALUES (new.id, new.title);
     END;
   `);
+}
+
+// ─── Hydrate DB-backed config into process.env ───────────────────────────────
+// app_config holds settings that used to live in den/.env (local-AI engine
+// paths/ports, capability providers, integration creds, …). The DB is
+// authoritative for any key it stores, so a value edited in the UI wins over a
+// stale .env entry. Inlined here (rather than importing config/appConfig.js) so
+// the very first import of this module hydrates env before any manager reads it,
+// and to avoid a circular import. See config/appConfig.js.
+try {
+  let hydrated = 0;
+  for (const row of db.prepare('SELECT key, value FROM app_config').all()) {
+    process.env[row.key] = row.value;
+    hydrated += 1;
+  }
+  if (hydrated > 0) logger.info(`Config: hydrated ${hydrated} setting(s) from app_config`);
+} catch (err) {
+  logger.warn('Config: could not hydrate app_config into env:', err.message);
 }
 
 logger.info(`Database: SQLite at ${DB_PATH}`);

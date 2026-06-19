@@ -1,12 +1,17 @@
 // den/src/agent/tools/localRagTools.js
-// Offline, file-backed retrieval over local folders. Uses deterministic hashed
-// lexical vectors so it works without cloud embeddings or extra dependencies.
+// Offline, file-backed retrieval over local folders. Each chunk stores a
+// deterministic lexical vector (always) plus a provider embedding (when the
+// active provider exposes /embeddings). Search uses the provider vectors when
+// the query embeds into the same space, and transparently falls back to the
+// lexical vectors otherwise — so an index built online still searches offline.
 
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, isPathInside } from './shared.js';
+import { embedBatch, embedText } from '../../ai/embeddings/embeddingService.js';
+import { lexicalVector, cosineSim, tokenize, LEXICAL_MODEL, LEXICAL_DIMS } from '../../ai/embeddings/lexicalVector.js';
 
 const SKIP_DIRS = new Set([
   '.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt',
@@ -22,13 +27,7 @@ const DEFAULT_EXTS = new Set([
   '.sql', '.sh',
 ]);
 
-const STOP_WORDS = new Set([
-  'the', 'and', 'for', 'that', 'this', 'with', 'from', 'are', 'was', 'were',
-  'you', 'your', 'but', 'not', 'have', 'has', 'had', 'into', 'about', 'then',
-  'function', 'const', 'let', 'var', 'return', 'import', 'export', 'class',
-]);
-
-const VECTOR_DIMS = 256;
+const EMBED_BATCH = 64;
 
 function ragDir(workingDir) {
   const dir = path.join(workingDir, '.asyncat', 'rag');
@@ -42,45 +41,6 @@ function slugify(text, fallback = 'local-rag') {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 50) || fallback;
-}
-
-function tokenize(text) {
-  return String(text || '')
-    .toLowerCase()
-    .match(/[a-z0-9_]{2,}/g)
-    ?.filter(token => !STOP_WORDS.has(token))
-    .slice(0, 5000) || [];
-}
-
-function hashToken(token) {
-  let hash = 2166136261;
-  for (let i = 0; i < token.length; i++) {
-    hash ^= token.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function vectorize(text) {
-  const vec = new Array(VECTOR_DIMS).fill(0);
-  const counts = new Map();
-  for (const token of tokenize(text)) counts.set(token, (counts.get(token) || 0) + 1);
-  for (const [token, count] of counts.entries()) {
-    const hash = hashToken(token);
-    const idx = hash % VECTOR_DIMS;
-    const sign = hash & 1 ? 1 : -1;
-    vec[idx] += sign * Math.log1p(count);
-  }
-  let mag = Math.sqrt(vec.reduce((sum, value) => sum + value * value, 0));
-  if (mag < 1e-8) mag = 1;
-  return vec.map(value => Number((value / mag).toFixed(6)));
-}
-
-function cosine(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return 0;
-  let dot = 0;
-  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
-  return dot;
 }
 
 function shouldIndexFile(filePath, extensions) {
@@ -175,7 +135,7 @@ function keywordBonus(content, queryTokens) {
 
 export const localRagIndexTool = {
   name: 'local_rag_index',
-  description: 'Build an offline local retrieval index for a codebase or docs folder. Stores a file-backed index under .asyncat/rag and uses local hashed lexical vectors, no cloud.',
+  description: 'Build a local retrieval index for a codebase or docs folder. Stores a file-backed index under .asyncat/rag. Uses the active provider\'s embeddings when available (semantic) and always keeps an offline lexical vector as a fallback.',
   category: 'rag',
   permission: PermissionLevel.MODERATE,
   parameters: {
@@ -217,23 +177,41 @@ export const localRagIndexTool = {
             start: chunk.start,
             end: chunk.end,
             content: chunk.content,
-            vector: vectorize(chunk.content),
+            lex: lexicalVector(chunk.content),
           });
         }
       }
 
+      // Provider embeddings (semantic). Batched + cached; degrades to lexical-only
+      // if the active provider has no embeddings endpoint.
+      let embeddingModel = LEXICAL_MODEL;
+      let embeddingDim = LEXICAL_DIMS;
+      let semanticChunks = 0;
+      for (let i = 0; i < chunks.length; i += EMBED_BATCH) {
+        const batch = chunks.slice(i, i + EMBED_BATCH);
+        const results = await embedBatch(batch.map(c => c.content), { userId: context.userId });
+        results.forEach((res, k) => {
+          if (res && res.model !== LEXICAL_MODEL && Array.isArray(res.vector)) {
+            batch[k].vec = res.vector;
+            embeddingModel = res.model;
+            embeddingDim = res.dim;
+            semanticChunks += 1;
+          }
+        });
+      }
+
       const indexName = slugify(args.index_name || path.basename(root) || 'workspace');
       const index = {
-        version: 1,
+        version: 2,
         indexName,
         root: path.relative(context.workingDir, root) || '.',
         createdAt: new Date().toISOString(),
-        embedding: { provider: 'local-hashed-lexical', dimensions: VECTOR_DIMS },
+        embedding: { model: embeddingModel, dimensions: embeddingDim, semantic: semanticChunks > 0 },
         files: files.map(filePath => path.relative(context.workingDir, filePath)),
         chunks,
       };
       const filePath = indexPathFor(context.workingDir, indexName);
-      fs.writeFileSync(filePath, JSON.stringify(index, null, 2), 'utf8');
+      fs.writeFileSync(filePath, JSON.stringify(index), 'utf8');
 
       return {
         success: true,
@@ -241,7 +219,9 @@ export const localRagIndexTool = {
         path: path.relative(context.workingDir, filePath),
         files: index.files.length,
         chunks: chunks.length,
-        message: `Indexed ${index.files.length} file(s) into ${chunks.length} chunk(s) as "${indexName}".`,
+        embeddingModel,
+        semantic: semanticChunks > 0,
+        message: `Indexed ${index.files.length} file(s) into ${chunks.length} chunk(s) as "${indexName}" (${semanticChunks > 0 ? `semantic via ${embeddingModel}` : 'offline lexical'}).`,
       };
     } catch (err) {
       return { success: false, error: err.message };
@@ -251,7 +231,7 @@ export const localRagIndexTool = {
 
 export const localRagSearchTool = {
   name: 'local_rag_search',
-  description: 'Search an offline local RAG index and return relevant file chunks with excerpts. Run local_rag_index first.',
+  description: 'Search a local RAG index and return relevant file chunks with excerpts. Uses semantic embeddings when the index has them and the query embeds into the same space, otherwise lexical matching. Run local_rag_index first.',
   category: 'rag',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -269,12 +249,20 @@ export const localRagSearchTool = {
       const query = String(args.query || '').trim();
       if (!query) return { success: false, error: 'query is required.' };
       const index = loadIndex(context.workingDir, args.index_name);
-      const queryVec = vectorize(query);
       const queryTokens = tokenize(query);
       const limit = Math.max(1, Math.min(30, Number(args.limit) || 8));
+
+      // Embed the query, then decide whether we can use the index's semantic
+      // vectors (same model) or must fall back to the always-present lexical ones.
+      const emb = await embedText(query, { userId: context.userId });
+      const indexModel = index.embedding?.model || LEXICAL_MODEL;
+      const useSemantic = Boolean(emb && emb.model !== LEXICAL_MODEL && emb.model === indexModel && index.embedding?.semantic);
+      const queryVec = useSemantic ? emb.vector : lexicalVector(query);
+
       const results = (index.chunks || [])
         .map(chunk => {
-          const semantic = cosine(queryVec, chunk.vector);
+          const chunkVec = useSemantic ? chunk.vec : (chunk.lex || chunk.vector);
+          const semantic = chunkVec ? cosineSim(queryVec, chunkVec) : 0;
           const keyword = keywordBonus(chunk.content, queryTokens);
           return {
             id: chunk.id,
@@ -293,6 +281,7 @@ export const localRagSearchTool = {
         success: true,
         indexName: index.indexName,
         query,
+        method: useSemantic ? `semantic (${indexModel})` : 'lexical',
         count: results.length,
         results,
       };
@@ -304,7 +293,7 @@ export const localRagSearchTool = {
 
 export const localRagListTool = {
   name: 'local_rag_list',
-  description: 'List offline local RAG indexes available in this workspace.',
+  description: 'List local RAG indexes available in this workspace.',
   category: 'rag',
   permission: PermissionLevel.SAFE,
   parameters: { type: 'object', properties: {} },
@@ -324,6 +313,8 @@ export const localRagListTool = {
             root: parsed.root || '',
             files: parsed.files?.length || 0,
             chunks: parsed.chunks?.length || 0,
+            embeddingModel: parsed.embedding?.model || LEXICAL_MODEL,
+            semantic: Boolean(parsed.embedding?.semantic),
             modified: stat.mtime.toISOString(),
           };
         })

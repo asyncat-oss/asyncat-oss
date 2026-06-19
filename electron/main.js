@@ -7,7 +7,7 @@
 // 4. Manages the full app lifecycle
 //
 import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage } from 'electron';
-import { IS_MAC, IS_DEV, APP_NAME, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, ICONS } from './constants.js';
+import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, APP_ID, BACKEND_URL, NEKO_DIST, FRONTEND_PORT } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
@@ -32,6 +32,8 @@ function isPortListening(port) {
 import { createWindow, getMainWindow, showLoadingScreen } from './window.js';
 import { createTray, updateTrayMenu, destroyTray, setAgentRunCount } from './tray.js';
 import { buildAppMenu } from './menu.js';
+import { applyAppIcon, getAppIcon, setAppIcon, resetAppIcon } from './icon.js';
+import { initPet, destroyPetWindow, getPet, setPet, resetPet, setPetStatus } from './pet.js';
 
 // ─── Single Instance Lock ─────────────────────────────────────────────────────
 // Prevent multiple instances of the app from running.
@@ -51,6 +53,9 @@ if (!gotLock) {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.setName(APP_NAME);
+if (IS_WIN) {
+  app.setAppUserModelId(APP_ID);
+}
 
 // macOS: keep app running when all windows closed (tray icon stays)
 app.on('window-all-closed', () => {
@@ -139,6 +144,11 @@ function setupIPC() {
       new Notification({ title, body }).show();
     }
   });
+
+  // App icon customization (dock / window / tray)
+  ipcMain.handle('app:get-icon', () => getAppIcon());
+  ipcMain.handle('app:set-icon', (_e, payload) => setAppIcon(payload));
+  ipcMain.handle('app:reset-icon', () => resetAppIcon());
 }
 
 // ─── Terminal IPC ─────────────────────────────────────────────────────────────
@@ -241,13 +251,31 @@ function setupDesktopIPC() {
     return image.toDataURL();
   });
 
-  // Set the macOS dock badge count + tray tooltip
+  // Set the macOS dock badge count + tray tooltip, and drive the pet status.
   ipcMain.on('app:badge', (_event, count) => {
     const n = count || 0;
     if (app.setBadgeCount) app.setBadgeCount(n);
     setAgentRunCount(n);
+
+    if (n > 0) {
+      setPetStatus('working');
+    } else if (prevRunCount > 0) {
+      // A run just finished — flash a checkmark, then settle back to idle.
+      setPetStatus('done');
+      setTimeout(() => setPetStatus('idle'), 3000);
+    } else {
+      setPetStatus('idle');
+    }
+    prevRunCount = n;
   });
+
+  // App icon + pet customization
+  ipcMain.handle('pet:get', () => getPet());
+  ipcMain.handle('pet:set', (_e, payload) => setPet(payload));
+  ipcMain.handle('pet:reset', () => resetPet());
 }
+
+let prevRunCount = 0;
 
 // ─── Tray Helpers ─────────────────────────────────────────────────────────────
 
@@ -395,8 +423,9 @@ async function quitApp() {
   await stopFrontendServer();
   await stopBackend();
 
-  // Cleanup tray
+  // Cleanup tray + pet
   destroyTray();
+  destroyPetWindow();
 
   // Quit
   app.quit();
@@ -413,10 +442,8 @@ app.on('before-quit', (event) => {
 // ─── App Ready ────────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  // macOS dock icon (needed in dev mode; packaged builds use the app bundle icon)
-  if (IS_MAC && app.dock) {
-    app.dock.setIcon(ICONS.png);
-  }
+  // Apply the user's saved app icon to the dock (window/tray are applied after boot).
+  applyAppIcon();
 
   // Setup IPC handlers
   setupIPC();
@@ -488,4 +515,10 @@ app.whenReady().then(async () => {
 
   // Boot the app
   await bootApp();
+
+  // Re-apply the saved icon now that the window and tray exist.
+  applyAppIcon();
+
+  // Spawn the pet overlay if the user enabled it.
+  initPet();
 });

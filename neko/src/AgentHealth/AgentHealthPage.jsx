@@ -19,6 +19,7 @@ import {
 import { agentApi } from '../CommandCenter/api';
 import ConfirmModal from '../CommandCenter/components/modals/ConfirmModal';
 import { aiProviderApi } from '../Settings/settingApi';
+import SessionTraces from './SessionTraces';
 
 const WINDOWS = [7, 14, 30, 90];
 
@@ -570,6 +571,8 @@ export default function AgentHealthPage() {
               <SummaryTile icon={Wrench} label="Tools Used" value={formatNumber(summary.toolsUsed)} sublabel={`${formatNumber(summary.sessions)} sessions`} title="Distinct agent tools used during this window." />
               <SummaryTile icon={ShieldAlert} label="Safety Blocks" value={formatNumber(guardBlocks)} sublabel="Read-first and permission checks" title="Protective blocks from permission checks or attempts to edit existing files before reading them." />
             </section>
+
+            <SessionTraces days={days} />
 
             <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">

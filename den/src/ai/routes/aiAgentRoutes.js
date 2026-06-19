@@ -27,10 +27,13 @@ import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updat
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { scheduleJob, listJobs, listJobRuns, runJobNow, updateJob, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { initWorkflows } from '../../agent/WorkflowEngine.js';
+import { createWorkflowRouter } from './workflowRoutes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool, renameSymbolTool } from '../../agent/tools/codeSearchTools.js';
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
-import { listMemories, normalizeMemoryRow, searchMemories } from '../../agent/tools/memoryTools.js';
+import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall } from '../../agent/tools/memoryTools.js';
+import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embeddings/embeddingService.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
@@ -431,7 +434,7 @@ function injectFileAttachments(goal, fileAttachments = []) {
         'Scope: prompt-only upload; not stored in or read from the workspace.',
         `MIME: ${f.mime || 'application/octet-stream'}`,
         f.size ? `Size: ${f.size} bytes` : null,
-        'This file type is available as metadata only in No workspace mode.',
+        'This file type is available as prompt metadata only.',
         '',
       ].filter(Boolean).join('\n');
     }
@@ -495,7 +498,7 @@ await initializeAgent();
 ensureAgentTaskRunsTable();
 markStaleActiveSessions();
 
-initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId, providerProfileId, providerSnapshot }) => {
+const runScheduledAgent = async ({ goal, userId, workspaceId, workingDir, profileId, providerProfileId, providerSnapshot }) => {
   const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForScheduledProvider(userId, providerProfileId, providerSnapshot);
   const profile = profileId ? getProfile(profileId, userId) : getDefaultProfile(userId);
   let resolvedSoul = null;
@@ -525,7 +528,9 @@ initScheduler(async ({ goal, userId, workspaceId, workingDir, profileId, provide
     });
   }
   return await agent.run(goal);
-});
+};
+initScheduler(runScheduledAgent);
+initWorkflows(runScheduledAgent);
 
 async function runAgentTaskInBackground(runId) {
   const run = db.prepare('SELECT * FROM agent_task_runs WHERE id = ?').get(runId);
@@ -1138,6 +1143,7 @@ function createAskUserRequest(req, res) {
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
 router.use('/metrics', createAgentMetricsRouter({ authenticate }));
+router.use('/workflows', createWorkflowRouter({ authenticate }));
 
 router.get('/tools', authenticate, async (req, res) => {
   const { toolRegistry } = await import('../../agent/index.js');
@@ -1155,6 +1161,58 @@ router.get('/capabilities/multimodal', authenticate, async (req, res) => {
     res.json({ success: true, capabilities: await getMultimodalCapabilities(req.user.id) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to load multimodal capabilities' });
+  }
+});
+
+// ─── Embeddings / semantic layer status ──────────────────────────────────────
+// Reports the resolved embedding strategy (provider model vs. offline lexical)
+// and cache size, so the UI can show whether semantic search is active.
+router.get('/embeddings/status', authenticate, (req, res) => {
+  try {
+    res.json({ success: true, ...embeddingStatus(req.user.id) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to load embedding status' });
+  }
+});
+
+// Force a re-probe of the provider's embeddings endpoint (e.g. after switching
+// the active provider in the Models page).
+router.post('/embeddings/refresh', authenticate, (req, res) => {
+  try {
+    resetEmbeddingStrategy(req.user.id);
+    res.json({ success: true, ...embeddingStatus(req.user.id) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to refresh embedding status' });
+  }
+});
+
+// Semantic search over the agent's durable memory (hybrid BM25 + vector). Powers
+// the command palette's "Memory" results and reports the active embedding space.
+router.get('/semantic/search', authenticate, async (req, res) => {
+  try {
+    const q = String(req.query.q || req.query.query || '').trim();
+    const status = embeddingStatus(req.user.id);
+    if (!q) return res.json({ success: true, query: q, results: [], embedding: status });
+    const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 8));
+    const workspaceId = req.workspaceId
+      || db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id
+      || null;
+    const context = {
+      userId: req.user.id,
+      workspaceId,
+      profileId: null,
+      computeEmbedding: (text) => embedText(text, { userId: req.user.id }),
+    };
+    const { memories, method } = await hybridRecall(context, { query: q, kind: 'all', limit });
+    res.json({
+      success: true,
+      query: q,
+      method,
+      embedding: status,
+      results: memories.map(m => ({ key: m.key, kind: m.kind, content: m.content, importance: m.importance, score: m.score })),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Semantic search failed' });
   }
 });
 
@@ -1587,13 +1645,11 @@ router.post('/run', authenticate, async (req, res) => {
       clientTimestamp = null,
       clientTimezone = null,
     } = req.body;
-    const resolvedAgentMode = agentMode === 'chat'
-      ? 'chat'
-      : agentMode === 'design'
-        ? 'design'
-        : agentMode === 'plan' || enableTools === false
-          ? 'plan'
-          : 'action';
+    const resolvedAgentMode = agentMode === 'design'
+      ? 'design'
+      : agentMode === 'plan' || enableTools === false
+        ? 'plan'
+        : 'action';
     const baseGoal = (rawGoal || rawMessage || '').trim();
 
     if (!baseGoal) {
@@ -1632,14 +1688,9 @@ router.post('/run', authenticate, async (req, res) => {
       heartbeatInterval = null;
     });
 
-    const resolvedWorkingContext = resolvedAgentMode === 'chat'
-      ? resolveAgentWorkingContext({ workingContext: null, workingDir: null, profile: null })
-      : resolveAgentWorkingContext({ workingContext, workingDir, profile });
+    const resolvedWorkingContext = resolveAgentWorkingContext({ workingContext, workingDir, profile });
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
-    const resolvedFiles = resolveFileAttachments(
-      fileAttachments,
-      resolvedAgentMode === 'chat' ? null : resolvedWorkingContext,
-    );
+    const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext);
     const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
     // Capabilities go into the system prompt via AgentRuntime — NOT prepended to the user's goal.
     const capabilitiesSection = formatMultimodalCapabilityPrompt(multimodalCapabilities);

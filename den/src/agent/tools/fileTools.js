@@ -6,10 +6,31 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import * as parser from '@babel/parser';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, truncate } from './shared.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Validate JS/TS syntax of proposed file content before writing. No-op for
+ * non-JS/TS files. Mirrors the check in searchReplaceBlockTool so atomic
+ * multi-file patches never leave a file in a syntactically broken state.
+ */
+function verifyJsSyntax(filePath, newContent) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (!['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'].includes(ext)) return { valid: true };
+  try {
+    parser.parse(newContent, {
+      sourceType: 'module',
+      plugins: ['typescript', 'jsx', 'classProperties', 'decorators-legacy',
+        'dynamicImport', 'exportDefaultFrom', 'optionalChaining', 'nullishCoalescingOperator'],
+    });
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: `Syntax error introduced by edit: ${err.message}` };
+  }
+}
 
 /**
  * Find the closest matching lines in file content when exact match fails.
@@ -376,6 +397,98 @@ export const patchFileTool = {
       success: true,
       path: args.path,
       message: 'Replacement applied.',
+    };
+  },
+};
+
+export const applyPatchTool = {
+  name: 'apply_patch',
+  description: 'Apply multiple precise edits across one or more files as a single ATOMIC operation. Every edit is validated first (each old_string must exist exactly once in its file, and JS/TS syntax must stay valid); if ANY edit fails, no files are changed at all. Use this for coordinated multi-file changes (e.g. rename a function and update all call sites) so the working tree is never left half-edited.',
+  category: 'file',
+  permission: PermissionLevel.MODERATE,
+  parameters: {
+    type: 'object',
+    properties: {
+      edits: {
+        type: 'array',
+        description: 'Ordered list of edits. Each: { path, old_string, new_string }. old_string must match exactly (whitespace included) and appear exactly once in its file at the time it is applied.',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path relative to working directory' },
+            old_string: { type: 'string', description: 'Exact text to find — must be unique within the file' },
+            new_string: { type: 'string', description: 'Replacement text' },
+          },
+          required: ['path', 'old_string', 'new_string'],
+        },
+      },
+    },
+    required: ['edits'],
+  },
+  execute: async (args, context) => {
+    const edits = Array.isArray(args.edits) ? args.edits : [];
+    if (edits.length === 0) {
+      return { success: false, error: 'No edits provided. Pass an "edits" array of { path, old_string, new_string }.' };
+    }
+
+    // Group edits by file, preserving order so coordinated edits apply predictably.
+    const byPath = new Map();
+    for (const e of edits) {
+      if (!e || typeof e.path !== 'string' || typeof e.old_string !== 'string' || typeof e.new_string !== 'string') {
+        return { success: false, error: 'Every edit must include string path, old_string, and new_string. No files were modified.' };
+      }
+      if (!byPath.has(e.path)) byPath.set(e.path, []);
+      byPath.get(e.path).push(e);
+    }
+
+    // ── Phase 1: validate everything in-memory (no writes yet) ──────────────
+    const planned = [];
+    const results = [];
+    for (const [relPath, fileEdits] of byPath) {
+      const filePath = safePath(relPath, context.workingDir);
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: `File not found: ${relPath}. No files were modified.` };
+      }
+      if (fs.statSync(filePath).isDirectory()) {
+        return { success: false, error: `"${relPath}" is a directory, not a file. No files were modified.` };
+      }
+      let content = fs.readFileSync(filePath, 'utf8');
+      for (let i = 0; i < fileEdits.length; i++) {
+        const { old_string, new_string } = fileEdits[i];
+        const count = content.split(old_string).length - 1;
+        if (count === 0) {
+          return {
+            success: false,
+            error: `Edit ${i + 1} for "${relPath}": old_string not found (it may be stale — re-read the file). No files were modified.`,
+            closest_matches: _findClosestLines(content, old_string, 2) || undefined,
+          };
+        }
+        if (count > 1) {
+          return {
+            success: false,
+            error: `Edit ${i + 1} for "${relPath}": old_string appears ${count} times — it must be unique. Add more surrounding context. No files were modified.`,
+          };
+        }
+        content = content.replace(old_string, new_string);
+      }
+      const syntax = verifyJsSyntax(filePath, content);
+      if (!syntax.valid) {
+        return { success: false, error: `"${relPath}": ${syntax.error} No files were modified.` };
+      }
+      planned.push({ filePath, newContent: content });
+      results.push({ path: relPath, edits_applied: fileEdits.length });
+    }
+
+    // ── Phase 2: all validated — commit every file ──────────────────────────
+    for (const p of planned) {
+      fs.writeFileSync(p.filePath, p.newContent, 'utf8');
+    }
+    return {
+      success: true,
+      files_changed: planned.length,
+      total_edits: edits.length,
+      results,
+      message: `Atomically applied ${edits.length} edit(s) across ${planned.length} file(s).`,
     };
   },
 };
@@ -775,7 +888,7 @@ export const fileWatchTool = {
 
 /** All file tools for batch registration. */
 export const fileTools = [
-  readFileTool, writeFileTool, createDirectoryTool, editFileTool, patchFileTool, searchFilesTool,
+  readFileTool, writeFileTool, createDirectoryTool, editFileTool, patchFileTool, applyPatchTool, searchFilesTool,
   listDirectoryTool, findFilesTool, fileDiffTool, globFindTool,
   fileCopyTool, fileMoveTool, fileDeleteTool, fileWatchTool,
 ];

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
+import { getAllConfig, setConfigValue, isBootstrapKey } from './appConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -87,8 +88,22 @@ function writeEnv(updates) {
   return true;
 }
 
+// Persist a key: bootstrap values go to den/.env, everything else to the DB.
+// Either way the live process.env is updated so the change applies immediately.
+function persistConfig(key, value) {
+  if (isBootstrapKey(key)) {
+    const ok = writeEnv({ [key]: value });
+    if (ok) process.env[key] = value;
+    return ok;
+  }
+  setConfigValue(key, value); // also sets process.env[key]
+  return true;
+}
+
 export function getConfig(req, res) {
-  const env = readEnv();
+  // Merge the bootstrap .env file with DB-backed config; the DB wins for any key
+  // it holds (that's where edits now persist), so the UI shows live values.
+  const env = { ...readEnv(), ...getAllConfig() };
 
   const masked = {};
   for (const [k, v] of Object.entries(env)) {
@@ -116,12 +131,10 @@ export function updateConfig(req, res) {
     return res.status(400).json({ success: false, error: `Key not allowed: ${key}. Allowed: ${allowed.join(', ')}` });
   }
 
-  const success = writeEnv({ [key]: value });
+  const success = persistConfig(key, value);
   if (!success) {
     return res.status(500).json({ success: false, error: 'Failed to write config' });
   }
-
-  process.env[key] = value;
 
   res.json({ success: true, message: restart ? 'Config updated. Restart the server to apply changes.' : 'Config updated.' });
 }
@@ -148,12 +161,10 @@ export function updateSecret(req, res) {
     return res.status(400).json({ success: false, error: 'Secret value cannot be empty' });
   }
 
-  const success = writeEnv({ [key]: value });
+  const success = persistConfig(key, value);
   if (!success) {
     return res.status(500).json({ success: false, error: 'Failed to write secret' });
   }
-
-  process.env[key] = value;
 
   res.json({ success: true, message: 'Secret updated.' });
 }

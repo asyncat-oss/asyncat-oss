@@ -4,13 +4,27 @@ import os from 'os';
 import { execFileSync, execSync, spawnSync } from 'child_process';
 import { once } from 'events';
 import { ROOT, readEnv, setKey } from './env.js';
+import { setConfigValue } from '../config/appConfig.js';
+
+// Persist a llama runtime path. These used to be written to den/.env; they now
+// live in the DB-backed app_config (hydrated into process.env at boot). We set
+// process.env immediately so the running process picks it up, then persist to
+// the DB, falling back to den/.env only if the DB write is unavailable.
+function persistLlamaEnv(key, value) {
+  process.env[key] = value;
+  try {
+    setConfigValue(key, value);
+  } catch {
+    setKey('den/.env', key, value);
+  }
+}
 
 export const LLAMA_RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
 export const LLAMA_RELEASES_LIST_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases';
 export const LLAMA_RELEASES_URL = 'https://github.com/ggml-org/llama.cpp/releases';
 export const MISSING_ENGINE_MESSAGE = 'Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
 export const MANAGED_ENGINE_METADATA_FILE = 'asyncat-engine.json';
-export const LLAMA_ENGINE_PROFILES = ['cpu_safe', 'nvidia_gpu', 'apple_metal', 'amd_rocm'];
+export const LLAMA_ENGINE_PROFILES = ['cpu_safe', 'nvidia_gpu', 'apple_metal', 'amd_rocm', 'vulkan', 'intel_sycl'];
 
 const isWin = process.platform === 'win32';
 
@@ -55,6 +69,8 @@ export function profileCapabilityHint(profile = 'cpu_safe') {
   if (profile === 'nvidia_gpu') return 'nvidia';
   if (profile === 'apple_metal') return 'apple';
   if (profile === 'amd_rocm') return 'amd';
+  if (profile === 'vulkan') return 'vulkan';
+  if (profile === 'intel_sycl') return 'intel';
   return 'cpu_safe';
 }
 
@@ -336,6 +352,27 @@ function pythonHasLlamaServer(pythonCmd) {
   }
 }
 
+// Best-effort Intel GPU probe (Arc / Iris Xe / UHD). Linux uses lspci; Windows
+// uses wmic when present. Returns null on macOS and when nothing is found, so it
+// never overrides a discrete NVIDIA/AMD GPU (those are checked first).
+function detectIntelGpu() {
+  try {
+    if (process.platform === 'linux') {
+      const out = execSync('lspci', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 });
+      const line = out.split('\n').find(l => /vga|3d|display/i.test(l) && /intel/i.test(l));
+      if (line) {
+        const name = /(arc|iris|xe|uhd)[^\]]*/i.exec(line)?.[0]?.trim();
+        return { vendor: 'Intel', name: name || 'Intel GPU', vramGb: null };
+      }
+    } else if (isWin) {
+      const out = execSync('wmic path win32_VideoController get name', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 4000 });
+      const line = out.split('\n').map(l => l.trim()).find(l => /intel/i.test(l));
+      if (line) return { vendor: 'Intel', name: line, vramGb: null };
+    }
+  } catch {}
+  return null;
+}
+
 export function detectGpu() {
   try {
     const out = execSync(
@@ -361,6 +398,9 @@ export function detectGpu() {
     return { vendor: 'Apple', name: 'Apple Silicon / Metal', vramGb: null };
   }
 
+  const intel = detectIntelGpu();
+  if (intel) return intel;
+
   return null;
 }
 
@@ -375,6 +415,9 @@ export function gpuAdvice(gpu = detectGpu()) {
   }
   if (gpu.vendor === 'AMD') {
     return 'AMD GPU detected. Choose option [3] to build a ROCm runtime (requires ROCm drivers installed).';
+  }
+  if (gpu.vendor === 'Intel') {
+    return 'Intel GPU detected. Install the Vulkan build for cross-vendor GPU acceleration, or build a SYCL runtime with the oneAPI toolkit.';
   }
   return null;
 }
@@ -408,6 +451,7 @@ function assetTagsFromName(name = '') {
   if (/vulkan/.test(lower)) tags.push('vulkan');
   if (/opencl/.test(lower)) tags.push('opencl');
   if (/sycl/.test(lower)) tags.push('sycl');
+  if (/openvino/.test(lower)) tags.push('openvino');
   return tags;
 }
 
@@ -416,6 +460,8 @@ function inferProfileFromAssetName(name = '', fallbackProfile = 'cpu_safe', plat
   if (tags.includes('cuda')) return 'nvidia_gpu';
   if (tags.includes('rocm')) return 'amd_rocm';
   if (tags.includes('metal')) return 'apple_metal';
+  if (tags.includes('vulkan')) return 'vulkan';
+  if (tags.includes('sycl') || tags.includes('openvino')) return 'intel_sycl';
   if (platform === 'darwin' && fallbackProfile === 'apple_metal') return 'apple_metal';
   return fallbackProfile;
 }
@@ -484,6 +530,22 @@ function scoreLlamaReleaseAsset(asset, platform = process.platform, arch = proce
     return score;
   }
 
+  if (profile === 'vulkan') {
+    // Cross-vendor GPU build: Intel Arc, AMD without ROCm, consumer NVIDIA,
+    // Windows-on-ARM. Prebuilt assets exist for Windows and Linux only.
+    if (!/vulkan/.test(name)) return null;
+    score += 40;
+    return score;
+  }
+
+  if (profile === 'intel_sycl') {
+    // Intel Arc / Core Ultra iGPU. Prebuilt OpenVINO assets exist for Linux x64;
+    // SYCL elsewhere comes from the Python compile path.
+    if (!/sycl|openvino/.test(name)) return null;
+    score += 40;
+    return score;
+  }
+
   return score;
 }
 
@@ -544,6 +606,41 @@ export function buildReleaseCatalog(releases, platform = process.platform, arch 
   });
 }
 
+// Windows CUDA llama.cpp / stable-diffusion.cpp builds ship without the CUDA
+// runtime DLLs; the release publishes a companion `cudart-*.zip` that must be
+// extracted alongside the binary or it fails to launch with a missing-DLL error.
+// Returns true when a companion was merged into targetDir.
+async function installCudartCompanion(release, mainAssetName, targetDir, onProgress = null) {
+  if (!isWin) return false;
+  const lower = String(mainAssetName || '').toLowerCase();
+  if (!/cu(da)?\d|cublas/.test(lower)) return false;
+
+  const major = lower.match(/cu(?:da)?[ _-]?(\d+)/)?.[1] || null;
+  const wantsX64 = /(x64|x86_64|amd64)/.test(lower);
+  const companion = (release.assets || []).find(asset => {
+    const n = String(asset.name || '').toLowerCase();
+    if (!n.startsWith('cudart') || !asset.browser_download_url) return false;
+    if (major && !new RegExp(`cu(?:da)?[ _-]?${major}`).test(n)) return false;
+    if (wantsX64 && !/(x64|x86_64|amd64)/.test(n)) return false;
+    return true;
+  });
+  if (!companion) return false;
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-cudart-'));
+  const archivePath = path.join(tmpRoot, companion.name);
+  const extractDir = path.join(tmpRoot, 'extract');
+  try {
+    onProgress?.({ phase: 'installing', message: `Downloading CUDA runtime (${companion.name})`, percent: 90 });
+    await downloadFile(companion.browser_download_url, archivePath);
+    extractArchive(archivePath, extractDir);
+    // Merge the runtime DLLs into the engine dir without clearing it.
+    fs.cpSync(extractDir, targetDir, { recursive: true });
+    return true;
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+}
+
 async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgress = null) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-llama-'));
   const archivePath = path.join(tmpRoot, asset.name);
@@ -591,6 +688,9 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     fs.cpSync(extractDir, targetDir, { recursive: true });
     ensureLinuxSonameLinks(targetDir);
     ensureDarwinDylibLinks(targetDir);
+    // Windows CUDA builds need the cudart companion DLLs before they can run
+    // (the verification step below launches the binary).
+    await installCudartCompanion(release, asset.name, targetDir, onProgress);
 
     const installed = managedLlamaBinaryPath(profile);
     const copiedServer = findLlamaServerBinary(targetDir);
@@ -641,7 +741,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       installedAt: new Date().toISOString(),
     }, targetDir);
     pointCurrentManagedEngine(targetDir);
-    setKey('den/.env', 'LLAMA_BINARY_PATH', installed);
+    persistLlamaEnv('LLAMA_BINARY_PATH', installed);
     onProgress?.({
       phase: 'complete',
       message: 'Managed engine installed successfully',
@@ -916,7 +1016,10 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
   }
 
   if (candidates.length === 0) {
-    throw new Error(`No llama.cpp release asset matched ${process.platform}-${process.arch} for profile ${requestedProfile}. Download manually from ${LLAMA_RELEASES_URL} and set LLAMA_BINARY_PATH.`);
+    const compileHint = requestedProfile !== 'cpu_safe'
+      ? ` No prebuilt ${requestedProfile} binary is published for ${process.platform}-${process.arch} (this is expected for CUDA on Linux) — use "Build GPU runtime" to compile from source instead.`
+      : '';
+    throw new Error(`No llama.cpp release asset matched ${process.platform}-${process.arch} for profile ${requestedProfile}.${compileHint} Or download manually from ${LLAMA_RELEASES_URL} and set LLAMA_BINARY_PATH.`);
   }
 
   const failures = [];
@@ -947,13 +1050,15 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
 }
 
 export function writeLlamaBinaryEnv(binaryPath) {
-  setKey('den/.env', 'LLAMA_BINARY_PATH', binaryPath);
+  persistLlamaEnv('LLAMA_BINARY_PATH', binaryPath);
 }
 
 const PYTHON_GPU_CMAKE_ARGS = {
   nvidia_gpu:  '-DGGML_CUDA=on',
   apple_metal: '-DGGML_METAL=on',
   amd_rocm:    '-DGGML_HIP=on',
+  vulkan:      '-DGGML_VULKAN=on',
+  intel_sycl:  '-DGGML_SYCL=on',
 };
 
 export function installPythonVenvFallback(pythonCmd, { profile = 'cpu_safe' } = {}) {
@@ -988,6 +1093,243 @@ export function installPythonVenvFallback(pythonCmd, { profile = 'cpu_safe' } = 
   } else {
     execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]'], { env, cwd: ROOT, stdio: 'ignore', timeout: 3600000 });
   }
-  setKey('den/.env', 'LLAMA_PYTHON_PATH', python);
+  persistLlamaEnv('LLAMA_PYTHON_PATH', python);
   return python;
+}
+
+// ─── Generic managed runtime installer (Piper / Whisper / stable-diffusion.cpp) ─
+// These engines, unlike llama.cpp, used to be detect-only. This installer
+// downloads a prebuilt GitHub release binary where one exists for the current
+// platform/arch, extracts it into ~/.asyncat/<dir>, links bundled libs, and
+// persists the binary path to the DB-backed config (the same key the manager
+// reads). If no prebuilt asset matches the platform, it throws — the caller
+// falls back to the package-manager command shown in the UI.
+
+export const MANAGED_RUNTIME_SPECS = {
+  piper: {
+    id: 'piper',
+    label: 'Piper (Text-to-Speech)',
+    repo: 'rhasspy/piper',
+    dir: 'piper',
+    binaryNames: ['piper'],
+    envKey: 'PIPER_BINARY_PATH',
+  },
+  whisper: {
+    id: 'whisper',
+    label: 'Whisper (Speech-to-Text)',
+    repo: 'ggml-org/whisper.cpp',
+    dir: 'whisper.cpp',
+    binaryNames: ['whisper-server', 'server', 'main'],
+    envKey: 'WHISPER_BINARY_PATH',
+  },
+  sd: {
+    id: 'sd',
+    label: 'Image (stable-diffusion.cpp)',
+    repo: 'leejet/stable-diffusion.cpp',
+    dir: 'stable-diffusion.cpp',
+    binaryNames: ['sd', 'sd-cli', 'stable-diffusion'],
+    envKey: 'IMAGEGEN_BINARY_PATH',
+    // stable-diffusion.cpp publishes CUDA / ROCm / Vulkan / Metal builds; pick the
+    // one matching the detected GPU so image generation is hardware-accelerated.
+    autoGpu: true,
+  },
+};
+
+export function listManagedRuntimes() {
+  return Object.values(MANAGED_RUNTIME_SPECS).map(({ id, label, envKey }) => ({ id, label, envKey }));
+}
+
+// GPU tag patterns for the generic runtimes (Whisper / sd.cpp).
+const RUNTIME_CAPABILITY_TAGS = {
+  nvidia: /cuda|cublas/,
+  amd:    /rocm|hip/,
+  vulkan: /vulkan/,
+  intel:  /sycl|openvino/,
+};
+
+// Map a detected GPU to the runtime build variant to download. Intel/unknown
+// GPUs use Vulkan, the broadest prebuilt option across these engines.
+export function runtimeCapabilityForGpu(gpu) {
+  if (!gpu) return 'cpu_safe';
+  if (gpu.vendor === 'NVIDIA') return 'nvidia';
+  if (gpu.vendor === 'AMD') return 'amd';
+  if (gpu.vendor === 'Apple') return 'apple';
+  return 'vulkan';
+}
+
+function runtimeCapabilityLabel(capability) {
+  return { nvidia: 'CUDA', amd: 'ROCm', vulkan: 'Vulkan', intel: 'SYCL', apple: 'Metal', cpu_safe: 'CPU' }[capability] || 'CPU';
+}
+
+function assetHasAnyGpuTag(lower) {
+  return /cuda|cublas|hip|rocm|vulkan|sycl|openvino|opencl|kompute/.test(lower);
+}
+
+// Score a release asset for the current platform/arch and target capability.
+// Returns null if it can't run here or doesn't match the requested variant.
+// Generic across the runtimes (token-based, tolerant of naming).
+function scoreRuntimeAsset(name, platform = process.platform, arch = process.arch, capability = 'cpu_safe') {
+  const lower = String(name || '').toLowerCase();
+  if (!/\.(zip|tar\.gz|tgz)$/.test(lower)) return null;
+  if (/sha256|checksums?|\.sig$|source|\.asc$|debug/.test(lower)) return null;
+  if (/^cudart/.test(lower)) return null; // CUDA runtime companion, installed separately
+
+  let score = 0;
+  if (platform === 'win32') {
+    if (!/(win|windows)/.test(lower)) return null;
+    score += 40;
+  } else if (platform === 'darwin') {
+    if (!/(macos|darwin|osx|apple)/.test(lower)) return null;
+    score += 40;
+  } else if (platform === 'linux') {
+    if (!/linux/.test(lower)) return null;
+    score += 40;
+  }
+
+  if (arch === 'x64') {
+    if (/(x64|x86_64|amd64)/.test(lower)) score += 25;
+    else if (/(arm64|aarch64)/.test(lower)) return null;
+  } else if (arch === 'arm64') {
+    if (/(arm64|aarch64)/.test(lower)) score += 25;
+    else if (/(x64|x86_64|amd64)/.test(lower)) return null;
+  }
+
+  if (capability === 'cpu_safe') {
+    if (assetHasAnyGpuTag(lower)) return null;     // strictly a CPU build
+    if (/blas/.test(lower)) score += 6;            // OpenBLAS CPU accel (bundled libs)
+    if (/avx2/.test(lower)) score += 3;
+    else if (/avx512/.test(lower)) score += 1;
+    if (/noavx/.test(lower)) score -= 4;
+  } else if (capability === 'apple') {
+    if (/cuda|cublas|hip|rocm|vulkan|sycl|openvino/.test(lower)) return null; // macOS build is Metal
+    score += 20;
+  } else {
+    const tag = RUNTIME_CAPABILITY_TAGS[capability];
+    if (!tag || !tag.test(lower)) return null;
+    score += 40;
+  }
+  if (/server/.test(lower)) score += 2;
+  return score;
+}
+
+function findBinaryByNames(root, baseNames) {
+  const wanted = [];
+  for (const base of baseNames) {
+    wanted.push(base);
+    if (isWin) wanted.push(`${base}.exe`);
+  }
+  const matchesByPriority = new Map();
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries = [];
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) { stack.push(full); continue; }
+      const idx = wanted.indexOf(entry.name);
+      if (idx !== -1 && !matchesByPriority.has(idx)) matchesByPriority.set(idx, full);
+    }
+  }
+  for (let i = 0; i < wanted.length; i++) {
+    if (matchesByPriority.has(i)) return matchesByPriority.get(i);
+  }
+  return null;
+}
+
+export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null } = {}) {
+  const spec = MANAGED_RUNTIME_SPECS[runtimeId];
+  if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
+
+  const report = (phase, message, percent, extra = {}) =>
+    onProgress?.({ phase, message, percent, runtime: spec.id, ...extra });
+
+  report('resolving', `Finding a ${spec.label} build for your system`, 2);
+  const res = await fetch(`https://api.github.com/repos/${spec.repo}/releases/latest`, {
+    headers: githubApiHeaders(),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`GitHub releases API returned ${res.status} for ${spec.repo}`);
+  const release = await res.json();
+
+  // Pick the best variant for this machine: an explicit capability, else the
+  // detected GPU when the engine ships GPU builds, else a portable CPU build.
+  let targetCapability = capability || (spec.autoGpu ? runtimeCapabilityForGpu(detectGpu()) : 'cpu_safe');
+  const rankFor = (cap) => (release.assets || [])
+    .map(asset => ({ asset, score: scoreRuntimeAsset(asset.name, process.platform, process.arch, cap) }))
+    .filter(item => item.score !== null)
+    .sort((a, b) => b.score - a.score)
+    .map(item => item.asset);
+
+  let ranked = rankFor(targetCapability);
+  if (ranked.length === 0 && targetCapability !== 'vulkan' && targetCapability !== 'apple' && targetCapability !== 'cpu_safe') {
+    targetCapability = 'vulkan'; // cross-vendor GPU build runs on NVIDIA/AMD/Intel too
+    ranked = rankFor('vulkan');
+  }
+  if (ranked.length === 0 && targetCapability !== 'cpu_safe') {
+    targetCapability = 'cpu_safe'; // no GPU build for this engine/platform — fall back
+    ranked = rankFor('cpu_safe');
+  }
+  if (ranked.length === 0) {
+    throw new Error(
+      `No prebuilt ${spec.label} download is available for ${process.platform}-${process.arch}. ` +
+      `Install it with your package manager or set ${spec.envKey}.`
+    );
+  }
+
+  const asset = ranked[0];
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `asyncat-${spec.id}-`));
+  const archivePath = path.join(tmpRoot, asset.name);
+  const extractDir = path.join(tmpRoot, 'extract');
+  const targetDir = path.join(asyncatHome(), spec.dir);
+
+  try {
+    report('downloading', `Downloading ${asset.name}`, 5, { assetName: asset.name });
+    await downloadFile(asset.browser_download_url, archivePath, p => {
+      report('downloading', `Downloading ${asset.name}`, Math.max(5, Math.min(72, p.percent ?? 0)), {
+        assetName: asset.name, downloadedBytes: p.downloadedBytes, totalBytes: p.totalBytes,
+      });
+    });
+
+    report('extracting', `Extracting ${asset.name}`, 80, { assetName: asset.name });
+    extractArchive(archivePath, extractDir);
+
+    const staged = findBinaryByNames(extractDir, spec.binaryNames);
+    if (!staged) {
+      throw new Error(`The ${spec.label} archive did not contain ${spec.binaryNames.join(' / ')}.`);
+    }
+
+    report('installing', 'Installing engine files', 88);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.cpSync(extractDir, targetDir, { recursive: true });
+    ensureLinuxSonameLinks(targetDir);
+    ensureDarwinDylibLinks(targetDir);
+    // Windows CUDA image/audio builds need the cudart companion DLLs too.
+    await installCudartCompanion(release, asset.name, targetDir, onProgress);
+
+    let installed = findBinaryByNames(targetDir, spec.binaryNames);
+    if (!installed) throw new Error(`Could not locate the installed ${spec.label} binary in ${targetDir}.`);
+
+    if (!isWin) {
+      // Wrap with a launcher that exports bundled lib dirs so the binary can find
+      // its .so/.dylib siblings regardless of the caller's working directory.
+      const realBinary = `${installed}.real`;
+      fs.renameSync(installed, realBinary);
+      installUnixLauncher(installed, realBinary, targetDir);
+      fs.chmodSync(realBinary, 0o755);
+      fs.chmodSync(installed, 0o755);
+    }
+
+    // Best-effort verification (these binaries don't all support --version cleanly).
+    let verified = false;
+    try { verified = verifyBinaryDetailed(installed).ok; } catch { /* non-fatal */ }
+
+    persistLlamaEnv(spec.envKey, installed);
+    const variantLabel = runtimeCapabilityLabel(targetCapability);
+    report('complete', `${spec.label} (${variantLabel}) installed`, 100, { binary: installed, verified, capability: targetCapability });
+    return { runtime: spec.id, binary: installed, envKey: spec.envKey, version: release.tag_name || 'latest', verified, capability: targetCapability };
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 }

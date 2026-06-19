@@ -15,7 +15,7 @@ function isolationChoice(value) {
 export const agentTools = [
   {
     name: 'delegate_task',
-    description: 'Delegate a complex sub-task to a specialized sub-agent. The sub-agent has the same capabilities but runs in isolation. Use this to break down huge tasks.',
+    description: 'Delegate a complex sub-task to a specialized sub-agent that runs in its own isolated context and returns only a concise result — ideal for fanning out big tasks (deep repo exploration, research, a self-contained coding chunk) without bloating your own context window. Set read_only:true for pure investigation/research (the sub-agent then cannot modify anything), and pass `tools` to restrict it to a focused toolset.',
     category: 'agent',
     permission: PermissionLevel.MODERATE,
     parameters: {
@@ -24,6 +24,9 @@ export const agentTools = [
         role: { type: 'string', description: 'The role of the sub-agent, e.g. "Web Scraper", "Code Reviewer"' },
         task: { type: 'string', description: 'The specific task for the sub-agent to accomplish' },
         isolation: { type: 'string', enum: ['auto', 'sandbox', 'same_workspace'], description: 'Where the sub-agent should work. auto creates a sandbox for coding tasks and otherwise uses the current workspace.' },
+        read_only: { type: 'boolean', description: 'If true, the sub-agent runs in read-only mode (inspect/search/read only, no writes or side effects). Use for research and exploration.' },
+        tools: { type: 'array', description: 'Optional allow-list of tool names to restrict the sub-agent to (planning and ask_user are always available).', items: { type: 'string' } },
+        max_rounds: { type: 'number', description: 'Optional cap on the sub-agent\'s reasoning rounds (default 15, max 30).' },
       },
       required: ['role', 'task']
     },
@@ -84,8 +87,15 @@ export const agentTools = [
           task: args.task,
           sessionId: subagentSessionId,
           sandbox,
+          readOnly: !!args.read_only,
+          scopedToolCount: Array.isArray(args.tools) ? args.tools.filter(Boolean).length : null,
         },
       });
+
+      const subAgentRounds = Math.min(Math.max(Number(args.max_rounds) || 15, 1), 30);
+      const subAgentTools = Array.isArray(args.tools)
+        ? args.tools.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim())
+        : null;
 
       const subAgent = new AgentRuntime({
         aiClient: providerInfo.client,
@@ -96,7 +106,11 @@ export const agentTools = [
         workspaceId: context.workspaceId,
         workingDir,
         workspaceRoot,
-        maxRounds: 15, // Cap sub-agents at 15 rounds
+        maxRounds: subAgentRounds,
+        // read_only research sub-agents reuse plan mode, which already restricts
+        // execution to safe inspect/read/search tools with no side effects.
+        agentMode: args.read_only ? 'plan' : 'action',
+        allowedTools: subAgentTools,
         requestPermission: context.requestPermission,
         askUser: context.askUser,
         providerInfo: providerInfo.providerInfo,
@@ -129,6 +143,8 @@ export const agentTools = [
           answer: result.answer,
           sessionId: subagentSessionId,
           sandbox,
+          readOnly: !!args.read_only,
+          scopedToolCount: Array.isArray(args.tools) ? args.tools.filter(Boolean).length : null,
           roundsTaken: result.session.totalRounds,
           status: result.session.status,
         };
@@ -143,6 +159,8 @@ export const agentTools = [
             name: args.role,
             icon: '🤖',
           },
+          readOnly: !!args.read_only,
+          scopedToolCount: Array.isArray(args.tools) ? args.tools.filter(Boolean).length : null,
           error: err.message,
           sessionId: subagentSessionId,
         };

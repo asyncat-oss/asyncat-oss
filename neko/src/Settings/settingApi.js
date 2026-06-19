@@ -591,6 +591,46 @@ export const llamaServerApi = {
 };
 
 // ===========================================
+// MANAGED RUNTIME INSTALLER API (Piper / Whisper / stable-diffusion.cpp)
+// ===========================================
+
+export const runtimeApi = {
+  // List installable managed runtimes.
+  list: async () => {
+    return apiCall(`${AI_API_BASE}/runtimes`);
+  },
+
+  // Start a background install for one runtime ('piper' | 'whisper' | 'sd').
+  install: async (id) => {
+    return apiCall(`${AI_API_BASE}/runtimes/${encodeURIComponent(id)}/install-jobs`, {
+      method: 'POST',
+    });
+  },
+
+  // Poll an install job until it completes or errors.
+  pollJob: (jobId, onUpdate, onDone, onError) => {
+    let stopped = false;
+    let timerId = null;
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const data = await apiCall(`${AI_API_BASE}/runtimes/install-jobs/${encodeURIComponent(jobId)}`);
+        if (stopped) return;
+        const job = data.job;
+        onUpdate?.(job);
+        if (job?.status === 'complete') { stopped = true; onDone?.(job); return; }
+        if (job?.status === 'error')    { stopped = true; onError?.(job); return; }
+      } catch (err) {
+        if (!stopped) { stopped = true; onError?.({ status: 'error', error: err.message }); return; }
+      }
+      if (!stopped) timerId = setTimeout(poll, 900);
+    };
+    poll();
+    return () => { stopped = true; clearTimeout(timerId); };
+  },
+};
+
+// ===========================================
 // MLX LOCAL MODEL SERVER API
 // ===========================================
 

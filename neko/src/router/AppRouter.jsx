@@ -26,6 +26,8 @@ import AgentHealthPage from '../AgentHealth/AgentHealthPage';
 import SchedulerPage from '../Scheduler/SchedulerPage';
 import ProfilesPage from '../Profiles/ProfilesPage';
 import AgentPage from '../Agent/AgentPage';
+import WorkflowsPage from '../Workflows/WorkflowsPage';
+import ActivityPage from '../Activity/ActivityPage';
 
 const ProjectsRedirect = () => {
   const { projectId, tab } = useParams();
@@ -244,6 +246,16 @@ const createRouter = () => createBrowserRouter([
       {
         path: "agent-health",
         element: <AgentHealthPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "workflows",
+        element: <WorkflowsPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "activity",
+        element: <ActivityPage />,
         errorElement: <RouteErrorElement />
       },
       {

@@ -15,6 +15,8 @@ import {
   Wrench,
   Activity,
   BrainCircuit,
+  Workflow,
+  Bell,
   Trash2,
   ChevronLeft,
   ChevronRight,
@@ -481,6 +483,8 @@ const DynamicSidebar = ({
   const isOnAgent = (location.pathname.startsWith("/agent") && !location.pathname.startsWith("/agent-health")) || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
   const isOnTools = location.pathname.startsWith("/tools");
   const isOnAgentHealth = location.pathname.startsWith("/agent-health");
+  const isOnWorkflows = location.pathname.startsWith("/workflows");
+  const isOnActivity = location.pathname.startsWith("/activity");
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
 
@@ -519,6 +523,8 @@ const DynamicSidebar = ({
     { key: "models", label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
     { key: "tools", label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
     { key: "agentHealth", label: "Agent Health", action: "navAgentHealth", onClick: () => navigate("/agent-health"), active: isOnAgentHealth, icon: <Activity className="w-5 h-5" /> },
+    { key: "workflows", label: "Workflows", action: "navWorkflows", onClick: () => navigate("/workflows"), active: isOnWorkflows, icon: <Workflow className="w-5 h-5" /> },
+    { key: "activity", label: "Activity", action: "navActivity", onClick: () => navigate("/activity"), active: isOnActivity, icon: <Bell className="w-5 h-5" /> },
     { key: "agent", label: "Agent", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
   ].filter(item => navItemsVisibility[item.key] !== false);
 
@@ -601,7 +607,7 @@ const DynamicSidebar = ({
                   ? 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
                   : 'text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-gray-500 midnight:group-hover:text-gray-300'
               }`}>
-                <img src="/cat.svg" alt="Asyncat" className="h-5 w-5" />
+                <img src="/app-tray.png" alt="Asyncat" className="h-5 w-5" />
                 {hasActiveRuns && (
                   <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
                 )}
@@ -719,7 +725,7 @@ const DynamicSidebar = ({
           isActive={isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")}
           dockPosition={dockPosition}
         >
-          <img src="/cat.svg" alt="Asyncat" className="w-5 h-5" />
+          <img src="/app-tray.png" alt="Asyncat" className="w-5 h-5" />
           {hasActiveRuns && (
             <span
               className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-gray-950 animate-pulse"
@@ -769,6 +775,28 @@ const DynamicSidebar = ({
             dockPosition={dockPosition}
           >
             <Wrench className="w-5 h-5" />
+          </DockItem>
+        )}
+
+        {navItemsVisibility.workflows !== false && (
+          <DockItem
+            label={labelWithShortcut("Workflows", "navWorkflows")}
+            onClick={() => navigate("/workflows")}
+            isActive={isOnWorkflows}
+            dockPosition={dockPosition}
+          >
+            <Workflow className="w-5 h-5" />
+          </DockItem>
+        )}
+
+        {navItemsVisibility.activity !== false && (
+          <DockItem
+            label={labelWithShortcut("Activity", "navActivity")}
+            onClick={() => navigate("/activity")}
+            isActive={isOnActivity}
+            dockPosition={dockPosition}
+          >
+            <Bell className="w-5 h-5" />
           </DockItem>
         )}
 
