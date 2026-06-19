@@ -13,7 +13,6 @@ import {
   MessageSquare as ChatIcon,
   Cpu,
   Wrench,
-  Activity,
   BrainCircuit,
   Workflow,
   Bell,
@@ -275,9 +274,9 @@ const DynamicSidebar = ({
   const [navItemsVisibility, setNavItemsVisibility] = useState(() => {
     try {
       const stored = localStorage.getItem('navItemsVisibility');
-      const defaults = { history: true, projects: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
+      const defaults = { history: true, projects: true, models: true, tools: true, agent: true, trash: true };
       return stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
-    } catch { return { history: true, projects: true, models: true, tools: true, agentHealth: true, agent: true, trash: true }; }
+    } catch { return { history: true, projects: true, models: true, tools: true, agent: true, trash: true }; }
   });
 
   // Profile state (for dock avatar only)
@@ -320,7 +319,7 @@ const DynamicSidebar = ({
     const syncNavItems = () => {
       try {
         const stored = localStorage.getItem('navItemsVisibility');
-        const defaults = { history: true, projects: true, models: true, tools: true, agentHealth: true, agent: true, trash: true };
+        const defaults = { history: true, projects: true, models: true, tools: true, agent: true, trash: true };
         setNavItemsVisibility(stored ? { ...defaults, ...JSON.parse(stored) } : defaults);
       } catch { /* keep current */ }
     };
@@ -454,7 +453,6 @@ const DynamicSidebar = ({
         case 'navWorkspace': navigate("/workspace"); break;
         case 'navModels': navigate("/models"); break;
         case 'navTools': navigate("/tools"); break;
-        case 'navAgentHealth': navigate("/agent-health"); break;
         case 'navScheduler': navigate("/agent/scheduler"); break;
         case 'navProfiles': navigate("/agent/profiles"); break;
         case 'navAgent': navigate("/agent"); break;
@@ -480,9 +478,8 @@ const DynamicSidebar = ({
   const isOnConversations = basePage === "all-chats";
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnModels = basePage === "models";
-  const isOnAgent = (location.pathname.startsWith("/agent") && !location.pathname.startsWith("/agent-health")) || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
+  const isOnAgent = location.pathname.startsWith("/agent") || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
   const isOnTools = location.pathname.startsWith("/tools");
-  const isOnAgentHealth = location.pathname.startsWith("/agent-health");
   const isOnWorkflows = location.pathname.startsWith("/workflows");
   const isOnActivity = location.pathname.startsWith("/activity");
   const isOnTrash = basePage === "trash";
@@ -522,7 +519,6 @@ const DynamicSidebar = ({
   const appItems = [
     { key: "models", label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
     { key: "tools", label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
-    { key: "agentHealth", label: "Agent Health", action: "navAgentHealth", onClick: () => navigate("/agent-health"), active: isOnAgentHealth, icon: <Activity className="w-5 h-5" /> },
     { key: "workflows", label: "Workflows", action: "navWorkflows", onClick: () => navigate("/workflows"), active: isOnWorkflows, icon: <Workflow className="w-5 h-5" /> },
     { key: "activity", label: "Activity", action: "navActivity", onClick: () => navigate("/activity"), active: isOnActivity, icon: <Bell className="w-5 h-5" /> },
     { key: "agent", label: "Agent", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
@@ -797,17 +793,6 @@ const DynamicSidebar = ({
             dockPosition={dockPosition}
           >
             <Bell className="w-5 h-5" />
-          </DockItem>
-        )}
-
-        {navItemsVisibility.agentHealth !== false && (
-          <DockItem
-            label={labelWithShortcut("Agent Health", "navAgentHealth")}
-            onClick={() => navigate("/agent-health")}
-            isActive={isOnAgentHealth}
-            dockPosition={dockPosition}
-          >
-            <Activity className="w-5 h-5" />
           </DockItem>
         )}
 

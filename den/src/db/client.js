@@ -231,6 +231,7 @@ function cleanupDeadTables() {
     DROP TABLE IF EXISTS mcp_auth_codes;
     DROP TABLE IF EXISTS mcp_access_tokens;
     DROP TABLE IF EXISTS TaskDependencies;
+    DROP TABLE IF EXISTS agent_eval_runs;
     DELETE FROM user_integrations WHERE provider IN ('google_calendar', 'outlook');
   `);
 }

@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, FolderOpen, MessageSquare, FileText, SquareCheck, Command, Sparkles, Workflow, Cpu, Wrench, Activity, Bell, Settings } from 'lucide-react';
+import { Search, X, FolderOpen, MessageSquare, FileText, SquareCheck, Command, Sparkles, Workflow, Cpu, Wrench, Bell, Settings } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi, agentApi } from '../CommandCenter/api';
 import { searchApi } from '../CommandCenter/api/searchApi.js';
@@ -61,7 +61,6 @@ const COMMANDS = [
   { id: 'cmd-home',      label: 'Go to Chat',           to: '/home',         icon: MessageSquare },
   { id: 'cmd-workflows', label: 'Go to Workflows',      to: '/workflows',    icon: Workflow },
   { id: 'cmd-activity',  label: 'Go to Activity',       to: '/activity',     icon: Bell },
-  { id: 'cmd-health',    label: 'Go to Agent Health',   to: '/agent-health', icon: Activity },
   { id: 'cmd-models',    label: 'Go to Models',         to: '/models',       icon: Cpu },
   { id: 'cmd-tools',     label: 'Go to Tools & Skills', to: '/tools',        icon: Wrench },
   { id: 'cmd-tasks',     label: 'Go to Tasks',          to: '/workspace',    icon: SquareCheck },

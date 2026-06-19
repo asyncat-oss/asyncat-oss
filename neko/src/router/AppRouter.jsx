@@ -22,7 +22,6 @@ import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Models/ModelsPage';
 import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
-import AgentHealthPage from '../AgentHealth/AgentHealthPage';
 import SchedulerPage from '../Scheduler/SchedulerPage';
 import ProfilesPage from '../Profiles/ProfilesPage';
 import AgentPage from '../Agent/AgentPage';
@@ -241,11 +240,6 @@ const createRouter = () => createBrowserRouter([
       {
         path: "skills",
         element: <ToolsSkillsPage initialTab="skills" />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "agent-health",
-        element: <AgentHealthPage />,
         errorElement: <RouteErrorElement />
       },
       {

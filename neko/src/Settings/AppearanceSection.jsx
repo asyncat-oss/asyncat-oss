@@ -1,5 +1,4 @@
 import {
-  Activity,
   BrainCircuit,
   Cpu,
   Layout,
@@ -101,7 +100,6 @@ const DEFAULT_NAV_ITEMS = {
   projects: true,
   models: true,
   tools: true,
-  agentHealth: true,
   agent: true,
   trash: true,
 };
@@ -291,12 +289,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           label="Tools & Skills"
           checked={navItemsVisibility.tools}
           onChange={() => handleNavItemToggle("tools")}
-        />
-        <CheckboxRow
-          icon={Activity}
-          label="Agent Health"
-          checked={navItemsVisibility.agentHealth}
-          onChange={() => handleNavItemToggle("agentHealth")}
         />
         <CheckboxRow
           icon={BrainCircuit}

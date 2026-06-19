@@ -484,28 +484,6 @@ CREATE TABLE IF NOT EXISTS agent_tool_audit (
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_session ON agent_tool_audit(session_id);
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_user    ON agent_tool_audit(user_id, started_at);
 
-CREATE TABLE IF NOT EXISTS agent_eval_runs (
-  id            TEXT PRIMARY KEY,
-  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  workspace_id  TEXT,
-  mode          TEXT NOT NULL CHECK (mode IN ('deterministic', 'live')),
-  status        TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed')),
-  phase         TEXT,
-  success       INTEGER,
-  passed        INTEGER DEFAULT 0,
-  failed        INTEGER DEFAULT 0,
-  total         INTEGER DEFAULT 0,
-  model         TEXT,
-  is_local      INTEGER,
-  duration_ms   INTEGER,
-  results       TEXT NOT NULL DEFAULT '[]',
-  stderr        TEXT,
-  error         TEXT,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  completed_at  TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_agent_eval_runs_user ON agent_eval_runs(user_id, created_at);
-
 CREATE TABLE IF NOT EXISTS agent_task_runs (
   id               TEXT PRIMARY KEY,
   card_id          TEXT NOT NULL REFERENCES Cards(id) ON DELETE CASCADE,

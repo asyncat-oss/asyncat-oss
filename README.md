@@ -208,10 +208,6 @@ Go to **Schedule** and create repeating agent jobs — daily reports, hourly che
 
 Go to **Tools & Skills** to browse the tool inventory, load skill modules, edit agent soul, and review memory entries.
 
-### 5. Monitor agent health
-
-Go to **Agent Health** for success rates, tool usage, failure patterns, and loop detection across recent sessions.
-
 ---
 
 ## Architecture
@@ -247,7 +243,6 @@ asyncat-oss/
 │   └── src/
 │       ├── CommandCenter/     # Main chat UI
 │       ├── Agent/             # Agent run view
-│       ├── AgentHealth/       # Health dashboard
 │       ├── Models/            # Provider config
 │       ├── Profiles/          # Agent profiles
 │       ├── Scheduler/         # Scheduler UI

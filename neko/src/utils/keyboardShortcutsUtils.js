@@ -7,7 +7,6 @@ const DEFAULT_SHORTCUTS = {
   dock3: { key: '3', ctrl: true, meta: true, label: 'Projects', action: 'navWorkspace' },
   dock5: { key: '5', ctrl: true, meta: true, label: 'Models', action: 'navModels' },
   dock6: { key: '6', ctrl: true, meta: true, label: 'Tools & Skills', action: 'navTools' },
-  dock7: { key: '7', ctrl: true, meta: true, label: 'Agent Health', action: 'navAgentHealth' },
   dock8: { key: '8', ctrl: true, meta: true, label: 'Agent', action: 'navAgent' },
 };
 

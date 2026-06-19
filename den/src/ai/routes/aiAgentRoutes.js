@@ -2,7 +2,6 @@
 // Combines conversation CRUD (formerly aiRoutes.js) and agent runtime (formerly agentRoutes.js)
 
 import express from 'express';
-import { createAgentMetricsRouter } from './agentMetricsRoutes.js';
 import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
 import { attachDb } from '../../db/sqlite.js';
 import db from '../../db/client.js';
@@ -1142,7 +1141,6 @@ function createAskUserRequest(req, res) {
 
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
-router.use('/metrics', createAgentMetricsRouter({ authenticate }));
 router.use('/workflows', createWorkflowRouter({ authenticate }));
 
 router.get('/tools', authenticate, async (req, res) => {
@@ -2412,90 +2410,6 @@ router.post('/sessions/:id/correct', authenticate, async (req, res) => {
   }
 });
 
-// ── Agent health ──────────────────────────────────────────────────────────────
-
-router.get('/health', authenticate, (req, res) => {
-  try {
-    const limit = Math.max(10, Math.min(200, Number(req.query.limit || 80)));
-    const sessions = db.prepare(`
-      SELECT id, status, scratchpad, total_rounds, created_at, updated_at
-      FROM agent_sessions
-      WHERE user_id = ?
-      ORDER BY updated_at DESC
-      LIMIT ?
-    `).all(req.user.id, limit);
-    const ids = sessions.map(s => s.id);
-    const rows = ids.length
-      ? db.prepare(`
-          SELECT session_id, tool_name, result, success
-          FROM agent_tool_audit
-          WHERE user_id = ?
-            AND session_id IN (${ids.map(() => '?').join(',')})
-        `).all(req.user.id, ...ids)
-      : [];
-
-    const bySession = new Map();
-    for (const row of rows) {
-      if (!bySession.has(row.session_id)) bySession.set(row.session_id, []);
-      bySession.get(row.session_id).push(row);
-    }
-
-    const groups = new Map();
-    for (const session of sessions) {
-      const scratchpad = parseJson(session.scratchpad, {});
-      const provider = providerKeyFromScratchpad(scratchpad);
-      if (!groups.has(provider.key)) {
-        groups.set(provider.key, {
-          ...provider,
-          sessions: 0,
-          completedSessions: 0,
-          failedSessions: 0,
-          totalRounds: 0,
-          totalTools: 0,
-          failedTools: 0,
-          invalidToolArgs: 0,
-          repeatedLoops: 0,
-          lastSeenAt: session.updated_at,
-        });
-      }
-      const group = groups.get(provider.key);
-      group.sessions += 1;
-      group.completedSessions += session.status === 'completed' ? 1 : 0;
-      group.failedSessions += session.status === 'failed' ? 1 : 0;
-      group.totalRounds += Number(session.total_rounds || 0);
-      if (String(session.updated_at || '').localeCompare(String(group.lastSeenAt || '')) > 0) {
-        group.lastSeenAt = session.updated_at;
-      }
-
-      const finalAnswer = String(scratchpad.finalAnswer || '');
-      if (/same tool call repeated|loop guard|calling the same tool/i.test(finalAnswer)) {
-        group.repeatedLoops += 1;
-      }
-
-      for (const row of bySession.get(session.id) || []) {
-        const result = parseJson(row.result, {});
-        group.totalTools += 1;
-        const failed = row.success === 0 || result?.success === false || Boolean(result?.error);
-        if (failed) group.failedTools += 1;
-        if (result?.code === 'invalid_tool_arguments') group.invalidToolArgs += 1;
-      }
-    }
-
-    const providers = [...groups.values()].map(group => ({
-      ...group,
-      avgRounds: group.sessions ? Number((group.totalRounds / group.sessions).toFixed(1)) : 0,
-      toolSuccessRate: group.totalTools
-        ? Number(((group.totalTools - group.failedTools) / group.totalTools).toFixed(3))
-        : null,
-      status: gradeHealth(group),
-    })).sort((a, b) => String(b.lastSeenAt || '').localeCompare(String(a.lastSeenAt || '')));
-
-    res.json({ success: true, count: providers.length, providers });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // ── Permissions / ask_user responses ─────────────────────────────────────────
 
 router.post('/permissions/:requestId', authenticate, (req, res) => {
@@ -3414,27 +3328,6 @@ function execGitStashList(cwd) {
 function parseJson(value, fallback) {
   if (value && typeof value === 'object') return value;
   try { return JSON.parse(value || ''); } catch { return fallback; }
-}
-
-function providerKeyFromScratchpad(scratchpad = {}) {
-  const info = scratchpad.providerInfo || {};
-  const providerId = info.providerId || info.provider_id || (info.isLocal ? 'local' : null) || 'global';
-  const model = info.model || 'unknown';
-  return {
-    key: `${providerId}:${model}`,
-    providerId,
-    providerType: info.type || info.provider_type || (info.isLocal ? 'local' : 'unknown'),
-    model,
-    supportsNativeTools: Boolean(info.supportsNativeTools),
-  };
-}
-
-function gradeHealth({ invalidToolArgs, repeatedLoops, failedTools, totalTools }) {
-  const totalProblems = invalidToolArgs + repeatedLoops + failedTools;
-  if (totalTools === 0) return 'unknown';
-  if (invalidToolArgs >= 3 || repeatedLoops >= 2 || totalProblems / Math.max(1, totalTools) > 0.25) return 'poor';
-  if (totalProblems > 0) return 'watch';
-  return 'good';
 }
 
 export default router;

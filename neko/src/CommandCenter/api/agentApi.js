@@ -125,45 +125,6 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/changes/state`);
   },
 
-  getHealth: async (limit = 80) => {
-    return await apiRequest(`${API_BASE_URL}/agent/health?limit=${encodeURIComponent(String(limit))}`);
-  },
-
-  getToolMetrics: async ({ days = 30, limit = 100 } = {}) => {
-    const params = new URLSearchParams({ days: String(days), limit: String(limit) });
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/tools?${params}`);
-  },
-
-  getMetricsSummary: async ({ days = 30 } = {}) => {
-    const params = new URLSearchParams({ days: String(days) });
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/summary?${params}`);
-  },
-
-  runEval: async ({ mode = 'deterministic', confirmLive = false, keepSandbox = false } = {}) => {
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/evals`, {
-      method: 'POST',
-      body: JSON.stringify({ mode, confirmLive, keepSandbox }),
-    });
-  },
-
-  getEvalHistory: async ({ limit = 10 } = {}) => {
-    const params = new URLSearchParams({ limit: String(limit) });
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/evals?${params}`);
-  },
-
-  getActiveEval: async () => {
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/evals/active`);
-  },
-
-  getSessionTraces: async ({ days = 30, limit = 25 } = {}) => {
-    const params = new URLSearchParams({ days: String(days), limit: String(limit) });
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/sessions?${params}`);
-  },
-
-  getSessionTrace: async (sessionId) => {
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/sessions/${encodeURIComponent(sessionId)}`);
-  },
-
   // ── Workflows / automations ──────────────────────────────────────────────
   listWorkflows: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/workflows`);
@@ -199,14 +160,6 @@ export const agentApi = {
   // ── Notification / activity log ──────────────────────────────────────────
   getNotificationLog: async (limit = 40) => {
     return await apiRequest(`${API_BASE_URL}/integrations/notifications/log?limit=${limit}`);
-  },
-
-  clearDiagnostics: async ({ days = 30, all = false } = {}) => {
-    const params = new URLSearchParams(all ? { all: 'true' } : { days: String(days) });
-    return await apiRequest(`${API_BASE_URL}/agent/metrics/audit?${params}`, {
-      method: 'DELETE',
-      body: JSON.stringify({ days, all }),
-    });
   },
 
   revertSession: async (sessionId) => {
