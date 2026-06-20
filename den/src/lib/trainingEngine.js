@@ -225,7 +225,8 @@ export async function installTrainingVenv({ backend = 'cpu', onProgress = null }
   }
 
   // CUDA or CPU path
-  const packages = ['transformers', 'peft', 'trl', 'datasets', 'accelerate', 'safetensors'];
+  // psutil powers the CPU% metric shown on the training dashboard for both backends.
+  const packages = ['transformers', 'peft', 'trl', 'datasets', 'accelerate', 'safetensors', 'psutil'];
 
   if (backend === 'cuda') {
     onProgress?.({ phase: 'installing_torch', message: 'Installing PyTorch with CUDA support…', percent: 15 });
@@ -245,7 +246,8 @@ export async function installTrainingVenv({ backend = 'cpu', onProgress = null }
     }
 
     onProgress?.({ phase: 'installing_training', message: 'Installing training libraries (transformers, peft, trl)…', percent: 50 });
-    await runCommandStreaming(python, ['-m', 'pip', 'install', ...packages, 'bitsandbytes'], {}, 600000, streamLine('installing_training'));
+    // nvidia-ml-py powers the live GPU memory/utilization metrics on the dashboard.
+    await runCommandStreaming(python, ['-m', 'pip', 'install', ...packages, 'bitsandbytes', 'nvidia-ml-py'], {}, 600000, streamLine('installing_training'));
 
     // Best-effort Unsloth — don't fail if it doesn't install
     onProgress?.({ phase: 'installing_unsloth', message: 'Installing Unsloth (optional, for faster training)…', percent: 80 });

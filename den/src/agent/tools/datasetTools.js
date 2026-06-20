@@ -10,7 +10,7 @@ import { getHuggingFaceToken, huggingFaceHeaders } from '../../ai/controllers/ai
 const HF_HUB_API = 'https://huggingface.co/api';
 const HF_DATASETS_SERVER = 'https://datasets-server.huggingface.co';
 
-function getDatasetsDir() {
+export function getDatasetsDir() {
   const base = process.env.ASYNCAT_HOME || path.join(os.homedir(), '.asyncat');
   const dir = path.join(base, 'datasets');
   fs.mkdirSync(dir, { recursive: true });

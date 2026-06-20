@@ -21,6 +21,7 @@ cleanly so no work is lost.
 
 import argparse
 import json
+import math
 import os
 import signal
 import sys
@@ -52,7 +53,9 @@ def emit(payload: dict):
 
 
 def emit_progress(step: int, total_steps: int, loss: float = None,
-                  epoch: float = None, lr: float = None):
+                  epoch: float = None, lr: float = None, grad_norm: float = None,
+                  perplexity: float = None, gpu_mem_gb: float = None,
+                  gpu_util_pct: float = None, cpu_pct: float = None):
     pct = round(step / max(total_steps, 1) * 100, 1)
     d = {"type": "progress", "step": step, "totalSteps": total_steps, "percent": pct}
     if loss is not None:
@@ -61,11 +64,71 @@ def emit_progress(step: int, total_steps: int, loss: float = None,
         d["epoch"] = round(epoch, 2)
     if lr is not None:
         d["lr"] = lr
+    if grad_norm is not None:
+        d["gradNorm"] = round(grad_norm, 4)
+    if perplexity is not None:
+        d["perplexity"] = round(perplexity, 2)
+    if gpu_mem_gb is not None:
+        d["gpuMemGb"] = gpu_mem_gb
+    if gpu_util_pct is not None:
+        d["gpuUtilPct"] = gpu_util_pct
+    if cpu_pct is not None:
+        d["cpuPct"] = cpu_pct
     emit(d)
 
 
 def emit_error(message: str, code: str = "TRAINING_ERROR"):
     emit({"type": "error", "code": code, "message": message})
+
+
+# ── System metrics (best-effort — training must work without these) ────────
+
+try:
+    import psutil as _psutil
+except ImportError:
+    _psutil = None
+
+
+def _init_nvml(use_cuda: bool):
+    """Best-effort NVML init for live GPU utilization/memory. Returns a device handle or None."""
+    if not use_cuda:
+        return None
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        return pynvml.nvmlDeviceGetHandleByIndex(0)
+    except Exception:
+        return None
+
+
+def _sample_system_metrics(nvml_handle):
+    """Returns (gpuMemGb, gpuUtilPct, cpuPct) — any may be None if unavailable."""
+    gpu_mem_gb = gpu_util_pct = cpu_pct = None
+    if nvml_handle is not None:
+        try:
+            import pynvml
+            mem = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle)
+            util = pynvml.nvmlDeviceGetUtilizationRates(nvml_handle)
+            gpu_mem_gb = round(mem.used / 1e9, 2)
+            gpu_util_pct = util.gpu
+        except Exception:
+            pass
+    if _psutil is not None:
+        try:
+            cpu_pct = _psutil.cpu_percent(interval=None)
+        except Exception:
+            pass
+    return gpu_mem_gb, gpu_util_pct, cpu_pct
+
+
+def _safe_perplexity(loss):
+    """exp(loss), guarding against overflow on the high losses seen early in training."""
+    if loss is None or loss > 50:
+        return None
+    try:
+        return math.exp(loss)
+    except OverflowError:
+        return None
 
 
 # ── Pre-flight checks ───────────────────────────────────────────────────────
@@ -173,6 +236,8 @@ def train_transformers(args, dataset_rows):
         "gpuName": torch.cuda.get_device_name(0) if use_cuda else None,
         "vramGb": round(torch.cuda.get_device_properties(0).total_mem / 1e9, 1) if use_cuda else None,
     })
+
+    nvml_handle = _init_nvml(use_cuda)
 
     # ── Try Unsloth first (CUDA only) ────────────────────────────────────────
     use_unsloth = False
@@ -321,8 +386,9 @@ def train_transformers(args, dataset_rows):
     from transformers import TrainerCallback
 
     class ProgressCallback(TrainerCallback):
-        def __init__(self):
+        def __init__(self, nvml_handle=None):
             self.last_emit_step = -1
+            self.nvml_handle = nvml_handle
 
         def on_log(self, callback_args, state, control, logs=None, **kwargs):
             if _interrupted:
@@ -334,12 +400,19 @@ def train_transformers(args, dataset_rows):
             # Batch: emit every 10 steps or on the first/last step
             if step - self.last_emit_step >= 10 or step <= 1 or step >= total_steps - 1:
                 self.last_emit_step = step
+                loss = logs.get("loss") if logs else None
+                gpu_mem_gb, gpu_util_pct, cpu_pct = _sample_system_metrics(self.nvml_handle)
                 emit_progress(
                     step=step,
                     total_steps=total_steps,
-                    loss=logs.get("loss") if logs else None,
+                    loss=loss,
                     epoch=state.epoch,
                     lr=logs.get("learning_rate") if logs else None,
+                    grad_norm=logs.get("grad_norm") if logs else None,
+                    perplexity=_safe_perplexity(loss),
+                    gpu_mem_gb=gpu_mem_gb,
+                    gpu_util_pct=gpu_util_pct,
+                    cpu_pct=cpu_pct,
                 )
 
         def on_step_end(self, callback_args, state, control, **kwargs):
@@ -384,7 +457,7 @@ def train_transformers(args, dataset_rows):
             tokenizer=tokenizer,
             train_dataset=dataset,
             args=training_args,
-            callbacks=[ProgressCallback()],
+            callbacks=[ProgressCallback(nvml_handle=nvml_handle)],
         )
 
         emit({"type": "status", "message": "Training started…"})

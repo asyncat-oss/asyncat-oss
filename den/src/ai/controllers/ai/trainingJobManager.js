@@ -89,6 +89,11 @@ const stmts = {
       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
     WHERE status IN ('queued', 'running')
   `),
+  insertMetric: db.prepare(`
+    INSERT INTO training_metrics (job_id, step, loss, lr, grad_norm, perplexity, gpu_mem_gb, gpu_util_pct, cpu_pct)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+  listMetrics: db.prepare('SELECT * FROM training_metrics WHERE job_id = ? ORDER BY step ASC'),
 };
 
 // ── SSE helpers ─────────────────────────────────────────────────────────────
@@ -145,6 +150,22 @@ export function deleteTrainingJob(id, userId) {
   }
   const result = stmts.delete.run(id, userId);
   return result.changes > 0;
+}
+
+export function getJobMetrics(id, userId) {
+  // Ownership check — reuse getTrainingJob's user scoping rather than joining.
+  if (!stmts.getForUser.get(id, userId)) return null;
+  return stmts.listMetrics.all(id).map(row => ({
+    step: row.step,
+    loss: row.loss,
+    lr: row.lr,
+    gradNorm: row.grad_norm,
+    perplexity: row.perplexity,
+    gpuMemGb: row.gpu_mem_gb,
+    gpuUtilPct: row.gpu_util_pct,
+    cpuPct: row.cpu_pct,
+    createdAt: row.created_at,
+  }));
 }
 
 function formatJob(row) {
@@ -247,8 +268,18 @@ export function startTrainingJob({
 
         // Batch DB writes: every 10 steps (progress type) or always for status/error/complete
         if (payload.type === 'progress') {
+          // Python already throttles emission to ~every 10 steps, so every
+          // received point is cheap to persist — this is what feeds the charts.
+          try {
+            stmts.insertMetric.run(
+              id, payload.step ?? 0, payload.loss ?? null, payload.lr ?? null,
+              payload.gradNorm ?? null, payload.perplexity ?? null,
+              payload.gpuMemGb ?? null, payload.gpuUtilPct ?? null, payload.cpuPct ?? null,
+            );
+          } catch { /* non-fatal — metrics history is a nice-to-have */ }
+
           const now = Date.now();
-          if (now - lastDbWrite > 3000) { // Write to DB at most every 3 seconds
+          if (now - lastDbWrite > 3000) { // Write the latest-snapshot column at most every 3 seconds
             lastDbWrite = now;
             stmts.updateProgress.run(JSON.stringify(payload), id);
           }

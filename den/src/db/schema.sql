@@ -653,3 +653,25 @@ CREATE INDEX IF NOT EXISTS idx_training_jobs_user
   ON training_jobs(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_training_jobs_status
   ON training_jobs(status, updated_at);
+
+-- ─── Training Metrics History ─────────────────────────────────────────────────
+-- One row per progress emission from train_lora.py (already throttled to every
+-- ~10 steps at the source). Powers the per-job charts on the Training page —
+-- the training_jobs.progress column only ever holds the latest snapshot.
+
+CREATE TABLE IF NOT EXISTS training_metrics (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id       TEXT NOT NULL REFERENCES training_jobs(id) ON DELETE CASCADE,
+  step         INTEGER NOT NULL,
+  loss         REAL,
+  lr           REAL,
+  grad_norm    REAL,
+  perplexity   REAL,
+  gpu_mem_gb   REAL,
+  gpu_util_pct REAL,
+  cpu_pct      REAL,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_training_metrics_job
+  ON training_metrics(job_id, step);

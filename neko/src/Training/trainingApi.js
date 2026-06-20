@@ -55,6 +55,11 @@ export const trainingApi = {
     return apiCall(`${API_BASE}/env`, { method: 'DELETE' });
   },
 
+  // ── Datasets ─────────────────────────────────────────────────────────────────
+  listDatasets: async () => {
+    return apiCall(`${API_BASE}/datasets`);
+  },
+
   // ── Training jobs ───────────────────────────────────────────────────────────
   createJob: async ({ name, baseModel, datasetPath, backend, epochs, lr, rank, alpha, batchSize, maxSeqLen }) => {
     return apiCall(`${API_BASE}/jobs`, {
@@ -69,6 +74,10 @@ export const trainingApi = {
 
   getJob: async (id) => {
     return apiCall(`${API_BASE}/jobs/${encodeURIComponent(id)}`);
+  },
+
+  getJobMetrics: async (id) => {
+    return apiCall(`${API_BASE}/jobs/${encodeURIComponent(id)}/metrics`);
   },
 
   stopJob: async (id) => {

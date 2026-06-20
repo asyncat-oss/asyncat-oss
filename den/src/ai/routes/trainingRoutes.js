@@ -15,7 +15,11 @@ import {
   getInstallJob,
   getTrainingReadiness,
   removeTrainingVenv,
+  getJobMetrics,
 } from '../controllers/ai/trainingJobManager.js';
+import { getDatasetsDir } from '../../agent/tools/datasetTools.js';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
 
@@ -126,6 +130,38 @@ router.get('/jobs/:id', (req, res) => {
   const job = getTrainingJob(req.params.id, req.user.id);
   if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
   res.json({ success: true, job });
+});
+
+// ── GET /jobs/:id/metrics — full metrics history for charts ─────────────────
+
+router.get('/jobs/:id/metrics', (req, res) => {
+  const metrics = getJobMetrics(req.params.id, req.user.id);
+  if (metrics === null) return res.status(404).json({ success: false, error: 'Job not found' });
+  res.json({ success: true, metrics, count: metrics.length });
+});
+
+// ── GET /datasets — local JSONL datasets for the dataset picker ─────────────
+
+router.get('/datasets', (req, res) => {
+  try {
+    const dir = getDatasetsDir();
+    const files = fs.readdirSync(dir)
+      .filter(f => f.endsWith('.jsonl') || f.endsWith('.json'))
+      .map(f => {
+        const full = path.join(dir, f);
+        const stat = fs.statSync(full);
+        return {
+          filename: f,
+          path: full,
+          sizeMb: +(stat.size / 1024 / 1024).toFixed(2),
+          modifiedAt: stat.mtime.toISOString(),
+        };
+      })
+      .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+    res.json({ success: true, datasetsDir: dir, files, count: files.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ── GET /jobs/:id/stream — SSE live progress ────────────────────────────────
