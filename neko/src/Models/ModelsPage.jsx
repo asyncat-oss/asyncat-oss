@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X,
-  Mic, Volume2, Cpu, Eye, Image, MessageSquare, BarChart3
+  Mic, Volume2, Eye, Image, MessageSquare, BarChart3
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
@@ -31,31 +31,7 @@ const StatusDot = ({ status }) => {
   return <span className={`inline-block h-2 w-2 rounded-full flex-shrink-0 ${cls}`} />;
 };
 
-// ── Tabbed page shell ────────────────────────────────────────────────────────
-const TabButton = ({ icon: Icon, label, meta, active, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors sm:flex-none sm:justify-start ${
-      active
-        ? 'bg-gray-950 text-white shadow-sm dark:bg-gray-100 dark:text-gray-950 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
-        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100'
-    }`}
-  >
-    <Icon className="h-4 w-4 flex-shrink-0" />
-    <span className="truncate">{label}</span>
-    {meta && (
-      <span className={`hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:inline-flex ${
-        active
-          ? 'bg-white/15 text-white dark:bg-gray-950/10 dark:text-gray-700 midnight:bg-slate-700 midnight:text-slate-200'
-          : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-900 midnight:text-slate-400'
-      }`}>
-        {meta}
-      </span>
-    )}
-  </button>
-);
-
+// ── Content header (icon + title + subtitle + badge) ────────────────────────
 const TabHeader = ({ icon: Icon, title, subtitle, badge }) => (
   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div className="flex min-w-0 items-start gap-3">
@@ -355,302 +331,334 @@ const ModelsPage = () => {
     { key: 'usage', label: 'Usage', icon: BarChart3, meta: usageRequestCount ? String(usageRequestCount) : usageRange },
   ];
 
+  // ── Content header for the active tab (icon/title/subtitle/badge) ─────────
+  const activeTabHeader = (() => {
+    switch (activeTab) {
+      case 'audio':
+        return {
+          icon: Mic,
+          title: 'Audio Models',
+          subtitle: `${SpeechSubtitle({
+            status: voiceState.sttStatus,
+            model: voiceState.sttModel,
+            loaded: voiceState.loaded,
+            idleLabel: 'Speech-to-text idle',
+          })} · ${SpeechSubtitle({
+            status: voiceState.ttsStatus,
+            model: voiceState.ttsModel,
+            loaded: voiceState.loaded,
+            idleLabel: 'Text-to-speech idle',
+          })}`,
+          badge: (
+            <div className="flex items-center gap-3">
+              <SpeechCompactBadge status={voiceState.sttStatus} label="STT" />
+              <SpeechCompactBadge status={voiceState.ttsStatus} label="TTS" />
+            </div>
+          ),
+        };
+      case 'vision':
+        return {
+          icon: Eye,
+          title: 'Vision Models',
+          subtitle: AssetSubtitle({
+            count: visualModels.vision.length,
+            emptyLabel: 'No vision assets',
+            singularLabel: 'vision asset',
+            pluralLabel: 'vision assets',
+          }),
+          badge: visualModels.vision.length > 0
+            ? <Badge color="gray">{visualModels.vision.length} asset{visualModels.vision.length === 1 ? '' : 's'}</Badge>
+            : null,
+        };
+      case 'image':
+        return {
+          icon: Image,
+          title: 'Image Generation',
+          subtitle: AssetSubtitle({
+            count: visualModels.image.length,
+            emptyLabel: 'No image generation assets',
+            singularLabel: 'image asset',
+            pluralLabel: 'image assets',
+          }),
+          badge: visualModels.image.length > 0
+            ? <Badge color="gray">{visualModels.image.length} asset{visualModels.image.length === 1 ? '' : 's'}</Badge>
+            : null,
+        };
+      case 'usage':
+        return {
+          icon: BarChart3,
+          title: 'Usage',
+          subtitle: modelUsage?.totals?.request_count
+            ? `${modelUsage.totals.request_count} request${modelUsage.totals.request_count === 1 ? '' : 's'} · ${Math.round((modelUsage.totals.total_tokens || 0) / 1000)}k tokens`
+            : 'No usage recorded yet',
+          badge: <Badge color={modelUsage?.totals?.request_count ? 'blue' : 'gray'}>{usageRange}</Badge>,
+        };
+      case 'chat':
+      default:
+        return {
+          icon: MessageSquare,
+          title: 'Language Models',
+          subtitle: `${providerProfiles.length} provider profile${providerProfiles.length === 1 ? '' : 's'} · ${models.length} local LLM${models.length === 1 ? '' : 's'}${activeProviderName ? ` · ${activeProviderName} active` : ''}`,
+          badge: <Badge color={chatReady ? 'green' : 'gray'}>{chatReady ? 'Active' : 'Choose one'}</Badge>,
+        };
+    }
+  })();
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div data-models-page className="flex h-full w-full flex-col bg-white text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100 font-sans">
+    <div data-models-page className="flex h-full w-full bg-white text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100 font-sans">
       <ConfirmDeleteDialog
         model={deleteConfirm}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}
       />
 
-      {/* ── Header bar ────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-b border-gray-200/80 bg-white dark:border-gray-800/80 dark:bg-gray-900 midnight:border-slate-800/80 midnight:bg-slate-950">
-        <div className="mx-auto w-full max-w-[1200px] px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4 pt-5 pb-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
-                <Cpu className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-lg font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100 leading-none">
-                  Models
-                </h1>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-                  <StatusDot status={status} />
-                  <span>{statusLabel}</span>
-                  {serverStatus?.model && (
-                    <>
-                      <span className="text-gray-300 dark:text-gray-700">·</span>
-                      <span className="text-gray-500 dark:text-gray-400 truncate max-w-[200px]">{serverStatus.model}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleRefresh}
-                disabled={isLoading || isBusy}
-                className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-400 midnight:hover:bg-slate-800 transition-colors"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-            </div>
+      {/* ── Left Sidebar — Navigation ─────────────────────────────────────── */}
+      <div className="w-64 flex-shrink-0 flex flex-col border-r border-gray-200/70 dark:border-gray-800/80 midnight:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-gray-950/50">
+        <div className="p-4 pt-5 pb-3">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+            Models
+          </h2>
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+            <StatusDot status={status} />
+            <span>{statusLabel}</span>
+            {serverStatus?.model && (
+              <>
+                <span className="text-gray-300 dark:text-gray-700">·</span>
+                <span className="truncate max-w-[140px] text-gray-500 dark:text-gray-400">{serverStatus.model}</span>
+              </>
+            )}
           </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 pt-2 pb-2">
+          <div className="space-y-0.5">
+            {tabItems.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setActiveTab(item.key)}
+                className={`w-full flex items-center px-3 py-1.5 rounded-lg text-left transition-all duration-150
+                  ${
+                    activeTab === item.key
+                      ? 'bg-white dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100 shadow-sm ring-1 ring-gray-200/50 dark:ring-gray-700/50 midnight:ring-gray-700/50'
+                      : 'text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 active:scale-[0.98]'
+                  }`}
+              >
+                <div className="flex items-center gap-2.5 w-full">
+                  <div className={`flex-shrink-0 ${activeTab === item.key ? 'text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400' : 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'}`}>
+                    <item.icon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{item.label}</span>
+                    {item.meta && (
+                      <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                        activeTab === item.key
+                          ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 midnight:bg-indigo-900/30 midnight:text-indigo-300'
+                          : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-gray-800 midnight:text-gray-400'
+                      }`}>
+                        {item.meta}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Refresh — pinned to bottom like Settings' sign out */}
+        <div className="flex-shrink-0 px-2 pb-3 pt-1 border-t border-gray-200/70 dark:border-gray-800/80 midnight:border-gray-800/80">
+          <button
+            onClick={handleRefresh}
+            disabled={isLoading || isBusy}
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-left text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 flex-shrink-0 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
       </div>
 
-      {/* ── Body ──────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Delete error banner */}
-        {deleteError && (
-          <div className="mx-auto max-w-[1200px] px-6 lg:px-8 mt-4">
-            <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
-                <TriangleAlert size={14} className="text-red-500" />
-              </div>
-              <span className="flex-1 text-gray-700 dark:text-gray-200">{deleteError}</span>
-              <button onClick={() => setDeleteError('')} className="hover:opacity-70 text-gray-400"><X size={13} /></button>
-            </div>
-          </div>
-        )}
-
-        <div className="mx-auto w-full max-w-[1200px] px-6 lg:px-8 py-6 space-y-4">
-
-          {/* ── Brain ─────────────────────────────────────────────────────── */}
-          <ActiveBrainPanel
-            activeConfig={providerConfig}
-            activeProviderName={activeProviderName}
-            serverStatus={serverStatus}
-            statusLabel={statusLabel}
-            statusColor={statusColor}
-            iconClass={iconClass}
-            isReady={isReady}
-            isRunning={isRunning}
-            stopping={stopping}
-            engineData={engineData}
-            hardwareBadgeLabel={hardwareBadgeLabel}
-            showHardwareBadge={showHardwareBadge}
-            providerAction={providerAction}
-            switchingEngine={switchingEngine}
-            installingEngine={installingEngine}
-            voiceState={voiceState}
-            visualModels={visualModels}
-            usageRequestCount={usageRequestCount}
-            usageTokensK={usageTokensK}
-            onStop={handleStop}
-            onDeactivateProvider={handleProviderDeactivate}
+      {/* ── Right Content Area ─────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 midnight:bg-gray-950">
+        {/* Content Header */}
+        <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800/60 midnight:border-gray-800/60">
+          <TabHeader
+            icon={activeTabHeader.icon}
+            title={activeTabHeader.title}
+            subtitle={activeTabHeader.subtitle}
+            badge={activeTabHeader.badge}
           />
+        </div>
 
-          <ModelDownloadHub
-            searchQuery={searchQuery}
-            downloadedMatches={downloadedMatches}
-            onSearchQueryChange={setSearchQuery}
-            onDownloadedSelect={handleDownloadedSelect}
-            onModelRefresh={loadModelList}
-            onAudioRefresh={refreshVoiceData}
-            onVisualRefresh={refreshVisualData}
-          />
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto w-full">
+          <div className="mx-auto w-full max-w-[1200px] px-8 py-8 space-y-6">
 
-          <div className="sticky top-0 z-20 -mx-6 border-y border-gray-200/80 bg-white/95 px-6 py-3 backdrop-blur dark:border-gray-800/80 dark:bg-gray-900/95 midnight:border-slate-800/80 midnight:bg-slate-950/95 lg:-mx-8 lg:px-8">
-            <div className="flex gap-2 overflow-x-auto pb-0.5">
-              {tabItems.map((item) => (
-                <TabButton
-                  key={item.key}
-                  icon={item.icon}
-                  label={item.label}
-                  meta={item.meta}
-                  active={activeTab === item.key}
-                  onClick={() => setActiveTab(item.key)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            {activeTab === 'chat' && (
-              <>
-                <TabHeader
-                  icon={MessageSquare}
-                  title="Language Models"
-                  subtitle={`${providerProfiles.length} provider profile${providerProfiles.length === 1 ? '' : 's'} · ${models.length} local LLM${models.length === 1 ? '' : 's'}${activeProviderName ? ` · ${activeProviderName} active` : ''}`}
-                  badge={<Badge color={chatReady ? 'green' : 'gray'}>{chatReady ? 'Active' : 'Choose one'}</Badge>}
-                />
-                <div className="space-y-8">
-                  <ProvidersSection
-                    catalog={providerCatalog}
-                    profiles={providerProfiles}
-                    activeConfig={providerConfig}
-                    serverStatus={serverStatus}
-                    loading={loadingProviders}
-                    providerAction={providerAction}
-                    providerError={providerError}
-                    highlightedItem={highlightedItem}
-                    onRefresh={loadProviderData}
-                    onSave={handleProviderSave}
-                    onDelete={handleProviderDelete}
-                    onTest={handleProviderTest}
-                    onActivate={handleProviderActivate}
-                    onLoadModels={handleLoadProviderModels}
-                  />
-
-                  <LocalModelsPane
-                    models={models}
-                    loadingModels={loadingModels}
-                    serverStatus={serverStatus}
-                    status={status}
-                    startingModel={startingModel}
-                    setStartingModel={setStartingModel}
-                    deletingModel={deletingModel}
-                    switchingEngine={switchingEngine}
-                    installingEngine={installingEngine}
-                    highlightedItem={highlightedItem}
-                    quickLoadPath={quickLoadPath}
-                    setQuickLoadPath={setQuickLoadPath}
-                    modelContextConfig={modelContextConfig}
-                    setServerStatus={setServerStatus}
-                    pollCleanup={pollCleanup}
-                    loadEngineData={loadEngineData}
-                    loadProviderData={loadProviderData}
-                    loadStatus={loadStatus}
-                    handleAddPath={handleAddPath}
-                    switchError={switchError}
-                    switchSuccess={switchSuccess}
-                    setSwitchError={setSwitchError}
-                    setSwitchSuccess={setSwitchSuccess}
-                    modelLoadCtxSizes={modelLoadCtxSizes}
-                    modelLoadCtxErrors={modelLoadCtxErrors}
-                    updateModelLoadCtxSize={updateModelLoadCtxSize}
-                    commitModelLoadCtxSize={commitModelLoadCtxSize}
-                    handleStart={handleStart}
-                    handleDelete={handleDelete}
-                  />
+            {/* Delete error banner */}
+            {deleteError && (
+              <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
+                  <TriangleAlert size={14} className="text-red-500" />
                 </div>
-              </>
+                <span className="flex-1 text-gray-700 dark:text-gray-200">{deleteError}</span>
+                <button onClick={() => setDeleteError('')} className="hover:opacity-70 text-gray-400"><X size={13} /></button>
+              </div>
+            )}
+
+            {/* ── Brain ─────────────────────────────────────────────────────── */}
+            <ActiveBrainPanel
+              activeConfig={providerConfig}
+              activeProviderName={activeProviderName}
+              serverStatus={serverStatus}
+              statusLabel={statusLabel}
+              statusColor={statusColor}
+              iconClass={iconClass}
+              isReady={isReady}
+              isRunning={isRunning}
+              stopping={stopping}
+              engineData={engineData}
+              hardwareBadgeLabel={hardwareBadgeLabel}
+              showHardwareBadge={showHardwareBadge}
+              providerAction={providerAction}
+              switchingEngine={switchingEngine}
+              installingEngine={installingEngine}
+              voiceState={voiceState}
+              visualModels={visualModels}
+              usageRequestCount={usageRequestCount}
+              usageTokensK={usageTokensK}
+              onStop={handleStop}
+              onDeactivateProvider={handleProviderDeactivate}
+            />
+
+            <ModelDownloadHub
+              searchQuery={searchQuery}
+              downloadedMatches={downloadedMatches}
+              onSearchQueryChange={setSearchQuery}
+              onDownloadedSelect={handleDownloadedSelect}
+              onModelRefresh={loadModelList}
+              onAudioRefresh={refreshVoiceData}
+              onVisualRefresh={refreshVisualData}
+            />
+
+            {/* ── Active tab content ───────────────────────────────────────── */}
+            {activeTab === 'chat' && (
+              <div className="space-y-8">
+                <ProvidersSection
+                  catalog={providerCatalog}
+                  profiles={providerProfiles}
+                  activeConfig={providerConfig}
+                  serverStatus={serverStatus}
+                  loading={loadingProviders}
+                  providerAction={providerAction}
+                  providerError={providerError}
+                  highlightedItem={highlightedItem}
+                  onRefresh={loadProviderData}
+                  onSave={handleProviderSave}
+                  onDelete={handleProviderDelete}
+                  onTest={handleProviderTest}
+                  onActivate={handleProviderActivate}
+                  onLoadModels={handleLoadProviderModels}
+                />
+
+                <LocalModelsPane
+                  models={models}
+                  loadingModels={loadingModels}
+                  serverStatus={serverStatus}
+                  status={status}
+                  startingModel={startingModel}
+                  setStartingModel={setStartingModel}
+                  deletingModel={deletingModel}
+                  switchingEngine={switchingEngine}
+                  installingEngine={installingEngine}
+                  highlightedItem={highlightedItem}
+                  quickLoadPath={quickLoadPath}
+                  setQuickLoadPath={setQuickLoadPath}
+                  modelContextConfig={modelContextConfig}
+                  setServerStatus={setServerStatus}
+                  pollCleanup={pollCleanup}
+                  loadEngineData={loadEngineData}
+                  loadProviderData={loadProviderData}
+                  loadStatus={loadStatus}
+                  handleAddPath={handleAddPath}
+                  switchError={switchError}
+                  switchSuccess={switchSuccess}
+                  setSwitchError={setSwitchError}
+                  setSwitchSuccess={setSwitchSuccess}
+                  modelLoadCtxSizes={modelLoadCtxSizes}
+                  modelLoadCtxErrors={modelLoadCtxErrors}
+                  updateModelLoadCtxSize={updateModelLoadCtxSize}
+                  commitModelLoadCtxSize={commitModelLoadCtxSize}
+                  handleStart={handleStart}
+                  handleDelete={handleDelete}
+                />
+              </div>
             )}
 
             {activeTab === 'audio' && (
-              <>
-                <TabHeader
-                  icon={Mic}
-                  title="Audio Models"
-                  subtitle={`${SpeechSubtitle({
-                    status: voiceState.sttStatus,
-                    model: voiceState.sttModel,
-                    loaded: voiceState.loaded,
-                    idleLabel: 'Speech-to-text idle',
-                  })} · ${SpeechSubtitle({
-                    status: voiceState.ttsStatus,
-                    model: voiceState.ttsModel,
-                    loaded: voiceState.loaded,
-                    idleLabel: 'Text-to-speech idle',
-                  })}`}
-                  badge={<div className="flex items-center gap-3"><SpeechCompactBadge status={voiceState.sttStatus} label="STT" /><SpeechCompactBadge status={voiceState.ttsStatus} label="TTS" /></div>}
-                />
-                <div className="grid gap-5 xl:grid-cols-2">
-                  <div className="space-y-5">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">
-                      <Mic className="h-4 w-4 text-gray-400" />
-                      Speech-to-Text
-                    </div>
-                    <CapabilityProvidersSection capability="stt" />
-                    <AudioModelsSection
-                      mode="whisper"
-                      highlightedItem={highlightedItem}
-                      onModelsChange={setAudioModels}
-                    />
+              <div className="grid gap-5 xl:grid-cols-2">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">
+                    <Mic className="h-4 w-4 text-gray-400" />
+                    Speech-to-Text
                   </div>
-                  <div className="space-y-5">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">
-                      <Volume2 className="h-4 w-4 text-gray-400" />
-                      Text-to-Speech
-                    </div>
-                    <CapabilityProvidersSection capability="tts" />
-                    <AudioModelsSection
-                      mode="tts"
-                      highlightedItem={highlightedItem}
-                      onModelsChange={setAudioModels}
-                    />
-                  </div>
+                  <CapabilityProvidersSection capability="stt" />
+                  <AudioModelsSection
+                    mode="whisper"
+                    highlightedItem={highlightedItem}
+                    onModelsChange={setAudioModels}
+                  />
                 </div>
-              </>
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200 midnight:text-slate-200">
+                    <Volume2 className="h-4 w-4 text-gray-400" />
+                    Text-to-Speech
+                  </div>
+                  <CapabilityProvidersSection capability="tts" />
+                  <AudioModelsSection
+                    mode="tts"
+                    highlightedItem={highlightedItem}
+                    onModelsChange={setAudioModels}
+                  />
+                </div>
+              </div>
             )}
 
             {activeTab === 'vision' && (
-              <>
-                <TabHeader
-                  icon={Eye}
-                  title="Vision Models"
-                  subtitle={AssetSubtitle({
-                    count: visualModels.vision.length,
-                    emptyLabel: 'No vision assets',
-                    singularLabel: 'vision asset',
-                    pluralLabel: 'vision assets',
-                  })}
-                  badge={visualModels.vision.length > 0 ? <Badge color="gray">{visualModels.vision.length} asset{visualModels.vision.length === 1 ? '' : 's'}</Badge> : null}
+              <div className="space-y-5">
+                <CapabilityProvidersSection capability="vision" />
+                <VisualModelsSection
+                  mode="vision"
+                  highlightedItem={highlightedItem}
+                  onModelsChange={setVisualModels}
                 />
-                <div className="space-y-5">
-                  <CapabilityProvidersSection capability="vision" />
-                  <VisualModelsSection
-                    mode="vision"
-                    highlightedItem={highlightedItem}
-                    onModelsChange={setVisualModels}
-                  />
-                </div>
-              </>
+              </div>
             )}
 
             {activeTab === 'image' && (
-              <>
-                <TabHeader
-                  icon={Image}
-                  title="Image Generation"
-                  subtitle={AssetSubtitle({
-                    count: visualModels.image.length,
-                    emptyLabel: 'No image generation assets',
-                    singularLabel: 'image asset',
-                    pluralLabel: 'image assets',
-                  })}
-                  badge={visualModels.image.length > 0 ? <Badge color="gray">{visualModels.image.length} asset{visualModels.image.length === 1 ? '' : 's'}</Badge> : null}
+              <div className="space-y-5">
+                <CapabilityProvidersSection capability="image" />
+                <VisualModelsSection
+                  mode="image"
+                  highlightedItem={highlightedItem}
+                  onModelsChange={setVisualModels}
                 />
-                <div className="space-y-5">
-                  <CapabilityProvidersSection capability="image" />
-                  <VisualModelsSection
-                    mode="image"
-                    highlightedItem={highlightedItem}
-                    onModelsChange={setVisualModels}
-                  />
-                </div>
-              </>
+              </div>
             )}
 
             {activeTab === 'usage' && (
-              <>
-                <TabHeader
-                  icon={BarChart3}
-                  title="Usage"
-                  subtitle={modelUsage?.totals?.request_count
-                    ? `${modelUsage.totals.request_count} request${modelUsage.totals.request_count === 1 ? '' : 's'} · ${Math.round((modelUsage.totals.total_tokens || 0) / 1000)}k tokens`
-                    : 'No usage recorded yet'}
-                  badge={<Badge color={modelUsage?.totals?.request_count ? 'blue' : 'gray'}>{usageRange}</Badge>}
-                />
-                <ModelUsageSection
-                  usage={modelUsage}
-                  loading={loadingUsage}
-                  error={usageError}
-                  range={usageRange}
-                  onRangeChange={setUsageRange}
-                  onRefresh={refreshUsageData}
-                  catalog={providerCatalog}
-                />
-              </>
+              <ModelUsageSection
+                usage={modelUsage}
+                loading={loadingUsage}
+                error={usageError}
+                range={usageRange}
+                onRangeChange={setUsageRange}
+                onRefresh={refreshUsageData}
+                catalog={providerCatalog}
+              />
             )}
 
           </div>
-
         </div>
       </div>
     </div>
