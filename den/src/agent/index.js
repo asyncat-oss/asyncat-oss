@@ -32,6 +32,7 @@ import { dbQueryTools } from './tools/dbQueryTools.js';
 import { modelStatusTools } from './tools/modelStatusTools.js';
 import { modelManagementTools } from './tools/modelManagementTools.js';
 import { datasetTools } from './tools/datasetTools.js';
+import { trainingTools } from './tools/trainingTools.js';
 import { hardwareTools } from './tools/hardwareTools.js';
 import { schedulerTools } from './tools/schedulerTools.js';
 import { codeSearchTools } from './tools/codeSearchTools.js';
@@ -100,6 +101,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(modelStatusTools);
   toolRegistry.registerAll(modelManagementTools);
   toolRegistry.registerAll(datasetTools);
+  toolRegistry.registerAll(trainingTools);
   toolRegistry.registerAll(hardwareTools);
   toolRegistry.registerAll(schedulerTools);
   toolRegistry.registerAll(codeSearchTools);

@@ -27,6 +27,7 @@ import ProfilesPage from '../Profiles/ProfilesPage';
 import AgentPage from '../Agent/AgentPage';
 import WorkflowsPage from '../Workflows/WorkflowsPage';
 import ActivityPage from '../Activity/ActivityPage';
+import TrainingPage from '../Training/TrainingPage';
 
 const ProjectsRedirect = () => {
   const { projectId, tab } = useParams();
@@ -250,6 +251,11 @@ const createRouter = () => createBrowserRouter([
       {
         path: "activity",
         element: <ActivityPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "training",
+        element: <TrainingPage />,
         errorElement: <RouteErrorElement />
       },
       {

@@ -15,6 +15,7 @@ import {
   Wrench,
   MessageSquare,
   KanbanSquare,
+  GraduationCap,
 } from "lucide-react";
 import { useState } from "react";
 import KeyboardShortcutsSection from "./KeyboardShortcutsSection.jsx";
@@ -100,6 +101,7 @@ const DEFAULT_NAV_ITEMS = {
   projects: true,
   models: true,
   tools: true,
+  training: true,
   agent: true,
   trash: true,
 };
@@ -295,6 +297,12 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           label="Agent"
           checked={navItemsVisibility.agent}
           onChange={() => handleNavItemToggle("agent")}
+        />
+        <CheckboxRow
+          icon={GraduationCap}
+          label="Training"
+          checked={navItemsVisibility.training}
+          onChange={() => handleNavItemToggle("training")}
         />
         <CheckboxRow
           icon={Trash2}

@@ -44,6 +44,9 @@ import installRouter from './install/installRouter.js';
 // ─── Search ───────────────────────────────────────────────────────────────────
 import searchRouter from './search/searchRouter.js';
 
+// ─── Training / Fine-Tuning ───────────────────────────────────────────────────
+import trainingRouter from './ai/routes/trainingRoutes.js';
+
 // ─── Integrations ─────────────────────────────────────────────────────────────
 import integrationsRouter from './integrations/integrationsRouter.js';
 
@@ -51,6 +54,7 @@ import integrationsRouter from './integrations/integrationsRouter.js';
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
 import { recoverSandboxJobs } from './agent/SandboxManager.js';
+import { recoverTrainingJobs } from './ai/controllers/ai/trainingJobManager.js';
 
 // ─── Machine token ────────────────────────────────────────────────────────────
 import { randomUUID } from 'crypto';
@@ -76,6 +80,15 @@ try {
   }
 } catch (e) {
   logger.warn('Could not recover sandbox jobs:', e.message);
+}
+
+try {
+  const recoveredTrainingJobs = recoverTrainingJobs();
+  if (recoveredTrainingJobs > 0) {
+    logger.info(`Marked ${recoveredTrainingJobs} interrupted training job(s) as failed`);
+  }
+} catch (e) {
+  logger.warn('Could not recover training jobs:', e.message);
 }
 
 // ─── App setup ────────────────────────────────────────────────────────────────
@@ -154,6 +167,9 @@ app.use('/api/integrations', integrationsRouter);
 // ─── Routes: Search ───────────────────────────────────────────────────────────
 app.use('/api/search', searchRouter);
 
+// ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
+app.use('/api/training', trainingRouter);
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.status(200).json({
@@ -227,11 +243,13 @@ seed().then(async () => {
       const { stopTts } = await import('./ai/controllers/ai/ttsServerManager.js');
       const { stopServer: stopLlama } = await import('./ai/controllers/ai/llamaServerManager.js');
       const { stopServer: stopMlx } = await import('./ai/controllers/ai/mlxServerManager.js');
+      const { stopAllTraining } = await import('./ai/controllers/ai/trainingJobManager.js');
       await Promise.all([
         stopWhisper().catch(e => logger.warn('Whisper stop error:', e.message)),
         stopTts().catch(e => logger.warn('TTS stop error:', e.message)),
         stopLlama().catch(e => logger.warn('Llama stop error:', e.message)),
         stopMlx().catch(e => logger.warn('MLX stop error:', e.message)),
+        stopAllTraining().catch(e => logger.warn('Training stop error:', e.message)),
       ]);
     } catch (err) {
       logger.warn('Error stopping child processes:', err.message);

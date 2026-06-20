@@ -620,3 +620,36 @@ CREATE TABLE IF NOT EXISTS app_config (
   value      TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+-- ─── Training / Fine-Tuning Jobs ──────────────────────────────────────────────
+-- Persists LoRA fine-tuning job state so long-running training survives page
+-- reloads and shows in history. Follows the agent_sandbox_jobs conventions.
+
+CREATE TABLE IF NOT EXISTS training_jobs (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  base_model        TEXT NOT NULL,          -- local path or HF repo id
+  dataset_path      TEXT NOT NULL,          -- JSONL file (reuses datasetTools output)
+  method            TEXT NOT NULL DEFAULT 'lora'
+                      CHECK (method IN ('lora')),
+  backend           TEXT NOT NULL
+                      CHECK (backend IN ('cuda','mlx','cpu')),
+  hyperparams       TEXT NOT NULL DEFAULT '{}',   -- JSON: {epochs, lr, rank, alpha, batchSize, maxSeqLen}
+  status            TEXT NOT NULL DEFAULT 'queued'
+                      CHECK (status IN ('queued','running','completed','failed','cancelled')),
+  progress          TEXT NOT NULL DEFAULT '{}',   -- JSON: {step, totalSteps, loss, percent}
+  output_dir        TEXT,
+  checkpoint_dir    TEXT,                   -- latest checkpoint path for resume
+  disk_usage_bytes  INTEGER,               -- track space consumed
+  error             TEXT,
+  created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  started_at        TEXT,
+  completed_at      TEXT,
+  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_training_jobs_user
+  ON training_jobs(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_training_jobs_status
+  ON training_jobs(status, updated_at);

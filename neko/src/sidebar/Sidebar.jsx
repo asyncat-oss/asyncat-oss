@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   KanbanSquare,
+  GraduationCap,
 } from "lucide-react";
 
 import UniversalSearch from "./UniversalSearch";
@@ -482,6 +483,7 @@ const DynamicSidebar = ({
   const isOnTools = location.pathname.startsWith("/tools");
   const isOnWorkflows = location.pathname.startsWith("/workflows");
   const isOnActivity = location.pathname.startsWith("/activity");
+  const isOnTraining = location.pathname.startsWith("/training");
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
 
@@ -521,6 +523,7 @@ const DynamicSidebar = ({
     { key: "tools", label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
     { key: "workflows", label: "Workflows", action: "navWorkflows", onClick: () => navigate("/workflows"), active: isOnWorkflows, icon: <Workflow className="w-5 h-5" /> },
     { key: "activity", label: "Activity", action: "navActivity", onClick: () => navigate("/activity"), active: isOnActivity, icon: <Bell className="w-5 h-5" /> },
+    { key: "training", label: "Training", action: "navTraining", onClick: () => navigate("/training"), active: isOnTraining, icon: <GraduationCap className="w-5 h-5" /> },
     { key: "agent", label: "Agent", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
   ].filter(item => navItemsVisibility[item.key] !== false);
 
@@ -804,6 +807,17 @@ const DynamicSidebar = ({
             dockPosition={dockPosition}
           >
             <BrainCircuit className="w-5 h-5" />
+          </DockItem>
+        )}
+
+        {navItemsVisibility.training !== false && (
+          <DockItem
+            label={labelWithShortcut("Training", "navTraining")}
+            onClick={() => navigate("/training")}
+            isActive={isOnTraining}
+            dockPosition={dockPosition}
+          >
+            <GraduationCap className="w-5 h-5" />
           </DockItem>
         )}
 
