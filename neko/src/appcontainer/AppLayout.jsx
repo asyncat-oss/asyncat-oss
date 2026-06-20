@@ -32,9 +32,6 @@ const AppLayout = ({ session, onSignOut }) => {
   const [pageTransitionsEnabled, setPageTransitionsEnabled] = useState(() => {
     return localStorage.getItem('pageTransitions') !== 'off';
   });
-  const [dockPosition, setDockPosition] = useState(() => {
-    return localStorage.getItem('dockPosition') || 'bottom';
-  });
   const [sidebarPosition, setSidebarPosition] = useState(() => {
     return localStorage.getItem('sidebarPosition') || 'left';
   });
@@ -43,9 +40,6 @@ const AppLayout = ({ session, onSignOut }) => {
   });
   const [sidebarVisibility, setSidebarVisibility] = useState(() => {
     return localStorage.getItem('sidebarVisibility') || 'always';
-  });
-  const [navigationStyle, setNavigationStyle] = useState(() => {
-    return localStorage.getItem('navigationStyle') || 'dock';
   });
   const [topBarVisible, setTopBarVisible] = useState(() => {
     return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
@@ -217,19 +211,6 @@ const AppLayout = ({ session, onSignOut }) => {
   }, []);
 
   useEffect(() => {
-    const syncDockPosition = () => {
-      setDockPosition(localStorage.getItem('dockPosition') || 'bottom');
-    };
-
-    window.addEventListener('storage', syncDockPosition);
-    window.addEventListener('dock-position-changed', syncDockPosition);
-    return () => {
-      window.removeEventListener('storage', syncDockPosition);
-      window.removeEventListener('dock-position-changed', syncDockPosition);
-    };
-  }, []);
-
-  useEffect(() => {
     const syncSidebarPreferences = () => {
       setSidebarPosition(localStorage.getItem('sidebarPosition') || 'left');
       setSidebarState(localStorage.getItem('sidebarState') || 'expanded');
@@ -245,19 +226,6 @@ const AppLayout = ({ session, onSignOut }) => {
       window.removeEventListener('sidebar-position-changed', syncSidebarPreferences);
       window.removeEventListener('sidebar-state-changed', syncSidebarPreferences);
       window.removeEventListener('sidebar-visibility-changed', syncSidebarPreferences);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncNavigationStyle = () => {
-      setNavigationStyle(localStorage.getItem('navigationStyle') || 'dock');
-    };
-
-    window.addEventListener('storage', syncNavigationStyle);
-    window.addEventListener('navigation-style-changed', syncNavigationStyle);
-    return () => {
-      window.removeEventListener('storage', syncNavigationStyle);
-      window.removeEventListener('navigation-style-changed', syncNavigationStyle);
     };
   }, []);
 
@@ -455,11 +423,6 @@ const AppLayout = ({ session, onSignOut }) => {
     );
   }
 
-  const dockPaddingClass = {
-    bottom: 'pb-20',
-    left: 'pl-20',
-    right: 'pr-20',
-  };
   const sidebarPaddingClass = {
     left: {
       collapsed: 'pl-16',
@@ -470,18 +433,14 @@ const AppLayout = ({ session, onSignOut }) => {
       expanded: 'pr-16 sm:pr-56',
     },
   };
-  const navigationPaddingClass = navigationStyle === 'sidebar'
-    ? sidebarVisibility === 'hover'
-      ? ''
-      : sidebarPaddingClass[sidebarPosition]?.[sidebarState] || sidebarPaddingClass.left.expanded
-    : dockPaddingClass[dockPosition] || dockPaddingClass.bottom;
+  const navigationPaddingClass = sidebarVisibility === 'hover'
+    ? ''
+    : sidebarPaddingClass[sidebarPosition]?.[sidebarState] || sidebarPaddingClass.left.expanded;
 
   // Normal dashboard when user has workspaces
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
-      <TopMenuBar
-        onSearchOpen={() => setIsSearchOpen(true)}
-      />
+      <TopMenuBar />
 
       <Sidebar
         session={session}

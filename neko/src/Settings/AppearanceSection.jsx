@@ -4,7 +4,6 @@ import {
   Layout,
   Moon,
   MousePointer,
-  PanelBottom,
   PanelLeft,
   PanelRight,
   Palette,
@@ -118,15 +117,6 @@ const loadNavItemsVisibility = () => {
 };
 
 const AppearanceSection = ({ theme, setThemeMode }) => {
-  const [navigationStyle, setNavigationStyle] = useState(() => {
-    return localStorage.getItem("navigationStyle") || "dock";
-  });
-  const [dockVisibility, setDockVisibility] = useState(() => {
-    return localStorage.getItem("dockVisibility") || "always";
-  });
-  const [dockPosition, setDockPosition] = useState(() => {
-    return localStorage.getItem("dockPosition") || "bottom";
-  });
   const [sidebarPosition, setSidebarPosition] = useState(() => {
     return localStorage.getItem("sidebarPosition") || "left";
   });
@@ -145,24 +135,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
   const [navItemsVisibility, setNavItemsVisibility] = useState(
     loadNavItemsVisibility,
   );
-
-  const handleNavigationStyleChange = (value) => {
-    setNavigationStyle(value);
-    localStorage.setItem("navigationStyle", value);
-    dispatchPreferenceChange("navigation-style-changed");
-  };
-
-  const handleDockVisibilityChange = (value) => {
-    setDockVisibility(value);
-    localStorage.setItem("dockVisibility", value);
-    dispatchPreferenceChange("dock-visibility-changed");
-  };
-
-  const handleDockPositionChange = (value) => {
-    setDockPosition(value);
-    localStorage.setItem("dockPosition", value);
-    dispatchPreferenceChange("dock-position-changed");
-  };
 
   const handleSidebarPositionChange = (value) => {
     setSidebarPosition(value);
@@ -244,27 +216,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
 
       <PreferenceCard
         icon={Layout}
-        title="Navigation"
-        description="Choose a floating dock or a persistent sidebar."
-      >
-        <RadioRow
-          name="navigationStyle"
-          icon={PanelBottom}
-          label="Floating Dock"
-          checked={navigationStyle === "dock"}
-          onChange={() => handleNavigationStyleChange("dock")}
-        />
-        <RadioRow
-          name="navigationStyle"
-          icon={PanelLeft}
-          label="Sidebar"
-          checked={navigationStyle === "sidebar"}
-          onChange={() => handleNavigationStyleChange("sidebar")}
-        />
-      </PreferenceCard>
-
-      <PreferenceCard
-        icon={Layout}
         title="Visible Nav Items"
         description="Command Center is always shown. Toggle everything else."
       >
@@ -312,68 +263,64 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
         />
       </PreferenceCard>
 
-      {navigationStyle === "sidebar" && (
-        <>
-          <PreferenceCard
-            icon={Layout}
-            title="Sidebar Position"
-            description="Choose which edge the persistent sidebar uses."
-          >
-            <RadioRow
-              name="sidebarPosition"
-              icon={PanelLeft}
-              label="Left"
-              checked={sidebarPosition === "left"}
-              onChange={() => handleSidebarPositionChange("left")}
-            />
-            <RadioRow
-              name="sidebarPosition"
-              icon={PanelRight}
-              label="Right"
-              checked={sidebarPosition === "right"}
-              onChange={() => handleSidebarPositionChange("right")}
-            />
-          </PreferenceCard>
+      <PreferenceCard
+        icon={Layout}
+        title="Sidebar Position"
+        description="Choose which edge the persistent sidebar uses."
+      >
+        <RadioRow
+          name="sidebarPosition"
+          icon={PanelLeft}
+          label="Left"
+          checked={sidebarPosition === "left"}
+          onChange={() => handleSidebarPositionChange("left")}
+        />
+        <RadioRow
+          name="sidebarPosition"
+          icon={PanelRight}
+          label="Right"
+          checked={sidebarPosition === "right"}
+          onChange={() => handleSidebarPositionChange("right")}
+        />
+      </PreferenceCard>
 
-          <PreferenceCard
-            icon={PanelLeft}
-            title="Sidebar Size"
-            description="Keep labels visible or collapse the sidebar to icons."
-          >
-            <RadioRow
-              name="sidebarState"
-              label="Expanded"
-              checked={sidebarState === "expanded"}
-              onChange={() => handleSidebarStateChange("expanded")}
-            />
-            <RadioRow
-              name="sidebarState"
-              label="Collapsed"
-              checked={sidebarState === "collapsed"}
-              onChange={() => handleSidebarStateChange("collapsed")}
-            />
-          </PreferenceCard>
+      <PreferenceCard
+        icon={PanelLeft}
+        title="Sidebar Size"
+        description="Keep labels visible or collapse the sidebar to icons."
+      >
+        <RadioRow
+          name="sidebarState"
+          label="Expanded"
+          checked={sidebarState === "expanded"}
+          onChange={() => handleSidebarStateChange("expanded")}
+        />
+        <RadioRow
+          name="sidebarState"
+          label="Collapsed"
+          checked={sidebarState === "collapsed"}
+          onChange={() => handleSidebarStateChange("collapsed")}
+        />
+      </PreferenceCard>
 
-          <PreferenceCard
-            icon={MousePointer}
-            title="Sidebar Visibility"
-            description="Choose whether the sidebar stays open or appears near the screen edge."
-          >
-            <RadioRow
-              name="sidebarVisibility"
-              label="Always Visible"
-              checked={sidebarVisibility === "always"}
-              onChange={() => handleSidebarVisibilityChange("always")}
-            />
-            <RadioRow
-              name="sidebarVisibility"
-              label="Show on Hover"
-              checked={sidebarVisibility === "hover"}
-              onChange={() => handleSidebarVisibilityChange("hover")}
-            />
-          </PreferenceCard>
-        </>
-      )}
+      <PreferenceCard
+        icon={MousePointer}
+        title="Sidebar Visibility"
+        description="Choose whether the sidebar stays open or appears near the screen edge."
+      >
+        <RadioRow
+          name="sidebarVisibility"
+          label="Always Visible"
+          checked={sidebarVisibility === "always"}
+          onChange={() => handleSidebarVisibilityChange("always")}
+        />
+        <RadioRow
+          name="sidebarVisibility"
+          label="Show on Hover"
+          checked={sidebarVisibility === "hover"}
+          onChange={() => handleSidebarVisibilityChange("hover")}
+        />
+      </PreferenceCard>
 
       <PreferenceCard
         icon={Sparkles}
@@ -393,57 +340,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           onChange={() => handlePageTransitionsChange("off")}
         />
       </PreferenceCard>
-
-      {navigationStyle === "dock" && (
-        <>
-          <PreferenceCard
-            icon={MousePointer}
-            title="Dock Visibility"
-            description="Choose whether the floating dock is always visible or appears near the screen edge."
-          >
-            <RadioRow
-              name="dockVisibility"
-              label="Always Visible"
-              checked={dockVisibility === "always"}
-              onChange={() => handleDockVisibilityChange("always")}
-            />
-            <RadioRow
-              name="dockVisibility"
-              label="Show on Hover"
-              checked={dockVisibility === "hover"}
-              onChange={() => handleDockVisibilityChange("hover")}
-            />
-          </PreferenceCard>
-
-          <PreferenceCard
-            icon={Layout}
-            title="Dock Position"
-            description="Choose where the floating dock appears on your screen."
-          >
-            <RadioRow
-              name="dockPosition"
-              icon={PanelBottom}
-              label="Bottom"
-              checked={dockPosition === "bottom"}
-              onChange={() => handleDockPositionChange("bottom")}
-            />
-            <RadioRow
-              name="dockPosition"
-              icon={PanelLeft}
-              label="Left"
-              checked={dockPosition === "left"}
-              onChange={() => handleDockPositionChange("left")}
-            />
-            <RadioRow
-              name="dockPosition"
-              icon={PanelRight}
-              label="Right"
-              checked={dockPosition === "right"}
-              onChange={() => handleDockPositionChange("right")}
-            />
-          </PreferenceCard>
-        </>
-      )}
 
       <PreferenceCard
         icon={Layout}

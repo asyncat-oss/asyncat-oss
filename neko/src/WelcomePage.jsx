@@ -149,7 +149,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
       ? savedTheme
       : "system";
   });
-  const [dockVis, setDockVis] = useState("always");
+  const [sidebarVis, setSidebarVis] = useState("always");
   const [topMenuVis, setTopMenuVis] = useState("always");
 
   const [showPassword, setShowPassword] = useState(false);
@@ -269,8 +269,8 @@ const WelcomePage = ({ session, onTeamCreated }) => {
       localStorage.setItem("theme", themePref);
     }
 
-    // Dock & Menu
-    localStorage.setItem("dockVisibility", dockVis);
+    // Sidebar & Menu
+    localStorage.setItem("sidebarVisibility", sidebarVis);
     localStorage.setItem("topMenuBarVisibility", topMenuVis);
   };
 
@@ -528,10 +528,10 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className={labelClassName}>Dock Visibility</label>
+                  <label className={labelClassName}>Sidebar Visibility</label>
                   <PreferenceToggle
-                    selected={dockVis}
-                    onChange={setDockVis}
+                    selected={sidebarVis}
+                    onChange={setSidebarVis}
                     options={[
                       { value: "always", label: "Always", icon: LayoutIcon },
                       { value: "hover", label: "On Hover", icon: MousePointer },
