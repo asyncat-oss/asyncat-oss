@@ -130,15 +130,6 @@ const SidebarNavItem = memo(({ icon, label, shortcut, onClick, isActive, collaps
     <span className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${collapsed ? 'hidden' : 'hidden sm:block'}`}>
       {label}
     </span>
-    {shortcut && !collapsed ? (
-      <span className={`hidden flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:block ${
-        isActive
-          ? 'text-gray-400 dark:text-gray-500 midnight:text-gray-600'
-          : 'text-gray-400 dark:text-gray-600 midnight:text-gray-600'
-      }`}>
-        {shortcut}
-      </span>
-    ) : null}
   </button>
 ));
 SidebarNavItem.displayName = "SidebarNavItem";
@@ -511,19 +502,19 @@ const DynamicSidebar = ({
                 collapsed={sidebarState === 'collapsed'}
               />
             ))}
-            {navItemsVisibility.trash !== false && (
-              <SidebarNavItem
-                icon={<Trash2 className="w-5 h-5" />}
-                label="Trash"
-                onClick={() => navigate("/trash")}
-                isActive={isOnTrash}
-                collapsed={sidebarState === 'collapsed'}
-              />
-            )}
           </div>
         </nav>
 
-        <div className="p-2.5">
+        <div className="space-y-1 border-t border-gray-200/60 p-2.5 dark:border-white/[0.06] midnight:border-white/[0.06]">
+          {navItemsVisibility.trash !== false && (
+            <SidebarNavItem
+              icon={<Trash2 className="w-5 h-5" />}
+              label="Trash"
+              onClick={() => navigate("/trash")}
+              isActive={isOnTrash}
+              collapsed={sidebarState === 'collapsed'}
+            />
+          )}
           <SidebarNavItem
             icon={settingsIcon}
             label="Settings"
