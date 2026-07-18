@@ -643,6 +643,76 @@ async function runAgentTaskInBackground(runId) {
 // CONVERSATION ROUTES — /api/ai/*
 // ══════════════════════════════════════════════════════════════════════════════
 
+router.post('/chat/stream', authenticate, async (req, res) => {
+  const message = String(req.body?.message || '').trim();
+  if (!message) {
+    return res.status(400).json({ success: false, error: 'message required' });
+  }
+
+  const history = normalizeConversationHistory(req.body?.conversationHistory);
+  const messages = [
+    ...history.map(item => ({ role: item.role, content: item.content })),
+    { role: 'user', content: message },
+  ];
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const abortController = new AbortController();
+  const abort = () => {
+    if (!res.writableEnded) abortController.abort();
+  };
+  res.on('close', abort);
+
+  let answer = '';
+  try {
+    const { client: aiClient, model } = getAiClientForUser(req.user.id);
+    const reasoningEffort = String(req.body?.reasoningEffort || '').trim();
+    const stream = await aiClient.client.chat.completions.create({
+      model,
+      messages,
+      stream: true,
+      ...(reasoningEffort && reasoningEffort !== 'auto'
+        ? { reasoning_effort: reasoningEffort }
+        : {}),
+    }, { signal: abortController.signal });
+
+    for await (const chunk of stream) {
+      if (abortController.signal.aborted) break;
+      const delta = chunk?.choices?.[0]?.delta?.content;
+      if (delta) {
+        answer += delta;
+        writeAgentSse(res, { type: 'delta', data: { content: delta } });
+      }
+      if (chunk?.usage) {
+        writeAgentSse(res, {
+          type: 'usage_update',
+          data: {
+            inputTokens: chunk.usage.prompt_tokens || 0,
+            outputTokens: chunk.usage.completion_tokens || 0,
+            totalTokens: chunk.usage.total_tokens || 0,
+          },
+        });
+      }
+    }
+
+    if (!abortController.signal.aborted) {
+      writeAgentSse(res, { type: 'done', data: { answer, stopReason: 'answer' } });
+    }
+  } catch (error) {
+    if (!abortController.signal.aborted) {
+      console.error('Direct chat error:', error);
+      writeAgentSse(res, { type: 'error', data: { message: error.message || 'Chat failed' } });
+      writeAgentSse(res, { type: 'done', data: { answer: '', stopReason: 'error' } });
+    }
+  } finally {
+    res.off('close', abort);
+    if (!res.writableEnded) res.end();
+  }
+});
+
 router.post('/generate-title', authenticate, async (req, res) => {
   try {
     const { userMessage, aiResponse } = req.body;

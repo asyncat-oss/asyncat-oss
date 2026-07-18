@@ -12,7 +12,6 @@ import {
   Sun,
   Trash2,
   Wrench,
-  MessageSquare,
   KanbanSquare,
   GraduationCap,
 } from "lucide-react";
@@ -96,7 +95,6 @@ const CheckboxRow = ({ checked, onChange, icon: Icon, label, locked }) => (
 );
 
 const DEFAULT_NAV_ITEMS = {
-  history: true,
   projects: true,
   models: true,
   tools: true,
@@ -219,12 +217,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
         title="Visible Nav Items"
         description="Command Center is always shown. Toggle everything else."
       >
-        <CheckboxRow
-          icon={MessageSquare}
-          label="History"
-          checked={navItemsVisibility.history}
-          onChange={() => handleNavItemToggle("history")}
-        />
         <CheckboxRow
           icon={KanbanSquare}
           label="Tasks"

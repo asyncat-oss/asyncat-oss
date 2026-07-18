@@ -1,6 +1,61 @@
 import { API_BASE_URL, ENDPOINTS, apiRequest } from './client.js';
+import authService from '../../services/authService.js';
 
 export const chatApi = {
+
+  runStream: async function* (message, conversationHistory = [], signal = null, opts = {}) {
+    const token = await authService.getSession();
+    const response = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token?.access_token}`,
+      },
+      signal,
+      body: JSON.stringify({
+        message,
+        conversationHistory,
+        reasoningEffort: opts.reasoningEffort || 'auto',
+      }),
+    });
+
+    if (!response.ok) {
+      let messageText = `Chat failed: ${response.statusText}`;
+      try {
+        const data = await response.json();
+        messageText = data.message || data.error || messageText;
+      } catch { /* response may not be JSON */ }
+      throw new Error(messageText);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            yield event;
+            if (event.type === 'done') return;
+          } catch (error) {
+            console.warn('Failed to parse direct chat SSE:', error);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
 
   generateTitle: async (userMessage, aiResponse) => {
     return await apiRequest(`${API_BASE_URL}/ai/generate-title`, {

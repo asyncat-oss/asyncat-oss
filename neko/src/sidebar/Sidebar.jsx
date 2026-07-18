@@ -11,7 +11,6 @@ import authService from "../services/authService.js";
 import {
   Command,
   Settings,
-  MessageSquare as ChatIcon,
   Cpu,
   Wrench,
   BrainCircuit,
@@ -173,9 +172,9 @@ const DynamicSidebar = ({
   const [navItemsVisibility, setNavItemsVisibility] = useState(() => {
     try {
       const stored = localStorage.getItem('navItemsVisibility');
-      const defaults = { history: true, projects: true, models: true, tools: true, agent: true, trash: true };
+      const defaults = { projects: true, models: true, tools: true, agent: true, trash: true };
       return stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
-    } catch { return { history: true, projects: true, models: true, tools: true, agent: true, trash: true }; }
+    } catch { return { projects: true, models: true, tools: true, agent: true, trash: true }; }
   });
 
   // Profile state (for sidebar avatar)
@@ -213,7 +212,7 @@ const DynamicSidebar = ({
     const syncNavItems = () => {
       try {
         const stored = localStorage.getItem('navItemsVisibility');
-        const defaults = { history: true, projects: true, models: true, tools: true, agent: true, trash: true };
+        const defaults = { projects: true, models: true, tools: true, agent: true, trash: true };
         setNavItemsVisibility(stored ? { ...defaults, ...JSON.parse(stored) } : defaults);
       } catch { /* keep current */ }
     };
@@ -337,7 +336,6 @@ const DynamicSidebar = ({
 
   // Active states
   const isOnHome = basePage === "home";
-  const isOnConversations = basePage === "all-chats";
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnModels = basePage === "models";
   const isOnAgent = location.pathname.startsWith("/agent") || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
@@ -363,7 +361,6 @@ const DynamicSidebar = ({
   const workspaceIcon = <KanbanSquare className="w-5 h-5" />;
 
   const primaryItems = [
-    { key: "history", label: "History", action: "navChat", onClick: () => navigate("/all-chats"), active: isOnConversations, icon: <ChatIcon className="w-5 h-5" /> },
     { key: "projects", label: "Tasks", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
   ].filter(item => navItemsVisibility[item.key] !== false);
 
