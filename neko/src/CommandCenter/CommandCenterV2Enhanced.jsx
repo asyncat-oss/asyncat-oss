@@ -447,11 +447,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setExperienceMode(mode);
     setConversationMetadata({ ...(conversationMetadata || {}), experienceMode: mode });
     if (mode === 'chat') {
-      setShowActivitySidebar(false);
-      setSidePanelTab('steps');
+      setShowTerminalDock(false);
+      if (sidePanelTab !== 'preview') {
+        setShowActivitySidebar(false);
+        setSidePanelTab('steps');
+      }
     }
     try { localStorage.setItem('asyncat_experience_mode', mode); } catch { /* localStorage may be unavailable */ }
-  }, [conversationMetadata, currentConversationId, messages.length, setConversationMetadata]);
+  }, [conversationMetadata, currentConversationId, messages.length, setConversationMetadata, sidePanelTab]);
   const handleContinueInExperienceMode = useCallback(async (targetMode) => {
     if (!currentConversationId || agentRunning || continuingMode || isGhostMode) return;
     const mode = targetMode === 'work' ? 'work' : 'chat';
@@ -763,6 +766,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const toggleSidePanelTab = useCallback((tab) => {
     if (tab === 'terminal') {
+      if (experienceMode !== 'work') return;
       setTerminalEverOpened(true);
       setShowTerminalDock((open) => {
         const next = !open;
@@ -781,7 +785,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       try { localStorage.setItem('asyncat_show_command_side_panel', String(next)); } catch { /* localStorage may be unavailable */ }
       return next;
     });
-  }, [sidePanelTab]);
+  }, [experienceMode, sidePanelTab]);
 
   useEffect(() => {
     setSidePanelWidth(workbenchPreferences.rightDockWidth);
@@ -2514,19 +2518,21 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       )}
     </div>
   );
-  const shouldRenderSidePanel = showActivitySidebar && experienceMode === 'work' && (
-    sidePanelTab === 'saved'
-    || sidePanelTab === 'preview'
-    || sidePanelTab === 'artifacts'
-    || sidePanelTab === 'artifact'
-    || sidePanelTab === 'nav'
-    || sidePanelTab === 'code'
-    || sidePanelTab === 'runtime'
-    || gitState?.detected
-    || sourceCatalog.totalCount > 0
-    || persistedAgentEvents.length > 0
-    || agentRunning
-    || agentLoadingSession
+  const shouldRenderSidePanel = showActivitySidebar && (
+    sidePanelTab === 'preview'
+    || (experienceMode === 'work' && (
+      sidePanelTab === 'saved'
+      || sidePanelTab === 'artifacts'
+      || sidePanelTab === 'artifact'
+      || sidePanelTab === 'nav'
+      || sidePanelTab === 'code'
+      || sidePanelTab === 'runtime'
+      || gitState?.detected
+      || sourceCatalog.totalCount > 0
+      || persistedAgentEvents.length > 0
+      || agentRunning
+      || agentLoadingSession
+    ))
   );
 
   const welcomeScreenJSX =
@@ -2558,7 +2564,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               )}
             </button>
           )}
-          {!isGhostMode && experienceMode === 'work' && (
+          {!isGhostMode && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('preview')}
@@ -2567,7 +2573,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
                   : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
               }`}
-              title="Web browser"
+              title={experienceMode === 'chat' ? 'Browser · not shared with Chat' : 'Browser'}
             >
               <Globe className="w-4 h-4" />
             </button>
@@ -2762,6 +2768,22 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
                   {/* Conversation actions — non-scrollable so dropdowns aren't clipped */}
                   <div className="flex shrink-0 items-center gap-1">
+                    {!isGhostMode && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSidePanelTab('preview')}
+                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
+                          showActivitySidebar && sidePanelTab === 'preview'
+                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30 midnight:text-blue-300'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
+                        }`}
+                        title={experienceMode === 'chat' ? 'Browser · not shared with Chat' : 'Browser'}
+                      >
+                        <Globe className="h-4 w-4" />
+                        <span className="hidden sm:inline">Browser</span>
+                      </button>
+                    )}
+
                     {!isGhostMode && hasConversationBranches && (
                       <div ref={branchMenuRef} className="relative">
                         <button
@@ -2917,24 +2939,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                           {gitState.changedCount || 0}
                           {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
                         </span>
-                      )}
-                    </button>
-
-                    {/* Web — always visible */}
-                    <button
-                      type="button"
-                      onClick={() => toggleSidePanelTab('preview')}
-                      className={`relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                        showActivitySidebar && sidePanelTab === 'preview'
-                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
-                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                      }`}
-                      title={effectivePreviewUrl ? `Web — ${effectivePreviewUrl}` : 'Open web browser'}
-                    >
-                      <Globe className="h-3.5 w-3.5" />
-                      Web
-                      {effectivePreviewUrl && !(showActivitySidebar && sidePanelTab === 'preview') && (
-                        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       )}
                     </button>
 
@@ -3274,6 +3278,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
               browserExecutorRef={browserExecutorRef}
+              experienceMode={experienceMode}
             />
           </div>
         </aside>
@@ -3340,6 +3345,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
               browserExecutorRef={browserExecutorRef}
+              experienceMode={experienceMode}
             />
           </div>
         </div>

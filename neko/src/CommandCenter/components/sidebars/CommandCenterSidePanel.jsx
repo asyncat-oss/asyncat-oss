@@ -13,7 +13,7 @@ const panelMeta = {
   code: { label: 'Code', icon: Code2 },
   media: { label: 'Media', icon: Image },
   saved: { label: 'Saved', icon: BookMarked },
-  preview: { label: 'Web', icon: Globe },
+  preview: { label: 'Browser', icon: Globe },
   artifacts: { label: 'Artifacts', icon: FilePlus },
   artifact: { label: 'Artifact', icon: FilePlus },
   nav: { label: 'Jump to', icon: List },
@@ -132,7 +132,7 @@ const SEARCH_ENGINES = {
 
 const BROWSER_API = `${import.meta.env.VITE_MAIN_URL || 'http://127.0.0.1:8716'}/api/browser`;
 
-function PreviewPanel({ initialUrl, browserExecutorRef }) {
+function PreviewPanel({ initialUrl, browserExecutorRef, agentControlEnabled = true }) {
   const { workbenchPreferences } = useUiPreferences();
   const [incognitoMode, setIncognitoMode] = useState(workbenchPreferences.browserProfile !== 'persistent');
   const incognitoPartition = useRef(`asyncat-web-incognito-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`).current;
@@ -680,10 +680,13 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
 
   // ── Register executor with parent ─────────────────────────────────────────
   useEffect(() => {
-    if (!browserExecutorRef || !isElectron) return;
+    if (!browserExecutorRef || !isElectron || !agentControlEnabled) {
+      if (browserExecutorRef) browserExecutorRef.current = null;
+      return undefined;
+    }
     browserExecutorRef.current = executeBrowserCommand;
     return () => { if (browserExecutorRef.current === executeBrowserCommand) browserExecutorRef.current = null; };
-  }, [browserExecutorRef, executeBrowserCommand]);
+  }, [agentControlEnabled, browserExecutorRef, executeBrowserCommand]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -828,19 +831,21 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
                 eventBus.emit('composer:prefill', prompt);
               }}
               className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-indigo-600 dark:hover:bg-gray-800 dark:hover:text-indigo-400 midnight:hover:bg-slate-800 midnight:hover:text-indigo-300"
-              title="Ask agent about this page"
+              title={agentControlEnabled ? 'Ask agent about this page' : 'Share page text with Chat'}
             >
               <Sparkles className="h-3 w-3" />
             </button>
-            <button
-              type="button"
-              onClick={() => setAgentPaused(value => !value)}
-              className={`flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-[9px] font-medium transition-colors ${agentPaused ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/30' : agentControlActive ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-              title={agentPaused ? 'Resume agent browser control' : 'Pause agent browser control'}
-            >
-              <Sparkles className={`h-3 w-3 ${agentControlActive ? 'animate-pulse' : ''}`} />
-              {agentPaused ? 'Paused' : agentControlActive ? 'Agent' : ''}
-            </button>
+            {agentControlEnabled && (
+              <button
+                type="button"
+                onClick={() => setAgentPaused(value => !value)}
+                className={`flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-[9px] font-medium transition-colors ${agentPaused ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/30' : agentControlActive ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                title={agentPaused ? 'Resume agent browser control' : 'Pause agent browser control'}
+              >
+                <Sparkles className={`h-3 w-3 ${agentControlActive ? 'animate-pulse' : ''}`} />
+                {agentPaused ? 'Paused' : agentControlActive ? 'Agent' : ''}
+              </button>
+            )}
           </>
         )}
         <button
@@ -1040,9 +1045,13 @@ function PreviewPanel({ initialUrl, browserExecutorRef }) {
                 </button>
               ))}
             </div>
-            <p className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+            <p className="flex items-center gap-1.5 text-center text-[11px] text-gray-400 dark:text-gray-500">
               {incognitoMode && <Ghost className="h-3 w-3 text-violet-500" />}
-              {incognitoMode ? 'Incognito: history, restored tabs, and persistent site data are off.' : 'Or ask the agent to browse the web for you.'}
+              {incognitoMode
+                ? 'Incognito: history, restored tabs, and persistent site data are off.'
+                : agentControlEnabled
+                  ? 'Or ask the agent to browse the web for you.'
+                  : 'Manual browsing · pages stay private until you share one with Chat.'}
             </p>
           </div>
         )}
@@ -1279,6 +1288,7 @@ export default function CommandCenterSidePanel({
   selectedArtifact = null,
   chatNavItems = [],
   browserExecutorRef = null,
+  experienceMode = 'work',
 }) {
   const currentTab = activeTab === 'git' || activeTab === 'sandboxes' ? 'code' : (activeTab || 'steps');
   const meta = panelMeta[currentTab] || panelMeta.steps;
@@ -1314,7 +1324,13 @@ export default function CommandCenterSidePanel({
         )}
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col">
+        {currentTab === 'preview' && experienceMode === 'chat' && (
+          <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-gray-100 bg-gray-50/80 px-3 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/70 midnight:text-slate-400">
+            <Lock className="h-3 w-3" />
+            Manual browser · page content is not shared with Chat
+          </div>
+        )}
         {currentTab === 'steps' && (
           <AgentActivitySidebar items={stepsItems} isLoading={stepsLoading} isRunning={isRunning} />
         )}
@@ -1337,7 +1353,11 @@ export default function CommandCenterSidePanel({
           <SavedMessagesPanel highlights={highlights} onOpenMessage={onOpenSavedMessage} />
         )}
         {currentTab === 'preview' && (
-          <PreviewPanel initialUrl={previewUrl} browserExecutorRef={browserExecutorRef} />
+          <PreviewPanel
+            initialUrl={previewUrl}
+            browserExecutorRef={browserExecutorRef}
+            agentControlEnabled={experienceMode === 'work'}
+          />
         )}
         {currentTab === 'artifacts' && (
           <ArtifactsPanel artifacts={artifacts} onSelectArtifact={onSelectArtifact} />
