@@ -466,6 +466,7 @@ export const MessageInputV2 = ({
   onSubmit,
   disabled,
   autoFocus,
+  experienceMode = "work",
   placeholder = "Ask anything...",
   maxLength = 50000,
   hasMessages = false,
@@ -499,6 +500,7 @@ export const MessageInputV2 = ({
   onAskUserAnswer,
 }) => {
   const navigate = useNavigate();
+  const isWorkExperience = experienceMode === "work";
   const [value, setValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -549,12 +551,12 @@ export const MessageInputV2 = ({
   // JSX without ever being defined).
   const allowWorkspaceAccess = false;
   const rawAgentTrigger = useMemo(
-    () => getAgentTrigger(value, cursorPosition),
-    [value, cursorPosition],
+    () => isWorkExperience ? getAgentTrigger(value, cursorPosition) : null,
+    [cursorPosition, isWorkExperience, value],
   );
   const rawFileTrigger = useMemo(
-    () => getFileTrigger(value, cursorPosition),
-    [value, cursorPosition],
+    () => isWorkExperience ? getFileTrigger(value, cursorPosition) : null,
+    [cursorPosition, isWorkExperience, value],
   );
   const agentTrigger = dismissedTrigger?.kind === "agent"
     && dismissedTrigger.value === value
@@ -597,7 +599,7 @@ export const MessageInputV2 = ({
     return fileRoots.find(root => root.id === rootId) || fileRoot || fileRoots[0] || null;
   }, [fileRoot, fileRoots, workingContext?.rootId, workingContext?.workingDir]);
   const activeWorkingContext = useMemo(() => {
-    if (!activeRoot) return null;
+    if (!isWorkExperience || !activeRoot) return null;
     const relativePath = workingContext?.relativePath || ".";
     return {
       rootId: activeRoot.id,
@@ -607,7 +609,7 @@ export const MessageInputV2 = ({
       relativePath,
       workingDir: workingContext?.workingDir || absoluteFromRoot(activeRoot.path, relativePath),
     };
-  }, [activeRoot, workingContext?.relativePath, workingContext?.workingDir]);
+  }, [activeRoot, isWorkExperience, workingContext?.relativePath, workingContext?.workingDir]);
 
   // The composer, agent, code tools, and terminal must share the same effective
   // directory. Previously the composer displayed this derived default without
@@ -691,7 +693,7 @@ export const MessageInputV2 = ({
   }, []);
 
   useEffect(() => {
-    if (!externalFileAttachment?.path) return;
+    if (!isWorkExperience || !externalFileAttachment?.path) return;
     setFileAttachments(prev => {
       const rootId = externalFileAttachment.rootId || activeWorkingContext?.rootId || "workspace";
       if (prev.some(file => file.path === externalFileAttachment.path && (file.rootId || "workspace") === rootId)) return prev;
@@ -703,9 +705,14 @@ export const MessageInputV2 = ({
       }];
     });
     requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [externalFileAttachment?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [externalFileAttachment?.nonce, isWorkExperience]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!isWorkExperience) {
+      setAgentProfiles([]);
+      setProfilesLoaded(true);
+      return undefined;
+    }
     let cancelled = false;
     profilesApi
       .listProfiles()
@@ -722,9 +729,14 @@ export const MessageInputV2 = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isWorkExperience]);
 
   useEffect(() => {
+    if (!isWorkExperience) {
+      setFileRoots([]);
+      setFileRoot(null);
+      return undefined;
+    }
     let cancelled = false;
     filesApi
       .getRoots()
@@ -741,7 +753,7 @@ export const MessageInputV2 = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isWorkExperience]);
 
   // File search effect
   useEffect(() => {
@@ -1367,10 +1379,14 @@ export const MessageInputV2 = ({
           65% { transform: scaleY(0.7); opacity: 0.78; }
         }
       `}</style>
-      <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
+      <div className={`w-full max-w-3xl mx-auto px-4 sm:px-6 ${isWorkExperience ? "py-3" : "py-2.5"}`}>
         <form onSubmit={handleSubmit}>
             <div
-              className={`bg-white px-4 pt-4 pb-3 rounded-[1.35rem] border transition-colors dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()}`}
+              className={`bg-white px-4 border transition-all dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()} ${
+                isWorkExperience
+                  ? "rounded-[1.35rem] pb-3 pt-4"
+                  : "rounded-[1.5rem] pb-2.5 pt-3.5 shadow-[0_10px_35px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_35px_rgba(0,0,0,0.16)] midnight:shadow-[0_10px_35px_rgba(0,0,0,0.2)]"
+              }`}
             >
               {(error || modelSwitchError) && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
@@ -1436,9 +1452,9 @@ export const MessageInputV2 = ({
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
-                  rows="2"
+                  rows={isWorkExperience ? 2 : 1}
                   style={{ padding: 0 }}
-                  className={`w-full resize-none bg-transparent focus:outline-none text-base leading-relaxed min-h-12 max-h-45 disabled:opacity-50 caret-gray-900 placeholder-gray-400 dark:caret-gray-100 dark:placeholder-gray-500 midnight:caret-gray-100 midnight:placeholder-gray-500 ${
+                  className={`w-full resize-none bg-transparent focus:outline-none text-base leading-relaxed max-h-45 disabled:opacity-50 caret-gray-900 placeholder-gray-400 dark:caret-gray-100 dark:placeholder-gray-500 midnight:caret-gray-100 midnight:placeholder-gray-500 ${isWorkExperience ? "min-h-12" : "min-h-8"} ${
                     highlightedSegments
                       ? "text-transparent"
                       : "text-gray-900 dark:text-gray-100 midnight:text-gray-100"
@@ -1551,7 +1567,7 @@ export const MessageInputV2 = ({
               )}
 
 
-            <div ref={toolbarRef} className="mt-2.5 flex items-center justify-between gap-2 bg-transparent text-gray-500 select-none">
+            <div ref={toolbarRef} className={`${isWorkExperience ? "mt-2.5" : "mt-1.5"} flex items-center justify-between gap-2 bg-transparent text-gray-500 select-none`}>
               <div className="flex items-center gap-1.5">
                 <div className="relative">
                   <button
@@ -1840,7 +1856,7 @@ export const MessageInputV2 = ({
               </div>
             </div>
 
-              {(activeWorkingContext || onWorkingContextChange) && (
+              {isWorkExperience && (activeWorkingContext || onWorkingContextChange) && (
                 <div className="-mx-4 px-4 pt-2.5 pb-3 mt-2 -mb-3 bg-gray-50/80 dark:bg-gray-800/40 midnight:bg-slate-800/40 flex flex-wrap items-center gap-3 select-none">
             {/* Workspace & Folder Combined Button */}
             {activeWorkingContext && (

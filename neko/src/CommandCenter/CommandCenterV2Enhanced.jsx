@@ -2651,6 +2651,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             <MessageInputV2
               key={`welcome-input-${currentConversationId || 'draft'}`}
               onSubmit={handleAgentRun}
+              experienceMode={experienceMode}
               sttReady={sttReady}
               ttsReady={ttsReady}
               voiceMode={voiceMode}
@@ -3152,6 +3153,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               <MessageInputV2
                 key={`conversation-input-${currentConversationId || 'draft'}`}
                 onSubmit={handleAgentRun}
+                experienceMode={experienceMode}
                 sttReady={sttReady}
                 ttsReady={ttsReady}
                 voiceMode={voiceMode}

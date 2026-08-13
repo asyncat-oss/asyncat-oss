@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -8,6 +8,9 @@ import {
   GraduationCap,
   History,
   KanbanSquare,
+  Check,
+  ListFilter,
+  Loader2,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -19,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
+import { chatApi } from "../CommandCenter/api/chatApi.js";
 import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import UniversalSearch from "./UniversalSearch";
@@ -79,6 +83,51 @@ SidebarNavItem.propTypes = {
   collapsed: PropTypes.bool,
 };
 
+const RecentConversationItem = memo(({ conversation, active, running, onOpen }) => {
+  const isWork = conversation.mode === "build" || conversation.mode === "work";
+  const modeLabel = isWork ? "Work" : "Chat";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(conversation.id)}
+      title={`${conversation.title || "Untitled conversation"} · ${modeLabel}`}
+      aria-current={active ? "page" : undefined}
+      className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-gray-400/40 ${
+        active
+          ? "bg-gray-100 text-gray-950 dark:bg-white/[0.07] dark:text-gray-100 midnight:bg-white/[0.06] midnight:text-slate-100"
+          : "text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
+      }`}
+    >
+      <span
+        aria-label={running ? "Generating" : modeLabel}
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          running
+            ? "animate-pulse bg-indigo-500 ring-2 ring-indigo-500/15"
+            : isWork
+              ? "bg-indigo-400/80 dark:bg-indigo-400/70"
+              : "bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600"
+        }`}
+      />
+      <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
+        {conversation.title || "Untitled conversation"}
+      </span>
+    </button>
+  );
+});
+
+RecentConversationItem.displayName = "RecentConversationItem";
+RecentConversationItem.propTypes = {
+  conversation: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    title: PropTypes.string,
+    mode: PropTypes.string,
+  }).isRequired,
+  active: PropTypes.bool,
+  running: PropTypes.bool,
+  onOpen: PropTypes.func.isRequired,
+};
+
 const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,11 +135,20 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const [updateAvailable, setUpdateAvailable] = useState(
     () => sessionStorage.getItem("asyncatUpdateAvailable") === "true",
   );
+  const [recentConversations, setRecentConversations] = useState([]);
+  const [recentMode, setRecentMode] = useState("all");
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [recentError, setRecentError] = useState(false);
+  const [showRecentFilter, setShowRecentFilter] = useState(false);
+  const recentFilterRef = useRef(null);
+  const recentRequestRef = useRef(0);
   const { sidebarState, setSidebarState, navItemsVisibility } = useUiPreferences();
   const {
     currentConversationId,
     hasActiveRuns,
     chatRunPreviews = [],
+    activeConversationIds = new Set(),
+    setConversationListRefresh,
   } = useCommandCenter();
 
   const collapsed = sidebarState === "collapsed";
@@ -104,6 +162,55 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const openCommandCenter = useCallback(() => {
     navigate(commandCenterTarget);
   }, [commandCenterTarget, navigate]);
+
+  const loadRecentConversations = useCallback(async () => {
+    const requestId = ++recentRequestRef.current;
+    setRecentLoading(true);
+    setRecentError(false);
+    try {
+      const result = await chatApi.getConversationHistory({
+        limit: 16,
+        mode: recentMode,
+        archived: false,
+      });
+      if (requestId !== recentRequestRef.current) return;
+      const conversations = [...(result?.conversations || [])]
+        .sort((a, b) => {
+          const bTime = new Date(b.last_message_at || b.updated_at || b.created_at || 0).getTime();
+          const aTime = new Date(a.last_message_at || a.updated_at || a.created_at || 0).getTime();
+          return bTime - aTime;
+        })
+        .slice(0, 7);
+      setRecentConversations(conversations);
+    } catch (error) {
+      if (requestId !== recentRequestRef.current) return;
+      console.error("Failed to load recent conversations:", error);
+      setRecentError(true);
+    } finally {
+      if (requestId === recentRequestRef.current) setRecentLoading(false);
+    }
+  }, [recentMode]);
+
+  useEffect(() => {
+    loadRecentConversations();
+  }, [loadRecentConversations]);
+
+  useEffect(() => {
+    setConversationListRefresh(() => loadRecentConversations);
+    return () => {
+      recentRequestRef.current += 1;
+      setConversationListRefresh(null);
+    };
+  }, [loadRecentConversations, setConversationListRefresh]);
+
+  useEffect(() => {
+    if (!showRecentFilter) return undefined;
+    const closeOnOutsideClick = (event) => {
+      if (!recentFilterRef.current?.contains(event.target)) setShowRecentFilter(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [showRecentFilter]);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -174,6 +281,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnTraining = location.pathname.startsWith("/training");
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
+  const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
+  const activeRecentConversationId = routeConversationId;
 
   const workItems = [
     { key: "projects", label: "Tasks", path: "/workspace", active: isOnWorkspace, icon: <KanbanSquare className={iconClass} /> },
@@ -265,6 +374,83 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-2">
+          {!collapsed ? (
+            <section className="relative mb-5 hidden sm:block" aria-label="Recent conversations">
+              <div className="flex items-center justify-between px-2.5 pb-1.5">
+                <button
+                  type="button"
+                  onClick={() => navigate("/all-chats")}
+                  className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:text-slate-300"
+                  title="View all conversations"
+                >
+                  Recent
+                </button>
+                <div ref={recentFilterRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowRecentFilter((visible) => !visible)}
+                    aria-label={`Filter recent conversations: ${recentMode}`}
+                    aria-expanded={showRecentFilter}
+                    className={`flex h-6 w-6 items-center justify-center rounded-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-gray-400/40 ${
+                      showRecentFilter || recentMode !== "all"
+                        ? "bg-gray-100 text-gray-700 dark:bg-white/[0.07] dark:text-gray-300 midnight:bg-white/[0.06] midnight:text-slate-300"
+                        : "text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-600 dark:hover:bg-white/[0.05] dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-300"
+                    }`}
+                    title="Filter recent conversations"
+                  >
+                    <ListFilter className="h-3.5 w-3.5" />
+                  </button>
+                  {showRecentFilter ? (
+                    <div className="absolute right-0 top-7 z-50 w-32 rounded-xl border border-gray-200/80 bg-white p-1.5 shadow-xl shadow-black/10 dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-900">
+                      {[['all', 'All'], ['chat', 'Chat'], ['work', 'Work']].map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => {
+                            setRecentMode(value);
+                            setShowRecentFilter(false);
+                          }}
+                          className="flex h-8 w-full items-center rounded-lg px-2.5 text-left text-xs text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-white/[0.07] dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-white/[0.06]"
+                        >
+                          <span className="flex-1">{label}</span>
+                          {recentMode === value ? <Check className="h-3.5 w-3.5" /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-px">
+                {recentLoading && recentConversations.length === 0 ? (
+                  <div className="flex h-16 items-center justify-center text-gray-400 dark:text-gray-600 midnight:text-slate-600">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : recentError ? (
+                  <button
+                    type="button"
+                    onClick={loadRecentConversations}
+                    className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.05] dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-300"
+                  >
+                    Couldn&apos;t load recents · Retry
+                  </button>
+                ) : recentConversations.length === 0 ? (
+                  <div className="px-2.5 py-2 text-xs text-gray-400 dark:text-gray-600 midnight:text-slate-600">
+                    No recent {recentMode === "all" ? "conversations" : `${recentMode} conversations`}
+                  </div>
+                ) : recentConversations.map((conversation) => (
+                  <RecentConversationItem
+                    key={conversation.id}
+                    conversation={conversation}
+                    active={conversation.id === activeRecentConversationId}
+                    running={activeConversationIds.has(conversation.id)}
+                    onOpen={(conversationId) => navigate(`/conversations/${conversationId}`)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {!collapsed ? <div className="hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Work</div> : null}
           <div className="space-y-0.5">{renderItems(workItems)}</div>
 
