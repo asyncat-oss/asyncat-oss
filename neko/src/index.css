@@ -124,6 +124,13 @@ body {
   scrollbar-color: rgba(180, 180, 180, 0.5) transparent;
 }
 
+/* The app rail lives in its own stacking context. Hide it while the embedded
+   browser owns the viewport so it cannot cover the browser's left edge. */
+body.browser-fullscreen-active [data-app-sidebar] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Override dark variant to use class instead of media query */
 @custom-variant dark (&:where(.dark, .dark *));
 

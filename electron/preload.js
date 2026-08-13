@@ -39,6 +39,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Screen Capture ───────────────────────────────────────────────────
   captureScreen:    () => ipcRenderer.invoke('screen:captureWindow'),
 
+  // ─── Embedded Browser ─────────────────────────────────────────
+  configureWebview: (payload) => ipcRenderer.invoke('browser:configure-webview', payload),
+  clearBrowserData: (payload) => ipcRenderer.invoke('browser:clear-data', payload),
+  onBrowserOpenTab: (cb) => subscribe('browser:open-tab', (_event, url) => cb(url)),
+  onBrowserDownload: (cb) => subscribe('browser:download', (_event, download) => cb(download)),
+  onBrowserShortcut: (cb) => subscribe('browser:shortcut', (_event, shortcut) => cb(shortcut)),
+
   // ─── Dock Badge ───────────────────────────────────────────────────────
   setDockBadge:     (count) => ipcRenderer.send('app:badge', count),
 

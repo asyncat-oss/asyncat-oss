@@ -202,6 +202,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   return (
     <>
       <aside
+        data-app-sidebar
         className={`fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-gray-200/70 bg-white transition-[width] duration-200 ease-out dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 ${
           collapsed ? "w-[72px]" : "w-[72px] sm:w-64"
         }`}

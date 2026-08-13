@@ -20,12 +20,14 @@ import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel, extractLocalhostUrl, buildEventSegments } from './components/agent/AgentRunFeed';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
+import TerminalPanel from './components/sidebars/TerminalPanel';
 import ChatFloatingNav from './components/nav/ChatFloatingNav';
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
 import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useAgentNotifications } from './hooks/useAgentNotifications';
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
+import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 import { chatApi, agentApi, gitApi } from "./api";
 import { audioApi } from "../Settings/settingApi.js";
 import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
@@ -54,6 +56,7 @@ import {
   Globe,
   List,
   SquareTerminal,
+  FolderOpen,
 } from "lucide-react";
 
 import {
@@ -227,6 +230,7 @@ function SkillLearnedToast({ toast, onDismiss }) {
 
 const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
+  const { workbenchPreferences, setWorkbenchPreference } = useUiPreferences();
   const navigate = useNavigate();
   const fallbackAgentAbortControllersRef = useRef(new Map());
   const fallbackRunStartedAtRef = useRef(null);
@@ -297,19 +301,40 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [recentConversationsError, setRecentConversationsError] = useState(null);
   const [showActivitySidebar, setShowActivitySidebar] = useState(() => {
     try {
-      return localStorage.getItem('asyncat_show_command_side_panel') === 'true';
+      return workbenchPreferences.restoreOpenPanels && localStorage.getItem('asyncat_show_command_side_panel') === 'true';
     } catch {
       return false;
     }
   });
-  const [sidePanelTab, setSidePanelTab] = useState('steps');
+  const [sidePanelTab, setSidePanelTab] = useState(() => {
+    try {
+      const saved = localStorage.getItem('asyncat_command_side_panel_tab');
+      return ['steps', 'code', 'media', 'history', 'saved', 'preview', 'artifacts', 'nav', 'runtime'].includes(saved) ? saved : 'steps';
+    } catch { return 'steps'; }
+  });
   const [prevSidePanelTab, setPrevSidePanelTab] = useState('steps');
-  const [sidePanelWidth, setSidePanelWidth] = useState(384);
+  const [sidePanelWidth, setSidePanelWidth] = useState(workbenchPreferences.rightDockWidth);
+  const [bottomDockHeight, setBottomDockHeight] = useState(workbenchPreferences.bottomDockHeight);
+  const [showTerminalDock, setShowTerminalDock] = useState(() => {
+    try {
+      return workbenchPreferences.restoreOpenPanels && localStorage.getItem('asyncat_show_terminal_dock') === 'true';
+    } catch { return false; }
+  });
+  const [terminalEverOpened, setTerminalEverOpened] = useState(showTerminalDock);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
   const panelDragRef = useRef({ active: false, startX: 0, startW: 0 });
+  const bottomDockDragRef = useRef({ active: false, startY: 0, startH: 0 });
   const [gitState, setGitState] = useState(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitError, setGitError] = useState(null);
+
+  // Migrate any live state left by the former side-panel terminal. The terminal
+  // is now exclusively rendered by its dedicated bottom/right dock.
+  useEffect(() => {
+    if (sidePanelTab !== 'terminal') return;
+    setSidePanelTab('steps');
+    setShowActivitySidebar(false);
+  }, [sidePanelTab]);
   const [externalFileAttachment, setExternalFileAttachment] = useState(null);
   const [multimodalCapabilities, setMultimodalCapabilities] = useState(null);
   const [runtimeStatus, setRuntimeStatus] = useState(null);
@@ -749,14 +774,46 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [refreshGitState]);
 
   const toggleSidePanelTab = useCallback((tab) => {
+    if (tab === 'terminal') {
+      setTerminalEverOpened(true);
+      setShowTerminalDock((open) => {
+        const next = !open;
+        try { localStorage.setItem('asyncat_show_terminal_dock', String(next)); } catch { /* localStorage may be unavailable */ }
+        return next;
+      });
+      return;
+    }
     setShowActivitySidebar(prev => {
       const shouldClose = prev && sidePanelTab === tab;
       const next = !shouldClose;
-      if (next) setSidePanelTab(tab);
+      if (next) {
+        setSidePanelTab(tab);
+        try { localStorage.setItem('asyncat_command_side_panel_tab', tab); } catch { /* localStorage may be unavailable */ }
+      }
       try { localStorage.setItem('asyncat_show_command_side_panel', String(next)); } catch { /* localStorage may be unavailable */ }
       return next;
     });
   }, [sidePanelTab]);
+
+  useEffect(() => {
+    setSidePanelWidth(workbenchPreferences.rightDockWidth);
+  }, [workbenchPreferences.rightDockWidth]);
+
+  useEffect(() => {
+    setBottomDockHeight(workbenchPreferences.bottomDockHeight);
+  }, [workbenchPreferences.bottomDockHeight]);
+
+  // Workbench shortcut: Ctrl/Cmd + ` toggles the interactive terminal dock.
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === '`') {
+        event.preventDefault();
+        toggleSidePanelTab('terminal');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleSidePanelTab]);
 
   const openRuntimePanel = useCallback(() => {
     setSidePanelTab('runtime');
@@ -769,21 +826,44 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   useEffect(() => {
     const onMove = (e) => {
       const d = panelDragRef.current;
-      if (!d.active) return;
-      const dx = d.startX - e.clientX;
-      const w = Math.max(280, Math.min(window.innerWidth * 0.5, d.startW + dx));
-      setSidePanelWidth(w);
+      if (d.active) {
+        const dx = d.startX - e.clientX;
+        const w = Math.max(320, Math.min(window.innerWidth * 0.5, d.startW + dx));
+        d.currentW = w;
+        setSidePanelWidth(w);
+      }
+      const bottom = bottomDockDragRef.current;
+      if (bottom.active) {
+        const dy = bottom.startY - e.clientY;
+        const h = Math.max(180, Math.min(window.innerHeight * 0.65, bottom.startH + dy));
+        bottom.currentH = h;
+        setBottomDockHeight(h);
+      }
     };
-    const onUp = () => { panelDragRef.current.active = false; };
+    const onUp = () => {
+      if (panelDragRef.current.active && panelDragRef.current.currentW) {
+        setWorkbenchPreference('rightDockWidth', panelDragRef.current.currentW);
+      }
+      if (bottomDockDragRef.current.active && bottomDockDragRef.current.currentH) {
+        setWorkbenchPreference('bottomDockHeight', bottomDockDragRef.current.currentH);
+      }
+      panelDragRef.current.active = false;
+      bottomDockDragRef.current.active = false;
+    };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, []);
+  }, [setWorkbenchPreference]);
 
   const handlePanelDragStart = useCallback((e) => {
-    panelDragRef.current = { active: true, startX: e.clientX, startW: sidePanelWidth };
+    panelDragRef.current = { active: true, startX: e.clientX, startW: sidePanelWidth, currentW: sidePanelWidth };
     e.preventDefault();
   }, [sidePanelWidth]);
+
+  const handleBottomDockDragStart = useCallback((event) => {
+    bottomDockDragRef.current = { active: true, startY: event.clientY, startH: bottomDockHeight, currentH: bottomDockHeight };
+    event.preventDefault();
+  }, [bottomDockHeight]);
 
   const handleViewArtifactInPanel = useCallback((artifact) => {
     setSelectedArtifact(artifact);
@@ -1406,7 +1486,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             setManualPreviewUrl(url);
             setShowActivitySidebar(true);
             setSidePanelTab('preview');
-            try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch {}
+            try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* storage may be unavailable */ }
           }
         }
 
@@ -2182,7 +2262,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       setManualPreviewUrl(url);
       setShowActivitySidebar(true);
       setSidePanelTab('preview');
-      try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch {}
+      try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* storage may be unavailable */ }
     };
     window.addEventListener('asyncat-open-preview', handler);
     return () => window.removeEventListener('asyncat-open-preview', handler);
@@ -2196,7 +2276,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     if (detectedPreviewUrl && prevDetectedUrlRef.current === null) {
       setShowActivitySidebar(true);
       setSidePanelTab('preview');
-      try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch {}
+      try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* storage may be unavailable */ }
     }
     prevDetectedUrlRef.current = detectedPreviewUrl;
   }, [detectedPreviewUrl]);
@@ -2448,7 +2528,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     || sidePanelTab === 'nav'
     || sidePanelTab === 'code'
     || sidePanelTab === 'runtime'
-    || sidePanelTab === 'terminal'
     || gitState?.detected
     || sourceCatalog.totalCount > 0
     || persistedAgentEvents.length > 0
@@ -2459,7 +2538,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const welcomeScreenJSX =
     !hasConversationContent ? (
-      <div className="flex flex-col min-h-full relative">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2">
           {modeSwitcher}
         </div>
@@ -2505,7 +2584,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               type="button"
               onClick={() => toggleSidePanelTab('terminal')}
               className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
-                showActivitySidebar && sidePanelTab === 'terminal'
+                showTerminalDock
                   ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                   : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
               }`}
@@ -2878,7 +2957,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       type="button"
                       onClick={() => toggleSidePanelTab('terminal')}
                       className={`relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                        showActivitySidebar && sidePanelTab === 'terminal'
+                        showTerminalDock
                           ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                           : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
                       }`}
@@ -2886,7 +2965,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     >
                       <SquareTerminal className="h-3.5 w-3.5" />
                       Terminal
-                      {detectedPreviewUrl && sidePanelTab !== 'terminal' && (
+                      {detectedPreviewUrl && !showTerminalDock && (
                         <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                           <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
@@ -3133,6 +3212,34 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             </div>
           </>
         )}
+
+        {terminalEverOpened && (!isXLScreen || workbenchPreferences.terminalPosition === 'bottom') && (
+          <section
+            style={{ height: showTerminalDock && experienceMode === 'work' ? bottomDockHeight : 0 }}
+            className="relative shrink-0 overflow-hidden border-t border-gray-200 bg-white transition-[height] duration-150 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
+            aria-hidden={!showTerminalDock || experienceMode !== 'work'}
+          >
+            {showTerminalDock && experienceMode === 'work' && (
+              <div onMouseDown={handleBottomDockDragStart} className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize hover:bg-indigo-400/20" title="Drag to resize terminal" />
+            )}
+            <div className="flex h-full min-h-0 flex-col pt-1">
+              <div className="flex h-8 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-700 midnight:border-slate-700">
+                <SquareTerminal className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Terminal</span>
+                {workingContext?.workingDir && (
+                  <span className="ml-2 flex min-w-0 items-center gap-1 text-[10px] text-gray-400" title={workingContext.workingDir}>
+                    <FolderOpen className="h-3 w-3 shrink-0" /><span className="truncate">{workingContext.workingDir}</span>
+                  </span>
+                )}
+                <div className="flex-1" />
+                <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock && experienceMode === 'work'} />
+              </div>
+            </div>
+          </section>
+        )}
       </div>
 
       {shouldRenderSidePanel && (
@@ -3151,6 +3258,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           <div className="flex-1 min-w-0">
             <CommandCenterSidePanel
               activeTab={sidePanelTab}
+              onClose={() => {
+                setShowActivitySidebar(false);
+                try { localStorage.setItem('asyncat_show_command_side_panel', 'false'); } catch { /* noop */ }
+              }}
               onBack={handleArtifactPanelBack}
               stepsItems={agentActivityItems}
               stepsLoading={agentLoadingSession}
@@ -3184,6 +3295,27 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               agentTerminalOutput={agentTerminalOutput}
               browserExecutorRef={browserExecutorRef}
             />
+          </div>
+        </aside>
+      )}
+
+      {terminalEverOpened && isXLScreen && workbenchPreferences.terminalPosition === 'right' && (
+        <aside
+          style={{ width: showTerminalDock && experienceMode === 'work' ? sidePanelWidth : 0 }}
+          className="relative hidden shrink-0 overflow-hidden border-l border-gray-200 bg-white transition-[width] duration-150 xl:flex dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
+          aria-hidden={!showTerminalDock || experienceMode !== 'work'}
+        >
+          {showTerminalDock && experienceMode === 'work' && (
+            <div onMouseDown={handlePanelDragStart} className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize hover:bg-indigo-400/20" title="Drag to resize terminal" />
+          )}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex h-10 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-700 midnight:border-slate-700">
+              <SquareTerminal className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Terminal</span>
+              <div className="flex-1" />
+              <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
+            </div>
+            <div className="min-h-0 flex-1"><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock && experienceMode === 'work'} /></div>
           </div>
         </aside>
       )}

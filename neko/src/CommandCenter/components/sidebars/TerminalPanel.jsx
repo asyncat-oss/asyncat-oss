@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { SquareTerminal, Plus, X, Bot, Square, RefreshCw, Globe, FolderOpen } from 'lucide-react';
+import { SquareTerminal, Plus, X, Bot, Square, RefreshCw, Globe, FolderOpen, Copy, Eraser } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
+import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
@@ -95,11 +96,12 @@ async function loadXterm() {
 
 // ─── Interactive PTY terminal (Electron only) ─────────────────────────────────
 
-function XtermInstance({ cwd, visible }) {
+function XtermInstance({ cwd, shell, fontSize, visible, onRegisterControls }) {
   const containerRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
   const termIdRef = useRef(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -110,7 +112,7 @@ function XtermInstance({ cwd, visible }) {
 
       const term = new Terminal({
         cursorBlink: true,
-        fontSize: 13,
+        fontSize,
         fontFamily: '"Cascadia Code", "Fira Mono", Menlo, Monaco, monospace',
         theme: getXtermTheme(),
         allowProposedApi: true,
@@ -123,20 +125,40 @@ function XtermInstance({ cwd, visible }) {
       termRef.current = term;
       fitRef.current = fitAddon;
 
-      const termId = await window.electronAPI.terminalCreate({ cwd: cwd || undefined });
+      const created = await window.electronAPI.terminalCreate({ cwd: cwd || undefined, shell });
+      const termId = typeof created === 'string' ? created : created?.id;
+      if (!termId) throw new Error('Terminal process could not be created.');
       if (disposed) { window.electronAPI.terminalKill(termId); return; }
       termIdRef.current = termId;
 
       window.electronAPI.onTerminalData(termId, (data) => { if (!disposed) term.write(data); });
       window.electronAPI.onTerminalExit(termId, () => {
-        if (!disposed) term.writeln('\r\n\x1b[90m[Process exited — press any key to close]\x1b[0m');
+        if (!disposed) term.writeln('\r\n\x1b[90m[Process exited]\x1b[0m');
       });
       term.onData((data) => { if (!disposed) window.electronAPI.terminalInput(termId, data); });
       term.onResize(({ cols, rows }) => { if (!disposed) window.electronAPI.terminalResize(termId, cols, rows); });
+      onRegisterControls?.({
+        clear: () => term.clear(),
+        copy: async () => {
+          const previousSelection = term.getSelection();
+          if (!previousSelection) term.selectAll();
+          const text = previousSelection || term.getSelection();
+          if (text) await navigator.clipboard.writeText(text);
+          if (!previousSelection) term.clearSelection();
+        },
+        focus: () => term.focus(),
+      });
+      if (visible) requestAnimationFrame(() => term.focus());
 
       const observer = new MutationObserver(() => { term.options.theme = getXtermTheme(); });
       observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
       termRef._themeObserver = observer;
+    }).catch((reason) => {
+      if (!disposed) {
+        const message = reason?.message || 'Terminal process could not be started.';
+        setError(message);
+        termRef.current?.writeln?.(`\r\n\x1b[31m[${message}]\x1b[0m`);
+      }
     });
 
     return () => {
@@ -149,6 +171,7 @@ function XtermInstance({ cwd, visible }) {
         termIdRef.current = null;
       }
       if (termRef.current) { termRef.current.dispose(); termRef.current = null; }
+      onRegisterControls?.(null);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -159,13 +182,21 @@ function XtermInstance({ cwd, visible }) {
         fitRef.current?.fit();
         const { cols, rows } = termRef.current;
         if (termIdRef.current) window.electronAPI?.terminalResize(termIdRef.current, cols, rows);
-      } catch {}
+        termRef.current?.focus();
+      } catch { /* terminal may be between mounts */ }
     }, 60);
     return () => clearTimeout(id);
   }, [visible]);
 
   return (
-    <div ref={containerRef} className="h-full w-full" style={{ display: visible ? 'block' : 'none' }} />
+    <div className="relative h-full w-full" style={{ display: visible ? 'block' : 'none' }}>
+      <div ref={containerRef} className="h-full w-full" />
+      {error && (
+        <div className="absolute inset-x-3 top-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-sm dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+          Could not start the terminal: {error}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -210,7 +241,7 @@ function AgentOutputInstance({ lines, visible }) {
       termRef.current = null;
       writtenRef.current = 0;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!termRef.current || !lines?.length) return;
@@ -223,7 +254,7 @@ function AgentOutputInstance({ lines, visible }) {
 
   useEffect(() => {
     if (!visible || !termRef._fit || !termRef.current) return;
-    const id = setTimeout(() => { try { termRef._fit?.fit(); } catch {} }, 60);
+    const id = setTimeout(() => { try { termRef._fit?.fit(); } catch { /* terminal may be between mounts */ } }, 60);
     return () => clearTimeout(id);
   }, [visible]);
 
@@ -280,7 +311,7 @@ function AgentSessionInstance({ lastOutput, visible }) {
       termRef.current = null;
       fitRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // On each poll: if output changed, reset xterm and rewrite the new snapshot
   useEffect(() => {
@@ -294,7 +325,7 @@ function AgentSessionInstance({ lastOutput, visible }) {
 
   useEffect(() => {
     if (!visible || !fitRef.current || !termRef.current) return;
-    const id = setTimeout(() => { try { fitRef.current?.fit(); } catch {} }, 60);
+    const id = setTimeout(() => { try { fitRef.current?.fit(); } catch { /* terminal may be between mounts */ } }, 60);
     return () => clearTimeout(id);
   }, [visible]);
 
@@ -460,7 +491,8 @@ let counter = 0;
 const AGENT_TAB_ID = '__agent_output__';
 const POLL_MS = 3000;
 
-export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
+export default function TerminalPanel({ workingDir = null, agentOutput = [], visible = true }) {
+  const { workbenchPreferences } = useUiPreferences();
   const [tabs, setTabs] = useState([]);
   const [activeId, setActiveId] = useState(AGENT_TAB_ID);
   const [agentSessions, setAgentSessions] = useState([]);
@@ -471,6 +503,7 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
     } catch { return new Set(); }
   });
   const [killingKeys, setKillingKeys] = useState(new Set());
+  const terminalControlsRef = useRef(new Map());
 
   // ── Poll agent sessions every 3 s ────────────────────────────────────────
   // Track when each session was first seen as stopped so we can auto-dismiss
@@ -490,7 +523,7 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
             setDismissedSessions(prev => {
               if (prev.has(s.key)) return prev;
               const next = new Set([...prev, s.key]);
-              try { sessionStorage.setItem('asyncat_dismissed_agent_sessions', JSON.stringify([...next])); } catch {}
+              try { sessionStorage.setItem('asyncat_dismissed_agent_sessions', JSON.stringify([...next])); } catch { /* storage may be unavailable */ }
               return next;
             });
           }
@@ -504,24 +537,40 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
     poll();
     const id = setInterval(poll, POLL_MS);
     return () => { mounted = false; clearInterval(id); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── User PTY tab management ──────────────────────────────────────────────
   const addTab = useCallback(() => {
     const id = `term_${++counter}`;
-    // Always label user shells as "shell" to avoid confusion with agent sessions
-    const label = 'shell';
-    setTabs(prev => [...prev, { id, label, cwd: workingDir }]);
+    const shellNames = { auto: 'Shell', pwsh: 'PowerShell 7', powershell: 'PowerShell', cmd: 'Command Prompt', zsh: 'zsh', bash: 'bash' };
+    const cwd = workbenchPreferences.terminalStartDirectory === 'working' ? workingDir : null;
+    const folder = cwd ? String(cwd).split(/[\\/]/).filter(Boolean).pop() : 'Home';
+    const label = `${shellNames[workbenchPreferences.terminalShell] || 'Shell'} · ${folder || 'Home'}`;
+    setTabs(prev => [...prev, {
+      id,
+      label,
+      cwd,
+      shell: workbenchPreferences.terminalShell,
+      generation: 0,
+    }]);
     setActiveId(id);
-  }, [workingDir]);
+  }, [workbenchPreferences.terminalShell, workbenchPreferences.terminalStartDirectory, workingDir]);
 
   const closeTab = useCallback((id) => {
+    if (workbenchPreferences.terminalConfirmClose && !window.confirm('Stop this terminal process and close its tab?')) return;
     setTabs(prev => {
       const next = prev.filter(t => t.id !== id);
       setActiveId(cur => cur === id ? (next[next.length - 1]?.id ?? AGENT_TAB_ID) : cur);
       return next;
     });
-  }, []);
+    terminalControlsRef.current.delete(id);
+  }, [workbenchPreferences.terminalConfirmClose]);
+
+  const restartActiveTerminal = useCallback(() => {
+    setTabs((current) => current.map((tab) => tab.id === activeId
+      ? { ...tab, generation: (tab.generation || 0) + 1 }
+      : tab));
+  }, [activeId]);
 
   // Open first PTY terminal automatically in Electron
   useEffect(() => {
@@ -532,7 +581,7 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
   const dismissAgentSession = useCallback((key) => {
     setDismissedSessions(prev => {
       const next = new Set([...prev, key]);
-      try { sessionStorage.setItem('asyncat_dismissed_agent_sessions', JSON.stringify([...next])); } catch {}
+      try { sessionStorage.setItem('asyncat_dismissed_agent_sessions', JSON.stringify([...next])); } catch { /* storage may be unavailable */ }
       return next;
     });
     setActiveId(cur => cur === key ? AGENT_TAB_ID : cur);
@@ -570,7 +619,7 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
         }`}
       >
         <Bot className="h-3 w-3 shrink-0" />
-        <span className="max-w-[6rem] truncate">Agent</span>
+        <span className="max-w-[7rem] truncate">Agent output</span>
         {agentOutput.length > 0 && activeId !== AGENT_TAB_ID && (
           <span className="ml-0.5 flex h-1.5 w-1.5 rounded-full bg-indigo-500" />
         )}
@@ -616,6 +665,15 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
         </button>
       )}
 
+      <div className="flex-1" />
+      {hasElectron && tabs.some(tab => tab.id === activeId) && (
+        <>
+          <button type="button" onClick={() => terminalControlsRef.current.get(activeId)?.copy?.()} className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200" title="Copy terminal contents"><Copy className="h-3.5 w-3.5" /></button>
+          <button type="button" onClick={() => terminalControlsRef.current.get(activeId)?.clear?.()} className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200" title="Clear terminal"><Eraser className="h-3.5 w-3.5" /></button>
+          <button type="button" onClick={restartActiveTerminal} className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200" title="Restart terminal"><RefreshCw className="h-3.5 w-3.5" /></button>
+        </>
+      )}
+
     </div>
   );
 
@@ -627,7 +685,7 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
         className="absolute inset-0 p-1"
         style={{ display: activeId === AGENT_TAB_ID ? 'block' : 'none' }}
       >
-        <AgentOutputInstance lines={agentOutput} visible={activeId === AGENT_TAB_ID} />
+        <AgentOutputInstance lines={agentOutput} visible={visible && activeId === AGENT_TAB_ID} />
       </div>
 
       {/* Agent session views — always mounted once visible so xterm stays alive */}
@@ -640,7 +698,7 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
           <AgentSessionStatusBar session={s} onKill={handleKillSession} killing={killingKeys.has(s.key)} />
           <div className="relative min-h-0 flex-1">
             <div className="absolute inset-0 p-1">
-              <AgentSessionInstance lastOutput={s.lastOutput} visible={activeId === s.key} />
+                <AgentSessionInstance lastOutput={s.lastOutput} visible={visible && activeId === s.key} />
             </div>
           </div>
         </div>
@@ -648,8 +706,18 @@ export default function TerminalPanel({ workingDir = null, agentOutput = [] }) {
 
       {/* User PTY tabs — always mounted so the PTY process stays alive */}
       {tabs.map(tab => (
-        <div key={tab.id} className="absolute inset-1">
-          <XtermInstance cwd={tab.cwd} visible={tab.id === activeId} />
+        <div key={tab.id} className="absolute inset-1" style={{ display: visible && tab.id === activeId ? 'block' : 'none' }}>
+          <XtermInstance
+            key={`${tab.id}-${tab.generation || 0}`}
+            cwd={tab.cwd}
+            shell={tab.shell}
+            fontSize={workbenchPreferences.terminalFontSize}
+            visible={visible && tab.id === activeId}
+            onRegisterControls={(controls) => {
+              if (controls) terminalControlsRef.current.set(tab.id, controls);
+              else terminalControlsRef.current.delete(tab.id);
+            }}
+          />
         </div>
       ))}
 

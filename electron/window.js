@@ -2,7 +2,7 @@
 import { BrowserWindow, shell } from 'electron';
 import {
   NEKO_INDEX, PRELOAD_PATH,
-  ICONS, IS_DEV, IS_MAC, APP_NAME,
+  ICONS, IS_DEV, IS_MAC, APP_NAME, FRONTEND_PORT,
 } from './constants.js';
 
 let mainWindow = null;
@@ -57,19 +57,23 @@ export function createWindow() {
 
   // ─── Open external links in the OS browser ─────────────────────────
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://localhost') || url.startsWith('file://')) {
-      return { action: 'allow' };
-    }
-    shell.openExternal(url);
+    try {
+      const target = new URL(url);
+      if (target.protocol === 'http:' || target.protocol === 'https:') shell.openExternal(url).catch(() => {});
+    } catch { /* deny malformed and privileged URLs */ }
     return { action: 'deny' };
   });
 
   // ─── Handle navigation to external URLs ─────────────────────────────
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('http://localhost') && !url.startsWith('file://')) {
-      event.preventDefault();
-      shell.openExternal(url);
-    }
+    let target;
+    try { target = new URL(url); } catch { event.preventDefault(); return; }
+    const isAppOrigin = target.protocol === 'http:'
+      && ['localhost', '127.0.0.1'].includes(target.hostname)
+      && target.port === String(FRONTEND_PORT);
+    if (isAppOrigin) return;
+    event.preventDefault();
+    if (target.protocol === 'http:' || target.protocol === 'https:') shell.openExternal(url).catch(() => {});
   });
 
   // ─── Cleanup ────────────────────────────────────────────────────────

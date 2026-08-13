@@ -608,6 +608,16 @@ export const MessageInputV2 = ({
       workingDir: workingContext?.workingDir || absoluteFromRoot(activeRoot.path, relativePath),
     };
   }, [activeRoot, workingContext?.relativePath, workingContext?.workingDir]);
+
+  // The composer, agent, code tools, and terminal must share the same effective
+  // directory. Previously the composer displayed this derived default without
+  // lifting it to the command-center context, so terminals silently opened in
+  // the Electron process directory instead of the folder shown to the user.
+  useEffect(() => {
+    if (!workingContext && activeWorkingContext && onWorkingContextChange) {
+      onWorkingContextChange(activeWorkingContext);
+    }
+  }, [activeWorkingContext, onWorkingContextChange, workingContext]);
   const activeContextLabel = labelForWorkingContext(activeWorkingContext, activeRoot);
   const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {

@@ -7,6 +7,7 @@ import {
   Database,
   Info,
   Palette,
+  AppWindow,
   Plug,
   Server,
   UserRound,
@@ -21,6 +22,7 @@ import UpdateSection from './UpdateSection';
 import StorageSection from './StorageSection';
 import IntegrationsSection from './IntegrationsSection';
 import RuntimeSection from './RuntimeSection';
+import WorkbenchSection from './WorkbenchSection';
 
 const TAB_ALIASES = {
   general: 'profile',
@@ -68,6 +70,13 @@ const SettingsPage = () => {
       label: 'Connections',
       description: 'External services available to Asyncat and its agents.',
       icon: Plug,
+    },
+    {
+      id: 'workbench',
+      group: 'App',
+      label: 'Workbench',
+      description: 'Browser, terminal, panel layout, and local browsing data.',
+      icon: AppWindow,
     },
     {
       id: 'runtime',
@@ -161,6 +170,8 @@ const SettingsPage = () => {
         return <AppearanceSection theme={theme} setThemeMode={setTheme} />;
       case 'connections':
         return <IntegrationsSection />;
+      case 'workbench':
+        return <WorkbenchSection />;
       case 'runtime':
         return <RuntimeSection />;
       case 'advanced':

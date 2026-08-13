@@ -620,6 +620,21 @@ CREATE TABLE IF NOT EXISTS app_config (
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+-- Local browsing history for the isolated Asyncat browser. Cookies, cache,
+-- downloads, and site permissions remain owned by Electron's session layer.
+CREATE TABLE IF NOT EXISTS browser_history (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  url        TEXT NOT NULL,
+  title      TEXT NOT NULL DEFAULT '',
+  visited_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_browser_history_user_visited
+  ON browser_history(user_id, visited_at DESC);
+CREATE INDEX IF NOT EXISTS idx_browser_history_user_url
+  ON browser_history(user_id, url);
+
 -- ─── Training / Fine-Tuning Jobs ──────────────────────────────────────────────
 -- Persists LoRA fine-tuning job state so long-running training survives page
 -- reloads and shows in history. Follows the agent_sandbox_jobs conventions.

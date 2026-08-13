@@ -21,6 +21,57 @@ const DEFAULT_NAV_ITEMS = {
   trash: true,
 };
 
+const DEFAULT_WORKBENCH_PREFERENCES = {
+  restoreOpenPanels: true,
+  terminalPosition: 'bottom',
+  terminalShell: 'auto',
+  terminalStartDirectory: 'working',
+  terminalFontSize: 13,
+  terminalConfirmClose: true,
+  rightDockWidth: 420,
+  bottomDockHeight: 280,
+  browserSearchEngine: 'brave',
+  browserRestoreTabs: true,
+  browserProfile: 'incognito',
+  browserOpenLinks: 'internal',
+  browserDeveloperTools: false,
+  browserHistoryEnabled: true,
+};
+
+const WORKBENCH_ENUMS = {
+  terminalPosition: ['bottom', 'right'],
+  terminalShell: ['auto', 'pwsh', 'powershell', 'cmd', 'zsh', 'bash'],
+  terminalStartDirectory: ['working', 'home'],
+  browserSearchEngine: ['brave', 'google', 'duckduckgo', 'bing'],
+  browserProfile: ['incognito', 'persistent'],
+  browserOpenLinks: ['internal', 'system'],
+};
+
+const normalizeWorkbenchPreferences = (value = {}) => {
+  const next = { ...DEFAULT_WORKBENCH_PREFERENCES, ...(value && typeof value === 'object' ? value : {}) };
+  // Migrate the first implementation's "private" label to the clearer,
+  // stricter incognito mode without losing any other saved preferences.
+  if (next.browserProfile === 'private') next.browserProfile = 'incognito';
+  Object.entries(WORKBENCH_ENUMS).forEach(([key, allowed]) => {
+    if (!allowed.includes(next[key])) next[key] = DEFAULT_WORKBENCH_PREFERENCES[key];
+  });
+  next.terminalFontSize = Math.min(20, Math.max(10, Number(next.terminalFontSize) || 13));
+  next.rightDockWidth = Math.min(900, Math.max(320, Number(next.rightDockWidth) || 420));
+  next.bottomDockHeight = Math.min(600, Math.max(180, Number(next.bottomDockHeight) || 280));
+  ['restoreOpenPanels', 'terminalConfirmClose', 'browserRestoreTabs', 'browserDeveloperTools', 'browserHistoryEnabled']
+    .forEach((key) => { next[key] = Boolean(next[key]); });
+  return next;
+};
+
+const loadWorkbenchPreferences = () => {
+  try {
+    const stored = localStorage.getItem('workbenchPreferences');
+    return normalizeWorkbenchPreferences(stored ? JSON.parse(stored) : {});
+  } catch {
+    return { ...DEFAULT_WORKBENCH_PREFERENCES };
+  }
+};
+
 const loadTheme = () => {
   const stored = localStorage.getItem('theme');
   return ['light', 'dark', 'midnight'].includes(stored) ? stored : 'system';
@@ -57,6 +108,7 @@ export const UiPreferencesProvider = ({ children }) => {
     () => localStorage.getItem('pageTransitions') !== 'off',
   );
   const [navItemsVisibility, setNavItemsVisibility] = useState(loadNavItems);
+  const [workbenchPreferences, setWorkbenchPreferences] = useState(loadWorkbenchPreferences);
 
   useEffect(() => {
     applyTheme(theme);
@@ -92,6 +144,9 @@ export const UiPreferencesProvider = ({ children }) => {
       if (!event.key || event.key === 'navItemsVisibility') {
         setNavItemsVisibility(loadNavItems());
       }
+      if (!event.key || event.key === 'workbenchPreferences') {
+        setWorkbenchPreferences(loadWorkbenchPreferences());
+      }
     };
 
     window.addEventListener('storage', syncFromStorage);
@@ -124,6 +179,29 @@ export const UiPreferencesProvider = ({ children }) => {
     });
   }, []);
 
+  const setWorkbenchPreference = useCallback((key, value) => {
+    setWorkbenchPreferences((current) => {
+      const next = normalizeWorkbenchPreferences({ ...current, [key]: value });
+      localStorage.setItem('workbenchPreferences', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('workbench-preferences-changed', { detail: next }));
+      return next;
+    });
+  }, []);
+
+  const resetWorkbenchLayout = useCallback(() => {
+    setWorkbenchPreferences((current) => {
+      const next = normalizeWorkbenchPreferences({
+        ...current,
+        terminalPosition: DEFAULT_WORKBENCH_PREFERENCES.terminalPosition,
+        rightDockWidth: DEFAULT_WORKBENCH_PREFERENCES.rightDockWidth,
+        bottomDockHeight: DEFAULT_WORKBENCH_PREFERENCES.bottomDockHeight,
+      });
+      localStorage.setItem('workbenchPreferences', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('workbench-preferences-changed', { detail: next }));
+      return next;
+    });
+  }, []);
+
   const value = useMemo(() => ({
     theme,
     setTheme,
@@ -133,6 +211,9 @@ export const UiPreferencesProvider = ({ children }) => {
     setPageTransitionsEnabled,
     navItemsVisibility,
     toggleNavItem,
+    workbenchPreferences,
+    setWorkbenchPreference,
+    resetWorkbenchLayout,
   }), [
     navItemsVisibility,
     pageTransitionsEnabled,
@@ -142,6 +223,9 @@ export const UiPreferencesProvider = ({ children }) => {
     sidebarState,
     theme,
     toggleNavItem,
+    workbenchPreferences,
+    setWorkbenchPreference,
+    resetWorkbenchLayout,
   ]);
 
   return (

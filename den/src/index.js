@@ -44,6 +44,9 @@ import searchRouter from './search/searchRouter.js';
 // ─── Training / Fine-Tuning ───────────────────────────────────────────────────
 import trainingRouter from './ai/routes/trainingRoutes.js';
 
+// Local browser history (cookies/cache remain in Electron sessions)
+import browserRouter from './browser/browserRouter.js';
+
 // ─── Integrations ─────────────────────────────────────────────────────────────
 import integrationsRouter from './integrations/integrationsRouter.js';
 
@@ -146,6 +149,9 @@ app.use('/api/integrations', integrationsRouter);
 
 // ─── Routes: Search ───────────────────────────────────────────────────────────
 app.use('/api/search', searchRouter);
+
+// Routes: Browser
+app.use('/api/browser', browserRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training', trainingRouter);
