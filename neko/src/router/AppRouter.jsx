@@ -20,6 +20,7 @@ import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Models/ModelsPage';
 import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
 import AgentPage from '../Agent/AgentPage';
+import SchedulerPage from '../Scheduler/SchedulerPage';
 import WorkflowsPage from '../Workflows/WorkflowsPage';
 import ActivityPage from '../Activity/ActivityPage';
 import TrainingPage from '../Training/TrainingPage';
@@ -159,6 +160,11 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
+        path: "schedules",
+        element: <SchedulerPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
         path: "activity",
         element: <ActivityPage />,
         errorElement: <RouteErrorElement />
@@ -170,7 +176,7 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "scheduler",
-        element: <Navigate to="/agent/scheduler" replace />,
+        element: <Navigate to="/schedules" replace />,
         errorElement: <RouteErrorElement />
       },
       {
@@ -190,7 +196,7 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "agent/scheduler",
-        element: <AgentPage />,
+        element: <Navigate to="/schedules" replace />,
         errorElement: <RouteErrorElement />
       },
       {

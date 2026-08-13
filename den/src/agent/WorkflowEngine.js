@@ -24,6 +24,7 @@ function ensureTables() {
       description         TEXT,
       trigger_type        TEXT NOT NULL DEFAULT 'manual',   -- 'manual' | 'schedule'
       schedule            TEXT,                              -- cron expression when trigger_type='schedule'
+      timezone            TEXT,                              -- IANA timezone for scheduled workflows
       steps               TEXT NOT NULL DEFAULT '[]',        -- JSON: [{ id, prompt, useContext, continueOnError }]
       enabled             INTEGER NOT NULL DEFAULT 1,
       profile_id          TEXT,
@@ -52,6 +53,17 @@ function ensureTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_workflow_runs_wf ON workflow_runs(workflow_id, started_at);
   `);
+  for (const migration of [
+    'ALTER TABLE workflows ADD COLUMN timezone TEXT',
+    'ALTER TABLE workflows ADD COLUMN provider_profile_id TEXT',
+    "ALTER TABLE workflows ADD COLUMN provider_snapshot TEXT NOT NULL DEFAULT '{}'",
+  ]) {
+    try {
+      db.prepare(migration).run();
+    } catch (err) {
+      if (!String(err.message || '').includes('duplicate column')) throw err;
+    }
+  }
 }
 
 export function initWorkflows(runAgentFn) {
@@ -73,7 +85,7 @@ function _armSchedule(wf) {
     if (!cron.validate(wf.schedule)) { console.warn(`[workflows] invalid cron for ${wf.id}: ${wf.schedule}`); return; }
     const task = cron.schedule(wf.schedule, () => {
       runWorkflow(wf.id, { trigger: 'schedule' }).catch(e => console.error('[workflows] scheduled run failed:', e.message));
-    });
+    }, wf.timezone ? { timezone: wf.timezone } : undefined);
     _cronTasks.set(wf.id, task);
   } catch (err) { console.warn('[workflows] arm schedule failed:', err.message); }
 }
@@ -100,6 +112,16 @@ function normalizeSteps(steps) {
     }));
 }
 
+function validateTimezone(timezone) {
+  if (!timezone) return null;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    return timezone;
+  } catch {
+    throw new Error(`Invalid timezone: "${timezone}"`);
+  }
+}
+
 function normalizeWorkflow(row) {
   return {
     id: row.id,
@@ -107,9 +129,11 @@ function normalizeWorkflow(row) {
     description: row.description || '',
     triggerType: row.trigger_type,
     schedule: row.schedule || null,
+    timezone: row.timezone || null,
     steps: _parseJson(row.steps, []),
     enabled: Boolean(row.enabled),
     profileId: row.profile_id || null,
+    providerProfileId: row.provider_profile_id || null,
     workingDir: row.working_dir || null,
     lastRunAt: row.last_run_at || null,
     runCount: Number(row.run_count || 0),
@@ -142,16 +166,17 @@ export function getWorkflow(id, userId) {
   return row ? normalizeWorkflow(row) : null;
 }
 
-export function createWorkflow({ userId, workspaceId = null, name, description = '', triggerType = 'manual', schedule = null, steps = [], enabled = true, profileId = null, workingDir = null, providerProfileId = null, providerSnapshot = null }) {
+export function createWorkflow({ userId, workspaceId = null, name, description = '', triggerType = 'manual', schedule = null, timezone = null, steps = [], enabled = true, profileId = null, workingDir = null, providerProfileId = null, providerSnapshot = null }) {
   if (!name || !String(name).trim()) throw new Error('Workflow name is required');
   if (triggerType === 'schedule' && schedule && !cron.validate(schedule)) throw new Error('Invalid cron schedule');
+  timezone = validateTimezone(timezone);
   const id = randomUUID();
   db.prepare(`
-    INSERT INTO workflows (id, user_id, workspace_id, name, description, trigger_type, schedule, steps, enabled, profile_id, provider_profile_id, provider_snapshot, working_dir)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO workflows (id, user_id, workspace_id, name, description, trigger_type, schedule, timezone, steps, enabled, profile_id, provider_profile_id, provider_snapshot, working_dir)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, userId, workspaceId, String(name).trim(), description || null,
-    triggerType, triggerType === 'schedule' ? schedule : null,
+    triggerType, triggerType === 'schedule' ? schedule : null, timezone || null,
     JSON.stringify(normalizeSteps(steps)), enabled ? 1 : 0,
     profileId, providerProfileId, JSON.stringify(providerSnapshot || {}), workingDir,
   );
@@ -165,21 +190,29 @@ export function updateWorkflow(id, userId, fields = {}) {
   if (!existing) throw new Error('Workflow not found');
   const triggerType = fields.triggerType ?? existing.trigger_type;
   let schedule = fields.schedule !== undefined ? fields.schedule : existing.schedule;
+  const timezone = validateTimezone(fields.timezone !== undefined ? (fields.timezone || null) : existing.timezone);
+  const providerProfileId = fields.providerProfileId !== undefined ? fields.providerProfileId : existing.provider_profile_id;
+  const providerSnapshot = fields.providerSnapshot !== undefined
+    ? JSON.stringify(fields.providerSnapshot || {})
+    : existing.provider_snapshot;
   if (triggerType !== 'schedule') schedule = null;
   if (triggerType === 'schedule' && schedule && !cron.validate(schedule)) throw new Error('Invalid cron schedule');
 
   db.prepare(`
     UPDATE workflows
-    SET name = ?, description = ?, trigger_type = ?, schedule = ?, steps = ?, enabled = ?, profile_id = ?, working_dir = ?, updated_at = datetime('now')
+    SET name = ?, description = ?, trigger_type = ?, schedule = ?, timezone = ?, steps = ?, enabled = ?, profile_id = ?, provider_profile_id = ?, provider_snapshot = ?, working_dir = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(
     fields.name !== undefined ? String(fields.name).trim() : existing.name,
     fields.description !== undefined ? (fields.description || null) : existing.description,
     triggerType,
     schedule,
+    timezone,
     fields.steps !== undefined ? JSON.stringify(normalizeSteps(fields.steps)) : existing.steps,
     fields.enabled !== undefined ? (fields.enabled ? 1 : 0) : existing.enabled,
     fields.profileId !== undefined ? fields.profileId : existing.profile_id,
+    providerProfileId,
+    providerSnapshot,
     fields.workingDir !== undefined ? fields.workingDir : existing.working_dir,
     id,
   );

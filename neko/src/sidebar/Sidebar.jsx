@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
   BrainCircuit,
+  CalendarClock,
   Cpu,
   GraduationCap,
   History,
@@ -255,7 +256,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         case "navWorkspace": navigate("/workspace"); break;
         case "navModels": navigate("/models"); break;
         case "navTools": navigate("/tools"); break;
-        case "navScheduler": navigate("/agent/scheduler"); break;
+        case "navScheduler": navigate("/schedules"); break;
         case "navProfiles": navigate("/agent/profiles"); break;
         case "navAgent": navigate("/agent"); break;
         default: break;
@@ -274,7 +275,10 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnChats = basePage === "all-chats";
   const isOnModels = basePage === "models";
-  const isOnAgent = ["/agent", "/scheduler", "/profiles"].some((path) => location.pathname.startsWith(path));
+  const isOnAgent = location.pathname === "/agent"
+    || location.pathname.startsWith("/agent/profiles")
+    || location.pathname.startsWith("/profiles");
+  const isOnSchedules = ["/schedules", "/scheduler", "/agent/scheduler"].some((path) => location.pathname.startsWith(path));
   const isOnTools = location.pathname.startsWith("/tools");
   const isOnWorkflows = location.pathname.startsWith("/workflows");
   const isOnActivity = location.pathname.startsWith("/activity");
@@ -287,13 +291,14 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const workItems = [
     { key: "projects", label: "Tasks", path: "/workspace", active: isOnWorkspace, icon: <KanbanSquare className={iconClass} /> },
     { key: "workflows", label: "Workflows", path: "/workflows", active: isOnWorkflows, icon: <Workflow className={iconClass} /> },
+    { key: "schedules", label: "Schedules", path: "/schedules", active: isOnSchedules, icon: <CalendarClock className={iconClass} /> },
     { key: "activity", label: "Activity", path: "/activity", active: isOnActivity, icon: <Bell className={iconClass} /> },
   ].filter((item) => navItemsVisibility[item.key] !== false);
 
   const buildItems = [
     { key: "models", label: "Models", path: "/models", active: isOnModels, icon: <Cpu className={iconClass} /> },
     { key: "tools", label: "Tools & Skills", path: "/tools", active: isOnTools, icon: <Wrench className={iconClass} /> },
-    { key: "agent", label: "Automation", path: "/agent", active: isOnAgent, icon: <BrainCircuit className={iconClass} /> },
+    { key: "agent", label: "Agents", path: "/agent/profiles", active: isOnAgent, icon: <BrainCircuit className={iconClass} /> },
     { key: "training", label: "Training", path: "/training", active: isOnTraining, icon: <GraduationCap className={iconClass} /> },
   ].filter((item) => navItemsVisibility[item.key] !== false);
 
@@ -454,7 +459,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
           {!collapsed ? <div className="hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Work</div> : null}
           <div className="space-y-0.5">{renderItems(workItems)}</div>
 
-          {!collapsed ? <div className="mt-5 hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Build</div> : null}
+          {!collapsed ? <div className="mt-5 hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Configure</div> : null}
           <div className="space-y-0.5">{renderItems(buildItems)}</div>
         </nav>
 

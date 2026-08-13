@@ -5,11 +5,11 @@ export const schedulerApi = {
     return await apiRequest(`${API_BASE_URL}/agent/schedule`);
   },
 
-  createJob: async ({ name, goal, schedule, profileId = null, providerProfileId = null }) => {
+  createJob: async ({ name, goal, schedule, timezone = null, profileId = null, providerProfileId = null }) => {
     return await apiRequest(`${API_BASE_URL}/agent/schedule`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, goal, schedule, profileId, providerProfileId }),
+      body: JSON.stringify({ name, goal, schedule, timezone, profileId, providerProfileId }),
     });
   },
 

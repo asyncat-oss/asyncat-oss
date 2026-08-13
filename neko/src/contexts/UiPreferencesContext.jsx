@@ -13,6 +13,7 @@ const UiPreferencesContext = createContext(null);
 const DEFAULT_NAV_ITEMS = {
   projects: true,
   workflows: true,
+  schedules: true,
   activity: true,
   models: true,
   tools: true,

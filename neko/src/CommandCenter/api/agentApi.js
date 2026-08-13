@@ -141,6 +141,9 @@ export const agentApi = {
   getRecentWorkflowRuns: async (limit = 30) => {
     return await apiRequest(`${API_BASE_URL}/agent/workflows/runs/recent?limit=${limit}`);
   },
+  getRecentActivity: async (limit = 50) => {
+    return await apiRequest(`${API_BASE_URL}/agent/activity?limit=${encodeURIComponent(String(limit))}`);
+  },
 
   // ── Semantic search + embeddings status ──────────────────────────────────
   semanticSearch: async (q, limit = 8) => {

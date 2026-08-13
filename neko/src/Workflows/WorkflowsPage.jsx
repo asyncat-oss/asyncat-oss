@@ -5,27 +5,25 @@
 // passing each step's output forward as context. Backed by /api/agent/workflows.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Workflow, Plus, Play, Trash2, Save, Clock, Hand, ChevronUp, ChevronDown,
   Loader2, CheckCircle2, XCircle, RefreshCw, Zap, GitBranch, AlertCircle, X,
 } from 'lucide-react';
 import { agentApi, profilesApi } from '../CommandCenter/api';
+import { aiProviderApi } from '../Settings/settingApi.js';
+import WorkflowScheduleControls from '../Scheduler/ScheduleControls';
+import { describeCron, getLocalTimeZone } from '../Scheduler/scheduleUtils';
 
 let STEP_SEQ = 1;
 const newStep = () => ({ id: `s-${Date.now()}-${STEP_SEQ++}`, prompt: '', useContext: false, continueOnError: false });
 const blankDraft = () => ({
   id: null, name: 'New workflow', description: '',
-  triggerType: 'manual', schedule: '0 9 * * *', enabled: true,
+  triggerType: 'manual', schedule: '0 9 * * *', timezone: getLocalTimeZone(), enabled: true,
   profileId: null,
+  providerProfileId: null,
   steps: [newStep()],
 });
-
-const CRON_EXAMPLES = [
-  { label: 'Every day 9am', value: '0 9 * * *' },
-  { label: 'Every hour', value: '0 * * * *' },
-  { label: 'Weekdays 8am', value: '0 8 * * 1-5' },
-  { label: 'Every 15 min', value: '*/15 * * * *' },
-];
 
 function when(v) {
   if (!v) return 'never';
@@ -103,8 +101,11 @@ function StepCard({ step, index, total, onChange, onMove, onRemove }) {
 }
 
 export default function WorkflowsPage() {
+  const [searchParams] = useSearchParams();
   const [workflows, setWorkflows] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  const [providerProfiles, setProviderProfiles] = useState([]);
+  const [activeProvider, setActiveProvider] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState(null);
@@ -127,6 +128,15 @@ export default function WorkflowsPage() {
 
   useEffect(() => { loadWorkflows(); }, [loadWorkflows]);
   useEffect(() => { profilesApi.listProfiles().then(r => setProfiles(r.profiles || [])).catch(() => {}); }, []);
+  useEffect(() => {
+    Promise.all([
+      aiProviderApi.listProfiles().catch(() => ({ profiles: [] })),
+      aiProviderApi.getConfig().catch(() => null),
+    ]).then(([profileResult, activeResult]) => {
+      setProviderProfiles(profileResult.profiles || []);
+      setActiveProvider(activeResult?.model ? activeResult : null);
+    });
+  }, []);
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const loadRuns = useCallback(async (id) => {
@@ -138,11 +148,18 @@ export default function WorkflowsPage() {
   const selectWorkflow = useCallback((wf) => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     setSelectedId(wf.id);
-    setDraft(JSON.parse(JSON.stringify(wf)));
+    setDraft({ ...JSON.parse(JSON.stringify(wf)), timezone: wf.timezone || getLocalTimeZone() });
     setDirty(false);
     setConfirmDelete(false);
     loadRuns(wf.id);
   }, [loadRuns]);
+
+  useEffect(() => {
+    const requestedId = searchParams.get('workflow');
+    if (!requestedId || selectedId === requestedId || workflows.length === 0) return;
+    const requested = workflows.find(workflow => workflow.id === requestedId);
+    if (requested) selectWorkflow(requested);
+  }, [searchParams, selectWorkflow, selectedId, workflows]);
 
   const startNew = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -171,7 +188,9 @@ export default function WorkflowsPage() {
       const body = {
         name: draft.name, description: draft.description,
         triggerType: draft.triggerType, schedule: draft.triggerType === 'schedule' ? draft.schedule : null,
+        timezone: draft.timezone || getLocalTimeZone(),
         enabled: draft.enabled, steps: draft.steps, profileId: draft.profileId || null,
+        providerProfileId: draft.providerProfileId || null,
       };
       const res = draft.id ? await agentApi.updateWorkflow(draft.id, body) : await agentApi.createWorkflow(body);
       const saved = res.workflow;
@@ -253,7 +272,7 @@ export default function WorkflowsPage() {
               </div>
               <div className="flex items-center gap-2 text-[11px] text-gray-400">
                 {wf.triggerType === 'schedule' ? <Clock className="h-3 w-3" /> : <Hand className="h-3 w-3" />}
-                <span>{wf.triggerType === 'schedule' ? wf.schedule : 'Manual'}</span>
+                <span>{wf.triggerType === 'schedule' ? describeCron(wf.schedule) : 'Manual'}</span>
                 <span>· {wf.steps.length} step{wf.steps.length === 1 ? '' : 's'}</span>
               </div>
             </button>
@@ -287,17 +306,31 @@ export default function WorkflowsPage() {
               <input value={draft.description} onChange={e => patchDraft({ description: e.target.value })} className={inputCls} placeholder="Description (optional)" />
 
               {/* Run as (agent profile) */}
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">Run as</label>
-                <select
-                  value={draft.profileId || ''}
-                  onChange={e => patchDraft({ profileId: e.target.value || null })}
-                  className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-indigo-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 midnight:border-slate-700 midnight:bg-slate-950"
-                >
-                  <option value="">Default agent</option>
-                  {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-                <span className="text-[11px] text-gray-400">agent profile used for every step</span>
+              <div className="grid gap-3 rounded-lg border border-gray-200/80 p-4 sm:grid-cols-2 dark:border-gray-800 midnight:border-slate-800">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">Run as agent</span>
+                  <select
+                    value={draft.profileId || ''}
+                    onChange={e => patchDraft({ profileId: e.target.value || null })}
+                    className={inputCls}
+                  >
+                    <option value="">Default agent</option>
+                    {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  <span className="mt-1 block text-[11px] text-gray-400">Behavior and permissions used for every step.</span>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">AI model</span>
+                  <select
+                    value={draft.providerProfileId || ''}
+                    onChange={e => patchDraft({ providerProfileId: e.target.value || null })}
+                    className={inputCls}
+                  >
+                    <option value="">{activeProvider?.model ? `Current active · ${activeProvider.model}` : 'Current active model'}</option>
+                    {providerProfiles.map(provider => <option key={provider.id} value={provider.id}>{provider.name || provider.provider_id} · {provider.model}</option>)}
+                  </select>
+                  <span className="mt-1 block text-[11px] text-gray-400">Saved with the workflow for predictable scheduled runs.</span>
+                </label>
               </div>
 
               {/* Trigger */}
@@ -315,12 +348,13 @@ export default function WorkflowsPage() {
                 </div>
                 {draft.triggerType === 'schedule' && (
                   <div className="mt-3">
-                    <input value={draft.schedule || ''} onChange={e => patchDraft({ schedule: e.target.value })} className={`${inputCls} font-mono`} placeholder="Cron expression e.g. 0 9 * * *" spellCheck={false} />
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {CRON_EXAMPLES.map(ex => (
-                        <button key={ex.value} type="button" onClick={() => patchDraft({ schedule: ex.value })} className="rounded-md border border-gray-200 px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">{ex.label}</button>
-                      ))}
-                    </div>
+                    <WorkflowScheduleControls
+                      value={draft.schedule || '0 9 * * *'}
+                      onChange={schedule => patchDraft({ schedule })}
+                      timezone={draft.timezone || getLocalTimeZone()}
+                      onTimezoneChange={timezone => patchDraft({ timezone })}
+                      inputClassName={inputCls}
+                    />
                   </div>
                 )}
               </div>

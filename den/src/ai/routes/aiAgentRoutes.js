@@ -260,6 +260,94 @@ function formatTaskRun(row) {
   };
 }
 
+function listRecentActivity(userId, workspaceId, limit = 50) {
+  const perTypeLimit = Math.max(10, limit);
+  const taskRows = workspaceId ? db.prepare(`
+    SELECT atr.*, c.title AS target_name, p.name AS project_name, ap.name AS profile_name
+    FROM agent_task_runs atr
+    JOIN Cards c ON c.id = atr.card_id
+    JOIN Columns col ON col.id = c.columnId
+    JOIN projects p ON p.id = col.projectId
+    LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
+    WHERE atr.user_id = ? AND atr.workspace_id = ?
+    ORDER BY COALESCE(atr.started_at, atr.created_at) DESC
+    LIMIT ?
+  `).all(userId, workspaceId, perTypeLimit) : [];
+
+  const scheduledRows = workspaceId ? db.prepare(`
+    SELECT r.*, j.name AS target_name, j.goal, j.profile_id, ap.name AS profile_name
+    FROM scheduled_job_runs r
+    JOIN scheduled_jobs j ON j.id = r.job_id
+    LEFT JOIN agent_profiles ap ON ap.id = j.profile_id
+    WHERE j.user_id = ? AND j.workspace_id = ?
+    ORDER BY r.started_at DESC
+    LIMIT ?
+  `).all(userId, workspaceId, perTypeLimit) : [];
+
+  const workflowRows = db.prepare(`
+    SELECT r.*, w.name AS target_name, w.profile_id, ap.name AS profile_name
+    FROM workflow_runs r
+    JOIN workflows w ON w.id = r.workflow_id
+    LEFT JOIN agent_profiles ap ON ap.id = w.profile_id
+    WHERE r.user_id = ? AND (? IS NULL OR w.workspace_id = ? OR w.workspace_id IS NULL)
+    ORDER BY r.started_at DESC
+    LIMIT ?
+  `).all(userId, workspaceId, workspaceId, perTypeLimit);
+
+  const items = [
+    ...taskRows.map(row => ({
+      id: row.id,
+      type: 'task',
+      name: row.target_name || 'Task',
+      context: row.project_name || null,
+      status: inferTaskRunDisplayStatus(row),
+      detail: row.summary || row.last_event_label || row.goal || null,
+      error: row.error || null,
+      startedAt: row.started_at || row.created_at,
+      finishedAt: row.completed_at || null,
+      sessionId: row.session_id || null,
+      targetId: row.card_id,
+      profileName: row.profile_name || null,
+    })),
+    ...scheduledRows.map(row => ({
+      id: row.id,
+      type: 'schedule',
+      name: row.target_name || 'Scheduled agent job',
+      context: 'Scheduled agent job',
+      status: row.status,
+      detail: row.answer || row.goal || null,
+      error: row.error || null,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at || null,
+      sessionId: row.agent_session_id || null,
+      targetId: row.job_id,
+      profileName: row.profile_name || null,
+    })),
+    ...workflowRows.map(row => {
+      const results = parseJson(row.results, []);
+      const sessionResult = [...results].reverse().find(result => result?.sessionId);
+      return {
+        id: row.id,
+        type: 'workflow',
+        name: row.target_name || 'Workflow',
+        context: `${row.steps_completed || 0}/${row.steps_total || 0} steps · ${row.trigger || 'manual'}`,
+        status: row.status,
+        detail: row.error || results.find(result => result?.output)?.output || null,
+        error: row.error || null,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at || null,
+        sessionId: sessionResult?.sessionId || null,
+        targetId: row.workflow_id,
+        profileName: row.profile_name || null,
+      };
+    }),
+  ];
+
+  return items
+    .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime())
+    .slice(0, limit);
+}
+
 function inferTaskRunDisplayStatus(row) {
   if (!row) return null;
   if (row.status !== 'failed') return row.status;
@@ -1231,7 +1319,7 @@ function createAskUserRequest(req, res) {
 
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
-router.use('/workflows', createWorkflowRouter({ withWorkspaceContext }));
+router.use('/workflows', createWorkflowRouter({ withWorkspaceContext, resolveProvider: resolveScheduledProvider }));
 
 router.get('/tools', withWorkspaceContext, async (req, res) => {
   const { toolRegistry } = await import('../../agent/index.js');
@@ -2009,6 +2097,16 @@ router.delete('/sandboxes/:id', withWorkspaceContext, (req, res) => {
 });
 
 // ── Agent task runs (Kanban cards assigned to agents) ─────────────────────────
+
+router.get('/activity', withWorkspaceContext, (req, res) => {
+  try {
+    const workspaceId = getWorkspaceIdForRequest(req);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
+    res.json({ success: true, items: listRecentActivity(req.user.id, workspaceId, limit) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to load activity' });
+  }
+});
 
 router.get('/task-runs', withWorkspaceContext, (req, res) => {
   try {
@@ -2875,7 +2973,7 @@ router.delete('/profiles/:id', withWorkspaceContext, (req, res) => {
 
 router.post('/schedule', withWorkspaceContext, async (req, res) => {
   try {
-    const { name, goal, schedule, profileId, providerProfileId } = req.body;
+    const { name, goal, schedule, timezone, profileId, providerProfileId } = req.body;
     if (!name || !goal || !schedule) {
       return res.status(400).json({ success: false, error: 'name, goal, and schedule are required' });
     }
@@ -2884,7 +2982,7 @@ router.post('/schedule', withWorkspaceContext, async (req, res) => {
     const provider = resolveScheduledProvider(req.user.id, providerProfileId || null);
 
     const job = scheduleJob({
-      name, goal, schedule,
+      name, goal, schedule, timezone: timezone || null,
       userId: req.user.id,
       workspaceId: workspaceId || 'default',
       profileId: profileId || null,
@@ -2931,6 +3029,7 @@ router.patch('/schedule/:id', withWorkspaceContext, async (req, res) => {
     if (body.name !== undefined) patch.name = String(body.name || '').trim();
     if (body.goal !== undefined) patch.goal = String(body.goal || '').trim();
     if (body.schedule !== undefined) patch.schedule = String(body.schedule || '').trim();
+    if (body.timezone !== undefined) patch.timezone = body.timezone ? String(body.timezone).trim() : null;
     if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
     if (body.profileId !== undefined || body.profile_id !== undefined) patch.profileId = body.profileId ?? body.profile_id ?? null;
     if (body.workingDir !== undefined || body.working_dir !== undefined) patch.workingDir = body.workingDir ?? body.working_dir ?? '.';
@@ -2969,7 +3068,9 @@ router.post('/schedule/:id/run-now', withWorkspaceContext, async (req, res) => {
 
 router.delete('/schedule/:id', withWorkspaceContext, (req, res) => {
   try {
-    deleteJob(req.params.id);
+    const workspaceId = getWorkspaceIdForRequest(req) || 'default';
+    const deleted = deleteJob(req.params.id, { userId: req.user.id, workspaceId });
+    if (!deleted) return res.status(404).json({ success: false, error: 'Job not found' });
     res.json({ success: true, message: `Job ${req.params.id} deleted` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2977,12 +3078,22 @@ router.delete('/schedule/:id', withWorkspaceContext, (req, res) => {
 });
 
 router.patch('/schedule/:id/enable', withWorkspaceContext, (req, res) => {
-  try { enableJob(req.params.id); res.json({ success: true }); }
+  try {
+    const workspaceId = getWorkspaceIdForRequest(req) || 'default';
+    const enabled = enableJob(req.params.id, { userId: req.user.id, workspaceId });
+    if (!enabled) return res.status(404).json({ success: false, error: 'Job not found' });
+    res.json({ success: true });
+  }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 router.patch('/schedule/:id/disable', withWorkspaceContext, (req, res) => {
-  try { disableJob(req.params.id); res.json({ success: true }); }
+  try {
+    const workspaceId = getWorkspaceIdForRequest(req) || 'default';
+    const disabled = disableJob(req.params.id, { userId: req.user.id, workspaceId });
+    if (!disabled) return res.status(404).json({ success: false, error: 'Job not found' });
+    res.json({ success: true });
+  }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 

@@ -15,6 +15,7 @@ db.exec(`
     name         TEXT NOT NULL,
     goal         TEXT NOT NULL,
     schedule     TEXT NOT NULL,          -- 'interval:<ms>' | 'at:<iso>' | 'once:<ms>'
+    timezone     TEXT,                   -- IANA timezone for wall-clock schedules
     user_id      TEXT NOT NULL,
     workspace_id TEXT NOT NULL,
     profile_id   TEXT,
@@ -42,6 +43,11 @@ try {
 }
 try {
   db.prepare("ALTER TABLE scheduled_jobs ADD COLUMN provider_snapshot TEXT NOT NULL DEFAULT '{}'").run();
+} catch (err) {
+  if (!String(err.message || '').includes('duplicate column')) throw err;
+}
+try {
+  db.prepare('ALTER TABLE scheduled_jobs ADD COLUMN timezone TEXT').run();
 } catch (err) {
   if (!String(err.message || '').includes('duplicate column')) throw err;
 }
@@ -78,20 +84,21 @@ export function initScheduler(runAgentFn) {
 }
 
 /** Create a new scheduled job. */
-export function scheduleJob({ name, goal, schedule, userId, workspaceId, workingDir = process.cwd(), profileId = null, providerProfileId = null, providerSnapshot = null }) {
+export function scheduleJob({ name, goal, schedule, timezone = null, userId, workspaceId, workingDir = process.cwd(), profileId = null, providerProfileId = null, providerSnapshot = null }) {
   if (!_runAgent) throw new Error('Scheduler not initialized. Call initScheduler() first.');
 
   const id = randomUUID();
-  const nextRunAt = _calcNextRun(schedule, new Date());
+  timezone = _validateTimezone(timezone);
+  const nextRunAt = _calcNextRun(schedule, new Date(), timezone);
   if (!nextRunAt) throw new Error(`Invalid schedule: "${schedule}". Use: interval:<ms> | at:<ISO> | once:<ms>`);
 
   db.prepare(`
-    INSERT INTO scheduled_jobs (id, name, goal, schedule, user_id, workspace_id, profile_id, provider_profile_id, provider_snapshot, working_dir, next_run_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, goal, schedule, userId, workspaceId, profileId, providerProfileId, JSON.stringify(providerSnapshot || {}), workingDir, nextRunAt.toISOString());
+    INSERT INTO scheduled_jobs (id, name, goal, schedule, timezone, user_id, workspace_id, profile_id, provider_profile_id, provider_snapshot, working_dir, next_run_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, goal, schedule, timezone, userId, workspaceId, profileId, providerProfileId, JSON.stringify(providerSnapshot || {}), workingDir, nextRunAt.toISOString());
 
   _armTimer(id);
-  return { id, name, goal, schedule, profile_id: profileId, provider_profile_id: providerProfileId, provider_snapshot: providerSnapshot || {}, nextRunAt: nextRunAt.toISOString() };
+  return { id, name, goal, schedule, timezone, profile_id: profileId, provider_profile_id: providerProfileId, provider_snapshot: providerSnapshot || {}, nextRunAt: nextRunAt.toISOString() };
 }
 
 /** List all scheduled jobs for a user. */
@@ -117,7 +124,7 @@ export async function runJobNow(id) {
 }
 
 /** Update an existing scheduled job. */
-export function updateJob({ id, userId, workspaceId, name, goal, schedule, enabled, profileId, providerProfileId, providerSnapshot, workingDir }) {
+export function updateJob({ id, userId, workspaceId, name, goal, schedule, timezone, enabled, profileId, providerProfileId, providerSnapshot, workingDir }) {
   const existing = db.prepare('SELECT * FROM scheduled_jobs WHERE id = ? AND user_id = ? AND workspace_id = ?')
     .get(id, userId, workspaceId);
   if (!existing) return null;
@@ -137,10 +144,13 @@ export function updateJob({ id, userId, workspaceId, name, goal, schedule, enabl
   if (providerSnapshot !== undefined) set('provider_snapshot', JSON.stringify(providerSnapshot || {}));
   if (enabled !== undefined) set('enabled', enabled ? 1 : 0);
 
-  if (schedule !== undefined) {
-    const nextRunAt = _calcNextRun(schedule, new Date());
-    if (!nextRunAt) throw new Error(`Invalid schedule: "${schedule}". Use: interval:<ms> | at:<ISO> | once:<ms> | daily:<HH:MM> | hourly`);
-    set('schedule', schedule);
+  if (schedule !== undefined || timezone !== undefined) {
+    const resolvedSchedule = schedule !== undefined ? schedule : existing.schedule;
+    const resolvedTimezone = _validateTimezone(timezone !== undefined ? timezone : existing.timezone);
+    const nextRunAt = _calcNextRun(resolvedSchedule, new Date(), resolvedTimezone);
+    if (!nextRunAt) throw new Error(`Invalid schedule: "${resolvedSchedule}". Use: interval:<ms> | at:<ISO> | once:<ms> | daily:<HH:MM> | hourly`);
+    if (schedule !== undefined) set('schedule', schedule);
+    if (timezone !== undefined) set('timezone', resolvedTimezone);
     set('next_run_at', nextRunAt.toISOString());
   }
 
@@ -161,19 +171,33 @@ export function updateJob({ id, userId, workspaceId, name, goal, schedule, enabl
 }
 
 /** Disable / delete a job. */
-export function deleteJob(id) {
+function _canManageJob(id, userId = null, workspaceId = null) {
+  if (!userId) return Boolean(db.prepare('SELECT id FROM scheduled_jobs WHERE id = ?').get(id));
+  return Boolean(db.prepare(`
+    SELECT id FROM scheduled_jobs
+    WHERE id = ? AND user_id = ? AND (? IS NULL OR workspace_id = ?)
+  `).get(id, userId, workspaceId, workspaceId));
+}
+
+export function deleteJob(id, { userId = null, workspaceId = null } = {}) {
+  if (!_canManageJob(id, userId, workspaceId)) return false;
   _clearTimer(id);
   db.prepare('DELETE FROM scheduled_jobs WHERE id = ?').run(id);
+  return true;
 }
 
-export function enableJob(id) {
+export function enableJob(id, { userId = null, workspaceId = null } = {}) {
+  if (!_canManageJob(id, userId, workspaceId)) return false;
   db.prepare("UPDATE scheduled_jobs SET enabled = 1 WHERE id = ?").run(id);
   _armTimer(id);
+  return true;
 }
 
-export function disableJob(id) {
+export function disableJob(id, { userId = null, workspaceId = null } = {}) {
+  if (!_canManageJob(id, userId, workspaceId)) return false;
   _clearTimer(id);
   db.prepare("UPDATE scheduled_jobs SET enabled = 0 WHERE id = ?").run(id);
+  return true;
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────
@@ -183,8 +207,12 @@ function _loadAndResumeJobs() {
   for (const job of jobs) {
     const next = new Date(job.next_run_at);
     if (next < new Date()) {
+      if (job.schedule.startsWith('once:') || job.schedule.startsWith('at:')) {
+        disableJob(job.id);
+        continue;
+      }
       // Missed — recalculate next run, skip catch-up execution to avoid storms
-      const newNext = _calcNextRun(job.schedule, new Date());
+      const newNext = _calcNextRun(job.schedule, new Date(), job.timezone);
       if (!newNext) { disableJob(job.id); continue; }
       db.prepare("UPDATE scheduled_jobs SET next_run_at = ? WHERE id = ?").run(newNext.toISOString(), job.id);
     }
@@ -198,7 +226,10 @@ function _armTimer(id) {
   if (!job || !job.enabled) return;
 
   const msUntil = Math.max(0, new Date(job.next_run_at) - Date.now());
-  const timer = setTimeout(() => _fireJob(id), msUntil);
+  const maxTimerMs = 2_147_000_000;
+  const timer = msUntil > maxTimerMs
+    ? setTimeout(() => _armTimer(id), maxTimerMs)
+    : setTimeout(() => _fireJob(id), msUntil);
   _timers.set(id, timer);
 }
 
@@ -256,7 +287,8 @@ async function _fireJob(id, { manual = false } = {}) {
   }
 
   // Recalculate next run
-  const newNext = _calcNextRun(job.schedule, now);
+  const isOneTime = job.schedule.startsWith('once:') || job.schedule.startsWith('at:');
+  const newNext = isOneTime ? null : _calcNextRun(job.schedule, new Date(), job.timezone);
   if (newNext) {
     db.prepare(`
       UPDATE scheduled_jobs SET last_run_at = ?, next_run_at = ?, run_count = run_count + 1, updated_at = datetime('now') WHERE id = ?
@@ -297,6 +329,39 @@ function _hydrateJob(row) {
   };
 }
 
+function _validateTimezone(timezone) {
+  if (!timezone) return null;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    return timezone;
+  } catch {
+    throw new Error(`Invalid timezone: "${timezone}"`);
+  }
+}
+
+function _zonedParts(date, timezone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  return Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, Number(part.value)]));
+}
+
+function _wallClockToUtc({ year, month, day, hour, minute }, timezone) {
+  const desiredUtcValue = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let candidate = new Date(desiredUtcValue);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const actual = _zonedParts(candidate, timezone);
+    const actualUtcValue = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second || 0, 0);
+    const adjustment = desiredUtcValue - actualUtcValue;
+    if (adjustment === 0) break;
+    candidate = new Date(candidate.getTime() + adjustment);
+  }
+  return candidate;
+}
+
 /**
  * Parse schedule string and return the next Date to fire.
  * Formats:
@@ -306,7 +371,7 @@ function _hydrateJob(row) {
  *   daily:<HH:MM>   — fire every day at HH:MM
  *   hourly          — fire at the top of every hour
  */
-function _calcNextRun(schedule, fromDate) {
+function _calcNextRun(schedule, fromDate, timezone = null) {
   if (!schedule) return null;
 
   if (schedule.startsWith('interval:')) {
@@ -329,6 +394,21 @@ function _calcNextRun(schedule, fromDate) {
 
   if (schedule.startsWith('daily:')) {
     const [hh, mm] = schedule.slice(6).split(':').map(Number);
+    if (!Number.isInteger(hh) || !Number.isInteger(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    if (timezone) {
+      const local = _zonedParts(fromDate, timezone);
+      let wallDate = new Date(Date.UTC(local.year, local.month - 1, local.day));
+      let next = _wallClockToUtc({
+        year: wallDate.getUTCFullYear(), month: wallDate.getUTCMonth() + 1, day: wallDate.getUTCDate(), hour: hh, minute: mm,
+      }, timezone);
+      if (next <= fromDate) {
+        wallDate.setUTCDate(wallDate.getUTCDate() + 1);
+        next = _wallClockToUtc({
+          year: wallDate.getUTCFullYear(), month: wallDate.getUTCMonth() + 1, day: wallDate.getUTCDate(), hour: hh, minute: mm,
+        }, timezone);
+      }
+      return next;
+    }
     const next = new Date(fromDate);
     next.setHours(hh, mm, 0, 0);
     if (next <= fromDate) next.setDate(next.getDate() + 1);

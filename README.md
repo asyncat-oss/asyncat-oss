@@ -28,12 +28,12 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Agent profiles** | Bundle a soul, working directory, tool permissions, and max rounds into named configurations. Switch profiles per task |
 | **Desktop automation** | Click, type, read screen content via OCR, focus windows — controls your actual machine |
 | **Sandboxes** | Isolated workspace copies. Review changes as a unified diff. Apply or discard. Commit to a branch |
-| **Scheduler** | Cron-based recurring agent jobs. Pick a profile and a model per job |
+| **Schedules** | One place for recurring agent jobs and scheduled workflows, with friendly recurrence controls |
 | **Workflows** | Chain agent steps into a saved automation. Run on demand or on a cron schedule, under any agent profile. Each step can pass its output to the next. The agent can trigger workflows too |
 | **Command palette** | `Cmd/Ctrl+K` from anywhere — jump to any page, run a workflow, or search across memory, notes, and chats |
 | **Semantic memory** | Recall by meaning, not just keywords. Uses your provider's embeddings when available, falls back to a fully offline local index |
 | **Built-in browser** | A real tabbed browser the agent shares. Hand it the page you're on with one click, or let it browse on its own |
-| **Activity** | One feed for what ran in the background — workflow runs and outbound notifications |
+| **Activity** | One feed for task agents, scheduled jobs, workflow runs, and outbound notifications |
 | **MCP support** | Configure MCP servers via `data/mcp.json`. Manage from the UI or API |
 | **Persistent memory** | SQLite-backed key-value memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state` |
 | **Workspace** | Notes (markdown, delta-based, export to DOCX/PDF), Kanban (columns, cards, checklists) |
@@ -253,8 +253,8 @@ asyncat-oss/
 │       ├── Agent/             # Agent run view
 │       ├── Models/            # Provider config
 │       ├── Profiles/          # Agent profiles
-│       ├── Scheduler/         # Scheduler UI
-│       ├── Workflows/         # Automation builder
+│       ├── Scheduler/         # Unified Schedules UI
+│       ├── Workflows/         # Workflow builder
 │       ├── Activity/          # Background activity feed
 │       ├── Tools/             # Tools & skills browser
 │       ├── notes/             # Notes editor

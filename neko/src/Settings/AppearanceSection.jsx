@@ -1,6 +1,7 @@
 import {
   BrainCircuit,
   Bell,
+  CalendarClock,
   Cpu,
   Layout,
   Moon,
@@ -169,6 +170,12 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           onChange={() => toggleNavItem("workflows")}
         />
         <CheckboxRow
+          icon={CalendarClock}
+          label="Schedules"
+          checked={navItemsVisibility.schedules}
+          onChange={() => toggleNavItem("schedules")}
+        />
+        <CheckboxRow
           icon={Bell}
           label="Activity"
           checked={navItemsVisibility.activity}
@@ -188,7 +195,7 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
         />
         <CheckboxRow
           icon={BrainCircuit}
-          label="Automation"
+          label="Agents"
           checked={navItemsVisibility.agent}
           onChange={() => toggleNavItem("agent")}
         />

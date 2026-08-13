@@ -3,13 +3,17 @@
 // ─── Agent Scheduler UI ───────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Clock, Plus, Trash2, Play, Pause, Loader2, AlertCircle,
   Calendar, RefreshCw, CheckCircle2, XCircle, ChevronDown,
   ChevronRight, Zap, Timer, Repeat, Layers, Cloud, RotateCcw,
+  Workflow, ExternalLink, Pencil,
 } from 'lucide-react';
-import { schedulerApi, profilesApi } from '../CommandCenter/api';
+import { agentApi, schedulerApi, profilesApi } from '../CommandCenter/api';
 import { aiProviderApi } from '../Settings/settingApi.js';
+import WorkflowScheduleControls from './ScheduleControls';
+import { describeCron, getAvailableTimeZones, getLocalTimeZone } from './scheduleUtils';
 
 // ── Schedule type helpers ─────────────────────────────────────────────────────
 
@@ -114,18 +118,38 @@ function runDisplayText(run) {
   return 'No result text recorded.';
 }
 
-function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [], activeProvider = null }) {
-  const [name, setName]           = useState('');
-  const [goal, setGoal]           = useState('');
-  const [profileId, setProfileId] = useState('');
-  const [providerProfileId, setProviderProfileId] = useState(activeProvider ? (activeProvider.profile_id || '') : (providerProfiles[0]?.id || ''));
-  const [scheduleType, setScheduleType] = useState('interval:3600000');
-  const [dailyTime, setDailyTime] = useState('09:00');
-  const [onceDelay, setOnceDelay] = useState('30');
+function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [], activeProvider = null, workflows = [], initialJob = null }) {
+  const editing = Boolean(initialJob);
+  const initialSchedule = initialJob?.schedule || 'interval:3600000';
+  const initialScheduleType = (() => {
+    if (initialSchedule.startsWith('daily:')) return '__daily__';
+    if (initialSchedule.startsWith('once:')) return '__once__';
+    if (initialSchedule.startsWith('at:')) return '__at__';
+    if (SCHEDULE_PRESETS.some(preset => preset.value === initialSchedule)) return initialSchedule;
+    if (initialSchedule.startsWith('interval:')) return '__custom__';
+    return initialSchedule;
+  })();
+  const initialAt = initialSchedule.startsWith('at:') ? new Date(initialSchedule.slice(3)) : null;
+  const initialOnceMs = initialSchedule.startsWith('once:') ? Number(initialSchedule.slice(5)) : 1800000;
+  const initialCustomMs = initialSchedule.startsWith('interval:') ? Number(initialSchedule.slice(9)) : 3600000;
+  const initialCustomUnit = initialCustomMs % 86400000 === 0 ? 'days' : initialCustomMs % 3600000 === 0 ? 'hours' : 'minutes';
+  const initialCustomDivisor = { minutes: 60000, hours: 3600000, days: 86400000 }[initialCustomUnit];
+  const [targetType, setTargetType] = useState('agent');
+  const [workflowId, setWorkflowId] = useState(workflows[0]?.id || '');
+  const [workflowSchedule, setWorkflowSchedule] = useState(workflows[0]?.schedule || '0 9 * * *');
+  const [timezone, setTimezone] = useState(initialJob?.timezone || workflows[0]?.timezone || getLocalTimeZone());
+  const [name, setName]           = useState(initialJob?.name || '');
+  const [goal, setGoal]           = useState(initialJob?.goal || '');
+  const [profileId, setProfileId] = useState(initialJob?.profile_id || '');
+  const [providerProfileId, setProviderProfileId] = useState(initialJob?.provider_profile_id || (activeProvider ? (activeProvider.profile_id || '') : (providerProfiles[0]?.id || '')));
+  const [scheduleType, setScheduleType] = useState(initialScheduleType);
+  const [dailyTime, setDailyTime] = useState(initialSchedule.startsWith('daily:') ? initialSchedule.slice(6) : '09:00');
+  const [onceDelay, setOnceDelay] = useState(String(Math.max(1, Math.round(initialOnceMs / 60000))));
   const [onceUnit, setOnceUnit]   = useState('minutes');
-  const [atDate, setAtDate]       = useState('');
-  const [atTime, setAtTime]       = useState('');
-  const [customMs, setCustomMs]   = useState('');
+  const [atDate, setAtDate]       = useState(initialAt && !Number.isNaN(initialAt.getTime()) ? `${initialAt.getFullYear()}-${String(initialAt.getMonth() + 1).padStart(2, '0')}-${String(initialAt.getDate()).padStart(2, '0')}` : '');
+  const [atTime, setAtTime]       = useState(initialAt && !Number.isNaN(initialAt.getTime()) ? `${String(initialAt.getHours()).padStart(2, '0')}:${String(initialAt.getMinutes()).padStart(2, '0')}` : '');
+  const [customInterval, setCustomInterval] = useState(String(Math.max(1, Math.round(initialCustomMs / initialCustomDivisor))));
+  const [customUnit, setCustomUnit] = useState(initialCustomUnit);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState(null);
 
@@ -141,7 +165,8 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
       return `at:${new Date(`${atDate}T${atTime}`).toISOString()}`;
     }
     if (scheduleType === '__custom__') {
-      const ms = parseInt(customMs, 10);
+      const multipliers = { minutes: 60000, hours: 3600000, days: 86400000 };
+      const ms = parseInt(customInterval, 10) * multipliers[customUnit];
       if (isNaN(ms) || ms < 1000) return null;
       return `interval:${ms}`;
     }
@@ -151,7 +176,21 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
-    const schedule = buildScheduleString();
+    const schedule = targetType === 'workflow' ? workflowSchedule.trim() : buildScheduleString();
+    if (targetType === 'workflow') {
+      if (!workflowId) { setError('Choose a workflow to schedule'); return; }
+      if (!schedule) { setError('Please complete the schedule configuration'); return; }
+      setSaving(true);
+      try {
+        await onCreate({ targetType, workflowId, schedule, timezone });
+        onClose();
+      } catch (err) {
+        setError(err.message || 'Failed to schedule workflow');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (!name.trim()) { setError('Name is required'); return; }
     if (!goal.trim()) { setError('Goal is required'); return; }
     if (!schedule)    { setError('Please complete the schedule configuration'); return; }
@@ -159,10 +198,10 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
 
     setSaving(true);
     try {
-      await onCreate({ name: name.trim(), goal: goal.trim(), schedule, profileId: profileId || null, providerProfileId: providerProfileId || null });
+      await onCreate({ targetType, name: name.trim(), goal: goal.trim(), schedule, timezone, profileId: profileId || null, providerProfileId: providerProfileId || null });
       onClose();
     } catch (err) {
-      setError(err.message || 'Failed to create job');
+      setError(err.message || (editing ? 'Failed to update job' : 'Failed to create job'));
     } finally {
       setSaving(false);
     }
@@ -180,7 +219,7 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
             <div className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-slate-850 flex items-center justify-center">
               <Plus className="w-4 h-4 text-gray-500 dark:text-gray-400 midnight:text-slate-300" />
             </div>
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">New Scheduled Job</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">{editing ? 'Edit Agent Schedule' : 'New Schedule'}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:text-slate-200 midnight:hover:bg-slate-900 transition-colors">
             <XCircle className="w-4 h-4" />
@@ -189,6 +228,49 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {!editing ? <div>
+            <label className={labelCls}>What should run?</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setTargetType('agent'); setTimezone(initialJob?.timezone || getLocalTimeZone()); }}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${targetType === 'agent' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'}`}
+              >
+                <Zap className="h-4 w-4" />
+                <span><strong className="block font-medium">Agent instruction</strong><span className="mt-0.5 block text-[10px] opacity-75">Run one saved goal</span></span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTargetType('workflow'); setTimezone(workflows.find(workflow => workflow.id === workflowId)?.timezone || getLocalTimeZone()); }}
+                disabled={workflows.length === 0}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${targetType === 'workflow' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'}`}
+              >
+                <Workflow className="h-4 w-4" />
+                <span><strong className="block font-medium">Workflow</strong><span className="mt-0.5 block text-[10px] opacity-75">Run reusable steps</span></span>
+              </button>
+            </div>
+            {workflows.length === 0 ? <p className="mt-1.5 text-[10px] text-gray-400">Create a workflow first to schedule reusable multi-step work.</p> : null}
+          </div> : null}
+
+          {targetType === 'workflow' ? (
+            <div>
+              <label className={labelCls}>Workflow</label>
+              <select
+                value={workflowId}
+                onChange={event => {
+                  const nextId = event.target.value;
+                  const workflow = workflows.find(item => item.id === nextId);
+                  setWorkflowId(nextId);
+                  setWorkflowSchedule(workflow?.schedule || '0 9 * * *');
+                  setTimezone(workflow?.timezone || getLocalTimeZone());
+                }}
+                className={inputCls}
+              >
+                {workflows.map(workflow => <option key={workflow.id} value={workflow.id}>{workflow.name}</option>)}
+              </select>
+            </div>
+          ) : (
+            <>
           <div>
             <label className={labelCls}>Job Name</label>
             <input
@@ -244,9 +326,15 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
             </select>
             <p className="mt-1.5 text-[10px] text-gray-400 midnight:text-slate-500">This model is saved with the job, so future active-model changes will not silently change scheduled runs.</p>
           </div>
+            </>
+          )}
 
           <div>
             <label className={labelCls}>Schedule</label>
+            {targetType === 'workflow' ? (
+              <WorkflowScheduleControls value={workflowSchedule} onChange={setWorkflowSchedule} timezone={timezone} onTimezoneChange={setTimezone} inputClassName={inputCls} />
+            ) : (
+              <>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {SCHEDULE_PRESETS.map(p => {
                 const Icon = p.icon;
@@ -308,17 +396,34 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
             )}
             {scheduleType === '__custom__' && (
               <div className="p-3 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-                <label className={labelCls}>Interval in milliseconds</label>
-                <input
-                  type="number"
-                  min="1000"
-                  value={customMs}
-                  onChange={e => setCustomMs(e.target.value)}
-                  className={inputCls}
-                  placeholder="e.g. 3600000 = 1 hour"
-                />
+                <label className={labelCls}>Repeat every</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={customInterval}
+                    onChange={e => setCustomInterval(e.target.value)}
+                    className={`${inputCls} flex-1`}
+                    placeholder="2"
+                  />
+                  <select value={customUnit} onChange={e => setCustomUnit(e.target.value)} className={`${inputCls} w-32`}>
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                    <option value="days">days</option>
+                  </select>
+                </div>
               </div>
             )}
+              </>
+            )}
+            {targetType === 'agent' ? (
+              <label className="mt-3 block">
+                <span className={labelCls}>Timezone</span>
+                <select value={timezone} onChange={event => setTimezone(event.target.value)} className={inputCls}>
+                  {getAvailableTimeZones().map(zone => <option key={zone} value={zone}>{zone === getLocalTimeZone() ? `${zone} (local)` : zone}</option>)}
+                </select>
+              </label>
+            ) : null}
           </div>
 
           {error && (
@@ -344,7 +449,7 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
             className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white dark:text-gray-900 transition-colors font-medium midnight:bg-slate-100 midnight:hover:bg-white midnight:text-slate-950 midnight:disabled:bg-slate-800 midnight:disabled:text-slate-550"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Schedule Job
+            {editing ? 'Save Changes' : targetType === 'workflow' ? 'Schedule Workflow' : 'Schedule Agent Job'}
           </button>
         </div>
       </div>
@@ -354,7 +459,7 @@ function CreateJobModal({ onClose, onCreate, profiles = [], providerProfiles = [
 
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
-function JobCard({ job, profile, onDelete, onToggle, onRunNow, deletingId, togglingId, runningNowId }) {
+function JobCard({ job, profile, onDelete, onToggle, onRunNow, onEdit, deletingId, togglingId, runningNowId }) {
   const [expanded, setExpanded] = useState(false);
   const [runs, setRuns] = useState([]);
   const [runsLoading, setRunsLoading] = useState(false);
@@ -433,6 +538,10 @@ function JobCard({ job, profile, onDelete, onToggle, onRunNow, deletingId, toggl
               <Clock className="w-3 h-3" />
               {parseScheduleLabel(job.schedule)}
             </span>
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {job.timezone || 'Server local time'}
+            </span>
             {job.next_run_at && isEnabled && (
               <span className="flex items-center gap-1 text-gray-600 dark:text-gray-300 midnight:text-slate-350 font-medium">
                 <Zap className="w-3 h-3" />
@@ -486,6 +595,14 @@ function JobCard({ job, profile, onDelete, onToggle, onRunNow, deletingId, toggl
             title="Run now"
           >
             {isRunningNow ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() => onEdit(job)}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            title="Edit schedule"
+          >
+            <Pencil className="w-4 h-4" />
           </button>
 
           <button
@@ -604,15 +721,102 @@ function JobCard({ job, profile, onDelete, onToggle, onRunNow, deletingId, toggl
 
 // ── Empty State ───────────────────────────────────────────────────────────────
 
+function WorkflowScheduleCard({ workflow, profile, onToggle, onRunNow, onRemove, busyAction, onEdit }) {
+  const [expanded, setExpanded] = useState(false);
+  const [runs, setRuns] = useState([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const isEnabled = Boolean(workflow.enabled);
+  const isBusy = busyAction?.endsWith(`:${workflow.id}`);
+
+  useEffect(() => {
+    if (!expanded) return;
+    let cancelled = false;
+    setRunsLoading(true);
+    agentApi.getWorkflowRuns(workflow.id)
+      .then(result => { if (!cancelled) setRuns(result.runs || []); })
+      .catch(() => { if (!cancelled) setRuns([]); })
+      .finally(() => { if (!cancelled) setRunsLoading(false); });
+    return () => { cancelled = true; };
+  }, [expanded, workflow.id, workflow.lastRunAt]);
+
+  return (
+    <div className={`border transition-colors ${isEnabled ? 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950' : 'border-gray-100 bg-gray-50/50 opacity-60 dark:border-gray-800 dark:bg-gray-900/30 midnight:border-slate-800 midnight:bg-slate-950/50'}`}>
+      <div className="flex items-start gap-3 p-4">
+        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-indigo-50 dark:bg-indigo-950/30">
+          <Workflow className="h-4 w-4 text-indigo-500 dark:text-indigo-300" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-200">{workflow.name}</span>
+            <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">Workflow</span>
+            {!isEnabled ? <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800">Paused</span> : null}
+          </div>
+          <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{workflow.description || `${workflow.steps?.length || 0} agent steps`}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-450">
+            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{describeCron(workflow.schedule)}</span>
+            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{workflow.timezone || 'Server local time'}</span>
+            {profile ? <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{profile.name}</span> : null}
+            {workflow.lastRunAt ? <span>Last: {formatRelative(workflow.lastRunAt)}</span> : null}
+            {workflow.runCount > 0 ? <span>{workflow.runCount} run{workflow.runCount === 1 ? '' : 's'}</span> : null}
+          </div>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-1">
+          <button onClick={() => setExpanded(value => !value)} className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300" title="View run history">
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+
+          <button onClick={() => onEdit(workflow.id)} className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Edit workflow">
+            <ExternalLink className="h-4 w-4" />
+          </button>
+          <button onClick={() => onRunNow(workflow.id)} disabled={isBusy} className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-blue-900/20 dark:hover:text-blue-300" title="Run workflow now">
+            {busyAction === `run:${workflow.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          </button>
+          <button onClick={() => onToggle(workflow.id, isEnabled)} disabled={isBusy} className={`rounded-lg p-1.5 transition-colors disabled:opacity-50 ${isEnabled ? 'text-amber-500 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20' : 'text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-900/20'}`} title={isEnabled ? 'Pause workflow schedule' : 'Resume workflow schedule'}>
+            {busyAction === `toggle:${workflow.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : isEnabled ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </button>
+          <button onClick={() => onRemove(workflow.id)} disabled={isBusy} className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-900/20 dark:hover:text-red-400" title="Remove schedule; keep workflow manual">
+            {busyAction === `remove:${workflow.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="border-t border-gray-100 px-4 pb-4 pt-3 dark:border-gray-800 midnight:border-slate-800">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Workflow run history</span>
+            <code className="text-[10px] text-gray-400">{workflow.schedule}</code>
+          </div>
+          {runsLoading ? <div className="text-xs text-gray-400">Loading runs…</div> : null}
+          {!runsLoading && runs.length === 0 ? <div className="text-xs text-gray-400">No workflow runs recorded yet.</div> : null}
+          {!runsLoading && runs.length > 0 ? (
+            <div className="space-y-2">
+              {runs.slice(0, 8).map(run => {
+                const meta = runStatusMeta(run.status);
+                return (
+                  <div key={run.id} className="flex items-center gap-2 rounded-lg border border-gray-100 px-3 py-2 text-xs dark:border-gray-800 midnight:border-slate-800">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${meta.cls}`}>{meta.label}</span>
+                    <span className="flex-1 text-gray-500 dark:text-gray-400">{run.stepsCompleted}/{run.stepsTotal} steps · {run.trigger}</span>
+                    <span className="text-[10px] text-gray-400">{run.startedAt ? new Date(run.startedAt).toLocaleString() : '—'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function EmptyState({ onAdd }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
       <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 flex items-center justify-center mb-4">
         <Clock className="w-6 h-6 text-gray-400" />
       </div>
-      <h3 className="text-sm font-semibold text-gray-800 dark:text-white midnight:text-slate-200 mb-2">No scheduled jobs yet</h3>
+      <h3 className="text-sm font-semibold text-gray-800 dark:text-white midnight:text-slate-200 mb-2">No schedules yet</h3>
       <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 max-w-xs leading-relaxed mb-6">
-        Schedule the agent to run goals automatically — on a repeating interval, at a specific time, or once after a delay.
+        Schedule an agent instruction or an existing workflow to run automatically.
       </p>
       <button
         onClick={onAdd}
@@ -628,32 +832,38 @@ function EmptyState({ onAdd }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SchedulerPage({ embedded = false }) {
+  const navigate = useNavigate();
   const [jobs, setJobs]           = useState([]);
+  const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [profiles, setProfiles]   = useState([]);
   const [providerProfiles, setProviderProfiles] = useState([]);
   const [activeProvider, setActiveProvider] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingJob, setEditingJob] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [runningNowId, setRunningNowId] = useState(null);
+  const [workflowAction, setWorkflowAction] = useState(null);
 
   const fetchJobs = useCallback(async () => {
     setError(null);
     try {
-      const [res, profileRes, providerProfilesRes, activeProviderRes] = await Promise.all([
+      const [res, workflowRes, profileRes, providerProfilesRes, activeProviderRes] = await Promise.all([
         schedulerApi.listJobs(),
+        agentApi.listWorkflows(),
         profilesApi.listProfiles().catch(() => ({ profiles: [] })),
         aiProviderApi.listProfiles().catch(() => ({ profiles: [], active: null })),
         aiProviderApi.getConfig().catch(() => null),
       ]);
       setJobs(res.jobs || []);
+      setWorkflows(workflowRes.workflows || []);
       setProfiles(profileRes.profiles || []);
       setProviderProfiles(providerProfilesRes.profiles || []);
       setActiveProvider(activeProviderRes?.model ? activeProviderRes : null);
     } catch (err) {
-      setError(err.message || 'Failed to load scheduled jobs');
+      setError(err.message || 'Failed to load schedules');
     } finally {
       setLoading(false);
     }
@@ -668,8 +878,21 @@ export default function SchedulerPage({ embedded = false }) {
   }, [fetchJobs]);
 
   async function handleCreate(data) {
-    const res = await schedulerApi.createJob(data);
-    if (!res.success) throw new Error(res.error || 'Failed to create job');
+    if (data.targetType === 'workflow') {
+      const res = await agentApi.updateWorkflow(data.workflowId, {
+        triggerType: 'schedule',
+        schedule: data.schedule,
+        timezone: data.timezone,
+        enabled: true,
+      });
+      if (!res.success) throw new Error(res.error || 'Failed to schedule workflow');
+      await fetchJobs();
+      return;
+    }
+    const res = editingJob
+      ? await schedulerApi.updateJob(editingJob.id, data)
+      : await schedulerApi.createJob(data);
+    if (!res.success) throw new Error(res.error || (editingJob ? 'Failed to update job' : 'Failed to create job'));
     await fetchJobs();
   }
 
@@ -713,8 +936,49 @@ export default function SchedulerPage({ embedded = false }) {
     }
   }
 
+  async function handleWorkflowToggle(id, isEnabled) {
+    setWorkflowAction(`toggle:${id}`);
+    try {
+      await agentApi.updateWorkflow(id, { enabled: !isEnabled });
+      await fetchJobs();
+    } catch (err) {
+      setError(err.message || 'Failed to update workflow schedule');
+    } finally {
+      setWorkflowAction(null);
+    }
+  }
+
+  async function handleWorkflowRunNow(id) {
+    setWorkflowAction(`run:${id}`);
+    try {
+      await agentApi.runWorkflow(id);
+      await fetchJobs();
+    } catch (err) {
+      setError(err.message || 'Failed to run workflow');
+    } finally {
+      setWorkflowAction(null);
+    }
+  }
+
+  async function handleWorkflowRemoveSchedule(id) {
+    setWorkflowAction(`remove:${id}`);
+    try {
+      await agentApi.updateWorkflow(id, { triggerType: 'manual', schedule: null });
+      await fetchJobs();
+    } catch (err) {
+      setError(err.message || 'Failed to remove workflow schedule');
+    } finally {
+      setWorkflowAction(null);
+    }
+  }
+
   const activeJobs  = jobs.filter(j => j.enabled);
   const pausedJobs  = jobs.filter(j => !j.enabled);
+  const scheduledWorkflows = workflows.filter(workflow => workflow.triggerType === 'schedule' && workflow.schedule);
+  const activeWorkflowSchedules = scheduledWorkflows.filter(workflow => workflow.enabled);
+  const pausedWorkflowSchedules = scheduledWorkflows.filter(workflow => !workflow.enabled);
+  const activeScheduleCount = activeJobs.length + activeWorkflowSchedules.length;
+  const pausedScheduleCount = pausedJobs.length + pausedWorkflowSchedules.length;
   const profilesById = new Map(profiles.map(profile => [profile.id, profile]));
 
   return (
@@ -725,20 +989,20 @@ export default function SchedulerPage({ embedded = false }) {
           <div className="flex items-center gap-3 text-xs text-gray-400">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              {activeJobs.length} active
+              {activeScheduleCount} active
             </span>
-            {pausedJobs.length > 0 && (
+            {pausedScheduleCount > 0 && (
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
-                {pausedJobs.length} paused
+                {pausedScheduleCount} paused
               </span>
             )}
           </div>
           <button onClick={fetchJobs} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh">
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors">
-            <Plus className="w-4 h-4" />New Job
+          <button onClick={() => { setEditingJob(null); setShowModal(true); }} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium transition-colors">
+            <Plus className="w-4 h-4" />New Schedule
           </button>
         </div>
       ) : (
@@ -746,26 +1010,29 @@ export default function SchedulerPage({ embedded = false }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              <h1 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Agent Scheduler</h1>
+              <div>
+                <h1 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Schedules</h1>
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">Manage when agent instructions and workflows run.</p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-3 text-xs text-gray-400 midnight:text-slate-400">
                 <span className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 midnight:bg-emerald-600/70" />
-                  {activeJobs.length} active
+                  {activeScheduleCount} active
                 </span>
-                {pausedJobs.length > 0 && (
+                {pausedScheduleCount > 0 && (
                   <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 midnight:bg-slate-700" />
-                    {pausedJobs.length} paused
+                    {pausedScheduleCount} paused
                   </span>
                 )}
               </div>
               <button onClick={fetchJobs} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:text-slate-200 midnight:hover:bg-slate-900 transition-colors" title="Refresh">
                 <RefreshCw className="w-4 h-4" />
               </button>
-              <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 midnight:bg-slate-100 midnight:hover:bg-white midnight:text-slate-950 rounded-lg text-sm font-medium transition-colors">
-                <Plus className="w-4 h-4" />New Job
+              <button onClick={() => { setEditingJob(null); setShowModal(true); }} className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 midnight:bg-slate-100 midnight:hover:bg-white midnight:text-slate-950 rounded-lg text-sm font-medium transition-colors">
+                <Plus className="w-4 h-4" />New Schedule
               </button>
             </div>
           </div>
@@ -777,7 +1044,7 @@ export default function SchedulerPage({ embedded = false }) {
         {loading && (
           <div className="flex items-center justify-center py-24 gap-2 text-gray-400">
             <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Loading scheduled jobs…</span>
+            <span className="text-sm">Loading schedules…</span>
           </div>
         )}
 
@@ -789,18 +1056,42 @@ export default function SchedulerPage({ embedded = false }) {
           </div>
         )}
 
-        {!loading && !error && jobs.length === 0 && (
-          <EmptyState onAdd={() => setShowModal(true)} />
+        {!loading && !error && jobs.length === 0 && scheduledWorkflows.length === 0 && (
+          <EmptyState onAdd={() => { setEditingJob(null); setShowModal(true); }} />
         )}
 
-        {!loading && !error && jobs.length > 0 && (
+        {!loading && !error && (jobs.length > 0 || scheduledWorkflows.length > 0) && (
           <div className="px-6 py-5 space-y-6">
+            {scheduledWorkflows.length > 0 && (
+              <section>
+                <div className="mb-3 flex items-center gap-2">
+                  <Workflow className="h-3.5 w-3.5 text-indigo-500" />
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Scheduled workflows</h2>
+                  <span className="ml-1 text-[10px] text-gray-400">{scheduledWorkflows.length}</span>
+                </div>
+                <div className="space-y-3">
+                  {scheduledWorkflows.map(workflow => (
+                    <WorkflowScheduleCard
+                      key={workflow.id}
+                      workflow={workflow}
+                      profile={profilesById.get(workflow.profileId)}
+                      onToggle={handleWorkflowToggle}
+                      onRunNow={handleWorkflowRunNow}
+                      onRemove={handleWorkflowRemoveSchedule}
+                      busyAction={workflowAction}
+                      onEdit={id => navigate(`/workflows?workflow=${encodeURIComponent(id)}`)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Active jobs */}
             {activeJobs.length > 0 && (
               <section>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Active</h2>
+                  <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Active agent jobs</h2>
                   <span className="text-[10px] text-gray-400 ml-1">{activeJobs.length}</span>
                 </div>
                 <div className="space-y-3">
@@ -812,6 +1103,7 @@ export default function SchedulerPage({ embedded = false }) {
                       onDelete={handleDelete}
                       onToggle={handleToggle}
                       onRunNow={handleRunNow}
+                      onEdit={job => { setEditingJob(job); setShowModal(true); }}
                       deletingId={deletingId}
                       togglingId={togglingId}
                       runningNowId={runningNowId}
@@ -826,7 +1118,7 @@ export default function SchedulerPage({ embedded = false }) {
               <section>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
-                  <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Paused</h2>
+                  <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Paused agent jobs</h2>
                   <span className="text-[10px] text-gray-400 ml-1">{pausedJobs.length}</span>
                 </div>
                 <div className="space-y-3">
@@ -838,6 +1130,7 @@ export default function SchedulerPage({ embedded = false }) {
                       onDelete={handleDelete}
                       onToggle={handleToggle}
                       onRunNow={handleRunNow}
+                      onEdit={job => { setEditingJob(job); setShowModal(true); }}
                       deletingId={deletingId}
                       togglingId={togglingId}
                       runningNowId={runningNowId}
@@ -852,11 +1145,13 @@ export default function SchedulerPage({ embedded = false }) {
 
       {showModal && (
         <CreateJobModal
-          onClose={() => setShowModal(false)}
+          onClose={() => { setShowModal(false); setEditingJob(null); }}
           onCreate={handleCreate}
           profiles={profiles}
           providerProfiles={providerProfiles}
           activeProvider={activeProvider}
+          workflows={workflows}
+          initialJob={editingJob}
         />
       )}
     </div>

@@ -7,7 +7,7 @@ import {
   deleteWorkflow, runWorkflow, listWorkflowRuns, listRecentRuns,
 } from '../../agent/WorkflowEngine.js';
 
-export function createWorkflowRouter({ withWorkspaceContext }) {
+export function createWorkflowRouter({ withWorkspaceContext, resolveProvider = null }) {
   const router = express.Router();
 
   router.get('/', withWorkspaceContext, (req, res) => {
@@ -20,7 +20,11 @@ export function createWorkflowRouter({ withWorkspaceContext }) {
 
   router.post('/', withWorkspaceContext, (req, res) => {
     try {
-      const workflow = createWorkflow({ userId: req.user.id, workspaceId: req.workspaceId || null, ...req.body });
+      const input = { ...(req.body || {}) };
+      if (resolveProvider && Object.prototype.hasOwnProperty.call(input, 'providerProfileId')) {
+        Object.assign(input, resolveProvider(req.user.id, input.providerProfileId || null));
+      }
+      const workflow = createWorkflow({ userId: req.user.id, workspaceId: req.workspaceId || null, ...input });
       res.status(201).json({ success: true, workflow });
     } catch (err) {
       res.status(400).json({ success: false, error: err.message });
@@ -46,7 +50,11 @@ export function createWorkflowRouter({ withWorkspaceContext }) {
 
   router.put('/:id', withWorkspaceContext, (req, res) => {
     try {
-      res.json({ success: true, workflow: updateWorkflow(req.params.id, req.user.id, req.body) });
+      const input = { ...(req.body || {}) };
+      if (resolveProvider && Object.prototype.hasOwnProperty.call(input, 'providerProfileId')) {
+        Object.assign(input, resolveProvider(req.user.id, input.providerProfileId || null));
+      }
+      res.json({ success: true, workflow: updateWorkflow(req.params.id, req.user.id, input) });
     } catch (err) {
       res.status(err.message.includes('not found') ? 404 : 400).json({ success: false, error: err.message });
     }
