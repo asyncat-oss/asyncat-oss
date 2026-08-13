@@ -1,4 +1,4 @@
-import { RefreshCw, Play, Trash2, Box, Cpu, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, FolderOpen } from 'lucide-react';
+import { RefreshCw, Play, Trash2, Box, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, File, FolderOpen } from 'lucide-react';
 import { LocalModelLogo } from './modelLogos.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';
 import { localModelsApi, llamaServerApi, mlxApi } from '../Settings/settingApi.js';
@@ -219,6 +219,55 @@ const LocalModelsPane = ({
               className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 midnight:border-gray-800/80 midnight:bg-gray-900/50 midnight:text-gray-100 midnight:placeholder:text-gray-500 midnight:focus:border-gray-700"
             />
           </div>
+          {(window?.electronAPI?.openFilesDialog || window?.electronAPI?.openDirectory) && (
+            <div className="mt-2 flex items-center gap-2">
+              {window.electronAPI.openFilesDialog && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setSwitchError('');
+                    const result = await window.electronAPI.openFilesDialog({
+                      title: 'Choose a local model file',
+                      buttonLabel: 'Choose Model',
+                      multiSelections: false,
+                      defaultPath: quickLoadPath.trim() || undefined,
+                      filters: [
+                        { name: 'Local model files', extensions: ['gguf', 'bin'] },
+                        { name: 'All files', extensions: ['*'] },
+                      ],
+                    });
+                    if (!result?.canceled && result?.filePaths?.[0]) {
+                      setQuickLoadPath(result.filePaths[0]);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
+                >
+                  <File className="h-3.5 w-3.5" />
+                  Choose file
+                </button>
+              )}
+              {window.electronAPI.openDirectory && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setSwitchError('');
+                    const result = await window.electronAPI.openDirectory({
+                      title: 'Choose an MLX model directory',
+                      buttonLabel: 'Choose Model Folder',
+                      defaultPath: quickLoadPath.trim() || undefined,
+                    });
+                    if (!result?.canceled && result?.filePaths?.[0]) {
+                      setQuickLoadPath(result.filePaths[0]);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  Choose folder
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button

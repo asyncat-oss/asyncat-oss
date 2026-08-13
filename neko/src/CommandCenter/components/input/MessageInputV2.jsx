@@ -1,5 +1,6 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell, Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
 import eventBus from "../../../utils/eventBus.js";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
@@ -497,6 +498,7 @@ export const MessageInputV2 = ({
   onPermissionDecision,
   onAskUserAnswer,
 }) => {
+  const navigate = useNavigate();
   const [value, setValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -1136,7 +1138,7 @@ export const MessageInputV2 = ({
   const handleModelSelect = useCallback(
     async (nextModel) => {
       setOpenMenu(null);
-      if (nextModel === "__manage__") { window.location.href = "/models"; return; }
+      if (nextModel === "__manage__") { navigate("/models"); return; }
       if (!nextModel || isSwitchingModel) return;
       if (nextModel.startsWith("provider:")) {
         const profileId = nextModel.slice("provider:".length);
@@ -1165,7 +1167,7 @@ export const MessageInputV2 = ({
         setIsSwitchingModel(false);
       }
     },
-    [ctxSize, isSwitchingModel, localModel.model, activeProfileId],
+    [ctxSize, isSwitchingModel, localModel.model, activeProfileId, navigate],
   );
 
   useEffect(() => {
