@@ -218,7 +218,12 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
               {hasActiveRuns ? <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-950" /> : null}
             </span>
             <span className={`min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-[-0.01em] text-gray-950 dark:text-gray-100 midnight:text-slate-100 ${collapsed ? "hidden" : "hidden sm:block"}`}>
-              Asyncat
+              <span className="inline-flex items-center gap-1.5">
+                Asyncat
+                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-indigo-600 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-300 midnight:border-indigo-400/20 midnight:bg-indigo-400/10 midnight:text-indigo-300">
+                  Beta
+                </span>
+              </span>
             </span>
           </button>
 

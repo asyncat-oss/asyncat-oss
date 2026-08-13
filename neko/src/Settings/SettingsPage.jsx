@@ -180,13 +180,19 @@ const SettingsPage = () => {
         type="button"
         onClick={() => navigate(`/settings/${item.id}`)}
         aria-current={selected ? 'page' : undefined}
-        className={`${mobile ? 'shrink-0' : 'w-full'} flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+        className={`${mobile ? 'shrink-0' : 'w-full'} group relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-left text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-gray-400/40 ${
           selected
-            ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900'
-            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-900 midnight:hover:text-slate-100'
+            ? 'bg-gray-100 text-gray-950 dark:bg-white/[0.07] dark:text-gray-100 midnight:bg-white/[0.06] midnight:text-slate-100'
+            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100'
         }`}
       >
-        <Icon className="h-4 w-4 shrink-0" />
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center transition-colors ${
+          selected
+            ? 'text-current'
+            : 'text-gray-400 group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-slate-500 midnight:group-hover:text-slate-300'
+        }`}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
         {item.label}
       </button>
     );
@@ -194,12 +200,12 @@ const SettingsPage = () => {
 
   return (
     <div className="flex h-full w-full bg-white font-sans text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200/80 bg-gray-50/70 lg:flex dark:border-gray-800 dark:bg-gray-950/40 midnight:border-slate-800 midnight:bg-slate-950">
-        <div className="border-b border-gray-200/80 px-4 py-4 dark:border-gray-800 midnight:border-slate-800">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200/70 bg-white lg:flex dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+        <div className="border-b border-gray-200/70 px-4 py-4 dark:border-gray-800 midnight:border-slate-800">
           <button
             type="button"
             onClick={() => navigate('/home')}
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-900"
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to Asyncat
