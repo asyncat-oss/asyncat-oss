@@ -236,13 +236,20 @@ const AppLayout = () => {
   // Show loading while workspaces are being fetched
   if (workspacesLoading) {
     return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 flex flex-col items-center justify-center">
-        <div className="mb-8">
-          <div className="w-8 h-8 border-4 border-indigo-200 dark:border-indigo-800 midnight:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 midnight:border-t-indigo-300 rounded-full animate-spin"></div>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-white text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100">
+        <svg
+          viewBox="0 0 32 32"
+          fill="none"
+          aria-hidden="true"
+          className="h-9 w-9 animate-[fadeIn_300ms_ease-out]"
+        >
+          <path d="M6 25L11.5 8L16 13L20.5 8L26 25" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M9 20H23" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+        </svg>
+        <div className="mt-4 text-sm font-semibold tracking-[-0.01em]">Asyncat</div>
+        <div className="mt-5 h-px w-10 overflow-hidden bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" role="status" aria-label="Loading workspace">
+          <div className="h-full w-[45%] bg-gray-900 motion-safe:animate-[loading-line_1.35s_ease-in-out_infinite] dark:bg-gray-100 midnight:bg-slate-100" />
         </div>
-        <p className="text-lg font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-300 text-center px-4 mb-4 transition-all duration-300">
-          Setting up your workspace...
-        </p>
       </div>
     );
   }
@@ -298,8 +305,8 @@ const AppLayout = () => {
   const navigationPaddingClass = isSettingsPage
     ? ''
     : sidebarState === 'collapsed'
-      ? 'pl-16'
-      : 'pl-16 sm:pl-56';
+      ? 'pl-[72px]'
+      : 'pl-[72px] sm:pl-64';
 
   // Normal dashboard when user has workspaces
   return (
@@ -307,7 +314,6 @@ const AppLayout = () => {
       <ConnectionNotice />
       {!isSettingsPage && (
         <Sidebar
-          localUser={localUser}
           onNewChat={handleNewChatWithNavigation}
           basePage={basePage}
           isSearchOpen={isSearchOpen}

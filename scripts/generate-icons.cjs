@@ -9,10 +9,11 @@ const { appBuilderPath } = require('app-builder-bin');
 
 const root = path.resolve(__dirname, '..');
 const publicDir = path.join(root, 'neko', 'public');
-const sourcePath = path.join(publicDir, 'Logo_Asyncat.png');
+const sourcePath = path.join(publicDir, 'Logo_Asyncat.svg');
 const linuxIconDir = path.join(publicDir, 'icons');
 
 const pngTargets = [
+  ['Logo_Asyncat.png', 1024],
   ['app-icon-1024.png', 1024],
   ['app-icon-512.png', 512],
   ['app-tray.png', 32],

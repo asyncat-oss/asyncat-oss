@@ -549,6 +549,16 @@ body {
   animation: spin-slow 2s linear infinite;
 }
 
+@keyframes loading-line {
+  0% {
+    transform: translateX(-110%);
+  }
+  55%,
+  100% {
+    transform: translateX(210%);
+  }
+}
+
 /* Add a focused state animation for form elements */
 @keyframes focus-border-pulse {
   0% {

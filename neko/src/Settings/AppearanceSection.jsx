@@ -16,7 +16,6 @@ import {
   Workflow,
 } from "lucide-react";
 import KeyboardShortcutsSection from "./KeyboardShortcutsSection.jsx";
-import AppIconSection from "./AppIconSection.jsx";
 import PetSection from "./PetSection.jsx";
 import PropTypes from "prop-types";
 import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
@@ -225,8 +224,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           onChange={() => setPageTransitionsEnabled(false)}
         />
       </PreferenceCard>
-
-      <AppIconSection />
 
       <PetSection />
 

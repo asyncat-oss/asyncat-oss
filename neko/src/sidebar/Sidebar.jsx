@@ -1,221 +1,114 @@
-import {
-  useState,
-  useEffect,
-  memo,
-  useCallback,
-  useMemo,
-} from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import PropTypes from "prop-types";
-import { useNavigate, useLocation } from "react-router-dom";
-import apiClient from "../services/apiClient.js";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Command,
-  Settings,
-  Cpu,
-  Wrench,
-  BrainCircuit,
-  Workflow,
   Bell,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  KanbanSquare,
+  BrainCircuit,
+  Cpu,
   GraduationCap,
+  KanbanSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Settings,
+  SquarePen,
+  Trash2,
+  Workflow,
+  Wrench,
 } from "lucide-react";
 
-import UniversalSearch from "./UniversalSearch";
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
-import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
-import eventBus from "../utils/eventBus.js";
 import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
-import catDP from "../assets/dp/CAT.webp";
-import dogDP from "../assets/dp/DOG.webp";
-import dolphinDP from "../assets/dp/DOLPHIN.webp";
-import dragonDP from "../assets/dp/DRAGON.webp";
-import elephantDP from "../assets/dp/ELEPHANT.webp";
-import foxDP from "../assets/dp/FOX.webp";
-import lionDP from "../assets/dp/LION.webp";
-import owlDP from "../assets/dp/OWL.webp";
-import penguinDP from "../assets/dp/PENGUIN.webp";
-import wolfDP from "../assets/dp/WOLF.webp";
+import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
+import UniversalSearch from "./UniversalSearch";
 
-let globalProfileCache = null;
-let profileCacheInitialized = false;
+const iconClass = "h-[18px] w-[18px]";
 
-const PROFILE_PICTURE_MAP = {
-  CAT: catDP,
-  DOG: dogDP,
-  DOLPHIN: dolphinDP,
-  DRAGON: dragonDP,
-  ELEPHANT: elephantDP,
-  FOX: foxDP,
-  LION: lionDP,
-  OWL: owlDP,
-  PENGUIN: penguinDP,
-  WOLF: wolfDP,
-};
-
-const isProfilePictureUrl = (value) => {
-  if (!value) return false;
-  return /^(https?:|data:|blob:)/i.test(value) || value.startsWith("/");
-};
-
-// ── ProfileImage ──────────────────────────────────────────────────────────────
-
-const ProfileImage = memo(
-  ({ size = "w-6 h-6", className = "", src, initials, hasError, onError, onLoad }) => {
-    if (src && !hasError) {
-      return (
-        <img
-          src={src}
-          alt="Profile"
-          className={`${size} rounded-full object-cover ${className}`}
-          loading="eager"
-          decoding="async"
-          onError={onError}
-          onLoad={onLoad}
-        />
-      );
-    }
-    return (
-      <div
-        className={`${size} rounded-full flex items-center justify-center bg-gray-200 dark:bg-gray-700 midnight:bg-gray-700 text-gray-600 dark:text-gray-300 midnight:text-gray-300 font-medium text-[10px] ${className}`}
-      >
-        {initials}
-      </div>
-    );
-  }
+const AsyncatMark = ({ className = "h-7 w-7" }) => (
+  <svg
+    viewBox="0 0 32 32"
+    aria-hidden="true"
+    className={className}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M6 25L11.5 8L16 13L20.5 8L26 25" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M9 20H23" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+  </svg>
 );
-ProfileImage.displayName = "ProfileImage";
-ProfileImage.propTypes = {
-  size: PropTypes.string,
+
+AsyncatMark.propTypes = {
   className: PropTypes.string,
-  src: PropTypes.string,
-  initials: PropTypes.string,
-  hasError: PropTypes.bool,
-  onError: PropTypes.func,
-  onLoad: PropTypes.func,
 };
 
-const formatShortcut = (shortcut) => {
-  if (!shortcut?.key) return "";
-  const parts = [];
-  if (shortcut.meta) parts.push("⌘");
-  else if (shortcut.ctrl) parts.push("Ctrl");
-  parts.push(shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key);
-  return parts.join(shortcut.meta ? "" : "+");
-};
-
-const SidebarNavItem = memo(({ icon, label, shortcut, onClick, isActive, collapsed = false }) => (
+const SidebarNavItem = memo(({ icon, label, onClick, isActive, collapsed = false }) => (
   <button
     type="button"
     onClick={onClick}
-    title={shortcut ? `${label} ${shortcut}` : label}
+    title={label}
+    aria-current={isActive ? "page" : undefined}
     className={`
-      group w-full h-10 flex items-center gap-3 rounded-lg px-3
-      transition-colors duration-150
+      group relative flex h-9 w-full items-center gap-3 rounded-lg px-2.5
+      outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-gray-400/40
       ${isActive
-        ? "bg-gray-100/80 text-gray-950 dark:bg-white/[0.06] dark:text-white midnight:bg-white/[0.05] midnight:text-white"
-        : "text-gray-500 hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.045] dark:hover:text-gray-100 midnight:text-gray-500 midnight:hover:bg-white/[0.045] midnight:hover:text-gray-100"
+        ? "bg-gray-100 text-gray-950 dark:bg-white/[0.07] dark:text-gray-100 midnight:bg-white/[0.06] midnight:text-slate-100"
+        : "text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
       }
     `}
   >
-    <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors ${
+    <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center transition-colors ${
       isActive
-        ? 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
-        : 'text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-gray-500 midnight:group-hover:text-gray-300'
+        ? "text-current"
+        : "text-gray-400 group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-slate-500 midnight:group-hover:text-slate-300"
     }`}>
       {icon}
     </span>
-    <span className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${collapsed ? 'hidden' : 'hidden sm:block'}`}>
+    <span className={`min-w-0 flex-1 truncate text-left text-[13px] font-medium ${collapsed ? "hidden" : "hidden sm:block"}`}>
       {label}
     </span>
   </button>
 ));
+
 SidebarNavItem.displayName = "SidebarNavItem";
 SidebarNavItem.propTypes = {
   icon: PropTypes.node,
   label: PropTypes.string.isRequired,
-  shortcut: PropTypes.string,
   onClick: PropTypes.func,
   isActive: PropTypes.bool,
   collapsed: PropTypes.bool,
 };
 
-// ── Main Sidebar Component ────────────────────────────────────────────────────
-
-const DynamicSidebar = ({
-  localUser,
-  onNewChat,
-  basePage,
-  isSearchOpen,
-  onSearchOpen,
-}) => {
+const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [shortcuts, setShortcuts] = useState(loadKeyboardShortcuts);
-  const { sidebarState, setSidebarState, navItemsVisibility } = useUiPreferences();
-
-  // Profile state (for sidebar avatar)
-  const API_URL = import.meta.env.VITE_USER_URL;
-  const [profileData, setProfileData] = useState(
-    () => globalProfileCache || { name: "", profilePicture: "" }
-  );
-  const [profileImageError, setProfileImageError] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(
-    () => sessionStorage.getItem('asyncatUpdateAvailable') === 'true',
+    () => sessionStorage.getItem("asyncatUpdateAvailable") === "true",
   );
+  const { sidebarState, setSidebarState, navItemsVisibility } = useUiPreferences();
   const {
     currentConversationId,
     hasActiveRuns,
     chatRunPreviews = [],
   } = useCommandCenter();
 
+  const collapsed = sidebarState === "collapsed";
   const latestChatRun = chatRunPreviews[0];
   const commandCenterTarget = currentConversationId
     ? `/conversations/${currentConversationId}`
     : latestChatRun?.conversationId
       ? `/conversations/${latestChatRun.conversationId}`
-      : '/home';
+      : "/home";
+
   const openCommandCenter = useCallback(() => {
     navigate(commandCenterTarget);
   }, [commandCenterTarget, navigate]);
-
-  // Fetch profile data (for sidebar avatar)
-  const userId = useMemo(() => localUser?.id, [localUser?.id]);
-  useEffect(() => {
-    if (profileCacheInitialized && globalProfileCache) { setProfileData(globalProfileCache); return; }
-    if (!userId) return;
-    apiClient
-      .request(`${API_URL}/api/users/me`, { method: "GET", headers: { "Content-Type": "application/json" } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.success && data.data) {
-          const p = { name: data.data.name || "", profilePicture: data.data.profile_picture || "" };
-          globalProfileCache = p;
-          profileCacheInitialized = true;
-          setProfileData(p);
-        }
-      })
-      .catch(() => {});
-  }, [userId, API_URL]);
-
-  // Listen for profile picture updates
-  useEffect(() => {
-    const handler = (data) => {
-      const p = { profilePicture: data.profilePicture, name: data.name || data.fullName || profileData.name };
-      globalProfileCache = p;
-      setProfileData(p);
-      setProfileImageError(false);
-    };
-    return eventBus.on("profile-updated", handler);
-  }, [profileData.name]);
 
   useEffect(() => {
     const api = window.electronAPI;
     if (!api?.onUpdateAvailable || !api?.onUpdateDownloaded) return undefined;
     const markAvailable = () => {
-      sessionStorage.setItem('asyncatUpdateAvailable', 'true');
+      sessionStorage.setItem("asyncatUpdateAvailable", "true");
       setUpdateAvailable(true);
     };
     const cleanups = [
@@ -223,68 +116,51 @@ const DynamicSidebar = ({
       api.onUpdateDownloaded(markAvailable),
     ];
     return () => cleanups.forEach((cleanup) => {
-      if (typeof cleanup === 'function') cleanup();
+      if (typeof cleanup === "function") cleanup();
     });
   }, []);
 
-  // Resolve profile picture URL — default to CAT when no picture is set
-  const profilePictureUrl = useMemo(() => {
-    const pic = profileData.profilePicture || "CAT";
-    if (isProfilePictureUrl(pic)) return pic;
-    return PROFILE_PICTURE_MAP[pic] || null;
-  }, [profileData.profilePicture]);
-
-  const profileInitials = useMemo(() => {
-    const name = profileData.name || localUser?.name || '';
-    return name ? name.charAt(0).toUpperCase() : 'U';
-  }, [profileData, localUser]);
-
-  // Keyboard shortcuts
   useEffect(() => {
-    const handler = (e) => {
-      const match = Object.values(shortcuts).find(s => {
-        const keyMatch = s.key === e.key;
-        const ctrlMatch = s.ctrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey);
+    const handler = (event) => {
+      const match = Object.values(shortcuts).find((shortcut) => {
+        const keyMatch = shortcut.key === event.key;
+        const ctrlMatch = shortcut.ctrl
+          ? event.ctrlKey || event.metaKey
+          : !event.ctrlKey && !event.metaKey;
         return keyMatch && ctrlMatch;
       });
 
       if (!match) return;
-      e.preventDefault();
+      event.preventDefault();
 
       switch (match.action) {
-        case 'openSearch': onSearchOpen(true); break;
-        case 'openSettings': navigate("/settings/profile"); break;
-        case 'newChat': onNewChat(); break;
-        case 'navHome': openCommandCenter(); break;
-        case 'navChat': navigate("/all-chats"); break;
-        case 'navWorkspace': navigate("/workspace"); break;
-        case 'navModels': navigate("/models"); break;
-        case 'navTools': navigate("/tools"); break;
-        case 'navScheduler': navigate("/agent/scheduler"); break;
-        case 'navProfiles': navigate("/agent/profiles"); break;
-        case 'navAgent': navigate("/agent"); break;
+        case "openSearch": onSearchOpen(true); break;
+        case "openSettings": navigate("/settings/profile"); break;
+        case "newChat": onNewChat(); break;
+        case "navHome": openCommandCenter(); break;
+        case "navChat": navigate("/all-chats"); break;
+        case "navWorkspace": navigate("/workspace"); break;
+        case "navModels": navigate("/models"); break;
+        case "navTools": navigate("/tools"); break;
+        case "navScheduler": navigate("/agent/scheduler"); break;
+        case "navProfiles": navigate("/agent/profiles"); break;
+        case "navAgent": navigate("/agent"); break;
         default: break;
       }
     };
 
-    const handleShortcutsChange = () => {
-      setShortcuts(loadKeyboardShortcuts());
-    };
-
+    const handleShortcutsChange = () => setShortcuts(loadKeyboardShortcuts());
     document.addEventListener("keydown", handler);
-    window.addEventListener('keyboard-shortcuts-changed', handleShortcutsChange);
-
+    window.addEventListener("keyboard-shortcuts-changed", handleShortcutsChange);
     return () => {
       document.removeEventListener("keydown", handler);
-      window.removeEventListener('keyboard-shortcuts-changed', handleShortcutsChange);
+      window.removeEventListener("keyboard-shortcuts-changed", handleShortcutsChange);
     };
-  }, [onNewChat, openCommandCenter, navigate, onSearchOpen, shortcuts]);
+  }, [navigate, onNewChat, onSearchOpen, openCommandCenter, shortcuts]);
 
-  // Active states
-  const isOnHome = basePage === "home";
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
   const isOnModels = basePage === "models";
-  const isOnAgent = location.pathname.startsWith("/agent") || location.pathname.startsWith("/scheduler") || location.pathname.startsWith("/profiles");
+  const isOnAgent = ["/agent", "/scheduler", "/profiles"].some((path) => location.pathname.startsWith(path));
   const isOnTools = location.pathname.startsWith("/tools");
   const isOnWorkflows = location.pathname.startsWith("/workflows");
   const isOnActivity = location.pathname.startsWith("/activity");
@@ -292,175 +168,111 @@ const DynamicSidebar = ({
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
 
-  const shortcutByAction = useMemo(() => {
-    return Object.values(shortcuts).reduce((acc, shortcut) => {
-      acc[shortcut.action] = formatShortcut(shortcut);
-      return acc;
-    }, {});
-  }, [shortcuts]);
-
-  const labelWithShortcut = useCallback((label, action) => {
-    const shortcut = shortcutByAction[action];
-    return shortcut ? `${label}  ${shortcut}` : label;
-  }, [shortcutByAction]);
-
-  const workspaceIcon = <KanbanSquare className="w-5 h-5" />;
-
   const workItems = [
-    { key: "projects", label: "Tasks", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
-    { key: "workflows", label: "Workflows", action: "navWorkflows", onClick: () => navigate("/workflows"), active: isOnWorkflows, icon: <Workflow className="w-5 h-5" /> },
-    { key: "activity", label: "Activity", action: "navActivity", onClick: () => navigate("/activity"), active: isOnActivity, icon: <Bell className="w-5 h-5" /> },
-  ].filter(item => navItemsVisibility[item.key] !== false);
+    { key: "projects", label: "Tasks", path: "/workspace", active: isOnWorkspace, icon: <KanbanSquare className={iconClass} /> },
+    { key: "workflows", label: "Workflows", path: "/workflows", active: isOnWorkflows, icon: <Workflow className={iconClass} /> },
+    { key: "activity", label: "Activity", path: "/activity", active: isOnActivity, icon: <Bell className={iconClass} /> },
+  ].filter((item) => navItemsVisibility[item.key] !== false);
 
   const buildItems = [
-    { key: "models", label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
-    { key: "tools", label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
-    { key: "agent", label: "Automation", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
-    { key: "training", label: "Training", action: "navTraining", onClick: () => navigate("/training"), active: isOnTraining, icon: <GraduationCap className="w-5 h-5" /> },
-  ].filter(item => navItemsVisibility[item.key] !== false);
+    { key: "models", label: "Models", path: "/models", active: isOnModels, icon: <Cpu className={iconClass} /> },
+    { key: "tools", label: "Tools & Skills", path: "/tools", active: isOnTools, icon: <Wrench className={iconClass} /> },
+    { key: "agent", label: "Automation", path: "/agent", active: isOnAgent, icon: <BrainCircuit className={iconClass} /> },
+    { key: "training", label: "Training", path: "/training", active: isOnTraining, icon: <GraduationCap className={iconClass} /> },
+  ].filter((item) => navItemsVisibility[item.key] !== false);
 
-  const settingsIcon = (
-    <span className="relative">
-      {profilePictureUrl || profileInitials ? (
-        <ProfileImage
-          size="w-6 h-6"
-          src={profilePictureUrl}
-          initials={profileInitials}
-          hasError={profileImageError}
-          onError={() => setProfileImageError(true)}
-          onLoad={() => setProfileImageError(false)}
-        />
-      ) : (
-        <Settings className="w-5 h-5" />
-      )}
-      {updateAvailable && (
-        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-gray-950 midnight:ring-slate-950" />
-      )}
-    </span>
-  );
+  const renderItems = (items) => items.map((item) => (
+    <SidebarNavItem
+      key={item.key}
+      icon={item.icon}
+      label={item.label}
+      onClick={() => navigate(item.path)}
+      isActive={item.active}
+      collapsed={collapsed}
+    />
+  ));
 
-  const sidebarWidthClass = sidebarState === 'collapsed'
-    ? 'w-16'
-    : 'w-16 sm:w-56';
-
-  const toggleCollapse = () => {
-    const next = sidebarState === 'collapsed' ? 'expanded' : 'collapsed';
-    setSidebarState(next);
-  };
-
-  const CollapseIcon = sidebarState === 'collapsed'
-    ? ChevronRight
-    : ChevronLeft;
+  const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
     <>
       <aside
-        className={`
-          fixed left-0 top-0 h-screen
-          z-50 flex ${sidebarWidthClass} flex-col bg-white/70 backdrop-blur-xl
-          dark:bg-gray-950/55 midnight:bg-gray-950/55
-          border-r border-gray-200/50 dark:border-white/[0.06] midnight:border-white/[0.06]
-          transition-[width] duration-150
-        `}
+        className={`fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-gray-200/70 bg-white transition-[width] duration-200 ease-out dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 ${
+          collapsed ? "w-[72px]" : "w-[72px] sm:w-64"
+        }`}
       >
-        {/* Header row — identical styling to SidebarNavItem */}
-        <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
+        <div className="flex h-16 items-center gap-2 px-3">
           <button
             type="button"
             onClick={openCommandCenter}
-            title={labelWithShortcut("Command Center", "navHome")}
-            className={`
-              group flex-1 h-10 flex items-center gap-3 rounded-lg px-3
-              transition-colors duration-150
-              ${isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")
-                ? "bg-gray-100/80 text-gray-950 dark:bg-white/[0.06] dark:text-white midnight:bg-white/[0.05] midnight:text-white"
-                : "text-gray-500 hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.045] dark:hover:text-gray-100 midnight:text-gray-500 midnight:hover:bg-white/[0.045] midnight:hover:text-gray-100"
-              }
-            `}
+            title="Command Center"
+            className="group flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-gray-400/40"
           >
-            <span className={`relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors ${
-              isOnHome || location.pathname.startsWith("/conversations") || location.pathname.startsWith("/agents")
-                ? 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
-                : 'text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-gray-500 midnight:group-hover:text-gray-300'
-            }`}>
-              <Command className="h-5 w-5" />
-              {hasActiveRuns && (
-                <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-950" />
-              )}
+            <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+              <AsyncatMark className="h-8 w-8" />
+              {hasActiveRuns ? <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-950" /> : null}
             </span>
-            <span className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${sidebarState === 'collapsed' ? 'hidden' : 'hidden sm:block'}`}>
+            <span className={`min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-[-0.01em] text-gray-950 dark:text-gray-100 midnight:text-slate-100 ${collapsed ? "hidden" : "hidden sm:block"}`}>
               Asyncat
             </span>
           </button>
 
           <button
             type="button"
-            onClick={toggleCollapse}
-            title={sidebarState === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-gray-300 hover:bg-gray-100/70 dark:hover:bg-white/[0.06] midnight:hover:bg-white/[0.06] transition-colors"
+            onClick={() => setSidebarState(collapsed ? "expanded" : "collapsed")}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 outline-none transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-gray-400/40 dark:text-gray-500 dark:hover:bg-white/[0.05] dark:hover:text-gray-300 midnight:hover:bg-white/[0.05] ${collapsed ? "absolute left-5 top-[72px]" : ""}`}
           >
-            <CollapseIcon className="w-3.5 h-3.5" />
+            <CollapseIcon className="h-[17px] w-[17px]" />
           </button>
         </div>
 
+        <div className={`space-y-0.5 px-3 pb-3 ${collapsed ? "pt-11" : ""}`}>
+          <SidebarNavItem
+            icon={<SquarePen className={iconClass} />}
+            label="New chat"
+            onClick={onNewChat}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            icon={<Search className={iconClass} />}
+            label="Search"
+            onClick={() => onSearchOpen(true)}
+            collapsed={collapsed}
+          />
+        </div>
 
-        <nav className="flex-1 overflow-y-auto px-2.5 py-3">
-          {sidebarState !== 'collapsed' && (
-            <div className="hidden px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">
-              Work
-            </div>
-          )}
-          <div className="space-y-1">
-            {workItems.map((item) => (
-              <SidebarNavItem
-                key={item.label}
-                icon={item.icon}
-                label={item.label}
-                shortcut={shortcutByAction[item.action]}
-                onClick={item.onClick}
-                isActive={item.active}
-                collapsed={sidebarState === 'collapsed'}
-              />
-            ))}
-          </div>
+        <nav className="flex-1 overflow-y-auto px-3 py-2">
+          {!collapsed ? <div className="hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Work</div> : null}
+          <div className="space-y-0.5">{renderItems(workItems)}</div>
 
-          {sidebarState !== 'collapsed' && (
-            <div className="mt-5 hidden px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">
-              Build
-            </div>
-          )}
-          <div className="space-y-1">
-            {buildItems.map((item) => (
-              <SidebarNavItem
-                key={item.label}
-                icon={item.icon}
-                label={item.label}
-                shortcut={shortcutByAction[item.action]}
-                onClick={item.onClick}
-                isActive={item.active}
-                collapsed={sidebarState === 'collapsed'}
-              />
-            ))}
-          </div>
+          {!collapsed ? <div className="mt-5 hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Build</div> : null}
+          <div className="space-y-0.5">{renderItems(buildItems)}</div>
         </nav>
 
-        <div className="space-y-1 border-t border-gray-200/60 p-2.5 dark:border-white/[0.06] midnight:border-white/[0.06]">
-          {navItemsVisibility.trash !== false && (
+        <div className="space-y-0.5 border-t border-gray-200/70 p-3 dark:border-gray-800 midnight:border-slate-800">
+          {navItemsVisibility.trash !== false ? (
             <SidebarNavItem
-              icon={<Trash2 className="w-5 h-5" />}
+              icon={<Trash2 className={iconClass} />}
               label="Trash"
               onClick={() => navigate("/trash")}
               isActive={isOnTrash}
-              collapsed={sidebarState === 'collapsed'}
+              collapsed={collapsed}
             />
-          )}
+          ) : null}
           <SidebarNavItem
-            icon={settingsIcon}
+            icon={(
+              <span className="relative flex h-5 w-5 items-center justify-center">
+                <Settings className={iconClass} />
+                {updateAvailable ? <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-950" /> : null}
+              </span>
+            )}
             label="Settings"
-            shortcut={shortcutByAction.openSettings}
             onClick={() => navigate("/settings/profile")}
             isActive={isOnSettings}
-            collapsed={sidebarState === 'collapsed'}
+            collapsed={collapsed}
           />
         </div>
       </aside>
@@ -470,10 +282,6 @@ const DynamicSidebar = ({
 };
 
 DynamicSidebar.propTypes = {
-  localUser: PropTypes.shape({
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    name: PropTypes.string,
-  }),
   onNewChat: PropTypes.func,
   basePage: PropTypes.string,
   isSearchOpen: PropTypes.bool,

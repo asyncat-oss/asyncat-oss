@@ -59,7 +59,7 @@ const SettingsPage = () => {
       id: 'appearance',
       group: 'App',
       label: 'Appearance',
-      description: 'Theme, navigation, motion, and desktop extras.',
+      description: 'Theme, navigation, motion, and keyboard preferences.',
       icon: Palette,
     },
     {
