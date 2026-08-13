@@ -34,6 +34,7 @@ import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   Bot,
   Code2,
   Edit2,
@@ -43,8 +44,6 @@ import {
   Ghost,
   Download,
   Loader2,
-  History,
-  Plus,
   MessageSquare,
   PanelRightOpen,
   Image,
@@ -55,6 +54,7 @@ import {
   Sparkles,
   Globe,
   List,
+  Lock,
   SquareTerminal,
   FolderOpen,
 } from "lucide-react";
@@ -241,7 +241,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     isProcessing = false,
     isConversationLoading = false,
     handleClearConversation = () => {},
-    handleNewConversation = () => {},
     currentConversationId = null,
     conversationTitle = "",
     triggerConversationRefresh = () => {},
@@ -260,8 +259,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     onProjectsChange,
     chatRuns = {},
     updateChatRun = () => {},
-    activeConversationIds = new Set(),
-    hasActiveRuns = false,
     agentAbortControllersRef = fallbackAgentAbortControllersRef,
     runStartedAtRef = fallbackRunStartedAtRef,
     currentConversationIdRef = fallbackCurrentConversationIdRef,
@@ -287,7 +284,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [editingBranchId, setEditingBranchId] = useState(null);
   const [branchNameDraft, setBranchNameDraft] = useState('');
 
-  const [messageInputResetKey, setMessageInputResetKey] = useState(0);
   const [experienceMode, setExperienceMode] = useState(() => {
     if (initialMode === 'agent') return 'work';
     try {
@@ -296,9 +292,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return 'chat';
     }
   });
-  const [recentConversations, setRecentConversations] = useState([]);
-  const [recentConversationsLoading, setRecentConversationsLoading] = useState(false);
-  const [recentConversationsError, setRecentConversationsError] = useState(null);
+  const [continuingMode, setContinuingMode] = useState(null);
   const [showActivitySidebar, setShowActivitySidebar] = useState(() => {
     try {
       return workbenchPreferences.restoreOpenPanels && localStorage.getItem('asyncat_show_command_side_panel') === 'true';
@@ -309,7 +303,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [sidePanelTab, setSidePanelTab] = useState(() => {
     try {
       const saved = localStorage.getItem('asyncat_command_side_panel_tab');
-      return ['steps', 'code', 'media', 'history', 'saved', 'preview', 'artifacts', 'nav', 'runtime'].includes(saved) ? saved : 'steps';
+      return ['steps', 'code', 'media', 'saved', 'preview', 'artifacts', 'nav', 'runtime'].includes(saved) ? saved : 'steps';
     } catch { return 'steps'; }
   });
   const [prevSidePanelTab, setPrevSidePanelTab] = useState('steps');
@@ -448,6 +442,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     try { localStorage.setItem('asyncat_agent_mode', mode); } catch { /* localStorage may be unavailable */ }
   }, [setToolsEnabled]);
   const handleExperienceModeChange = useCallback((nextMode) => {
+    if (currentConversationId || messages.length > 0) return;
     const mode = nextMode === 'work' ? 'work' : 'chat';
     setExperienceMode(mode);
     setConversationMetadata({ ...(conversationMetadata || {}), experienceMode: mode });
@@ -456,7 +451,38 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       setSidePanelTab('steps');
     }
     try { localStorage.setItem('asyncat_experience_mode', mode); } catch { /* localStorage may be unavailable */ }
-  }, [conversationMetadata, setConversationMetadata]);
+  }, [conversationMetadata, currentConversationId, messages.length, setConversationMetadata]);
+  const handleContinueInExperienceMode = useCallback(async (targetMode) => {
+    if (!currentConversationId || agentRunning || continuingMode || isGhostMode) return;
+    const mode = targetMode === 'work' ? 'work' : 'chat';
+    if (mode === experienceMode) return;
+
+    setContinuingMode(mode);
+    setError(null);
+    try {
+      const result = await chatApi.continueConversation(currentConversationId, mode);
+      if (!result?.conversationId) throw new Error('The continued conversation was not created');
+      setShowActivitySidebar(false);
+      setShowTerminalDock(false);
+      setSelectedArtifact(null);
+      triggerConversationRefresh();
+      navigate(`/conversations/${result.conversationId}`);
+    } catch (error) {
+      console.error('Continue conversation error:', error);
+      setError(error.message || `Failed to continue in ${mode === 'work' ? 'Work' : 'Chat'}`);
+    } finally {
+      setContinuingMode(null);
+    }
+  }, [
+    agentRunning,
+    continuingMode,
+    currentConversationId,
+    experienceMode,
+    isGhostMode,
+    navigate,
+    setError,
+    triggerConversationRefresh,
+  ]);
   useEffect(() => {
     const savedMode = conversationMetadata?.experienceMode;
     if (!currentConversationId || !['chat', 'work'].includes(savedMode)) return;
@@ -711,44 +737,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return () => document.removeEventListener("mousedown", handler);
   }, [showBranchMenu]);
 
-  const loadRecentConversations = useCallback(async () => {
-    try {
-      setRecentConversationsLoading(true);
-      setRecentConversationsError(null);
-      const result = await chatApi.getConversationHistory({ limit: 8, archived: false });
-      const conversations = result?.conversations || [];
-      conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-      setRecentConversations(conversations);
-    } catch (error) {
-      console.error('Failed to load recent conversations:', error);
-      setRecentConversationsError('Could not load recent chats');
-    } finally {
-      setRecentConversationsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (showActivitySidebar && sidePanelTab === 'history') loadRecentConversations();
-  }, [showActivitySidebar, sidePanelTab, loadRecentConversations]);
-
-
-
-  const handleStartNewConversation = useCallback(async () => {
-    setShowActivitySidebar(false);
-    setSidePanelTab('steps');
-    setSelectedArtifact(null);
-    setMessageInputResetKey(prev => prev + 1);
-    navigate('/home');
-    await handleNewConversation();
-  }, [handleNewConversation, navigate]);
-
-  const handleOpenConversation = useCallback((conversationId) => {
-    if (!conversationId) return;
-
-    setMessageInputResetKey(prev => prev + 1);
-    navigate(`/conversations/${conversationId}`);
-  }, [navigate]);
-
   const refreshGitState = useCallback(async () => {
     setGitLoading(true);
     setGitError(null);
@@ -942,33 +930,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       });
     }
   }, []);
-
-  const ConversationSwitcher = useCallback(({ compact = false } = {}) => (
-    <button
-      type="button"
-      onClick={() => toggleSidePanelTab('history')}
-      className={`relative shrink-0 ${compact ? 'p-2' : 'inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium sm:px-2.5 sm:text-sm'} transition-colors ${
-        showActivitySidebar && sidePanelTab === 'history' && !compact
-          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-      }`}
-      title="Recent conversations"
-    >
-      <History className={compact ? "w-5 h-5" : "w-4 h-4"} />
-      {!compact && <span className="hidden sm:inline">History</span>}
-      {hasActiveRuns && (
-        <span
-          className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-900 animate-pulse"
-          title="A chat is generating"
-        />
-      )}
-    </button>
-  ), [
-    hasActiveRuns,
-    showActivitySidebar,
-    sidePanelTab,
-    toggleSidePanelTab,
-  ]);
 
   const conversationBranches = useMemo(() => {
     const storedBranches = Array.isArray(conversationMetadata?.branches)
@@ -2497,12 +2458,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     >
       {['chat', 'work'].map(mode => {
         const active = experienceMode === mode;
+        const description = mode === 'chat'
+          ? 'Direct model conversation without workspace tools'
+          : 'Agent conversation with workspace context, planning, and tools';
         return (
           <button
             key={mode}
             type="button"
             role="tab"
             aria-selected={active}
+            aria-label={`${mode}: ${description}`}
+            title={description}
             onClick={() => handleExperienceModeChange(mode)}
             disabled={agentRunning}
             className={`h-9 min-w-24 rounded-full px-6 text-sm font-semibold capitalize transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -2518,9 +2484,37 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     </div>
   );
   const hasConversationContent = messages.length > 0 || persistedAgentEvents.length > 0 || agentRunning;
-  const shouldRenderSidePanel = showActivitySidebar && (
-    sidePanelTab === 'history'
-    || (experienceMode === 'work' && (
+  const targetExperienceMode = experienceMode === 'chat' ? 'work' : 'chat';
+  const currentModeLabel = experienceMode === 'chat' ? 'Chat' : 'Work';
+  const targetModeLabel = targetExperienceMode === 'chat' ? 'Chat' : 'Work';
+  const CurrentModeIcon = experienceMode === 'chat' ? MessageSquare : Bot;
+  const lockedModeControl = (
+    <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1 shadow-sm dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+      <span
+        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-gray-100 px-3 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200 midnight:bg-slate-800 midnight:text-slate-200"
+        title={`${currentModeLabel} is fixed for this conversation`}
+      >
+        <CurrentModeIcon className="h-3.5 w-3.5" />
+        {currentModeLabel}
+        <Lock className="h-3 w-3 text-gray-400" />
+      </span>
+      {currentConversationId && !isGhostMode && (
+        <button
+          type="button"
+          onClick={() => handleContinueInExperienceMode(targetExperienceMode)}
+          disabled={agentRunning || Boolean(continuingMode)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-indigo-600 transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40 midnight:text-indigo-300 midnight:hover:bg-indigo-950/40"
+          title={`Create a new ${targetModeLabel} conversation with this transcript`}
+        >
+          {continuingMode === targetExperienceMode
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <ArrowRight className="h-3.5 w-3.5" />}
+          Continue in {targetModeLabel}
+        </button>
+      )}
+    </div>
+  );
+  const shouldRenderSidePanel = showActivitySidebar && experienceMode === 'work' && (
     sidePanelTab === 'saved'
     || sidePanelTab === 'preview'
     || sidePanelTab === 'artifacts'
@@ -2533,7 +2527,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     || persistedAgentEvents.length > 0
     || agentRunning
     || agentLoadingSession
-    ))
   );
 
   const welcomeScreenJSX =
@@ -2617,6 +2610,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               <h1 className="text-xl font-medium text-gray-900 dark:text-white midnight:text-slate-100">
                 {getGreeting()}
               </h1>
+              <p className="max-w-lg text-sm text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                {experienceMode === 'chat'
+                  ? 'Chat talks directly to the model. It cannot inspect or change your workspace.'
+                  : 'Work runs the agent, so it can plan, use enabled tools, and operate in your selected workspace.'}
+              </p>
             </div>
 
             {isGhostMode && (
@@ -2651,7 +2649,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             )}
 
             <MessageInputV2
-              key={`welcome-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
+              key={`welcome-input-${currentConversationId || 'draft'}`}
               onSubmit={handleAgentRun}
               sttReady={sttReady}
               ttsReady={ttsReady}
@@ -2717,13 +2715,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               <div className={`mx-auto px-3 sm:px-4 md:px-6 ${shouldRenderSidePanel ? 'max-w-[min(100vw,96rem)]' : 'max-w-5xl'}`}>
 
                 <div className="flex justify-center pt-2 xl:hidden">
-                  {modeSwitcher}
+                  {lockedModeControl}
                 </div>
 
                 {/* ── Row 1: Title + conversation-level actions ──────────────── */}
                 <div className="relative flex min-w-0 items-center gap-2 py-2">
                   <div className="absolute left-1/2 top-1/2 z-20 hidden -translate-x-1/2 -translate-y-1/2 xl:block">
-                    {modeSwitcher}
+                    {lockedModeControl}
                   </div>
                   <div className="hidden h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 sm:block" />
 
@@ -2763,19 +2761,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
                   {/* Conversation actions — non-scrollable so dropdowns aren't clipped */}
                   <div className="flex shrink-0 items-center gap-1">
-                    {!isGhostMode && (
-                      <button
-                        type="button"
-                        onClick={handleStartNewConversation}
-                        className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 sm:px-2.5 sm:text-sm dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800"
-                        title="Start new conversation"
-                      >
-                        <Plus className="h-4 w-4" />
-                        <span className="hidden sm:inline">New</span>
-                      </button>
-                    )}
-                    {!isGhostMode && <ConversationSwitcher />}
-
                     {!isGhostMode && hasConversationBranches && (
                       <div ref={branchMenuRef} className="relative">
                         <button
@@ -3165,7 +3150,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 </div>
               )}
               <MessageInputV2
-                key={`conversation-input-${currentConversationId || 'draft'}-${messageInputResetKey}`}
+                key={`conversation-input-${currentConversationId || 'draft'}`}
                 onSubmit={handleAgentRun}
                 sttReady={sttReady}
                 ttsReady={ttsReady}
@@ -3275,13 +3260,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onAttachGitFile={handleAttachGitFile}
               workingDir={workingContext?.workingDir || null}
               workingContext={workingContext}
-              recentConversations={recentConversations}
-              recentConversationsLoading={recentConversationsLoading}
-              recentConversationsError={recentConversationsError}
-              activeConversationIds={activeConversationIds}
-              currentConversationId={currentConversationId}
-              onOpenConversation={handleOpenConversation}
-              navigate={navigate}
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
@@ -3348,13 +3326,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               onAttachGitFile={handleAttachGitFile}
               workingDir={workingContext?.workingDir || null}
               workingContext={workingContext}
-              recentConversations={recentConversations}
-              recentConversationsLoading={recentConversationsLoading}
-              recentConversationsError={recentConversationsError}
-              activeConversationIds={activeConversationIds}
-              currentConversationId={currentConversationId}
-              onOpenConversation={handleOpenConversation}
-              navigate={navigate}
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}

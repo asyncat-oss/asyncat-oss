@@ -887,6 +887,33 @@ router.get('/chats/:conversationId', withWorkspaceContext, async (req, res) => {
   }
 });
 
+router.post('/chats/:conversationId/continue', withWorkspaceContext, async (req, res) => {
+  try {
+    const mode = String(req.body?.mode || '').trim().toLowerCase();
+    if (!['chat', 'work'].includes(mode)) {
+      return res.status(400).json({ success: false, error: 'Mode must be chat or work' });
+    }
+
+    const result = await chatService.continueConversation(
+      req.user.id,
+      req.params.conversationId,
+      mode,
+      req.workspaceId,
+      req.db,
+    );
+    res.status(201).json({ success: true, ...result });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    if (error.message.includes('already in') || error.message.includes('no readable messages')) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    console.error('Continue conversation error:', error);
+    res.status(500).json({ success: false, error: 'Failed to continue conversation' });
+  }
+});
+
 router.patch('/chats/:conversationId', withWorkspaceContext, async (req, res) => {
   try {
     const result = await chatService.updateConversation(req.user.id, req.params.conversationId, req.body, req.workspaceId, req.db);

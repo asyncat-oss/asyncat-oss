@@ -4,7 +4,6 @@ import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, Exter
 import eventBus from '../../../utils/eventBus.js';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
-import HistoryPanel from './HistoryPanel';
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import CodePanel from './CodePanel';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
@@ -13,7 +12,6 @@ const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
   code: { label: 'Code', icon: Code2 },
   media: { label: 'Media', icon: Image },
-  history: { label: 'History', icon: History },
   saved: { label: 'Saved', icon: BookMarked },
   preview: { label: 'Web', icon: Globe },
   artifacts: { label: 'Artifacts', icon: FilePlus },
@@ -1273,13 +1271,6 @@ export default function CommandCenterSidePanel({
   onAttachGitFile,
   workingDir = null,
   workingContext = null,
-  recentConversations = [],
-  recentConversationsLoading = false,
-  recentConversationsError = null,
-  activeConversationIds = new Set(),
-  currentConversationId = null,
-  onOpenConversation,
-  navigate,
   highlights = null,
   onOpenSavedMessage,
   previewUrl = null,
@@ -1341,17 +1332,6 @@ export default function CommandCenterSidePanel({
         )}
         {currentTab === 'media' && sourceCatalog && (
           <ChatSourcesMediaSidebar catalog={sourceCatalog} />
-        )}
-        {currentTab === 'history' && (
-          <HistoryPanel
-            recentConversations={recentConversations}
-            recentConversationsLoading={recentConversationsLoading}
-            recentConversationsError={recentConversationsError}
-            activeConversationIds={activeConversationIds}
-            currentConversationId={currentConversationId}
-            handleOpenConversation={onOpenConversation}
-            navigate={navigate}
-          />
         )}
         {currentTab === 'saved' && (
           <SavedMessagesPanel highlights={highlights} onOpenMessage={onOpenSavedMessage} />

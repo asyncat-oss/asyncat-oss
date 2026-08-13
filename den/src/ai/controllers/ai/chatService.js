@@ -3,6 +3,8 @@ import { sqliteDb as db } from '../../../db/sqlite.js';
 import rawDb from '../../../db/client.js';
 import { deleteCheckpoint } from '../../../agent/AgentRuntime.js';
 import { v4 as uuidv4 } from 'uuid';
+import { normalizeConversationMode } from './conversationModes.js';
+import { buildConversationContinuation } from './conversationContinuation.js';
 
 /**
  * Parse a conversation's messages JSON and extract all note IDs created by
@@ -632,9 +634,8 @@ class ChatService {
       databaseClient = null
     } = options;
 
-    // Map visual mode to chat mode for database compatibility
-    // Database only accepts 'chat' or 'build', but frontend uses 'visual' for animations
-    const dbMode = mode === 'visual' ? 'chat' : mode;
+    // UI experience names are normalized to the schema's persisted values.
+    const dbMode = normalizeConversationMode(mode);
 
     // Use the request database client when provided, otherwise use the base client.
     const dbClient = databaseClient || db;
@@ -712,7 +713,7 @@ class ChatService {
             user_id: userId,
             workspace_id: effectiveWorkspaceId,
             title: conversationTitle,
-            mode: dbMode, // Use mapped mode (visual → chat)
+            mode: dbMode,
             project_ids: projectIds,
             metadata: enhancedMetadata,
             messages: jsonbMessages,
@@ -799,6 +800,20 @@ class ChatService {
     }
   }
 
+  async continueConversation(userId, conversationId, targetMode, workspaceId = null, databaseClient = null) {
+    const sourceConversation = await this.getConversation(userId, conversationId, workspaceId, databaseClient);
+    const continuation = buildConversationContinuation(sourceConversation, targetMode, { createId: uuidv4 });
+
+    return this.saveConversation(userId, continuation.messages, {
+      title: continuation.title,
+      mode: continuation.mode,
+      projectIds: continuation.projectIds,
+      metadata: continuation.metadata,
+      workspaceId,
+      databaseClient,
+    });
+  }
+
   // Get user's conversations using SQLite
   async getUserConversations(userId, options = {}) {
     const {
@@ -813,6 +828,7 @@ class ChatService {
 
     // Use the request database client when provided, otherwise use the base client.
     const dbClient = databaseClient || db;
+    const dbMode = mode ? normalizeConversationMode(mode, { allowAll: true }) : null;
 
     try {
       await this.setUserContext(userId);
@@ -820,7 +836,7 @@ class ChatService {
 
       // Create cache key without the databaseClient client to avoid circular reference
       const cacheOptions = {
-        mode,
+        mode: dbMode,
         limit,
         offset,
         includeArchived,
@@ -848,8 +864,8 @@ class ChatService {
       query = query.is('deleted_at', null);
 
       // Add filters
-      if (mode && mode !== 'all') {
-        query = query.eq('mode', mode);
+      if (dbMode && dbMode !== 'all') {
+        query = query.eq('mode', dbMode);
       }
 
       if (!includeArchived) {

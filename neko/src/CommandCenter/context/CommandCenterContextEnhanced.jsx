@@ -376,15 +376,22 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
 
       dispatch({ type: ActionTypes.SET_JUST_LOADED });
 
+      const loadedMetadata = {
+        ...(conversation.metadata || {}),
+        // The persisted conversation mode is canonical. Legacy conversations
+        // may contain metadata from the former per-turn Chat/Work switcher.
+        experienceMode: conversation.mode === 'build' ? 'work' : 'chat',
+      };
+
       dispatch({ type: ActionTypes.SET_MESSAGES, payload: conversation.messages || [] });
       dispatch({ type: ActionTypes.SET_SELECTED_PROJECTS, payload: conversation.project_ids || [] });
       dispatch({ type: ActionTypes.SET_CURRENT_CONVERSATION_ID, payload: conversationId });
       dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: conversation.title });
-      dispatch({ type: ActionTypes.SET_CONVERSATION_METADATA, payload: conversation.metadata || {} });
-      dispatch({ type: ActionTypes.SET_WORKING_CONTEXT, payload: conversation.metadata?.workingContext || null });
+      dispatch({ type: ActionTypes.SET_CONVERSATION_METADATA, payload: loadedMetadata });
+      dispatch({ type: ActionTypes.SET_WORKING_CONTEXT, payload: loadedMetadata.workingContext || null });
 
-      if (conversation.metadata?.conversationSummaries) {
-        dispatch({ type: ActionTypes.SET_CONVERSATION_SUMMARIES, payload: conversation.metadata.conversationSummaries });
+      if (loadedMetadata.conversationSummaries) {
+        dispatch({ type: ActionTypes.SET_CONVERSATION_SUMMARIES, payload: loadedMetadata.conversationSummaries });
       }
 
       const apiHistory = [];
@@ -399,8 +406,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           });
         }
       }
-      const compactedHistory = Array.isArray(conversation.metadata?.compactedConversationHistory)
-        ? conversation.metadata.compactedConversationHistory
+      const compactedHistory = Array.isArray(loadedMetadata.compactedConversationHistory)
+        ? loadedMetadata.compactedConversationHistory
         : null;
       dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: compactedHistory || apiHistory.slice(-8) });
     } catch (error) {

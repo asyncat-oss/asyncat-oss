@@ -1909,7 +1909,7 @@ export const MessageInputV2 = ({
                       <ClipboardPen className="h-3.5 w-3.5 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <span className="block font-medium">Plan</span>
-                        <span className="block text-[10px] opacity-60">Read-only, no tool execution</span>
+                        <span className="block text-[10px] opacity-60">Read-only tools only</span>
                       </div>
                       {!isActionMode && <Check className="h-3.5 w-3.5 shrink-0" />}
                     </button>

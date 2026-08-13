@@ -6,6 +6,7 @@ import {
   BrainCircuit,
   Cpu,
   GraduationCap,
+  History,
   KanbanSquare,
   PanelLeftClose,
   PanelLeftOpen,
@@ -164,6 +165,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   }, [navigate, onNewChat, onSearchOpen, openCommandCenter, shortcuts]);
 
   const isOnWorkspace = ["workspace", "projects"].includes(basePage);
+  const isOnChats = basePage === "all-chats";
   const isOnModels = basePage === "models";
   const isOnAgent = ["/agent", "/scheduler", "/profiles"].some((path) => location.pathname.startsWith(path));
   const isOnTools = location.pathname.startsWith("/tools");
@@ -245,6 +247,13 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
             icon={<SquarePen className={iconClass} />}
             label="New chat"
             onClick={onNewChat}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            icon={<History className={iconClass} />}
+            label="All chats"
+            onClick={() => navigate("/all-chats")}
+            isActive={isOnChats}
             collapsed={collapsed}
           />
           <SidebarNavItem
