@@ -1,32 +1,16 @@
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 const isWin = process.platform === 'win32';
+const isDesktopRuntime = process.env.ASYNCAT_DESKTOP === '1';
 
 function run(cmd, args = [], options = {}) {
   try {
     return {
       ok: true,
       stdout: execFileSync(cmd, args, {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: options.timeout || 8000,
-        windowsHide: true,
-        ...options,
-      }).trim(),
-    };
-  } catch (error) {
-    return { ok: false, stdout: '', error: error.message };
-  }
-}
-
-function shell(command, options = {}) {
-  try {
-    return {
-      ok: true,
-      stdout: execSync(command, {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
         timeout: options.timeout || 8000,
@@ -252,8 +236,11 @@ function binaryCheck(name, commands, options = {}) {
 }
 
 function nodeCheck() {
-  const command = firstExisting(['node']);
-  const version = command ? versionFor(command) : null;
+  // If this report is running, this exact Node executable is already capable
+  // of running the backend. Packaged desktop builds intentionally do not need
+  // a second system Node on PATH.
+  const command = process.execPath;
+  const version = parseSemver(process.version)?.raw || process.version;
   return {
     id: 'node',
     found: Boolean(command),
@@ -263,16 +250,49 @@ function nodeCheck() {
     minVersion: '20.19 / 22.13 / 24',
     required: true,
     scope: 'core',
-    reason: 'Runs the Asyncat backend, frontend tooling, and CLI.',
+    reason: isDesktopRuntime ? 'Bundled with the Asyncat desktop app.' : 'Runs the Asyncat backend.',
+    source: isDesktopRuntime ? 'bundled' : 'process',
   };
 }
 
 function npmCheck() {
   return binaryCheck('npm', [isWin ? 'npm.cmd' : 'npm'], {
-    required: true,
-    scope: 'core',
-    reason: 'Installs workspace packages.',
+    required: !isDesktopRuntime,
+    scope: isDesktopRuntime ? 'source-development' : 'core',
+    reason: isDesktopRuntime ? 'Only needed for source development.' : 'Installs workspace packages.',
   });
+}
+
+function mlxRuntimeCheck() {
+  const supported = process.platform === 'darwin' && process.arch === 'arm64';
+  if (!supported) {
+    return {
+      id: 'mlx-lm', found: false, ok: true, command: null, version: null,
+      required: false, supported: false, scope: 'apple-mlx',
+      reason: 'MLX is available only on Apple Silicon.',
+    };
+  }
+  const candidates = [
+    (process.env.MLX_PYTHON_PATH || '').trim(),
+    path.join(asyncatHome(), 'mlx', 'python', 'bin', 'python'),
+    path.join(asyncatHome(), 'training', 'python', 'bin', 'python'),
+    'python3',
+  ].filter(Boolean);
+  for (const command of candidates) {
+    const probe = run(command, ['-c', 'import mlx_lm'], { timeout: 10000 });
+    if (probe.ok) {
+      return {
+        id: 'mlx-lm', found: true, ok: true, command, version: null,
+        required: false, supported: true, scope: 'apple-mlx',
+        reason: 'Runs MLX language models on Apple Silicon.',
+      };
+    }
+  }
+  return {
+    id: 'mlx-lm', found: false, ok: false, command: null, version: null,
+    required: false, supported: true, scope: 'apple-mlx',
+    reason: 'Installable as an isolated managed runtime from Asyncat.',
+  };
 }
 
 function pythonCheck() {
@@ -341,11 +361,12 @@ export function inspectSystemDependencies() {
     nodeCheck(),
     npmCheck(),
     binaryCheck('git', ['git'], {
-      required: true,
-      scope: 'core',
-      reason: 'Clones and updates Asyncat.',
+      required: !isDesktopRuntime,
+      scope: isDesktopRuntime ? 'source-development' : 'core',
+      reason: isDesktopRuntime ? 'Only needed for source development.' : 'Clones and updates Asyncat.',
     }),
     pythonCheck(),
+    mlxRuntimeCheck(),
     ...archiveChecks(),
     binaryCheck('ffmpeg', ['ffmpeg'], {
       scope: 'speech-to-text',
@@ -385,7 +406,11 @@ export function inspectSystemDependencies() {
   });
 
   const requiredMissing = checks.filter(check => check.required && !check.ok);
-  const optionalMissing = checks.filter(check => !check.required && !check.ok);
+  const optionalMissing = checks.filter(check => (
+    !check.required
+    && !check.ok
+    && !(isDesktopRuntime && check.scope === 'source-development')
+  ));
   const packageManagers = detectPackageManagers();
 
   return {
@@ -398,7 +423,10 @@ export function inspectSystemDependencies() {
     requiredMissing,
     optionalMissing,
     ready: requiredMissing.length === 0,
-    commands: recommendedInstallCommands(checks, packageManagers.preferred?.id),
+    commands: recommendedInstallCommands(
+      isDesktopRuntime ? checks.filter(check => check.scope !== 'source-development') : checks,
+      packageManagers.preferred?.id,
+    ),
   };
 }
 
@@ -635,20 +663,4 @@ export function recommendedInstallCommands(checks, managerId = null) {
   }
 
   return commands;
-}
-
-export function installSystemPackages({ managerId = null, includeOptional = true, dryRun = false } = {}) {
-  const report = inspectSystemDependencies();
-  const manager = managerId || report.packageManagers.preferred?.id;
-  if (!manager) {
-    return { ok: false, error: 'No supported package manager detected.', report };
-  }
-  const checks = includeOptional ? report.checks : report.checks.filter(check => check.required);
-  const command = recommendedInstallCommands(checks, manager)[0]?.command;
-  if (!command || command.includes('Install Node.js 20+ from')) {
-    return { ok: false, error: 'No direct package-manager command is available for this platform.', command, report };
-  }
-  if (dryRun) return { ok: true, dryRun: true, command, report };
-  const result = shell(command, { stdio: 'inherit', timeout: 20 * 60 * 1000 });
-  return { ok: result.ok, command, error: result.error || null, report: inspectSystemDependencies() };
 }

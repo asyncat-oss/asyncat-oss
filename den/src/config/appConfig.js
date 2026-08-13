@@ -6,11 +6,11 @@
 // of existing `process.env.X` reads across the codebase working untouched — they
 // just get their values from the DB instead of the file.
 //
-// BOOTSTRAP_KEYS are the chicken-and-egg values needed before the DB is open
-// Those stay in den/.env and are never written here.
+// BOOTSTRAP_KEYS are the chicken-and-egg values needed before the DB is open.
+// Those stay in the active runtime .env and are never written here.
 import db from '../db/client.js';
 
-// Values that must remain in den/.env (read before the DB exists, or every request).
+// Values that must remain in the runtime .env (read before the DB exists).
 export const BOOTSTRAP_KEYS = new Set([
   'DB_PATH',
   'PORT',
@@ -52,7 +52,7 @@ export function getConfigValue(key) {
 // so the change takes effect immediately without a restart.
 export function setConfigValue(key, value) {
   if (BOOTSTRAP_KEYS.has(key)) {
-    throw new Error(`${key} is a bootstrap value and must be set in den/.env, not the database.`);
+    throw new Error(`${key} is a bootstrap value and must be set in the runtime .env, not the database.`);
   }
   db.prepare(`
     INSERT INTO app_config (key, value, updated_at)

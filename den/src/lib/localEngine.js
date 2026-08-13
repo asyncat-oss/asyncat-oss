@@ -1,28 +1,28 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFileSync, execSync, spawnSync } from 'child_process';
+import { execFileSync, execSync, spawn, spawnSync } from 'child_process';
 import { once } from 'events';
-import { ROOT, readEnv, setKey } from './env.js';
+import { ENV_FILE, ROOT, readEnv, setKey } from './env.js';
 import { setConfigValue } from '../config/appConfig.js';
 
-// Persist a llama runtime path. These used to be written to den/.env; they now
+// Persist a runtime path. These used to be written to a source-tree .env; they now
 // live in the DB-backed app_config (hydrated into process.env at boot). We set
 // process.env immediately so the running process picks it up, then persist to
-// the DB, falling back to den/.env only if the DB write is unavailable.
-function persistLlamaEnv(key, value) {
+// the DB, falling back to the active runtime .env only if the DB is unavailable.
+export function persistRuntimeConfigValue(key, value) {
   process.env[key] = value;
   try {
     setConfigValue(key, value);
   } catch {
-    setKey('den/.env', key, value);
+    setKey(ENV_FILE, key, value);
   }
 }
 
 export const LLAMA_RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
 export const LLAMA_RELEASES_LIST_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases';
 export const LLAMA_RELEASES_URL = 'https://github.com/ggml-org/llama.cpp/releases';
-export const MISSING_ENGINE_MESSAGE = 'Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+export const MISSING_ENGINE_MESSAGE = 'Local engine missing. Install one in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
 export const MANAGED_ENGINE_METADATA_FILE = 'asyncat-engine.json';
 export const LLAMA_ENGINE_PROFILES = ['cpu_safe', 'nvidia_gpu', 'apple_metal', 'amd_rocm', 'vulkan', 'intel_sycl'];
 
@@ -196,8 +196,8 @@ export function knownLlamaPaths() {
     path.join(home, 'AppData', 'Local', 'Programs', 'llama.cpp', 'llama-server.exe'),
     path.join(localAppData, 'Programs', 'llama.cpp', 'llama-server.exe'),
     path.join(home, '.local', 'bin', 'llama-server.exe'),
-    path.join(home, '.unsloth', 'llama.cpp', 'build', 'bin', 'llama-server'),
-    path.join(home, '.unsloth', 'llama.cpp', 'llama-server'),
+    path.join(home, '.unsloth', 'llama.cpp', 'build', 'bin', isWin ? 'llama-server.exe' : 'llama-server'),
+    path.join(home, '.unsloth', 'llama.cpp', isWin ? 'llama-server.exe' : 'llama-server'),
     path.join(home, '.local', 'bin', 'llama-server'),
     path.join(home, 'bin', 'llama-server'),
     '/usr/local/bin/llama-server',
@@ -294,7 +294,7 @@ function verifyBinaryError(binary) {
 }
 
 export function findExistingLlamaServer() {
-  const denEnv = readEnv('den/.env');
+  const denEnv = readEnv(ENV_FILE);
   const envPath = (process.env.LLAMA_BINARY_PATH || denEnv.LLAMA_BINARY_PATH || '').trim();
   if (envPath && fs.existsSync(envPath)) {
     return { found: true, binary: envPath, source: 'LLAMA_BINARY_PATH' };
@@ -741,7 +741,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       installedAt: new Date().toISOString(),
     }, targetDir);
     pointCurrentManagedEngine(targetDir);
-    persistLlamaEnv('LLAMA_BINARY_PATH', installed);
+    persistRuntimeConfigValue('LLAMA_BINARY_PATH', installed);
     onProgress?.({
       phase: 'complete',
       message: 'Managed engine installed successfully',
@@ -1050,7 +1050,7 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
 }
 
 export function writeLlamaBinaryEnv(binaryPath) {
-  persistLlamaEnv('LLAMA_BINARY_PATH', binaryPath);
+  persistRuntimeConfigValue('LLAMA_BINARY_PATH', binaryPath);
 }
 
 const PYTHON_GPU_CMAKE_ARGS = {
@@ -1093,23 +1093,24 @@ export function installPythonVenvFallback(pythonCmd, { profile = 'cpu_safe' } = 
   } else {
     execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]'], { env, cwd: ROOT, stdio: 'ignore', timeout: 3600000 });
   }
-  persistLlamaEnv('LLAMA_PYTHON_PATH', python);
+  persistRuntimeConfigValue('LLAMA_PYTHON_PATH', python);
   return python;
 }
 
-// ─── Generic managed runtime installer (Piper / Whisper / stable-diffusion.cpp) ─
-// These engines, unlike llama.cpp, used to be detect-only. This installer
-// downloads a prebuilt GitHub release binary where one exists for the current
-// platform/arch, extracts it into ~/.asyncat/<dir>, links bundled libs, and
-// persists the binary path to the DB-backed config (the same key the manager
-// reads). If no prebuilt asset matches the platform, it throws — the caller
-// falls back to the package-manager command shown in the UI.
+// ─── Generic managed runtime installer ────────────────────────────────────────
+// Whisper and stable-diffusion.cpp use matching prebuilt release assets. Piper
+// and MLX install their current Python packages into Asyncat-owned isolated
+// environments. Every path is persisted through the same DB-backed config.
 
 export const MANAGED_RUNTIME_SPECS = {
   piper: {
     id: 'piper',
     label: 'Piper (Text-to-Speech)',
-    repo: 'rhasspy/piper',
+    installer: 'python',
+    packageName: 'piper-tts',
+    importName: 'piper',
+    projectUrl: 'https://github.com/OHF-Voice/piper1-gpl',
+    license: 'GPL-3.0-or-later',
     dir: 'piper',
     binaryNames: ['piper'],
     envKey: 'PIPER_BINARY_PATH',
@@ -1133,10 +1134,24 @@ export const MANAGED_RUNTIME_SPECS = {
     // one matching the detected GPU so image generation is hardware-accelerated.
     autoGpu: true,
   },
+  mlx: {
+    id: 'mlx',
+    label: 'MLX LM (Apple Silicon)',
+    installer: 'python',
+    packageName: 'mlx-lm',
+    importName: 'mlx_lm',
+    projectUrl: 'https://github.com/ml-explore/mlx-lm',
+    dir: 'mlx',
+    binaryNames: [],
+    envKey: 'MLX_PYTHON_PATH',
+    platform: 'darwin-arm64',
+  },
 };
 
 export function listManagedRuntimes() {
-  return Object.values(MANAGED_RUNTIME_SPECS).map(({ id, label, envKey }) => ({ id, label, envKey }));
+  return Object.values(MANAGED_RUNTIME_SPECS).map(({ id, label, envKey, license, projectUrl, platform }) => ({
+    id, label, envKey, license: license || null, projectUrl: projectUrl || null, platform: platform || null,
+  }));
 }
 
 // GPU tag patterns for the generic runtimes (Whisper / sd.cpp).
@@ -1168,7 +1183,7 @@ function assetHasAnyGpuTag(lower) {
 // Score a release asset for the current platform/arch and target capability.
 // Returns null if it can't run here or doesn't match the requested variant.
 // Generic across the runtimes (token-based, tolerant of naming).
-function scoreRuntimeAsset(name, platform = process.platform, arch = process.arch, capability = 'cpu_safe') {
+function scoreRuntimeAsset(name, platform = process.platform, arch = process.arch, capability = 'cpu_safe', runtimeId = '') {
   const lower = String(name || '').toLowerCase();
   if (!/\.(zip|tar\.gz|tgz)$/.test(lower)) return null;
   if (/sha256|checksums?|\.sig$|source|\.asc$|debug/.test(lower)) return null;
@@ -1176,7 +1191,10 @@ function scoreRuntimeAsset(name, platform = process.platform, arch = process.arc
 
   let score = 0;
   if (platform === 'win32') {
-    if (!/(win|windows)/.test(lower)) return null;
+    // whisper.cpp names its current 64-bit Windows archive
+    // whisper-bin-x64.zip, without a separate Windows token.
+    const whisperX64Alias = runtimeId === 'whisper' && /(?:^|[-_])x64(?:[-_.]|$)/.test(lower);
+    if (!/(win|windows)/.test(lower) && !whisperX64Alias) return null;
     score += 40;
   } else if (platform === 'darwin') {
     if (!/(macos|darwin|osx|apple)/.test(lower)) return null;
@@ -1187,9 +1205,11 @@ function scoreRuntimeAsset(name, platform = process.platform, arch = process.arc
   }
 
   if (arch === 'x64') {
+    if (/(?:^|[-_])(win32|x86|i[3-6]86)(?:[-_.]|$)/.test(lower)) return null;
     if (/(x64|x86_64|amd64)/.test(lower)) score += 25;
     else if (/(arm64|aarch64)/.test(lower)) return null;
   } else if (arch === 'arm64') {
+    if (/(?:^|[-_])(win32|x86|i[3-6]86)(?:[-_.]|$)/.test(lower)) return null;
     if (/(arm64|aarch64)/.test(lower)) score += 25;
     else if (/(x64|x86_64|amd64)/.test(lower)) return null;
   }
@@ -1237,12 +1257,145 @@ function findBinaryByNames(root, baseNames) {
   return null;
 }
 
+function findPythonWithVenv() {
+  const candidates = isWin
+    ? ['python', 'python3', 'py']
+    : [
+        'python3',
+        'python',
+        '/opt/homebrew/bin/python3',
+        '/usr/local/bin/python3',
+        '/usr/bin/python3',
+      ];
+  for (const candidate of candidates) {
+    try {
+      execFileSync(candidate, ['-c', 'import venv, sys; print(sys.executable)'], {
+        stdio: 'ignore',
+        timeout: 8000,
+        windowsHide: true,
+      });
+      return candidate;
+    } catch {}
+  }
+  return null;
+}
+
+function managedRuntimePythonDir(spec) {
+  return path.join(asyncatHome(), spec.dir, 'python');
+}
+
+function pythonInVenv(venvDir) {
+  return isWin
+    ? path.join(venvDir, 'Scripts', 'python.exe')
+    : path.join(venvDir, 'bin', 'python');
+}
+
+function pythonConsoleScript(venvDir, name) {
+  return isWin
+    ? path.join(venvDir, 'Scripts', `${name}.exe`)
+    : path.join(venvDir, 'bin', name);
+}
+
+function runManagedCommand(command, args, { timeoutMs = 20 * 60 * 1000, onLine = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let settled = false;
+    let errorTail = '';
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(new Error(`Timed out while running ${path.basename(command)}.`));
+    }, timeoutMs);
+    const handleChunk = chunk => {
+      const text = chunk.toString();
+      errorTail = (errorTail + text).slice(-1200);
+      if (onLine) {
+        text.split(/[\r\n]+/).map(line => line.trim()).filter(Boolean).forEach(onLine);
+      }
+    };
+    child.stdout.on('data', handleChunk);
+    child.stderr.on('data', handleChunk);
+    child.once('error', error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('close', code => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`${path.basename(command)} exited with code ${code}: ${errorTail.trim()}`));
+    });
+  });
+}
+
+async function installManagedPythonRuntime(spec, report) {
+  if (spec.platform === 'darwin-arm64' && (process.platform !== 'darwin' || process.arch !== 'arm64')) {
+    throw new Error(`${spec.label} is only supported on Apple Silicon (macOS arm64).`);
+  }
+
+  const venvDir = managedRuntimePythonDir(spec);
+  const python = pythonInVenv(venvDir);
+  if (!fs.existsSync(python)) {
+    const systemPython = findPythonWithVenv();
+    if (!systemPython) {
+      throw new Error(`Python 3 with venv support is required to install ${spec.label}.`);
+    }
+    fs.mkdirSync(path.dirname(venvDir), { recursive: true });
+    report('preparing', `Creating an isolated Python environment for ${spec.label}`, 10);
+    await runManagedCommand(systemPython, ['-m', 'venv', venvDir], { timeoutMs: 180000 });
+  }
+
+  report('installing', `Updating the ${spec.label} environment`, 30);
+  await runManagedCommand(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
+    timeoutMs: 300000,
+  });
+  await runManagedCommand(python, ['-m', 'pip', 'install', '--upgrade', spec.packageName], {
+    timeoutMs: 30 * 60 * 1000,
+    onLine: line => {
+      if (/collecting|downloading|installing collected|successfully installed/i.test(line)) {
+        report('installing', line.slice(0, 160), 65);
+      }
+    },
+  });
+
+  report('verifying', `Verifying ${spec.label}`, 92);
+  await runManagedCommand(python, ['-c', `import ${spec.importName}`], { timeoutMs: 30000 });
+
+  const installed = spec.id === 'piper' ? pythonConsoleScript(venvDir, 'piper') : python;
+  if (!fs.existsSync(installed)) {
+    throw new Error(`${spec.label} installed, but its executable was not found at ${installed}.`);
+  }
+  persistRuntimeConfigValue(spec.envKey, installed);
+  report('complete', `${spec.label} installed`, 100, { binary: installed });
+  return {
+    runtime: spec.id,
+    binary: installed,
+    envKey: spec.envKey,
+    version: 'managed-python',
+    verified: true,
+    license: spec.license || null,
+    projectUrl: spec.projectUrl || null,
+  };
+}
+
 export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null } = {}) {
   const spec = MANAGED_RUNTIME_SPECS[runtimeId];
   if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
 
   const report = (phase, message, percent, extra = {}) =>
     onProgress?.({ phase, message, percent, runtime: spec.id, ...extra });
+
+  if (spec.installer === 'python') {
+    return installManagedPythonRuntime(spec, report);
+  }
 
   report('resolving', `Finding a ${spec.label} build for your system`, 2);
   const res = await fetch(`https://api.github.com/repos/${spec.repo}/releases/latest`, {
@@ -1256,7 +1409,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
   // detected GPU when the engine ships GPU builds, else a portable CPU build.
   let targetCapability = capability || (spec.autoGpu ? runtimeCapabilityForGpu(detectGpu()) : 'cpu_safe');
   const rankFor = (cap) => (release.assets || [])
-    .map(asset => ({ asset, score: scoreRuntimeAsset(asset.name, process.platform, process.arch, cap) }))
+    .map(asset => ({ asset, score: scoreRuntimeAsset(asset.name, process.platform, process.arch, cap, spec.id) }))
     .filter(item => item.score !== null)
     .sort((a, b) => b.score - a.score)
     .map(item => item.asset);
@@ -1325,7 +1478,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     let verified = false;
     try { verified = verifyBinaryDetailed(installed).ok; } catch { /* non-fatal */ }
 
-    persistLlamaEnv(spec.envKey, installed);
+    persistRuntimeConfigValue(spec.envKey, installed);
     const variantLabel = runtimeCapabilityLabel(targetCapability);
     report('complete', `${spec.label} (${variantLabel}) installed`, 100, { binary: installed, verified, capability: targetCapability });
     return { runtime: spec.id, binary: installed, envKey: spec.envKey, version: release.tag_name || 'latest', verified, capability: targetCapability };

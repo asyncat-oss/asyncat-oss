@@ -169,6 +169,9 @@ export function startBackend() {
       // the read-only app bundle. Override to a writable OS location.
       ...(app.isPackaged && {
         ASYNCAT_LOG_DIR: path.join(DEN_CWD, 'logs'),
+        ASYNCAT_ENV_PATH: path.join(DEN_CWD, '.env'),
+        ASYNCAT_DATA_PATH: path.join(DEN_CWD, 'data'),
+        ASYNCAT_DESKTOP: '1',
       }),
     };
 

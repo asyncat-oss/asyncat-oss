@@ -6,10 +6,8 @@
 //
 // What it does:
 //   1. One-click install of the local chat engine (managed llama.cpp build).
-//   2. One-click install of the optional engines — Whisper (STT), Piper (TTS),
-//      stable-diffusion.cpp (image) — by downloading a prebuilt release binary
-//      for this platform. Where no prebuilt asset exists, the install reports an
-//      error and the package-manager commands below are the fallback.
+//   2. One-click install of optional engines. Whisper and stable-diffusion.cpp
+//      use compatible prebuilt assets; Piper and MLX use isolated Python venvs.
 //   3. Surfaces remaining system tools (ffmpeg, C++ compiler) with copyable
 //      package-manager commands.
 //   4. Points users at the Models page, where the actual model weights are pulled.
@@ -45,8 +43,9 @@ const profileForGpu = (gpu) => {
 // Optional engines: each maps a readiness check id → a managed-runtime install id.
 const OPTIONAL_ENGINES = [
   { runtime: 'whisper', icon: Mic,       label: 'Speech-to-Text',   detail: 'Whisper',                 checkId: 'whisper-server', needs: ['ffmpeg'] },
-  { runtime: 'piper',   icon: Volume2,   label: 'Text-to-Speech',   detail: 'Piper',                   checkId: 'piper' },
+  { runtime: 'piper',   icon: Volume2,   label: 'Text-to-Speech',   detail: 'Piper (piper-tts, GPL-3.0-or-later)', checkId: 'piper' },
   { runtime: 'sd',      icon: ImageIcon, label: 'Image Generation', detail: 'stable-diffusion.cpp',    checkId: 'sd' },
+  { runtime: 'mlx',     icon: Cpu,       label: 'Apple MLX',        detail: 'mlx-lm',                   checkId: 'mlx-lm', appleOnly: true },
 ];
 
 const StatusDot = ({ ok }) => (
@@ -128,7 +127,7 @@ const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
             className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200"
           >
             {installing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-            {installing ? 'Installing…' : 'Download'}
+            {installing ? 'Installing…' : 'Install'}
           </button>
         )}
       </div>
@@ -143,7 +142,7 @@ const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
 
       {error && (
         <p className="mt-1.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400">
-          {error} If no prebuilt build exists for your system, use the command below.
+          {error} Review the system-tool requirements below or configure a custom runtime path.
         </p>
       )}
     </div>
@@ -156,7 +155,7 @@ EngineRow.propTypes = {
   onInstalled: PropTypes.func,
 };
 
-const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
+const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled }) => {
   const [readiness, setReadiness] = useState(null);
   const [engines, setEngines] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -213,6 +212,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
           if (!mounted.current) return;
           setInstallJob(j); setInstalling(false); setInstallDone(true); installCleanup.current = null;
           await load();
+          await onRuntimeInstalled?.();
         },
         (j) => {
           if (!mounted.current) return;
@@ -236,9 +236,13 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
   const checkById = (id) => (readiness?.checks || []).find(c => c.id === id) || null;
   const ffmpegMissing = !checkById('ffmpeg')?.ok;
   const installCommands = (readiness?.commands || []).filter(c => c.kind === 'packages' || c.kind === 'compiler' || c.kind === 'node');
+  const visibleOptionalEngines = OPTIONAL_ENGINES.filter(engine => (
+    !engine.appleOnly || (readiness?.platform === 'darwin' && readiness?.arch === 'arm64')
+  ));
 
   const cardCls = 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-900/60';
-  const llamaPct = installJob?.progress?.percent ?? (installing ? 2 : 0);
+  const llamaPct = installJob?.percent ?? installJob?.progress?.percent ?? (installing ? 2 : 0);
+  const llamaMessage = installJob?.message ?? installJob?.progress?.message ?? 'Preparing download…';
 
   if (loading) {
     return (
@@ -286,7 +290,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
         </div>
 
         {(installing || installJob) && !engineInstalled && (
-          <ProgressBar percent={llamaPct} message={installJob?.progress?.message || 'Preparing download…'} />
+          <ProgressBar percent={llamaPct} message={llamaMessage} />
         )}
 
         {installError && (
@@ -303,16 +307,19 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
       <div className={cardCls}>
         <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Optional local engines</p>
         <p className="mt-0.5 mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-          Download voice and image engines for this machine. Each grabs a prebuilt build when one exists for your platform.
+          Install voice, image, and Apple MLX engines for this machine. Asyncat uses a prebuilt build or an isolated managed Python environment, depending on the runtime.
         </p>
         <div className="space-y-2">
-          {OPTIONAL_ENGINES.map((engine) => (
+          {visibleOptionalEngines.map((engine) => (
             <EngineRow
               key={engine.runtime}
               engine={engine}
               ready={Boolean(checkById(engine.checkId)?.ok)}
               ffmpegMissing={engine.runtime === 'whisper' && ffmpegMissing}
-              onInstalled={load}
+              onInstalled={async () => {
+                await load();
+                await onRuntimeInstalled?.();
+              }}
             />
           ))}
         </div>
@@ -370,6 +377,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange }) => {
 RuntimeSetupPanel.propTypes = {
   compact: PropTypes.bool,
   onReadyChange: PropTypes.func,
+  onRuntimeInstalled: PropTypes.func,
 };
 
 export default RuntimeSetupPanel;

@@ -27,13 +27,13 @@ import {
   fetchLlamaReleases,
   buildReleaseCatalog,
   installPythonVenvFallback,
+  persistRuntimeConfigValue,
 } from '../../../lib/localEngine.js';
 
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PYTHON_WRAPPER_PATH = path.resolve(__dirname, '../../../../scripts/llama_cpp_server_wrapper.py');
-const DEN_ENV_PATH = path.resolve(__dirname, '../../../../.env');
 const LLAMA_PYTHON_IMPORT_PROBE =
   'import site, sys; ' +
   'usersite = site.getusersitepackages(); ' +
@@ -46,7 +46,7 @@ const LOAD_TIMEOUT_MS = 180_000; // 3 min — large models can take time
 const POLL_INTERVAL   = 700;     // ms between /health polls
 
 const MISSING_ENGINE_ERROR =
-  'MISSING_ENGINE: Local engine missing. Run asyncat install --local-engine, set LLAMA_BINARY_PATH, or choose /provider for Ollama, LM Studio, or cloud.';
+  'MISSING_ENGINE: Local engine missing. Install one in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
 
 function asyncatHome() {
   if (IS_WIN) {
@@ -140,7 +140,7 @@ export async function detectGpuInfo() {
       vendor: 'Apple',
       name: 'Apple Silicon / Metal',
       vramGb: null,
-      advice: 'Apple Silicon detected. Use the managed macOS llama.cpp build first, then set LLAMA_GPU_LAYERS in den/.env if you want Metal offload.',
+      advice: 'Apple Silicon detected. Use the managed macOS llama.cpp build first, then adjust GPU layers in Settings → Runtime if needed.',
     };
   }
 
@@ -652,31 +652,9 @@ async function loadReleaseCatalog(force = false) {
   return catalog;
 }
 
-function persistEngineEnv(updates) {
-  const existing = fs.existsSync(DEN_ENV_PATH) ? fs.readFileSync(DEN_ENV_PATH, 'utf8') : '';
-  const lines = existing.split('\n');
-  const written = new Set();
-  const updated = lines.map(raw => {
-    const trimmed = raw.trim();
-    if (!trimmed || trimmed.startsWith('#')) return raw;
-    const idx = trimmed.indexOf('=');
-    if (idx < 0) return raw;
-    const key = trimmed.slice(0, idx).trim();
-    if (!(key in updates)) return raw;
-    written.add(key);
-    return `${key}=${updates[key]}`;
-  });
-
+function persistEngineConfig(updates) {
   for (const [key, value] of Object.entries(updates)) {
-    if (!written.has(key)) updated.push(`${key}=${value}`);
-  }
-
-  fs.writeFileSync(DEN_ENV_PATH, updated.join('\n'), 'utf8');
-}
-
-function applyProcessEnv(updates) {
-  for (const [key, value] of Object.entries(updates)) {
-    process.env[key] = value;
+    persistRuntimeConfigValue(key, value);
   }
 }
 
@@ -755,8 +733,7 @@ export async function selectEngine({ runtime, path: selectedPath, retryModel, ct
       };
 
   await stopServer();
-  persistEngineEnv(updates);
-  applyProcessEnv(updates);
+  persistEngineConfig(updates);
 
   let retry = {
     attempted: false,
@@ -819,8 +796,7 @@ export async function installEngine({ profile, releaseTag, assetName, retryModel
     LLAMA_PYTHON_PATH: '',
     LLAMA_GPU_LAYERS: gpuLayers,
   };
-  persistEngineEnv(updates);
-  applyProcessEnv(updates);
+  persistEngineConfig(updates);
 
   let retry = {
     attempted: false,
@@ -1183,8 +1159,7 @@ async function installPythonEngine({ profile, retryModel, ctxSize, modelsDir, on
   const gpu = await detectGpuInfo();
   const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
   const updates = { LLAMA_BINARY_PATH: '', LLAMA_PYTHON_PATH: pythonBin, LLAMA_GPU_LAYERS: gpuLayers };
-  persistEngineEnv(updates);
-  applyProcessEnv(updates);
+  persistEngineConfig(updates);
 
   return { pythonPath: pythonBin, profile, capabilityHint, gpuLayers: parseInt(gpuLayers, 10) };
 }
@@ -1373,9 +1348,9 @@ export async function checkBinary() {
     path.join(home, 'AppData', 'Local', 'Programs', 'llama.cpp', 'llama-server.exe'),
     path.join(home, '.local', 'bin', 'llama-server.exe'),
     path.join(process.env.LOCALAPPDATA || '', 'Programs', 'llama.cpp', 'llama-server.exe'),
-    // unsloth studio ships its own llama.cpp build
-    path.join(home, '.unsloth', 'llama.cpp', 'build', 'bin', 'llama-server'),
-    path.join(home, '.unsloth', 'llama.cpp', 'llama-server'),
+    // Unsloth Studio ships its own llama.cpp build.
+    path.join(home, '.unsloth', 'llama.cpp', 'build', 'bin', IS_WIN ? 'llama-server.exe' : 'llama-server'),
+    path.join(home, '.unsloth', 'llama.cpp', IS_WIN ? 'llama-server.exe' : 'llama-server'),
     // user-local installs
     path.join(home, '.local', 'bin', 'llama-server'),
     path.join(home, 'bin', 'llama-server'),
@@ -1444,7 +1419,7 @@ export async function checkBinary() {
   return withDiagnostics({
     found:    false,
     searched: [...absolutePaths, ...pathNames, ...pythonCommands.map(cmd => `${cmd} llama-cpp-python`)],
-    hint:     'Run asyncat install --local-engine, set LLAMA_BINARY_PATH=/path/to/llama-server, or choose /provider for Ollama, LM Studio, or cloud.',
+    hint:     'Install a local engine in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.',
   });
 }
 
@@ -1691,10 +1666,10 @@ function classifyError(logs, exitCode) {
     return 'CORRUPTED: The model file is incomplete or corrupted (the download was cut short). Delete it and re-download from Models.';
   }
   if (/error while loading shared libraries|cannot open shared object file/i.test(logs)) {
-    return 'ENGINE_LIBS: The local llama.cpp engine is missing its shared libraries. Re-run asyncat install --local-engine.';
+    return 'ENGINE_LIBS: The local llama.cpp engine is missing its shared libraries. Reinstall it from Settings → Runtime.';
   }
   if (/failed to create command queue|ggml_metal_init|backend_metal|failed to initialize the context: failed to initialize +backend/i.test(logs)) {
-    return 'BACKEND_INIT: llama.cpp backend initialization failed. If you are using GPU offload, set LLAMA_GPU_LAYERS=0 in den/.env. Otherwise try a newer llama.cpp or llama-cpp-python build.';
+    return 'BACKEND_INIT: llama.cpp backend initialization failed. If you are using GPU offload, select the CPU-safe runtime in Settings → Runtime. Otherwise try a newer llama.cpp build.';
   }
   if (/out of memory|CUDA error.*out of memory|std::bad_alloc|cannot allocate memory|failed to allocate (buffer|tensor|memory)/i.test(logs)) {
     return 'OOM: Not enough VRAM/RAM to load this model. Try a smaller quantization (Q4_K_M) or a smaller model.';

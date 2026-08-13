@@ -25,6 +25,8 @@ const readOnlyCls =
 
 const ServerSection = () => {
   const [config, setConfig] = useState({});
+  const [effectiveConfig, setEffectiveConfig] = useState({});
+  const [configSources, setConfigSources] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -47,6 +49,8 @@ const ServerSection = () => {
       const cfg = await configApi.getConfig();
       if (cfg.success) {
         setConfig(cfg.config);
+        setEffectiveConfig(cfg.effectiveConfig || cfg.config || {});
+        setConfigSources(cfg.configSources || {});
         setRuntime(cfg.runtime || {});
       }
     } catch (err) {
@@ -61,6 +65,7 @@ const ServerSection = () => {
 
   useEffect(() => {
     loadConfig();
+    return () => restartCleanupRef.current?.();
   }, [loadConfig]);
 
   const saveConfigValue = async (key) => {
@@ -72,7 +77,7 @@ const ServerSection = () => {
 
     setSaving(true);
     try {
-      const res = await configApi.updateConfig(key, value, true);
+      const res = await configApi.updateConfig(key, value);
       if (!res.success) throw new Error(res.error);
 
       setEditValues((prev) => ({ ...prev, [key]: "" }));
@@ -107,6 +112,7 @@ const ServerSection = () => {
     { key: "FRONTEND_URL", label: "Frontend URL" },
     { key: "DB_PATH", label: "Database Path" },
     { key: "LLAMA_SERVER_PORT", label: "LLM Server Port" },
+    { key: "MLX_SERVER_PORT", label: "MLX Server Port" },
     { key: "MODELS_PATH", label: "Models Path" },
     { key: "STORAGE_PATH", label: "Storage Path" },
     { key: "WHISPER_SERVER_PORT", label: "Whisper STT Port" },
@@ -114,6 +120,8 @@ const ServerSection = () => {
     { key: "TTS_SERVER_PORT", label: "Piper TTS Port" },
     { key: "PIPER_BINARY_PATH", label: "Piper Binary Path" },
     { key: "IMAGEGEN_BINARY_PATH", label: "Simple Image Engine Binary Path" },
+    { key: "MLX_PYTHON_PATH", label: "MLX Python Runtime" },
+    { key: "MLX_MODELS_PATH", label: "Additional MLX Models Path" },
   ];
 
   const editableConfig = [
@@ -121,7 +129,7 @@ const ServerSection = () => {
       key: "ASYNCAT_WORKSPACE_ROOT",
       label: "Agent file workspace root",
       placeholder: runtime.workspaceRoot || "/path/to/project",
-      help: "Controls what @ file search and default agent tools can see. Restart the server after changing it.",
+      help: "Controls what @ file search and default agent tools can see. Applies immediately.",
     },
     {
       key: "COMFYUI_BASE_URL",
@@ -177,7 +185,7 @@ const ServerSection = () => {
             const currentValue =
               key === "ASYNCAT_WORKSPACE_ROOT"
                 ? runtime.workspaceRoot || config[key] || "(auto-detected)"
-                : config[key] || "(not set)";
+                : effectiveConfig[key] || config[key] || "(not set)";
             const canBrowse =
               key === "ASYNCAT_WORKSPACE_ROOT" &&
               window?.electronAPI?.openDirectory;
@@ -196,7 +204,7 @@ const ServerSection = () => {
                         [key]: e.target.value,
                       }))
                     }
-                    placeholder={config[key] || placeholder}
+                    placeholder={effectiveConfig[key] || config[key] || placeholder}
                     className={inputCls}
                   />
                   {canBrowse && (
@@ -262,9 +270,9 @@ const ServerSection = () => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Current server settings (read-only). Engine paths and ports are
-          managed from Runtime and Models; bootstrap values such as the port and
-          database path live in <code className="font-mono px-1">den/.env</code>.
+          Effective server settings (read-only). Engine paths and ports are
+          managed from Runtime and Models. Bootstrap configuration is loaded
+          from <code className="font-mono px-1 break-all">{runtime.envFile || '.env'}</code>.
         </p>
 
         <div className="space-y-3">
@@ -273,7 +281,10 @@ const ServerSection = () => {
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1">
                 {label}
               </label>
-              <div className={readOnlyCls}>{config[key] || "(not set)"}</div>
+              <div className={readOnlyCls}>{effectiveConfig[key] || config[key] || "(not set)"}</div>
+              <p className="mt-1 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-600">
+                Source: {configSources[key] || 'unknown'}
+              </p>
             </div>
           ))}
         </div>
@@ -288,12 +299,9 @@ const ServerSection = () => {
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Sends a graceful shutdown signal to the backend. With a process
-          manager (pm2, the <code className="font-mono px-1">asyncat</code> CLI)
-          the server restarts automatically and this page reloads. In{" "}
-          <code className="font-mono px-1">npm run dev</code> mode it will not
-          come back on its own — restart the backend terminal manually after
-          clicking.
+          The desktop app stops and starts its managed backend directly. A web
+          or source deployment requests a graceful restart and requires a
+          supervisor such as systemd, pm2, Docker, or an equivalent restart policy.
         </p>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -335,11 +343,8 @@ const ServerSection = () => {
           {restartPhase === "timeout" && (
             <span className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 flex-wrap">
               <AlertTriangle size={14} className="shrink-0" />
-              Server did not restart automatically. In dev mode, run{" "}
-              <code className="px-1 rounded bg-amber-100 dark:bg-amber-900/40 font-mono text-xs">
-                npm run dev
-              </code>{" "}
-              again in your backend terminal.
+              Server did not restart automatically. Relaunch the desktop app,
+              or restart the backend from your source deployment supervisor.
             </span>
           )}
         </div>

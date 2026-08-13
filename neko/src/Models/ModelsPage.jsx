@@ -73,7 +73,7 @@ const AssetSubtitle = ({ count, emptyLabel, singularLabel, pluralLabel }) => {
 // ── Main page ─────────────────────────────────────────────────────────────────
 const ModelsPage = () => {
   const {
-    modelContextConfig, serverStatus, setServerStatus,
+    modelContextConfig, serverStatus, setServerStatus, mlxStatus,
     models, engineData, setInstallJob,
     loadingModels, loadingStatus, loadingEngines, loadingCatalog,
     startingModel, setStartingModel, stopping, deletingModel,
@@ -549,6 +549,7 @@ const ModelsPage = () => {
                   profiles={providerProfiles}
                   activeConfig={providerConfig}
                   serverStatus={serverStatus}
+                  mlxStatus={mlxStatus}
                   loading={loadingProviders}
                   providerAction={providerAction}
                   providerError={providerError}

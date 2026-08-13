@@ -437,14 +437,6 @@ export const llamaServerApi = {
     });
   },
 
-  // Install or reinstall a managed engine profile and optionally retry a model.
-  installEngine: async (payload) => {
-    return apiCall(`${AI_API_BASE}/server/engines/install`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  },
-
   // Start a background managed install job.
   startInstallJob: async (payload) => {
     return apiCall(`${AI_API_BASE}/server/engines/install-jobs`, {
@@ -584,7 +576,7 @@ export const runtimeApi = {
     return apiCall(`${AI_API_BASE}/runtimes`);
   },
 
-  // Start a background install for one runtime ('piper' | 'whisper' | 'sd').
+  // Start a background install for one runtime ('piper' | 'whisper' | 'sd' | 'mlx').
   install: async (id) => {
     return apiCall(`${AI_API_BASE}/runtimes/${encodeURIComponent(id)}/install-jobs`, {
       method: 'POST',
@@ -679,10 +671,10 @@ export const configApi = {
   },
 
   // Update a config value
-  updateConfig: async (key, value, restart = false) => {
+  updateConfig: async (key, value) => {
     return apiCall(`${MAIN_URL}/api/config`, {
       method: 'PUT',
-      body: JSON.stringify({ key, value, restart }),
+      body: JSON.stringify({ key, value }),
     });
   },
 
@@ -745,7 +737,8 @@ export const updateApi = {
     return apiCall(`${UPDATE_API_BASE}/status`);
   },
 
-  // Trigger a graceful SIGTERM restart on the backend.
+  // Restart through Electron's lifecycle manager when available. Supervised web
+  // deployments fall back to the backend's graceful SIGTERM endpoint.
   // Returns a cleanup fn that stops the health-poll loop.
   // onWaiting() — called when server is down and we're polling
   // onBack()    — called when /health responds 200 again
@@ -754,15 +747,24 @@ export const updateApi = {
     let stopped = false;
 
     (async () => {
-      // Fire-and-forget — the connection may close before the response arrives.
-      try { await apiCall(`${UPDATE_API_BASE}/restart`, { method: 'POST' }); } catch { /* expected */ }
-
       if (stopped) return;
       onWaiting?.();
 
+      try {
+        if (window.electronAPI?.restartBackend) {
+          await window.electronAPI.restartBackend();
+        } else {
+          // The response can close while a supervised backend exits; the health
+          // poll below is the source of truth.
+          try { await apiCall(`${UPDATE_API_BASE}/restart`, { method: 'POST' }); } catch { /* process may be exiting */ }
+        }
+      } catch {
+        if (!stopped) onTimeout?.();
+        return;
+      }
+
       const deadline = Date.now() + timeoutMs;
-      // Give the process a moment to actually shut down before polling.
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, window.electronAPI?.restartBackend ? 250 : 1500));
 
       const poll = async () => {
         if (stopped) return;

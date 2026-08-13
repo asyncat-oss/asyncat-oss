@@ -38,15 +38,16 @@ Auto-creates `.env` from `.env.example`.
 
 ### Configure
 
-Edit `den/.env`:
+Edit `den/.env` for bootstrap server settings. Runtime selections are managed
+from **Settings → Runtime** and persisted in Asyncat's database:
 
 ```env
 PORT=8716
 
-# Local model (recommended)
+# Optional source-install overrides
 LLAMA_SERVER_PORT=8765
 MODELS_PATH=./data/models
-# Optional explicit llama.cpp binary; asyncat install --local-engine sets this
+# Optional explicit llama.cpp binary
 LLAMA_BINARY_PATH=/full/path/to/llama-server
 # Optional GPU offload tuning for the selected local engine
 LLAMA_GPU_LAYERS=0
@@ -57,13 +58,11 @@ AI_API_KEY=sk-...
 AI_MODEL=gpt-4o
 ```
 
-For local GGUF models, prefer the CLI-managed llama.cpp install:
-
-```bash
-asyncat install --local-engine
-```
-
-That managed install is CPU-safe by default. The Models page can inspect the machine, recommend a better runtime, switch to already-installed `llama-server` or `llama-cpp-python` engines, and trigger supported managed installs without restarting `den`.
+For local GGUF models, open **Settings → Runtime** and install the recommended
+managed llama.cpp build. The Runtime page inspects the machine, recommends a
+CPU/GPU profile, switches among installed `llama-server` or
+`llama-cpp-python` engines, and installs supported runtimes without restarting
+`den`.
 
 Do not install `llama-cpp-python` into system Python on Linux; Asyncat uses a managed binary or an Asyncat-owned venv fallback to avoid PEP 668 / externally managed Python errors.
 

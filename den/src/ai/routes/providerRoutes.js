@@ -28,7 +28,6 @@ import {
   getEngineAdvisor,
   getEngineInstallCatalog,
   selectEngine,
-  installEngine,
   startEngineInstallJob,
   getEngineInstallJob,
   startPythonEngineInstallJob,
@@ -1996,42 +1995,6 @@ router.post('/server/engines/select', async (req, res) => {
   } catch (err) {
     console.error('[llamaServer] Engine switch failed:', err.message || err);
     const status = /required|not found|failed verification|does not provide/i.test(err.message) ? 400 : 500;
-    res.status(status).json({ success: false, error: err.message });
-  }
-});
-
-// ── POST /server/engines/install — install managed engine and optionally retry ──
-router.post('/server/engines/install', async (req, res) => {
-  try {
-    const { profile, releaseTag, assetName, retryModel, ctxSize } = req.body || {};
-    const result = await installEngine({
-      profile,
-      releaseTag,
-      assetName,
-      retryModel,
-      ctxSize,
-      modelsDir: MODELS_DIR,
-    });
-
-    if (result.retry?.attempted && result.retry?.success && retryModel) {
-      const unsub = llamaSubscribe(snap => {
-        if (snap.status === 'ready' && snap.model === retryModel) {
-          unsub();
-          try {
-            saveBuiltinProviderConfig(req.user.id, retryModel);
-          } catch (dbErr) {
-            console.error('[llamaServer] Failed to auto-save provider config after engine install:', dbErr);
-          }
-        } else if (snap.status === 'error' || snap.status === 'idle') {
-          unsub();
-        }
-      });
-    }
-
-    res.json({ success: true, ...result });
-  } catch (err) {
-    console.error('[llamaServer] Managed engine install failed:', err.message || err);
-    const status = /No llama\.cpp release asset matched|Download failed|extract|verification failed|required/i.test(err.message) ? 400 : 500;
     res.status(status).json({ success: false, error: err.message });
   }
 });

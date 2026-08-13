@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { RefreshCw, Play, Trash2, Box, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, File, FolderOpen } from 'lucide-react';
 import { LocalModelLogo } from './modelLogos.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';
@@ -190,6 +191,7 @@ const ModelCard = ({
 // ── Main pane ──────────────────────────────────────────────────────────────────
 const LocalModelsPane = ({
   models, loadingModels, serverStatus, status,
+  mlxStatus,
   startingModel, setStartingModel, deletingModel,
   switchingEngine, installingEngine,
   highlightedItem,
@@ -383,12 +385,17 @@ const LocalModelsPane = ({
     )}
 
     {/* MLX active panel */}
-    {(serverStatus?.port === 8766 || (serverStatus?.status === 'loading' && startingModel && !startingModel.toLowerCase().endsWith('.gguf') && !startingModel.toLowerCase().endsWith('.bin'))) && (
+    {(mlxStatus?.available && (
+      mlxStatus?.mlxAvailable === false
+      || serverStatus?.port === 8766
+      || (serverStatus?.status === 'loading' && startingModel && !startingModel.toLowerCase().endsWith('.gguf') && !startingModel.toLowerCase().endsWith('.bin'))
+    )) && (
       <Panel className="p-5">
         <MlxModelsSection
           globalServerStatus={serverStatus}
           onMlxStatusChange={setServerStatus}
           onMlxStopRequest={loadStatus}
+          onMlxRuntimeChange={loadStatus}
         />
       </Panel>
     )}

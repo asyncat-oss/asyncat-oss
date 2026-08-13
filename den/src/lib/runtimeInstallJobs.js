@@ -1,5 +1,5 @@
 // runtimeInstallJobs.js — background install jobs for managed runtimes
-// (Piper / Whisper / stable-diffusion.cpp). Mirrors the llama engine install-job
+// (Piper / Whisper / stable-diffusion.cpp / MLX). Mirrors the llama engine install-job
 // pattern: start returns immediately, the client polls for progress.
 import { randomUUID } from 'crypto';
 import { installManagedRuntime, MANAGED_RUNTIME_SPECS } from './localEngine.js';

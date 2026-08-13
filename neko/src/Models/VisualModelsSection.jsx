@@ -332,7 +332,7 @@ const SimpleImageRuntimePanel = () => {
             <div className="leading-5 opacity-90">
               {runtime.found
                 ? `${runtime.models?.length || 0} image model${runtime.models?.length === 1 ? '' : 's'} indexed.`
-                : 'Install stable-diffusion.cpp, put the sd binary on PATH, or set IMAGEGEN_BINARY_PATH in den/.env. Then add a .safetensors, .ckpt, .gguf, or .bin image model below.'}
+                : 'Install stable-diffusion.cpp from Settings → Runtime, put the sd binary on PATH, or configure IMAGEGEN_BINARY_PATH. Then add a .safetensors, .ckpt, .gguf, or .bin image model below.'}
             </div>
           </div>
         </div>

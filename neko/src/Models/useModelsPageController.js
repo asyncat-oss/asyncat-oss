@@ -7,9 +7,10 @@ const notifyModelRuntimeUpdated = () => {
   window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
 };
 
-export const useModelsPageController = () => {
+export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
   const { config: modelContextConfig, setConfig: setModelContextConfig } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
+  const [mlxStatus, setMlxStatus] = useState(null);
   const [models, setModels] = useState([]);
   const [engineData, setEngineData] = useState(null);
   const [engineCatalog, setEngineCatalog] = useState(null);
@@ -50,15 +51,20 @@ export const useModelsPageController = () => {
 
   useEffect(() => {
     loadStatus();
-    loadModelList();
     loadEngineData();
     loadEngineCatalog();
-    loadProviderData();
+    if (!runtimeOnly) {
+      loadModelList();
+      loadProviderData();
+    }
     return () => {
       pollCleanup.current?.();
       installPollCleanup.current?.();
       pythonBuildPollCleanup.current?.();
     };
+    // The controller owns a mount-only bootstrap. Callers explicitly use the
+    // returned refresh functions after mutations.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const clearEngineActionMessages = () => {
@@ -109,6 +115,7 @@ export const useModelsPageController = () => {
         mlxApi.getStatus().catch(() => null)
       ]);
       const isMlxActive = mlxSnap && (mlxSnap.status === 'ready' || mlxSnap.status === 'loading');
+      setMlxStatus(mlxSnap);
       setServerStatus(isMlxActive ? mlxSnap : (llamaSnap || { status: 'idle' }));
     } catch (err) {
       console.warn('Failed to load server status:', err);
@@ -591,6 +598,7 @@ export const useModelsPageController = () => {
     modelContextConfig,
     serverStatus,
     setServerStatus,
+    mlxStatus,
     models,
     engineData,
     engineCatalog,

@@ -32,7 +32,11 @@ function mlxPythonPath() {
 }
 
 function mlxPythonCandidates() {
-  return [...new Set([mlxPythonPath(), 'python3'].filter(Boolean))];
+  return [...new Set([
+    mlxPythonPath(),
+    path.join(asyncatHome(), 'training', 'python', 'bin', 'python'),
+    'python3',
+  ].filter(Boolean))];
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -371,7 +375,9 @@ let _mlxPythonCommand = null;
 
 export async function isMlxAvailable() {
   if (!IS_APPLE_SILICON) return false;
-  if (_mlxAvailableCache !== null) return _mlxAvailableCache;
+  // Cache success, but retry failures so a just-finished managed install is
+  // detected without restarting the backend.
+  if (_mlxAvailableCache === true) return true;
 
   for (const python of mlxPythonCandidates()) {
     try {
@@ -408,7 +414,7 @@ export async function startServer(modelPath) {
 
   const mlxOk = await isMlxAvailable();
   if (!mlxOk) {
-    throw new Error('mlx_lm is not installed. Run: pip install mlx-lm');
+    throw new Error('mlx_lm is not installed. Install the managed MLX runtime from the Models or Runtime page.');
   }
 
   // Stop any running server first

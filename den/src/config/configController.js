@@ -1,14 +1,8 @@
 // config/configController.js — read/write server config
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
 import { getAllConfig, setConfigValue, isBootstrapKey } from './appConfig.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..', '..', '..');
-
-const ENV_FILE = path.join(ROOT, 'den', '.env');
+import { ENV_FILE, readEnv as readEnvFile, writeEnv } from '../lib/env.js';
+import { buildEffectiveRuntimeConfig, runtimeDataRoot } from './runtimeConfig.js';
 
 const SECRETS = [
   'HF_TOKEN',
@@ -38,92 +32,64 @@ function maskSecret(value) {
   return value.slice(0, 4) + '****' + value.slice(-4);
 }
 
-function readEnv() {
-  if (!fs.existsSync(ENV_FILE)) return {};
-  const lines = fs.readFileSync(ENV_FILE, 'utf8').split('\n');
-  const result = {};
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const idx = line.indexOf('=');
-    if (idx < 0) continue;
-    const key = line.slice(0, idx).trim();
-    let val = line.slice(idx + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    result[key] = val;
+const readEnv = () => readEnvFile(ENV_FILE);
+
+function maskConfig(config) {
+  const masked = {};
+  for (const [key, value] of Object.entries(config)) {
+    masked[key] = SECRETS.includes(key) ? maskSecret(value) : value;
   }
-  return result;
+  return masked;
 }
 
-function writeEnv(updates) {
-  if (!fs.existsSync(ENV_FILE)) return false;
-  const existing = fs.readFileSync(ENV_FILE, 'utf8');
-  const lines = existing.split('\n');
-  const written = new Set();
-
-  const updated = lines.map(raw => {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) return raw;
-    const idx = line.indexOf('=');
-    if (idx < 0) return raw;
-    const key = line.slice(0, idx).trim();
-    if (key in updates) {
-      written.add(key);
-      return `${key}=${updates[key]}`;
-    }
-    return raw;
-  });
-
-  for (const [k, v] of Object.entries(updates)) {
-    if (!written.has(k)) updated.push(`${k}=${v}`);
-  }
-
-  fs.writeFileSync(ENV_FILE, updated.join('\n'), 'utf8');
-  return true;
-}
-
-// Persist a key: bootstrap values go to den/.env, everything else to the DB.
+// Persist a key: bootstrap values go to the active runtime .env, everything
+// else to the DB. In packaged Electron that .env is inside userData.
 // Either way the live process.env is updated so the change applies immediately.
 function persistConfig(key, value) {
-  if (isBootstrapKey(key)) {
-    const ok = writeEnv({ [key]: value });
-    if (ok) process.env[key] = value;
-    return ok;
+  try {
+    if (isBootstrapKey(key)) {
+      writeEnv(ENV_FILE, { [key]: value });
+      process.env[key] = value;
+      return true;
+    }
+    setConfigValue(key, value); // also sets process.env[key]
+    return true;
+  } catch (error) {
+    console.error(`[config] Failed to persist ${key}:`, error.message);
+    return false;
   }
-  setConfigValue(key, value); // also sets process.env[key]
-  return true;
 }
 
 export function getConfig(req, res) {
-  // Merge the bootstrap .env file with DB-backed config; the DB wins for any key
-  // it holds (that's where edits now persist), so the UI shows live values.
-  const env = { ...readEnv(), ...getAllConfig() };
-
-  const masked = {};
-  for (const [k, v] of Object.entries(env)) {
-    masked[k] = SECRETS.includes(k) ? maskSecret(v) : v;
-  }
+  const fileConfig = readEnv();
+  const databaseConfig = getAllConfig();
+  const rawConfig = { ...fileConfig, ...databaseConfig };
+  const effective = buildEffectiveRuntimeConfig({ fileConfig, databaseConfig });
 
   res.json({
     success: true,
-    config: masked,
+    // Keep raw config for existing setup screens and add an explicit resolved
+    // snapshot for diagnostics. Defaults are never mistaken for "not set".
+    config: maskConfig(rawConfig),
+    effectiveConfig: maskConfig(effective.config),
+    configSources: effective.sources,
     runtime: {
       workspaceRoot: getWorkspaceRoot(),
+      envFile: ENV_FILE,
+      dataRoot: runtimeDataRoot(),
+      desktop: process.env.ASYNCAT_DESKTOP === '1',
     },
   });
 }
 
 export function updateConfig(req, res) {
-  const { key, value, restart } = req.body;
+  const { key, value } = req.body;
 
   if (!key || value === undefined) {
     return res.status(400).json({ success: false, error: 'key and value are required' });
   }
 
-  const allowed = [...SECRETS, 'ASYNCAT_WORKSPACE_ROOT', 'WORKSPACE_ROOT', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH', 'WHISPER_SERVER_PORT', 'WHISPER_BINARY_PATH', 'TTS_SERVER_PORT', 'PIPER_BINARY_PATH', 'IMAGEGEN_BINARY_PATH', 'COMFYUI_BASE_URL', 'ASYNCAT_STT_PROVIDER', 'ASYNCAT_TTS_PROVIDER', 'ASYNCAT_VISION_PROVIDER', 'ASYNCAT_IMAGE_PROVIDER', 'OBSIDIAN_VAULT_PATH', 'MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_IMAP_SECURE', 'MAIL_IMAP_USER', 'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_SMTP_SECURE', 'MAIL_SMTP_USER', 'MAIL_FROM_EMAIL', 'MAIL_FROM_NAME', 'NOTIFY_EMAIL_TO', 'NOTIFY_TELEGRAM_CHAT_ID', 'NOTIFY_DEFAULT_CHANNELS'];
+  const allowed = [...SECRETS, 'ASYNCAT_WORKSPACE_ROOT', 'WORKSPACE_ROOT', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MLX_SERVER_PORT', 'MLX_PYTHON_PATH', 'MLX_MODELS_PATH', 'MODELS_PATH', 'STORAGE_PATH', 'WHISPER_SERVER_PORT', 'WHISPER_BINARY_PATH', 'TTS_SERVER_PORT', 'PIPER_BINARY_PATH', 'IMAGEGEN_BINARY_PATH', 'IMAGEGEN_OUTPUT_PATH', 'COMFYUI_BASE_URL', 'ASYNCAT_STT_PROVIDER', 'ASYNCAT_TTS_PROVIDER', 'ASYNCAT_VISION_PROVIDER', 'ASYNCAT_IMAGE_PROVIDER', 'OBSIDIAN_VAULT_PATH', 'MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_IMAP_SECURE', 'MAIL_IMAP_USER', 'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_SMTP_SECURE', 'MAIL_SMTP_USER', 'MAIL_FROM_EMAIL', 'MAIL_FROM_NAME', 'NOTIFY_EMAIL_TO', 'NOTIFY_TELEGRAM_CHAT_ID', 'NOTIFY_DEFAULT_CHANNELS'];
   if (!allowed.includes(key)) {
     return res.status(400).json({ success: false, error: `Key not allowed: ${key}. Allowed: ${allowed.join(', ')}` });
   }
@@ -133,11 +99,18 @@ export function updateConfig(req, res) {
     return res.status(500).json({ success: false, error: 'Failed to write config' });
   }
 
-  res.json({ success: true, message: restart ? 'Config updated. Restart the server to apply changes.' : 'Config updated.' });
+  const restartRequired = isBootstrapKey(key);
+  res.json({
+    success: true,
+    restartRequired,
+    message: restartRequired
+      ? 'Config updated. Restart the server to apply changes.'
+      : 'Config updated and applied.',
+  });
 }
 
 export function getSecrets(req, res) {
-  const env = readEnv();
+  const env = { ...readEnv(), ...getAllConfig() };
 
   const secrets = {};
   for (const s of SECRETS) {

@@ -4,23 +4,19 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import db from '../../../db/client.js';
+import { runtimeModelsPath } from '../../../config/runtimeConfig.js';
 
 const execAsync = promisify(exec);
 
-// Resolve data/models relative to this file so it's always den/data/models
-// regardless of what directory the server is started from.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MODELS_DIR = process.env.MODELS_PATH
-  ? path.resolve(process.env.MODELS_PATH)
-  : path.resolve(__dirname, '../../../../data/models');
-// __dirname = den/src/ai/controllers/ai  →  ../../../../  = den/  →  den/data/models
+// Packaged Electron runs the backend from its writable user-data directory;
+// source installs run from den/. Both resolve to the correct writable data dir.
+const MODELS_DIR = runtimeModelsPath();
 
 // Ensure models directory exists
 fs.mkdirSync(MODELS_DIR, { recursive: true });

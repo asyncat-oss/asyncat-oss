@@ -2,24 +2,20 @@
 // Scans ~/.cache/huggingface/hub/ and other common locations for MLX
 // .safetensors model directories and lets the user load them via mlx_lm.server.
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import PropTypes from 'prop-types';
 import {
   Cpu,
+  Download,
+  Loader2,
   RefreshCw,
   AlertCircle,
   TriangleAlert,
   Square,
 } from 'lucide-react';
-import { mlxApi } from "../Settings/settingApi.js";
+import { mlxApi, runtimeApi } from "../Settings/settingApi.js";
 
 // ── Format helpers ─────────────────────────────────────────────────────────────
-const formatBytes = (bytes) => {
-  if (!bytes) return null;
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
-  return `${(bytes / 1e3).toFixed(0)} KB`;
-};
-
 // ── Status badge ───────────────────────────────────────────────────────────────
 const StatusDot = ({ status }) => {
   const colors = {
@@ -36,12 +32,14 @@ const StatusDot = ({ status }) => {
 
 
 // ── Main component ─────────────────────────────────────────────────────────────
-const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequest }) => {
+const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequest, onMlxRuntimeChange }) => {
   const [serverStatus, setServerStatus] = useState(null); // { status, model, modelPath, mlxAvailable, available }
   const [loading, setLoading]   = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
   const [error, setError] = useState(null);
-  const [stopCleanup, setStopCleanup] = useState(null);
+  const [installing, setInstalling] = useState(false);
+  const [installJob, setInstallJob] = useState(null);
+  const installCleanup = useRef(null);
 
   // ── Fetch status ───────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
@@ -58,34 +56,45 @@ const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequ
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onMlxStatusChange]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   // ── Load a model ───────────────────────────────────────────────────────────
-  const handleLoad = async (modelPath) => {
-    setLoadingAction(true);
+  const handleInstall = async () => {
+    setInstalling(true);
+    setInstallJob(null);
     setError(null);
     try {
-      await mlxApi.start(modelPath);
-      // Poll status until ready or error
-      const cleanup = mlxApi.pollStatus(
-        (snap) => { setServerStatus(prev => ({ ...prev, ...snap })); onMlxStatusChange?.(snap); },
-        (snap) => { setServerStatus(prev => ({ ...prev, ...snap })); onMlxStatusChange?.(snap); setLoadingAction(false); },
-        (snap) => { setServerStatus(prev => ({ ...prev, ...snap })); onMlxStatusChange?.(snap); setLoadingAction(false); setError(snap.error || 'Failed to load model'); },
+      const result = await runtimeApi.install('mlx');
+      setInstallJob(result.job);
+      installCleanup.current?.();
+      installCleanup.current = runtimeApi.pollJob(
+        result.job.id,
+        setInstallJob,
+        async (job) => {
+          setInstallJob(job);
+          setInstalling(false);
+          installCleanup.current = null;
+          await refresh();
+          await onMlxRuntimeChange?.();
+        },
+        (job) => {
+          setInstalling(false);
+          installCleanup.current = null;
+          setError(job?.error || 'Failed to install the MLX runtime');
+        },
       );
-      setStopCleanup(() => cleanup);
     } catch (err) {
-      setError(err.message || 'Failed to start MLX server');
-      setLoadingAction(false);
+      setInstalling(false);
+      setError(err.message || 'Failed to start the MLX runtime install');
     }
   };
 
   // ── Stop the server ────────────────────────────────────────────────────────
   const handleStop = async () => {
-    stopCleanup?.();
     setLoadingAction(true);
     setError(null);
     try {
@@ -101,17 +110,18 @@ const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequ
 
   // ── Cleanup polling on unmount ─────────────────────────────────────────────
   useEffect(() => {
-    return () => stopCleanup?.();
-  }, [stopCleanup]);
+    return () => {
+      installCleanup.current?.();
+    };
+  }, []);
 
   // ── Sync with global server status ─────────────────────────────────────────
   useEffect(() => {
     if (globalServerStatus?.status === 'idle' && serverStatus?.status !== 'idle') {
       setServerStatus(prev => prev ? { ...prev, status: 'idle', model: null, modelPath: null } : null);
-      stopCleanup?.();
       setLoadingAction(false);
     }
-  }, [globalServerStatus?.status, serverStatus?.status, stopCleanup]);
+  }, [globalServerStatus?.status, serverStatus?.status]);
 
   // ── Not Apple Silicon — graceful empty state ───────────────────────────────
   if (!loading && serverStatus && !serverStatus.available) {
@@ -139,15 +149,35 @@ const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequ
           </p>
         </div>
         <p className="text-xs text-amber-700 dark:text-amber-400 leading-5">
-          MLX model support requires Asyncat's managed <code className="font-mono text-[11px] bg-amber-100 dark:bg-amber-900/40 px-1 rounded">mlx-lm</code> runtime.
-          Install it in your terminal:
+          MLX model support requires an isolated <code className="font-mono text-[11px] bg-amber-100 dark:bg-amber-900/40 px-1 rounded">mlx-lm</code> runtime. Asyncat can create and manage it for this user.
         </p>
-        <code className="block text-xs font-mono bg-gray-900 text-green-400 rounded-lg px-3 py-2">
-          asyncat install
-        </code>
+        {installing && (
+          <div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-amber-900/30">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all"
+                style={{ width: `${Math.max(3, Math.min(100, installJob?.progress?.percent ?? 3))}%` }}
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+              {installJob?.progress?.message || 'Preparing MLX installation…'}
+            </p>
+          </div>
+        )}
         <button
+          type="button"
+          onClick={handleInstall}
+          disabled={installing}
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50"
+        >
+          {installing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          {installing ? 'Installing…' : 'Install managed MLX runtime'}
+        </button>
+        <button
+          type="button"
           onClick={refresh}
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+          disabled={installing}
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 transition-colors disabled:opacity-50"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Check again
@@ -213,6 +243,17 @@ const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequ
 
     </div>
   );
+};
+
+StatusDot.propTypes = {
+  status: PropTypes.string,
+};
+
+MlxModelsSection.propTypes = {
+  globalServerStatus: PropTypes.shape({ status: PropTypes.string }),
+  onMlxStatusChange: PropTypes.func,
+  onMlxStopRequest: PropTypes.func,
+  onMlxRuntimeChange: PropTypes.func,
 };
 
 export default MlxModelsSection;

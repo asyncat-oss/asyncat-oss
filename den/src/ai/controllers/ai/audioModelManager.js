@@ -5,15 +5,11 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import db from '../../../db/client.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { runtimeModelsPath } from '../../../config/runtimeConfig.js';
 
 // Audio models live inside the same data/models directory as LLMs
-const BASE_MODELS_DIR = process.env.MODELS_PATH
-  ? path.resolve(process.env.MODELS_PATH)
-  : path.resolve(__dirname, '../../../../data/models');
+const BASE_MODELS_DIR = runtimeModelsPath();
 
 const AUDIO_DIR = path.join(BASE_MODELS_DIR, 'audio');
 const WHISPER_DIR = path.join(AUDIO_DIR, 'whisper');

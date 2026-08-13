@@ -6,14 +6,13 @@ import os from 'os';
 import { randomUUID } from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { fileURLToPath } from 'url';
 import { MODELS_DIR } from './modelManager.js';
 import { listVisualModels } from './visualModelManager.js';
+import { runtimeGeneratedImagesPath } from '../../../config/runtimeConfig.js';
 
 const execFileAsync = promisify(execFile);
 const IS_WIN = process.platform === 'win32';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const GENERATED_DIR = path.resolve(__dirname, '../../../../data/generated/images');
+const GENERATED_DIR = runtimeGeneratedImagesPath();
 const GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
 fs.mkdirSync(GENERATED_DIR, { recursive: true });
@@ -114,7 +113,7 @@ export async function checkSdCpp() {
       binaryPath: null,
       models,
       modelsDir: path.join(MODELS_DIR, 'image'),
-      error: 'Simple image engine binary not found. Install stable-diffusion.cpp, put sd on PATH, or set IMAGEGEN_BINARY_PATH in den/.env.',
+      error: 'Simple image engine binary not found. Install it from Settings → Runtime, put sd on PATH, or configure IMAGEGEN_BINARY_PATH.',
     };
   }
 

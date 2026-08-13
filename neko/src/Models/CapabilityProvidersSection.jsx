@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ExternalLink, KeyRound, Loader2, RefreshCw, Zap, Construction } from 'lucide-react';
 import { configApi } from '../Settings/settingApi.js';
@@ -169,7 +170,7 @@ const CapabilityProvidersSection = ({ capability }) => {
     setError('');
     setMessage('');
     try {
-      await configApi.updateConfig(activeKey, provider.id, false);
+      await configApi.updateConfig(activeKey, provider.id);
       setConfig(prev => ({ ...prev, [activeKey]: provider.id }));
       setMessage(`${provider.name} selected for ${CAPABILITY_LABELS[capability]}.`);
     } catch (err) {

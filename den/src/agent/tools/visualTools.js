@@ -6,10 +6,11 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
 import { getWorkspaceRoot } from '../../files/fileExplorerService.js';
+import { runtimeGeneratedImagesPath } from '../../config/runtimeConfig.js';
 import { checkSdCpp, generateSdCppImage } from '../../ai/controllers/ai/sdCppManager.js';
 import { checkComfyUi, editComfyUiImage, generateComfyUiImage } from '../../ai/controllers/ai/comfyUiManager.js';
 
-const GENERATED_DIR = path.join(getWorkspaceRoot(), 'den', 'data', 'generated', 'images');
+const GENERATED_DIR = runtimeGeneratedImagesPath();
 
 function clampInt(value, fallback, min, max) {
   const n = parseInt(value, 10);

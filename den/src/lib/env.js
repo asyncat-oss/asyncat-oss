@@ -1,12 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { runtimeEnvFilePath } from '../config/runtimeConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const ROOT = path.resolve(__dirname, '..', '..');
+export const ENV_FILE = runtimeEnvFilePath();
 
-export function readEnv(file) {
+export function readEnv(file = ENV_FILE) {
   const full = path.isAbsolute(file) ? file : path.join(ROOT, file);
   if (!fs.existsSync(full)) return {};
   const lines = fs.readFileSync(full, 'utf8').split('\n');
@@ -50,11 +52,13 @@ export function writeEnv(file, obj) {
     if (!written.has(k)) updated.push(`${k}=${v}`);
   }
 
+  fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, updated.join('\n'), 'utf8');
 }
 
 export function setKey(file, key, value) {
   const full = path.isAbsolute(file) ? file : path.join(ROOT, file);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
   if (!fs.existsSync(full)) {
     fs.writeFileSync(full, `${key}=${value}\n`, 'utf8');
     return;

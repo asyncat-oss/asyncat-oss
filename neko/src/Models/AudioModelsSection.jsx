@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback } from 'react';
 import { Mic, Volume2, Play, Square, Trash2, FolderOpen, Plus, RefreshCw, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { audioApi } from '../Settings/settingApi.js';
@@ -120,8 +121,8 @@ const EngineStatusBanner = ({ type, status, binaryFound, onCheck }) => {
           <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">{label} not found.</span>
           <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400 ml-1">
             {type === 'whisper'
-              ? 'Install whisper.cpp or set WHISPER_BINARY_PATH in den/.env'
-              : 'Install piper-tts or set PIPER_BINARY_PATH in den/.env'}
+              ? 'Install whisper.cpp from Settings → Runtime or configure WHISPER_BINARY_PATH'
+              : 'Install piper-tts from Settings → Runtime or configure PIPER_BINARY_PATH'}
           </span>
         </div>
         <button onClick={onCheck} className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors flex-shrink-0">Re-check</button>

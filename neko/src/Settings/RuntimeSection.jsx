@@ -32,7 +32,8 @@ const RuntimeSection = () => {
     handleEngineSwitch,
     handleManagedInstall,
     handleBuildGpuRuntime,
-  } = useModelsPageController();
+    mlxStatus,
+  } = useModelsPageController({ runtimeOnly: true });
 
   const [installReadiness, setInstallReadiness] = useState(null);
   const [runtimeRefreshing, setRuntimeRefreshing] = useState(false);
@@ -97,10 +98,11 @@ const RuntimeSection = () => {
         </button>
       </div>
 
-      <RuntimeSetupPanel />
+      <RuntimeSetupPanel onRuntimeInstalled={refreshRuntime} />
 
       <EngineRuntimeSection
         engineData={engineData}
+        mlxStatus={mlxStatus}
         engineCatalog={engineCatalog}
         loadingCatalog={loadingCatalog}
         installJob={installJob}

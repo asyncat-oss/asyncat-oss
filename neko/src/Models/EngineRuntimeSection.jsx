@@ -117,6 +117,7 @@ const StatusNote = ({ tone = 'gray', children }) => {
 
 const EngineRuntimeSection = ({
   engineData,
+  mlxStatus = null,
   engineCatalog,
   loadingCatalog = false,
   installJob,
@@ -232,8 +233,10 @@ const EngineRuntimeSection = ({
 
   const selectableCandidates = candidates.length > 0 ? candidates : (current ? [current] : []);
   const currentKey = engineKey(current);
-  const mlxAvailable = engineData?.hardware?.platform === 'darwin'
-    && (engineData?.hardware?.arch === 'arm64' || engineData?.hardware?.gpu?.vendor === 'Apple');
+  const mlxSupported = mlxStatus?.available ?? (engineData?.hardware?.platform === 'darwin'
+    && (engineData?.hardware?.arch === 'arm64' || engineData?.hardware?.gpu?.vendor === 'Apple'));
+  const mlxReady = mlxSupported && mlxStatus?.mlxAvailable === true;
+  const mlxLabel = !mlxSupported ? 'Not supported on this machine' : (mlxReady ? 'MLX runtime' : 'MLX runtime needs setup');
   const relevantToolIds = useMemo(() => {
     const ids = new Set();
     if (bestManagedAsset) {
@@ -337,9 +340,11 @@ const EngineRuntimeSection = ({
         >
           <div className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950 midnight:border-slate-700 midnight:bg-slate-950 sm:w-[360px]">
             <span className="truncate font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100">
-              {mlxAvailable ? 'MLX runtime' : 'Not supported on this machine'}
+              {mlxLabel}
             </span>
-            <Badge color={mlxAvailable ? 'blue' : 'gray'}>{mlxAvailable ? 'Available' : 'System'}</Badge>
+            <Badge color={mlxReady ? 'blue' : (mlxSupported ? 'amber' : 'gray')}>
+              {mlxReady ? 'Ready' : (mlxSupported ? 'Install' : 'System')}
+            </Badge>
           </div>
         </SettingRow>
       </SettingGroup>

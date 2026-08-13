@@ -24,4 +24,18 @@ router.get('/status', (req, res) => {
   }
 });
 
+// POST /api/update/restart — request a graceful process restart. Electron uses
+// its IPC lifecycle manager instead; this fallback is for supervised source or
+// self-hosted deployments (systemd, pm2, Docker restart policies, etc.).
+router.post('/restart', (_req, res) => {
+  res.status(202).json({
+    success: true,
+    message: 'Graceful backend restart requested.',
+  });
+  const timer = setTimeout(() => {
+    process.kill(process.pid, 'SIGTERM');
+  }, 250);
+  timer.unref?.();
+});
+
 export default router;
