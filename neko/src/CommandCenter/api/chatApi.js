@@ -1,15 +1,13 @@
 import { API_BASE_URL, ENDPOINTS, apiRequest } from './client.js';
-import authService from '../../services/authService.js';
+import apiClient from '../../services/apiClient.js';
 
 export const chatApi = {
 
   runStream: async function* (message, conversationHistory = [], signal = null, opts = {}) {
-    const token = await authService.getSession();
-    const response = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
+    const response = await apiClient.request(`${API_BASE_URL}/ai/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token?.access_token}`,
       },
       signal,
       body: JSON.stringify({

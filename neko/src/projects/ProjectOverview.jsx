@@ -5,7 +5,7 @@ import ProjectOverviewOriginal from "../projects/ProjectOverviewContent.jsx";
 const VALID_PROJECT_TABS = ['kanban', 'list'];
 
 const ProjectOverview = () => {
-  const { selectedProject, session } = useOutletContext();
+  const { selectedProject, localUser } = useOutletContext();
   const { projectId, tab } = useParams();
   const navigate = useNavigate();
 
@@ -25,7 +25,7 @@ const ProjectOverview = () => {
       selectedProject={selectedProject}
       projectId={projectId}
       currentTab={currentTab}
-      session={session}
+      localUser={localUser}
     />
   );
 };

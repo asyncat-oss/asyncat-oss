@@ -251,6 +251,12 @@ function ensureProjectSchema() {
   dropColumnIfPresent('projects', 'enabled_widgets');
 }
 
+function ensureLocalProfileSchema() {
+  // Passwords belonged to the removed login flow. The profile now exists only
+  // as the stable owner referenced by local content.
+  dropColumnIfPresent('users', 'password_hash');
+}
+
 function ensureKanbanSchema() {
   dropColumnIfPresent('Columns', 'isCompletionColumn');
   dropColumnIfPresent('Cards', 'dependencies');
@@ -289,6 +295,7 @@ function ensureModelPathsSchema() {
 }
 
 cleanupDeadTables();
+ensureLocalProfileSchema();
 ensureProjectSchema();
 ensureKanbanSchema();
 ensureNotesSchema();

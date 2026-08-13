@@ -3,13 +3,10 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import morgan from 'morgan';
 import logger, { flushLogs, logError, morganStream } from './logger.js';
-
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-import authRouter from './auth/authRouter.js';
+import { attachLocalContext } from './middleware/localContext.js';
 
 // ─── AI / MCP routes (from asy_b_main) ───────────────────────────────────────
 import aiAgentRoutes from './ai/routes/aiAgentRoutes.js';
@@ -52,26 +49,9 @@ import integrationsRouter from './integrations/integrationsRouter.js';
 
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
-import { seed } from './db/seed.js';     // auto-seeds solo user on first boot
+import { seed } from './db/seed.js';     // creates the local profile on first boot
 import { recoverSandboxJobs } from './agent/SandboxManager.js';
 import { recoverTrainingJobs } from './ai/controllers/ai/trainingJobManager.js';
-
-// ─── Machine token ────────────────────────────────────────────────────────────
-import { randomUUID } from 'crypto';
-import { mkdirSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
-
-const ASYNCAT_HOME = process.env.ASYNCAT_HOME || join(homedir(), '.asyncat');
-const MACHINE_TOKEN_PATH = join(ASYNCAT_HOME, 'machine_token');
-const MACHINE_TOKEN = randomUUID();
-try {
-  mkdirSync(ASYNCAT_HOME, { recursive: true });
-  writeFileSync(MACHINE_TOKEN_PATH, MACHINE_TOKEN, { mode: 0o600 });
-} catch (e) {
-  logger.warn('Could not write machine token:', e.message);
-}
-export { MACHINE_TOKEN };
 
 try {
   const recoveredSandboxJobs = recoverSandboxJobs();
@@ -99,16 +79,17 @@ const PORT = process.env.PORT || 8716;
 const allowedOrigins = [
   'http://localhost:8717',
   'http://localhost:8716',
+  'http://127.0.0.1:8717',
+  'http://127.0.0.1:8716',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
 // All other routes use the restricted allow-list
 app.use(cors({
   origin: allowedOrigins,
-  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
-    'Content-Type', 'Authorization', 'Cookie', 'X-Requested-With',
+    'Content-Type', 'X-Requested-With',
     'x-client-timestamp', 'x-update-type', 'x-auto-save', 'x-client-timezone',
     'Cache-Control',
   ],
@@ -120,12 +101,11 @@ app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'tiny', {
   stream: morganStream,
 }));
-app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// ─── Routes: Auth ────────────────────────────────────────────────────────────
-app.use('/api/auth', authRouter);
+// Every API request uses the single local profile as its ownership context.
+app.use(attachLocalContext);
 
 // ─── Routes: AI ──────────────────────────────────────────────────────────────
 // Provider routes MUST be mounted before aiAgentRoutes to avoid the /api/ai catch-all
@@ -192,10 +172,6 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') {
     return res.status(413).json({ success: false, error: 'Payload too large' });
   }
-  if (err.message?.includes('JWT')) {
-    return res.status(401).json({ success: false, error: 'Authentication failed' });
-  }
-
   const status = err.status || err.statusCode || 500;
   res.status(status).json({
     success: false,
@@ -215,10 +191,10 @@ seed().then(async () => {
     logger.warn('Storage initialization warning:', err.message);
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '127.0.0.1', () => {
     logger.info(`den running on port ${PORT}`);
     logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);
-    logger.info(`frontend: ${process.env.FRONTEND_URL || 'http://localhost:8717'}`);
+    logger.info(`frontend: ${process.env.FRONTEND_URL || 'http://127.0.0.1:8717'}`);
   });
   server.on('error', async (err) => {
     logError('HTTP server failed:', err);

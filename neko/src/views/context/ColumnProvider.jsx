@@ -160,7 +160,6 @@ export const BoardSkeleton = () => {
 
 export const ColumnProvider = ({
 	children,
-	session,
 	selectedProject,
 	viewType = "kanban",
 }) => {
@@ -169,17 +168,10 @@ export const ColumnProvider = ({
 	const [error, setError] = useState(null);
 
 	// Extract stable values to avoid unnecessary re-renders
-	const hasSession = Boolean(session?.user?.id);
 	const projectId = selectedProject?.id;
 
 	// Memoize loadColumns to avoid dependency issues
 	const loadColumns = useCallback(async () => {
-		if (!hasSession) {
-			setError("User session not found");
-			setIsLoading(false);
-			return;
-		}
-
 		if (!projectId) {
 			setError("Please select a project to view its Kanban board");
 			setIsLoading(false);
@@ -206,7 +198,7 @@ export const ColumnProvider = ({
 		} finally {
 			setIsLoading(false);
 		}
-	}, [hasSession, projectId]);
+	}, [projectId]);
 
 	useEffect(() => {
 		loadColumns();

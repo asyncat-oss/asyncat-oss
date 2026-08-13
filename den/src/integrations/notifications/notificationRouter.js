@@ -1,19 +1,8 @@
 import express from 'express';
-import { verifyUser } from '../../auth/authMiddleware.js';
-import { attachDb } from '../../db/sqlite.js';
 import { getNotificationStatus, notifyChannels } from './notificationService.js';
 import db from '../../db/client.js';
 
 const router = express.Router();
-
-const auth = (req, res, next) => {
-  verifyUser(req, res, (err) => {
-    if (err) return next(err);
-    attachDb(req, res, next);
-  });
-};
-
-router.use(auth);
 
 router.get('/status', (_req, res) => {
   res.json({ success: true, ...getNotificationStatus() });

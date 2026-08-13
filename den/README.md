@@ -12,7 +12,6 @@ Den is a single Express server that handles everything:
 
 | Domain | Routes |
 |---|---|
-| Auth (JWT) | `/api/auth/*` |
 | AI / Agent | `/api/ai/*`, `/api/agent/*` |
 | Config | `/api/config/*` |
 | Users | `/api/users/*` |
@@ -43,7 +42,6 @@ Edit `den/.env`:
 
 ```env
 PORT=8716
-JWT_SECRET=change-this-to-a-long-random-string
 
 # Local model (recommended)
 LLAMA_SERVER_PORT=8765
@@ -76,16 +74,14 @@ npm run dev   # development
 npm start     # production
 ```
 
-Starts at `http://localhost:8716`.
+Starts at `http://127.0.0.1:8716` and only accepts connections from the local
+machine.
 
-## Local account
+## Local profile
 
-Default. One local user, SQLite database, no network access needed.
-
-```env
-LOCAL_EMAIL=admin@local
-LOCAL_PASSWORD=changeme
-```
+Asyncat creates one local profile automatically. It is used only to associate
+projects, notes, and agent history with a stable owner ID; there is no login,
+password, browser session, or account setup.
 
 ## Database
 

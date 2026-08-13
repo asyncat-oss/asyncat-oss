@@ -5,7 +5,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { verifyUser } from '../auth/authMiddleware.js';
 import { clearManagedUploads, getStorageSummary, getLogsSummary, clearLogs, readLogFile } from './storageService.js';
 
 const router = express.Router();
@@ -20,7 +19,7 @@ const sanitizePath = (inputPath) => {
   return path.normalize(inputPath).replace(/^(\.\.(\/|\\|$))+/, '');
 };
 
-router.get('/summary', verifyUser, (req, res) => {
+router.get('/summary', (req, res) => {
   try {
     const summary = getStorageSummary();
     res.json(summary);
@@ -30,7 +29,7 @@ router.get('/summary', verifyUser, (req, res) => {
   }
 });
 
-router.delete('/uploads', verifyUser, async (req, res) => {
+router.delete('/uploads', async (req, res) => {
   try {
     const confirm = String(req.body?.confirm || '').trim().toLowerCase();
     if (confirm !== 'clear uploads') {
@@ -48,7 +47,7 @@ router.delete('/uploads', verifyUser, async (req, res) => {
   }
 });
 
-router.get('/logs', verifyUser, (req, res) => {
+router.get('/logs', (req, res) => {
   try {
     const summary = getLogsSummary();
     res.json(summary);
@@ -58,7 +57,7 @@ router.get('/logs', verifyUser, (req, res) => {
   }
 });
 
-router.delete('/logs', verifyUser, async (req, res) => {
+router.delete('/logs', async (req, res) => {
   try {
     const confirm = String(req.body?.confirm || '').trim().toLowerCase();
     if (confirm !== 'clear logs') {
@@ -76,7 +75,7 @@ router.delete('/logs', verifyUser, async (req, res) => {
   }
 });
 
-router.get('/logs/read', verifyUser, (req, res) => {
+router.get('/logs/read', (req, res) => {
   try {
     const category = String(req.query?.category || '').trim();
     const filename = String(req.query?.filename || '').trim();

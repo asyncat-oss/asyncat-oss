@@ -13,20 +13,16 @@ import {
   Sun,
   Moon,
   Monitor,
-  Layout as LayoutIcon,
-  MousePointer,
-  Eye,
-  EyeOff,
   FolderOpen,
   Globe,
   Cpu,
   Mic,
   Star,
 } from "lucide-react";
-import authService from "./services/authService.js";
+import apiClient from "./services/apiClient.js";
 import RuntimeSetupPanel from "./Models/RuntimeSetupPanel.jsx";
 
-const API_URL = import.meta.env.VITE_USER_URL || "http://localhost:8716";
+const API_URL = import.meta.env.VITE_USER_URL || "http://127.0.0.1:8716";
 const EMOJI_OPTIONS = [
   "🏠",
   "🧭",
@@ -51,7 +47,7 @@ const labelClassName =
   "text-[10px] font-bold text-gray-400 dark:text-gray-500 midnight:text-slate-500 uppercase tracking-widest ml-1";
 
 const setupFetchJson = async (url) => {
-  const response = await authService.authenticatedFetch(url);
+  const response = await apiClient.request(url);
   const data = await response.json().catch(() => ({}));
   if (!response.ok)
     throw new Error(
@@ -128,17 +124,13 @@ const PageWrapper = ({ children, title, subtitle }) => (
   </motion.div>
 );
 
-const WelcomePage = ({ session, onTeamCreated }) => {
+const WelcomePage = ({ localUser, onTeamCreated }) => {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   // Form State
-  const [accountName, setAccountName] = useState(session?.user?.name || "");
-  const [accountEmail, setAccountEmail] = useState(
-    session?.user?.email || "admin@local",
-  );
-  const [accountPassword, setAccountPassword] = useState("");
+  const [accountName, setAccountName] = useState(localUser?.name || "");
   const [workspaceName, setWorkspaceName] = useState("My Workspace");
   const [emoji, setEmoji] = useState("🏠");
 
@@ -149,10 +141,6 @@ const WelcomePage = ({ session, onTeamCreated }) => {
       ? savedTheme
       : "system";
   });
-  const [sidebarVis, setSidebarVis] = useState("always");
-  const [topMenuVis, setTopMenuVis] = useState("always");
-
-  const [showPassword, setShowPassword] = useState(false);
 
   const [config, setConfig] = useState({});
   const [configStatus, setConfigStatus] = useState("loading");
@@ -215,10 +203,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
   const handleBack = () => setStep((s) => s - 1);
 
   // Validation
-  const isAccountValid =
-    accountName.trim().length > 0 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$|^[^\s@]+@local$/i.test(accountEmail.trim()) &&
-    accountPassword.length >= 8;
+  const isAccountValid = accountName.trim().length > 0;
 
   const isWorkspaceValid = workspaceName.trim().length >= 2;
   const requiredMissing =
@@ -269,9 +254,6 @@ const WelcomePage = ({ session, onTeamCreated }) => {
       localStorage.setItem("theme", themePref);
     }
 
-    // Sidebar & Menu
-    localStorage.setItem("sidebarVisibility", sidebarVis);
-    localStorage.setItem("topMenuBarVisibility", topMenuVis);
   };
 
   const handleSubmit = async () => {
@@ -280,13 +262,16 @@ const WelcomePage = ({ session, onTeamCreated }) => {
     try {
       applyPreferences();
 
-      await authService.updateLocalAccount({
-        name: accountName.trim(),
-        email: accountEmail.trim(),
-        password: accountPassword,
+      const profileResponse = await apiClient.request(`${API_URL}/api/users/me`, {
+        method: "PUT",
+        body: JSON.stringify({ name: accountName.trim() }),
       });
+      if (!profileResponse.ok) {
+        const profileError = await profileResponse.json().catch(() => ({}));
+        throw new Error(profileError.error || "Failed to save local profile");
+      }
 
-      const response = await authService.authenticatedFetch(
+      const response = await apiClient.request(
         `${API_URL}/api/teams`,
         {
           method: "POST",
@@ -381,7 +366,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
             <PageWrapper
               key="account"
               title="Identity"
-              subtitle="Your data never leaves this device. Create your local profile."
+              subtitle="Choose the name shown inside this local app."
             >
               <div className="space-y-6">
                 <div className="space-y-4 text-left">
@@ -395,46 +380,6 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                       className={fieldClassName}
                       autoFocus
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className={labelClassName}>Email Handle</label>
-                    <input
-                      type="email"
-                      value={accountEmail}
-                      onChange={(e) => setAccountEmail(e.target.value)}
-                      placeholder="admin@local"
-                      className={fieldClassName}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className={labelClassName}>Password</label>
-                    <div className="relative flex items-center">
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        value={accountPassword}
-                        onChange={(e) => setAccountPassword(e.target.value)}
-                        placeholder="Min 8 characters"
-                        className={`w-full px-1 py-2 pr-7 bg-transparent border-b ${accountPassword.length > 0 && accountPassword.length < 8 ? "border-red-500" : "border-gray-200 dark:border-gray-700 midnight:border-slate-700"} focus:border-blue-500 transition-all outline-none text-gray-900 dark:text-gray-100 midnight:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 text-[13px]`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-1 text-gray-400 dark:text-gray-500 midnight:text-slate-500 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-slate-300 transition-colors"
-                        tabIndex={-1}
-                      >
-                        {showPassword ? (
-                          <EyeOff size={14} strokeWidth={2} />
-                        ) : (
-                          <Eye size={14} strokeWidth={2} />
-                        )}
-                      </button>
-                    </div>
-                    {accountPassword.length > 0 &&
-                      accountPassword.length < 8 && (
-                        <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider ml-1">
-                          Security too low (Min 8 chars)
-                        </p>
-                      )}
                   </div>
                 </div>
                 <div className="flex gap-4 pt-4">
@@ -510,7 +455,7 @@ const WelcomePage = ({ session, onTeamCreated }) => {
             <PageWrapper
               key="preferences"
               title="Preferences"
-              subtitle="Customize your interface. These can be adjusted later in Settings."
+              subtitle="Choose a comfortable theme. You can change it later in Settings."
             >
               <div className="space-y-6 text-left">
                 <div className="space-y-1.5">
@@ -523,30 +468,6 @@ const WelcomePage = ({ session, onTeamCreated }) => {
                       { value: "dark", label: "Dark", icon: Moon },
                       { value: "midnight", label: "Midnight", icon: Star },
                       { value: "system", label: "Auto", icon: Monitor },
-                    ]}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className={labelClassName}>Sidebar Visibility</label>
-                  <PreferenceToggle
-                    selected={sidebarVis}
-                    onChange={setSidebarVis}
-                    options={[
-                      { value: "always", label: "Always", icon: LayoutIcon },
-                      { value: "hover", label: "On Hover", icon: MousePointer },
-                    ]}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className={labelClassName}>Top Menu Bar</label>
-                  <PreferenceToggle
-                    selected={topMenuVis}
-                    onChange={setTopMenuVis}
-                    options={[
-                      { value: "always", label: "Visible" },
-                      { value: "hidden", label: "Hidden" },
                     ]}
                   />
                 </div>
@@ -795,11 +716,8 @@ PageWrapper.propTypes = {
 };
 
 WelcomePage.propTypes = {
-  session: PropTypes.shape({
-    user: PropTypes.shape({
-      name: PropTypes.string,
-      email: PropTypes.string,
-    }),
+  localUser: PropTypes.shape({
+    name: PropTypes.string,
   }),
   onTeamCreated: PropTypes.func,
 };

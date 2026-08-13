@@ -1,7 +1,5 @@
 // integrations/github/githubRouter.js
 import express from 'express';
-import { verifyUser } from '../../auth/authMiddleware.js';
-import { attachDb } from '../../db/sqlite.js';
 import {
   isConfigured,
   getAuthUrl,
@@ -16,21 +14,14 @@ import {
 const router = express.Router();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8717';
 
-const auth = (req, res, next) => {
-  verifyUser(req, res, (err) => {
-    if (err) return next(err);
-    attachDb(req, res, next);
-  });
-};
-
 // GET /api/integrations/github/status
-router.get('/status', auth, (req, res) => {
+router.get('/status', (req, res) => {
   const status = getIntegrationStatus(req.user.id);
   res.json({ success: true, configured: isConfigured(), ...status });
 });
 
 // GET /api/integrations/github/connect
-router.get('/connect', auth, (req, res) => {
+router.get('/connect', (req, res) => {
   if (!isConfigured()) {
     return res.status(503).json({
       success: false,
@@ -42,7 +33,7 @@ router.get('/connect', auth, (req, res) => {
 });
 
 // GET /api/integrations/github/callback
-// GitHub redirects here — not protected by verifyUser.
+// GitHub redirects here after the external OAuth flow.
 router.get('/callback', async (req, res) => {
   const { code, state, error } = req.query;
 
@@ -71,7 +62,7 @@ router.get('/callback', async (req, res) => {
 });
 
 // DELETE /api/integrations/github/disconnect
-router.delete('/disconnect', auth, async (req, res) => {
+router.delete('/disconnect', async (req, res) => {
   try {
     await revokeToken(req.user.id);
     deleteIntegration(req.user.id);

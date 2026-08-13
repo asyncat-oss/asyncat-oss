@@ -1,5 +1,5 @@
 // Training/trainingApi.js — Frontend API client for fine-tuning
-import authService from '../services/authService.js';
+import apiClient from '../services/apiClient.js';
 
 const API_BASE = import.meta.env.VITE_MAIN_URL + '/api/training';
 
@@ -12,7 +12,7 @@ const handleResponse = async (response) => {
 };
 
 const apiCall = async (url, options = {}) => {
-  const response = await authService.authenticatedFetch(url, options);
+  const response = await apiClient.request(url, options);
   return handleResponse(response);
 };
 
@@ -90,10 +90,7 @@ export const trainingApi = {
 
   // ── SSE stream ──────────────────────────────────────────────────────────────
   streamJobProgress: (jobId, onEvent, onError) => {
-    const token = authService.getAccessToken();
-    if (!token) { onError?.('Not authenticated'); return () => {}; }
-
-    const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/stream?token=${encodeURIComponent(token)}`;
+    const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/stream`;
     const source = new EventSource(url);
 
     source.onmessage = (event) => {

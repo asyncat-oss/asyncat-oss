@@ -228,7 +228,6 @@ asyncat-oss/
 │   │   ├── agent/             # AgentRuntime, BasalGanglia, skills, souls,
 │   │   │                      #   sessions, SandboxManager, Scheduler, profiles
 │   │   ├── ai/                # Provider integration, providerRoutes, aiAgentRoutes
-│   │   ├── auth/              # JWT auth, bcrypt, authMiddleware
 │   │   ├── config/            # Config + secrets API (/api/config)
 │   │   ├── db/                # SQLite client + schema
 │   │   ├── files/             # File explorer service
@@ -236,7 +235,7 @@ asyncat-oss/
 │   │   ├── kanban/            # Cards + columns (/api/cards, /api/columns)
 │   │   ├── lib/               # Shared logic extracted from CLI (system deps, local engines)
 │   │   ├── notes/             # Delta-based notes, export (/api/notes)
-│   │   └── users/             # Auth middleware, user CRUD
+│   │   └── users/             # Local profile + workspace/project CRUD
 │   ├── data/                  # SQLite DB, model files, generated output
 │   └── test/                  # Tests + evals
 ├── neko/            # React + Vite frontend

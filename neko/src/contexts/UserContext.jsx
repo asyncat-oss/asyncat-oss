@@ -1,58 +1,44 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import authService from '../services/authService';
+import PropTypes from 'prop-types';
+import apiClient from '../services/apiClient';
 
 const UserContext = createContext();
 
-export const UserProvider = ({ children, session }) => {
+export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profileData, setProfileData] = useState({ name: '', profilePicture: '' });
   const [loading, setLoading] = useState(true);
 
   const MAIN_URL = import.meta.env.VITE_USER_URL;
 
-  useEffect(() => {
-    if (session?.user) {
-      setUser(session.user);
-      fetchUserProfile();
-    } else {
-      setUser(null);
-      setLoading(false);
-    }
-  }, [session]);
-
   const fetchUserProfile = useCallback(async () => {
-    if (!session?.user?.id) return;
     try {
-      const response = await authService.authenticatedFetch(`${MAIN_URL}/api/users/me`, { method: 'GET' });
+      const response = await apiClient.request(`${MAIN_URL}/api/users/me`, { method: 'GET' });
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
+          setUser(data.data);
           setProfileData({ name: data.data.name || '', profilePicture: data.data.profile_picture || '' });
         }
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      if (session?.user) {
-        setProfileData({ name: session.user.name || '', profilePicture: session.user.profile_picture || session.user.user_metadata?.profile_picture || '' });
-      }
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, MAIN_URL]);
+  }, [MAIN_URL]);
 
-  const refreshUserData = useCallback(() => {
-    if (session?.user) fetchUserProfile();
-  }, [session?.user, fetchUserProfile]);
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
+
+  const refreshUserData = useCallback(() => fetchUserProfile(), [fetchUserProfile]);
 
   const contextValue = {
     user,
     loading,
     refreshUserData,
-    isAuthenticated: !!user,
-    userId: user?.id,
-    userEmail: user?.email,
-    userName: profileData.name || user?.email?.split('@')[0] || 'User',
-    userProfilePicture: profileData.profilePicture,
+    profileData,
   };
 
   return (
@@ -60,6 +46,10 @@ export const UserProvider = ({ children, session }) => {
       {children}
     </UserContext.Provider>
   );
+};
+
+UserProvider.propTypes = {
+  children: PropTypes.node,
 };
 
 export const useUser = () => {

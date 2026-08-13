@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   AlertCircle,
   AlertTriangle,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react';
 import { storageApi, apiUtils } from './settingApi';
 
-const soraFontBase = 'font-sora';
+const settingsFontBase = 'font-sans';
 
 const panelCls =
   'rounded-lg border border-gray-200 dark:border-gray-800 midnight:border-gray-800 ' +
@@ -188,6 +189,52 @@ function DatabaseFileRow({ file }) {
   );
 }
 
+StatTile.propTypes = {
+  icon: PropTypes.elementType.isRequired,
+  label: PropTypes.string.isRequired,
+  value: PropTypes.node,
+  hint: PropTypes.string,
+};
+
+DiskBar.propTypes = {
+  disk: PropTypes.shape({
+    path: PropTypes.string,
+    usedPercent: PropTypes.number,
+    usedFormatted: PropTypes.string,
+    usedBytes: PropTypes.number,
+    availableFormatted: PropTypes.string,
+    availableBytes: PropTypes.number,
+    totalFormatted: PropTypes.string,
+    totalBytes: PropTypes.number,
+  }),
+};
+
+AppPathRow.propTypes = {
+  item: PropTypes.shape({
+    label: PropTypes.string,
+    description: PropTypes.string,
+    path: PropTypes.string,
+    bytes: PropTypes.number,
+    formatted: PropTypes.string,
+    files: PropTypes.number,
+    directories: PropTypes.number,
+    exists: PropTypes.bool,
+    truncated: PropTypes.bool,
+  }).isRequired,
+  totalBytes: PropTypes.number.isRequired,
+};
+
+DatabaseFileRow.propTypes = {
+  file: PropTypes.shape({
+    label: PropTypes.string,
+    path: PropTypes.string,
+    bytes: PropTypes.number,
+    formatted: PropTypes.string,
+    exists: PropTypes.bool,
+    modifiedAt: PropTypes.string,
+  }).isRequired,
+};
+
 const importantTableOrder = [
   'notes',
   'conversations',
@@ -346,7 +393,7 @@ export default function StorageSection() {
 
   if (loading) {
     return (
-      <div className={`space-y-3 ${soraFontBase}`}>
+      <div className={`space-y-3 ${settingsFontBase}`}>
         {[1, 2, 3].map(item => (
           <div key={item} className="h-24 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 animate-pulse" />
         ))}
@@ -356,7 +403,7 @@ export default function StorageSection() {
 
   if (error) {
     return (
-      <div className={`${soraFontBase} ${panelCls} p-5`}>
+      <div className={`${settingsFontBase} ${panelCls} p-5`}>
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
           <div>
@@ -382,7 +429,7 @@ export default function StorageSection() {
   const database = summary?.database;
 
   return (
-    <div className={`space-y-6 ${soraFontBase}`}>
+    <div className={`space-y-6 ${settingsFontBase}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">

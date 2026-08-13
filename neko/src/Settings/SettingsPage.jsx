@@ -1,11 +1,20 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { SlidersHorizontal, Lock, Moon, Star, Sun, Server, LogOut, ArrowUpCircle, HardDrive, Plug, Cpu } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  BriefcaseBusiness,
+  Cpu,
+  Database,
+  Info,
+  Palette,
+  Plug,
+  Server,
+  UserRound,
+  Wrench,
+} from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-
-// Import our components
+import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import GeneralSection from './GeneralSection';
-import SecuritySection from './SecuritySection';
 import AppearanceSection from './AppearanceSection';
 import ServerSection from './ServerSection';
 import UpdateSection from './UpdateSection';
@@ -13,234 +22,237 @@ import StorageSection from './StorageSection';
 import IntegrationsSection from './IntegrationsSection';
 import RuntimeSection from './RuntimeSection';
 
+const TAB_ALIASES = {
+  general: 'profile',
+  account: 'profile',
+  security: 'profile',
+  integrations: 'connections',
+  server: 'advanced',
+  storage: 'advanced',
+  updates: 'about',
+};
+
 const SettingsPage = () => {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const { session, onSignOut } = useOutletContext() || {};
-
-  // Workspace context
+  const { localUser } = useOutletContext() || {};
   const { currentWorkspace, refreshWorkspaces, updateCurrentWorkspace } = useWorkspace();
+  const { theme, setTheme } = useUiPreferences();
+  const [advancedView, setAdvancedView] = useState(tab === 'server' ? 'server' : 'storage');
 
-  // UI state
-  const [theme, setTheme] = useState('system');
+  const tabs = useMemo(() => [
+    {
+      id: 'profile',
+      group: 'Personal',
+      label: 'Profile',
+      description: 'Your local display name and avatar.',
+      icon: UserRound,
+    },
+    {
+      id: 'workspace',
+      group: 'Personal',
+      label: 'Workspace',
+      description: 'Project-space identity and ownership controls.',
+      icon: BriefcaseBusiness,
+    },
+    {
+      id: 'appearance',
+      group: 'App',
+      label: 'Appearance',
+      description: 'Theme, navigation, motion, and desktop extras.',
+      icon: Palette,
+    },
+    {
+      id: 'connections',
+      group: 'App',
+      label: 'Connections',
+      description: 'External services available to Asyncat and its agents.',
+      icon: Plug,
+    },
+    {
+      id: 'runtime',
+      group: 'System',
+      label: 'Runtime',
+      description: 'Local inference engines and installation readiness.',
+      icon: Cpu,
+    },
+    {
+      id: 'advanced',
+      group: 'System',
+      label: 'Advanced',
+      description: 'Storage, logs, server configuration, and maintenance.',
+      icon: Wrench,
+    },
+    {
+      id: 'about',
+      group: 'System',
+      label: 'About',
+      description: 'Version information and application updates.',
+      icon: Info,
+    },
+  ], []);
 
-  const activeTab = tab === 'profile' ? 'general' : (tab || 'general');
-
-  const applyTheme = useCallback((mode) => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.classList.remove('dark', 'midnight');
-    if (mode === 'dark' || (mode === 'system' && prefersDark)) {
-      document.documentElement.classList.add('dark');
-    } else if (mode === 'midnight') {
-      document.documentElement.classList.add('midnight');
-    }
-  }, []);
+  const requestedTab = TAB_ALIASES[tab] || tab || 'profile';
+  const activeTab = tabs.some((item) => item.id === requestedTab) ? requestedTab : 'profile';
+  const activeTabInfo = tabs.find((item) => item.id === activeTab) || tabs[0];
+  const groups = [...new Set(tabs.map((item) => item.group))];
 
   useEffect(() => {
-    const storedTheme = localStorage.theme;
-    const initialTheme = ['light', 'dark', 'midnight'].includes(storedTheme) ? storedTheme : 'system';
-    applyTheme(initialTheme);
-    setTheme(initialTheme);
+    if (tab === 'server') setAdvancedView('server');
+    if (tab === 'storage') setAdvancedView('storage');
+  }, [tab]);
 
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e) => {
-      if (!('theme' in localStorage) || localStorage.theme === 'system') {
-        document.documentElement.classList.toggle('dark', e.matches);
-        document.documentElement.classList.remove('midnight');
-        setTheme('system');
-      }
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [applyTheme]);
-
-  const setThemeMode = (mode) => {
-    const nextTheme = ['dark', 'light', 'midnight'].includes(mode) ? mode : 'system';
-    if (nextTheme === 'system') {
-      localStorage.removeItem('theme');
-    } else {
-      localStorage.theme = nextTheme;
-    }
-    applyTheme(nextTheme);
-    setTheme(nextTheme);
-  };
-
-  // Handle workspace deletion
   const handleWorkspaceDeleted = () => {
     refreshWorkspaces();
     navigate('/home');
   };
 
-  // Handle leaving workspace
-  const handleWorkspaceLeft = () => {
-    refreshWorkspaces();
-    navigate('/home');
-  };
+  const renderProfile = () => (
+    <GeneralSection
+      view="profile"
+      localUser={localUser}
+      workspace={currentWorkspace}
+      onWorkspaceUpdated={updateCurrentWorkspace}
+      onWorkspaceDeleted={handleWorkspaceDeleted}
+    />
+  );
 
-  const allTabs = useMemo(() => [
-    {
-      id: 'general',
-      label: 'General',
-      icon: <SlidersHorizontal className="w-4 h-4" />,
-    },
-    {
-      id: 'security',
-      label: 'Security',
-      icon: <Lock className="w-4 h-4" />,
-    },
-    {
-      id: 'appearance',
-      label: 'Appearance',
-      icon:
-        theme === 'midnight' ? (
-          <Star className="w-4 h-4" />
-        ) : theme === 'dark' ? (
-          <Moon className="w-4 h-4" />
-        ) : (
-          <Sun className="w-4 h-4" />
-        ),
-    },
-    {
-      id: 'server',
-      label: 'Server',
-      icon: <Server className="w-4 h-4" />,
-    },
-    {
-      id: 'runtime',
-      label: 'Runtime',
-      icon: <Cpu className="w-4 h-4" />,
-    },
-    {
-      id: 'storage',
-      label: 'Storage',
-      icon: <HardDrive className="w-4 h-4" />,
-    },
-    {
-      id: 'integrations',
-      label: 'Integrations',
-      icon: <Plug className="w-4 h-4" />,
-    },
-    {
-      id: 'updates',
-      label: 'Updates',
-      icon: <ArrowUpCircle className="w-4 h-4" />,
-    },
-  ], [theme]);
+  const renderAdvanced = () => (
+    <div className="space-y-5">
+      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
+        {[
+          { id: 'storage', label: 'Storage & logs', icon: Database },
+          { id: 'server', label: 'Server', icon: Server },
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setAdvancedView(id)}
+            className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              advancedView === id
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100'
+                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200'
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+          </button>
+        ))}
+      </div>
+      {advancedView === 'server' ? <ServerSection /> : <StorageSection />}
+    </div>
+  );
 
-  const activeTabInfo = allTabs.find((t) => t.id === activeTab) || allTabs[0];
-
-  // Render tab content
-  const renderTabContent = () => {
+  const renderContent = () => {
     switch (activeTab) {
-      case 'general':
+      case 'profile':
+        return renderProfile();
+      case 'workspace':
         return (
           <GeneralSection
-            session={session}
+            view="workspace"
+            localUser={localUser}
             workspace={currentWorkspace}
             onWorkspaceUpdated={updateCurrentWorkspace}
             onWorkspaceDeleted={handleWorkspaceDeleted}
-            onWorkspaceLeft={handleWorkspaceLeft}
           />
         );
-      case 'security':    return <SecuritySection session={session} />;
-      case 'appearance':  return <AppearanceSection theme={theme} setThemeMode={setThemeMode} />;
-      case 'server':      return <ServerSection session={session} />;
-      case 'runtime':     return <RuntimeSection />;
-      case 'storage':      return <StorageSection />;
-      case 'integrations': return <IntegrationsSection />;
-      case 'updates':      return <UpdateSection />;
+      case 'appearance':
+        return <AppearanceSection theme={theme} setThemeMode={setTheme} />;
+      case 'connections':
+        return <IntegrationsSection />;
+      case 'runtime':
+        return <RuntimeSection />;
+      case 'advanced':
+        return renderAdvanced();
+      case 'about':
+        return <UpdateSection />;
       default:
-        return (
-          <GeneralSection
-            session={session}
-            workspace={currentWorkspace}
-            onWorkspaceUpdated={updateCurrentWorkspace}
-            onWorkspaceDeleted={handleWorkspaceDeleted}
-            onWorkspaceLeft={handleWorkspaceLeft}
-          />
-        );
+        return renderProfile();
     }
   };
 
-  const handleTabChange = (tabId) => {
-    navigate(`/settings/${tabId}`);
+  const renderNavButton = (item, mobile = false) => {
+    const Icon = item.icon;
+    const selected = item.id === activeTab;
+    return (
+      <button
+        type="button"
+        onClick={() => navigate(`/settings/${item.id}`)}
+        aria-current={selected ? 'page' : undefined}
+        className={`${mobile ? 'shrink-0' : 'w-full'} flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+          selected
+            ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-100 midnight:text-slate-900'
+            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-900 midnight:hover:text-slate-100'
+        }`}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        {item.label}
+      </button>
+    );
   };
 
   return (
-    <div className="flex h-full w-full bg-white dark:bg-gray-900 midnight:bg-gray-950 font-sans">
-      {/* Left Sidebar - Navigation */}
-      <div className="w-64 flex-shrink-0 flex flex-col border-r border-gray-200/70 dark:border-gray-800/80 midnight:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-gray-950/50">
-        <div className="p-4 pt-5 pb-3">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
-            Settings
-          </h2>
+    <div className="flex h-full w-full bg-white font-sans text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200/80 bg-gray-50/70 lg:flex dark:border-gray-800 dark:bg-gray-950/40 midnight:border-slate-800 midnight:bg-slate-950">
+        <div className="border-b border-gray-200/80 px-4 py-4 dark:border-gray-800 midnight:border-slate-800">
+          <button
+            type="button"
+            onClick={() => navigate('/home')}
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-900"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Asyncat
+          </button>
+          <h1 className="mt-4 px-2 text-lg font-semibold tracking-tight">Settings</h1>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 pt-2 pb-2">
-          <div className="space-y-0.5">
-            {allTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`w-full flex items-center px-3 py-1.5 rounded-lg text-left transition-all duration-150
-                  ${
-                    activeTab === tab.id
-                      ? 'bg-white dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100 shadow-sm ring-1 ring-gray-200/50 dark:ring-gray-700/50 midnight:ring-gray-700/50'
-                      : 'text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-800 active:scale-[0.98]'
-                  }`}
-              >
-                <div className="flex items-center gap-2.5 w-full">
-                  <div className={`flex-shrink-0 ${activeTab === tab.id ? 'text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400' : 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'}`}>
-                    {tab.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{tab.label}</div>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
+        <nav className="flex-1 overflow-y-auto p-3">
+          {groups.map((group, index) => (
+            <div key={group} className={index === 0 ? '' : 'mt-5'}>
+              <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-600 midnight:text-slate-600">
+                {group}
+              </div>
+              <div className="space-y-1">
+                {tabs.filter((item) => item.group === group).map((item) => (
+                  <div key={item.id}>{renderNavButton(item)}</div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+      </aside>
 
-        {/* Sign out — pinned to bottom like macOS System Settings */}
-        {onSignOut && (
-          <div className="flex-shrink-0 px-2 pb-3 pt-1 border-t border-gray-200/70 dark:border-gray-800/80 midnight:border-gray-800/80">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 border-b border-gray-200/80 bg-white/95 px-4 pt-3 backdrop-blur lg:hidden dark:border-gray-800 dark:bg-gray-900/95 midnight:border-slate-800 midnight:bg-slate-950/95">
+          <div className="flex items-center justify-between pb-3">
             <button
-              onClick={onSignOut}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-left text-sm text-red-600 dark:text-red-400 midnight:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 transition-colors"
+              type="button"
+              onClick={() => navigate('/home')}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:hover:bg-slate-900"
+              aria-label="Back to Asyncat"
             >
-              <LogOut className="w-4 h-4 flex-shrink-0" />
-              Log Out
+              <ArrowLeft className="h-4 w-4" />
             </button>
+            <div className="text-sm font-semibold">Settings</div>
+            <div className="h-8 w-8" />
           </div>
-        )}
-      </div>
-
-      {/* Right Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 midnight:bg-gray-950">
-        {/* Content Header */}
-        <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800/60 midnight:border-gray-800/60">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gray-50 dark:bg-gray-800 midnight:bg-gray-800 rounded-lg text-gray-500 dark:text-gray-400">
-              {activeTabInfo?.icon}
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
-                {activeTabInfo?.label}
-              </h3>
-            </div>
-          </div>
+          <nav className="flex gap-1 overflow-x-auto pb-3">
+            {tabs.map((item) => <div key={item.id}>{renderNavButton(item, true)}</div>)}
+          </nav>
         </div>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto w-full flex justify-center">
-          <div className="max-w-4xl w-full px-8 py-8">
-            <div className="bg-white dark:bg-gray-900 midnight:bg-gray-950">
-              {renderTabContent()}
-            </div>
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-5xl px-5 py-7 sm:px-8 sm:py-9">
+            <header className="mb-7 border-b border-gray-100 pb-5 dark:border-gray-800 midnight:border-slate-800">
+              <h2 className="text-xl font-semibold tracking-tight">{activeTabInfo.label}</h2>
+              <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+                {activeTabInfo.description}
+              </p>
+            </header>
+            {renderContent()}
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );

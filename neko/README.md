@@ -14,7 +14,7 @@ The UI for the full Asyncat experience:
 - **Terminal** — in-browser command execution
 - **Notes** — block-based editor
 - **Habits** — XP and streaks
-- **Settings** — profile, security, server config
+- **Settings** — profile, appearance, integrations, and server config
 
 ## Getting started
 
@@ -29,7 +29,7 @@ Auto-creates `.env` from `.env.example`.
 ### Configure
 
 ```env
-VITE_API_URL=http://localhost:8716
+VITE_API_URL=http://127.0.0.1:8716
 ```
 
 ### Run
@@ -39,20 +39,18 @@ npm run dev    # http://localhost:8717
 npm run build  # production build to dist/
 ```
 
-## Auth
+## Local access
 
-JWT-based. Login at `/auth`.
-
-Default credentials:
-- Email: `admin@local`
-- Password: `changeme`
+The frontend opens directly into the app. Asyncat is a local desktop tool and
+does not have a login, password, or account session.
 
 ## Settings
 
-- **General** — profile, workspace
-- **Security** — change password
+- **Profile** — local display name and avatar
+- **Workspace** — workspace name and icon
 - **Appearance** — light/dark/midnight
-- **Server** — config and secrets
+- **Connections** — external integrations
+- **Advanced** — storage and local server config
 
 ## Themes
 

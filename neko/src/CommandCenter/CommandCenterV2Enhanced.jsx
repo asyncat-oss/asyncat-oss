@@ -1434,13 +1434,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               }
               // POST result back to den so the pending promise resolves
               try {
-                const token = (await import('../services/authService.js')).default.getAccessToken();
                 await fetch(`${import.meta.env.VITE_MAIN_URL}/api/agent/browser/result/${commandId}`, {
                   method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                  },
+                  headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(result),
                 });
               } catch { /* if POST fails, the agent tool will time out gracefully */ }

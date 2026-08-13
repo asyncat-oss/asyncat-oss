@@ -1,4 +1,4 @@
-import authService from "../services/authService";
+import apiClient from "../services/apiClient";
 import { secureLogger } from "../utils/secureLogger";
 import { sanitizeNoteContent, sanitizeToText } from "../utils/sanitizer";
 import { attachmentApi } from "./attachmentApi";
@@ -33,7 +33,7 @@ const API_URL = import.meta.env.VITE_NOTES_URL;
 
 export const apiRequest = async (url, options = {}) => {
   try {
-    const response = await authService.authenticatedFetch(url, {
+    const response = await apiClient.request(url, {
       ...options,
       headers: { "Content-Type": "application/json", ...options.headers },
     });
@@ -139,7 +139,7 @@ export const notesApi = {
 
   exportAsDocx: async (noteId) => {
     try {
-      const response = await authService.authenticatedFetch(
+      const response = await apiClient.request(
         `${API_URL}/api/notes/${noteId}/export/docx`,
         { method: "POST" }
       );
@@ -153,7 +153,7 @@ export const notesApi = {
 
   exportAsPdf: async (noteId) => {
     try {
-      const response = await authService.authenticatedFetch(
+      const response = await apiClient.request(
         `${API_URL}/api/notes/${noteId}/export/pdf`,
         { method: "POST" }
       );
@@ -177,9 +177,7 @@ export const attachmentsApi = {
 
   getAttachmentUrl: (noteId, filename) => {
     const baseUrl = (API_URL || "").replace(/\/$/, "");
-    const token = authService.getAccessToken();
-    const url = `${baseUrl}/api/attachments/notes/${noteId}/${encodeURIComponent(filename)}`;
-    return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+    return `${baseUrl}/api/attachments/notes/${noteId}/${encodeURIComponent(filename)}`;
   },
 
   deleteAttachment: async (noteId, filename) => {

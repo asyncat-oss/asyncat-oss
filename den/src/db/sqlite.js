@@ -419,19 +419,8 @@ class QueryBuilder {
 // Exposes the same top-level API as the Supabase JS client:
 //   supabase.schema("kanban").from("Cards")  →  QueryBuilder("Cards")
 //   supabase.from("notes")                   →  QueryBuilder("notes")
-//   supabase.auth.getUser()                  →  { data: { user: req.user } }
-//                                               (populated by attachDb middleware)
 
 class CompatClient {
-  constructor(user = null) {
-    this._user = user;
-    // Minimal auth shim — controllers that call supabase.auth.getUser()
-    // will receive the user injected at middleware time.
-    this.auth = {
-      getUser: async () => ({ data: { user: this._user }, error: null }),
-    };
-  }
-
   schema(_name) {
     // No-op: SQLite has no schemas. All tables are flat.
     return this;
@@ -453,17 +442,11 @@ class CompatClient {
 export const sqliteDb = new CompatClient();
 
 /**
- * Creates a user-scoped SQLite client.
- * Replaces createAuthenticatedClient(token) calls.
- */
-export const createDbClient = (user) => new CompatClient(user);
-
-/**
  * Express middleware: attaches a CompatClient as req.db.
- * Drop-in replacement for the old "inject authenticated Supabase client" middleware.
+ * Attaches the SQLite compatibility client used by older controllers.
  */
 export const attachDb = (req, _res, next) => {
-  req.db = new CompatClient(req.user || null);
+  req.db = new CompatClient();
   next();
 };
 

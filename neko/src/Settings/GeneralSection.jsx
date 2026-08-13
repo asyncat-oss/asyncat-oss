@@ -140,7 +140,7 @@ const DeleteWorkspaceDialog = ({
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">
-              Delete projects?
+              Delete workspace?
             </h3>
             <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
               This permanently deletes <span className="font-semibold text-gray-900 dark:text-gray-200 midnight:text-slate-200">{workspaceName}</span> and cannot be undone.
@@ -211,10 +211,8 @@ const workspaceShape = PropTypes.shape({
   is_personal: PropTypes.bool,
 });
 
-const sessionShape = PropTypes.shape({
-  user: PropTypes.shape({
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  }),
+const localUserShape = PropTypes.shape({
+  id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 });
 
 PrimaryButton.propTypes = {
@@ -251,7 +249,8 @@ const isCustomImageUrl = (value) =>
   value && /^https?:\/\//.test(value) && /\/files\/profile-pictures\//.test(value);
 
 const GeneralSection = ({
-  session,
+  view = 'all',
+  localUser,
   workspace,
   onWorkspaceUpdated,
   onWorkspaceDeleted,
@@ -261,7 +260,6 @@ const GeneralSection = ({
   const [profileSaving,    setProfileSaving]    = useState(false);
   const [profileMsg,       setProfileMsg]       = useState(null);
   const [name,             setName]             = useState('');
-  const [email,            setEmail]            = useState('');
   const [avatar,           setAvatar]           = useState('CAT');
   const [showPicker,       setShowPicker]       = useState(false);
   const [customImageUrl,   setCustomImageUrl]   = useState(null);
@@ -303,7 +301,6 @@ const GeneralSection = ({
           const d = data.data;
           setUserData(d);
           setName(d.name || '');
-          setEmail(d.email || '');
           if (isCustomImageUrl(d.profile_picture)) {
             setCustomImageUrl(d.profile_picture);
             setAvatar(null);
@@ -472,28 +469,31 @@ const GeneralSection = ({
   const currentAvatar = AVATARS.find(a => a.id === avatar) || AVATARS[0];
   const displayImageSrc = customImageUrl || currentAvatar.src;
   const displayImageAlt = customImageUrl ? 'Custom profile picture' : currentAvatar.name;
-  const isOwner = session?.user && workspace &&
-    String(session.user.id) === String(workspace?.owner_id);
+  const isOwner = localUser && workspace &&
+    String(localUser.id) === String(workspace?.owner_id);
   const hasWorkspace = !!workspace;
   const canEditWorkspace = hasWorkspace && isOwner;
+  const showProfile = view !== 'workspace';
+  const showWorkspace = view !== 'profile';
 
   if (profileLoading) {
     return (
-      <div className="font-sora space-y-4 animate-pulse">
-        <div className="h-40 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900" />
-        <div className="h-48 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900" />
+      <div className="space-y-4 animate-pulse">
+        {showProfile && <div className="h-40 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900" />}
+        {showWorkspace && <div className="h-48 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900" />}
       </div>
     );
   }
 
   return (
-    <div className="font-sora space-y-5">
-      <SectionPanel
-        title="Profile"
-        description="Your display name and avatar are shown across the local workspace. Images are saved instantly; name changes require saving."
-        message={profileMsg}
-        action={<PrimaryButton loading={profileSaving} onClick={saveProfile}>Save profile</PrimaryButton>}
-      >
+    <div className="space-y-5">
+      {showProfile && (
+        <SectionPanel
+          title="Profile"
+          description="Your display name and avatar are shown across the local workspace. Images are saved instantly; name changes require saving."
+          message={profileMsg}
+          action={<PrimaryButton loading={profileSaving} onClick={saveProfile}>Save profile</PrimaryButton>}
+        >
         <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div>
             <input
@@ -613,20 +613,14 @@ const GeneralSection = ({
               />
             </div>
 
-            <div>
-              <label className={fieldLabelCls}>Email</label>
-              <div className={readCls}>{email}</div>
-              <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500">
-                Email cannot be changed in the local build.
-              </p>
-            </div>
           </div>
         </div>
-      </SectionPanel>
+        </SectionPanel>
+      )}
 
-      {hasWorkspace && (
+      {showWorkspace && hasWorkspace && (
         <SectionPanel
-          title="Projects"
+          title="Workspace"
           description={canEditWorkspace ? 'Customize the name and icon for your project space.' : 'Project space details are managed by the owner.'}
           message={wsMsg}
           action={canEditWorkspace ? <PrimaryButton loading={wsSaving} onClick={saveWorkspace}>Save</PrimaryButton> : null}
@@ -724,7 +718,7 @@ const GeneralSection = ({
         </SectionPanel>
       )}
 
-      {showDeleteModal && (
+      {showWorkspace && showDeleteModal && (
         <DeleteWorkspaceDialog
           workspaceName={workspace?.name || 'this workspace'}
           dangerLoading={dangerLoading}
@@ -741,7 +735,8 @@ const GeneralSection = ({
 };
 
 GeneralSection.propTypes = {
-  session: sessionShape,
+  view: PropTypes.oneOf(['all', 'profile', 'workspace']),
+  localUser: localUserShape,
   workspace: workspaceShape,
   onWorkspaceUpdated: PropTypes.func,
   onWorkspaceDeleted: PropTypes.func,

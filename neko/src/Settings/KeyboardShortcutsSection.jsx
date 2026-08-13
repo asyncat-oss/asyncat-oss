@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import PropTypes from 'prop-types';
 import { Keyboard, AlertTriangle } from 'lucide-react';
 import { DEFAULT_KEYBOARD_SHORTCUTS, loadKeyboardShortcuts, saveKeyboardShortcuts } from '../utils/keyboardShortcutsUtils.js';
 
@@ -25,7 +26,6 @@ const normalizeKey = (key) => {
 const KeyRecorder = ({ shortcut, onSave, onCancel }) => {
   const [recording, setRecording] = useState(false);
   const [keys, setKeys] = useState({ ctrl: shortcut.ctrl, meta: shortcut.meta, key: shortcut.key });
-  const [modifierWarning, setModifierWarning] = useState(false);
   const inputRef = useRef(null);
 
   const handleKeyDown = useCallback((e) => {
@@ -48,10 +48,8 @@ const KeyRecorder = ({ shortcut, onSave, onCancel }) => {
 
     if (!hasCtrl && !hasMeta && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
       setKeys({ ctrl: false, meta: false, key: e.key });
-      setModifierWarning(false);
     } else if ((e.ctrlKey || e.metaKey) && e.key !== 'Control' && e.key !== 'Meta') {
       setKeys({ ctrl: e.ctrlKey || hasMeta, meta: hasMeta || e.metaKey, key: e.key });
-      setModifierWarning(false);
     }
   }, [onCancel]);
 
@@ -115,6 +113,16 @@ const KeyRecorder = ({ shortcut, onSave, onCancel }) => {
   );
 };
 
+KeyRecorder.propTypes = {
+  shortcut: PropTypes.shape({
+    key: PropTypes.string,
+    ctrl: PropTypes.bool,
+    meta: PropTypes.bool,
+  }).isRequired,
+  onSave: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+};
+
 const KeyboardShortcutsSection = () => {
   const [shortcuts, setShortcuts] = useState(loadShortcuts);
   const [conflicts, setConflicts] = useState([]);
@@ -159,8 +167,16 @@ const KeyboardShortcutsSection = () => {
 
   const forceSaveShortcut = () => {
     if (!pendingShortcut) return;
-    const conflictShortcut = conflicts[0];
+    const previousShortcut = shortcuts[pendingShortcut];
     const newShortcuts = { ...shortcuts, [pendingShortcut]: conflicts[0].newShortcut };
+    conflicts.forEach(({ id }) => {
+      newShortcuts[id] = {
+        ...shortcuts[id],
+        key: previousShortcut.key,
+        ctrl: previousShortcut.ctrl,
+        meta: previousShortcut.meta,
+      };
+    });
     setShortcuts(newShortcuts);
     saveShortcuts(newShortcuts);
     setShowConflictModal(false);
@@ -181,11 +197,11 @@ const KeyboardShortcutsSection = () => {
 
   return (
     <div className="space-y-6">
-      <div className="backdrop-blur-md bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 p-6 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-600/50 midnight:border-gray-500/40">
+      <section className="rounded-xl border border-gray-200/80 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Keyboard size={20} className="text-gray-700 dark:text-gray-200 midnight:text-blue-300" />
-            <h3 className="text-base font-medium text-gray-700 dark:text-gray-200 midnight:text-blue-200">
+            <Keyboard size={18} className="text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
               Keyboard Shortcuts
             </h3>
           </div>
@@ -213,7 +229,7 @@ const KeyboardShortcutsSection = () => {
         <p className="text-sm text-gray-500 dark:text-gray-300 midnight:text-gray-200 mt-4">
           Click on a shortcut to record a new key combination. Press Escape to cancel recording.
         </p>
-      </div>
+      </section>
 
       {showConflictModal && conflicts.length > 0 && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">

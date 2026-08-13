@@ -2,10 +2,8 @@ import express from 'express';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { auth } from '../users/middleware/auth.js';
 
 const router = express.Router();
-router.use(auth);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 

@@ -1,18 +1,15 @@
-// router/AppRouter.jsx - AppRouter using Supabase Auth
-import React, { useEffect, useState } from 'react';
+// router/AppRouter.jsx - local application routes
 import PropTypes from 'prop-types';
 import { createBrowserRouter, RouterProvider, Navigate, useParams } from 'react-router-dom';
-import useAuth from '../hooks/useAuth';
 import { UserProvider } from '../contexts/UserContext';
 import { WorkspaceProvider } from '../contexts/WorkspaceContext';
+import { UiPreferencesProvider } from '../contexts/UiPreferencesContext';
 import { CommandCenterProvider } from '../CommandCenter/context/CommandCenterContextEnhanced';
-import ErrorBoundary, { UnauthorizedErrorProvider } from '../error/ErrorBoundary';
-import useGlobal401Handler from '../hooks/useGlobal401Handler';
+import ErrorBoundary from '../error/ErrorBoundary';
 import RouteErrorElement from '../error/ErrorBoundary';
 
 // Page components
 import AppLayout from '../appcontainer/AppLayout';
-import AuthContainer from '../auth/AuthContainer';
 import CommandCenterV2Enhanced from '../CommandCenter/CommandCenterV2EnhancedRouter';
 import ChatsPage from '../CommandCenter/pages/ChatsPage';
 import TrashPage from '../CommandCenter/pages/TrashPage';
@@ -22,8 +19,6 @@ import NotFound from '../error/NotFound';
 import SettingsPage from '../Settings/SettingsPage';
 import ModelsPage from '../Models/ModelsPage';
 import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
-import SchedulerPage from '../Scheduler/SchedulerPage';
-import ProfilesPage from '../Profiles/ProfilesPage';
 import AgentPage from '../Agent/AgentPage';
 import WorkflowsPage from '../Workflows/WorkflowsPage';
 import ActivityPage from '../Activity/ActivityPage';
@@ -34,117 +29,32 @@ const ProjectsRedirect = () => {
   return <Navigate to={tab ? `/workspace/${projectId}/${tab}` : `/workspace/${projectId}`} replace />;
 };
 
-const loadingMessages = [
-  "Waking up the cat AI...",
-  "Paws initializing...",
-  "Whiskers calibrating...",
-  "Good morning, Dave. I'm a CAT-9000 computer...",
-  "Purr systems online...",
-  "Meow modules loading...",
-  "I'm sorry Dave, I can't do that... just kidding! Loading your dashboard...",
-  "Cat is thinking...",
-  "Hunting virtual mice...",
-  "Catnip systems initializing...",
-  "This cat door is now operational...",
-  "Asyncat AI is becoming self-aware...",
-  "Grooming algorithms activated...",
-  "All these tasks are yours, except Europa. Attempt no procrastination there...",
-  "Warming up the keyboard for optimal paw placement..."
-];
-
-const ProtectedRoute = ({ children }) => {
-  const { session, user, loading, signOut } = useAuth();
-  const [isTransitioning, setIsTransitioning] = useState(false);
-
-  // Initialize global 401 handler
-  useGlobal401Handler();
-  const [loadingMessage, setLoadingMessage] = useState(
-    loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
-  );
-
-  // Change loading message periodically
-  useEffect(() => {
-    if (!loading && !isTransitioning) return;
-
-    const interval = setInterval(() => {
-      setLoadingMessage(loadingMessages[Math.floor(Math.random() * loadingMessages.length)]);
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [loading, isTransitioning]);
-
-  const handleSignOut = async () => {
-    setIsTransitioning(true);
-    try {
-      await signOut();
-      // Force redirect to auth page after successful logout
-      window.location.href = '/auth';
-    } catch (error) {
-      console.error('Sign out error:', error);
-      // Even if logout fails, still redirect to clear the app state
-      window.location.href = '/auth';
-    } finally {
-      setIsTransitioning(false);
-    }
-  };
-
-  const shouldShowLoading = loading || isTransitioning;
-
-  if (shouldShowLoading) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="mb-8">
-            <div className="w-8 h-8 mx-auto border-4 border-indigo-200 dark:border-indigo-800 midnight:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 midnight:border-t-indigo-300 rounded-full animate-spin"></div>
-          </div>
-          <p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 text-lg font-medium mb-2">
-            {loadingMessage}
-          </p>
-          <p className="text-gray-400 dark:text-gray-500 midnight:text-gray-600 text-sm">
-            The Cat is preparing your workspace...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session || !user) {
-    return <Navigate to="/auth" replace />;
-  }
-
+const LocalApp = ({ children }) => {
   return (
-    <UserProvider session={session}>
+    <UserProvider>
       <WorkspaceProvider>
         <CommandCenterProvider>
-          {React.cloneElement(children, { session, onSignOut: handleSignOut })}
+          <UiPreferencesProvider>
+            {children}
+          </UiPreferencesProvider>
         </CommandCenterProvider>
       </WorkspaceProvider>
     </UserProvider>
   );
 };
 
-ProtectedRoute.propTypes = {
+LocalApp.propTypes = {
   children: PropTypes.node,
 };
 
 
 const createRouter = () => createBrowserRouter([
   {
-    path: "/auth",
-    element: <AuthContainer />,
-    errorElement: <RouteErrorElement />
-  },
-  {
-    path: "/signup",
-    element: <AuthContainer />,
-    errorElement: <RouteErrorElement />
-  },
-  {
     path: "/",
     element: (
-      <ProtectedRoute>
+      <LocalApp>
         <AppLayout />
-      </ProtectedRoute>
+      </LocalApp>
     ),
     errorElement: <RouteErrorElement />,
     children: [
@@ -302,9 +212,7 @@ const AppRouter = () => {
 
   return (
     <ErrorBoundary>
-      <UnauthorizedErrorProvider>
-        <RouterProvider router={router} />
-      </UnauthorizedErrorProvider>
+      <RouterProvider router={router} />
     </ErrorBoundary>
   );
 };

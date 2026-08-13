@@ -1,9 +1,7 @@
-// Settings/ServerSection.jsx — server config and secrets management
+// Settings/ServerSection.jsx — local server configuration
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Server,
-  Eye,
-  EyeOff,
   Loader2,
   RotateCcw,
   CheckCircle2,
@@ -11,7 +9,7 @@ import {
 } from "lucide-react";
 import { configApi, updateApi, apiUtils } from "./settingApi";
 
-const soraFontBase = "font-sora";
+const settingsFontBase = "font-sans";
 
 const inputCls =
   "w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 " +
@@ -33,7 +31,6 @@ const ServerSection = () => {
   const [runtime, setRuntime] = useState({});
 
   const [editValues, setEditValues] = useState({});
-  const [showPasswords, setShowPasswords] = useState({});
 
   // Restart state
   const [restartPhase, setRestartPhase] = useState(null); // null | 'restarting' | 'waiting' | 'done' | 'timeout'
@@ -66,31 +63,6 @@ const ServerSection = () => {
     loadConfig();
   }, [loadConfig]);
 
-  const saveSecret = async (key) => {
-    const value = editValues[key]?.trim();
-    if (!value) {
-      flash({ type: "error", text: `${key} cannot be empty` });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await configApi.updateSecret(key, value);
-      if (!res.success) throw new Error(res.error);
-
-      setEditValues((prev) => ({ ...prev, [key]: "" }));
-      await loadConfig();
-      flash({ type: "success", text: res.message || `${key} updated` });
-    } catch (err) {
-      flash({
-        type: "error",
-        text: apiUtils.handleError(err, "Failed to save"),
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const saveConfigValue = async (key) => {
     const value = editValues[key]?.trim();
     if (!value) {
@@ -116,10 +88,6 @@ const ServerSection = () => {
     }
   };
 
-  const toggleShow = (key) => {
-    setShowPasswords((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   const handleRestart = () => {
     restartCleanupRef.current?.();
     setRestartPhase("restarting");
@@ -133,19 +101,10 @@ const ServerSection = () => {
     );
   };
 
-  const editableSecrets = [
-    {
-      key: "JWT_SECRET",
-      label: "JWT Secret",
-      placeholder: "Enter JWT secret key",
-    },
-  ];
-
   const nonEditableConfig = [
     { key: "PORT", label: "Server Port" },
     { key: "NODE_ENV", label: "Environment" },
     { key: "FRONTEND_URL", label: "Frontend URL" },
-    { key: "LOCAL_EMAIL", label: "Seed Email" },
     { key: "DB_PATH", label: "Database Path" },
     { key: "LLAMA_SERVER_PORT", label: "LLM Server Port" },
     { key: "MODELS_PATH", label: "Models Path" },
@@ -175,7 +134,7 @@ const ServerSection = () => {
   if (loading) {
     const skeletonRows = ["h-10", "h-8", "h-6"];
     return (
-      <div className={`space-y-3 ${soraFontBase}`}>
+      <div className={`space-y-3 ${settingsFontBase}`}>
         {skeletonRows.map((heightClass) => (
           <div
             key={heightClass}
@@ -187,7 +146,7 @@ const ServerSection = () => {
   }
 
   return (
-    <div className={`space-y-6 ${soraFontBase}`}>
+    <div className={`space-y-6 ${settingsFontBase}`}>
       {message && (
         <div
           className={`p-4 rounded-lg text-sm ${
@@ -199,72 +158,6 @@ const ServerSection = () => {
           {message.text}
         </div>
       )}
-
-      {/* Secrets Section */}
-      <div className="border-0 py-2">
-        <div className="flex items-center gap-2 mb-4">
-          <Server size={18} className="text-gray-500 dark:text-gray-400" />
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
-            Server Secrets
-          </h3>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Update server-level secrets. Account password changes belong in
-          Profile or the setup walkthrough.
-        </p>
-
-        <div className="space-y-4">
-          {editableSecrets.map(({ key, label, placeholder }) => (
-            <div key={key}>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1.5">
-                {label}
-              </label>
-              <div className="relative">
-                <input
-                  type={showPasswords[key] ? "text" : "password"}
-                  value={editValues[key] || ""}
-                  onChange={(e) =>
-                    setEditValues((prev) => ({
-                      ...prev,
-                      [key]: e.target.value,
-                    }))
-                  }
-                  placeholder={placeholder}
-                  className={`${inputCls} pr-10`}
-                />
-                <button
-                  type="button"
-                  onClick={() => toggleShow(key)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  {showPasswords[key] ? (
-                    <EyeOff size={16} />
-                  ) : (
-                    <Eye size={16} />
-                  )}
-                </button>
-              </div>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => saveSecret(key)}
-                  disabled={saving || !editValues[key]}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5
-                    bg-gray-900 hover:bg-gray-700 dark:bg-gray-100 dark:hover:bg-white
-                    midnight:bg-gray-100 midnight:hover:bg-white
-                    text-white dark:text-gray-900 midnight:text-gray-900
-                    disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {saving ? (
-                    <Loader2 size={11} className="animate-spin" />
-                  ) : null}
-                  Save {label}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Agent Workspace Section */}
       <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
@@ -370,8 +263,8 @@ const ServerSection = () => {
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
           Current server settings (read-only). Engine paths and ports are
-          managed from Runtime and Models; bootstrap values (port, database, JWT
-          secret) live in <code className="font-mono px-1">den/.env</code>.
+          managed from Runtime and Models; bootstrap values such as the port and
+          database path live in <code className="font-mono px-1">den/.env</code>.
         </p>
 
         <div className="space-y-3">

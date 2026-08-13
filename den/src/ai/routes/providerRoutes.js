@@ -6,7 +6,6 @@
 import express from 'express';
 import fs from 'fs';
 import { randomUUID } from 'crypto';
-import { verifyUser } from '../../auth/authMiddleware.js';
 import { getProviderStats } from '../controllers/ai/providerManager.js';
 import OpenAIClient from '../controllers/ai/openAIClient.js';
 import LocalRuntimeClient from '../controllers/ai/localRuntimeClient.js';
@@ -653,7 +652,7 @@ router.use((_req, res, next) => {
 });
 
 // ── GET /stats — hardware stats ───────────────────────────────────────────────
-router.get('/stats', verifyUser, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     const stats = await getProviderStats();
     res.json({ success: true, ...stats });
@@ -694,12 +693,12 @@ router.get('/check-local-runtimes', async (_req, res) => {
 });
 
 // ── GET /catalog — built-in provider presets ────────────────────────────────
-router.get('/catalog', verifyUser, (_req, res) => {
+router.get('/catalog', (_req, res) => {
   res.json({ success: true, providers: PROVIDER_CATALOG });
 });
 
 // ── GET /config — get user provider config ──────────────────────────────────
-router.get('/config', verifyUser, (req, res) => {
+router.get('/config', (req, res) => {
   try {
     const row = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
     if (row) {
@@ -712,7 +711,7 @@ router.get('/config', verifyUser, (req, res) => {
   }
 });
 
-router.delete('/config', verifyUser, (req, res) => {
+router.delete('/config', (req, res) => {
   try {
     db.prepare('DELETE FROM ai_provider_config WHERE user_id = ?').run(req.user.id);
     notifyProviderStatus(req.user.id);
@@ -726,7 +725,7 @@ router.delete('/config', verifyUser, (req, res) => {
 });
 
 // ── GET /usage — per-user model usage analytics ─────────────────────────────
-router.get('/usage', verifyUser, (req, res) => {
+router.get('/usage', (req, res) => {
   try {
     const workspaceId = req.query.workspaceId || req.body?.workspaceId || null;
     const range = req.query.range || '30d';
@@ -738,17 +737,6 @@ router.get('/usage', verifyUser, (req, res) => {
 });
 
 router.get('/status/stream', async (req, res) => {
-  const tokenFromQuery = req.query.token;
-  if (tokenFromQuery && !req.headers.authorization) {
-    req.headers.authorization = `Bearer ${tokenFromQuery}`;
-  }
-
-  let authed = false;
-  await new Promise(resolve => {
-    verifyUser(req, res, err => { if (!err) authed = true; resolve(); });
-  });
-  if (!authed) return;
-
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -779,7 +767,7 @@ router.get('/status/stream', async (req, res) => {
 });
 
 // ── Provider profiles — saved local/cloud/custom endpoints ──────────────────
-router.get('/profiles', verifyUser, (req, res) => {
+router.get('/profiles', (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM ai_provider_profiles WHERE user_id = ? ORDER BY updated_at DESC').all(req.user.id);
     const active = db.prepare('SELECT profile_id, provider_id, model, base_url, supports_tools FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
@@ -793,7 +781,7 @@ router.get('/profiles', verifyUser, (req, res) => {
   }
 });
 
-router.post('/profiles', verifyUser, (req, res) => {
+router.post('/profiles', (req, res) => {
   try {
     const profile = normalizeProfilePayload(req.body || {});
     if (profile.provider_id === 'openai-codex' && !profile.api_key) {
@@ -841,7 +829,7 @@ router.post('/profiles', verifyUser, (req, res) => {
   }
 });
 
-router.patch('/profiles/:id', verifyUser, (req, res) => {
+router.patch('/profiles/:id', (req, res) => {
   try {
     const existing = rowByProfileId(req.user.id, req.params.id);
     if (!existing) return res.status(404).json({ success: false, error: 'Profile not found' });
@@ -879,7 +867,7 @@ router.patch('/profiles/:id', verifyUser, (req, res) => {
   }
 });
 
-router.delete('/profiles/:id', verifyUser, (req, res) => {
+router.delete('/profiles/:id', (req, res) => {
   try {
     const existing = rowByProfileId(req.user.id, req.params.id);
     if (!existing) return res.status(404).json({ success: false, error: 'Profile not found' });
@@ -896,7 +884,7 @@ router.delete('/profiles/:id', verifyUser, (req, res) => {
   }
 });
 
-router.post('/profiles/:id/test', verifyUser, async (req, res) => {
+router.post('/profiles/:id/test', async (req, res) => {
   const row = rowByProfileId(req.user.id, req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'Profile not found' });
 
@@ -920,7 +908,7 @@ router.post('/profiles/:id/test', verifyUser, async (req, res) => {
   }
 });
 
-router.post('/profiles/:id/activate', verifyUser, async (req, res) => {
+router.post('/profiles/:id/activate', async (req, res) => {
   try {
     const row = rowByProfileId(req.user.id, req.params.id);
     if (!row) return res.status(404).json({ success: false, error: 'Profile not found' });
@@ -942,7 +930,7 @@ router.post('/profiles/:id/activate', verifyUser, async (req, res) => {
   }
 });
 
-router.get('/models', verifyUser, async (req, res) => {
+router.get('/models', async (req, res) => {
   try {
     const profileId = req.query.profileId;
     let row = null;
@@ -965,7 +953,7 @@ router.get('/models', verifyUser, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /local-models — list all downloaded models ────────────────────────────
-router.get('/local-models', verifyUser, (req, res) => {
+router.get('/local-models', (req, res) => {
   try {
     const models = listModels();
     res.json({ success: true, models });
@@ -976,7 +964,7 @@ router.get('/local-models', verifyUser, (req, res) => {
 });
 
 // ── DELETE /local-models/:filename — delete a model file ─────────────────────
-router.delete('/local-models/:filename', verifyUser, (req, res) => {
+router.delete('/local-models/:filename', (req, res) => {
   try {
     const { filename } = req.params;
     deleteModel(filename);
@@ -992,7 +980,7 @@ router.delete('/local-models/:filename', verifyUser, (req, res) => {
 });
 
 // ── GET /local-models/custom-paths — list all custom model paths ─────────────
-router.get('/local-models/custom-paths', verifyUser, (req, res) => {
+router.get('/local-models/custom-paths', (req, res) => {
   try {
     const paths = db.prepare('SELECT * FROM custom_model_paths ORDER BY created_at DESC').all();
     res.json({ success: true, paths });
@@ -1002,7 +990,7 @@ router.get('/local-models/custom-paths', verifyUser, (req, res) => {
 });
 
 // ── POST /local-models/custom-paths — save a new custom model path ────────────
-router.post('/local-models/custom-paths', verifyUser, (req, res) => {
+router.post('/local-models/custom-paths', (req, res) => {
   let { name, path: modelPath, type } = req.body;
   if (!name || !modelPath) {
     return res.status(400).json({ success: false, error: 'Name and path are required' });
@@ -1043,7 +1031,7 @@ router.post('/local-models/custom-paths', verifyUser, (req, res) => {
 });
 
 // ── POST /local-models/start — auto-detect engine and start model ─────────────
-router.post('/local-models/start', verifyUser, async (req, res) => {
+router.post('/local-models/start', async (req, res) => {
   let { path: modelPath, ctxSize } = req.body;
   if (!modelPath) return res.status(400).json({ success: false, error: 'Path is required' });
   modelPath = modelPath.trim();
@@ -1087,7 +1075,7 @@ router.post('/local-models/start', verifyUser, async (req, res) => {
 });
 
 // ── DELETE /local-models/custom-paths/:id — remove a custom model path ────────
-router.delete('/local-models/custom-paths/:id', verifyUser, (req, res) => {
+router.delete('/local-models/custom-paths/:id', (req, res) => {
   const { id } = req.params;
   try {
     db.prepare('DELETE FROM custom_model_paths WHERE id = ?').run(id);
@@ -1100,7 +1088,7 @@ router.delete('/local-models/custom-paths/:id', verifyUser, (req, res) => {
 });
 
 // ── POST /local-models/download — start a model download ─────────────────────
-router.post('/local-models/download', verifyUser, async (req, res) => {
+router.post('/local-models/download', async (req, res) => {
   try {
     const { url, filename, subDir } = req.body;
 
@@ -1123,7 +1111,7 @@ router.post('/local-models/download', verifyUser, async (req, res) => {
 });
 
 // ── GET /local-models/downloads — list active downloads ──────────────────────
-router.get('/local-models/downloads', verifyUser, (req, res) => {
+router.get('/local-models/downloads', (req, res) => {
   try {
     const downloads = listActiveDownloads();
     res.json({ success: true, downloads });
@@ -1133,7 +1121,7 @@ router.get('/local-models/downloads', verifyUser, (req, res) => {
 });
 
 // ── GET /local-models/downloads/:downloadId — get download status ─────────────
-router.get('/local-models/downloads/:downloadId', verifyUser, (req, res) => {
+router.get('/local-models/downloads/:downloadId', (req, res) => {
   try {
     const status = getDownloadStatus(req.params.downloadId);
     if (!status) {
@@ -1146,7 +1134,7 @@ router.get('/local-models/downloads/:downloadId', verifyUser, (req, res) => {
 });
 
 // ── DELETE /local-models/downloads/:downloadId — cancel a download ────────────
-router.delete('/local-models/downloads/:downloadId', verifyUser, (req, res) => {
+router.delete('/local-models/downloads/:downloadId', (req, res) => {
   try {
     cancelDownload(req.params.downloadId);
     res.json({ success: true, message: 'Download cancelled' });
@@ -1161,23 +1149,6 @@ router.delete('/local-models/downloads/:downloadId', verifyUser, (req, res) => {
 // ── GET /local-models/downloads/:downloadId/stream — SSE progress stream ──────
 router.get('/local-models/downloads/:downloadId/stream', async (req, res) => {
   const { downloadId } = req.params;
-  const { verifyUser: _verify } = await import('../../auth/authMiddleware.js');
-
-  const tokenFromQuery = req.query.token;
-  if (tokenFromQuery && !req.headers.authorization) {
-    req.headers.authorization = `Bearer ${tokenFromQuery}`;
-  }
-
-  let authed = false;
-  await new Promise((resolve) => {
-    _verify(req, res, (err) => {
-      if (!err) authed = true;
-      resolve();
-    });
-  });
-
-  if (!authed) return;
-
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -1204,7 +1175,7 @@ router.get('/local-models/downloads/:downloadId/stream', async (req, res) => {
 });
 
 // ── GET /hf-search — search HuggingFace GGUF models ─────────────────────────
-router.get('/hf-search', verifyUser, async (req, res) => {
+router.get('/hf-search', async (req, res) => {
   try {
     const { q = '', filter = '', sort = 'downloads', page = 0, limit = 20 } = req.query;
     const params = new URLSearchParams({
@@ -1253,7 +1224,7 @@ router.get('/hf-search', verifyUser, async (req, res) => {
 });
 
 // ── GET /hf-files?repoId=org/name — list downloadable files in a HF repo ─────
-router.get('/hf-files', verifyUser, async (req, res) => {
+router.get('/hf-files', async (req, res) => {
   try {
     const repoId = String(req.query.repoId || '').trim();
     if (!repoId) {
@@ -1433,7 +1404,7 @@ router.get('/recommended-models', async (req, res) => {
 });
 
 // ── GET /hf-repo/:repoId/files — list GGUF files in a HF repo ─────────────────
-router.get('/hf-repo/:repoId/files', verifyUser, async (req, res) => {
+router.get('/hf-repo/:repoId/files', async (req, res) => {
   try {
     const { repoId } = req.params;
     const url = `https://huggingface.co/api/models/${repoId}/tree/main?recursive=true`;
@@ -1466,7 +1437,7 @@ router.get('/hf-repo/:repoId/files', verifyUser, async (req, res) => {
 });
 
 // ── GET /hf-download-url — get direct CDN URL for a HF file ───────────────────
-router.get('/hf-download-url', verifyUser, async (req, res) => {
+router.get('/hf-download-url', async (req, res) => {
   try {
     const { repoId, filename } = req.query;
     if (!repoId || !filename) {
@@ -1510,7 +1481,7 @@ function formatBytes(bytes) {
 // VISUAL MODEL ROUTES — /api/ai/providers/visual/*
 // ══════════════════════════════════════════════════════════════════════════════
 
-router.get('/visual/models', verifyUser, (req, res) => {
+router.get('/visual/models', (req, res) => {
   try {
     res.json({ success: true, ...listVisualModels() });
   } catch (err) {
@@ -1519,7 +1490,7 @@ router.get('/visual/models', verifyUser, (req, res) => {
   }
 });
 
-router.post('/visual/models/custom-paths', verifyUser, (req, res) => {
+router.post('/visual/models/custom-paths', (req, res) => {
   let { name, path: modelPath, type } = req.body;
   if (!name || !modelPath) {
     return res.status(400).json({ success: false, error: 'Name and path are required' });
@@ -1547,7 +1518,7 @@ router.post('/visual/models/custom-paths', verifyUser, (req, res) => {
   }
 });
 
-router.delete('/visual/models/:id', verifyUser, (req, res) => {
+router.delete('/visual/models/:id', (req, res) => {
   const { id } = req.params;
   const { type } = req.query;
   try {
@@ -1678,7 +1649,7 @@ async function generateWithCloudProvider(providerId, params) {
 }
 
 // POST /visual/image/cloud/generate — cloud image gen via ASYNCAT_IMAGE_PROVIDER
-router.post('/visual/image/cloud/generate', verifyUser, async (req, res) => {
+router.post('/visual/image/cloud/generate', async (req, res) => {
   try {
     const providerId = String(process.env.ASYNCAT_IMAGE_PROVIDER || '').trim();
     if (!providerId || providerId === 'local') {
@@ -1698,7 +1669,7 @@ router.post('/visual/image/cloud/generate', verifyUser, async (req, res) => {
   }
 });
 
-router.get('/visual/image/simple/status', verifyUser, async (req, res) => {
+router.get('/visual/image/simple/status', async (req, res) => {
   try {
     const status = await checkSdCpp();
     res.json({ success: true, ...status });
@@ -1707,7 +1678,7 @@ router.get('/visual/image/simple/status', verifyUser, async (req, res) => {
   }
 });
 
-router.post('/visual/image/simple/generate', verifyUser, async (req, res) => {
+router.post('/visual/image/simple/generate', async (req, res) => {
   try {
     const result = await generateSdCppImage(req.body || {});
     res.json(result);
@@ -1716,7 +1687,7 @@ router.post('/visual/image/simple/generate', verifyUser, async (req, res) => {
   }
 });
 
-router.get('/visual/image/comfyui/status', verifyUser, async (req, res) => {
+router.get('/visual/image/comfyui/status', async (req, res) => {
   try {
     const status = await checkComfyUi();
     res.json({ success: true, ...status });
@@ -1725,7 +1696,7 @@ router.get('/visual/image/comfyui/status', verifyUser, async (req, res) => {
   }
 });
 
-router.get('/visual/image/comfyui/models', verifyUser, async (req, res) => {
+router.get('/visual/image/comfyui/models', async (req, res) => {
   try {
     const models = await listComfyUiModels();
     res.json({ success: true, ...models });
@@ -1734,7 +1705,7 @@ router.get('/visual/image/comfyui/models', verifyUser, async (req, res) => {
   }
 });
 
-router.post('/visual/image/comfyui/generate', verifyUser, async (req, res) => {
+router.post('/visual/image/comfyui/generate', async (req, res) => {
   try {
     const result = await generateComfyUiImage(req.body || {});
     res.json(result);
@@ -1748,7 +1719,7 @@ router.post('/visual/image/comfyui/generate', verifyUser, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /audio/models — list all audio models (whisper + tts) ─────────────────
-router.get('/audio/models', verifyUser, (req, res) => {
+router.get('/audio/models', (req, res) => {
   try {
     const models = listAllAudioModels();
     res.json({ success: true, ...models });
@@ -1759,7 +1730,7 @@ router.get('/audio/models', verifyUser, (req, res) => {
 });
 
 // ── POST /audio/models/custom-paths — add a custom audio model path ───────────
-router.post('/audio/models/custom-paths', verifyUser, (req, res) => {
+router.post('/audio/models/custom-paths', (req, res) => {
   let { name, path: modelPath, type } = req.body;
   if (!name || !modelPath) {
     return res.status(400).json({ success: false, error: 'Name and path are required' });
@@ -1793,7 +1764,7 @@ router.post('/audio/models/custom-paths', verifyUser, (req, res) => {
 });
 
 // ── DELETE /audio/models/:id — delete an audio model file ─────────────────────
-router.delete('/audio/models/:id', verifyUser, (req, res) => {
+router.delete('/audio/models/:id', (req, res) => {
   const { id } = req.params;
   const { type } = req.query;
   try {
@@ -1813,7 +1784,7 @@ router.delete('/audio/models/:id', verifyUser, (req, res) => {
 });
 
 // ── GET /audio/whisper/status — get whisper server status ─────────────────────
-router.get('/audio/whisper/status', verifyUser, (req, res) => {
+router.get('/audio/whisper/status', (req, res) => {
   try {
     res.json({ success: true, ...getWhisperStatus() });
   } catch (err) {
@@ -1822,7 +1793,7 @@ router.get('/audio/whisper/status', verifyUser, (req, res) => {
 });
 
 // ── GET /audio/whisper/check — check if whisper binary exists ─────────────────
-router.get('/audio/whisper/check', verifyUser, async (req, res) => {
+router.get('/audio/whisper/check', async (req, res) => {
   try {
     const result = await checkWhisperBinary();
     res.json({ success: true, ...result });
@@ -1832,7 +1803,7 @@ router.get('/audio/whisper/check', verifyUser, async (req, res) => {
 });
 
 // ── GET /audio/whisper/ffmpeg-check — check if ffmpeg exists ──────────────────
-router.get('/audio/whisper/ffmpeg-check', verifyUser, async (req, res) => {
+router.get('/audio/whisper/ffmpeg-check', async (req, res) => {
   try {
     const result = await checkWhisperFfmpeg();
     res.json({ success: true, ...result });
@@ -1842,7 +1813,7 @@ router.get('/audio/whisper/ffmpeg-check', verifyUser, async (req, res) => {
 });
 
 // ── POST /audio/whisper/start — start whisper with a model ────────────────────
-router.post('/audio/whisper/start', verifyUser, async (req, res) => {
+router.post('/audio/whisper/start', async (req, res) => {
   const { modelPath } = req.body;
   if (!modelPath) {
     return res.status(400).json({ success: false, error: 'modelPath is required' });
@@ -1856,7 +1827,7 @@ router.post('/audio/whisper/start', verifyUser, async (req, res) => {
 });
 
 // ── POST /audio/whisper/stop — stop whisper server ────────────────────────────
-router.post('/audio/whisper/stop', verifyUser, async (req, res) => {
+router.post('/audio/whisper/stop', async (req, res) => {
   try {
     await stopWhisper();
     res.json({ success: true, status: 'idle' });
@@ -1866,7 +1837,7 @@ router.post('/audio/whisper/stop', verifyUser, async (req, res) => {
 });
 
 // ── POST /audio/transcribe — transcribe an audio file ─────────────────────────
-router.post('/audio/transcribe', verifyUser, express.raw({ type: '*/*', limit: '50mb' }), async (req, res) => {
+router.post('/audio/transcribe', express.raw({ type: '*/*', limit: '50mb' }), async (req, res) => {
   try {
     const audioBuffer = req.body;
     if (!audioBuffer || audioBuffer.length === 0) {
@@ -1886,7 +1857,7 @@ router.post('/audio/transcribe', verifyUser, express.raw({ type: '*/*', limit: '
 });
 
 // ── GET /audio/tts/status — get TTS server status ─────────────────────────────
-router.get('/audio/tts/status', verifyUser, (req, res) => {
+router.get('/audio/tts/status', (req, res) => {
   try {
     res.json({ success: true, ...getTtsStatus() });
   } catch (err) {
@@ -1895,7 +1866,7 @@ router.get('/audio/tts/status', verifyUser, (req, res) => {
 });
 
 // ── GET /audio/tts/check — check if piper binary exists ───────────────────────
-router.get('/audio/tts/check', verifyUser, async (req, res) => {
+router.get('/audio/tts/check', async (req, res) => {
   try {
     const result = await checkPiperBinary();
     res.json({ success: true, ...result });
@@ -1905,7 +1876,7 @@ router.get('/audio/tts/check', verifyUser, async (req, res) => {
 });
 
 // ── POST /audio/tts/start — load a TTS voice model ────────────────────────────
-router.post('/audio/tts/start', verifyUser, async (req, res) => {
+router.post('/audio/tts/start', async (req, res) => {
   const { modelPath } = req.body;
   if (!modelPath) {
     return res.status(400).json({ success: false, error: 'modelPath is required' });
@@ -1919,7 +1890,7 @@ router.post('/audio/tts/start', verifyUser, async (req, res) => {
 });
 
 // ── POST /audio/tts/stop — unload TTS voice model ────────────────────────────
-router.post('/audio/tts/stop', verifyUser, async (req, res) => {
+router.post('/audio/tts/stop', async (req, res) => {
   try {
     await stopTts();
     res.json({ success: true, status: 'idle' });
@@ -1929,7 +1900,7 @@ router.post('/audio/tts/stop', verifyUser, async (req, res) => {
 });
 
 // ── POST /audio/speak — generate speech from text ─────────────────────────────
-router.post('/audio/speak', verifyUser, async (req, res) => {
+router.post('/audio/speak', async (req, res) => {
   const { text, speakerId, lengthScale, noiseScale } = req.body;
   if (!text) {
     return res.status(400).json({ success: false, error: 'text is required' });
@@ -1959,7 +1930,7 @@ router.post('/audio/speak', verifyUser, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /server/check — does llama-server binary exist? ───────────────────────
-router.get('/server/check', verifyUser, async (req, res) => {
+router.get('/server/check', async (req, res) => {
   try {
     const result = await checkBinary();
     res.json({ success: true, ...result });
@@ -1969,7 +1940,7 @@ router.get('/server/check', verifyUser, async (req, res) => {
 });
 
 // ── GET /server/engines — current engine, candidates, and recommendation ─────
-router.get('/server/engines', verifyUser, async (_req, res) => {
+router.get('/server/engines', async (_req, res) => {
   try {
     const result = await getEngineAdvisor();
     res.json({ success: true, ...result });
@@ -1979,7 +1950,7 @@ router.get('/server/engines', verifyUser, async (_req, res) => {
 });
 
 // ── GET /server/engines/catalog — release catalog for managed installs ──────
-router.get('/server/engines/catalog', verifyUser, async (req, res) => {
+router.get('/server/engines/catalog', async (req, res) => {
   try {
     const force = String(req.query.refresh || '') === '1';
     const result = await getEngineInstallCatalog({ force });
@@ -1991,7 +1962,7 @@ router.get('/server/engines/catalog', verifyUser, async (req, res) => {
 });
 
 // ── POST /server/engines/select — switch engine and optionally retry model ───
-router.post('/server/engines/select', verifyUser, async (req, res) => {
+router.post('/server/engines/select', async (req, res) => {
   try {
     const { runtime, path, retryModel, ctxSize } = req.body || {};
     if (!runtime || !path) {
@@ -2030,7 +2001,7 @@ router.post('/server/engines/select', verifyUser, async (req, res) => {
 });
 
 // ── POST /server/engines/install — install managed engine and optionally retry ──
-router.post('/server/engines/install', verifyUser, async (req, res) => {
+router.post('/server/engines/install', async (req, res) => {
   try {
     const { profile, releaseTag, assetName, retryModel, ctxSize } = req.body || {};
     const result = await installEngine({
@@ -2066,7 +2037,7 @@ router.post('/server/engines/install', verifyUser, async (req, res) => {
 });
 
 // ── POST /server/engines/install-jobs — start background managed install ─────
-router.post('/server/engines/install-jobs', verifyUser, async (req, res) => {
+router.post('/server/engines/install-jobs', async (req, res) => {
   try {
     const { profile, releaseTag, assetName, retryModel, ctxSize } = req.body || {};
     const job = await startEngineInstallJob({
@@ -2085,7 +2056,7 @@ router.post('/server/engines/install-jobs', verifyUser, async (req, res) => {
 });
 
 // ── GET /server/engines/install-jobs/:id — poll managed install job status ───
-router.get('/server/engines/install-jobs/:id', verifyUser, async (req, res) => {
+router.get('/server/engines/install-jobs/:id', async (req, res) => {
   const job = getEngineInstallJob(req.params.id);
   if (!job) {
     return res.status(404).json({ success: false, error: 'Install job not found' });
@@ -2094,7 +2065,7 @@ router.get('/server/engines/install-jobs/:id', verifyUser, async (req, res) => {
 });
 
 // ── POST /server/engines/python-install-jobs — start Python GPU runtime build ─
-router.post('/server/engines/python-install-jobs', verifyUser, async (req, res) => {
+router.post('/server/engines/python-install-jobs', async (req, res) => {
   try {
     const { profile, retryModel, ctxSize } = req.body || {};
     const job = await startPythonEngineInstallJob({
@@ -2111,7 +2082,7 @@ router.post('/server/engines/python-install-jobs', verifyUser, async (req, res) 
 });
 
 // ── GET /server/engines/python-install-jobs/:id — poll Python build job ───────
-router.get('/server/engines/python-install-jobs/:id', verifyUser, (req, res) => {
+router.get('/server/engines/python-install-jobs/:id', (req, res) => {
   const job = getPythonEngineInstallJob(req.params.id);
   if (!job) return res.status(404).json({ success: false, error: 'Python install job not found' });
   res.json({ success: true, job });
@@ -2119,12 +2090,12 @@ router.get('/server/engines/python-install-jobs/:id', verifyUser, (req, res) => 
 
 // ── Managed runtimes (Piper / Whisper / stable-diffusion.cpp) ─────────────────
 // GET /runtimes — list installable managed runtimes.
-router.get('/runtimes', verifyUser, (_req, res) => {
+router.get('/runtimes', (_req, res) => {
   res.json({ success: true, runtimes: listManagedRuntimes() });
 });
 
 // POST /runtimes/:id/install-jobs — download + install a prebuilt runtime binary.
-router.post('/runtimes/:id/install-jobs', verifyUser, (req, res) => {
+router.post('/runtimes/:id/install-jobs', (req, res) => {
   try {
     const job = startRuntimeInstallJob(req.params.id);
     res.status(202).json({ success: true, job });
@@ -2136,31 +2107,19 @@ router.post('/runtimes/:id/install-jobs', verifyUser, (req, res) => {
 });
 
 // GET /runtimes/install-jobs/:jobId — poll a runtime install job.
-router.get('/runtimes/install-jobs/:jobId', verifyUser, (req, res) => {
+router.get('/runtimes/install-jobs/:jobId', (req, res) => {
   const job = getRuntimeInstallJob(req.params.jobId);
   if (!job) return res.status(404).json({ success: false, error: 'Runtime install job not found' });
   res.json({ success: true, job });
 });
 
 // ── GET /server/status — current server state ─────────────────────────────────
-router.get('/server/status', verifyUser, (req, res) => {
+router.get('/server/status', (req, res) => {
   res.json({ success: true, ...getLlamaStatus() });
 });
 
 // ── GET /server/status/stream — SSE stream while model is loading ─────────────
 router.get('/server/status/stream', async (req, res) => {
-  const { verifyUser: _verify } = await import('../../auth/authMiddleware.js');
-  const tokenFromQuery = req.query.token;
-  if (tokenFromQuery && !req.headers.authorization) {
-    req.headers.authorization = `Bearer ${tokenFromQuery}`;
-  }
-
-  let authed = false;
-  await new Promise(resolve => {
-    _verify(req, res, err => { if (!err) authed = true; resolve(); });
-  });
-  if (!authed) return;
-
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -2181,7 +2140,7 @@ router.get('/server/status/stream', async (req, res) => {
 });
 
 // ── POST /server/start — load a model into the built-in server ────────────────
-router.post('/server/start', verifyUser, async (req, res) => {
+router.post('/server/start', async (req, res) => {
   let { filename, ctxSize } = req.body;
   if (filename) filename = filename.trim();
   try {
@@ -2222,7 +2181,7 @@ router.post('/server/start', verifyUser, async (req, res) => {
 });
 
 // ── POST /server/activate — mark the ready built-in server as the provider ───
-router.post('/server/activate', verifyUser, async (req, res) => {
+router.post('/server/activate', async (req, res) => {
   try {
     const snap = getLlamaStatus();
     if (snap.status !== 'ready' || !snap.model) {
@@ -2246,7 +2205,7 @@ router.post('/server/activate', verifyUser, async (req, res) => {
 });
 
 // ── POST /server/stop — unload the model and stop the server ──────────────────
-router.post('/server/stop', verifyUser, async (req, res) => {
+router.post('/server/stop', async (req, res) => {
   try {
     await stopServer();
 
@@ -2273,7 +2232,7 @@ router.post('/server/stop', verifyUser, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // GET /mlx/status — current MLX server state + availability
-router.get('/mlx/status', verifyUser, async (req, res) => {
+router.get('/mlx/status', async (req, res) => {
   try {
     const status = getMlxStatus();
     const mlxAvailable = IS_APPLE_SILICON ? await isMlxAvailable() : false;
@@ -2284,7 +2243,7 @@ router.get('/mlx/status', verifyUser, async (req, res) => {
 });
 
 // GET /mlx/models — list all locally detected MLX model directories
-router.get('/mlx/models', verifyUser, (req, res) => {
+router.get('/mlx/models', (req, res) => {
   try {
     const models = listMlxModels();
     res.json({ success: true, models });
@@ -2295,7 +2254,7 @@ router.get('/mlx/models', verifyUser, (req, res) => {
 });
 
 // POST /mlx/start — start mlx_lm.server with a specific model path
-router.post('/mlx/start', verifyUser, async (req, res) => {
+router.post('/mlx/start', async (req, res) => {
   try {
     const { modelPath } = req.body || {};
     if (!modelPath) {
@@ -2341,7 +2300,7 @@ router.post('/mlx/start', verifyUser, async (req, res) => {
 });
 
 // POST /mlx/stop — stop the running mlx_lm.server
-router.post('/mlx/stop', verifyUser, async (req, res) => {
+router.post('/mlx/stop', async (req, res) => {
   try {
     await stopMlxServer();
 

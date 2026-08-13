@@ -4,7 +4,6 @@
 
 import express from 'express';
 import db from '../db/client.js';
-import { verifyUser } from '../auth/authMiddleware.js';
 
 const router = express.Router();
 
@@ -34,7 +33,7 @@ function snippet(raw, query, maxLen = 110) {
   return (start > 0 ? '…' : '') + slice + (text.length > start + maxLen ? '…' : '');
 }
 
-router.get('/', verifyUser, (req, res) => {
+router.get('/', (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q || q.length < 2) {
     return res.json({ results: [], query: q, total: 0 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const MAIN_URL = import.meta.env.VITE_MAIN_URL || "http://localhost:8716";
+const MAIN_URL = import.meta.env.VITE_MAIN_URL || "http://127.0.0.1:8716";
 
 export function useNetworkStatus({ pollMs = 15000 } = {}) {
   const [online, setOnline] = useState(() => navigator.onLine);

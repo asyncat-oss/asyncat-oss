@@ -293,7 +293,7 @@ function refreshTray() {
 
 // ─── Frontend Static Server (production only) ────────────────────────────────
 // In production, we serve neko/dist/ via a tiny HTTP server instead of using
-// file:// protocol. This is because the frontend's API calls to localhost:8716
+// file:// protocol. This is because the frontend's local API calls
 // are blocked by the browser when loaded from file:// (cross-origin).
 
 let frontendServer = null;
@@ -396,7 +396,8 @@ async function bootApp() {
   }
 
   // 4. Load the frontend (always via HTTP to avoid file:// CORS issues)
-  win.loadURL(`http://localhost:${FRONTEND_PORT}`);
+  const frontendHost = viteRunning ? 'localhost' : '127.0.0.1';
+  win.loadURL(`http://${frontendHost}:${FRONTEND_PORT}`);
 
   // 5. Notify the renderer that backend is ready
   win.webContents.once('did-finish-load', () => {

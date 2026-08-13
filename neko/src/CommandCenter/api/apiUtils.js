@@ -10,12 +10,6 @@ export const apiUtils = {
            error.message.includes('Failed to fetch');
   },
 
-  isAuthError: (error) => {
-    return error.message.includes('401') ||
-           error.message.includes('Unauthorized') ||
-           error.message.includes('Session expired');
-  },
-
   isWorkspaceError: (error) => {
     return error.message.includes('workspace') ||
            error.message.includes('Workspace') ||
@@ -25,10 +19,6 @@ export const apiUtils = {
   formatErrorMessage: (error, context = '') => {
     if (apiUtils.isNetworkError(error)) {
       return `Connection error${context ? ` while ${context}` : ''}. Please check your internet connection.`;
-    }
-
-    if (apiUtils.isAuthError(error)) {
-      return `Authentication error${context ? ` while ${context}` : ''}. Please sign in again.`;
     }
 
     if (apiUtils.isWorkspaceError(error)) {
@@ -47,7 +37,7 @@ export const apiUtils = {
       } catch (error) {
         lastError = error;
 
-        if (apiUtils.isAuthError(error) || apiUtils.isWorkspaceError(error)) {
+        if (apiUtils.isWorkspaceError(error)) {
           throw error;
         }
 

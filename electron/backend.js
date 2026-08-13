@@ -14,13 +14,32 @@ import { spawn, execSync } from 'child_process';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import { randomBytes } from 'crypto';
 import { app } from 'electron';
 import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV } from './constants.js';
 
 let backendProcess = null;
 let isShuttingDown = false;
 let cachedNodeBinary = null;
+
+const OBSOLETE_LOCAL_LOGIN_KEYS = new Set([
+  'LOCAL_EMAIL',
+  'LOCAL_PASSWORD',
+  'JWT_SECRET',
+  'JWT_EXPIRES_IN',
+  'SOLO_EMAIL',
+  'SOLO_PASSWORD',
+]);
+
+function removeObsoleteLocalLoginConfig(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const current = fs.readFileSync(filePath, 'utf8');
+  const lines = current.split(/\r?\n/);
+  const filtered = lines.filter((line) => {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)=/);
+    return !match || !OBSOLETE_LOCAL_LOGIN_KEYS.has(match[1]);
+  });
+  if (filtered.length !== lines.length) fs.writeFileSync(filePath, filtered.join('\n'));
+}
 
 // ─── Node binary selection ────────────────────────────────────────────────────
 
@@ -101,7 +120,10 @@ function setupEnvFile() {
   if (!app.isPackaged) return; // dev handles .env via postinstall
 
   const userEnvPath = path.join(DEN_CWD, '.env');
-  if (fs.existsSync(userEnvPath)) return; // already set up
+  if (fs.existsSync(userEnvPath)) {
+    removeObsoleteLocalLoginConfig(userEnvPath);
+    return;
+  }
 
   const examplePath = path.join(process.resourcesPath, '.env.example');
   if (!fs.existsSync(examplePath)) {
@@ -109,16 +131,7 @@ function setupEnvFile() {
     return;
   }
 
-  let content = fs.readFileSync(examplePath, 'utf8');
-
-  // Inject fresh cryptographic secrets so every install is unique
-  const jwt = randomBytes(32).toString('hex');
-  const pass = [randomBytes(2), randomBytes(2), randomBytes(2)].map(b => b.toString('hex')).join('-');
-
-  content = content.replace(/^JWT_SECRET=.*$/m, `JWT_SECRET=${jwt}`);
-  content = content.replace(/^LOCAL_PASSWORD=.*$/m, `LOCAL_PASSWORD=${pass}`);
-
-  fs.writeFileSync(userEnvPath, content);
+  fs.copyFileSync(examplePath, userEnvPath);
   console.log('[Asyncat] Created .env in user data directory');
 }
 

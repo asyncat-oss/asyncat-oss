@@ -1,5 +1,5 @@
 import { API_BASE_URL, apiRequest, handleResponse } from './client.js';
-import authService from '../../services/authService.js';
+import apiClient from '../../services/apiClient.js';
 
 export const filesApi = {
   getRoots: async () => {
@@ -101,14 +101,10 @@ export const filesApi = {
     return `${API_BASE_URL}/files/raw?${params}`;
   },
 
-  // Fetch raw file content with auth and return a blob URL (for <audio>, <img>, etc.)
+  // Fetch raw file content and return a blob URL (for <audio>, <img>, etc.)
   fetchRawBlob: async (rootId, filePath) => {
-    const token = await authService.getSession();
     const params = new URLSearchParams({ rootId, path: filePath });
-    const res = await fetch(`${API_BASE_URL}/files/raw?${params}`, {
-      headers: token?.access_token ? { Authorization: `Bearer ${token.access_token}` } : {},
-      credentials: 'include',
-    });
+    const res = await apiClient.request(`${API_BASE_URL}/files/raw?${params}`);
     if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
     const blob = await res.blob();
     return URL.createObjectURL(blob);
@@ -134,10 +130,8 @@ export const filesApi = {
     formData.append('rootId', rootId);
     formData.append('path', filePath);
     formData.append('overwrite', String(options.overwrite === true));
-    const token = await authService.getSession();
-    const res = await fetch(`${API_BASE_URL}/files/upload`, {
+    const res = await apiClient.request(`${API_BASE_URL}/files/upload`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token?.access_token}` },
       body: formData,
     });
     return await handleResponse(res);

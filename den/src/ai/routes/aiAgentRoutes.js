@@ -2,8 +2,6 @@
 // Combines conversation CRUD (formerly aiRoutes.js) and agent runtime (formerly agentRoutes.js)
 
 import express from 'express';
-import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
-import { attachDb } from '../../db/sqlite.js';
 import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
@@ -481,14 +479,9 @@ function markStaleActiveSessions() {
 
 // ─── Auth middleware ──────────────────────────────────────────────────────────
 
-const authenticate = (req, res, next) => {
-  jwtVerify(req, res, (err) => {
-    if (err) return;
-    attachDb(req, res, () => {
-      req.workspaceId = getWorkspaceContext(req);
-      next();
-    });
-  });
+const withWorkspaceContext = (req, _res, next) => {
+  req.workspaceId = getWorkspaceContext(req);
+  next();
 };
 
 // ─── Agent init (once on module load) ────────────────────────────────────────
@@ -643,7 +636,7 @@ async function runAgentTaskInBackground(runId) {
 // CONVERSATION ROUTES — /api/ai/*
 // ══════════════════════════════════════════════════════════════════════════════
 
-router.post('/chat/stream', authenticate, async (req, res) => {
+router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   const message = String(req.body?.message || '').trim();
   if (!message) {
     return res.status(400).json({ success: false, error: 'message required' });
@@ -713,7 +706,7 @@ router.post('/chat/stream', authenticate, async (req, res) => {
   }
 });
 
-router.post('/generate-title', authenticate, async (req, res) => {
+router.post('/generate-title', withWorkspaceContext, async (req, res) => {
   try {
     const { userMessage, aiResponse } = req.body;
     if (!userMessage) return res.status(400).json({ success: false, error: 'userMessage required' });
@@ -736,7 +729,7 @@ router.post('/generate-title', authenticate, async (req, res) => {
   }
 });
 
-router.post('/chats/save', authenticate, async (req, res) => {
+router.post('/chats/save', withWorkspaceContext, async (req, res) => {
   try {
     const { messages, title, mode = 'chat', projectIds = [], metadata = {}, conversationId = null, fileAttachments = null } = req.body;
 
@@ -748,7 +741,7 @@ router.post('/chats/save', authenticate, async (req, res) => {
       title, mode, projectIds, metadata, conversationId,
       workspaceId: req.workspaceId,
       fileAttachments,
-      authenticatedDb: req.db
+      databaseClient: req.db
     });
 
     res.json({ success: true, ...result });
@@ -761,7 +754,7 @@ router.post('/chats/save', authenticate, async (req, res) => {
   }
 });
 
-router.post('/chats/autosave', authenticate, async (req, res) => {
+router.post('/chats/autosave', withWorkspaceContext, async (req, res) => {
   try {
     const { messages, mode = 'chat', projectIds = [], metadata = {}, conversationId = null, fileAttachments = null } = req.body;
 
@@ -773,7 +766,7 @@ router.post('/chats/autosave', authenticate, async (req, res) => {
       title: null, mode, projectIds, metadata, conversationId,
       workspaceId: req.workspaceId,
       fileAttachments,
-      authenticatedDb: req.db
+      databaseClient: req.db
     });
 
     res.json({ success: true, ...result });
@@ -786,7 +779,7 @@ router.post('/chats/autosave', authenticate, async (req, res) => {
   }
 });
 
-router.get('/chats', authenticate, async (req, res) => {
+router.get('/chats', withWorkspaceContext, async (req, res) => {
   try {
     const { mode, limit = 50, offset = 0, includeArchived = false, search } = req.query;
     const result = await chatService.getUserConversations(req.user.id, {
@@ -796,7 +789,7 @@ router.get('/chats', authenticate, async (req, res) => {
       includeArchived: includeArchived === 'true',
       searchTerm: search || null,
       workspaceId: req.workspaceId,
-      authenticatedDb: req.db
+      databaseClient: req.db
     });
     res.json({ success: true, ...result });
   } catch (error) {
@@ -805,7 +798,7 @@ router.get('/chats', authenticate, async (req, res) => {
   }
 });
 
-router.get('/chats/workspaces', authenticate, async (req, res) => {
+router.get('/chats/workspaces', withWorkspaceContext, async (req, res) => {
   try {
     const workspaces = await chatService.getUserConversationWorkspaces(req.user.id);
     res.json({ success: true, workspaces });
@@ -816,7 +809,7 @@ router.get('/chats/workspaces', authenticate, async (req, res) => {
 });
 
 // ── Conversation full-text search ─────────────────────────────────────────────
-router.get('/chats/search', authenticate, (req, res) => {
+router.get('/chats/search', withWorkspaceContext, (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     if (!q) return res.status(400).json({ success: false, error: 'q parameter required' });
@@ -862,7 +855,7 @@ router.get('/chats/search', authenticate, (req, res) => {
   }
 });
 
-router.get('/chats/trash', authenticate, async (req, res) => {
+router.get('/chats/trash', withWorkspaceContext, async (req, res) => {
   try {
     const conversations = await chatService.getTrashConversations(req.user.id, req.workspaceId, req.db);
     res.json({ success: true, conversations });
@@ -871,7 +864,7 @@ router.get('/chats/trash', authenticate, async (req, res) => {
   }
 });
 
-router.get('/chats/stats/summary', authenticate, async (req, res) => {
+router.get('/chats/stats/summary', withWorkspaceContext, async (req, res) => {
   try {
     const stats = await chatService.getConversationStats(req.user.id, req.workspaceId);
     res.json({ success: true, stats });
@@ -881,7 +874,7 @@ router.get('/chats/stats/summary', authenticate, async (req, res) => {
   }
 });
 
-router.get('/chats/:conversationId', authenticate, async (req, res) => {
+router.get('/chats/:conversationId', withWorkspaceContext, async (req, res) => {
   try {
     const conversation = await chatService.getConversation(req.user.id, req.params.conversationId, req.workspaceId, req.db);
     res.json({ success: true, conversation });
@@ -894,7 +887,7 @@ router.get('/chats/:conversationId', authenticate, async (req, res) => {
   }
 });
 
-router.patch('/chats/:conversationId', authenticate, async (req, res) => {
+router.patch('/chats/:conversationId', withWorkspaceContext, async (req, res) => {
   try {
     const result = await chatService.updateConversation(req.user.id, req.params.conversationId, req.body, req.workspaceId, req.db);
     res.json({ success: true, conversation: result });
@@ -907,7 +900,7 @@ router.patch('/chats/:conversationId', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/chats/:conversationId', authenticate, async (req, res) => {
+router.delete('/chats/:conversationId', withWorkspaceContext, async (req, res) => {
   try {
     await chatService.deleteConversation(req.user.id, req.params.conversationId, req.workspaceId, req.db);
     res.json({ success: true, message: 'Conversation deleted successfully' });
@@ -920,7 +913,7 @@ router.delete('/chats/:conversationId', authenticate, async (req, res) => {
   }
 });
 
-router.post('/chats/:conversationId/restore', authenticate, async (req, res) => {
+router.post('/chats/:conversationId/restore', withWorkspaceContext, async (req, res) => {
   try {
     await chatService.restoreConversation(req.user.id, req.params.conversationId, req.workspaceId, req.db);
     res.json({ success: true });
@@ -929,7 +922,7 @@ router.post('/chats/:conversationId/restore', authenticate, async (req, res) => 
   }
 });
 
-router.delete('/chats/:conversationId/permanent', authenticate, async (req, res) => {
+router.delete('/chats/:conversationId/permanent', withWorkspaceContext, async (req, res) => {
   try {
     await chatService.permanentDeleteConversation(req.user.id, req.params.conversationId, req.workspaceId, req.db);
     res.json({ success: true });
@@ -938,7 +931,7 @@ router.delete('/chats/:conversationId/permanent', authenticate, async (req, res)
   }
 });
 
-router.delete('/chats/trash/empty', authenticate, async (req, res) => {
+router.delete('/chats/trash/empty', withWorkspaceContext, async (req, res) => {
   try {
     await chatService.emptyTrash(req.user.id, req.workspaceId, req.db);
     res.json({ success: true });
@@ -949,7 +942,7 @@ router.delete('/chats/trash/empty', authenticate, async (req, res) => {
 
 // ── Chat folders ─────────────────────────────────────────────────────────────
 
-router.get('/chat-folders', authenticate, async (req, res) => {
+router.get('/chat-folders', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId;
     if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId required' });
@@ -979,7 +972,7 @@ router.get('/chat-folders', authenticate, async (req, res) => {
   }
 });
 
-router.post('/chat-folders', authenticate, async (req, res) => {
+router.post('/chat-folders', withWorkspaceContext, async (req, res) => {
   try {
     const { name, color } = req.body;
     const workspaceId = req.workspaceId;
@@ -1001,7 +994,7 @@ router.post('/chat-folders', authenticate, async (req, res) => {
   }
 });
 
-router.patch('/chat-folders/:folderId', authenticate, async (req, res) => {
+router.patch('/chat-folders/:folderId', withWorkspaceContext, async (req, res) => {
   try {
     const { folderId } = req.params;
     const { name, color, sort_order } = req.body;
@@ -1028,7 +1021,7 @@ router.patch('/chat-folders/:folderId', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/chat-folders/:folderId', authenticate, async (req, res) => {
+router.delete('/chat-folders/:folderId', withWorkspaceContext, async (req, res) => {
   try {
     const { folderId } = req.params;
     const workspaceId = req.workspaceId;
@@ -1051,7 +1044,7 @@ router.delete('/chat-folders/:folderId', authenticate, async (req, res) => {
   }
 });
 
-router.patch('/chats/:conversationId/folder', authenticate, async (req, res) => {
+router.patch('/chats/:conversationId/folder', withWorkspaceContext, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { folder_id } = req.body;
@@ -1211,9 +1204,9 @@ function createAskUserRequest(req, res) {
 
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
-router.use('/workflows', createWorkflowRouter({ authenticate }));
+router.use('/workflows', createWorkflowRouter({ withWorkspaceContext }));
 
-router.get('/tools', authenticate, async (req, res) => {
+router.get('/tools', withWorkspaceContext, async (req, res) => {
   const { toolRegistry } = await import('../../agent/index.js');
   const tools = toolRegistry.all().map(t => ({
     name: t.name,
@@ -1224,7 +1217,7 @@ router.get('/tools', authenticate, async (req, res) => {
   res.json({ tools });
 });
 
-router.get('/capabilities/multimodal', authenticate, async (req, res) => {
+router.get('/capabilities/multimodal', withWorkspaceContext, async (req, res) => {
   try {
     res.json({ success: true, capabilities: await getMultimodalCapabilities(req.user.id) });
   } catch (err) {
@@ -1235,7 +1228,7 @@ router.get('/capabilities/multimodal', authenticate, async (req, res) => {
 // ─── Embeddings / semantic layer status ──────────────────────────────────────
 // Reports the resolved embedding strategy (provider model vs. offline lexical)
 // and cache size, so the UI can show whether semantic search is active.
-router.get('/embeddings/status', authenticate, (req, res) => {
+router.get('/embeddings/status', withWorkspaceContext, (req, res) => {
   try {
     res.json({ success: true, ...embeddingStatus(req.user.id) });
   } catch (err) {
@@ -1245,7 +1238,7 @@ router.get('/embeddings/status', authenticate, (req, res) => {
 
 // Force a re-probe of the provider's embeddings endpoint (e.g. after switching
 // the active provider in the Models page).
-router.post('/embeddings/refresh', authenticate, (req, res) => {
+router.post('/embeddings/refresh', withWorkspaceContext, (req, res) => {
   try {
     resetEmbeddingStrategy(req.user.id);
     res.json({ success: true, ...embeddingStatus(req.user.id) });
@@ -1256,7 +1249,7 @@ router.post('/embeddings/refresh', authenticate, (req, res) => {
 
 // Semantic search over the agent's durable memory (hybrid BM25 + vector). Powers
 // the command palette's "Memory" results and reports the active embedding space.
-router.get('/semantic/search', authenticate, async (req, res) => {
+router.get('/semantic/search', withWorkspaceContext, async (req, res) => {
   try {
     const q = String(req.query.q || req.query.query || '').trim();
     const status = embeddingStatus(req.user.id);
@@ -1286,7 +1279,7 @@ router.get('/semantic/search', authenticate, async (req, res) => {
 
 // ─── Shell process / server management ───────────────────────────────────────
 
-router.get('/processes', authenticate, (req, res) => {
+router.get('/processes', withWorkspaceContext, (req, res) => {
   try {
     const sessions = shellSessionManager.list(null);
     res.json({ success: true, sessions });
@@ -1295,7 +1288,7 @@ router.get('/processes', authenticate, (req, res) => {
   }
 });
 
-router.delete('/processes/:key', authenticate, (req, res) => {
+router.delete('/processes/:key', withWorkspaceContext, (req, res) => {
   const key = decodeURIComponent(req.params.key);
   const killed = shellSessionManager.killByKey(key);
   res.json({ success: killed, key });
@@ -1303,14 +1296,14 @@ router.delete('/processes/:key', authenticate, (req, res) => {
 
 // ── Preview browser command result (called by the frontend after executing
 //    a browser_command SSE event on the live webview) ──────────────────────
-// No authenticate — this is always called from the local Electron renderer.
+// No withWorkspaceContext — this is always called from the local Electron renderer.
 router.post('/browser/result/:commandId', (req, res) => {
   const { commandId } = req.params;
   const found = resolveBrowserCommand(commandId, req.body || {});
   res.json({ success: found, commandId });
 });
 
-router.get('/runtime/status', authenticate, async (req, res) => {
+router.get('/runtime/status', withWorkspaceContext, async (req, res) => {
   try {
     res.json(await getModelRuntimeStatus(req.user.id));
   } catch (err) {
@@ -1318,7 +1311,7 @@ router.get('/runtime/status', authenticate, async (req, res) => {
   }
 });
 
-router.get('/skills', authenticate, (req, res) => {
+router.get('/skills', withWorkspaceContext, (req, res) => {
   loadSkills();
   const skills = listSkills().map(s => ({
     name: s.name,
@@ -1334,7 +1327,7 @@ router.get('/skills', authenticate, (req, res) => {
   res.json({ success: true, count: skills.length, skills });
 });
 
-router.get('/skills/:name', authenticate, (req, res) => {
+router.get('/skills/:name', withWorkspaceContext, (req, res) => {
   loadSkills();
   const skill = listSkills().find(s => s.name === req.params.name);
   if (!skill) return res.status(404).json({ success: false, error: 'Skill not found' });
@@ -1354,7 +1347,7 @@ router.get('/skills/:name', authenticate, (req, res) => {
   });
 });
 
-router.post('/skills/reload', authenticate, (_req, res) => {
+router.post('/skills/reload', withWorkspaceContext, (_req, res) => {
   try {
     const skills = reloadSkills();
     res.json({ success: true, count: skills.length });
@@ -1363,7 +1356,7 @@ router.post('/skills/reload', authenticate, (_req, res) => {
   }
 });
 
-router.post('/skills', authenticate, (req, res) => {
+router.post('/skills', withWorkspaceContext, (req, res) => {
   try {
     const { name, description = '', brain_region = 'unknown', weight = 1, tags = [], when_to_use = '', body = '', created_by = null } = req.body;
     const result = createSkill({ name, description, brain_region, weight, tags, when_to_use, body, created_by });
@@ -1374,7 +1367,7 @@ router.post('/skills', authenticate, (req, res) => {
   }
 });
 
-router.put('/skills/:name', authenticate, (req, res) => {
+router.put('/skills/:name', withWorkspaceContext, (req, res) => {
   try {
     const result = updateSkill(req.params.name, req.body);
     res.json({ success: true, ...result });
@@ -1384,7 +1377,7 @@ router.put('/skills/:name', authenticate, (req, res) => {
   }
 });
 
-router.delete('/skills/:name', authenticate, (req, res) => {
+router.delete('/skills/:name', withWorkspaceContext, (req, res) => {
   try {
     deleteSkill(req.params.name);
     res.json({ success: true });
@@ -1394,11 +1387,11 @@ router.delete('/skills/:name', authenticate, (req, res) => {
   }
 });
 
-router.get('/souls', authenticate, (req, res) => {
+router.get('/souls', withWorkspaceContext, (req, res) => {
   res.json({ success: true, souls: listSouls() });
 });
 
-router.get('/soul', authenticate, (req, res) => {
+router.get('/soul', withWorkspaceContext, (req, res) => {
   const { name = 'default' } = req.query;
   const content = readSoulRaw(name);
   if (content === null) {
@@ -1407,7 +1400,7 @@ router.get('/soul', authenticate, (req, res) => {
   res.json({ success: true, name, content });
 });
 
-router.put('/soul', authenticate, (req, res) => {
+router.put('/soul', withWorkspaceContext, (req, res) => {
   try {
     const { name = 'default', content } = req.body;
     if (typeof content !== 'string') {
@@ -1495,7 +1488,7 @@ function fallbackCommitMessage(context = {}) {
   return `${type}: ${action} ${commitMessageArea(context)}`.slice(0, 72);
 }
 
-router.get('/git/state', authenticate, (req, res) => {
+router.get('/git/state', withWorkspaceContext, (req, res) => {
   try {
     res.json(getGitState(gitWorkingDir(req)));
   } catch (err) {
@@ -1503,7 +1496,7 @@ router.get('/git/state', authenticate, (req, res) => {
   }
 });
 
-router.get('/git/log', authenticate, (req, res) => {
+router.get('/git/log', withWorkspaceContext, (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 100;
     const skip = parseInt(req.query.skip, 10) || 0;
@@ -1513,7 +1506,7 @@ router.get('/git/log', authenticate, (req, res) => {
   }
 });
 
-router.get('/git/diff', authenticate, (req, res) => {
+router.get('/git/diff', withWorkspaceContext, (req, res) => {
   try {
     res.json(getGitDiff(gitWorkingDir(req), {
       file: req.query?.file || null,
@@ -1525,7 +1518,7 @@ router.get('/git/diff', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/commit-message', authenticate, async (req, res) => {
+router.post('/git/commit-message', withWorkspaceContext, async (req, res) => {
   try {
     const context = getGitCommitMessageContext(gitWorkingDir(req), {
       scope: req.body?.scope || 'auto',
@@ -1578,7 +1571,7 @@ router.post('/git/commit-message', authenticate, async (req, res) => {
   }
 });
 
-router.post('/git/stage', authenticate, (req, res) => {
+router.post('/git/stage', withWorkspaceContext, (req, res) => {
   try {
     res.json(stageGitFiles(gitWorkingDir(req), req.body?.files || []));
   } catch (err) {
@@ -1586,7 +1579,7 @@ router.post('/git/stage', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/unstage', authenticate, (req, res) => {
+router.post('/git/unstage', withWorkspaceContext, (req, res) => {
   try {
     res.json(unstageGitFiles(gitWorkingDir(req), req.body?.files || []));
   } catch (err) {
@@ -1594,7 +1587,7 @@ router.post('/git/unstage', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/commit', authenticate, (req, res) => {
+router.post('/git/commit', withWorkspaceContext, (req, res) => {
   try {
     res.json(commitGit(gitWorkingDir(req), {
       message: req.body?.message,
@@ -1606,7 +1599,7 @@ router.post('/git/commit', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/pull', authenticate, (req, res) => {
+router.post('/git/pull', withWorkspaceContext, (req, res) => {
   try {
     res.json(pullGit(gitWorkingDir(req), {
       remote: req.body?.remote || null,
@@ -1617,7 +1610,7 @@ router.post('/git/pull', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/push', authenticate, (req, res) => {
+router.post('/git/push', withWorkspaceContext, (req, res) => {
   try {
     if (req.body?.force) {
       return res.status(400).json({ success: false, error: 'Force push is not available in the visual Git workflow.' });
@@ -1632,7 +1625,7 @@ router.post('/git/push', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/stash', authenticate, (req, res) => {
+router.post('/git/stash', withWorkspaceContext, (req, res) => {
   try {
     res.json(stashGit(gitWorkingDir(req), {
       action: req.body?.action || 'list',
@@ -1644,7 +1637,7 @@ router.post('/git/stash', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/branch', authenticate, (req, res) => {
+router.post('/git/branch', withWorkspaceContext, (req, res) => {
   try {
     res.json(branchGit(gitWorkingDir(req), {
       action: req.body?.action || 'list',
@@ -1655,7 +1648,7 @@ router.post('/git/branch', authenticate, (req, res) => {
   }
 });
 
-router.get('/git/branches', authenticate, (req, res) => {
+router.get('/git/branches', withWorkspaceContext, (req, res) => {
   try {
     res.json(getGitBranches(gitWorkingDir(req)));
   } catch (err) {
@@ -1663,7 +1656,7 @@ router.get('/git/branches', authenticate, (req, res) => {
   }
 });
 
-router.get('/git/commit/:hash', authenticate, (req, res) => {
+router.get('/git/commit/:hash', withWorkspaceContext, (req, res) => {
   try {
     res.json(getGitCommit(gitWorkingDir(req), req.params.hash));
   } catch (err) {
@@ -1671,7 +1664,7 @@ router.get('/git/commit/:hash', authenticate, (req, res) => {
   }
 });
 
-router.post('/git/discard', authenticate, (req, res) => {
+router.post('/git/discard', withWorkspaceContext, (req, res) => {
   try {
     res.json(discardGitFiles(gitWorkingDir(req), req.body?.files || []));
   } catch (err) {
@@ -1681,7 +1674,7 @@ router.post('/git/discard', authenticate, (req, res) => {
 
 // ── Agent run (streaming) ─────────────────────────────────────────────────────
 
-router.post('/run', authenticate, async (req, res) => {
+router.post('/run', withWorkspaceContext, async (req, res) => {
   let heartbeatInterval = null;
   const abortController = new AbortController();
   let clientClosed = false;
@@ -1860,7 +1853,7 @@ router.post('/run', authenticate, async (req, res) => {
 
 // ── Sandboxes ────────────────────────────────────────────────────────────────
 
-router.get('/sandboxes', authenticate, (req, res) => {
+router.get('/sandboxes', withWorkspaceContext, (req, res) => {
   try {
     res.json({
       success: true,
@@ -1875,7 +1868,7 @@ router.get('/sandboxes', authenticate, (req, res) => {
   }
 });
 
-router.post('/sandboxes', authenticate, (req, res) => {
+router.post('/sandboxes', withWorkspaceContext, (req, res) => {
   try {
     const result = createSandbox({
       userId: req.user.id,
@@ -1891,7 +1884,7 @@ router.post('/sandboxes', authenticate, (req, res) => {
   }
 });
 
-router.get('/sandboxes/:id', authenticate, (req, res) => {
+router.get('/sandboxes/:id', withWorkspaceContext, (req, res) => {
   try {
     const sandbox = getSandboxStatus(req.user.id, req.params.id);
     if (!sandbox) return res.status(404).json({ success: false, error: 'Sandbox not found.' });
@@ -1901,7 +1894,7 @@ router.get('/sandboxes/:id', authenticate, (req, res) => {
   }
 });
 
-router.get('/sandboxes/:id/diff', authenticate, (req, res) => {
+router.get('/sandboxes/:id/diff', withWorkspaceContext, (req, res) => {
   try {
     res.json(getSandboxDiff(req.user.id, req.params.id, {
       filePath: req.query.file || null,
@@ -1912,7 +1905,7 @@ router.get('/sandboxes/:id/diff', authenticate, (req, res) => {
   }
 });
 
-router.post('/sandboxes/:id/patch', authenticate, (req, res) => {
+router.post('/sandboxes/:id/patch', withWorkspaceContext, (req, res) => {
   try {
     res.json(createSandboxPatch(req.user.id, req.params.id, {
       filePaths: req.body?.filePaths || req.body?.files || [],
@@ -1922,7 +1915,7 @@ router.post('/sandboxes/:id/patch', authenticate, (req, res) => {
   }
 });
 
-router.post('/sandboxes/:id/apply', authenticate, (req, res) => {
+router.post('/sandboxes/:id/apply', withWorkspaceContext, (req, res) => {
   try {
     res.json(applySandboxPatch(req.user.id, req.params.id, {
       filePaths: req.body?.filePaths || req.body?.files || [],
@@ -1933,7 +1926,7 @@ router.post('/sandboxes/:id/apply', authenticate, (req, res) => {
   }
 });
 
-router.post('/sandboxes/:id/commit-branch', authenticate, (req, res) => {
+router.post('/sandboxes/:id/commit-branch', withWorkspaceContext, (req, res) => {
   try {
     res.json(commitSandboxBranch(req.user.id, req.params.id, {
       message: req.body?.message || 'Asyncat sandbox changes',
@@ -1944,7 +1937,7 @@ router.post('/sandboxes/:id/commit-branch', authenticate, (req, res) => {
   }
 });
 
-router.get('/sandboxes/:id/jobs', authenticate, (req, res) => {
+router.get('/sandboxes/:id/jobs', withWorkspaceContext, (req, res) => {
   try {
     res.json({
       success: true,
@@ -1955,7 +1948,7 @@ router.get('/sandboxes/:id/jobs', authenticate, (req, res) => {
   }
 });
 
-router.get('/sandboxes/:id/jobs/:jobId', authenticate, (req, res) => {
+router.get('/sandboxes/:id/jobs/:jobId', withWorkspaceContext, (req, res) => {
   try {
     const job = getSandboxJob(req.user.id, req.params.id, req.params.jobId);
     if (!job) return res.status(404).json({ success: false, error: 'Sandbox job not found.' });
@@ -1965,7 +1958,7 @@ router.get('/sandboxes/:id/jobs/:jobId', authenticate, (req, res) => {
   }
 });
 
-router.post('/sandboxes/:id/jobs', authenticate, (req, res) => {
+router.post('/sandboxes/:id/jobs', withWorkspaceContext, (req, res) => {
   try {
     res.status(201).json(runSandboxCommand(req.user.id, req.params.id, {
       command: req.body?.command,
@@ -1978,7 +1971,7 @@ router.post('/sandboxes/:id/jobs', authenticate, (req, res) => {
   }
 });
 
-router.delete('/sandboxes/:id', authenticate, (req, res) => {
+router.delete('/sandboxes/:id', withWorkspaceContext, (req, res) => {
   try {
     res.json(deleteSandbox(req.user.id, req.params.id, {
       force: req.body?.force === true || req.query.force === 'true',
@@ -1990,7 +1983,7 @@ router.delete('/sandboxes/:id', authenticate, (req, res) => {
 
 // ── Agent task runs (Kanban cards assigned to agents) ─────────────────────────
 
-router.get('/task-runs', authenticate, (req, res) => {
+router.get('/task-runs', withWorkspaceContext, (req, res) => {
   try {
     const workspaceId = getWorkspaceIdForRequest(req);
     if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId is required' });
@@ -2070,7 +2063,7 @@ router.get('/task-runs', authenticate, (req, res) => {
   }
 });
 
-router.post('/task-runs', authenticate, (req, res) => {
+router.post('/task-runs', withWorkspaceContext, (req, res) => {
   try {
     const workspaceId = getWorkspaceIdForRequest(req);
     const { cardId, profileId = null, goal = null } = req.body || {};
@@ -2117,7 +2110,7 @@ router.post('/task-runs', authenticate, (req, res) => {
   }
 });
 
-router.get('/task-runs/:id', authenticate, (req, res) => {
+router.get('/task-runs/:id', withWorkspaceContext, (req, res) => {
   try {
     const row = db.prepare(`
       SELECT atr.*, ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon, ap.color AS profile_color
@@ -2143,7 +2136,7 @@ router.get('/task-runs/:id', authenticate, (req, res) => {
   }
 });
 
-router.post('/task-runs/:id/cancel', authenticate, (req, res) => {
+router.post('/task-runs/:id/cancel', withWorkspaceContext, (req, res) => {
   try {
     const row = db.prepare('SELECT * FROM agent_task_runs WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!row) return res.status(404).json({ success: false, error: 'Task run not found' });
@@ -2171,14 +2164,14 @@ router.post('/task-runs/:id/cancel', authenticate, (req, res) => {
 
 // ── Session management ────────────────────────────────────────────────────────
 
-router.get('/sessions', authenticate, (req, res) => {
+router.get('/sessions', withWorkspaceContext, (req, res) => {
   const limit = parseInt(req.query.limit || '20');
   const workspaceId = getWorkspaceIdForRequest(req);
   const sessions = AgentSession.listRecent(req.user.id, limit, workspaceId);
   res.json({ success: true, sessions });
 });
 
-router.get('/sessions/search', authenticate, async (req, res) => {
+router.get('/sessions/search', withWorkspaceContext, async (req, res) => {
   try {
     const q = req.query.q?.trim();
     if (!q) {
@@ -2201,7 +2194,7 @@ router.get('/sessions/search', authenticate, async (req, res) => {
   }
 });
 
-router.get('/sessions/:id', authenticate, (req, res) => {
+router.get('/sessions/:id', withWorkspaceContext, (req, res) => {
   const session = AgentSession.load(req.params.id);
   if (!session || session.userId !== req.user.id) {
     return res.status(404).json({ success: false, error: 'Session not found' });
@@ -2245,7 +2238,7 @@ router.get('/sessions/:id', authenticate, (req, res) => {
   res.json({ success: true, session });
 });
 
-router.get('/sessions/:id/audit', authenticate, async (req, res) => {
+router.get('/sessions/:id/audit', withWorkspaceContext, async (req, res) => {
   try {
     const session = db.prepare(
       'SELECT id FROM agent_sessions WHERE id = ? AND user_id = ?'
@@ -2275,7 +2268,7 @@ router.get('/sessions/:id/audit', authenticate, async (req, res) => {
   }
 });
 
-router.get('/sessions/:id/changes/state', authenticate, (req, res) => {
+router.get('/sessions/:id/changes/state', withWorkspaceContext, (req, res) => {
   try {
     const session = loadOwnedSession(req.params.id, req.user.id);
     if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
@@ -2312,7 +2305,7 @@ router.get('/sessions/:id/changes/state', authenticate, (req, res) => {
   }
 });
 
-router.post('/sessions/:id/revert', authenticate, (req, res) => {
+router.post('/sessions/:id/revert', withWorkspaceContext, (req, res) => {
   try {
     const session = loadOwnedSession(req.params.id, req.user.id);
     if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
@@ -2348,7 +2341,7 @@ router.post('/sessions/:id/revert', authenticate, (req, res) => {
   }
 });
 
-router.patch('/sessions/:id', authenticate, async (req, res) => {
+router.patch('/sessions/:id', withWorkspaceContext, async (req, res) => {
   try {
     const { goal } = req.body;
     if (!goal?.trim()) return res.status(400).json({ success: false, error: 'goal is required' });
@@ -2368,7 +2361,7 @@ router.patch('/sessions/:id', authenticate, async (req, res) => {
 // ── Mid-run plan editing ───────────────────────────────────────────────────────
 // Allows the UI to inject or replace the plan of a running (or paused) session.
 // Each plan item: { id, content, status: 'pending'|'in_progress'|'completed' }
-router.patch('/sessions/:id/plan', authenticate, async (req, res) => {
+router.patch('/sessions/:id/plan', withWorkspaceContext, async (req, res) => {
   try {
     const { plan } = req.body;
     if (!Array.isArray(plan)) {
@@ -2394,7 +2387,7 @@ router.patch('/sessions/:id/plan', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/sessions/:id', authenticate, async (req, res) => {
+router.delete('/sessions/:id', withWorkspaceContext, async (req, res) => {
   try {
     const sessionRow = db.prepare(
       'SELECT scratchpad FROM agent_sessions WHERE id = ? AND user_id = ?'
@@ -2420,7 +2413,7 @@ router.delete('/sessions/:id', authenticate, async (req, res) => {
   }
 });
 
-router.post('/sessions/:id/feedback', authenticate, async (req, res) => {
+router.post('/sessions/:id/feedback', withWorkspaceContext, async (req, res) => {
   try {
     const { rating, comment, was_helpful } = req.body;
     if (!rating || rating < 1 || rating > 5) {
@@ -2447,7 +2440,7 @@ router.post('/sessions/:id/feedback', authenticate, async (req, res) => {
   }
 });
 
-router.post('/sessions/:id/correct', authenticate, async (req, res) => {
+router.post('/sessions/:id/correct', withWorkspaceContext, async (req, res) => {
   try {
     const { tool, correction, explanation } = req.body;
     if (!correction) {
@@ -2482,7 +2475,7 @@ router.post('/sessions/:id/correct', authenticate, async (req, res) => {
 
 // ── Permissions / ask_user responses ─────────────────────────────────────────
 
-router.post('/permissions/:requestId', authenticate, (req, res) => {
+router.post('/permissions/:requestId', withWorkspaceContext, (req, res) => {
   const pending = pendingPermissions.get(req.params.requestId);
   if (!pending || pending.userId !== req.user.id) {
     return res.json({ success: true, decision: req.body?.decision || 'deny', note: 'already_resolved' });
@@ -2501,7 +2494,7 @@ router.post('/permissions/:requestId', authenticate, (req, res) => {
   res.json({ success: true, decision });
 });
 
-router.post('/permission', authenticate, (req, res) => {
+router.post('/permission', withWorkspaceContext, (req, res) => {
   const { sessionId } = req.body || {};
   const found = [...pendingPermissions.entries()].find(([, pending]) =>
     pending.userId === req.user.id && pending.sessionId === sessionId
@@ -2525,7 +2518,7 @@ router.post('/permission', authenticate, (req, res) => {
   res.json({ success: true, decision });
 });
 
-router.post('/ask/:requestId', authenticate, (req, res) => {
+router.post('/ask/:requestId', withWorkspaceContext, (req, res) => {
   const pending = pendingUserQuestions.get(req.params.requestId);
   if (!pending || pending.userId !== req.user.id) {
     return res.status(404).json({ success: false, error: 'Question request not found' });
@@ -2541,7 +2534,7 @@ router.post('/ask/:requestId', authenticate, (req, res) => {
 
 // ── Brain stats (memory + skill counts for UI indicators) ─────────────────────
 
-router.get('/brain-stats', authenticate, async (req, res) => {
+router.get('/brain-stats', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2571,7 +2564,7 @@ router.get('/brain-stats', authenticate, async (req, res) => {
 
 // ── Agent memory ──────────────────────────────────────────────────────────────
 
-router.get('/memory', authenticate, async (req, res) => {
+router.get('/memory', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2602,7 +2595,7 @@ router.get('/memory', authenticate, async (req, res) => {
 });
 
 // ── Memory stats ─────────────────────────────────────────────────────────────
-router.get('/memory/stats', authenticate, async (req, res) => {
+router.get('/memory/stats', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2640,7 +2633,7 @@ router.get('/memory/stats', authenticate, async (req, res) => {
 });
 
 // ── Memory consolidate (manual trigger) ──────────────────────────────────────
-router.post('/memory/consolidate', authenticate, async (req, res) => {
+router.post('/memory/consolidate', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2666,7 +2659,7 @@ router.post('/memory/consolidate', authenticate, async (req, res) => {
   }
 });
 
-router.get('/memory/:key', authenticate, async (req, res) => {
+router.get('/memory/:key', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2691,7 +2684,7 @@ router.get('/memory/:key', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/memory', authenticate, async (req, res) => {
+router.delete('/memory', withWorkspaceContext, async (req, res) => {
   try {
     const { key } = req.body;
     if (!key) return res.status(400).json({ success: false, error: 'key is required' });
@@ -2714,7 +2707,7 @@ router.delete('/memory', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/memory/:key', authenticate, async (req, res) => {
+router.delete('/memory/:key', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2736,7 +2729,7 @@ router.delete('/memory/:key', authenticate, async (req, res) => {
 
 // ── MCP management ────────────────────────────────────────────────────────────
 
-router.get('/mcp', authenticate, (_req, res) => {
+router.get('/mcp', withWorkspaceContext, (_req, res) => {
   try {
     res.json({ success: true, servers: listMcpServers(MCP_CONFIG_PATH), status: getMcpStatus() });
   } catch (err) {
@@ -2744,7 +2737,7 @@ router.get('/mcp', authenticate, (_req, res) => {
   }
 });
 
-router.post('/mcp', authenticate, async (req, res) => {
+router.post('/mcp', withWorkspaceContext, async (req, res) => {
   try {
     const { name, command, args = [], env = {}, disabled = false } = req.body || {};
     if (!name || !command) return res.status(400).json({ success: false, error: 'name and command are required' });
@@ -2758,7 +2751,7 @@ router.post('/mcp', authenticate, async (req, res) => {
   }
 });
 
-router.patch('/mcp/:name', authenticate, async (req, res) => {
+router.patch('/mcp/:name', withWorkspaceContext, async (req, res) => {
   try {
     const config = readMcpConfig(MCP_CONFIG_PATH);
     const server = config.mcpServers?.[req.params.name];
@@ -2775,7 +2768,7 @@ router.patch('/mcp/:name', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/mcp/:name', authenticate, async (req, res) => {
+router.delete('/mcp/:name', withWorkspaceContext, async (req, res) => {
   try {
     const config = readMcpConfig(MCP_CONFIG_PATH);
     if (!config.mcpServers?.[req.params.name]) return res.status(404).json({ success: false, error: 'MCP server not found' });
@@ -2788,7 +2781,7 @@ router.delete('/mcp/:name', authenticate, async (req, res) => {
   }
 });
 
-router.post('/mcp/reload', authenticate, async (_req, res) => {
+router.post('/mcp/reload', withWorkspaceContext, async (_req, res) => {
   try {
     const status = await reloadMcpTools(MCP_CONFIG_PATH);
     res.json({ success: true, status, servers: listMcpServers(MCP_CONFIG_PATH) });
@@ -2799,7 +2792,7 @@ router.post('/mcp/reload', authenticate, async (_req, res) => {
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
 
-router.get('/profiles', authenticate, (req, res) => {
+router.get('/profiles', withWorkspaceContext, (req, res) => {
   try {
     const profiles = listProfiles(req.user.id);
     res.json({ success: true, profiles });
@@ -2808,7 +2801,7 @@ router.get('/profiles', authenticate, (req, res) => {
   }
 });
 
-router.post('/profiles', authenticate, (req, res) => {
+router.post('/profiles', withWorkspaceContext, (req, res) => {
   try {
     const { name, handle, description, icon, color, soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' });
@@ -2822,7 +2815,7 @@ router.post('/profiles', authenticate, (req, res) => {
   }
 });
 
-router.get('/profiles/:id', authenticate, (req, res) => {
+router.get('/profiles/:id', withWorkspaceContext, (req, res) => {
   try {
     const profile = getProfile(req.params.id, req.user.id);
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
@@ -2832,7 +2825,7 @@ router.get('/profiles/:id', authenticate, (req, res) => {
   }
 });
 
-router.put('/profiles/:id', authenticate, (req, res) => {
+router.put('/profiles/:id', withWorkspaceContext, (req, res) => {
   try {
     const profile = updateProfile(req.params.id, req.user.id, req.body);
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
@@ -2842,7 +2835,7 @@ router.put('/profiles/:id', authenticate, (req, res) => {
   }
 });
 
-router.delete('/profiles/:id', authenticate, (req, res) => {
+router.delete('/profiles/:id', withWorkspaceContext, (req, res) => {
   try {
     deleteProfile(req.params.id, req.user.id);
     res.json({ success: true });
@@ -2853,7 +2846,7 @@ router.delete('/profiles/:id', authenticate, (req, res) => {
 
 // ── Scheduler ────────────────────────────────────────────────────────────────
 
-router.post('/schedule', authenticate, async (req, res) => {
+router.post('/schedule', withWorkspaceContext, async (req, res) => {
   try {
     const { name, goal, schedule, profileId, providerProfileId } = req.body;
     if (!name || !goal || !schedule) {
@@ -2878,7 +2871,7 @@ router.post('/schedule', authenticate, async (req, res) => {
   }
 });
 
-router.get('/schedule', authenticate, async (req, res) => {
+router.get('/schedule', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2889,7 +2882,7 @@ router.get('/schedule', authenticate, async (req, res) => {
   }
 });
 
-router.get('/schedule/:id/runs', authenticate, async (req, res) => {
+router.get('/schedule/:id/runs', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2902,7 +2895,7 @@ router.get('/schedule/:id/runs', authenticate, async (req, res) => {
   }
 });
 
-router.patch('/schedule/:id', authenticate, async (req, res) => {
+router.patch('/schedule/:id', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2933,7 +2926,7 @@ router.patch('/schedule/:id', authenticate, async (req, res) => {
   }
 });
 
-router.post('/schedule/:id/run-now', authenticate, async (req, res) => {
+router.post('/schedule/:id/run-now', withWorkspaceContext, async (req, res) => {
   try {
     const workspaceId = req.workspaceId ||
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
@@ -2947,7 +2940,7 @@ router.post('/schedule/:id/run-now', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/schedule/:id', authenticate, (req, res) => {
+router.delete('/schedule/:id', withWorkspaceContext, (req, res) => {
   try {
     deleteJob(req.params.id);
     res.json({ success: true, message: `Job ${req.params.id} deleted` });
@@ -2956,30 +2949,30 @@ router.delete('/schedule/:id', authenticate, (req, res) => {
   }
 });
 
-router.patch('/schedule/:id/enable', authenticate, (req, res) => {
+router.patch('/schedule/:id/enable', withWorkspaceContext, (req, res) => {
   try { enableJob(req.params.id); res.json({ success: true }); }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.patch('/schedule/:id/disable', authenticate, (req, res) => {
+router.patch('/schedule/:id/disable', withWorkspaceContext, (req, res) => {
   try { disableJob(req.params.id); res.json({ success: true }); }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 // ── Checkpoints ──────────────────────────────────────────────────────────────
 
-router.get('/checkpoints', authenticate, (_req, res) => {
+router.get('/checkpoints', withWorkspaceContext, (_req, res) => {
   res.json({ success: true, checkpoints: listCheckpoints() });
 });
 
-router.post('/checkpoints/restore', authenticate, (req, res) => {
+router.post('/checkpoints/restore', withWorkspaceContext, (req, res) => {
   const result = restoreCheckpoint(req.body?.id || null);
   res.status(result.success ? 200 : 404).json(result);
 });
 
 // ── Multi-agent ──────────────────────────────────────────────────────────────
 
-router.post('/multi', authenticate, async (req, res) => {
+router.post('/multi', withWorkspaceContext, async (req, res) => {
   try {
     const { tasks, maxConcurrency = 3 } = req.body;
 
@@ -3039,7 +3032,7 @@ function findArtifactFile(workingDir, filename) {
 }
 
 /** List all artifacts in the workspace. */
-router.get('/artifacts', jwtVerify, (req, res) => {
+router.get('/artifacts', (req, res) => {
   try {
     const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
     const artifactsDir = getArtifactsDir(workingDir);
@@ -3082,7 +3075,7 @@ router.get('/artifacts', jwtVerify, (req, res) => {
 });
 
 /** Get artifact content or raw download. */
-router.get('/artifacts/:filename', jwtVerify, (req, res) => {
+router.get('/artifacts/:filename', (req, res) => {
   try {
     const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
     const filename = path.basename(req.params.filename);
@@ -3125,7 +3118,7 @@ router.get('/artifacts/:filename', jwtVerify, (req, res) => {
 });
 
 /** Delete an artifact. */
-router.delete('/artifacts/:filename', jwtVerify, (req, res) => {
+router.delete('/artifacts/:filename', (req, res) => {
   try {
     const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
     const filename = path.basename(req.params.filename);
@@ -3151,7 +3144,7 @@ function codeWorkingDir(req) {
 
 const codeContext = (req) => ({ workingDir: codeWorkingDir(req) });
 
-router.get('/code/search', authenticate, async (req, res) => {
+router.get('/code/search', withWorkspaceContext, async (req, res) => {
   try {
     const result = await codeSearchTool.execute({
       symbol: req.query.q || '',
@@ -3163,7 +3156,7 @@ router.get('/code/search', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.get('/code/definitions', authenticate, async (req, res) => {
+router.get('/code/definitions', withWorkspaceContext, async (req, res) => {
   try {
     const result = await listDefinitionsTool.execute({
       path: req.query.file,
@@ -3172,7 +3165,7 @@ router.get('/code/definitions', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.get('/code/find-definition', authenticate, async (req, res) => {
+router.get('/code/find-definition', withWorkspaceContext, async (req, res) => {
   try {
     const result = await findDefinitionTool.execute({
       symbol: req.query.symbol,
@@ -3182,7 +3175,7 @@ router.get('/code/find-definition', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.get('/code/references', authenticate, async (req, res) => {
+router.get('/code/references', withWorkspaceContext, async (req, res) => {
   try {
     const result = await findReferencesTool.execute({
       symbol: req.query.symbol,
@@ -3193,7 +3186,7 @@ router.get('/code/references', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.post('/code/rename', authenticate, async (req, res) => {
+router.post('/code/rename', withWorkspaceContext, async (req, res) => {
   try {
     const result = await renameSymbolTool.execute({
       old_name: req.body.old_name,

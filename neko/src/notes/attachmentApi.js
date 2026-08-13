@@ -1,12 +1,12 @@
 // attachmentApi.js - API functions for handling attachments
-import authService from "../services/authService";
+import apiClient from "../services/apiClient";
 
 const API_URL = import.meta.env.VITE_NOTES_URL;
 
 // Generic API request wrapper for attachments
 export const attachmentRequest = async (url, options = {}) => {
   try {
-    const response = await authService.authenticatedFetch(url, {
+    const response = await apiClient.request(url, {
       ...options,
       headers: {
         // Don't set Content-Type for FormData, let browser set it with boundary
@@ -86,11 +86,6 @@ export const attachmentApi = {
         });
 
         xhr.open("POST", `${API_URL}/api/attachments/notes/${noteId}/upload`);
-        // Set Authorization header with token
-        const token = authService.getAccessToken();
-        if (token) {
-          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-        }
         xhr.send(formData);
       });
     } catch (error) {
@@ -119,20 +114,9 @@ export const attachmentApi = {
     // Remove any trailing slash from base URL
     const cleanBaseUrl = baseUrl.replace(/\/$/, "");
 
-    // Get the current auth token
-    const token = authService.getAccessToken();
-
-    // Construct the full URL with authentication token
-    const url = `${cleanBaseUrl}/api/attachments/notes/${noteId}/${encodeURIComponent(
+    return `${cleanBaseUrl}/api/attachments/notes/${noteId}/${encodeURIComponent(
       filename
     )}`;
-
-    // Add token as query parameter for direct image access
-    const urlWithAuth = token
-      ? `${url}?token=${encodeURIComponent(token)}`
-      : url;
-
-    return urlWithAuth;
   },
 
   // Delete attachment
@@ -582,11 +566,6 @@ export const attachmentApi = {
         });
 
         xhr.open("POST", `${API_URL}/api/attachments/notes/${noteId}/upload`);
-        // Set Authorization header with token
-        const token = authService.getAccessToken();
-        if (token) {
-          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-        }
         xhr.send(formData);
       });
     } catch (error) {

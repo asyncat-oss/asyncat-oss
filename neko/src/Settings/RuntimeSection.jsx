@@ -71,7 +71,7 @@ const RuntimeSection = () => {
   }, [loadEngineCatalog, loadInstallReadiness]);
 
   return (
-    <div className="font-sora space-y-4">
+    <div className="space-y-4 font-sans">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-50 text-gray-500 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 midnight:bg-gray-800 midnight:ring-gray-700">

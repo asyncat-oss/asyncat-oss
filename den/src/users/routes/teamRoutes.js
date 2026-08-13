@@ -1,7 +1,6 @@
 // users/routes/teamRoutes.js
 // /api/teams — workspace CRUD + member helpers (maps "teams" → "workspaces" table)
 import express from 'express';
-import { auth } from '../middleware/auth.js';
 import db from '../../db/client.js';
 import { randomUUID } from 'crypto';
 
@@ -9,7 +8,7 @@ const router = express.Router();
 
 // ── GET /api/teams ─────────────────────────────────────────────────────────────
 // Returns workspaces owned by (or accessible to) the current user.
-router.get('/', auth, (req, res) => {
+router.get('/', (req, res) => {
   try {
     const userId = req.user.id;
     const workspaces = db.prepare(
@@ -34,7 +33,7 @@ router.get('/', auth, (req, res) => {
 });
 
 // ── GET /api/teams/:teamId ─────────────────────────────────────────────────────
-router.get('/:teamId', auth, (req, res) => {
+router.get('/:teamId', (req, res) => {
   try {
     const ws = db.prepare(
       `SELECT id, name, owner_id, emoji, created_at, updated_at
@@ -49,7 +48,7 @@ router.get('/:teamId', auth, (req, res) => {
 });
 
 // ── POST /api/teams ────────────────────────────────────────────────────────────
-router.post('/', auth, (req, res) => {
+router.post('/', (req, res) => {
   try {
     const { name, emoji } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'name is required' });
@@ -68,7 +67,7 @@ router.post('/', auth, (req, res) => {
 });
 
 // ── PUT /api/teams/:teamId ─────────────────────────────────────────────────────
-router.put('/:teamId', auth, (req, res) => {
+router.put('/:teamId', (req, res) => {
   try {
     const { name, emoji, description } = req.body;
     const { teamId } = req.params;
@@ -97,7 +96,7 @@ router.put('/:teamId', auth, (req, res) => {
 
 // ── DELETE /api/teams/:teamId ──────────────────────────────────────────────────
 // Deletes the workspace. Projects cascade via FK. Only the owner can delete.
-router.delete('/:teamId', auth, (req, res) => {
+router.delete('/:teamId', (req, res) => {
   try {
     const { teamId } = req.params;
 
@@ -121,7 +120,7 @@ router.delete('/:teamId', auth, (req, res) => {
 
 // ── GET /api/teams/:teamId/members ─────────────────────────────────────────────
 // Local account build: the only "member" is the owner.
-router.get('/:teamId/members', auth, (req, res) => {
+router.get('/:teamId/members', (req, res) => {
   try {
     const ws = db.prepare('SELECT id, owner_id FROM workspaces WHERE id = ?')
       .get(req.params.teamId);

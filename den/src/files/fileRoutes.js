@@ -2,8 +2,6 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { verifyUser as jwtVerify } from '../auth/authMiddleware.js';
-import { attachDb } from '../db/sqlite.js';
 import {
   batchCopyEntries,
   batchDeleteEntries,
@@ -22,14 +20,9 @@ import {
 
 const router = express.Router();
 
-const authenticate = (req, res, next) => {
-  jwtVerify(req, res, (err) => {
-    if (err) return;
-    attachDb(req, res, () => {
-      req.workspaceId = req.query?.workspaceId || req.body?.workspaceId || null;
-      next();
-    });
-  });
+const withWorkspaceContext = (req, _res, next) => {
+  req.workspaceId = req.query?.workspaceId || req.body?.workspaceId || null;
+  next();
 };
 
 function sendRouteError(res, err) {
@@ -48,7 +41,7 @@ function parseListOptions(query) {
   };
 }
 
-router.get('/roots', authenticate, (req, res) => {
+router.get('/roots', withWorkspaceContext, (req, res) => {
   try {
     res.json({ success: true, roots: publicRoots() });
   } catch (err) {
@@ -56,7 +49,7 @@ router.get('/roots', authenticate, (req, res) => {
   }
 });
 
-router.get('/list', authenticate, (req, res) => {
+router.get('/list', withWorkspaceContext, (req, res) => {
   try {
     res.json(listDirectory({
       rootId: req.query.rootId || 'workspace',
@@ -69,7 +62,7 @@ router.get('/list', authenticate, (req, res) => {
   }
 });
 
-router.get('/entry', authenticate, (req, res) => {
+router.get('/entry', withWorkspaceContext, (req, res) => {
   try {
     res.json(loadEntry({
       rootId: req.query.rootId || 'workspace',
@@ -82,7 +75,7 @@ router.get('/entry', authenticate, (req, res) => {
   }
 });
 
-router.get('/preview', authenticate, (req, res) => {
+router.get('/preview', withWorkspaceContext, (req, res) => {
   try {
     res.json(loadEntry({
       rootId: req.query.rootId || 'workspace',
@@ -94,7 +87,7 @@ router.get('/preview', authenticate, (req, res) => {
   }
 });
 
-router.get('/search', authenticate, (req, res) => {
+router.get('/search', withWorkspaceContext, (req, res) => {
   try {
     const maxResults = Math.min(Math.max(parseInt(req.query.max || '120', 10) || 120, 1), 500);
     res.json(searchEntries({
@@ -112,7 +105,7 @@ router.get('/search', authenticate, (req, res) => {
   }
 });
 
-router.post('/mkdir', authenticate, (req, res) => {
+router.post('/mkdir', withWorkspaceContext, (req, res) => {
   try {
     res.json(createDirectory({
       rootId: req.body.rootId || 'workspace',
@@ -124,7 +117,7 @@ router.post('/mkdir', authenticate, (req, res) => {
   }
 });
 
-router.post('/write', authenticate, (req, res) => {
+router.post('/write', withWorkspaceContext, (req, res) => {
   try {
     res.json(writeFile({
       rootId: req.body.rootId || 'workspace',
@@ -137,7 +130,7 @@ router.post('/write', authenticate, (req, res) => {
   }
 });
 
-router.post('/copy', authenticate, (req, res) => {
+router.post('/copy', withWorkspaceContext, (req, res) => {
   try {
     res.json(copyEntry({
       rootId: req.body.rootId || 'workspace',
@@ -150,7 +143,7 @@ router.post('/copy', authenticate, (req, res) => {
   }
 });
 
-router.post('/move', authenticate, (req, res) => {
+router.post('/move', withWorkspaceContext, (req, res) => {
   try {
     res.json(moveEntry({
       rootId: req.body.rootId || 'workspace',
@@ -163,7 +156,7 @@ router.post('/move', authenticate, (req, res) => {
   }
 });
 
-router.post('/batch-delete', authenticate, (req, res) => {
+router.post('/batch-delete', withWorkspaceContext, (req, res) => {
   try {
     res.json(batchDeleteEntries({
       rootId: req.body.rootId || 'workspace',
@@ -174,7 +167,7 @@ router.post('/batch-delete', authenticate, (req, res) => {
   }
 });
 
-router.post('/batch-copy', authenticate, (req, res) => {
+router.post('/batch-copy', withWorkspaceContext, (req, res) => {
   try {
     res.json(batchCopyEntries({
       rootId: req.body.rootId || 'workspace',
@@ -185,7 +178,7 @@ router.post('/batch-copy', authenticate, (req, res) => {
   }
 });
 
-router.post('/delete', authenticate, (req, res) => {
+router.post('/delete', withWorkspaceContext, (req, res) => {
   try {
     res.json(deleteEntry({
       rootId: req.body.rootId || 'workspace',
@@ -219,7 +212,7 @@ const MIME_TYPES = {
   pdf: 'application/pdf',
 };
 
-router.get('/raw', authenticate, (req, res) => {
+router.get('/raw', withWorkspaceContext, (req, res) => {
   try {
     const { rootId = 'workspace', path: relativePath } = req.query;
     if (!relativePath) {
@@ -243,7 +236,7 @@ router.get('/raw', authenticate, (req, res) => {
 
 // ── Archive operations ───────────────────────────────────────────────────────
 
-router.post('/archive/extract', authenticate, async (req, res) => {
+router.post('/archive/extract', withWorkspaceContext, async (req, res) => {
   try {
     res.json(await extractArchive({
       rootId: req.body.rootId || 'workspace',
@@ -255,7 +248,7 @@ router.post('/archive/extract', authenticate, async (req, res) => {
   }
 });
 
-router.post('/archive/create', authenticate, async (req, res) => {
+router.post('/archive/create', withWorkspaceContext, async (req, res) => {
   try {
     res.json(await createArchive({
       rootId: req.body.rootId || 'workspace',
@@ -271,7 +264,7 @@ router.post('/archive/create', authenticate, async (req, res) => {
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-router.post('/upload', authenticate, upload.single('file'), (req, res) => {
+router.post('/upload', withWorkspaceContext, upload.single('file'), (req, res) => {
   try {
     const { rootId = 'workspace', path: relativePath } = req.body;
     if (!req.file || !relativePath) {

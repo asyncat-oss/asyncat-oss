@@ -7,7 +7,7 @@ import {
 } from "react";
 import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";
-import authService from "../services/authService.js";
+import apiClient from "../services/apiClient.js";
 import {
   Command,
   Settings,
@@ -27,6 +27,7 @@ import UniversalSearch from "./UniversalSearch";
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import eventBus from "../utils/eventBus.js";
+import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
 import catDP from "../assets/dp/CAT.webp";
 import dogDP from "../assets/dp/DOG.webp";
 import dolphinDP from "../assets/dp/DOLPHIN.webp";
@@ -144,7 +145,7 @@ SidebarNavItem.propTypes = {
 // ── Main Sidebar Component ────────────────────────────────────────────────────
 
 const DynamicSidebar = ({
-  session,
+  localUser,
   onNewChat,
   basePage,
   isSearchOpen,
@@ -152,30 +153,8 @@ const DynamicSidebar = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-
-  const [sidebarPosition, setSidebarPosition] = useState(() => {
-    return localStorage.getItem('sidebarPosition') || 'left';
-  });
-  const [sidebarState, setSidebarState] = useState(() => {
-    return localStorage.getItem('sidebarState') || 'expanded';
-  });
-  const [sidebarVisibility, setSidebarVisibility] = useState(() => {
-    return localStorage.getItem('sidebarVisibility') || 'always';
-  });
-  const [topBarVisible, setTopBarVisible] = useState(() => {
-    return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
-  });
-  const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
-    return localStorage.getItem('sidebarVisibility') !== 'hover';
-  });
   const [shortcuts, setShortcuts] = useState(loadKeyboardShortcuts);
-  const [navItemsVisibility, setNavItemsVisibility] = useState(() => {
-    try {
-      const stored = localStorage.getItem('navItemsVisibility');
-      const defaults = { projects: true, models: true, tools: true, agent: true, trash: true };
-      return stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
-    } catch { return { projects: true, models: true, tools: true, agent: true, trash: true }; }
-  });
+  const { sidebarState, setSidebarState, navItemsVisibility } = useUiPreferences();
 
   // Profile state (for sidebar avatar)
   const API_URL = import.meta.env.VITE_USER_URL;
@@ -183,9 +162,11 @@ const DynamicSidebar = ({
     () => globalProfileCache || { name: "", profilePicture: "" }
   );
   const [profileImageError, setProfileImageError] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(
+    () => sessionStorage.getItem('asyncatUpdateAvailable') === 'true',
+  );
   const {
     currentConversationId,
-    conversationTitle,
     hasActiveRuns,
     chatRunPreviews = [],
   } = useCommandCenter();
@@ -200,64 +181,13 @@ const DynamicSidebar = ({
     navigate(commandCenterTarget);
   }, [commandCenterTarget, navigate]);
 
-  useEffect(() => {
-    const syncNavigationPreferences = () => {
-      setSidebarPosition(localStorage.getItem('sidebarPosition') || 'left');
-      setSidebarState(localStorage.getItem('sidebarState') || 'expanded');
-      const nextSidebarVisibility = localStorage.getItem('sidebarVisibility') || 'always';
-      setSidebarVisibility(nextSidebarVisibility);
-      setTopBarVisible(localStorage.getItem('topMenuBarVisibility') !== 'hidden');
-      setIsSidebarVisible(nextSidebarVisibility !== 'hover');
-    };
-    const syncNavItems = () => {
-      try {
-        const stored = localStorage.getItem('navItemsVisibility');
-        const defaults = { projects: true, models: true, tools: true, agent: true, trash: true };
-        setNavItemsVisibility(stored ? { ...defaults, ...JSON.parse(stored) } : defaults);
-      } catch { /* keep current */ }
-    };
-    window.addEventListener('storage', syncNavigationPreferences);
-    window.addEventListener('storage', syncNavItems);
-    window.addEventListener('sidebar-position-changed', syncNavigationPreferences);
-    window.addEventListener('sidebar-state-changed', syncNavigationPreferences);
-    window.addEventListener('sidebar-visibility-changed', syncNavigationPreferences);
-    window.addEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
-    window.addEventListener('nav-items-visibility-changed', syncNavItems);
-    return () => {
-      window.removeEventListener('storage', syncNavigationPreferences);
-      window.removeEventListener('storage', syncNavItems);
-      window.removeEventListener('sidebar-position-changed', syncNavigationPreferences);
-      window.removeEventListener('sidebar-state-changed', syncNavigationPreferences);
-      window.removeEventListener('sidebar-visibility-changed', syncNavigationPreferences);
-      window.removeEventListener('top-menu-bar-visibility-changed', syncNavigationPreferences);
-      window.removeEventListener('nav-items-visibility-changed', syncNavItems);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (sidebarVisibility !== 'hover') return;
-
-    const handleMouseMove = (e) => {
-      if (sidebarPosition === 'left' && e.clientX < 88) {
-        setIsSidebarVisible(true);
-      } else if (sidebarPosition === 'right' && e.clientX > window.innerWidth - 88) {
-        setIsSidebarVisible(true);
-      }
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, [sidebarPosition, sidebarVisibility]);
-
   // Fetch profile data (for sidebar avatar)
-  const userId = useMemo(() => session?.user?.id, [session?.user?.id]);
+  const userId = useMemo(() => localUser?.id, [localUser?.id]);
   useEffect(() => {
     if (profileCacheInitialized && globalProfileCache) { setProfileData(globalProfileCache); return; }
     if (!userId) return;
-    authService
-      .authenticatedFetch(`${API_URL}/api/users/me`, { method: "GET", headers: { "Content-Type": "application/json" } })
+    apiClient
+      .request(`${API_URL}/api/users/me`, { method: "GET", headers: { "Content-Type": "application/json" } })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.success && data.data) {
@@ -281,6 +211,22 @@ const DynamicSidebar = ({
     return eventBus.on("profile-updated", handler);
   }, [profileData.name]);
 
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onUpdateAvailable || !api?.onUpdateDownloaded) return undefined;
+    const markAvailable = () => {
+      sessionStorage.setItem('asyncatUpdateAvailable', 'true');
+      setUpdateAvailable(true);
+    };
+    const cleanups = [
+      api.onUpdateAvailable(markAvailable),
+      api.onUpdateDownloaded(markAvailable),
+    ];
+    return () => cleanups.forEach((cleanup) => {
+      if (typeof cleanup === 'function') cleanup();
+    });
+  }, []);
+
   // Resolve profile picture URL — default to CAT when no picture is set
   const profilePictureUrl = useMemo(() => {
     const pic = profileData.profilePicture || "CAT";
@@ -289,9 +235,9 @@ const DynamicSidebar = ({
   }, [profileData.profilePicture]);
 
   const profileInitials = useMemo(() => {
-    const n = profileData.name || session?.user?.name || "";
-    return n ? n.charAt(0).toUpperCase() : (session?.user?.email || "U").charAt(0).toUpperCase();
-  }, [profileData, session]);
+    const name = profileData.name || localUser?.name || '';
+    return name ? name.charAt(0).toUpperCase() : 'U';
+  }, [profileData, localUser]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -307,7 +253,7 @@ const DynamicSidebar = ({
 
       switch (match.action) {
         case 'openSearch': onSearchOpen(true); break;
-        case 'openSettings': navigate("/settings/general"); break;
+        case 'openSettings': navigate("/settings/profile"); break;
         case 'newChat': onNewChat(); break;
         case 'navHome': openCommandCenter(); break;
         case 'navChat': navigate("/all-chats"); break;
@@ -360,76 +306,62 @@ const DynamicSidebar = ({
 
   const workspaceIcon = <KanbanSquare className="w-5 h-5" />;
 
-  const primaryItems = [
+  const workItems = [
     { key: "projects", label: "Tasks", action: "navWorkspace", onClick: () => navigate("/workspace"), active: isOnWorkspace, icon: workspaceIcon },
-  ].filter(item => navItemsVisibility[item.key] !== false);
-
-  const appItems = [
-    { key: "models", label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
-    { key: "tools", label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
     { key: "workflows", label: "Workflows", action: "navWorkflows", onClick: () => navigate("/workflows"), active: isOnWorkflows, icon: <Workflow className="w-5 h-5" /> },
     { key: "activity", label: "Activity", action: "navActivity", onClick: () => navigate("/activity"), active: isOnActivity, icon: <Bell className="w-5 h-5" /> },
-    { key: "training", label: "Training", action: "navTraining", onClick: () => navigate("/training"), active: isOnTraining, icon: <GraduationCap className="w-5 h-5" /> },
-    { key: "agent", label: "Agent", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
   ].filter(item => navItemsVisibility[item.key] !== false);
 
-  const settingsIcon = profilePictureUrl || profileInitials ? (
-    <ProfileImage
-      size="w-6 h-6"
-      src={profilePictureUrl}
-      initials={profileInitials}
-      hasError={profileImageError}
-      onError={() => setProfileImageError(true)}
-      onLoad={() => setProfileImageError(false)}
-    />
-  ) : (
-    <Settings className="w-5 h-5" />
+  const buildItems = [
+    { key: "models", label: "Models", action: "navModels", onClick: () => navigate("/models"), active: isOnModels, icon: <Cpu className="w-5 h-5" /> },
+    { key: "tools", label: "Tools & Skills", action: "navTools", onClick: () => navigate("/tools"), active: isOnTools, icon: <Wrench className="w-5 h-5" /> },
+    { key: "agent", label: "Automation", action: "navAgent", onClick: () => navigate("/agent"), active: isOnAgent, icon: <BrainCircuit className="w-5 h-5" /> },
+    { key: "training", label: "Training", action: "navTraining", onClick: () => navigate("/training"), active: isOnTraining, icon: <GraduationCap className="w-5 h-5" /> },
+  ].filter(item => navItemsVisibility[item.key] !== false);
+
+  const settingsIcon = (
+    <span className="relative">
+      {profilePictureUrl || profileInitials ? (
+        <ProfileImage
+          size="w-6 h-6"
+          src={profilePictureUrl}
+          initials={profileInitials}
+          hasError={profileImageError}
+          onError={() => setProfileImageError(true)}
+          onLoad={() => setProfileImageError(false)}
+        />
+      ) : (
+        <Settings className="w-5 h-5" />
+      )}
+      {updateAvailable && (
+        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-gray-950 midnight:ring-slate-950" />
+      )}
+    </span>
   );
 
-  const sidebarEdgeClasses = sidebarPosition === 'right'
-    ? 'right-0'
-    : 'left-0';
   const sidebarWidthClass = sidebarState === 'collapsed'
     ? 'w-16'
     : 'w-16 sm:w-56';
-  const sidebarVisibilityClass = sidebarVisibility === 'hover' && !isSidebarVisible
-    ? `opacity-0 pointer-events-none ${sidebarPosition === 'right' ? 'translate-x-2' : '-translate-x-2'}`
-    : 'opacity-100 translate-x-0';
-  const sidebarTriggerClass = sidebarPosition === 'right'
-    ? 'fixed right-0 top-0 bottom-0 w-20 z-40'
-    : 'fixed left-0 top-0 bottom-0 w-20 z-40';
 
   const toggleCollapse = () => {
     const next = sidebarState === 'collapsed' ? 'expanded' : 'collapsed';
-    localStorage.setItem('sidebarState', next);
-    window.dispatchEvent(new Event('sidebar-state-changed'));
+    setSidebarState(next);
   };
 
   const CollapseIcon = sidebarState === 'collapsed'
-    ? (sidebarPosition === 'right' ? ChevronLeft : ChevronRight)
-    : (sidebarPosition === 'right' ? ChevronRight : ChevronLeft);
+    ? ChevronRight
+    : ChevronLeft;
 
   return (
     <>
-      {sidebarVisibility === 'hover' && !isSidebarVisible && (
-        <div
-          className={sidebarTriggerClass}
-          onMouseEnter={() => setIsSidebarVisible(true)}
-        />
-      )}
       <aside
         className={`
-          fixed ${sidebarEdgeClasses} ${topBarVisible ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}
+          fixed left-0 top-0 h-screen
           z-50 flex ${sidebarWidthClass} flex-col bg-white/70 backdrop-blur-xl
           dark:bg-gray-950/55 midnight:bg-gray-950/55
-          transition-[opacity,transform,width] duration-150
-          ${sidebarVisibilityClass}
+          border-r border-gray-200/50 dark:border-white/[0.06] midnight:border-white/[0.06]
+          transition-[width] duration-150
         `}
-        onMouseLeave={() => {
-          if (sidebarVisibility === 'hover') {
-            setIsSidebarVisible(false);
-          }
-        }}
       >
         {/* Header row — identical styling to SidebarNavItem */}
         <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
@@ -457,7 +389,7 @@ const DynamicSidebar = ({
               )}
             </span>
             <span className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${sidebarState === 'collapsed' ? 'hidden' : 'hidden sm:block'}`}>
-              {conversationTitle || 'Asyncat'}
+              Asyncat
             </span>
           </button>
 
@@ -473,8 +405,13 @@ const DynamicSidebar = ({
 
 
         <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+          {sidebarState !== 'collapsed' && (
+            <div className="hidden px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">
+              Work
+            </div>
+          )}
           <div className="space-y-1">
-            {primaryItems.map((item) => (
+            {workItems.map((item) => (
               <SidebarNavItem
                 key={item.label}
                 icon={item.icon}
@@ -487,8 +424,13 @@ const DynamicSidebar = ({
             ))}
           </div>
 
-          <div className="space-y-1 mt-1">
-            {appItems.map((item) => (
+          {sidebarState !== 'collapsed' && (
+            <div className="mt-5 hidden px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">
+              Build
+            </div>
+          )}
+          <div className="space-y-1">
+            {buildItems.map((item) => (
               <SidebarNavItem
                 key={item.label}
                 icon={item.icon}
@@ -516,7 +458,7 @@ const DynamicSidebar = ({
             icon={settingsIcon}
             label="Settings"
             shortcut={shortcutByAction.openSettings}
-            onClick={() => navigate("/settings/general")}
+            onClick={() => navigate("/settings/profile")}
             isActive={isOnSettings}
             collapsed={sidebarState === 'collapsed'}
           />
@@ -528,12 +470,9 @@ const DynamicSidebar = ({
 };
 
 DynamicSidebar.propTypes = {
-  session: PropTypes.shape({
-    user: PropTypes.shape({
-      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-      name: PropTypes.string,
-      email: PropTypes.string,
-    }),
+  localUser: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    name: PropTypes.string,
   }),
   onNewChat: PropTypes.func,
   basePage: PropTypes.string,

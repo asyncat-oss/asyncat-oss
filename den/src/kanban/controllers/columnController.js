@@ -27,7 +27,7 @@ const getColumns = asyncHandler(async (req, res) => {
 });
 
 const createColumn = asyncHandler(async (req, res) => {
-	// Add user ID from authentication as createdBy
+	// Use the local profile ID as createdBy.
 	const columnData = {
 		...req.body,
 		createdBy: req.user.id,

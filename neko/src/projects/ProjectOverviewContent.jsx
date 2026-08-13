@@ -136,7 +136,7 @@ const ProjectOverview = React.memo(({
 	selectedProject,
 	projectId,
 	currentTab,
-	session,
+	localUser,
 }) => {
 	const navigate = useNavigate();
 	const [projectInfo, setProjectInfo] = useState(null);
@@ -221,13 +221,11 @@ const ProjectOverview = React.memo(({
 
 		return (
 			<ColumnProvider
-				session={session}
 				selectedProject={projectData}
 				viewType={currentTab}
 			>
-				<CardProvider session={session}>
+				<CardProvider localUser={localUser}>
 					<ViewComponent
-						session={session}
 						selectedProject={projectData}
 					/>
 				</CardProvider>

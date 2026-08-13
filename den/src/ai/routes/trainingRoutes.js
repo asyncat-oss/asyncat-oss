@@ -2,8 +2,6 @@
 // Mounted at /api/training in index.js.
 
 import express from 'express';
-import { verifyUser as jwtVerify } from '../../auth/authMiddleware.js';
-import { attachDb } from '../../db/sqlite.js';
 import {
   startTrainingJob,
   getTrainingJob,
@@ -24,15 +22,6 @@ import path from 'path';
 const router = express.Router();
 
 // ── Auth middleware ──────────────────────────────────────────────────────────
-
-const authenticate = (req, res, next) => {
-  jwtVerify(req, res, (err) => {
-    if (err) return;
-    attachDb(req, res, () => next());
-  });
-};
-
-router.use(authenticate);
 
 // ── GET /readiness — GPU, VRAM, venv, disk status ───────────────────────────
 

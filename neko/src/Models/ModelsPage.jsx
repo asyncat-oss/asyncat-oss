@@ -466,7 +466,7 @@ const ModelsPage = () => {
           </div>
         </div>
 
-        {/* Refresh — pinned to bottom like Settings' sign out */}
+        {/* Refresh action pinned to the bottom */}
         <div className="flex-shrink-0 px-2 pb-3 pt-1 border-t border-gray-200/70 dark:border-gray-800/80 midnight:border-gray-800/80">
           <button
             onClick={handleRefresh}

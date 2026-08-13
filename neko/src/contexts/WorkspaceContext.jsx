@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import authService from '../services/authService.js';
+import apiClient from '../services/apiClient.js';
 import eventBus from '../utils/eventBus.js';
 
 const API_URL = import.meta.env.VITE_USER_URL;
@@ -44,22 +44,13 @@ export const WorkspaceProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await authService.authenticatedFetch(`${API_URL}/api/teams`);
+      const response = await apiClient.request(`${API_URL}/api/teams`);
       
       if (response.ok) {
         const { data } = await response.json();
         
-        // Sort workspaces: owners first, then workspace members, then project-only access
-        // Within each group, sort alphabetically
-        const currentUserId = (window?.__SESSION__ && window.__SESSION__.user?.id) || null;
+        // Sort owned workspaces first, then project-only access, then alphabetically.
         const sortedWorkspaces = (data || []).sort((a, b) => {
-          // First, prefer explicit owner_id match to current user
-          const aIsOwner = currentUserId && a.owner_id && a.owner_id === currentUserId;
-          const bIsOwner = currentUserId && b.owner_id && b.owner_id === currentUserId;
-          if (aIsOwner && !bIsOwner) return -1;
-          if (!aIsOwner && bIsOwner) return 1;
-
-          // Fall back to user_role for backwards compatibility
           if (a.user_role === 'owner' && b.user_role !== 'owner') return -1;
           if (a.user_role !== 'owner' && b.user_role === 'owner') return 1;
 
@@ -104,9 +95,7 @@ export const WorkspaceProvider = ({ children }) => {
         const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
         
         // Provide more specific error messages based on status
-        if (response.status === 401) {
-          throw new Error('Invalid session - Authentication required');
-        } else if (response.status === 403) {
+        if (response.status === 403) {
           throw new Error('Access denied - You may not have permission to view workspaces');
         } else if (response.status >= 500) {
           throw new Error('Server error - Please try again later');
@@ -145,32 +134,10 @@ export const WorkspaceProvider = ({ children }) => {
     eventBus.emit('workspaceChanged', { workspace });
   }, [currentWorkspace]);
 
-  // Clear workspace selection (useful for logout or error states)
+  // Clear the current workspace selection.
   const clearWorkspace = useCallback(() => {
     setCurrentWorkspace(null);
     sessionStorage.removeItem('currentWorkspace');
-  }, []);
-
-  // Handle authentication errors by clearing workspace state
-  const handleAuthError = useCallback(() => {
-    setCurrentWorkspace(null);
-    setWorkspaces([]);
-    setError('Invalid session - Authentication required');
-    setLoading(false);
-    
-    // Clear session storage
-    sessionStorage.removeItem('currentWorkspace');
-    
-    // Also clear any workspace context caches
-    try {
-      Object.keys(sessionStorage).forEach(key => {
-        if (key.includes('workspace') || key.includes('project')) {
-          sessionStorage.removeItem(key);
-        }
-      });
-    } catch (err) {
-      console.warn('Error clearing workspace caches:', err);
-    }
   }, []);
 
   // Get workspace by ID
@@ -180,15 +147,6 @@ export const WorkspaceProvider = ({ children }) => {
 
   // Check if current workspace is owned by current user
   const isWorkspaceOwner = useCallback(() => {
-    // Prefer owner_id if provided by API (hybrid ownership model). Fall back to user_role for backwards compatibility.
-    try {
-      const currentUserId = (window?.__SESSION__ && window.__SESSION__.user?.id) || null;
-      if (currentWorkspace?.owner_id && currentUserId) {
-        return currentWorkspace.owner_id === currentUserId;
-      }
-    } catch (err) {
-      // ignore session lookup errors and fall back
-    }
     return currentWorkspace?.user_role === 'owner';
   }, [currentWorkspace]);
 
@@ -210,13 +168,13 @@ export const WorkspaceProvider = ({ children }) => {
     try {
       let data = [];
       if (currentWorkspace.access_type === 'workspace') {
-        const response = await authService.authenticatedFetch(`${API_URL}/api/projects/teams/${currentWorkspace.id}/projects`);
+        const response = await apiClient.request(`${API_URL}/api/projects/teams/${currentWorkspace.id}/projects`);
         if (response.ok) {
           const json = await response.json();
           data = json.data || [];
         }
       } else {
-        const response = await authService.authenticatedFetch(`${API_URL}/api/projects`);
+        const response = await apiClient.request(`${API_URL}/api/projects`);
         if (response.ok) {
           const json = await response.json();
           data = (json.data || []).filter(p => p.team_id === currentWorkspace.id);
@@ -251,7 +209,7 @@ export const WorkspaceProvider = ({ children }) => {
     if (!currentWorkspace?.id) return;
     
     try {
-      const response = await authService.authenticatedFetch(`${API_URL}/api/teams`);
+      const response = await apiClient.request(`${API_URL}/api/teams`);
       
       if (response.ok) {
         const { data } = await response.json();
@@ -294,7 +252,6 @@ export const WorkspaceProvider = ({ children }) => {
     // Actions
     switchWorkspace,
     clearWorkspace,
-    handleAuthError,
     refreshWorkspaces,
     updateCurrentWorkspace,
     getWorkspaceById,

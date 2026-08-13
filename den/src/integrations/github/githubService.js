@@ -4,7 +4,7 @@ import db from '../../db/client.js';
 const SCOPES = 'read:user repo';
 
 function getRedirectUri() {
-  return `${process.env.PUBLIC_URL || 'http://localhost:8716'}/api/integrations/github/callback`;
+  return `${process.env.PUBLIC_URL || 'http://127.0.0.1:8716'}/api/integrations/github/callback`;
 }
 
 export function isConfigured() {

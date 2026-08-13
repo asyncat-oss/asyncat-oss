@@ -48,8 +48,6 @@ export const NoteProvider = ({ children }) => {
         setError(
           `${operation} failed - you are offline. Changes will be synced when connection is restored.`
         );
-      } else if (error.status === 401) {
-        setError("Session expired. Please log in again.");
       } else if (error.status === 403) {
         setError("You do not have permission to perform this action.");
       } else if (error.status === 404) {

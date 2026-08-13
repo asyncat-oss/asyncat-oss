@@ -13,7 +13,7 @@ const STORAGE_ROOT = process.env.STORAGE_PATH
   ? path.resolve(process.env.STORAGE_PATH)
   : path.resolve('data', 'uploads');
 
-const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://localhost:8716';
+const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://127.0.0.1:8716';
 
 const initializedContainers = new Set();
 

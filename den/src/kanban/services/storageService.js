@@ -16,7 +16,7 @@ const STORAGE_ROOT = process.env.STORAGE_PATH
 const CONTAINER = process.env.STORAGE_KANBAN_CONTAINER || 'kanban-attachments';
 const CONTAINER_DIR = path.join(STORAGE_ROOT, CONTAINER);
 
-const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://localhost:8716';
+const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://127.0.0.1:8716';
 
 const fileUrl = (blobName) =>
   `${PUBLIC_URL_BASE}/files/${CONTAINER}/${blobName.replace(/\\/g, '/')}`;

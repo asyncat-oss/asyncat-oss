@@ -21,14 +21,12 @@ import {
   CircleX,
 } from "lucide-react";
 import { useNoteContext } from "../context/NoteContext";
-import { useUser } from "../../contexts/UserContext";
 import { attachmentsApi, notesApi } from "../noteApi";
 import ModernBlockEditor from "./ModernBlockEditor";
 import NoteBanner from "./components/NoteBanner";
 import KeyboardShortcutsDropdown from "./components/KeyboardShortcutsDropdown";
 import { blocksToHtml, htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
-import authService from "../../services/authService";
 
 const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
   const {
@@ -39,8 +37,6 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
     getQueueSize,
     isOnline,
   } = useNoteContext();
-
-  const { user, userName, userEmail } = useUser();
 
   // Core state
   const [title, setTitle] = useState("");
@@ -854,20 +850,14 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
           blocks: blocksRef.current,
         };
 
-        // Use fetch with keepalive for reliable background saving with auth headers
+        // Use fetch with keepalive for reliable background saving.
         if (note?.id) {
           try {
-            const token = authService.getAccessToken();
-            if (token) {
-              // Use fetch with keepalive - works like sendBeacon but supports headers
-              fetch(
+            fetch(
                 `${import.meta.env.VITE_NOTES_URL}/api/notes/${note.id}/delta`,
                 {
                   method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                  },
+                  headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     changeset: {
                       operations: [
@@ -893,7 +883,6 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
               ).catch((error) => {
                 console.warn("Cleanup save failed:", error);
               });
-            }
           } catch (error) {
             console.warn("Cleanup save failed:", error);
           }
@@ -915,17 +904,11 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
           };
 
           // Try to save immediately without waiting using fetch with keepalive
-          const token = authService.getAccessToken();
-          if (token) {
-            // Use fetch with keepalive - works like sendBeacon but supports headers
-            fetch(
+          fetch(
               `${import.meta.env.VITE_NOTES_URL}/api/notes/${note.id}/delta`,
               {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   changeset: {
                     operations: [
@@ -951,7 +934,6 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
             ).catch((error) => {
               console.warn("Beforeunload save failed:", error);
             });
-          }
 
           // Don't prevent navigation - just save in background
         } catch (error) {

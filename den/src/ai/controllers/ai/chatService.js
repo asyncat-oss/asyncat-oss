@@ -155,10 +155,10 @@ class ChatService {
   }
 
   // Helper to get user's current team ID (workspace)
-  async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, authenticatedDb = null) {
+  async getCurrentWorkspaceId(userId, preferredWorkspaceId = null, databaseClient = null) {
     try {
-      // Use authenticated client if provided, otherwise fall back to base client
-      const dbClient = authenticatedDb || db;
+      // Use the request database client when provided, otherwise use the base client.
+      const dbClient = databaseClient || db;
 
       await this.setUserContext(userId);
 
@@ -629,15 +629,15 @@ class ChatService {
       conversationId = null,
       workspaceId = null,
       fileAttachments = null,
-      authenticatedDb = null
+      databaseClient = null
     } = options;
 
     // Map visual mode to chat mode for database compatibility
     // Database only accepts 'chat' or 'build', but frontend uses 'visual' for animations
     const dbMode = mode === 'visual' ? 'chat' : mode;
 
-    // Use authenticated client if provided, otherwise fall back to base client
-    const dbClient = authenticatedDb || db;
+    // Use the request database client when provided, otherwise use the base client.
+    const dbClient = databaseClient || db;
 
     try {
       // Validation
@@ -647,7 +647,7 @@ class ChatService {
       }
 
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       let finalConversationId = conversationId;
 
@@ -746,13 +746,13 @@ class ChatService {
   }
 
   // Simplified get conversation using SQLite
-  async getConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
+  async getConversation(userId, conversationId, workspaceId = null, databaseClient = null) {
     const cacheKey = `conversation_${conversationId}_${userId}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
 
-    // Use authenticated client if provided, otherwise fall back to base client
-    const dbClient = authenticatedDb || db;
+    // Use the request database client when provided, otherwise use the base client.
+    const dbClient = databaseClient || db;
 
     try {
       await this.setUserContext(userId);
@@ -808,17 +808,17 @@ class ChatService {
       includeArchived = false,
       searchTerm = null,
       workspaceId = null,
-      authenticatedDb = null
+      databaseClient = null
     } = options;
 
-    // Use authenticated client if provided, otherwise fall back to base client
-    const dbClient = authenticatedDb || db;
+    // Use the request database client when provided, otherwise use the base client.
+    const dbClient = databaseClient || db;
 
     try {
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
-      // Create cache key without the authenticatedDb client to avoid circular reference
+      // Create cache key without the databaseClient client to avoid circular reference
       const cacheOptions = {
         mode,
         limit,
@@ -912,13 +912,13 @@ class ChatService {
   }
 
   // Update conversation with workspace validation
-  async updateConversation(userId, conversationId, updates, workspaceId = null, authenticatedDb = null) {
+  async updateConversation(userId, conversationId, updates, workspaceId = null, databaseClient = null) {
     try {
-      // Use authenticated client if provided, otherwise fall back to base client
-      const dbClient = authenticatedDb || db;
+      // Use the request database client when provided, otherwise use the base client.
+      const dbClient = databaseClient || db;
 
       // Get effective workspace ID
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       const allowedFields = ['title', 'is_pinned', 'is_archived', 'metadata'];
       const updateData = { updated_at: new Date().toISOString() };
@@ -960,10 +960,10 @@ class ChatService {
 
   // Delete conversation with workspace validation
   // Soft-delete (move to trash)
-  async deleteConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
+  async deleteConversation(userId, conversationId, workspaceId = null, databaseClient = null) {
     try {
-      const dbClient = authenticatedDb || db;
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const dbClient = databaseClient || db;
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       // First verify the conversation exists and belongs to this user/workspace.
       // We do this as a separate SELECT so the soft-delete UPDATE doesn't have to
@@ -1004,10 +1004,10 @@ class ChatService {
   }
 
   // Restore from trash
-  async restoreConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
+  async restoreConversation(userId, conversationId, workspaceId = null, databaseClient = null) {
     try {
-      const dbClient = authenticatedDb || db;
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const dbClient = databaseClient || db;
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       // First verify the conversation exists in trash.
       // We do this as a separate SELECT so the restore UPDATE doesn't have to
@@ -1041,10 +1041,10 @@ class ChatService {
   }
 
   // Permanent delete (from trash only)
-  async permanentDeleteConversation(userId, conversationId, workspaceId = null, authenticatedDb = null) {
+  async permanentDeleteConversation(userId, conversationId, workspaceId = null, databaseClient = null) {
     try {
-      const dbClient = authenticatedDb || db;
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const dbClient = databaseClient || db;
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       const { data: existing } = await dbClient
         .schema('aichats')
@@ -1089,11 +1089,11 @@ class ChatService {
   }
 
   // Get trashed conversations
-  async getTrashConversations(userId, workspaceId = null, authenticatedDb = null) {
+  async getTrashConversations(userId, workspaceId = null, databaseClient = null) {
     try {
-      const dbClient = authenticatedDb || db;
+      const dbClient = databaseClient || db;
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       const { data, error } = await dbClient
         .schema('aichats')
@@ -1113,11 +1113,11 @@ class ChatService {
   }
 
   // Empty trash (permanently delete all trashed conversations)
-  async emptyTrash(userId, workspaceId = null, authenticatedDb = null) {
+  async emptyTrash(userId, workspaceId = null, databaseClient = null) {
     try {
-      const dbClient = authenticatedDb || db;
+      const dbClient = databaseClient || db;
       await this.setUserContext(userId);
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, authenticatedDb);
+      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       const { data: trashed, error: listError } = await dbClient
         .schema('aichats')

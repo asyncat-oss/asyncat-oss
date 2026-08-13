@@ -1,5 +1,6 @@
 // Settings/IntegrationsSection.jsx
 import { useState, useEffect, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2, ExternalLink, Loader2, Plug, Unplug,
@@ -484,6 +485,51 @@ function RssReadLaterManager({ onChanged, flash }) {
 
 // ── Main section ──────────────────────────────────────────────────────────────
 
+const setupFieldShape = PropTypes.shape({
+  key: PropTypes.string.isRequired,
+  label: PropTypes.string.isRequired,
+  configType: PropTypes.oneOf(['config', 'secret']),
+  placeholder: PropTypes.string,
+});
+
+CredentialSetup.propTypes = {
+  fields: PropTypes.arrayOf(setupFieldShape).isRequired,
+  helpUrl: PropTypes.string,
+  helpText: PropTypes.string,
+  onSaved: PropTypes.func,
+};
+
+IntegrationCard.propTypes = {
+  logo: PropTypes.node,
+  name: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  status: PropTypes.shape({
+    connected: PropTypes.bool,
+    email: PropTypes.string,
+    login: PropTypes.string,
+    notes: PropTypes.number,
+    folders: PropTypes.number,
+    vaultPath: PropTypes.string,
+  }),
+  configured: PropTypes.bool,
+  loading: PropTypes.bool,
+  onConnect: PropTypes.func,
+  onDisconnect: PropTypes.func,
+  connecting: PropTypes.bool,
+  disconnecting: PropTypes.bool,
+  setupFields: PropTypes.arrayOf(setupFieldShape),
+  setupHelpUrl: PropTypes.string,
+  setupHelpText: PropTypes.string,
+  onCredsSaved: PropTypes.func,
+  noOAuth: PropTypes.bool,
+  children: PropTypes.node,
+};
+
+RssReadLaterManager.propTypes = {
+  onChanged: PropTypes.func,
+  flash: PropTypes.func.isRequired,
+};
+
 export default function IntegrationsSection() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [message, setMessage] = useState(null);
@@ -789,7 +835,7 @@ export default function IntegrationsSection() {
   };
 
   return (
-    <div className="font-sora space-y-5">
+    <div className="space-y-5 font-sans">
       {/* Flash message */}
       {message && (
         <div className={`rounded-lg border px-3 py-2 text-xs font-medium ${

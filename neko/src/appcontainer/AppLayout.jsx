@@ -1,20 +1,66 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
-import PropTypes from 'prop-types';
+import { RotateCw, ServerCrash, WifiOff } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
-import { useUnauthorizedError } from '../error/ErrorBoundary.jsx';
-import { initializeTheme, setupThemeListener } from '../auth/utils.js';
-import TopMenuBar from '../components/TopMenuBar.jsx';
+import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
+import { useUser } from '../contexts/UserContext.jsx';
+import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
 import WelcomePage from '../WelcomePage.jsx';
 
-const AppLayout = ({ session, onSignOut }) => {
+const ConnectionNotice = () => {
+  const network = useNetworkStatus({ pollMs: 6000 });
+  const [isRestarting, setIsRestarting] = useState(false);
+  const canRestart = Boolean(window.electronAPI?.restartBackend) && !network.backendOnline;
+
+  if (network.online && network.backendOnline) return null;
+
+  const Icon = network.backendOnline ? WifiOff : ServerCrash;
+  const title = network.backendOnline ? 'Internet connection unavailable' : 'Local services are offline';
+  const detail = network.backendOnline
+    ? 'Local features remain available.'
+    : 'Asyncat will reconnect automatically.';
+
+  const restart = async () => {
+    if (!canRestart || isRestarting) return;
+    setIsRestarting(true);
+    try {
+      await window.electronAPI.restartBackend();
+    } finally {
+      setTimeout(() => setIsRestarting(false), 4000);
+    }
+  };
+
+  return (
+    <div className="fixed right-3 top-3 z-[80] flex max-w-sm items-center gap-3 rounded-xl border border-amber-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur dark:border-amber-900/60 dark:bg-gray-900/95 midnight:border-amber-900/60 midnight:bg-slate-950/95">
+      <Icon className="h-4 w-4 shrink-0 text-amber-500" />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{title}</div>
+        <div className="text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">{detail}</div>
+      </div>
+      {canRestart && (
+        <button
+          type="button"
+          onClick={restart}
+          disabled={isRestarting}
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70"
+        >
+          <RotateCw className={`h-3 w-3 ${isRestarting ? 'animate-spin' : ''}`} />
+          Restart
+        </button>
+      )}
+    </div>
+  );
+};
+
+const AppLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
+  const { user: localUser } = useUser();
   
   // Workspace context
   const { 
@@ -29,26 +75,13 @@ const AppLayout = ({ session, onSignOut }) => {
   
   // UI state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [pageTransitionsEnabled, setPageTransitionsEnabled] = useState(() => {
-    return localStorage.getItem('pageTransitions') !== 'off';
-  });
-  const [sidebarPosition, setSidebarPosition] = useState(() => {
-    return localStorage.getItem('sidebarPosition') || 'left';
-  });
-  const [sidebarState, setSidebarState] = useState(() => {
-    return localStorage.getItem('sidebarState') || 'expanded';
-  });
-  const [sidebarVisibility, setSidebarVisibility] = useState(() => {
-    return localStorage.getItem('sidebarVisibility') || 'always';
-  });
-  const [topBarVisible, setTopBarVisible] = useState(() => {
-    return localStorage.getItem('topMenuBarVisibility') !== 'hidden';
-  });
+  const { pageTransitionsEnabled, sidebarState } = useUiPreferences();
 
   // Project state
   const [selectedProject, setSelectedProject] = useState(null);
   
   const basePage = location.pathname.split('/').filter(Boolean)[0] || 'home';
+  const isSettingsPage = basePage === 'settings';
   const routeTransitionKey = basePage;
   
   // Check if user has any workspaces
@@ -175,16 +208,6 @@ const AppLayout = ({ session, onSignOut }) => {
     handleNewConversation,
   } = useCommandCenter();
 
-  // Use the 401 error handler
-  const { trigger401Error } = useUnauthorizedError();
-
-  // Initialize theme on component mount
-  useEffect(() => {
-    initializeTheme();
-    const cleanup = setupThemeListener();
-    return cleanup;
-  }, []);
-
   // Global ⌘K / Ctrl+K opens the command palette (UniversalSearch).
   useEffect(() => {
     const onKey = (e) => {
@@ -195,51 +218,6 @@ const AppLayout = ({ session, onSignOut }) => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  useEffect(() => {
-    const syncPageTransitions = () => {
-      setPageTransitionsEnabled(localStorage.getItem('pageTransitions') !== 'off');
-    };
-
-    window.addEventListener('storage', syncPageTransitions);
-    window.addEventListener('page-transitions-changed', syncPageTransitions);
-    return () => {
-      window.removeEventListener('storage', syncPageTransitions);
-      window.removeEventListener('page-transitions-changed', syncPageTransitions);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncSidebarPreferences = () => {
-      setSidebarPosition(localStorage.getItem('sidebarPosition') || 'left');
-      setSidebarState(localStorage.getItem('sidebarState') || 'expanded');
-      setSidebarVisibility(localStorage.getItem('sidebarVisibility') || 'always');
-    };
-
-    window.addEventListener('storage', syncSidebarPreferences);
-    window.addEventListener('sidebar-position-changed', syncSidebarPreferences);
-    window.addEventListener('sidebar-state-changed', syncSidebarPreferences);
-    window.addEventListener('sidebar-visibility-changed', syncSidebarPreferences);
-    return () => {
-      window.removeEventListener('storage', syncSidebarPreferences);
-      window.removeEventListener('sidebar-position-changed', syncSidebarPreferences);
-      window.removeEventListener('sidebar-state-changed', syncSidebarPreferences);
-      window.removeEventListener('sidebar-visibility-changed', syncSidebarPreferences);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncTopBar = () => {
-      setTopBarVisible(localStorage.getItem('topMenuBarVisibility') !== 'hidden');
-    };
-
-    window.addEventListener('storage', syncTopBar);
-    window.addEventListener('top-menu-bar-visibility-changed', syncTopBar);
-    return () => {
-      window.removeEventListener('storage', syncTopBar);
-      window.removeEventListener('top-menu-bar-visibility-changed', syncTopBar);
-    };
   }, []);
 
   // Helper function to open settings with a specific tab
@@ -259,8 +237,7 @@ const AppLayout = ({ session, onSignOut }) => {
   if (workspacesLoading) {
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 flex flex-col items-center justify-center">
-        <TopMenuBar />
-        <div className={topBarVisible ? 'mt-10 mb-8' : 'mb-8'}>
+        <div className="mb-8">
           <div className="w-8 h-8 border-4 border-indigo-200 dark:border-indigo-800 midnight:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 midnight:border-t-indigo-300 rounded-full animate-spin"></div>
         </div>
         <p className="text-lg font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-300 text-center px-4 mb-4 transition-all duration-300">
@@ -272,142 +249,37 @@ const AppLayout = ({ session, onSignOut }) => {
 
   // Show error state when there's an error loading workspaces
   if (workspacesError) {
-    // Check if this is an authentication error
-    const isAuthError = workspacesError.includes('Invalid session') ||
-                       workspacesError.includes('401') ||
-                       workspacesError.includes('Unauthorized') ||
-                       workspacesError.includes('Authentication required');
-
-    // Trigger the scary 401 error page for auth errors
-    if (isAuthError) {
-      trigger401Error(workspacesError);
-      return null; // Return null while the 401 error is being shown
-    }
-    
     const isNetworkError = workspacesError.includes('fetch') || 
                           workspacesError.includes('network') ||
                           workspacesError.includes('Failed to fetch');
 
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 flex flex-col items-center justify-center">
-        <TopMenuBar />
-        <div className={`${topBarVisible ? 'mt-10' : ''} text-center max-w-md mx-auto px-4`}>
+        <div className="text-center max-w-md mx-auto px-4">
           <div className="text-red-500 dark:text-red-400 midnight:text-red-400 text-6xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-300 mb-2">
-            {isAuthError ? 'Session Expired' : isNetworkError ? 'Connection Error' : 'Workspace Error'}
+            {isNetworkError ? 'Connection Error' : 'Workspace Error'}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 mb-6 text-sm leading-relaxed">
-            {isAuthError 
-              ? 'Your session has expired or is invalid. Please sign in again to continue accessing your workspaces.'
-              : isNetworkError 
-              ? 'Unable to connect to our servers. Please check your internet connection and try again.'
-              : 'We encountered an error loading your workspaces. This might be a temporary issue.'
+            {isNetworkError
+              ? 'Unable to reach the local Asyncat service. Try again or restart the app.'
+              : 'Asyncat could not load your local workspaces. This might be a temporary issue.'
             }
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            {isAuthError ? (
-              <button
-                onClick={async () => {
-                  try {
-                    // Clear all browser storage comprehensively
-                    sessionStorage.clear();
-                    localStorage.clear();
-                    
-                    // Clear all cookies
-                    document.cookie.split(";").forEach(function(c) {
-                      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-                    });
-                    
-                    // Clear indexedDB if it exists
-                    if (window.indexedDB) {
-                      try {
-                        const databases = await indexedDB.databases();
-                        databases.forEach(db => {
-                          indexedDB.deleteDatabase(db.name);
-                        });
-                      } catch (e) {
-                        console.log('Could not clear IndexedDB:', e);
-                      }
-                    }
-                    
-                    // Sign out and redirect to login
-                    await onSignOut();
-                    
-                    // Force page reload to ensure clean state
-                    window.location.href = '/';
-                  } catch (error) {
-                    console.error('Error during sign out:', error);
-                    // Force reload even if sign out fails
-                    window.location.href = '/';
-                  }
-                }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 midnight:bg-indigo-400 midnight:hover:bg-indigo-500 text-white rounded-lg transition-colors"
-              >
-                Sign Out & Sign Back In
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => refreshWorkspaces()}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 midnight:bg-indigo-400 midnight:hover:bg-indigo-500 text-white rounded-lg transition-colors"
-                >
-                  Try Again
-                </button>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 midnight:bg-gray-800 midnight:hover:bg-gray-700 text-gray-800 dark:text-gray-200 midnight:text-gray-300 rounded-lg transition-colors"
-                >
-                  Refresh Page
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => refreshWorkspaces()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 midnight:bg-indigo-400 midnight:hover:bg-indigo-500 text-white rounded-lg transition-colors"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 midnight:bg-gray-800 midnight:hover:bg-gray-700 text-gray-800 dark:text-gray-200 midnight:text-gray-300 rounded-lg transition-colors"
+            >
+              Refresh Page
+            </button>
           </div>
-          {!isAuthError && (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 midnight:border-gray-800">
-              <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-500 mb-2">
-                Still having trouble?
-              </p>
-              <button
-                onClick={async () => {
-                  try {
-                    // Clear all browser storage comprehensively
-                    sessionStorage.clear();
-                    localStorage.clear();
-                    
-                    // Clear all cookies
-                    document.cookie.split(";").forEach(function(c) {
-                      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-                    });
-                    
-                    // Clear indexedDB if it exists
-                    if (window.indexedDB) {
-                      try {
-                        const databases = await indexedDB.databases();
-                        databases.forEach(db => {
-                          indexedDB.deleteDatabase(db.name);
-                        });
-                      } catch (e) {
-                        console.log('Could not clear IndexedDB:', e);
-                      }
-                    }
-                    
-                    // Sign out and redirect
-                    await onSignOut();
-                    
-                    // Force page reload to ensure clean state
-                    window.location.href = '/';
-                  } catch (error) {
-                    console.error('Error during sign out:', error);
-                    // Force reload even if sign out fails
-                    window.location.href = '/';
-                  }
-                }}
-                className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400 midnight:hover:text-gray-400 underline transition-colors"
-              >
-                Sign out and sign back in
-              </button>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -417,40 +289,33 @@ const AppLayout = ({ session, onSignOut }) => {
   if (shouldShowCreateWorkspace) {
     return (
       <WelcomePage
-        session={session}
+        localUser={localUser}
         onTeamCreated={handleWorkspaceCreated}
       />
     );
   }
 
-  const sidebarPaddingClass = {
-    left: {
-      collapsed: 'pl-16',
-      expanded: 'pl-16 sm:pl-56',
-    },
-    right: {
-      collapsed: 'pr-16',
-      expanded: 'pr-16 sm:pr-56',
-    },
-  };
-  const navigationPaddingClass = sidebarVisibility === 'hover'
+  const navigationPaddingClass = isSettingsPage
     ? ''
-    : sidebarPaddingClass[sidebarPosition]?.[sidebarState] || sidebarPaddingClass.left.expanded;
+    : sidebarState === 'collapsed'
+      ? 'pl-16'
+      : 'pl-16 sm:pl-56';
 
   // Normal dashboard when user has workspaces
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
-      <TopMenuBar />
+      <ConnectionNotice />
+      {!isSettingsPage && (
+        <Sidebar
+          localUser={localUser}
+          onNewChat={handleNewChatWithNavigation}
+          basePage={basePage}
+          isSearchOpen={isSearchOpen}
+          onSearchOpen={setIsSearchOpen}
+        />
+      )}
 
-      <Sidebar
-        session={session}
-        onNewChat={handleNewChatWithNavigation}
-        basePage={basePage}
-        isSearchOpen={isSearchOpen}
-        onSearchOpen={setIsSearchOpen}
-      />
-
-      <main className={`flex-1 overflow-hidden h-full ${topBarVisible ? 'pt-10' : ''}`}>
+      <main className="flex-1 overflow-hidden h-full">
         <div
           key={routeTransitionKey}
           className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full ${navigationPaddingClass}`}
@@ -458,11 +323,10 @@ const AppLayout = ({ session, onSignOut }) => {
           <Outlet context={{
               selectedProject: getProjectValue(true),
               onProjectSelect: handleProjectSelect,
-              session,
+              localUser,
               currentTab: params.tab,
               refreshProjects,
               onOpenSettings: handleOpenSettings,
-              onSignOut,
             }} />
         </div>
       </main>
@@ -472,8 +336,3 @@ const AppLayout = ({ session, onSignOut }) => {
 };
 
 export default AppLayout;
-
-AppLayout.propTypes = {
-  session: PropTypes.object,
-  onSignOut: PropTypes.func,
-};

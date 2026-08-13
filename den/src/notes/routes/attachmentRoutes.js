@@ -1,57 +1,54 @@
 import express from "express";
 import * as attachmentController from "../controllers/attachmentController.js";
-import { auth } from "../middleware/auth.js";
-import { verifyAttachmentAccess } from "../middleware/attachmentAuth.js";
 import { handleFileUpload } from "../middleware/fileUpload.js";
 
 const router = express.Router();
 
-// Upload attachment to a note (requires full auth)
+// Upload attachment to a note
 router.post(
-  "/notes/:noteId/upload", auth,
+  "/notes/:noteId/upload",
   handleFileUpload,
   attachmentController.uploadAttachment
 );
 
-// Banner management routes - Must come before /:filename routes (requires full auth)
+// Banner management routes - Must come before /:filename routes
 router.post(
-  "/notes/:noteId/banner", auth,
+  "/notes/:noteId/banner",
   attachmentController.setBanner
 );
 
 router.delete(
-  "/notes/:noteId/banner", auth,
+  "/notes/:noteId/banner",
   attachmentController.removeBanner
 );
 
-// List attachments for a note (requires full auth)
+// List attachments for a note
 router.get(
-  "/notes/:noteId", auth,
+  "/notes/:noteId",
   attachmentController.listAttachments
 );
 
-// Get attachment metadata (requires full auth)
+// Get attachment metadata
 router.get(
-  "/notes/:noteId/:filename/metadata", auth,
+  "/notes/:noteId/:filename/metadata",
   attachmentController.getAttachmentMetadata
 );
 
-// Update attachment metadata (requires full auth)
+// Update attachment metadata
 router.patch(
-  "/notes/:noteId/:filename/metadata", auth,
+  "/notes/:noteId/:filename/metadata",
   attachmentController.updateAttachmentMetadata
 );
 
-// Download/view attachment (uses flexible auth for images)
+// Download/view attachment
 router.get(
   "/notes/:noteId/:filename",
-  verifyAttachmentAccess,
   attachmentController.downloadAttachment
 );
 
-// Delete attachment (requires full auth)
+// Delete attachment
 router.delete(
-  "/notes/:noteId/:filename", auth,
+  "/notes/:noteId/:filename",
   attachmentController.deleteAttachment
 );
 

@@ -1,5 +1,5 @@
 import { API_BASE_URL, apiRequest, addWorkspaceToUrl, getCurrentWorkspaceId, handleResponse } from './client.js';
-import authService from '../../services/authService.js';
+import apiClient from '../../services/apiClient.js';
 import eventBus from '../../utils/eventBus.js';
 
 export const agentApi = {
@@ -14,13 +14,10 @@ export const agentApi = {
         return window.__CURRENT_WORKSPACE_ID__ || null;
       } catch { return null; }
     })();
-    const token = await authService.getSession();
-
-    const response = await fetch(`${API_BASE_URL}/agent/run`, {
+    const response = await apiClient.request(`${API_BASE_URL}/agent/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token?.access_token}`
       },
       signal,
       body: JSON.stringify({
@@ -92,19 +89,16 @@ export const agentApi = {
   },
 
   deleteSession: async (sessionId) => {
-    const token = await authService.getSession();
-    const res = await fetch(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
+    const res = await apiClient.request(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token?.access_token}` },
     });
     return res.json();
   },
 
   renameSession: async (sessionId, goal) => {
-    const token = await authService.getSession();
-    const res = await fetch(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
+    const res = await apiClient.request(`${API_BASE_URL}/agent/sessions/${sessionId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token?.access_token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ goal }),
     });
     return res.json();
@@ -170,12 +164,10 @@ export const agentApi = {
   },
 
   respondPermission: async (requestId, decision, reason = null) => {
-    const token = await authService.getSession();
-    const res = await fetch(`${API_BASE_URL}/agent/permissions/${requestId}`, {
+    const res = await apiClient.request(`${API_BASE_URL}/agent/permissions/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token?.access_token}`
       },
       body: JSON.stringify({ decision, reason })
     });
@@ -183,12 +175,10 @@ export const agentApi = {
   },
 
   respondAskUser: async (requestId, answer) => {
-    const token = await authService.getSession();
-    const res = await fetch(`${API_BASE_URL}/agent/ask/${requestId}`, {
+    const res = await apiClient.request(`${API_BASE_URL}/agent/ask/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token?.access_token}`
       },
       body: JSON.stringify({ answer })
     });
@@ -301,9 +291,9 @@ export const agentApi = {
   downloadArtifact: async (filename) => {
     const workspaceId = getCurrentWorkspaceId();
     const url = `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}?download=1`;
-    const response = await authService.authenticatedFetch(
+    const response = await apiClient.request(
       workspaceId ? addWorkspaceToUrl(url, workspaceId) : url,
-      { method: 'GET', credentials: 'include' }
+      { method: 'GET' }
     );
     if (!response.ok) {
       let message = `Download failed: ${response.status} ${response.statusText}`;

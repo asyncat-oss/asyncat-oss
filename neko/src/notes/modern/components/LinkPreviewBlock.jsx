@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { ExternalLink, RefreshCw, Globe, Copy, Check, Edit3 } from "lucide-react";
-import authService from "../../../services/authService";
+import apiClient from "../../../services/apiClient";
 
 const LinkPreviewBlock = ({
   block,
@@ -75,8 +75,8 @@ const LinkPreviewBlock = ({
       // Get the correct backend URL from environment variables
       const API_URL = import.meta.env.VITE_NOTES_URL;
 
-      // Use authenticated fetch like other API calls
-      const response = await authService.authenticatedFetch(
+      // Use the shared local API client.
+      const response = await apiClient.request(
         `${API_URL}/api/notes/link-preview`,
         {
           method: "POST",

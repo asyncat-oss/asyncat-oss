@@ -6,7 +6,7 @@
  * external API communications.
  */
 
-import authService from "../services/authService.js";
+import apiClient from "../services/apiClient.js";
 
 // API Base URLs from environment variables
 const KANBAN_API_URL = import.meta.env.VITE_KANBAN_URL + "/api";
@@ -39,14 +39,14 @@ const debounceApiCall = (url, requestFn) => {
 };
 
 /**
- * Generic fetch wrapper with error handling and authentication
+ * Generic fetch wrapper with error handling
  */
 const apiRequest = async (url, options = {}) => {
 	// Use debouncing for GET requests to prevent excessive API calls
 	const shouldDebounce = !options.method || options.method === "GET";
 
 	const makeRequest = async () => {
-		const response = await authService.authenticatedFetch(url, options);
+		const response = await apiClient.request(url, options);
 
 		if (!response.ok) {
 			const errorData = await response.json().catch(() => ({}));
@@ -73,7 +73,7 @@ const apiRequestRaw = async (url, options = {}) => {
 	const shouldDebounce = !options.method || options.method === "GET";
 
 	const makeRequest = async () => {
-		const response = await authService.authenticatedFetch(url, {
+		const response = await apiClient.request(url, {
 			...options,
 			headers: {
 				...options.headers,

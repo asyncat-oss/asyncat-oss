@@ -54,7 +54,7 @@ export const ICONS = {
 export const BACKEND_PORT  = parseInt(process.env.PORT || '8716', 10);
 export const FRONTEND_PORT = parseInt(process.env.ASYNCAT_FRONTEND_PORT || '8717', 10);
 
-export const BACKEND_URL   = `http://localhost:${BACKEND_PORT}`;
+export const BACKEND_URL   = `http://127.0.0.1:${BACKEND_PORT}`;
 export const HEALTH_URL    = `${BACKEND_URL}/health`;
 
 // ─── App Meta ─────────────────────────────────────────────────────────────────

@@ -2,23 +2,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { SquareTerminal, Plus, X, Bot, Square, RefreshCw, Globe, FolderOpen } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
-import authService from '../../../services/authService.js';
 
-// ─── Auth + API helpers ───────────────────────────────────────────────────────
+// ─── API helpers ──────────────────────────────────────────────────────────────
 
 const PROCESS_API = import.meta.env.VITE_MAIN_URL + '/api';
 
-function processAuthHeaders() {
-  const token = authService.getAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function fetchAgentSessions() {
   try {
-    const res = await fetch(`${PROCESS_API}/agent/processes`, {
-      credentials: 'include',
-      headers: processAuthHeaders(),
-    });
+    const res = await fetch(`${PROCESS_API}/agent/processes`);
     if (!res.ok) return [];
     const data = await res.json();
     return data?.sessions || [];
@@ -31,8 +22,6 @@ async function killAgentSession(key) {
   try {
     const res = await fetch(`${PROCESS_API}/agent/processes/${encodeURIComponent(key)}`, {
       method: 'DELETE',
-      credentials: 'include',
-      headers: processAuthHeaders(),
     });
     return res.ok;
   } catch {

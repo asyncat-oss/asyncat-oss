@@ -1,4 +1,4 @@
-import authService from '../../services/authService.js';
+import apiClient from '../../services/apiClient.js';
 
 const API_BASE_URL = import.meta.env.VITE_MAIN_URL + '/api';
 const USER_API_BASE_URL = import.meta.env.VITE_USER_URL + '/api';
@@ -80,7 +80,6 @@ const apiRequest = async (url, options = {}) => {
       'Content-Type': 'application/json',
       ...options.headers
     },
-    credentials: 'include',
     ...options
   };
 
@@ -94,7 +93,7 @@ const apiRequest = async (url, options = {}) => {
     }
   }
 
-  const response = await authService.authenticatedFetch(finalUrl, defaultOptions);
+  const response = await apiClient.request(finalUrl, defaultOptions);
   return await handleResponse(response);
 };
 

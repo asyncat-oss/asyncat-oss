@@ -849,7 +849,7 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                   }, 50);
                 }}
                 onError={() => {
-                  // Try to refresh the URL with a new token if it's an auth-related failure
+                  // Retry the local URL with a cache-busting parameter.
                   if (filename && selectedNote?.id) {
                     const newUrl = attachmentsApi.getAttachmentUrl(
                       selectedNote.id,
@@ -859,7 +859,7 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                     const separator = newUrl.includes("?") ? "&" : "?";
                     const refreshedUrl = `${newUrl}${separator}t=${Date.now()}`;
 
-                    // Only try to refresh if the URL is different (has a new token)
+                    // Only retry when the URL changes.
                     if (refreshedUrl !== videoUrl) {
                       onChange(block.id, {
                         properties: {
@@ -916,7 +916,7 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                   }, 50);
                 }}
                 onError={() => {
-                  // Try to refresh the URL with a new token if it's an auth-related failure
+                  // Retry the local URL with a cache-busting parameter.
                   if (filename && selectedNote?.id) {
                     const newUrl = attachmentsApi.getAttachmentUrl(
                       selectedNote.id,
@@ -926,7 +926,7 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                     const separator = newUrl.includes("?") ? "&" : "?";
                     const refreshedUrl = `${newUrl}${separator}t=${Date.now()}`;
 
-                    // Only try to refresh if the URL is different (has a new token)
+                    // Only retry when the URL changes.
                     if (refreshedUrl !== videoUrl) {
                       onChange(block.id, {
                         properties: {
@@ -1177,7 +1177,7 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                 onWaiting={() => setIsVideoBuffering(true)}
                 onCanPlay={() => setIsVideoBuffering(false)}
                 onError={() => {
-                  // Try to refresh the URL with a new token if it's an auth-related failure
+                  // Retry the local URL with a cache-busting parameter.
                   if (filename && selectedNote?.id) {
                     const newUrl = attachmentsApi.getAttachmentUrl(
                       selectedNote.id,
@@ -1187,7 +1187,7 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
                     const separator = newUrl.includes("?") ? "&" : "?";
                     const refreshedUrl = `${newUrl}${separator}t=${Date.now()}`;
 
-                    // Only try to refresh if the URL is different (has a new token)
+                    // Only retry when the URL changes.
                     if (refreshedUrl !== videoUrl) {
                       onChange(block.id, {
                         properties: {

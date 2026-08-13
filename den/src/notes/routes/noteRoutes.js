@@ -1,8 +1,7 @@
-// noteRoutes.js - Clean routes with authentication middleware
+// noteRoutes.js - local note routes
 import express from "express";
 import * as noteController from "../controllers/noteController.js";
 import * as exportController from "../controllers/exportController.js";
-import { auth } from "../middleware/auth.js";
 import {
   sanitizeNoteInput,
   sanitizeChangesetInput,
@@ -11,11 +10,10 @@ import {
 
 const router = express.Router();
 
-// Apply authentication and security middleware to all routes
-router.use(auth);
+// Apply request sanitization to all routes.
 router.use(securityMiddleware);
 
-// Protected routes with sanitization
+// Note routes with sanitization
 router.get("/", noteController.getNotes);
 router.post("/:id/delta", sanitizeChangesetInput, noteController.applyDeltaChanges);
 router.get("/:id", noteController.getNoteById);

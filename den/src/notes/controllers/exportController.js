@@ -11,10 +11,6 @@ export async function exportDocx(req, res) {
     const userId = req.user?.id;
     const db = req.db;
 
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
     const docxBuffer = await exportNoteAsDocx(id, userId, db);
 
     // Get note title for filename
@@ -55,10 +51,6 @@ export async function exportPdf(req, res) {
     const { id } = req.params;
     const userId = req.user?.id;
     const db = req.db;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
 
     const forwardedProtoHeader = req.headers["x-forwarded-proto"];
     const forwardedProto = Array.isArray(forwardedProtoHeader)

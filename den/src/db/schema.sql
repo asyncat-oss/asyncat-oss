@@ -26,7 +26,6 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
   id              TEXT PRIMARY KEY,
   email           TEXT NOT NULL UNIQUE,
-  password_hash   TEXT,                  -- bcrypt; NULL until first login set
   name            TEXT,
   profile_picture TEXT,
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
@@ -520,7 +519,7 @@ CREATE TABLE IF NOT EXISTS custom_model_paths (
 
 -- ─── Integrations ─────────────────────────────────────────────────────────────
 -- One row per user per provider. Tokens are encrypted at rest by the OS keychain
--- for production; for local OSS they live in the DB (same threat model as JWT_SECRET).
+-- for production; for local OSS they live in the local database.
 
 CREATE TABLE IF NOT EXISTS user_integrations (
   id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -610,7 +609,7 @@ CREATE INDEX IF NOT EXISTS idx_notification_log_created ON notification_log(crea
 
 -- ─── App Config ────────────────────────────────────────────────────────────────
 -- Runtime configuration that used to live in den/.env. Bootstrap-only values
--- (DB_PATH, PORT, JWT_SECRET, paths the logger/storage need before the DB opens)
+-- (DB_PATH, PORT, and paths the logger/storage need before the DB opens)
 -- stay in .env; everything else (local-AI engine paths/ports, capability
 -- providers, integration OAuth creds, mail, notifications) is stored here and
 -- hydrated into process.env at boot. See den/src/config/appConfig.js.

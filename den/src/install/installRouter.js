@@ -1,12 +1,10 @@
 import express from 'express';
-import { auth } from '../users/middleware/auth.js';
 import {
   inspectSystemDependencies,
   recommendedInstallCommands,
 } from '../lib/systemDeps.js';
 
 const router = express.Router();
-router.use(auth);
 
 // GET /api/install/readiness — local installer/runtime dependency status.
 router.get('/readiness', (_req, res) => {

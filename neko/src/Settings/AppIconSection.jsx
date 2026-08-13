@@ -7,16 +7,15 @@ import {
   RotateCcw,
   Check,
   Loader2,
-  Info,
 } from "lucide-react";
 
 // Presets must mirror ICON_PRESETS in electron/icon.js. Files live in neko/public.
 const PRESETS = [{ key: "default", name: "Asyncat", src: "/app-icon-512.png" }];
 
 const cardClasses =
-  "bg-white dark:bg-gray-900 midnight:bg-gray-950 p-6 rounded-xl shadow-sm border border-gray-200/70 dark:border-gray-800 midnight:border-gray-800";
+  "bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 rounded-xl border border-gray-200/80 dark:border-gray-800 midnight:border-slate-800";
 const insetClasses =
-  "bg-gray-50/80 dark:bg-gray-800/80 midnight:bg-gray-900/80 p-4 rounded-lg border border-gray-200/60 dark:border-gray-700/70 midnight:border-gray-700/70";
+  "mt-4";
 const mutedClasses =
   "text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400";
 
@@ -83,25 +82,7 @@ const AppIconSection = () => {
   }, []);
 
   if (!isSupported) {
-    return (
-      <section className={cardClasses}>
-        <div className="flex items-center gap-2 mb-4">
-          <ImageIcon
-            size={20}
-            className="text-gray-700 dark:text-gray-200 midnight:text-gray-200"
-          />
-          <h3 className="text-base font-medium text-gray-800 dark:text-gray-100 midnight:text-gray-100">
-            App Icon
-          </h3>
-        </div>
-        <div className={insetClasses}>
-          <p className={`${mutedClasses} flex items-center gap-2`}>
-            <Info size={15} className="shrink-0" />
-            App icon customization is available in the Asyncat desktop app.
-          </p>
-        </div>
-      </section>
-    );
+    return null;
   }
 
   const apply = async (run, successText) => {

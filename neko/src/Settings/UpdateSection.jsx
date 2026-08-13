@@ -6,7 +6,7 @@ const RELEASES_URL = 'https://github.com/asyncat-oss/asyncat-oss/releases';
 
 const isPackaged = window.electronAPI?.isPackaged === true;
 
-const soraFontBase = 'font-sora';
+const settingsFontBase = 'font-sans';
 
 const UpdateSection = () => {
   const [localInfo, setLocalInfo] = useState(null);
@@ -24,17 +24,24 @@ const UpdateSection = () => {
 
   // Register electron-updater listeners
   useEffect(() => {
-    if (!window.electronAPI) return;
-    window.electronAPI.getPlatform().then(p => setPlatform(p));
-    window.electronAPI.onUpdateChecking(() => setPkgStatus('checking'));
-    window.electronAPI.onUpdateAvailable((info) => { setPkgStatus('available'); setPkgUpdateInfo(info); });
-    window.electronAPI.onUpdateNotAvailable((info) => { setPkgStatus('up-to-date'); setPkgUpdateInfo(info); });
-    window.electronAPI.onUpdateProgress((p) => { setPkgStatus('downloading'); setPkgProgress(p); });
-    window.electronAPI.onUpdateDownloaded((info) => { setPkgStatus('downloaded'); setPkgUpdateInfo(info); });
-    window.electronAPI.onUpdateError((msg) => { setPkgStatus('error'); setPkgError(msg); });
+    const api = window.electronAPI;
+    if (!api) return undefined;
+    api.getPlatform().then(p => setPlatform(p));
+    const markUpdateAvailable = (available) => {
+      sessionStorage.setItem('asyncatUpdateAvailable', available ? 'true' : 'false');
+    };
+    const cleanups = [
+      api.onUpdateChecking(() => setPkgStatus('checking')),
+      api.onUpdateAvailable((info) => { markUpdateAvailable(true); setPkgStatus('available'); setPkgUpdateInfo(info); }),
+      api.onUpdateNotAvailable((info) => { markUpdateAvailable(false); setPkgStatus('up-to-date'); setPkgUpdateInfo(info); }),
+      api.onUpdateProgress((p) => { setPkgStatus('downloading'); setPkgProgress(p); }),
+      api.onUpdateDownloaded((info) => { markUpdateAvailable(true); setPkgStatus('downloaded'); setPkgUpdateInfo(info); }),
+      api.onUpdateError((msg) => { setPkgStatus('error'); setPkgError(msg); }),
+    ];
     return () => {
-      ['update:checking', 'update:available', 'update:not-available', 'update:progress', 'update:downloaded', 'update:error']
-        .forEach(ch => window.electronAPI.removeAllListeners(ch));
+      cleanups.forEach((cleanup) => {
+        if (typeof cleanup === 'function') cleanup();
+      });
     };
   }, []);
 
@@ -68,7 +75,7 @@ const UpdateSection = () => {
   const isMac = platform === 'darwin';
 
   return (
-    <div className={`space-y-6 ${soraFontBase}`}>
+    <div className={`space-y-6 ${settingsFontBase}`}>
 
       {/* Current version */}
       <div>
@@ -127,7 +134,7 @@ const UpdateSection = () => {
             {pkgStatus === 'up-to-date' && (
               <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                 <CheckCircle2 size={15} />
-                <span>You're on the latest version</span>
+                <span>You are on the latest version</span>
                 {pkgUpdateInfo?.version && (
                   <span className="text-xs text-gray-400 ml-1">v{pkgUpdateInfo.version}</span>
                 )}

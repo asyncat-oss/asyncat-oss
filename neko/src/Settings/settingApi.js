@@ -1,8 +1,7 @@
 // Centralized API functions for Settings components
-import authService from "../services/authService.js";
+import apiClient from "../services/apiClient.js";
 
 const MAIN_URL = import.meta.env.VITE_USER_URL;
-const AUTH_API_URL = import.meta.env.VITE_AUTH_URL;
 
 // Helper function to handle API responses
 const handleResponse = async (response) => {
@@ -17,7 +16,7 @@ const handleResponse = async (response) => {
 
 // Helper function to make API calls with common options
 const apiCall = async (url, options = {}) => {
-	const response = await authService.authenticatedFetch(url, options);
+	const response = await apiClient.request(url, options);
 	return handleResponse(response);
 };
 
@@ -67,20 +66,6 @@ export const workspaceApi = {
 };
 
 // ===========================================
-// SECURITY/AUTH API FUNCTIONS
-// ===========================================
-
-export const securityApi = {
-	// Change password
-	changePassword: async (currentPassword, newPassword) => {
-		return apiCall(`${AUTH_API_URL}/auth/change-password`, {
-			method: "POST",
-			body: JSON.stringify({ currentPassword, newPassword }),
-		});
-	},
-};
-
-// ===========================================
 // PROFILE API FUNCTIONS
 // ===========================================
 
@@ -104,7 +89,7 @@ export const profileApi = {
 		const formData = new FormData();
 		formData.append("profilePicture", file);
 
-		const response = await authService.authenticatedFetch(
+		const response = await apiClient.request(
 			`${MAIN_URL}/api/users/me/profile-picture`,
 			{
 				method: "POST",
@@ -269,9 +254,8 @@ export const aiProviderApi = {
   },
 
   streamStatus: (onStatus, onError) => {
-    const token = authService.getAccessToken();
-    if (!token || typeof EventSource === 'undefined') return null;
-    const source = new EventSource(`${AI_API_URL}/status/stream?token=${encodeURIComponent(token)}`);
+    if (typeof EventSource === 'undefined') return null;
+    const source = new EventSource(`${AI_API_URL}/status/stream`);
     source.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
@@ -365,7 +349,7 @@ export const localModelsApi = {
     });
   },
 
-  // Poll download progress (replaces SSE — avoids EventSource auth issues)
+  // Poll download progress.
   // Returns a cleanup function that stops polling when called.
   streamDownloadProgress: (downloadId, onProgress, onDone, onError) => {
     let stopped = false;
@@ -811,14 +795,6 @@ export const apiUtils = {
 	isNetworkError: (error) => {
 		return error instanceof TypeError && error.message.includes("fetch");
 	},
-
-	// Check if error is unauthorized
-	isUnauthorized: (error) => {
-		return (
-			error.message?.includes("unauthorized") ||
-			error.message?.includes("401")
-		);
-	},
 };
 
 // ===========================================
@@ -894,15 +870,10 @@ export const audioApi = {
       return () => { stopped = true; clearTimeout(timerId); };
     },
     transcribe: async (audioBlob, language) => {
-      const token = (await import('../services/authService.js')).default.getAccessToken();
       const url = new URL(`${AI_API_BASE}/audio/transcribe`, window.location.origin);
       if (language) url.searchParams.append('language', language);
-      const res = await fetch(url.toString(), {
+      const res = await apiClient.request(url.toString(), {
         method: 'POST',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
         body: audioBlob,
       });
       if (!res.ok) {
@@ -932,14 +903,9 @@ export const audioApi = {
     },
     // Generate speech — returns audio blob URL
     speak: async (text, options = {}) => {
-      const token = (await import('../services/authService.js')).default.getAccessToken();
-      const res = await fetch(`${AI_API_BASE}/audio/speak`, {
+      const res = await apiClient.request(`${AI_API_BASE}/audio/speak`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, ...options }),
       });
       if (!res.ok) {

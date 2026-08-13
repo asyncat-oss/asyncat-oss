@@ -7,8 +7,7 @@
 // just get their values from the DB instead of the file.
 //
 // BOOTSTRAP_KEYS are the chicken-and-egg values needed before the DB is open
-// (or to verify auth on every request). Those stay in den/.env and are never
-// written here.
+// Those stay in den/.env and are never written here.
 import db from '../db/client.js';
 
 // Values that must remain in den/.env (read before the DB exists, or every request).
@@ -16,17 +15,12 @@ export const BOOTSTRAP_KEYS = new Set([
   'DB_PATH',
   'PORT',
   'NODE_ENV',
-  'JWT_SECRET',
-  'JWT_EXPIRES_IN',
   'ASYNCAT_HOME',
   'ASYNCAT_LOG_DIR',
   'STORAGE_DRIVER',
   'STORAGE_PATH',
   'FRONTEND_URL',
   'PUBLIC_URL',
-  // First-run seed only; harmless to keep in .env.
-  'LOCAL_EMAIL',
-  'LOCAL_PASSWORD',
 ]);
 
 export function isBootstrapKey(key) {

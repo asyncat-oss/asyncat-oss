@@ -1,6 +1,11 @@
 // electron/preload.js — Secure bridge between renderer and main process
 const { contextBridge, ipcRenderer } = require('electron');
 
+const subscribe = (channel, listener) => {
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+};
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // ─── App Info ─────────────────────────────────────────────────────────
   getAppVersion:  () => ipcRenderer.invoke('app:version'),
@@ -57,14 +62,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openReleasesPage:  () => ipcRenderer.invoke('update:open-releases'),
 
   // ─── Event Listeners ──────────────────────────────────────────────────
-  onBackendReady:       (cb) => ipcRenderer.on('backend:ready', () => cb()),
-  onBackendError:       (cb) => ipcRenderer.on('backend:error', (_e, msg) => cb(msg)),
-  onUpdateChecking:     (cb) => ipcRenderer.on('update:checking', () => cb()),
-  onUpdateAvailable:    (cb) => ipcRenderer.on('update:available', (_e, info) => cb(info)),
-  onUpdateNotAvailable: (cb) => ipcRenderer.on('update:not-available', (_e, info) => cb(info)),
-  onUpdateProgress:     (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
-  onUpdateDownloaded:   (cb) => ipcRenderer.on('update:downloaded', (_e, info) => cb(info)),
-  onUpdateError:        (cb) => ipcRenderer.on('update:error', (_e, msg) => cb(msg)),
+  onBackendReady:       (cb) => subscribe('backend:ready', () => cb()),
+  onBackendError:       (cb) => subscribe('backend:error', (_e, msg) => cb(msg)),
+  onUpdateChecking:     (cb) => subscribe('update:checking', () => cb()),
+  onUpdateAvailable:    (cb) => subscribe('update:available', (_e, info) => cb(info)),
+  onUpdateNotAvailable: (cb) => subscribe('update:not-available', (_e, info) => cb(info)),
+  onUpdateProgress:     (cb) => subscribe('update:progress', (_e, p) => cb(p)),
+  onUpdateDownloaded:   (cb) => subscribe('update:downloaded', (_e, info) => cb(info)),
+  onUpdateError:        (cb) => subscribe('update:error', (_e, msg) => cb(msg)),
 
   // ─── Terminal ─────────────────────────────────────────────────────────────
   terminalCreate:    (opts) => ipcRenderer.invoke('terminal:create', opts),

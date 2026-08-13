@@ -6,7 +6,7 @@ import crypto from 'crypto';
 const STORAGE_ROOT = process.env.STORAGE_PATH
   ? path.resolve(process.env.STORAGE_PATH)
   : path.resolve('data', 'uploads');
-const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://localhost:8716';
+const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://127.0.0.1:8716';
 const PROFILE_PICTURES_DIR = path.join(STORAGE_ROOT, 'profile-pictures');
 
 /**
@@ -14,7 +14,7 @@ const PROFILE_PICTURES_DIR = path.join(STORAGE_ROOT, 'profile-pictures');
  */
 export async function getCurrentUserProfile(req, res) {
   try {
-    // Use middleware-provided authentication data
+    // Use the local profile and database context.
     const { user, db } = req;
     
     // Get user details from the database
@@ -31,7 +31,7 @@ export async function getCurrentUserProfile(req, res) {
     });
   } catch (error) {
     console.error("Fetch user profile error:", error);
-    res.status(error.message === "Invalid session" ? 401 : 500).json({
+    res.status(500).json({
       success: false,
       error: error.message || "Failed to fetch user profile",
     });
@@ -43,7 +43,7 @@ export async function updateUserProfile(req, res) {
   const { name, profile_picture } = req.body;
 
   try {
-    // Use middleware-provided authentication data
+    // Use the local profile and database context.
     const { user, db } = req;
 
     // Make sure we have an update to perform
@@ -107,7 +107,7 @@ export async function updateUserProfile(req, res) {
     });
   } catch (error) {
     console.error("Update user profile error:", error);
-    res.status(error.message === "Invalid session" ? 401 : 500).json({
+    res.status(500).json({
       success: false,
       error: error.message || "Failed to update user profile",
     });
@@ -194,40 +194,16 @@ export async function getUserById(req, res) {
   const { id } = req.params;
 
   try {
-    // TEMPORARY: Disable internal authentication to test if RLS is the issue
-    // Check if this is an internal service call
-    // More robust detection: no auth token OR has internal service header
-    const hasNoAuth = !req.user; // Check if middleware set user (from JWT)
-    const hasInternalHeader = req.headers["x-internal-service"] === "true";
-    const isLocalhost =
-      req.ip === "127.0.0.1" ||
-      req.ip === "::1" ||
-      req.connection?.remoteAddress === "127.0.0.1" ||
-      req.connection?.remoteAddress === "::1" ||
-      req.headers.host?.includes("localhost");
-
-    // TEMPORARILY DISABLE internal call detection
-    const isInternalCall = false; // hasInternalHeader || (hasNoSession && isLocalhost);
-
-    console.log(
-      `getUserById called for ${id} - Internal: ${isInternalCall}, NoAuth: ${hasNoAuth}, Internal Header: ${hasInternalHeader}, Localhost: ${isLocalhost}`
-    );
-
-    // Use req.db if available (authenticated), otherwise fall back to compat singleton
     const db = req.db || sqliteDb;
-    console.log("🔍 Using compat client for userId:", id);
 
     const { data: profile, error } = await db
       .from("users")
-      .select("id, name, profile_picture, email") // Include email for internal calls
-      .eq("id", id); // Remove .single() to get all matching rows
+      .select("id, name, profile_picture, email")
+      .eq("id", id);
 
     if (error) {
-      console.error("Supabase error:", error);
       throw error;
     }
-
-    console.log(`Found ${profile?.length || 0} users for ID: ${id}`);
 
     // Handle single result
     if (!profile || profile.length === 0) {
@@ -247,7 +223,7 @@ export async function getUserById(req, res) {
     });
   } catch (error) {
     console.error("Fetch user by ID error:", error);
-    res.status(error.message === "Invalid session" ? 401 : 500).json({
+    res.status(500).json({
       success: false,
       error: error.message || "Failed to fetch user",
     });
@@ -268,8 +244,7 @@ export async function getUsersByIds(req, res) {
   }
 
   try {
-    // Use middleware-provided authentication data (might be null for optionalAuth)
-    let { user, db } = req;
+    let { db } = req;
     
     // If no db client from middleware, use the singleton SQLite client
     if (!db) {
@@ -289,7 +264,7 @@ export async function getUsersByIds(req, res) {
     });
   } catch (error) {
     console.error("Fetch users by IDs error:", error);
-    res.status(error.message === "Invalid session" ? 401 : 500).json({
+    res.status(500).json({
       success: false,
       error: error.message || "Failed to fetch users",
     });
@@ -310,7 +285,6 @@ export async function searchUsers(req, res) {
   }
 
   try {
-    // Use middleware-provided authentication data (might be null for optionalAuth)
     let { user, db } = req;
     
     // If no db client from middleware, use the singleton SQLite client
@@ -318,13 +292,13 @@ export async function searchUsers(req, res) {
       db = sqliteDb;
     }
 
-    // Search by name or email, excluding the current user (if authenticated)
+    // Search by name or email, excluding the local profile.
     let query_builder = db
       .from("users")
       .select("id, name, email, profile_picture")
       .or(`name.ilike.%${query}%,email.ilike.%${query}%`);
     
-    // Only exclude current user if we have an authenticated user
+    // The local profile is always available on req.user.
     if (user) {
       query_builder = query_builder.neq("id", user.id);
     }
@@ -339,7 +313,7 @@ export async function searchUsers(req, res) {
     });
   } catch (error) {
     console.error("Search users error:", error);
-    res.status(error.message === "Invalid session" ? 401 : 500).json({
+    res.status(500).json({
       success: false,
       error: error.message || "Failed to search users",
     });

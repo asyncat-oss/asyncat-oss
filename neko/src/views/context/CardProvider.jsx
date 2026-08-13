@@ -2,14 +2,14 @@ import { useState, useCallback, useEffect } from "react";
 import CardDetailModal from "../tasks/carddetail/CardDetailModal";
 import { CardContext, useColumnContext } from "./viewContexts";
 
-export const CardProvider = ({ children, session }) => {
+export const CardProvider = ({ children, localUser }) => {
 	const [selectedCard, setSelectedCard] = useState(null);
 	const [showAddCardModal, setShowAddCardModal] = useState(false);
 	const [deletingCards, setDeletingCards] = useState([]);
 
 	const { setColumns } = useColumnContext();
 
-	const userId = session?.user?.id || null;
+	const userId = localUser?.id || null;
 
 	// Force refresh mechanism to clean up ghost cards
 	const forceRefreshCards = useCallback(() => {

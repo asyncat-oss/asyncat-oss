@@ -1,13 +1,8 @@
-// columnRoutes.js - Updated to use Supabase auth
+// columnRoutes.js - local column routes
 import express from "express";
 import columnController from "../controllers/columnController.js";
-import { verifyUser } from "../../auth/authMiddleware.js";
-import { attachDb } from "../../db/sqlite.js";
 
 const router = express.Router();
-
-// Apply authentication middleware to all routes
-router.use(verifyUser, attachDb);
 
 // Column routes
 router.get("/", columnController.getColumns);

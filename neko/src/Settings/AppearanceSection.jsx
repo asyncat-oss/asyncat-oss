@@ -1,11 +1,10 @@
 import {
   BrainCircuit,
+  Bell,
   Cpu,
   Layout,
   Moon,
-  MousePointer,
   PanelLeft,
-  PanelRight,
   Palette,
   Sparkles,
   Star,
@@ -14,39 +13,33 @@ import {
   Wrench,
   KanbanSquare,
   GraduationCap,
+  Workflow,
 } from "lucide-react";
-import { useState } from "react";
 import KeyboardShortcutsSection from "./KeyboardShortcutsSection.jsx";
 import AppIconSection from "./AppIconSection.jsx";
 import PetSection from "./PetSection.jsx";
 import PropTypes from "prop-types";
+import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
 
 const cardClasses =
-  "bg-white dark:bg-gray-900 midnight:bg-gray-950 p-6 rounded-xl shadow-sm border border-gray-200/70 dark:border-gray-800 midnight:border-gray-800";
+  "overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950";
 const insetClasses =
-  "bg-gray-50/80 dark:bg-gray-800/80 midnight:bg-gray-900/80 p-4 rounded-lg border border-gray-200/60 dark:border-gray-700/70 midnight:border-gray-700/70";
+  "p-4";
 const textClasses = "text-gray-700 dark:text-gray-200 midnight:text-gray-200";
-const mutedClasses =
-  "text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400 mt-4";
-
-const dispatchPreferenceChange = (eventName) => {
-  window.dispatchEvent(new Event(eventName));
-};
 
 const PreferenceCard = ({ icon: Icon, title, description, children }) => (
   <section className={cardClasses}>
-    <div className="flex items-center gap-2 mb-4">
-      <Icon
-        size={20}
-        className="text-gray-700 dark:text-gray-200 midnight:text-gray-200"
-      />
-      <h3 className="text-base font-medium text-gray-800 dark:text-gray-100 midnight:text-gray-100">
-        {title}
-      </h3>
+    <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-800 midnight:border-slate-800">
+      <div className="flex items-center gap-2">
+        <Icon size={16} className="text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+          {title}
+        </h3>
+      </div>
+      {description ? <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{description}</p> : null}
     </div>
     <div className={insetClasses}>
       <div className="flex flex-col gap-3">{children}</div>
-      {description ? <p className={mutedClasses}>{description}</p> : null}
     </div>
   </section>
 );
@@ -94,85 +87,18 @@ const CheckboxRow = ({ checked, onChange, icon: Icon, label, locked }) => (
   </label>
 );
 
-const DEFAULT_NAV_ITEMS = {
-  projects: true,
-  models: true,
-  tools: true,
-  training: true,
-  agent: true,
-  trash: true,
-};
-
-const loadNavItemsVisibility = () => {
-  try {
-    const stored = localStorage.getItem("navItemsVisibility");
-    return stored
-      ? { ...DEFAULT_NAV_ITEMS, ...JSON.parse(stored) }
-      : { ...DEFAULT_NAV_ITEMS };
-  } catch {
-    return { ...DEFAULT_NAV_ITEMS };
-  }
-};
-
 const AppearanceSection = ({ theme, setThemeMode }) => {
-  const [sidebarPosition, setSidebarPosition] = useState(() => {
-    return localStorage.getItem("sidebarPosition") || "left";
-  });
-  const [sidebarState, setSidebarState] = useState(() => {
-    return localStorage.getItem("sidebarState") || "expanded";
-  });
-  const [sidebarVisibility, setSidebarVisibility] = useState(() => {
-    return localStorage.getItem("sidebarVisibility") || "always";
-  });
-  const [topMenuBarVisibility, setTopMenuBarVisibility] = useState(() => {
-    return localStorage.getItem("topMenuBarVisibility") || "always";
-  });
-  const [pageTransitions, setPageTransitions] = useState(() => {
-    return localStorage.getItem("pageTransitions") || "on";
-  });
-  const [navItemsVisibility, setNavItemsVisibility] = useState(
-    loadNavItemsVisibility,
-  );
-
-  const handleSidebarPositionChange = (value) => {
-    setSidebarPosition(value);
-    localStorage.setItem("sidebarPosition", value);
-    dispatchPreferenceChange("sidebar-position-changed");
-  };
-
-  const handleSidebarStateChange = (value) => {
-    setSidebarState(value);
-    localStorage.setItem("sidebarState", value);
-    dispatchPreferenceChange("sidebar-state-changed");
-  };
-
-  const handleSidebarVisibilityChange = (value) => {
-    setSidebarVisibility(value);
-    localStorage.setItem("sidebarVisibility", value);
-    dispatchPreferenceChange("sidebar-visibility-changed");
-  };
-
-  const handleTopMenuBarVisibilityChange = (value) => {
-    setTopMenuBarVisibility(value);
-    localStorage.setItem("topMenuBarVisibility", value);
-    dispatchPreferenceChange("top-menu-bar-visibility-changed");
-  };
-
-  const handlePageTransitionsChange = (value) => {
-    setPageTransitions(value);
-    localStorage.setItem("pageTransitions", value);
-    dispatchPreferenceChange("page-transitions-changed");
-  };
-
-  const handleNavItemToggle = (key) => {
-    const next = { ...navItemsVisibility, [key]: !navItemsVisibility[key] };
-    setNavItemsVisibility(next);
-    localStorage.setItem("navItemsVisibility", JSON.stringify(next));
-    dispatchPreferenceChange("nav-items-visibility-changed");
-  };
+  const {
+    sidebarState,
+    setSidebarState,
+    pageTransitionsEnabled,
+    setPageTransitionsEnabled,
+    navItemsVisibility,
+    toggleNavItem,
+  } = useUiPreferences();
 
   return (
-    <div className="space-y-6 font-sora">
+    <div className="space-y-5">
       <PreferenceCard
         icon={Palette}
         title="Theme"
@@ -208,109 +134,76 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
         />
       </PreferenceCard>
 
-      <AppIconSection />
-
-      <PetSection />
-
       <PreferenceCard
         icon={Layout}
-        title="Visible Nav Items"
-        description="Command Center is always shown. Toggle everything else."
+        title="Navigation"
+        description="Choose whether the sidebar shows labels, then keep only the destinations you use. Command Center and Settings are always available."
       >
+        <div className="grid gap-2 sm:grid-cols-2">
+          <RadioRow
+            name="sidebarState"
+            icon={PanelLeft}
+            label="Show labels"
+            checked={sidebarState === "expanded"}
+            onChange={() => setSidebarState("expanded")}
+          />
+          <RadioRow
+            name="sidebarState"
+            label="Compact icons"
+            checked={sidebarState === "collapsed"}
+            onChange={() => setSidebarState("collapsed")}
+          />
+        </div>
+        <div className="mt-1 border-t border-gray-100 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:border-gray-800 dark:text-gray-600 midnight:border-slate-800 midnight:text-slate-600">
+          Visible destinations
+        </div>
         <CheckboxRow
           icon={KanbanSquare}
           label="Tasks"
           checked={navItemsVisibility.projects}
-          onChange={() => handleNavItemToggle("projects")}
+          onChange={() => toggleNavItem("projects")}
+        />
+        <CheckboxRow
+          icon={Workflow}
+          label="Workflows"
+          checked={navItemsVisibility.workflows}
+          onChange={() => toggleNavItem("workflows")}
+        />
+        <CheckboxRow
+          icon={Bell}
+          label="Activity"
+          checked={navItemsVisibility.activity}
+          onChange={() => toggleNavItem("activity")}
         />
         <CheckboxRow
           icon={Cpu}
           label="Models"
           checked={navItemsVisibility.models}
-          onChange={() => handleNavItemToggle("models")}
+          onChange={() => toggleNavItem("models")}
         />
         <CheckboxRow
           icon={Wrench}
           label="Tools & Skills"
           checked={navItemsVisibility.tools}
-          onChange={() => handleNavItemToggle("tools")}
+          onChange={() => toggleNavItem("tools")}
         />
         <CheckboxRow
           icon={BrainCircuit}
-          label="Agent"
+          label="Automation"
           checked={navItemsVisibility.agent}
-          onChange={() => handleNavItemToggle("agent")}
+          onChange={() => toggleNavItem("agent")}
         />
         <CheckboxRow
           icon={GraduationCap}
           label="Training"
           checked={navItemsVisibility.training}
-          onChange={() => handleNavItemToggle("training")}
+          onChange={() => toggleNavItem("training")}
         />
         <CheckboxRow
           icon={Trash2}
           label="Trash"
           checked={navItemsVisibility.trash}
-          onChange={() => handleNavItemToggle("trash")}
-        />
-      </PreferenceCard>
-
-      <PreferenceCard
-        icon={Layout}
-        title="Sidebar Position"
-        description="Choose which edge the persistent sidebar uses."
-      >
-        <RadioRow
-          name="sidebarPosition"
-          icon={PanelLeft}
-          label="Left"
-          checked={sidebarPosition === "left"}
-          onChange={() => handleSidebarPositionChange("left")}
-        />
-        <RadioRow
-          name="sidebarPosition"
-          icon={PanelRight}
-          label="Right"
-          checked={sidebarPosition === "right"}
-          onChange={() => handleSidebarPositionChange("right")}
-        />
-      </PreferenceCard>
-
-      <PreferenceCard
-        icon={PanelLeft}
-        title="Sidebar Size"
-        description="Keep labels visible or collapse the sidebar to icons."
-      >
-        <RadioRow
-          name="sidebarState"
-          label="Expanded"
-          checked={sidebarState === "expanded"}
-          onChange={() => handleSidebarStateChange("expanded")}
-        />
-        <RadioRow
-          name="sidebarState"
-          label="Collapsed"
-          checked={sidebarState === "collapsed"}
-          onChange={() => handleSidebarStateChange("collapsed")}
-        />
-      </PreferenceCard>
-
-      <PreferenceCard
-        icon={MousePointer}
-        title="Sidebar Visibility"
-        description="Choose whether the sidebar stays open or appears near the screen edge."
-      >
-        <RadioRow
-          name="sidebarVisibility"
-          label="Always Visible"
-          checked={sidebarVisibility === "always"}
-          onChange={() => handleSidebarVisibilityChange("always")}
-        />
-        <RadioRow
-          name="sidebarVisibility"
-          label="Show on Hover"
-          checked={sidebarVisibility === "hover"}
-          onChange={() => handleSidebarVisibilityChange("hover")}
+          onChange={() => toggleNavItem("trash")}
         />
       </PreferenceCard>
 
@@ -322,35 +215,20 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
         <RadioRow
           name="pageTransitions"
           label="Subtle Transitions"
-          checked={pageTransitions === "on"}
-          onChange={() => handlePageTransitionsChange("on")}
+          checked={pageTransitionsEnabled}
+          onChange={() => setPageTransitionsEnabled(true)}
         />
         <RadioRow
           name="pageTransitions"
           label="No Page Motion"
-          checked={pageTransitions === "off"}
-          onChange={() => handlePageTransitionsChange("off")}
+          checked={!pageTransitionsEnabled}
+          onChange={() => setPageTransitionsEnabled(false)}
         />
       </PreferenceCard>
 
-      <PreferenceCard
-        icon={Layout}
-        title="Top Menu Bar"
-        description="Toggle the top menu bar that displays app status and quick actions."
-      >
-        <RadioRow
-          name="topMenuBarVisibility"
-          label="Always Show"
-          checked={topMenuBarVisibility === "always"}
-          onChange={() => handleTopMenuBarVisibilityChange("always")}
-        />
-        <RadioRow
-          name="topMenuBarVisibility"
-          label="Hide"
-          checked={topMenuBarVisibility === "hidden"}
-          onChange={() => handleTopMenuBarVisibilityChange("hidden")}
-        />
-      </PreferenceCard>
+      <AppIconSection />
+
+      <PetSection />
 
       <KeyboardShortcutsSection />
     </div>

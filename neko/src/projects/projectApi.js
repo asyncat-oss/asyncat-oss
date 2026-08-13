@@ -1,9 +1,9 @@
-import authService from '../services/authService.js';
+import apiClient from '../services/apiClient.js';
 
 const API_URL = import.meta.env.VITE_USER_URL;
 
 const apiFetch = async (url, options = {}) => {
-  const response = await authService.authenticatedFetch(url, options);
+  const response = await apiClient.request(url, options);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`);

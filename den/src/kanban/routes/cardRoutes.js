@@ -1,8 +1,6 @@
 import express from "express";
 import multer from "multer";
 import cardController from "../controllers/cardController.js";
-import { verifyUser } from "../../auth/authMiddleware.js";
-import { attachDb } from "../../db/sqlite.js";
 
 const router = express.Router();
 
@@ -26,8 +24,6 @@ const upload = multer({
     cb(allowed.includes(file.mimetype) ? null : new Error(`Invalid file type: ${file.mimetype}`), allowed.includes(file.mimetype));
   },
 });
-
-router.use(verifyUser, attachDb);
 
 router.get("/column/:columnId", cardController.getCards);
 router.get("/:id", cardController.getCard);

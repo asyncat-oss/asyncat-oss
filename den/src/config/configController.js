@@ -11,8 +11,6 @@ const ROOT = path.resolve(__dirname, '..', '..', '..');
 const ENV_FILE = path.join(ROOT, 'den', '.env');
 
 const SECRETS = [
-  'JWT_SECRET',
-  'LOCAL_PASSWORD',
   'HF_TOKEN',
   'OPENAI_API_KEY',
   'ELEVENLABS_API_KEY',
@@ -34,7 +32,6 @@ const SECRETS = [
   'NOTIFY_SLACK_WEBHOOK',
   'NOTIFY_TELEGRAM_BOT_TOKEN',
 ];
-const LEGACY_SECRETS = ['SOLO_PASSWORD'];
 
 function maskSecret(value) {
   if (!value || value.length < 8) return '***';
@@ -107,7 +104,7 @@ export function getConfig(req, res) {
 
   const masked = {};
   for (const [k, v] of Object.entries(env)) {
-    masked[k] = [...SECRETS, ...LEGACY_SECRETS].includes(k) ? maskSecret(v) : v;
+    masked[k] = SECRETS.includes(k) ? maskSecret(v) : v;
   }
 
   res.json({
@@ -126,7 +123,7 @@ export function updateConfig(req, res) {
     return res.status(400).json({ success: false, error: 'key and value are required' });
   }
 
-  const allowed = [...SECRETS, 'LOCAL_EMAIL', 'ASYNCAT_WORKSPACE_ROOT', 'WORKSPACE_ROOT', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH', 'WHISPER_SERVER_PORT', 'WHISPER_BINARY_PATH', 'TTS_SERVER_PORT', 'PIPER_BINARY_PATH', 'IMAGEGEN_BINARY_PATH', 'COMFYUI_BASE_URL', 'ASYNCAT_STT_PROVIDER', 'ASYNCAT_TTS_PROVIDER', 'ASYNCAT_VISION_PROVIDER', 'ASYNCAT_IMAGE_PROVIDER', 'OBSIDIAN_VAULT_PATH', 'MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_IMAP_SECURE', 'MAIL_IMAP_USER', 'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_SMTP_SECURE', 'MAIL_SMTP_USER', 'MAIL_FROM_EMAIL', 'MAIL_FROM_NAME', 'NOTIFY_EMAIL_TO', 'NOTIFY_TELEGRAM_CHAT_ID', 'NOTIFY_DEFAULT_CHANNELS'];
+  const allowed = [...SECRETS, 'ASYNCAT_WORKSPACE_ROOT', 'WORKSPACE_ROOT', 'LLAMA_SERVER_PORT', 'LLAMA_BINARY_PATH', 'LLAMA_PYTHON_PATH', 'LLAMA_GPU_LAYERS', 'LLAMA_CTX_SIZE', 'MODELS_PATH', 'STORAGE_PATH', 'WHISPER_SERVER_PORT', 'WHISPER_BINARY_PATH', 'TTS_SERVER_PORT', 'PIPER_BINARY_PATH', 'IMAGEGEN_BINARY_PATH', 'COMFYUI_BASE_URL', 'ASYNCAT_STT_PROVIDER', 'ASYNCAT_TTS_PROVIDER', 'ASYNCAT_VISION_PROVIDER', 'ASYNCAT_IMAGE_PROVIDER', 'OBSIDIAN_VAULT_PATH', 'MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_IMAP_SECURE', 'MAIL_IMAP_USER', 'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_SMTP_SECURE', 'MAIL_SMTP_USER', 'MAIL_FROM_EMAIL', 'MAIL_FROM_NAME', 'NOTIFY_EMAIL_TO', 'NOTIFY_TELEGRAM_CHAT_ID', 'NOTIFY_DEFAULT_CHANNELS'];
   if (!allowed.includes(key)) {
     return res.status(400).json({ success: false, error: `Key not allowed: ${key}. Allowed: ${allowed.join(', ')}` });
   }
