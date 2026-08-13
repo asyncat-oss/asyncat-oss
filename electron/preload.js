@@ -59,7 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates:   () => ipcRenderer.invoke('update:check'),
   downloadUpdate:    () => ipcRenderer.invoke('update:download'),
   installUpdate:     () => ipcRenderer.invoke('update:install'),
-  openReleasesPage:  () => ipcRenderer.invoke('update:open-releases'),
+  openReleasesPage:  (url) => ipcRenderer.invoke('update:open-releases', url),
 
   // ─── Event Listeners ──────────────────────────────────────────────────
   onBackendReady:       (cb) => subscribe('backend:ready', () => cb()),
@@ -67,8 +67,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateChecking:     (cb) => subscribe('update:checking', () => cb()),
   onUpdateAvailable:    (cb) => subscribe('update:available', (_e, info) => cb(info)),
   onUpdateNotAvailable: (cb) => subscribe('update:not-available', (_e, info) => cb(info)),
-  onUpdateProgress:     (cb) => subscribe('update:progress', (_e, p) => cb(p)),
-  onUpdateDownloaded:   (cb) => subscribe('update:downloaded', (_e, info) => cb(info)),
   onUpdateError:        (cb) => subscribe('update:error', (_e, msg) => cb(msg)),
 
   // ─── Terminal ─────────────────────────────────────────────────────────────

@@ -1,83 +1,106 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, ArrowUpCircle, CheckCircle2, XCircle, Loader2, ExternalLink, Package } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  ArrowUpCircle,
+  CheckCircle2,
+  ExternalLink,
+  Loader2,
+  Package,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
 import { updateApi } from './settingApi';
 
 const RELEASES_URL = 'https://github.com/asyncat-oss/asyncat-oss/releases';
-
 const isPackaged = window.electronAPI?.isPackaged === true;
-
 const settingsFontBase = 'font-sans';
+
+function publishUpdateFlag(available) {
+  sessionStorage.setItem('asyncatUpdateAvailable', available ? 'true' : 'false');
+  window.dispatchEvent(new CustomEvent('asyncat:update-flag', { detail: available }));
+}
+
+function installInstructions(platform) {
+  if (platform === 'darwin') {
+    return 'Quit Asyncat, open the downloaded DMG, drag Asyncat to Applications, choose Replace, and relaunch.';
+  }
+  if (platform === 'linux') {
+    return 'Quit Asyncat, then replace your AppImage or install the downloaded DEB over the current version.';
+  }
+  return 'Quit Asyncat and run the downloaded installer over your current installation.';
+}
 
 const UpdateSection = () => {
   const [localInfo, setLocalInfo] = useState(null);
-
-  // ─── Packaged build: electron-updater state ──────────────────────────────
-  const [pkgStatus, setPkgStatus] = useState(null); // null|'checking'|'up-to-date'|'available'|'downloading'|'downloaded'|'error'
-  const [pkgUpdateInfo, setPkgUpdateInfo] = useState(null);
-  const [pkgProgress, setPkgProgress] = useState(null);
-  const [pkgError, setPkgError] = useState(null);
+  const [status, setStatus] = useState(null); // null|'checking'|'up-to-date'|'available'|'opening'|'error'
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [error, setError] = useState(null);
   const [platform, setPlatform] = useState(null);
 
   useEffect(() => {
-    loadLocalInfo();
+    updateApi.getStatus()
+      .then((data) => { if (data.success) setLocalInfo(data); })
+      .catch(() => {});
   }, []);
 
-  // Register electron-updater listeners
   useEffect(() => {
     const api = window.electronAPI;
     if (!api) return undefined;
-    api.getPlatform().then(p => setPlatform(p));
-    const markUpdateAvailable = (available) => {
-      sessionStorage.setItem('asyncatUpdateAvailable', available ? 'true' : 'false');
-    };
+
+    api.getPlatform().then(setPlatform);
     const cleanups = [
-      api.onUpdateChecking(() => setPkgStatus('checking')),
-      api.onUpdateAvailable((info) => { markUpdateAvailable(true); setPkgStatus('available'); setPkgUpdateInfo(info); }),
-      api.onUpdateNotAvailable((info) => { markUpdateAvailable(false); setPkgStatus('up-to-date'); setPkgUpdateInfo(info); }),
-      api.onUpdateProgress((p) => { setPkgStatus('downloading'); setPkgProgress(p); }),
-      api.onUpdateDownloaded((info) => { markUpdateAvailable(true); setPkgStatus('downloaded'); setPkgUpdateInfo(info); }),
-      api.onUpdateError((msg) => { setPkgStatus('error'); setPkgError(msg); }),
+      api.onUpdateChecking(() => setStatus('checking')),
+      api.onUpdateAvailable((info) => {
+        publishUpdateFlag(true);
+        setStatus('available');
+        setUpdateInfo(info);
+      }),
+      api.onUpdateNotAvailable((info) => {
+        publishUpdateFlag(false);
+        setStatus('up-to-date');
+        setUpdateInfo(info);
+      }),
+      api.onUpdateError((message) => {
+        setStatus('error');
+        setError(message);
+      }),
     ];
-    return () => {
-      cleanups.forEach((cleanup) => {
-        if (typeof cleanup === 'function') cleanup();
-      });
-    };
+
+    // Opening Settings after the startup check should still show fresh state.
+    if (isPackaged) api.checkForUpdates();
+
+    return () => cleanups.forEach((cleanup) => {
+      if (typeof cleanup === 'function') cleanup();
+    });
   }, []);
 
-  const loadLocalInfo = async () => {
-    try {
-      const data = await updateApi.getStatus();
-      if (data.success) setLocalInfo(data);
-    } catch {
-      // Version info is optional — fail silently
-    }
-  };
-
   const handleCheckForUpdates = async () => {
-    setPkgStatus('checking');
-    setPkgError(null);
+    setStatus('checking');
+    setError(null);
     const result = await window.electronAPI?.checkForUpdates();
     if (result && !result.success) {
-      setPkgStatus('error');
-      setPkgError(result.error || 'Check failed');
+      setStatus('error');
+      setError(result.error || 'Update check failed.');
     }
   };
 
   const handleDownloadUpdate = async () => {
+    setStatus('opening');
+    setError(null);
     const result = await window.electronAPI?.downloadUpdate();
     if (result && !result.success) {
-      setPkgStatus('error');
-      setPkgError(result.error || 'Download failed');
+      setStatus('error');
+      setError(result.error || 'Could not open the installer download.');
+      return;
     }
+    setStatus('available');
   };
 
-  const isMac = platform === 'darwin';
+  const openReleaseNotes = () => {
+    window.electronAPI?.openReleasesPage(updateInfo?.releaseUrl || RELEASES_URL);
+  };
 
   return (
     <div className={`space-y-6 ${settingsFontBase}`}>
-
-      {/* Current version */}
       <div>
         <div className="flex items-center gap-2 mb-4">
           <Package size={18} className="text-gray-500 dark:text-gray-400" />
@@ -92,20 +115,19 @@ const UpdateSection = () => {
               <p className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">v{localInfo.version}</p>
             </div>
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
-              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Install type</p>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Desktop app</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Update channel</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Public beta</p>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[1, 2].map(i => (
-              <div key={i} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 animate-pulse" />
+            {[1, 2].map((item) => (
+              <div key={item} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 animate-pulse" />
             ))}
           </div>
         )}
       </div>
 
-      {/* Auto-update */}
       <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
         <div className="flex items-center gap-2 mb-4">
           <ArrowUpCircle size={18} className="text-gray-500 dark:text-gray-400" />
@@ -114,174 +136,97 @@ const UpdateSection = () => {
           </h3>
         </div>
 
-        {/* dev-mode notice */}
         {!isPackaged && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Update checks are only available in packaged builds. Run{' '}
-            <code className="font-mono px-1 rounded bg-gray-100 dark:bg-gray-800">npm run electron:build</code>{' '}
-            to produce a distributable, or visit{' '}
-            <a href={RELEASES_URL} target="_blank" rel="noreferrer"
-              className="underline hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-              GitHub Releases
-            </a>{' '}
-            to download the latest version.
+            Update checks are available in packaged builds. Development installs update through Git.
           </p>
         )}
 
-        {/* idle or up-to-date */}
-        {isPackaged && (!pkgStatus || pkgStatus === 'up-to-date') && (
+        {isPackaged && (!status || status === 'up-to-date') && (
           <div className="space-y-3">
-            {pkgStatus === 'up-to-date' && (
+            {status === 'up-to-date' && (
               <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                 <CheckCircle2 size={15} />
                 <span>You are on the latest version</span>
-                {pkgUpdateInfo?.version && (
-                  <span className="text-xs text-gray-400 ml-1">v{pkgUpdateInfo.version}</span>
-                )}
               </div>
             )}
             <button
+              type="button"
               onClick={handleCheckForUpdates}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-                bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700
-                midnight:bg-slate-800 midnight:hover:bg-slate-700
-                text-gray-700 dark:text-gray-200 midnight:text-slate-200 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 midnight:bg-slate-800 midnight:hover:bg-slate-700 text-gray-700 dark:text-gray-200 midnight:text-slate-200 transition-colors"
             >
               <RefreshCw size={14} />
-              {pkgStatus === 'up-to-date' ? 'Check again' : 'Check for updates'}
+              {status === 'up-to-date' ? 'Check again' : 'Check for updates'}
             </button>
           </div>
         )}
 
-        {/* checking */}
-        {isPackaged && pkgStatus === 'checking' && (
+        {isPackaged && status === 'checking' && (
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <Loader2 size={15} className="animate-spin" />
-            <span>Checking for updates…</span>
+            <span>Checking GitHub Releases…</span>
           </div>
         )}
 
-        {/* update available */}
-        {isPackaged && pkgStatus === 'available' && (
+        {isPackaged && (status === 'available' || status === 'opening') && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
               <ArrowUpCircle size={15} />
-              <span>
-                Version <strong>v{pkgUpdateInfo?.version}</strong> is available
-              </span>
+              <span>Version <strong>v{updateInfo?.version}</strong> is available</span>
             </div>
-            {pkgUpdateInfo?.releaseDate && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Released {new Date(pkgUpdateInfo.releaseDate).toLocaleDateString()}.
-                {' '}Download and install to get the latest features and fixes.
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {installInstructions(platform)} Your settings and local data are kept.
+            </p>
+            {!updateInfo?.assetUrl && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                The exact {platform || 'platform'} installer was not found, so the button will open the release page.
               </p>
             )}
             <div className="flex items-center gap-3 flex-wrap">
               <button
+                type="button"
+                disabled={status === 'opening'}
                 onClick={handleDownloadUpdate}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-                  bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600
-                  text-white transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white transition-colors"
               >
-                <ArrowUpCircle size={14} />
-                Download update
+                {status === 'opening' ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+                {status === 'opening' ? 'Opening download…' : 'Download installer'}
               </button>
-              <a
-                href={RELEASES_URL}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={openReleaseNotes}
                 className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
               >
                 <ExternalLink size={12} />
                 View release notes
-              </a>
+              </button>
             </div>
           </div>
         )}
 
-        {/* downloading */}
-        {isPackaged && pkgStatus === 'downloading' && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400">
-              <Loader2 size={15} className="animate-spin" />
-              <span>Downloading v{pkgUpdateInfo?.version}…</span>
-              {pkgProgress?.percent != null && (
-                <span className="text-xs text-gray-400 ml-1">
-                  {Math.round(pkgProgress.percent)}%
-                </span>
-              )}
-            </div>
-            {pkgProgress?.percent != null && (
-              <div className="w-full bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(pkgProgress.percent)}%` }}
-                />
-              </div>
-            )}
-            {pkgProgress?.bytesPerSecond != null && (
-              <p className="text-xs text-gray-400 tabular-nums">
-                {(pkgProgress.transferred / 1048576).toFixed(1)} MB
-                {' / '}
-                {(pkgProgress.total / 1048576).toFixed(1)} MB
-                {'  ·  '}
-                {(pkgProgress.bytesPerSecond / 1024).toFixed(0)} KB/s
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* downloaded — ready to install */}
-        {isPackaged && pkgStatus === 'downloaded' && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-              <CheckCircle2 size={15} />
-              <span>v{pkgUpdateInfo?.version} is ready to install</span>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {isMac
-                ? 'Download the latest DMG from GitHub Releases, drag it to Applications, and relaunch.'
-                : 'The app will quit and restart automatically to apply the update.'}
-            </p>
-            <button
-              onClick={() => window.electronAPI?.installUpdate()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-                bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600
-                text-white transition-colors"
-            >
-              {isMac ? <ExternalLink size={14} /> : <ArrowUpCircle size={14} />}
-              {isMac ? 'Open Releases Page' : 'Install and Restart'}
-            </button>
-          </div>
-        )}
-
-        {/* error */}
-        {isPackaged && pkgStatus === 'error' && (
+        {isPackaged && status === 'error' && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
               <XCircle size={15} />
-              <span>{pkgError || 'Update check failed'}</span>
+              <span>{error || 'Update check failed.'}</span>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <button
+                type="button"
                 onClick={handleCheckForUpdates}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-                  bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700
-                  midnight:bg-slate-800 midnight:hover:bg-slate-700
-                  text-gray-700 dark:text-gray-200 midnight:text-slate-200 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 midnight:bg-slate-800 midnight:hover:bg-slate-700 text-gray-700 dark:text-gray-200 midnight:text-slate-200 transition-colors"
               >
                 <RefreshCw size={14} />
                 Try again
               </button>
-              <a
-                href={RELEASES_URL}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => window.electronAPI?.openReleasesPage(RELEASES_URL)}
                 className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
               >
                 <ExternalLink size={12} />
-                View releases manually
-              </a>
+                Open GitHub Releases
+              </button>
             </div>
           </div>
         )}

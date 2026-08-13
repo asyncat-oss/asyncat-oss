@@ -3,6 +3,13 @@
   "productName": "Asyncat",
   "version": "0.7.4",
   "description": "Asyncat — open-source AI-powered workspace for teams",
+  "author": "Asyncat Contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/asyncat-oss/asyncat-oss",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asyncat-oss/asyncat-oss.git"
+  },
   "type": "module",
   "private": true,
   "main": "electron/main.js",
@@ -24,9 +31,9 @@
     "electron:build:mac": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --mac --config electron-builder.yml",
     "electron:build:win": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --win --config electron-builder.yml",
     "electron:build:linux": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --linux --config electron-builder.yml",
-    "electron:rebuild": "npx electron-rebuild",
-    "electron:publish": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --publish always --config electron-builder.yml",
-    "electron:publish:mac": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --mac --publish always --config electron-builder.yml"
+    "release:validate": "node scripts/validate-release.js",
+    "release:verify": "node scripts/verify-package.js",
+    "test:release": "node --test electron/update-policy.test.js scripts/validate-release.test.js"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || ^24.0.0 || ^25.0.0 || ^26.0.0"
@@ -35,13 +42,12 @@
     "dompurify": "^3.4.7"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.4",
     "concurrently": "^9.2.1",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
+    "den": "0.7.4",
     "node-pty": "^1.1.0"
   }
 }

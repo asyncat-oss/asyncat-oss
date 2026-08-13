@@ -106,18 +106,23 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
 
   useEffect(() => {
     const api = window.electronAPI;
-    if (!api?.onUpdateAvailable || !api?.onUpdateDownloaded) return undefined;
-    const markAvailable = () => {
-      sessionStorage.setItem("asyncatUpdateAvailable", "true");
-      setUpdateAvailable(true);
+    if (!api?.onUpdateAvailable) return undefined;
+    const markAvailable = (available = true) => {
+      sessionStorage.setItem("asyncatUpdateAvailable", available ? "true" : "false");
+      setUpdateAvailable(available);
     };
+    const handleFlag = (event) => markAvailable(Boolean(event.detail));
     const cleanups = [
-      api.onUpdateAvailable(markAvailable),
-      api.onUpdateDownloaded(markAvailable),
+      api.onUpdateAvailable(() => markAvailable(true)),
+      api.onUpdateNotAvailable(() => markAvailable(false)),
     ];
-    return () => cleanups.forEach((cleanup) => {
-      if (typeof cleanup === "function") cleanup();
-    });
+    window.addEventListener("asyncat:update-flag", handleFlag);
+    return () => {
+      cleanups.forEach((cleanup) => {
+        if (typeof cleanup === "function") cleanup();
+      });
+      window.removeEventListener("asyncat:update-flag", handleFlag);
+    };
   }, []);
 
   useEffect(() => {
@@ -270,7 +275,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
               </span>
             )}
             label="Settings"
-            onClick={() => navigate("/settings/profile")}
+            onClick={() => navigate(updateAvailable ? "/settings/about" : "/settings/profile")}
             isActive={isOnSettings}
             collapsed={collapsed}
           />

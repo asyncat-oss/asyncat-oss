@@ -25,7 +25,17 @@ const destDir = join(ROOT, 'resources', 'node-bin');
 const cacheDir = join(ROOT, '.node-bundle-cache');
 
 const platform = process.platform;
-const arch = process.arch;
+const archArg = process.argv.find((value) => value.startsWith('--arch='));
+const arch = archArg ? archArg.slice('--arch='.length) : process.arch;
+if (!['x64', 'arm64'].includes(arch)) {
+  throw new Error(`Unsupported target architecture: ${arch}`);
+}
+if (arch !== process.arch) {
+  throw new Error(
+    `Refusing to bundle ${arch} from a ${process.arch} host. Backend native modules `
+    + 'must be installed and packaged on the target architecture.',
+  );
+}
 const version = process.version; // e.g. 'v26.0.0'
 const exeName = platform === 'win32' ? 'node.exe' : 'node';
 const dest = join(destDir, exeName);

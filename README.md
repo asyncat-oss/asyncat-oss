@@ -72,9 +72,9 @@ Moving from a web app to a native desktop app unlocks things that aren't possibl
 
 Download the latest native package for your system from the **Releases** page:
 
-- **macOS**: `.dmg` (x64 / arm64 Apple Silicon)
-- **Windows**: `.exe` (NSIS installer)
-- **Linux**: `.AppImage` or `.deb`
+- **macOS**: `.dmg` (Intel x64 or Apple Silicon arm64)
+- **Windows**: `.exe` (x64 NSIS installer)
+- **Linux**: `.AppImage` or `.deb` (x64)
 
 > See [Code Signing Warnings](#-code-signing-warnings) below — macOS and Windows will show a security warning on first launch. This is expected for unsigned open-source software. The workarounds are straightforward.
 
@@ -87,9 +87,6 @@ cd asyncat-oss
 
 # Install dependencies
 npm install
-
-# Rebuild native SQLite/Puppeteer modules for Electron's Node version
-npm run electron:rebuild
 
 # Launch dev server + Electron app
 npm run electron:dev
@@ -111,7 +108,20 @@ npm run electron:build:linux
 
 Output packages go into the `release/` directory.
 
-> Cross-platform note: macOS builds must be done on macOS. Windows builds can be done on macOS/Linux with Wine, or on Windows natively. Linux builds work on any platform.
+> Native-build note: build on the same OS and CPU architecture as the target. The backend includes native SQLite and Canvas modules, so relabeling a cross-compiled package is unsafe. GitHub Actions builds every published target on a matching native runner.
+
+### Publishing a release
+
+The three package versions (`package.json`, `den/package.json`, and `neko/package.json`) must match the tag. Validate them before tagging:
+
+```bash
+npm install --package-lock-only
+npm run release:validate -- v0.7.5-beta.1
+git tag v0.7.5-beta.1
+git push origin v0.7.5-beta.1
+```
+
+The release workflow builds and verifies each native package, creates SHA-256 checksums, and publishes all installers to one GitHub Release. Tags containing a suffix such as `-beta.1` become GitHub prereleases.
 
 ---
 
@@ -122,15 +132,14 @@ Output packages go into the `release/` directory.
 ```bash
 git pull
 npm install
-npm run electron:rebuild
 npm run electron:dev
 ```
 
-Run `electron:rebuild` after every `npm install` when Electron or any native module (`better-sqlite3`, `canvas`, `node-pty`) changes version. If you skip it the app will crash on launch with a native module error.
-
 ### Pre-built installers
 
-Download the new release from the Releases page and reinstall. In-app updates (`Settings → Updates`) also work for source installs only.
+Asyncat checks published GitHub releases after launch. A dot appears on Settings when a newer version exists. Open **Settings → About**, click **Download installer**, quit Asyncat, and run the installer over the existing installation. The updater selects the asset for the current OS and CPU; settings and local data remain in the OS user-data directory.
+
+Beta builds use assisted installation because they are unsigned. The app will not silently replace itself.
 
 ---
 
@@ -311,13 +320,13 @@ The backend failed to start. Check:
 
 ### `better-sqlite3` crashes or fails to load
 
-The native module must be compiled against Electron's Node.js ABI:
+The backend native modules must be compiled for the system Node.js version used during installation:
 
 ```bash
-npm run electron:rebuild
+npm rebuild better-sqlite3 canvas
 ```
 
-Run this after `npm install` whenever Electron is upgraded.
+Do not rebuild these backend modules against Electron; packaged builds run them with the separately bundled Node.js runtime.
 
 ### Tray icon missing on Linux
 
@@ -329,9 +338,9 @@ sudo apt install libappindicator1
 sudo apt install libayatana-appindicator1
 ```
 
-### In-app updates (Settings → Updates)
+### Assisted desktop updates (Settings → About)
 
-The in-app update flow (`git pull` + dependency reinstall) works for **source installs only**. If you installed a pre-built `.dmg` / `.exe` / `.AppImage`, download the new release from the Releases page and reinstall it.
+Packaged builds check GitHub Releases automatically and open the exact installer for their OS and CPU. Quit Asyncat and install the downloaded version over the existing app. Source installations continue to update with `git pull` and `npm install`.
 
 ---
 

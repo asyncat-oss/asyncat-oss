@@ -1,111 +1,123 @@
-// electron/updater.js — Auto-update via electron-updater + GitHub Releases
+// electron/updater.js — assisted beta updates through GitHub Releases.
 //
-// How it works:
-//   1. On app launch (packaged builds only), we check GitHub Releases for a
-//      newer version by reading latest-mac.yml / latest.yml published there.
-//   2. If an update is found the renderer gets an 'update:available' event.
-//   3. macOS (unsigned): we can check + notify but Gatekeeper will block a
-//      silent quitAndInstall. We detect this and open the browser instead.
-//   4. Windows / Linux: full silent download + install works out of the box.
-//
-// Publishing a release:
-//   GH_TOKEN=<your-pat> npm run electron:publish
-//   electron-builder handles uploading the binaries + latest.yml to the
-//   GitHub Release automatically.
+// Unsigned beta builds deliberately do not replace themselves. The app checks
+// published GitHub releases, selects the installer for this OS/CPU, and opens
+// that installer in the user's browser. The user then closes Asyncat and runs
+// the installer over the existing installation; userData remains untouched.
 
-import { createRequire } from 'module';
-import { ipcMain, shell } from 'electron';
-const { autoUpdater } = createRequire(import.meta.url)('electron-updater');
-import { IS_DEV, IS_MAC } from './constants.js';
+import { app, ipcMain, net, shell } from 'electron';
+import { IS_DEV } from './constants.js';
 import { getMainWindow } from './window.js';
+import {
+  isTrustedReleaseUrl,
+  parseVersion,
+  selectLatestRelease,
+  selectReleaseAsset,
+} from './update-policy.js';
 
 const RELEASES_URL = 'https://github.com/asyncat-oss/asyncat-oss/releases';
+const RELEASES_API_URL = 'https://api.github.com/repos/asyncat-oss/asyncat-oss/releases?per_page=20';
 
-let _initialized = false;
+let initialized = false;
+let currentUpdate = null;
+let pendingCheck = null;
 
-// ─── Setup ────────────────────────────────────────────────────────────────────
+function toUpdateInfo(release) {
+  const parsed = parseVersion(release.tag_name);
+  const linuxPreference = process.platform === 'linux'
+    ? (process.env.APPIMAGE ? '.AppImage' : '.deb')
+    : null;
+  const asset = selectReleaseAsset(release.assets, process.platform, process.arch, linuxPreference);
+  return {
+    version: parsed.version,
+    releaseDate: release.published_at || release.created_at || null,
+    releaseNotes: release.body || '',
+    releaseUrl: release.html_url || RELEASES_URL,
+    assetName: asset?.name || null,
+    assetUrl: asset?.browser_download_url || null,
+    platform: process.platform,
+    arch: process.arch,
+  };
+}
+
+async function fetchPublishedReleases() {
+  const response = await net.fetch(RELEASES_API_URL, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': `Asyncat-Desktop/${app.getVersion()}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!response.ok) {
+    const remaining = response.headers.get('x-ratelimit-remaining');
+    const hint = remaining === '0' ? ' GitHub rate limit reached; try again later.' : '';
+    throw new Error(`GitHub update check failed (${response.status}).${hint}`);
+  }
+  const releases = await response.json();
+  if (!Array.isArray(releases)) throw new Error('GitHub returned an invalid releases response.');
+  return releases;
+}
+
+async function checkForUpdates() {
+  if (IS_DEV) return { success: false, error: 'Update checks are only available in packaged builds.' };
+  if (pendingCheck) return pendingCheck;
+
+  send('update:checking');
+  pendingCheck = (async () => {
+    try {
+      const release = selectLatestRelease(await fetchPublishedReleases(), app.getVersion());
+      if (!release) {
+        currentUpdate = null;
+        const info = { version: app.getVersion() };
+        send('update:not-available', info);
+        return { success: true, updateInfo: null };
+      }
+
+      currentUpdate = toUpdateInfo(release);
+      send('update:available', currentUpdate);
+      return { success: true, updateInfo: currentUpdate };
+    } catch (error) {
+      console.warn('[updater] check failed:', error.message);
+      send('update:error', error.message);
+      return { success: false, error: error.message };
+    } finally {
+      pendingCheck = null;
+    }
+  })();
+  return pendingCheck;
+}
+
+async function openUpdateDownload() {
+  const requestedUrl = currentUpdate?.assetUrl || currentUpdate?.releaseUrl || RELEASES_URL;
+  const url = isTrustedReleaseUrl(requestedUrl) ? requestedUrl : RELEASES_URL;
+  await shell.openExternal(url);
+  return {
+    success: true,
+    opened: url,
+    exactAsset: Boolean(currentUpdate?.assetUrl),
+  };
+}
 
 export function setupAutoUpdater() {
-  if (IS_DEV || _initialized) return;
-  _initialized = true;
+  if (IS_DEV || initialized) return;
+  initialized = true;
 
-  // Don't download automatically — let the user decide
-  autoUpdater.autoDownload    = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  // ── Events ────────────────────────────────────────────────────────────
-
-  autoUpdater.on('checking-for-update', () => {
-    send('update:checking');
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    console.log(`[updater] Update available: v${info.version}`);
-    send('update:available', info);
-  });
-
-  autoUpdater.on('update-not-available', (info) => {
-    send('update:not-available', info);
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    send('update:progress', progress);
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log(`[updater] Downloaded v${info.version}`);
-    send('update:downloaded', info);
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('[updater] error:', err.message);
-    send('update:error', err.message);
-  });
-
-  // Check 5 seconds after launch so the app has time to settle
+  // Give the main window and sidebar time to register their listeners.
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(err => {
-      console.warn('[updater] check failed:', err.message);
-    });
+    checkForUpdates();
   }, 5000);
 }
 
-// ─── IPC Handlers (call once from main.js) ────────────────────────────────────
-
 export function setupUpdaterIPC() {
-  ipcMain.handle('update:check', async () => {
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      return { success: true, updateInfo: result?.updateInfo ?? null };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('update:download', async () => {
-    try {
-      await autoUpdater.downloadUpdate();
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
-  });
-
-  // macOS unsigned: open GitHub Releases in browser instead of quitAndInstall
-  ipcMain.handle('update:install', () => {
-    if (IS_MAC) {
-      shell.openExternal(RELEASES_URL);
-    } else {
-      autoUpdater.quitAndInstall();
-    }
-  });
-
-  ipcMain.handle('update:open-releases', () => {
-    shell.openExternal(RELEASES_URL);
+  ipcMain.handle('update:check', checkForUpdates);
+  ipcMain.handle('update:download', openUpdateDownload);
+  ipcMain.handle('update:install', openUpdateDownload);
+  ipcMain.handle('update:open-releases', async (_event, requestedUrl) => {
+    const url = isTrustedReleaseUrl(requestedUrl) ? requestedUrl : RELEASES_URL;
+    await shell.openExternal(url);
+    return { success: true };
   });
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function send(channel, payload) {
   getMainWindow()?.webContents.send(channel, payload);

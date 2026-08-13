@@ -26,20 +26,13 @@ directories:
 # ─── What goes into the package ───────────────────────────────────────────────
 files:
   - electron/**/*
-  - den/**/*
+  - den/package.json
+  - den/src/**/*
   - neko/dist/**/*
-  - "!den/node_modules/.cache"
-  - "!den/test"
-  - "!den/scripts"
-  - "!den/data/**/*.db"
-  - "!neko/src"
-  - "!neko/node_modules"
-  - "!.git"
-  - "!.claude"
-  - "!.asyncat"
-  - "!logs"
-  - "!data"
-  - "!resources/node-bin"
+  - "!electron/**/*.test.js"
+  - "!node_modules/den/**/*"
+  # Root depends on the den workspace, so electron-builder follows den's full
+  # production dependency graph without copying local secrets or runtime data.
 
 # ─── Extra resources (outside the app directory, next to it) ──────────────────
 # node-bin/ holds the Node.js binary bundled by scripts/bundle-node.js.
@@ -52,16 +45,10 @@ extraResources:
 
 # ─── macOS ────────────────────────────────────────────────────────────────────
 mac:
+  artifactName: "${productName}-${version}-macos-${arch}.${ext}"
   category: public.app-category.productivity
   target:
-    - target: dmg
-      arch:
-        - x64
-        - arm64
-    - target: zip
-      arch:
-        - x64
-        - arm64
+    - dmg
   icon: icon.icns
   darkModeSupport: true
   hardenedRuntime: false         # No code signing for OSS — see README
@@ -81,11 +68,9 @@ dmg:
 
 # ─── Windows ──────────────────────────────────────────────────────────────────
 win:
+  artifactName: "${productName}-${version}-windows-${arch}.${ext}"
   target:
-    - target: nsis
-      arch:
-        - x64
-        - arm64
+    - nsis
   icon: icon.ico
 
 nsis:
@@ -99,15 +84,10 @@ nsis:
 
 # ─── Linux ────────────────────────────────────────────────────────────────────
 linux:
+  artifactName: "${productName}-${version}-linux-${arch}.${ext}"
   target:
-    - target: AppImage
-      arch:
-        - x64
-        - arm64
-    - target: deb
-      arch:
-        - x64
-        - arm64
+    - AppImage
+    - deb
   icon: icons
   category: Utility
   maintainer: Asyncat Contributors
@@ -115,22 +95,3 @@ linux:
   description: >
     Asyncat is a local-first AI Agent OS with built-in kanban, calendar, notes,
     and a brain-inspired agent runtime. It gives your local model superpowers.
-
-deb:
-  depends:
-    - gconf2
-    - gconf-service
-    - libnotify4
-    - libappindicator1
-    - libxtst6
-    - libnss3
-
-# ─── Publish (GitHub Releases) ────────────────────────────────────────────────
-# electron-builder uploads binaries + latest.yml to a GitHub Release.
-# Run via: GH_TOKEN=<pat> npm run electron:publish
-# The PAT needs "repo" scope (Contents: write).
-publish:
-  provider: github
-  owner: asyncat-oss
-  repo: asyncat-oss
-  releaseType: release

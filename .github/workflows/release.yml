@@ -1,13 +1,3 @@
-# ─── Asyncat Desktop — Release workflow ──────────────────────────────────────
-#
-# Triggered by pushing a version tag:
-#   git tag v0.7.4 && git push origin v0.7.4
-#
-# Builds on macOS, Windows, and Linux in parallel and uploads the installers
-# to the GitHub Release created for that tag automatically.
-#
-# No extra secrets needed — GITHUB_TOKEN is provided by Actions automatically.
-
 name: Release
 
 on:
@@ -16,43 +6,137 @@ on:
       - 'v*'
 
 permissions:
-  contents: write   # allows uploading release assets
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            platform_flag: --mac
-          - os: windows-latest
-            platform_flag: --win
-          - os: ubuntu-latest
-            platform_flag: --linux
-
-    runs-on: ${{ matrix.os }}
-
+  validate:
+    name: Validate release version
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout tagged source
         uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: npm
+
+      - name: Validate tag and package versions
+        run: node scripts/validate-release.js "$GITHUB_REF_NAME"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            platform: win
+            arch: x64
+            artifact_name: windows-x64
+            artifact_path: release/Asyncat-*-windows-x64.exe
+          - name: Linux x64
+            os: ubuntu-latest
+            platform: linux
+            arch: x64
+            artifact_name: linux-x64
+            artifact_path: |
+              release/Asyncat-*-linux-x64.AppImage
+              release/Asyncat-*-linux-x64.deb
+          - name: macOS Apple Silicon
+            os: macos-15
+            platform: mac
+            arch: arm64
+            artifact_name: macos-arm64
+            artifact_path: release/Asyncat-*-macos-arm64.dmg
+          - name: macOS Intel
+            os: macos-15-intel
+            platform: mac
+            arch: x64
+            artifact_name: macos-x64
+            artifact_path: release/Asyncat-*-macos-x64.dmg
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Confirm native runner architecture
+        run: node -e "if (process.arch !== '${{ matrix.arch }}') throw new Error('Runner architecture is ' + process.arch + ', expected ${{ matrix.arch }}')"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Bundle portable Node binary
-        run: node scripts/bundle-node.js
+      - name: Bundle target-native Node.js
+        run: node scripts/bundle-node.js --arch=${{ matrix.arch }}
 
       - name: Build frontend
         run: npm run build -w neko
 
-      - name: Build & publish Electron app
+      - name: Build desktop package
+        run: npm exec -- electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never --config electron-builder.yml
+
+      - name: Verify packaged runtime and privacy contract
+        run: node scripts/verify-package.js --arch=${{ matrix.arch }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified installers
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum Asyncat-* > SHA256SUMS.txt
+
+      - name: Publish release once
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder ${{ matrix.platform_flag }} --publish always --config electron-builder.yml
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          prerelease=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            prerelease+=(--prerelease)
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --verify-tag \
+              --generate-notes \
+              --title "Asyncat $RELEASE_TAG" \
+              "${prerelease[@]}"
+          fi
