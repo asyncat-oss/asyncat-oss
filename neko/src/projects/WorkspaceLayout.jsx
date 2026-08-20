@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import PropTypes from 'prop-types';
 import { Outlet, useOutletContext, useNavigate } from "react-router-dom";
-import { FolderOpen } from "lucide-react";
+import { ArrowRight, FolderOpen } from "lucide-react";
 import ProjectSidebar from "./ProjectSidebar";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 
-export const WorkspaceEmpty = ({ basePath = '/projects', emptyLabel = 'projects' }) => {
+export const WorkspaceEmpty = ({ basePath = '/projects' }) => {
   const { getWorkspaceProjects } = useWorkspace();
   const navigate = useNavigate();
   const [checked, setChecked] = useState(false);
+  const isTaskSection = basePath === '/tasks';
 
   useEffect(() => {
     getWorkspaceProjects()
@@ -34,11 +35,23 @@ export const WorkspaceEmpty = ({ basePath = '/projects', emptyLabel = 'projects'
       <div className="text-center px-8">
         <FolderOpen className="mx-auto w-10 h-10 text-gray-300 dark:text-gray-600 midnight:text-gray-700 mb-3" />
         <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300 midnight:text-gray-300 mb-1">
-          No {emptyLabel} yet
+          No projects yet
         </h3>
         <p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
-          Click the + in the sidebar to create your first project.
+          {isTaskSection
+            ? 'Tasks live inside projects. Create a project first, then return here.'
+            : 'Use New in the sidebar to create your first project.'}
         </p>
+        {isTaskSection && (
+          <button
+            type="button"
+            onClick={() => navigate('/projects')}
+            className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+          >
+            Open Projects
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -46,7 +59,6 @@ export const WorkspaceEmpty = ({ basePath = '/projects', emptyLabel = 'projects'
 
 WorkspaceEmpty.propTypes = {
   basePath: PropTypes.string,
-  emptyLabel: PropTypes.string,
 };
 
 const WorkspaceLayout = ({ basePath = '/projects', section = 'projects' }) => {
@@ -54,7 +66,7 @@ const WorkspaceLayout = ({ basePath = '/projects', section = 'projects' }) => {
 
   return (
     <div className="flex h-full">
-      <ProjectSidebar basePath={basePath} sectionLabel={section === 'tasks' ? 'Task boards' : 'Projects'} />
+      <ProjectSidebar basePath={basePath} mode={section} />
       <div className="flex-1 min-w-0 overflow-hidden">
         <Outlet context={{ ...outletContext, basePath, section }} />
       </div>

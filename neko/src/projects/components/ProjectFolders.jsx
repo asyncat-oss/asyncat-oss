@@ -23,6 +23,7 @@ export default function ProjectFolders({ project, compact = false }) {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [manualPath, setManualPath] = useState('');
+  const [showManualEntry, setShowManualEntry] = useState(false);
   const [error, setError] = useState('');
   const [pendingRemove, setPendingRemove] = useState(null);
   const [busyFolderId, setBusyFolderId] = useState(null);
@@ -54,6 +55,7 @@ export default function ProjectFolders({ project, compact = false }) {
     try {
       await projectApi.addProjectFolder(project.id, { path: selectedPath });
       setManualPath('');
+      setShowManualEntry(false);
       await loadFolders();
       eventBus.emit('projectsUpdated');
       eventBus.emit('projectFoldersUpdated', { projectId: project.id });
@@ -147,7 +149,16 @@ export default function ProjectFolders({ project, compact = false }) {
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Folders with AI access</div>
             <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Removing access never deletes the folder or its files.</div>
           </div>
-          {window.electronAPI?.openDirectory && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowManualEntry((visible) => !visible)}
+              disabled={adding}
+              className="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            >
+              {showManualEntry ? 'Hide path entry' : 'Enter path'}
+            </button>
+            {window.electronAPI?.openDirectory && (
             <button
               type="button"
               onClick={browseForFolder}
@@ -155,14 +166,15 @@ export default function ProjectFolders({ project, compact = false }) {
               className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
             >
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
-              Add folder
+              Choose folder
             </button>
-          )}
+            )}
+          </div>
         </div>
 
-        <form
+        {showManualEntry && <form
           onSubmit={(event) => { event.preventDefault(); addFolder(manualPath); }}
-          className="flex gap-2 border-b border-gray-100 p-3 dark:border-gray-800 midnight:border-slate-800"
+          className="flex gap-2 border-b border-gray-100 bg-gray-50/50 p-3 dark:border-gray-800 dark:bg-gray-950/30 midnight:border-slate-800 midnight:bg-slate-950/40"
         >
           <input
             value={manualPath}
@@ -179,7 +191,7 @@ export default function ProjectFolders({ project, compact = false }) {
             {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
             Add
           </button>
-        </form>
+        </form>}
 
         {error && <div className="border-b border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-600 dark:border-red-950 dark:bg-red-950/20 dark:text-red-400">{error}</div>}
 

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Play, Loader2, Bot } from 'lucide-react';
+import PropTypes from 'prop-types';
+import { X, Play, Loader2, Bot, Check } from 'lucide-react';
 import { profilesApi, agentTaskRunsApi } from '../../../../CommandCenter/api';
 import { cardAPI } from '../../../viewsApi';
+import Portal from '../../../../components/Portal';
 
 const PROFILE_COLOR_MAP = {
   indigo:  'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
@@ -38,6 +39,14 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
       .finally(() => setLoadingProfiles(false));
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !submitting) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, submitting]);
+
   const handleSubmit = async () => {
     if (!goal.trim() || !selectedProfileId || !column?.id) return;
     setSubmitting(true);
@@ -67,29 +76,36 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
 
   const canSubmit = goal.trim() && selectedProfileId && !submitting;
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/20 dark:bg-black/50 midnight:bg-black/70 backdrop-blur-[2px]"
-        onClick={e => e.target === e.currentTarget && onClose()}
+        className="absolute inset-0 bg-black/35 dark:bg-black/60"
+        onClick={e => e.target === e.currentTarget && !submitting && onClose()}
       />
-      <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-white/10 flex flex-col overflow-hidden">
+      <div className="relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950" role="dialog" aria-modal="true" aria-labelledby="new-task-title">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">New Agent Task</span>
+        <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
+          <div>
+            <h2 id="new-task-title" className="text-base font-semibold text-gray-900 dark:text-white">Create task</h2>
+            <p className="mt-0.5 text-xs leading-5 text-gray-500 dark:text-gray-400">Choose an agent and describe one clear outcome.</p>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            disabled={submitting}
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-5 overflow-y-auto max-h-[70vh]">
+        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4">
           {/* Profile picker */}
           <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2.5">Choose Agent</p>
+            <p className="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">Agent</p>
             {loadingProfiles ? (
               <div className="flex items-center gap-2 text-sm text-gray-400 py-4 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" /> Loading agents…
@@ -110,10 +126,10 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
                       key={profile.id}
                       type="button"
                       onClick={() => setSelectedProfileId(profile.id)}
-                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                      className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                         selected
-                          ? 'border-indigo-400/50 dark:border-indigo-500/40 bg-indigo-50/50 dark:bg-indigo-900/20 shadow-sm'
-                          : 'border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-800/80'
+                          ? 'border-gray-400 bg-gray-50 dark:border-gray-500 dark:bg-gray-800'
+                          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/60'
                       }`}
                     >
                       <span className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm flex-shrink-0 ${colorCls}`}>
@@ -125,6 +141,7 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
                           <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">{profile.soul}</p>
                         )}
                       </div>
+                      {selected && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-gray-600 dark:text-gray-300" />}
                     </button>
                   );
                 })}
@@ -134,7 +151,7 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
 
           {/* Goal */}
           <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2.5">Task Goal</p>
+            <p className="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">Task goal</p>
             <textarea
               autoFocus
               value={goal}
@@ -143,7 +160,7 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
               rows={4}
               placeholder="Describe what the agent should do…"
               disabled={submitting}
-              className="w-full px-3.5 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-gray-800/40 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none resize-none transition-colors"
+              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-white dark:focus:border-gray-500"
             />
           </div>
 
@@ -153,16 +170,16 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100 dark:border-white/10">
+        <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3.5 dark:border-gray-800">
           <span className="text-xs text-gray-400 dark:text-gray-500">
-            Backed by <span className="font-medium">{column?.title || 'Queue'}</span>
+            Added to <span className="font-medium">{column?.title || 'Queue'}</span>
           </span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-4 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+              className="rounded-lg px-3.5 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               Cancel
             </button>
@@ -170,17 +187,26 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
             >
               {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-              {submitting ? 'Dispatching…' : 'Dispatch'}
+              {submitting ? 'Creating…' : 'Create task'}
             </button>
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+      </div>
+    </Portal>
   );
+};
+
+NewTaskModal.propTypes = {
+  column: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    title: PropTypes.string,
+  }).isRequired,
+  onClose: PropTypes.func.isRequired,
+  onSuccess: PropTypes.func,
 };
 
 export default NewTaskModal;

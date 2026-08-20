@@ -99,7 +99,7 @@ const createRouter = () => createBrowserRouter([
         children: [
           {
             index: true,
-            element: <WorkspaceEmpty basePath="/projects" emptyLabel="projects" />,
+            element: <WorkspaceEmpty basePath="/projects" />,
           },
           {
             path: ":projectId",
@@ -120,7 +120,7 @@ const createRouter = () => createBrowserRouter([
         children: [
           {
             index: true,
-            element: <WorkspaceEmpty basePath="/tasks" emptyLabel="tasks" />,
+            element: <WorkspaceEmpty basePath="/tasks" />,
           },
           {
             path: ":projectId",

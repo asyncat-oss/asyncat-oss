@@ -8,12 +8,12 @@ import {
 let mainWindow = null;
 
 /** Apply the metadata Windows uses for the live taskbar button and relaunch icon. */
-function applyWindowsTaskbarIdentity(win) {
+function applyWindowsTaskbarIdentity(win, windowIcon) {
   if (!IS_WIN || win.isDestroyed()) return;
 
-  // Passing the ICO path preserves all embedded DPI variants. setAppDetails
-  // prevents Windows from resolving the taskbar group back to electron.exe.
-  win.setIcon(ICONS.ico);
+  // Use the decoded PNG for the live window and the ICO path for Windows
+  // shell/taskbar metadata.
+  if (windowIcon && !windowIcon.isEmpty()) win.setIcon(windowIcon);
   win.setAppDetails({
     appId: WINDOWS_APP_ID,
     appIconPath: ICONS.ico,
@@ -68,7 +68,7 @@ export function createWindow() {
 
   // ─── Show when ready ────────────────────────────────────────────────
   mainWindow.once('ready-to-show', () => {
-    applyWindowsTaskbarIdentity(mainWindow);
+    applyWindowsTaskbarIdentity(mainWindow, windowIcon);
     mainWindow.show();
 
     if (OPEN_DEVTOOLS) {
@@ -87,7 +87,7 @@ export function createWindow() {
 
   // Reassert the icon after native window creation; this avoids the Electron
   // executable icon winning the first Windows taskbar paint in source runs.
-  if (IS_WIN) applyWindowsTaskbarIdentity(mainWindow);
+  if (IS_WIN) applyWindowsTaskbarIdentity(mainWindow, windowIcon);
   else if (!IS_MAC && !windowIcon.isEmpty()) mainWindow.setIcon(windowIcon);
 
   // ─── Handle navigation to external URLs ─────────────────────────────

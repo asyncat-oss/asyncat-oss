@@ -1,9 +1,10 @@
 // Training/TrainingPage.jsx — Fine-tuning / LoRA training page
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import PropTypes from 'prop-types';
 import {
-  GraduationCap, Cpu, HardDrive, Zap, AlertTriangle, CheckCircle2,
+  HardDrive, Zap, AlertTriangle,
   Play, Square, Trash2, RefreshCw, ChevronDown, ChevronUp,
-  Download, Loader2, Info, XCircle, Settings2, Brain, Check, FileJson,
+  Download, XCircle, Settings2, Brain, Check, FileJson,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { trainingApi } from './trainingApi.js';
@@ -23,6 +24,40 @@ const SUGGESTED_MODELS = [
   { id: 'unsloth/Llama-3.1-8B-Instruct', note: '8B — needs ~8GB+ VRAM (4-bit QLoRA)' },
 ];
 
+const readinessShape = PropTypes.shape({
+  backend: PropTypes.string,
+  canInstall: PropTypes.bool,
+  canTrain: PropTypes.bool,
+  envReady: PropTypes.bool,
+  gpu: PropTypes.shape({
+    name: PropTypes.string,
+    vendor: PropTypes.string,
+    vramGb: PropTypes.number,
+  }),
+  disk: PropTypes.shape({ freeGb: PropTypes.number }),
+  warnings: PropTypes.arrayOf(PropTypes.string),
+});
+
+const jobShape = PropTypes.shape({
+  id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  name: PropTypes.string,
+  status: PropTypes.string,
+  baseModel: PropTypes.string,
+  backend: PropTypes.string,
+  outputDir: PropTypes.string,
+  error: PropTypes.string,
+  createdAt: PropTypes.string,
+  completedAt: PropTypes.string,
+  hyperparams: PropTypes.shape({ rank: PropTypes.number }),
+  progress: PropTypes.shape({
+    percent: PropTypes.number,
+    loss: PropTypes.number,
+    step: PropTypes.number,
+    totalSteps: PropTypes.number,
+    message: PropTypes.string,
+  }),
+});
+
 // Rough heuristic from a "<N>B" pattern in the model id — not exact, just a hint.
 function estimateVramFit(modelId, availableVramGb) {
   const match = (modelId || '').match(/(\d+(?:\.\d+)?)\s*[bB](?:[-_]|$|[^a-zA-Z])/);
@@ -39,20 +74,21 @@ function estimateVramFit(modelId, availableVramGb) {
 
 const StatusBadge = ({ status }) => {
   const styles = {
-    queued: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-    running: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    completed: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-    cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400',
+    queued: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
+    running: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-400',
+    completed: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-400',
+    failed: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400',
+    cancelled: 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
   };
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.queued}`}>
-      {status === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
-      {status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
-      {status === 'failed' && <XCircle className="w-3 h-3" />}
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium capitalize ${styles[status] || styles.queued}`}>
       {status}
     </span>
   );
+};
+
+StatusBadge.propTypes = {
+  status: PropTypes.string.isRequired,
 };
 
 // ── Progress bar ────────────────────────────────────────────────────────────
@@ -65,14 +101,19 @@ const ProgressBar = ({ percent = 0, loss = null }) => (
         <span className="text-gray-500 dark:text-gray-400">Loss: {loss.toFixed(4)}</span>
       )}
     </div>
-    <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800/60 rounded-full overflow-hidden">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800/60">
       <div
-        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
+        className="h-full rounded-full bg-gray-700 transition-[width] duration-500 ease-out dark:bg-gray-300"
         style={{ width: `${Math.min(100, percent)}%` }}
       />
     </div>
   </div>
 );
+
+ProgressBar.propTypes = {
+  percent: PropTypes.number,
+  loss: PropTypes.number,
+};
 
 // ── Readiness banner ────────────────────────────────────────────────────────
 
@@ -80,16 +121,21 @@ const ReadinessBanner = ({ readiness, onInstall, installing, onRemove }) => {
   if (!readiness) return null;
 
   return (
-    <div className="rounded-xl border border-gray-200/60 dark:border-white/[0.06] midnight:border-white/[0.04] p-5">
-      <div className="flex items-start gap-4">
-        <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 dark:from-indigo-500/20 dark:to-purple-500/20 flex items-center justify-center">
-          <Cpu className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+      <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-5 py-3.5 dark:border-gray-800 midnight:border-slate-800">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white">Environment</h2>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Local hardware and training runtime.</p>
         </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white mb-2">
-            Training Environment
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        {readiness.envReady && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Ready
+          </span>
+        )}
+      </div>
+      <div className="px-5 py-4">
+          <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
             {/* GPU */}
             <div className="flex items-center gap-2">
               <Zap className="w-3.5 h-3.5 text-gray-400" />
@@ -103,7 +149,7 @@ const ReadinessBanner = ({ readiness, onInstall, installing, onRemove }) => {
             <div className="flex items-center gap-2">
               <Brain className="w-3.5 h-3.5 text-gray-400" />
               <span className="text-gray-600 dark:text-gray-300">
-                Backend: <span className="font-medium">{readiness.backend.toUpperCase()}</span>
+                Backend: <span className="font-medium">{(readiness.backend || 'cpu').toUpperCase()}</span>
               </span>
             </div>
             {/* Disk */}
@@ -130,33 +176,23 @@ const ReadinessBanner = ({ readiness, onInstall, installing, onRemove }) => {
           {/* Install / Status */}
           <div className="mt-3 flex items-center gap-3">
             {readiness.envReady ? (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Training environment ready</span>
-                </div>
-                <button
-                  onClick={onRemove}
-                  className="text-xs font-medium text-red-500 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                  title="Uninstall training environment"
-                >
-                  (Remove Environment)
-                </button>
-              </div>
+              <button
+                onClick={onRemove}
+                className="text-xs font-medium text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                title="Uninstall training environment"
+              >
+                Remove environment
+              </button>
             ) : (
               <button
                 onClick={onInstall}
                 disabled={installing || !readiness.canInstall}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium
-                  bg-indigo-600 text-white hover:bg-indigo-700
+                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white
                   disabled:opacity-50 disabled:cursor-not-allowed
                   transition-colors duration-150"
               >
                 {installing ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Installing…
-                  </>
+                  'Installing…'
                 ) : (
                   <>
                     <Download className="w-3.5 h-3.5" />
@@ -166,10 +202,16 @@ const ReadinessBanner = ({ readiness, onInstall, installing, onRemove }) => {
               </button>
             )}
           </div>
-        </div>
       </div>
-    </div>
+    </section>
   );
+};
+
+ReadinessBanner.propTypes = {
+  readiness: readinessShape,
+  onInstall: PropTypes.func.isRequired,
+  installing: PropTypes.bool.isRequired,
+  onRemove: PropTypes.func.isRequired,
 };
 
 // ── Dataset dropdown ────────────────────────────────────────────────────────
@@ -202,7 +244,7 @@ const DatasetSelect = ({ datasets, value, onChange }) => {
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700
           bg-white dark:bg-gray-900 midnight:bg-gray-900
-          focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-colors"
+          focus:outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors"
       >
         <span className={`flex items-center gap-2 truncate ${selected ? 'text-gray-900 dark:text-white midnight:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
           <FileJson className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
@@ -222,7 +264,7 @@ const DatasetSelect = ({ datasets, value, onChange }) => {
               onClick={() => { onChange(d.path); setOpen(false); }}
               className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
                 value === d.path
-                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 midnight:bg-indigo-900/20 midnight:text-indigo-300'
+                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100'
                   : 'text-gray-600 dark:text-gray-300 midnight:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800'
               }`}
             >
@@ -236,6 +278,16 @@ const DatasetSelect = ({ datasets, value, onChange }) => {
       )}
     </div>
   );
+};
+
+DatasetSelect.propTypes = {
+  datasets: PropTypes.arrayOf(PropTypes.shape({
+    path: PropTypes.string.isRequired,
+    filename: PropTypes.string.isRequired,
+    sizeMb: PropTypes.number,
+  })).isRequired,
+  value: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
 };
 
 // ── New Job Form ────────────────────────────────────────────────────────────
@@ -286,11 +338,11 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200/60 dark:border-white/[0.06] midnight:border-white/[0.04] p-5">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white mb-4 flex items-center gap-2">
-        <Play className="w-4 h-4 text-indigo-500" />
-        New Training Job
-      </h3>
+    <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white">New training job</h2>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Choose a model and JSONL dataset, then adjust advanced settings if needed.</p>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
@@ -304,7 +356,7 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
               bg-white dark:bg-gray-900 midnight:bg-gray-900
               text-gray-900 dark:text-white midnight:text-white
               placeholder-gray-400 dark:placeholder-gray-500
-              focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+              focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
             required
           />
         </div>
@@ -320,7 +372,7 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
               bg-white dark:bg-gray-900 midnight:bg-gray-900
               text-gray-900 dark:text-white midnight:text-white
               placeholder-gray-400 dark:placeholder-gray-500
-              focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+              focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
             required
           />
           <datalist id="suggested-base-models">
@@ -347,7 +399,7 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
             <button
               type="button"
               onClick={() => setDatasetMode(datasetMode === 'pick' ? 'custom' : 'pick')}
-              className="text-[10px] font-medium text-indigo-500 hover:text-indigo-600 transition-colors"
+              className="text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
             >
               {datasetMode === 'pick' ? 'Enter custom path' : 'Pick from downloaded datasets'}
             </button>
@@ -365,7 +417,7 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
               bg-white dark:bg-gray-900 midnight:bg-gray-900
               text-gray-900 dark:text-white midnight:text-white
               placeholder-gray-400 dark:placeholder-gray-500
-              focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+              focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
             required
           />
         )}
@@ -405,7 +457,7 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
                 onChange={(e) => setHyper({ ...hyper, [key]: key === 'lr' ? parseFloat(e.target.value) : parseInt(e.target.value) })}
                 className="w-full px-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700
                   bg-white dark:bg-gray-900 text-gray-900 dark:text-white
-                  focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+                  focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
               />
             </div>
           ))}
@@ -415,14 +467,12 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
       <button
         type="submit"
         disabled={submitting || !readiness?.canTrain || !name.trim() || !baseModel.trim() || !datasetPath.trim()}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-          bg-indigo-600 text-white hover:bg-indigo-700
+        className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white
           disabled:opacity-50 disabled:cursor-not-allowed
           transition-colors duration-150"
       >
         {submitting ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
             Starting…
           </>
         ) : (
@@ -434,6 +484,12 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
       </button>
     </form>
   );
+};
+
+NewJobForm.propTypes = {
+  readiness: readinessShape,
+  onSubmit: PropTypes.func.isRequired,
+  submitting: PropTypes.bool.isRequired,
 };
 
 // ── Job Card ────────────────────────────────────────────────────────────────
@@ -465,6 +521,16 @@ const MetricChart = ({ title, data, lines }) => (
     </ResponsiveContainer>
   </div>
 );
+
+MetricChart.propTypes = {
+  title: PropTypes.string.isRequired,
+  data: PropTypes.arrayOf(PropTypes.object).isRequired,
+  lines: PropTypes.arrayOf(PropTypes.shape({
+    key: PropTypes.string.isRequired,
+    name: PropTypes.string,
+    color: PropTypes.string.isRequired,
+  })).isRequired,
+};
 
 // ── Job details: live log feed + metrics dashboard ──────────────────────────
 
@@ -528,7 +594,7 @@ const JobDetails = ({ job }) => {
       {loadingMetrics ? (
         <p className="text-xs text-gray-400 dark:text-gray-500">Loading metrics…</p>
       ) : metrics.length === 0 ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500">No metrics yet — they'll appear once training starts logging steps.</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">No metrics yet — they&apos;ll appear once training starts logging steps.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {hasMetric('loss') && (
@@ -562,13 +628,17 @@ const JobDetails = ({ job }) => {
   );
 };
 
-const JobCard = ({ job, onStop, onDelete, onRefresh }) => {
+JobDetails.propTypes = {
+  job: jobShape.isRequired,
+};
+
+const JobCard = ({ job, onStop, onDelete }) => {
   const progress = job.progress || {};
   const isActive = job.status === 'running' || job.status === 'queued';
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-xl border border-gray-200/60 dark:border-white/[0.06] midnight:border-white/[0.04] p-4 transition-colors">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 transition-colors dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -593,7 +663,7 @@ const JobCard = ({ job, onStop, onDelete, onRefresh }) => {
           <button
             onClick={() => setExpanded((e) => !e)}
             title={expanded ? 'Hide details' : 'Show metrics & logs'}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >
             {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
@@ -658,6 +728,12 @@ const JobCard = ({ job, onStop, onDelete, onRefresh }) => {
   );
 };
 
+JobCard.propTypes = {
+  job: jobShape.isRequired,
+  onStop: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+};
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 const TrainingPage = () => {
@@ -688,6 +764,7 @@ const TrainingPage = () => {
   }, []);
 
   useEffect(() => {
+    const activePollCleanups = pollCleanups.current;
     loadData();
     // Poll active jobs
     const interval = setInterval(() => {
@@ -697,7 +774,7 @@ const TrainingPage = () => {
     }, 5000);
     return () => {
       clearInterval(interval);
-      pollCleanups.current.forEach(fn => fn());
+      activePollCleanups.forEach(fn => fn());
     };
   }, [loadData]);
 
@@ -779,10 +856,18 @@ const TrainingPage = () => {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="text-center">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mx-auto mb-3" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">Loading training environment…</p>
+      <div className="flex-1 overflow-y-auto" role="status" aria-label="Loading training environment">
+        <div className="mx-auto max-w-4xl space-y-4 px-4 py-8 sm:px-6">
+          <div className="mb-7 space-y-2">
+            <div className="h-5 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+            <div className="h-3 w-64 animate-pulse rounded bg-gray-100 dark:bg-gray-800/70" />
+          </div>
+          {[112, 260].map((height) => (
+            <div key={height} className="animate-pulse rounded-xl border border-gray-200 p-5 dark:border-gray-800" style={{ height }}>
+              <div className="h-3.5 w-32 rounded bg-gray-200 dark:bg-gray-800" />
+              <div className="mt-4 h-3 w-3/4 rounded bg-gray-100 dark:bg-gray-800/70" />
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -790,22 +875,13 @@ const TrainingPage = () => {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-7">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 dark:from-indigo-500/20 dark:to-purple-500/20 flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-white midnight:text-white">
-                  Training
-                </h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Fine-tune LLMs with LoRA adapters
-                </p>
-              </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white midnight:text-white">Training</h1>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Fine-tune a local model with a LoRA adapter.</p>
             </div>
             <button
               onClick={loadData}
@@ -832,10 +908,9 @@ const TrainingPage = () => {
 
         {/* Install progress */}
         {installing && installProgress && (
-          <div className="mb-4 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-800/30">
-            <div className="flex items-center gap-2 mb-2">
-              <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
-              <span className="text-sm font-medium text-indigo-700 dark:text-indigo-400">
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {installProgress.message || 'Installing…'}
               </span>
             </div>
@@ -861,27 +936,13 @@ const TrainingPage = () => {
             />
           )}
 
-          {/* Info when env not ready */}
-          {readiness && !readiness.envReady && !installing && (
-            <div className="rounded-xl border border-gray-200/60 dark:border-white/[0.06] p-5 text-center">
-              <Info className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Install the training environment to get started with fine-tuning.
-              </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Or ask the agent: "set up fine-tuning environment"
-              </p>
-            </div>
-          )}
-
           {/* Jobs list */}
           {jobs.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white mb-3 flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-gray-400" />
-                Training Jobs
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white midnight:text-white">
+                Training jobs
                 <span className="text-xs font-normal text-gray-400">({jobs.length})</span>
-              </h3>
+              </h2>
               <div className="space-y-3">
                 {jobs.map(job => (
                   <JobCard
@@ -889,7 +950,6 @@ const TrainingPage = () => {
                     job={job}
                     onStop={handleStopJob}
                     onDelete={handleDeleteJob}
-                    onRefresh={loadData}
                   />
                 ))}
               </div>
@@ -898,9 +958,8 @@ const TrainingPage = () => {
 
           {/* Empty state */}
           {jobs.length === 0 && readiness?.canTrain && (
-            <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 midnight:border-gray-700 p-8 text-center">
-              <GraduationCap className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+            <div className="border-t border-gray-100 py-7 text-center dark:border-gray-800">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
                 No training jobs yet
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">

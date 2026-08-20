@@ -46,9 +46,9 @@ export const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 export const ICONS = {
   png:    path.join(NEKO_ASSETS, 'app-icon-512.png'),
   ico:    path.join(NEKO_ASSETS, 'icon.ico'),
-  window: process.platform === 'win32'
-    ? path.join(NEKO_ASSETS, 'icon.ico')
-    : path.join(NEKO_ASSETS, 'app-icon-512.png'),
+  // BrowserWindow/nativeImage reliably decodes PNG on every platform. Windows
+  // still uses the ICO below for shell/taskbar metadata.
+  window: path.join(NEKO_ASSETS, 'app-icon-512.png'),
   tray:   path.join(NEKO_ASSETS, 'app-tray.png'),
   logo:   path.join(NEKO_ASSETS, 'app-icon-512.png'),
 };

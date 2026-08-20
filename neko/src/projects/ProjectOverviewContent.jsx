@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
+import PropTypes from 'prop-types';
 import { useNavigate } from "react-router-dom";
 import {
 	LayoutGrid,
 	KanbanSquare,
 	List,
 	FolderOpen,
+	ChevronRight,
 } from "lucide-react";
 
 // Import view components directly here
@@ -301,24 +303,32 @@ const ProjectOverview = React.memo(({
 		<div className={`flex flex-col h-full ${soraFontBase} relative`}>
 			{/* Section tab navigation */}
 			{section === 'tasks' && <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
-				<div className="flex items-center gap-0.5 px-4 overflow-x-auto scrollbar-none">
-					{TASK_VIEWS.map(({ key, label, Icon }) => {
-						const isActive = currentTab === key;
-						return (
-							<button
-								key={key}
-								onClick={() => navigate(`${basePath}/${projectId}/${key}`)}
-								className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-									isActive
-										? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400'
-										: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200'
-								}`}
-							>
-								<Icon className="w-3.5 h-3.5" />
-								{label}
-							</button>
-						);
-					})}
+				<div className="flex min-h-12 items-center justify-between gap-4 px-5">
+					<div className="flex min-w-0 items-center gap-2 text-sm">
+						<span className="shrink-0 text-base leading-none">{selectedProject.emoji || '📁'}</span>
+						<span className="max-w-48 truncate font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200">{selectedProject.name}</span>
+						<ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-gray-600" />
+						<span className="shrink-0 text-gray-500 dark:text-gray-400">Tasks</span>
+					</div>
+					<div className="flex shrink-0 items-center gap-0.5 self-stretch overflow-x-auto scrollbar-none">
+						{TASK_VIEWS.map(({ key, label, Icon }) => {
+							const isActive = currentTab === key;
+							return (
+								<button
+									key={key}
+									onClick={() => navigate(`${basePath}/${projectId}/${key}`)}
+									className={`flex items-center gap-1.5 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors ${
+										isActive
+											? 'border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100 midnight:border-slate-100 midnight:text-slate-100'
+											: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 midnight:hover:text-gray-200'
+									}`}
+								>
+									<Icon className="w-3.5 h-3.5" />
+									{label}
+								</button>
+							);
+						})}
+					</div>
 				</div>
 			</div>}
 			<div className="flex-1 overflow-auto">
@@ -330,5 +340,19 @@ const ProjectOverview = React.memo(({
 
 // Add display name for debugging
 ProjectOverview.displayName = 'ProjectOverview';
+
+ProjectOverview.propTypes = {
+	selectedProject: PropTypes.shape({
+		id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+		name: PropTypes.string,
+		emoji: PropTypes.string,
+		owner_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+	}),
+	projectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+	currentTab: PropTypes.string.isRequired,
+	localUser: PropTypes.object,
+	basePath: PropTypes.string,
+	section: PropTypes.oneOf(['projects', 'tasks']),
+};
 
 export default ProjectOverview;
