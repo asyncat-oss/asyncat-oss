@@ -488,7 +488,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   ]);
   useEffect(() => {
     const savedMode = conversationMetadata?.experienceMode;
-    if (!currentConversationId || !['chat', 'work'].includes(savedMode)) return;
+    if (!['chat', 'work'].includes(savedMode)) return;
     setExperienceMode(savedMode);
     try { localStorage.setItem('asyncat_experience_mode', savedMode); } catch { /* localStorage may be unavailable */ }
   }, [conversationMetadata?.experienceMode, currentConversationId]);
@@ -741,6 +741,12 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [showBranchMenu]);
 
   const refreshGitState = useCallback(async () => {
+    if (!workingContext?.workingDir) {
+      setGitState(null);
+      setGitError(null);
+      setGitLoading(false);
+      return;
+    }
     setGitLoading(true);
     setGitError(null);
     try {
@@ -766,7 +772,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const toggleSidePanelTab = useCallback((tab) => {
     if (tab === 'terminal') {
-      if (experienceMode !== 'work') return;
+      if (experienceMode !== 'work' || !workingContext?.workingDir) return;
       setTerminalEverOpened(true);
       setShowTerminalDock((open) => {
         const next = !open;
@@ -775,6 +781,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       });
       return;
     }
+    if (tab === 'code' && !workingContext?.workingDir) return;
     setShowActivitySidebar(prev => {
       const shouldClose = prev && sidePanelTab === tab;
       const next = !shouldClose;
@@ -785,7 +792,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       try { localStorage.setItem('asyncat_show_command_side_panel', String(next)); } catch { /* localStorage may be unavailable */ }
       return next;
     });
-  }, [experienceMode, sidePanelTab]);
+  }, [experienceMode, sidePanelTab, workingContext?.workingDir]);
+
+  useEffect(() => {
+    if (workingContext?.workingDir) return;
+    setShowTerminalDock(false);
+    if (sidePanelTab === 'code') {
+      setShowActivitySidebar(false);
+      setSidePanelTab('steps');
+    }
+  }, [sidePanelTab, workingContext?.workingDir]);
 
   useEffect(() => {
     setSidePanelWidth(workbenchPreferences.rightDockWidth);
@@ -874,6 +890,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, [refreshGitState]);
 
   const handleAttachGitFile = useCallback((file) => {
+    if (!workingContext?.rootId) return;
     const basePath = workingContext?.relativePath && workingContext.relativePath !== '.'
       ? workingContext.relativePath.replace(/\/+$/, '')
       : '';
@@ -882,7 +899,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       : file?.path;
     setExternalFileAttachment({
       ...file,
-      rootId: workingContext?.rootId || 'workspace',
+      rootId: workingContext.rootId,
       path: scopedPath,
       nonce: Date.now(),
     });
@@ -1304,6 +1321,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         workingContext: activeWorkingContext,
         enableTools: effectiveToolsEnabled,
         agentMode: effectiveAgentMode,
+        experienceMode: runExperienceMode,
         reasoningEffort: selectedReasoningEffort,
         enabledIntegrationTools: runEnabledIntegrationTools,
         conversationId: runConversationId,
@@ -2470,8 +2488,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       {['chat', 'work'].map(mode => {
         const active = experienceMode === mode;
         const description = mode === 'chat'
-          ? 'Direct model conversation without workspace tools'
-          : 'Agent conversation with workspace context, planning, and tools';
+          ? 'Direct model conversation without agent tools'
+          : 'Agent conversation with planning and tools; a Project is optional';
         return (
           <button
             key={mode}
@@ -2549,7 +2567,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           {modeSwitcher}
         </div>
         <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
-          {!isGhostMode && experienceMode === 'work' && (
+          {!isGhostMode && experienceMode === 'work' && workingContext?.workingDir && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('code')}
@@ -2585,7 +2603,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               <Globe className="w-4 h-4" />
             </button>
           )}
-          {!isGhostMode && experienceMode === 'work' && (
+          {!isGhostMode && experienceMode === 'work' && workingContext?.workingDir && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('terminal')}
@@ -2625,8 +2643,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               </h1>
               <p className="max-w-lg text-sm text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                 {experienceMode === 'chat'
-                  ? 'Chat talks directly to the model. It cannot inspect or change your workspace.'
-                  : 'Work runs the agent, so it can plan, use enabled tools, and operate in your selected workspace.'}
+                  ? 'Chat talks directly to the model and does not use agent tools.'
+                  : 'Work runs the agent. Select a Project for local-file access, or use No project for non-file work.'}
               </p>
             </div>
 
@@ -2929,6 +2947,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 {experienceMode === 'work' && (
                 <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800">
                   <div className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {workingContext?.workingDir && <>
                     <button
                       type="button"
                       onClick={() => toggleSidePanelTab('code')}
@@ -2969,6 +2988,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         </span>
                       )}
                     </button>
+                    </>}
 
                     {(persistedAgentEvents.length > 0 || agentRunning || agentLoadingSession) && (
                       <button
@@ -3093,7 +3113,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         {agentTaskRun.projectId && (
                           <button
                             type="button"
-                            onClick={() => navigate(`/projects/${agentTaskRun.projectId}/list`)}
+                            onClick={() => navigate(`/tasks/${agentTaskRun.projectId}/list`)}
                             className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                           >
                             <ArrowLeft className="h-3.5 w-3.5" />
@@ -3211,7 +3231,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           </>
         )}
 
-        {terminalEverOpened && (!isXLScreen || workbenchPreferences.terminalPosition === 'bottom') && (
+        {terminalEverOpened && workingContext?.workingDir && (!isXLScreen || workbenchPreferences.terminalPosition === 'bottom') && (
           <section
             style={{ height: showTerminalDock && experienceMode === 'work' ? bottomDockHeight : 0 }}
             className="relative shrink-0 overflow-hidden border-t border-gray-200 bg-white transition-[height] duration-150 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
@@ -3292,7 +3312,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         </aside>
       )}
 
-      {terminalEverOpened && isXLScreen && workbenchPreferences.terminalPosition === 'right' && (
+      {terminalEverOpened && workingContext?.workingDir && isXLScreen && workbenchPreferences.terminalPosition === 'right' && (
         <aside
           style={{ width: showTerminalDock && experienceMode === 'work' ? sidePanelWidth : 0 }}
           className="relative hidden shrink-0 overflow-hidden border-l border-gray-200 bg-white transition-[width] duration-150 xl:flex dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"

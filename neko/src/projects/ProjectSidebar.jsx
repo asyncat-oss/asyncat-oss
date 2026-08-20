@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import PropTypes from 'prop-types';
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Plus, Check, X, MoreHorizontal, Loader2, Search,
@@ -16,7 +17,7 @@ const sortProjects = (projects) =>
   });
 
 // Single project row
-const ProjectItem = ({ project, isActive, onClick, onEdit }) => (
+const ProjectItem = ({ project, isActive, onClick, onEdit, showFolderCount = true }) => (
   <div
     onClick={onClick}
     className={`group/item flex items-center gap-2.5 px-3 h-9 mx-1 rounded-lg cursor-pointer transition-colors duration-150 ${
@@ -31,6 +32,11 @@ const ProjectItem = ({ project, isActive, onClick, onEdit }) => (
       {project.emoji || "📁"}
     </span>
     <span className="flex-1 text-sm font-medium truncate">{project.name}</span>
+    {showFolderCount && project.folder_count > 0 && (
+      <span className="shrink-0 text-[10px] tabular-nums text-gray-400 dark:text-gray-600" title={`${project.folder_count} attached folder${project.folder_count === 1 ? '' : 's'}`}>
+        {project.folder_count}
+      </span>
+    )}
     <button
       onClick={(e) => { e.stopPropagation(); onEdit(); }}
       className={`
@@ -47,7 +53,19 @@ const ProjectItem = ({ project, isActive, onClick, onEdit }) => (
   </div>
 );
 
-const ProjectSidebar = () => {
+ProjectItem.propTypes = {
+  project: PropTypes.shape({
+    name: PropTypes.string.isRequired,
+    emoji: PropTypes.string,
+    folder_count: PropTypes.number,
+  }).isRequired,
+  isActive: PropTypes.bool,
+  onClick: PropTypes.func.isRequired,
+  onEdit: PropTypes.func.isRequired,
+  showFolderCount: PropTypes.bool,
+};
+
+const ProjectSidebar = ({ basePath = '/projects', sectionLabel = 'Projects' }) => {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const { getWorkspaceProjects, bustProjectsCache, currentWorkspace } = useWorkspace();
@@ -105,22 +123,17 @@ const ProjectSidebar = () => {
 
   const handleCreate = async () => {
     if (!newName.trim() || creating) return;
-    if (!currentWorkspace?.id) {
-      setCreateError("No workspace available");
-      return;
-    }
     setCreating(true);
     setCreateError(null);
     try {
       const result = await projectApi.createProject({
         name: newName.trim(),
         description: "",
-        team_id: currentWorkspace.id,
       });
       if (result?.data) {
         cancelCreate();
         eventBus.emit("projectsUpdated");
-        navigate(`/workspace/${result.data.id}`);
+        navigate(`${basePath}/${result.data.id}${basePath === '/projects' ? '/folders' : ''}`);
       }
     } catch (err) {
       setCreateError(err.message || "Failed to create project");
@@ -152,7 +165,7 @@ const ProjectSidebar = () => {
         {/* ── Header ── */}
         <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
           <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-gray-500 select-none px-1">
-            Projects
+            {sectionLabel}
           </span>
           <button
             onClick={startCreate}
@@ -238,7 +251,7 @@ const ProjectSidebar = () => {
             <div className="px-3 py-6 text-center">
               {searchQuery ? (
                 <p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500">
-                  No projects match <span className="font-medium text-gray-600 dark:text-gray-400">"{searchQuery}"</span>
+                  No projects match <span className="font-medium text-gray-600 dark:text-gray-400">&ldquo;{searchQuery}&rdquo;</span>
                 </p>
               ) : (
                 <>
@@ -261,8 +274,9 @@ const ProjectSidebar = () => {
                 key={project.id}
                 project={project}
                 isActive={String(project.id) === String(projectId)}
-                onClick={() => navigate(`/workspace/${project.id}`)}
+                onClick={() => navigate(`${basePath}/${project.id}`)}
                 onEdit={() => setEditProject(project)}
+                showFolderCount={basePath === '/projects'}
               />
             ))
           )}
@@ -288,13 +302,18 @@ const ProjectSidebar = () => {
           onDeleted={() => {
             setEditProject(null);
             if (String(editProject.id) === String(projectId)) {
-              navigate("/workspace");
+              navigate(basePath);
             }
           }}
         />
       )}
     </>
   );
+};
+
+ProjectSidebar.propTypes = {
+  basePath: PropTypes.string,
+  sectionLabel: PropTypes.string,
 };
 
 export default ProjectSidebar;

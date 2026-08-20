@@ -31,4 +31,28 @@ export const projectApi = {
       body: JSON.stringify(projectData),
     });
   },
+
+  async getProjectFolders(projectId) {
+    return apiFetch(`${API_URL}/api/projects/${projectId}/folders`);
+  },
+
+  async addProjectFolder(projectId, folderData) {
+    return apiFetch(`${API_URL}/api/projects/${projectId}/folders`, {
+      method: "POST",
+      body: JSON.stringify(folderData),
+    });
+  },
+
+  async updateProjectFolder(projectId, folderId, folderData) {
+    return apiFetch(`${API_URL}/api/projects/${projectId}/folders/${folderId}`, {
+      method: "PATCH",
+      body: JSON.stringify(folderData),
+    });
+  },
+
+  async deleteProjectFolder(projectId, folderId) {
+    return apiFetch(`${API_URL}/api/projects/${projectId}/folders/${folderId}`, {
+      method: "DELETE",
+    });
+  },
 };

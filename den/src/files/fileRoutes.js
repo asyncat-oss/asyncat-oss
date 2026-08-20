@@ -25,6 +25,11 @@ const withWorkspaceContext = (req, _res, next) => {
   next();
 };
 
+const projectAccess = (req) => ({
+  userId: req.user?.id || null,
+  projectId: req.query?.projectId || req.body?.projectId || null,
+});
+
 function sendRouteError(res, err) {
   res.status(err.status || 500).json({
     success: false,
@@ -43,7 +48,7 @@ function parseListOptions(query) {
 
 router.get('/roots', withWorkspaceContext, (req, res) => {
   try {
-    res.json({ success: true, roots: publicRoots() });
+    res.json({ success: true, roots: publicRoots(projectAccess(req)) });
   } catch (err) {
     sendRouteError(res, err);
   }
@@ -55,6 +60,7 @@ router.get('/list', withWorkspaceContext, (req, res) => {
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
       includeHidden: req.query.hidden === 'true',
+      ...projectAccess(req),
       ...parseListOptions(req.query),
     }));
   } catch (err) {
@@ -68,6 +74,7 @@ router.get('/entry', withWorkspaceContext, (req, res) => {
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
       includeHidden: req.query.hidden === 'true',
+      ...projectAccess(req),
       ...parseListOptions(req.query),
     }));
   } catch (err) {
@@ -80,6 +87,7 @@ router.get('/preview', withWorkspaceContext, (req, res) => {
     res.json(loadEntry({
       rootId: req.query.rootId || 'workspace',
       relativePath: req.query.path || '.',
+      ...projectAccess(req),
       ...parseListOptions(req.query),
     }));
   } catch (err) {
@@ -99,6 +107,7 @@ router.get('/search', withWorkspaceContext, (req, res) => {
       maxResults,
       sort: req.query.sort || 'relevance',
       order: req.query.order === 'desc' ? 'desc' : 'asc',
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -111,6 +120,7 @@ router.post('/mkdir', withWorkspaceContext, (req, res) => {
       rootId: req.body.rootId || 'workspace',
       relativePath: req.body.path,
       overwrite: req.body.overwrite === true,
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -124,6 +134,7 @@ router.post('/write', withWorkspaceContext, (req, res) => {
       relativePath: req.body.path,
       content: req.body.content || '',
       overwrite: req.body.overwrite !== false,
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -137,6 +148,7 @@ router.post('/copy', withWorkspaceContext, (req, res) => {
       source: req.body.source,
       destination: req.body.destination,
       overwrite: req.body.overwrite !== false,
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -150,6 +162,7 @@ router.post('/move', withWorkspaceContext, (req, res) => {
       source: req.body.source,
       destination: req.body.destination,
       overwrite: req.body.overwrite !== false,
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -161,6 +174,7 @@ router.post('/batch-delete', withWorkspaceContext, (req, res) => {
     res.json(batchDeleteEntries({
       rootId: req.body.rootId || 'workspace',
       entries: Array.isArray(req.body.entries) ? req.body.entries : [],
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -172,6 +186,7 @@ router.post('/batch-copy', withWorkspaceContext, (req, res) => {
     res.json(batchCopyEntries({
       rootId: req.body.rootId || 'workspace',
       entries: Array.isArray(req.body.entries) ? req.body.entries : [],
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -184,6 +199,7 @@ router.post('/delete', withWorkspaceContext, (req, res) => {
       rootId: req.body.rootId || 'workspace',
       relativePath: req.body.path,
       recursive: req.body.recursive === true,
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -218,7 +234,7 @@ router.get('/raw', withWorkspaceContext, (req, res) => {
     if (!relativePath) {
       return res.status(400).json({ success: false, error: 'path is required' });
     }
-    const entry = loadEntry({ rootId, relativePath });
+    const entry = loadEntry({ rootId, relativePath, ...projectAccess(req) });
     if (!entry.success || entry.type !== 'file') {
       return res.status(404).json({ success: false, error: 'File not found' });
     }
@@ -242,6 +258,7 @@ router.post('/archive/extract', withWorkspaceContext, async (req, res) => {
       rootId: req.body.rootId || 'workspace',
       relativePath: req.body.path,
       destination: req.body.destination || null,
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -254,6 +271,7 @@ router.post('/archive/create', withWorkspaceContext, async (req, res) => {
       rootId: req.body.rootId || 'workspace',
       paths: Array.isArray(req.body.paths) ? req.body.paths : [],
       destination: req.body.destination,
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);
@@ -275,6 +293,7 @@ router.post('/upload', withWorkspaceContext, upload.single('file'), (req, res) =
       relativePath,
       content: req.file.buffer,
       overwrite: req.body.overwrite === true || req.body.overwrite === 'true',
+      ...projectAccess(req),
     }));
   } catch (err) {
     sendRouteError(res, err);

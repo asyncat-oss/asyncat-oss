@@ -682,10 +682,11 @@ class ChatService {
         };
 
         if (title !== null) updateData.title = title;
-        if (enhancedMetadata && Object.keys(enhancedMetadata).length > 0) {
-          updateData.metadata = enhancedMetadata;
-        }
-        if (projectIds.length > 0) updateData.project_ids = projectIds;
+        // Project scope belongs to the conversation. Empty arrays and an
+        // explicit null workingContext are meaningful: they clear a Project
+        // instead of silently retaining whichever Project was used before.
+        updateData.metadata = enhancedMetadata;
+        updateData.project_ids = projectIds;
 
         const { data, error } = await dbClient
           .schema('aichats')
@@ -936,12 +937,16 @@ class ChatService {
       // Get effective workspace ID
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
-      const allowedFields = ['title', 'is_pinned', 'is_archived', 'metadata'];
+      const allowedFields = ['title', 'is_pinned', 'is_archived', 'metadata', 'project_ids'];
       const updateData = { updated_at: new Date().toISOString() };
 
       for (const [field, value] of Object.entries(updates)) {
         if (allowedFields.includes(field)) {
-          updateData[field] = value;
+          if (field === 'project_ids') {
+            updateData[field] = Array.isArray(value) ? value.filter(Boolean).map(String).slice(0, 1) : [];
+          } else {
+            updateData[field] = value;
+          }
         }
       }
 

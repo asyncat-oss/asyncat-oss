@@ -55,19 +55,17 @@ function relativeToContext(entryPath = '.', contextPath = '.') {
 }
 
 function contextKeyFor(workingContext, workingDir) {
-  return `${workingContext?.rootId || 'workspace'}:${workingContext?.relativePath || '.'}:${workingDir || ''}`;
+  return `${workingContext?.rootId || 'none'}:${workingContext?.relativePath || '.'}:${workingDir || ''}`;
 }
 
 function WorkspaceFilesBrowser({ onFileOpen, navigateTo, workingContext = null }) {
-  const rootId = workingContext?.rootId || 'workspace';
+  const rootId = workingContext?.rootId || null;
   const basePath = workingContext?.relativePath || '.';
   const contextLabel = workingContext?.relativePath && workingContext.relativePath !== '.'
     ? basename(workingContext.relativePath)
-    : workingContext?.rootLabel || 'workspace';
-  // Defensive: a legacy "No workspace" context may still be persisted from
-  // before chat-only mode was retired. Treat it as "nothing to browse" rather
-  // than firing a listing against a root that no longer exists.
-  const noWorkspace = workingContext?.rootId === 'none' || workingContext?.noWorkspace === true;
+    : workingContext?.rootLabel || 'Project folder';
+  // No Project means no implicit global filesystem fallback.
+  const noWorkspace = !rootId || workingContext?.rootId === 'none' || workingContext?.noWorkspace === true;
   const [entryPath, setEntryPath] = useState('.');
   const [entry, setEntry] = useState(null);
   const [openFile, setOpenFile] = useState(null);

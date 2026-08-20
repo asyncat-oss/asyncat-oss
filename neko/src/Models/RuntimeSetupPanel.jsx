@@ -1,7 +1,7 @@
 // Models/RuntimeSetupPanel.jsx — Shared local-runtime setup panel.
 //
 // Used in two places:
-//   • WelcomePage onboarding (compact) — first-run "set up the local engines" step
+//   • Compact first-run runtime setup surfaces
 //   • Settings → Runtime (full) — same controls, alongside the engine advisor
 //
 // What it does:

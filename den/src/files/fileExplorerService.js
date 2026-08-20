@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import db from '../db/client.js';
 
 const SKIP_NAMES = new Set(['.git', 'node_modules', '__pycache__', '.next', 'dist', 'build', 'venv', '.venv']);
 const TEXT_PREVIEW_LIMIT = 5 * 1024 * 1024;
@@ -97,6 +98,31 @@ function normalizeRootPath(rootPath) {
   return path.resolve(rootPath);
 }
 
+function comparablePath(value) {
+  const normalized = path.normalize(value);
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isWithinRoot(rootPath, candidatePath) {
+  const root = comparablePath(rootPath);
+  const candidate = comparablePath(candidatePath);
+  return candidate === root || candidate.startsWith(root + path.sep);
+}
+
+function assertRealPathContained(rootPath, candidatePath) {
+  const realRoot = fs.realpathSync(rootPath);
+  let existingAncestor = candidatePath;
+  while (!fs.existsSync(existingAncestor)) {
+    const parent = path.dirname(existingAncestor);
+    if (parent === existingAncestor) break;
+    existingAncestor = parent;
+  }
+  const realAncestor = fs.realpathSync(existingAncestor);
+  if (!isWithinRoot(realRoot, realAncestor)) {
+    throw createRouteError('Path escapes the attached Project folder through a link', 403, 'OUTSIDE_ROOT');
+  }
+}
+
 export function getWorkspaceRoot() {
   const configuredRoot = process.env.ASYNCAT_WORKSPACE_ROOT || process.env.WORKSPACE_ROOT;
   if (configuredRoot && existsDir(configuredRoot)) return normalizeRootPath(configuredRoot);
@@ -146,45 +172,100 @@ export function getFileRoots() {
     });
 }
 
-export function getRoot(rootId = 'workspace') {
+function getProjectFolderRoot(rootId, { userId = null, projectId = null } = {}) {
+  if (!String(rootId || '').startsWith('project:')) return null;
+  const folderId = String(rootId).slice('project:'.length);
+  const conditions = ['pf.id = ?'];
+  const params = [folderId];
+  if (userId) {
+    conditions.push('p.owner_id = ?');
+    params.push(userId);
+  }
+  if (projectId) {
+    conditions.push('p.id = ?');
+    params.push(projectId);
+  }
+  const folder = db.prepare(`
+    SELECT pf.id, pf.name, pf.path, pf.is_primary,
+           p.id AS project_id, p.name AS project_name, p.emoji AS project_emoji
+    FROM project_folders pf
+    JOIN projects p ON p.id = pf.project_id
+    WHERE ${conditions.join(' AND ')} AND p.is_archived = 0
+    LIMIT 1
+  `).get(...params);
+  if (!folder) return null;
+  return {
+    id: `project:${folder.id}`,
+    label: folder.name,
+    kind: 'project',
+    path: normalizeRootPath(folder.path),
+    projectId: folder.project_id,
+    projectName: folder.project_name,
+    projectEmoji: folder.project_emoji,
+    isPrimary: Boolean(folder.is_primary),
+  };
+}
+
+export function getProjectFileRoots({ userId = null, projectId = null } = {}) {
+  const conditions = ['p.is_archived = 0'];
+  const params = [];
+  if (userId) {
+    conditions.push('p.owner_id = ?');
+    params.push(userId);
+  }
+  if (projectId) {
+    conditions.push('p.id = ?');
+    params.push(projectId);
+  }
+  return db.prepare(`
+    SELECT pf.id, pf.name, pf.path, pf.is_primary,
+           p.id AS project_id, p.name AS project_name, p.emoji AS project_emoji
+    FROM project_folders pf
+    JOIN projects p ON p.id = pf.project_id
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY p.updated_at DESC, pf.is_primary DESC, pf.position ASC, pf.created_at ASC
+  `).all(...params).map(folder => ({
+    id: `project:${folder.id}`,
+    label: folder.name,
+    kind: 'project',
+    path: normalizeRootPath(folder.path),
+    projectId: folder.project_id,
+    projectName: folder.project_name,
+    projectEmoji: folder.project_emoji,
+    isPrimary: Boolean(folder.is_primary),
+  }));
+}
+
+export function getRoot(rootId = 'workspace', access = {}) {
+  const projectRoot = getProjectFolderRoot(rootId, access);
+  if (projectRoot) return projectRoot;
+  if (String(rootId || '').startsWith('project:')) return null;
   const roots = getFileRoots();
   return roots.find(root => root.id === rootId) || roots[0];
 }
 
-export function resolveExplorerPath(rootId = 'workspace', relativePath = '.') {
-  // ── Absolute-path sentinel ────────────────────────────────────────────────
-  // When rootId is '_abs' and relativePath is an absolute path, treat
-  // relativePath as the root itself (no further traversal).
+export function resolveExplorerPath(rootId = 'workspace', relativePath = '.', access = {}) {
   if (rootId === '_abs') {
-    const cleanRelative = relativePath || '.';
-    const rootPath = normalizeRootPath(cleanRelative);
-    const syntheticRoot = {
-      id: '_abs',
-      label: path.basename(rootPath),
-      kind: 'dir',
-      path: rootPath,
-    };
-    return {
-      root: syntheticRoot,
-      rootPath,
-      absolutePath: rootPath,
-      relativePath: '.',
-    };
+    throw createRouteError('Attach this folder to a Project before using it', 403, 'PROJECT_FOLDER_REQUIRED');
   }
 
-  const root = getRoot(rootId);
-  if (!root) throw new Error('No file roots are available');
+  const root = getRoot(rootId, access);
+  if (!root) throw createRouteError('Project folder not found or access denied', 404, 'ROOT_NOT_FOUND');
 
   const cleanRelative = relativePath || '.';
   const rootPath = normalizeRootPath(root.path);
+  if (!existsDir(rootPath)) {
+    throw createRouteError('Attached Project folder is unavailable', 404, 'ROOT_UNAVAILABLE');
+  }
   const resolved = path.resolve(rootPath, cleanRelative);
 
-  if (resolved !== rootPath && !resolved.startsWith(rootPath + path.sep)) {
+  if (!isWithinRoot(rootPath, resolved)) {
     const err = new Error('Path outside selected root');
     err.status = 403;
     err.code = 'OUTSIDE_ROOT';
     throw err;
   }
+  assertRealPathContained(rootPath, resolved);
 
   return {
     root,
@@ -194,44 +275,20 @@ export function resolveExplorerPath(rootId = 'workspace', relativePath = '.') {
   };
 }
 
-export function resolveWorkingDirectoryContext(context = {}) {
-  const rootId = context?.rootId || 'workspace';
-
-  // ── Absolute-path context (e.g. from native OS folder picker in Electron) ──
-  // rootId '_abs' means the frontend picked an arbitrary folder that is not
-  // under any of the configured file roots.  Use workingDir / rootPath directly.
-  if (rootId === '_abs') {
-    const absPath = context.workingDir || context.rootPath;
-    if (!absPath) {
-      throw createRouteError('Absolute-path context is missing workingDir', 400, 'MISSING_WORKING_DIR');
-    }
-    const resolvedAbsPath = path.resolve(absPath);
-    if (!fs.existsSync(resolvedAbsPath)) {
-      throw createRouteError('Working directory not found', 404, 'NOT_FOUND');
-    }
-    if (!fs.statSync(resolvedAbsPath).isDirectory()) {
-      throw createRouteError('Working context must be a directory', 400, 'NOT_DIRECTORY');
-    }
-    const folderName = path.basename(resolvedAbsPath);
-    const syntheticRoot = {
-      id: '_abs',
-      label: context.rootLabel || folderName,
-      kind: context.rootKind || 'dir',
-      path: resolvedAbsPath,
-    };
-    return {
-      root: syntheticRoot,
-      rootId: '_abs',
-      rootLabel: syntheticRoot.label,
-      rootKind: syntheticRoot.kind,
-      rootPath: resolvedAbsPath,
-      relativePath: '.',
-      workingDir: resolvedAbsPath,
-    };
+export function resolveWorkingDirectoryContext(context = {}, access = {}) {
+  const rootId = context?.rootId;
+  if (!rootId) {
+    throw createRouteError('Choose a Project folder before starting Work', 400, 'PROJECT_FOLDER_REQUIRED');
+  }
+  if (!String(rootId).startsWith('project:')) {
+    throw createRouteError('Work can only use folders attached to a Project', 403, 'PROJECT_FOLDER_REQUIRED');
   }
 
   const relativePath = context?.relativePath || context?.path || '.';
-  const resolved = resolveExplorerPath(rootId, relativePath);
+  const resolved = resolveExplorerPath(rootId, relativePath, {
+    ...access,
+    projectId: access.projectId || context.projectId || null,
+  });
 
   if (!fs.existsSync(resolved.absolutePath)) {
     throw createRouteError('Working directory not found', 404, 'NOT_FOUND');
@@ -246,6 +303,9 @@ export function resolveWorkingDirectoryContext(context = {}) {
     rootLabel: resolved.root.label,
     rootKind: resolved.root.kind,
     rootPath: resolved.rootPath,
+    projectId: resolved.root.projectId || null,
+    projectName: resolved.root.projectName || null,
+    projectEmoji: resolved.root.projectEmoji || null,
     relativePath: resolved.relativePath,
     workingDir: resolved.absolutePath,
   };
@@ -331,8 +391,8 @@ function assertDestinationAvailable(ctx, overwrite) {
   }
 }
 
-export function listDirectory({ rootId = 'workspace', relativePath = '.', includeHidden = false, sort = 'name', order = 'asc', limit = 1000 }) {
-  const ctx = resolveExplorerPath(rootId, relativePath);
+export function listDirectory({ rootId = 'workspace', relativePath = '.', includeHidden = false, sort = 'name', order = 'asc', limit = 1000, userId = null, projectId = null }) {
+  const ctx = resolveExplorerPath(rootId, relativePath, { userId, projectId });
   if (!fs.existsSync(ctx.absolutePath)) {
     throw createRouteError('Directory not found', 404, 'NOT_FOUND');
   }
@@ -366,15 +426,15 @@ export function listDirectory({ rootId = 'workspace', relativePath = '.', includ
   };
 }
 
-export function loadEntry({ rootId = 'workspace', relativePath = '.', includeHidden = false, sort = 'name', order = 'asc', limit = 1000 }) {
-  const ctx = resolveExplorerPath(rootId, relativePath);
+export function loadEntry({ rootId = 'workspace', relativePath = '.', includeHidden = false, sort = 'name', order = 'asc', limit = 1000, userId = null, projectId = null }) {
+  const ctx = resolveExplorerPath(rootId, relativePath, { userId, projectId });
   if (!fs.existsSync(ctx.absolutePath)) {
     throw createRouteError('Path not found', 404, 'NOT_FOUND');
   }
 
   const stat = fs.statSync(ctx.absolutePath);
   if (stat.isDirectory()) {
-    const listed = listDirectory({ rootId: ctx.root.id, relativePath: ctx.relativePath, includeHidden, sort, order, limit });
+    const listed = listDirectory({ rootId: ctx.root.id, relativePath: ctx.relativePath, includeHidden, sort, order, limit, userId, projectId });
     return { ...listed, type: 'dir' };
   }
 
@@ -426,8 +486,8 @@ function sortSearchEntries(entries, needle) {
   });
 }
 
-export function searchEntries({ rootId = 'workspace', relativePath = '.', query = '', includeHidden = false, maxResults = 80, sort = 'relevance', order = 'asc', contentQuery = '' }) {
-  const ctx = resolveExplorerPath(rootId, relativePath);
+export function searchEntries({ rootId = 'workspace', relativePath = '.', query = '', includeHidden = false, maxResults = 80, sort = 'relevance', order = 'asc', contentQuery = '', userId = null, projectId = null }) {
+  const ctx = resolveExplorerPath(rootId, relativePath, { userId, projectId });
   const nameNeedle = query.trim().toLowerCase();
   const contentNeedle = contentQuery.trim().toLowerCase();
   if (!nameNeedle && !contentNeedle) return { success: true, root: publicRoot(ctx.root), path: ctx.relativePath, entries: [] };
@@ -468,15 +528,15 @@ export function searchEntries({ rootId = 'workspace', relativePath = '.', query 
   };
 }
 
-export function createDirectory({ rootId = 'workspace', relativePath, overwrite = false }) {
-  const ctx = resolveExplorerPath(rootId, relativePath);
+export function createDirectory({ rootId = 'workspace', relativePath, overwrite = false, userId = null, projectId = null }) {
+  const ctx = resolveExplorerPath(rootId, relativePath, { userId, projectId });
   assertDestinationAvailable(ctx, overwrite);
   fs.mkdirSync(ctx.absolutePath, { recursive: true });
   return { success: true, entry: entryMeta(ctx.rootPath, ctx.absolutePath) };
 }
 
-export function writeFile({ rootId = 'workspace', relativePath, content = '', overwrite = true }) {
-  const ctx = resolveExplorerPath(rootId, relativePath);
+export function writeFile({ rootId = 'workspace', relativePath, content = '', overwrite = true, userId = null, projectId = null }) {
+  const ctx = resolveExplorerPath(rootId, relativePath, { userId, projectId });
   assertDestinationAvailable(ctx, overwrite);
   fs.mkdirSync(path.dirname(ctx.absolutePath), { recursive: true });
   if (Buffer.isBuffer(content)) {
@@ -487,9 +547,9 @@ export function writeFile({ rootId = 'workspace', relativePath, content = '', ov
   return { success: true, entry: entryMeta(ctx.rootPath, ctx.absolutePath) };
 }
 
-export function copyEntry({ rootId = 'workspace', source, destination, overwrite = true }) {
-  const src = resolveExplorerPath(rootId, source);
-  const dst = resolveExplorerPath(rootId, destination);
+export function copyEntry({ rootId = 'workspace', source, destination, overwrite = true, userId = null, projectId = null }) {
+  const src = resolveExplorerPath(rootId, source, { userId, projectId });
+  const dst = resolveExplorerPath(rootId, destination, { userId, projectId });
   if (!fs.existsSync(src.absolutePath)) {
     throw createRouteError('Source not found', 404, 'NOT_FOUND');
   }
@@ -499,9 +559,9 @@ export function copyEntry({ rootId = 'workspace', source, destination, overwrite
   return { success: true, entry: entryMeta(dst.rootPath, dst.absolutePath) };
 }
 
-export function moveEntry({ rootId = 'workspace', source, destination, overwrite = true }) {
-  const src = resolveExplorerPath(rootId, source);
-  const dst = resolveExplorerPath(rootId, destination);
+export function moveEntry({ rootId = 'workspace', source, destination, overwrite = true, userId = null, projectId = null }) {
+  const src = resolveExplorerPath(rootId, source, { userId, projectId });
+  const dst = resolveExplorerPath(rootId, destination, { userId, projectId });
   if (!fs.existsSync(src.absolutePath)) {
     throw createRouteError('Source not found', 404, 'NOT_FOUND');
   }
@@ -511,8 +571,8 @@ export function moveEntry({ rootId = 'workspace', source, destination, overwrite
   return { success: true, entry: entryMeta(dst.rootPath, dst.absolutePath) };
 }
 
-export function deleteEntry({ rootId = 'workspace', relativePath, recursive = false }) {
-  const ctx = resolveExplorerPath(rootId, relativePath);
+export function deleteEntry({ rootId = 'workspace', relativePath, recursive = false, userId = null, projectId = null }) {
+  const ctx = resolveExplorerPath(rootId, relativePath, { userId, projectId });
   if (ctx.relativePath === '.') {
     throw createRouteError('Cannot delete a root', 400, 'ROOT_DELETE');
   }
@@ -528,12 +588,12 @@ export function deleteEntry({ rootId = 'workspace', relativePath, recursive = fa
   return { success: true, path: ctx.relativePath };
 }
 
-export function batchDeleteEntries({ rootId = 'workspace', entries = [] }) {
+export function batchDeleteEntries({ rootId = 'workspace', entries = [], userId = null, projectId = null }) {
   const deleted = [];
   const errors = [];
   for (const item of entries) {
     try {
-      const result = deleteEntry({ rootId, relativePath: item.path, recursive: item.recursive === true });
+      const result = deleteEntry({ rootId, relativePath: item.path, recursive: item.recursive === true, userId, projectId });
       deleted.push(result.path);
     } catch (err) {
       errors.push({ path: item.path, error: err.message, code: err.code || 'UNKNOWN' });
@@ -542,12 +602,12 @@ export function batchDeleteEntries({ rootId = 'workspace', entries = [] }) {
   return { success: errors.length === 0, deleted, errors };
 }
 
-export function batchCopyEntries({ rootId = 'workspace', entries = [] }) {
+export function batchCopyEntries({ rootId = 'workspace', entries = [], userId = null, projectId = null }) {
   const copied = [];
   const errors = [];
   for (const item of entries) {
     try {
-      const result = copyEntry({ rootId, source: item.source, destination: item.destination, overwrite: item.overwrite === true });
+      const result = copyEntry({ rootId, source: item.source, destination: item.destination, overwrite: item.overwrite === true, userId, projectId });
       copied.push(result.entry);
     } catch (err) {
       errors.push({ source: item.source, destination: item.destination, error: err.message, code: err.code || 'UNKNOWN' });
@@ -576,21 +636,22 @@ function addDirToZip(zipFolder, absoluteDir) {
   }
 }
 
-export async function extractArchive({ rootId = 'workspace', relativePath, destination }) {
+export async function extractArchive({ rootId = 'workspace', relativePath, destination, userId = null, projectId = null }) {
   const { default: JSZip } = await import('jszip');
-  const ctx = resolveExplorerPath(rootId, relativePath);
+  const ctx = resolveExplorerPath(rootId, relativePath, { userId, projectId });
   if (!fs.existsSync(ctx.absolutePath)) throw createRouteError('Archive not found', 404, 'NOT_FOUND');
 
   const name = path.basename(relativePath);
   const lowerName = name.toLowerCase();
   const destRelative = destination || path.join(path.dirname(relativePath), archiveBaseName(name));
-  const destCtx = resolveExplorerPath(rootId, destRelative);
+  const destCtx = resolveExplorerPath(rootId, destRelative, { userId, projectId });
   fs.mkdirSync(destCtx.absolutePath, { recursive: true });
 
   if (lowerName.endsWith('.zip')) {
     const zip = await JSZip.loadAsync(fs.readFileSync(ctx.absolutePath));
     for (const [entryName, zipEntry] of Object.entries(zip.files)) {
-      const outPath = path.join(destCtx.absolutePath, entryName);
+      const outCtx = resolveExplorerPath(rootId, path.join(destRelative, entryName), { userId, projectId });
+      const outPath = outCtx.absolutePath;
       if (zipEntry.dir) {
         fs.mkdirSync(outPath, { recursive: true });
       } else {
@@ -599,8 +660,8 @@ export async function extractArchive({ rootId = 'workspace', relativePath, desti
       }
     }
   } else if (lowerName.endsWith('.tar') || lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz') || lowerName.endsWith('.tar.bz2') || lowerName.endsWith('.tbz')) {
-    const { execSync } = await import('child_process');
-    execSync(`tar -xf "${ctx.absolutePath}" -C "${destCtx.absolutePath}"`, { stdio: 'pipe' });
+    const { execFileSync } = await import('child_process');
+    execFileSync('tar', ['-xf', ctx.absolutePath, '-C', destCtx.absolutePath], { stdio: 'pipe' });
   } else if (lowerName.endsWith('.gz')) {
     const zlib = await import('zlib');
     const outName = path.basename(relativePath, '.gz');
@@ -614,12 +675,12 @@ export async function extractArchive({ rootId = 'workspace', relativePath, desti
   return { success: true, extractedTo: destCtx.relativePath };
 }
 
-export async function createArchive({ rootId = 'workspace', paths = [], destination }) {
+export async function createArchive({ rootId = 'workspace', paths = [], destination, userId = null, projectId = null }) {
   const { default: JSZip } = await import('jszip');
   if (!destination) throw createRouteError('destination is required', 400, 'MISSING_DESTINATION');
   const zip = new JSZip();
   for (const relPath of paths) {
-    const ctx = resolveExplorerPath(rootId, relPath);
+    const ctx = resolveExplorerPath(rootId, relPath, { userId, projectId });
     if (!fs.existsSync(ctx.absolutePath)) continue;
     const entryName = path.basename(ctx.absolutePath);
     if (fs.statSync(ctx.absolutePath).isDirectory()) {
@@ -628,7 +689,7 @@ export async function createArchive({ rootId = 'workspace', paths = [], destinat
       zip.file(entryName, fs.readFileSync(ctx.absolutePath));
     }
   }
-  const destCtx = resolveExplorerPath(rootId, destination);
+  const destCtx = resolveExplorerPath(rootId, destination, { userId, projectId });
   fs.mkdirSync(path.dirname(destCtx.absolutePath), { recursive: true });
   fs.writeFileSync(destCtx.absolutePath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
   return { success: true, archivePath: destCtx.relativePath };
@@ -640,9 +701,13 @@ export function publicRoot(root) {
     label: root.label,
     kind: root.kind,
     path: root.path,
+    projectId: root.projectId || null,
+    projectName: root.projectName || null,
+    projectEmoji: root.projectEmoji || null,
+    isPrimary: Boolean(root.isPrimary),
   };
 }
 
-export function publicRoots() {
-  return getFileRoots().map(publicRoot);
+export function publicRoots({ userId = null, projectId = null } = {}) {
+  return getProjectFileRoots({ userId, projectId }).map(publicRoot);
 }

@@ -111,8 +111,8 @@ function setupIPC() {
     const win = getMainWindow();
     return dialog.showOpenDialog(win, {
       properties: ['openDirectory', 'createDirectory'],
-      title: opts.title || 'Select workspace folder',
-      buttonLabel: opts.buttonLabel || 'Use as Workspace',
+      title: opts.title || 'Choose a Project folder',
+      buttonLabel: opts.buttonLabel || 'Choose Folder',
       defaultPath: opts.defaultPath || undefined,
     });
   });

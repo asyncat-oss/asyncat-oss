@@ -29,6 +29,7 @@ export const agentApi = {
         fileAttachments: opts.fileAttachments || [],
         enableTools: opts.enableTools !== false,
         agentMode: opts.agentMode || (opts.enableTools === false ? 'plan' : 'action'),
+        experienceMode: opts.experienceMode || 'work',
         reasoningEffort: opts.reasoningEffort || 'auto',
         enabledIntegrationTools: Array.isArray(opts.enabledIntegrationTools) ? opts.enabledIntegrationTools : null,
         conversationId: opts.conversationId || null,

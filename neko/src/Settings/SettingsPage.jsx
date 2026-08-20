@@ -23,6 +23,7 @@ import StorageSection from './StorageSection';
 import IntegrationsSection from './IntegrationsSection';
 import RuntimeSection from './RuntimeSection';
 import WorkbenchSection from './WorkbenchSection';
+import ProjectsSection from './ProjectsSection';
 
 const TAB_ALIASES = {
   general: 'profile',
@@ -32,13 +33,14 @@ const TAB_ALIASES = {
   server: 'advanced',
   storage: 'advanced',
   updates: 'about',
+  workspace: 'projects',
 };
 
 const SettingsPage = () => {
   const { tab } = useParams();
   const navigate = useNavigate();
   const { localUser } = useOutletContext() || {};
-  const { currentWorkspace, refreshWorkspaces, updateCurrentWorkspace } = useWorkspace();
+  const { currentWorkspace, updateCurrentWorkspace } = useWorkspace();
   const { theme, setTheme } = useUiPreferences();
   const [advancedView, setAdvancedView] = useState(tab === 'server' ? 'server' : 'storage');
 
@@ -51,10 +53,10 @@ const SettingsPage = () => {
       icon: UserRound,
     },
     {
-      id: 'workspace',
+      id: 'projects',
       group: 'Personal',
-      label: 'Workspace',
-      description: 'Project-space identity and ownership controls.',
+      label: 'Projects',
+      description: 'Create Projects and control their local folder access.',
       icon: BriefcaseBusiness,
     },
     {
@@ -111,18 +113,12 @@ const SettingsPage = () => {
     if (tab === 'storage') setAdvancedView('storage');
   }, [tab]);
 
-  const handleWorkspaceDeleted = () => {
-    refreshWorkspaces();
-    navigate('/home');
-  };
-
   const renderProfile = () => (
     <GeneralSection
       view="profile"
       localUser={localUser}
       workspace={currentWorkspace}
       onWorkspaceUpdated={updateCurrentWorkspace}
-      onWorkspaceDeleted={handleWorkspaceDeleted}
     />
   );
 
@@ -156,16 +152,8 @@ const SettingsPage = () => {
     switch (activeTab) {
       case 'profile':
         return renderProfile();
-      case 'workspace':
-        return (
-          <GeneralSection
-            view="workspace"
-            localUser={localUser}
-            workspace={currentWorkspace}
-            onWorkspaceUpdated={updateCurrentWorkspace}
-            onWorkspaceDeleted={handleWorkspaceDeleted}
-          />
-        );
+      case 'projects':
+        return <ProjectsSection />;
       case 'appearance':
         return <AppearanceSection theme={theme} setThemeMode={setTheme} />;
       case 'connections':

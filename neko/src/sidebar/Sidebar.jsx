@@ -8,6 +8,7 @@ import {
   Cpu,
   GraduationCap,
   History,
+  FolderKanban,
   KanbanSquare,
   Check,
   ListFilter,
@@ -253,7 +254,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         case "newChat": onNewChat(); break;
         case "navHome": openCommandCenter(); break;
         case "navChat": navigate("/all-chats"); break;
-        case "navWorkspace": navigate("/workspace"); break;
+        case "navWorkspace": navigate("/projects"); break;
         case "navModels": navigate("/models"); break;
         case "navTools": navigate("/tools"); break;
         case "navScheduler": navigate("/schedules"); break;
@@ -272,7 +273,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     };
   }, [navigate, onNewChat, onSearchOpen, openCommandCenter, shortcuts]);
 
-  const isOnWorkspace = ["workspace", "projects"].includes(basePage);
+  const isOnProjects = basePage === "projects";
+  const isOnTasks = ["workspace", "tasks"].includes(basePage);
   const isOnChats = basePage === "all-chats";
   const isOnModels = basePage === "models";
   const isOnAgent = location.pathname === "/agent"
@@ -289,7 +291,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const activeRecentConversationId = routeConversationId;
 
   const workItems = [
-    { key: "projects", label: "Tasks", path: "/workspace", active: isOnWorkspace, icon: <KanbanSquare className={iconClass} /> },
+    { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: <FolderKanban className={iconClass} /> },
+    { key: "tasks", label: "Tasks", path: "/tasks", active: isOnTasks, icon: <KanbanSquare className={iconClass} /> },
     { key: "workflows", label: "Workflows", path: "/workflows", active: isOnWorkflows, icon: <Workflow className={iconClass} /> },
     { key: "schedules", label: "Schedules", path: "/schedules", active: isOnSchedules, icon: <CalendarClock className={iconClass} /> },
     { key: "activity", label: "Activity", path: "/activity", active: isOnActivity, icon: <Bell className={iconClass} /> },

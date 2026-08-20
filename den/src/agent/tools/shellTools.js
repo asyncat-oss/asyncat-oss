@@ -128,7 +128,7 @@ export const runCommandTool = {
     type: 'object',
     properties: {
       command: { type: 'string', description: 'The shell command to execute' },
-      cwd: { type: 'string', description: 'Working directory (relative to workspace root, default: workspace root)' },
+      cwd: { type: 'string', description: 'Working directory relative to the active Project folder.' },
       timeout: { type: 'number', description: 'Timeout in seconds (default: 30)' },
     },
     required: ['command'],
@@ -230,7 +230,7 @@ export const shellSessionStartTool = {
     type: 'object',
     properties: {
       name: { type: 'string', description: 'Session name (default: "default"). Use different names for independent workflows.' },
-      cwd: { type: 'string', description: 'Starting working directory (default: workspace root).' },
+      cwd: { type: 'string', description: 'Starting working directory inside the active Project folder.' },
     },
     required: [],
   },

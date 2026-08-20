@@ -15,10 +15,12 @@ function basenamePath(value = '') {
 
 function formatWorkingContextLabel(context) {
   if (!context || typeof context !== 'object') return null;
-  if (context.relativePath && context.relativePath !== '.') return basenamePath(context.relativePath);
-  if (context.workingDir) return basenamePath(context.workingDir);
-  if (context.rootPath) return basenamePath(context.rootPath);
-  return context.rootLabel || null;
+  const folder = context.relativePath && context.relativePath !== '.'
+    ? basenamePath(context.relativePath)
+    : context.rootLabel || basenamePath(context.workingDir) || basenamePath(context.rootPath);
+  return context.projectName
+    ? `${context.projectEmoji || '📁'} ${context.projectName}${folder ? ` / ${folder}` : ''}`
+    : folder || null;
 }
 
 function getWorkingContext(item) {
@@ -27,7 +29,7 @@ function getWorkingContext(item) {
 
 function getWorkingContextFilterKey(context) {
   if (!context || typeof context !== 'object') return null;
-  const root = context.rootId || context.rootPath || context.rootLabel || '';
+  const root = context.projectId || context.rootId || context.rootPath || context.rootLabel || '';
   const relative = context.relativePath || context.workingDir || context.rootPath || '';
   if (!root && !relative) return null;
   return `${root}:${relative}`;

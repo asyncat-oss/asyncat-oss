@@ -23,7 +23,7 @@ export const sandboxTools = [
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Human-readable sandbox name.' },
-        sourcePath: { type: 'string', description: 'Source directory. Defaults to the current workspace root.' },
+        sourcePath: { type: 'string', description: 'Source directory. Defaults to the active Project folder.' },
         strategy: { type: 'string', description: 'auto, worktree, or copy. auto prefers worktree for git repositories.' },
         baseRef: { type: 'string', description: 'Git ref to branch from when using worktree. Defaults to HEAD.' },
       },

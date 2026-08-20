@@ -2,7 +2,9 @@
 import db from '../../db/client.js';
 import { PermissionLevel } from './toolRegistry.js';
 
-function getCardForWorkspace(cardId, workspaceId) {
+function getCardForWorkspace(cardId, workspaceId, projectId = null) {
+  const projectClause = projectId ? 'AND p.id = ?' : '';
+  const params = projectId ? [cardId, workspaceId, projectId] : [cardId, workspaceId];
   return db.prepare(`
     SELECT c.*, col.title AS column_title,
            p.id AS project_id, p.name AS project_name
@@ -10,8 +12,9 @@ function getCardForWorkspace(cardId, workspaceId) {
     JOIN Columns col ON col.id = c.columnId
     JOIN projects p ON p.id = col.projectId
     WHERE c.id = ? AND p.team_id = ?
+    ${projectClause}
     LIMIT 1
-  `).get(cardId, workspaceId);
+  `).get(...params);
 }
 
 function parseJson(value, fallback) {
@@ -81,7 +84,7 @@ export const workspaceTools = [
   },
   {
     name: 'get_tasks',
-    description: 'Retrieve tasks (Cards) from the workspace Kanban board.',
+    description: 'Retrieve task cards from the selected Project. Outside a Project, task tools are unavailable.',
     permission: 'safe',
     parameters: {
       type: 'object',
@@ -94,6 +97,10 @@ export const workspaceTools = [
       const limit = args.limit || 10;
       try {
         const status = String(args.status || '').toLowerCase();
+        const projectClause = context.projectId ? 'AND p.id = ?' : '';
+        const params = context.projectId
+          ? [context.workspaceId, context.projectId, limit]
+          : [context.workspaceId, limit];
         let rows = db.prepare(`
           SELECT c.*, col.title AS column_title,
                  p.id AS project_id, p.name AS project_name
@@ -101,9 +108,10 @@ export const workspaceTools = [
           JOIN Columns col ON col.id = c.columnId
           JOIN projects p ON p.id = col.projectId
           WHERE p.team_id = ?
+          ${projectClause}
           ORDER BY c.updatedAt DESC
           LIMIT ?
-        `).all(context.workspaceId, limit);
+        `).all(...params);
 
         if (status) {
           rows = rows.filter(row => {
@@ -136,17 +144,17 @@ export const workspaceTools = [
     },
     execute: async (args, context) => {
       try {
-        const card = getCardForWorkspace(args.cardId, context.workspaceId);
-        if (!card) return { success: false, error: 'Task card not found in this workspace.' };
+        const card = getCardForWorkspace(args.cardId, context.workspaceId, context.projectId);
+        if (!card) return { success: false, error: 'Task card not found in this Project.' };
 
         let dest = null;
         if (args.columnId) {
           dest = db.prepare(`
             SELECT col.* FROM Columns col
             JOIN projects p ON p.id = col.projectId
-            WHERE col.id = ? AND p.team_id = ?
+            WHERE col.id = ? AND p.team_id = ? AND p.id = ?
             LIMIT 1
-          `).get(args.columnId, context.workspaceId);
+          `).get(args.columnId, context.workspaceId, card.project_id);
         } else if (args.columnTitle) {
           dest = db.prepare(`
             SELECT col.* FROM Columns col
@@ -188,8 +196,8 @@ export const workspaceTools = [
     },
     execute: async (args, context) => {
       try {
-        const card = getCardForWorkspace(args.cardId, context.workspaceId);
-        if (!card) return { success: false, error: 'Task card not found in this workspace.' };
+        const card = getCardForWorkspace(args.cardId, context.workspaceId, context.projectId);
+        if (!card) return { success: false, error: 'Task card not found in this Project.' };
         const checklist = parseJson(card.checklist, []);
         const index = checklist.findIndex(item =>
           (args.subtaskId && String(item.id) === String(args.subtaskId)) ||
@@ -232,8 +240,8 @@ export const workspaceTools = [
     },
     execute: async (args, context) => {
       try {
-        const card = getCardForWorkspace(args.cardId, context.workspaceId);
-        if (!card) return { success: false, error: 'Task card not found in this workspace.' };
+        const card = getCardForWorkspace(args.cardId, context.workspaceId, context.projectId);
+        if (!card) return { success: false, error: 'Task card not found in this Project.' };
         const stamp = new Date().toISOString();
         const nextDescription = [card.description || '', `\n\nAgent note (${stamp}):\n${args.note}`].join('').trim();
         db.prepare('UPDATE Cards SET description = ?, updatedAt = ? WHERE id = ?').run(nextDescription, stamp, card.id);

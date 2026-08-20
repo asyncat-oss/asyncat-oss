@@ -4,11 +4,13 @@ import {
 	LayoutGrid,
 	KanbanSquare,
 	List,
+	FolderOpen,
 } from "lucide-react";
 
 // Import view components directly here
 import KanIndex from "../views/kanban/KanIndex";
 import ListView from "../views/list/ListView";
+import ProjectFolders from './components/ProjectFolders.jsx';
 
 // Import context providers
 import { ColumnProvider } from "../views/context/ColumnProvider";
@@ -19,9 +21,13 @@ import { useWorkspace } from "../contexts/WorkspaceContext";
 
 const soraFontBase = "font-sora";
 
-const PROJECT_VIEWS = [
+const TASK_VIEWS = [
 	{ key: 'kanban', label: 'Board', Icon: KanbanSquare },
 	{ key: 'list',   label: 'List',  Icon: List },
+];
+
+const PROJECT_VIEWS = [
+	{ key: 'folders', label: 'Folders', Icon: FolderOpen },
 ];
 
 const TASK_VIEW_COMPONENTS = {
@@ -137,6 +143,8 @@ const ProjectOverview = React.memo(({
 	projectId,
 	currentTab,
 	localUser,
+	basePath = '/projects',
+	section = 'projects',
 }) => {
 	const navigate = useNavigate();
 	const [projectInfo, setProjectInfo] = useState(null);
@@ -193,7 +201,7 @@ const ProjectOverview = React.memo(({
 				setProjectInfo(updatedProject);
 			} else {
 				console.warn(
-					"Project not found in workspace projects, keeping current data"
+					"Project not found in the current project list, keeping current data"
 				);
 				setProjectInfo({ ...selectedProject });
 			}
@@ -215,6 +223,8 @@ const ProjectOverview = React.memo(({
 		const projectData = selectedProject?.owner_id
 			? selectedProject 
 			: (projectInfo || selectedProject);
+
+		if (section === 'projects') return <ProjectFolders project={projectData} />;
 
 		const ViewComponent = TASK_VIEW_COMPONENTS[currentTab];
 		if (!ViewComponent) return <div>No content available</div>;
@@ -290,14 +300,14 @@ const ProjectOverview = React.memo(({
 	return (
 		<div className={`flex flex-col h-full ${soraFontBase} relative`}>
 			{/* Section tab navigation */}
-			<div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
+			{section === 'tasks' && <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
 				<div className="flex items-center gap-0.5 px-4 overflow-x-auto scrollbar-none">
-					{PROJECT_VIEWS.map(({ key, label, Icon }) => {
+					{TASK_VIEWS.map(({ key, label, Icon }) => {
 						const isActive = currentTab === key;
 						return (
 							<button
 								key={key}
-								onClick={() => navigate(`/workspace/${projectId}/${key}`)}
+								onClick={() => navigate(`${basePath}/${projectId}/${key}`)}
 								className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
 									isActive
 										? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400'
@@ -310,7 +320,7 @@ const ProjectOverview = React.memo(({
 						);
 					})}
 				</div>
-			</div>
+			</div>}
 			<div className="flex-1 overflow-auto">
 				{renderViewContent()}
 			</div>

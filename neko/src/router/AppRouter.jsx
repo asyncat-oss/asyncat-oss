@@ -25,9 +25,13 @@ import WorkflowsPage from '../Workflows/WorkflowsPage';
 import ActivityPage from '../Activity/ActivityPage';
 import TrainingPage from '../Training/TrainingPage';
 
-const ProjectsRedirect = () => {
+const LegacyWorkspaceRedirect = () => {
   const { projectId, tab } = useParams();
-  return <Navigate to={tab ? `/workspace/${projectId}/${tab}` : `/workspace/${projectId}`} replace />;
+  if (projectId && tab === 'folders') {
+    return <Navigate to={`/projects/${projectId}/folders`} replace />;
+  }
+  const taskTab = ['kanban', 'list'].includes(tab) ? tab : null;
+  return <Navigate to={projectId ? (taskTab ? `/tasks/${projectId}/${taskTab}` : `/tasks/${projectId}`) : '/tasks'} replace />;
 };
 
 const LocalApp = ({ children }) => {
@@ -89,13 +93,13 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
-        path: "workspace",
-        element: <WorkspaceLayout />,
+        path: "projects",
+        element: <WorkspaceLayout basePath="/projects" section="projects" />,
         errorElement: <RouteErrorElement />,
         children: [
           {
             index: true,
-            element: <WorkspaceEmpty />,
+            element: <WorkspaceEmpty basePath="/projects" emptyLabel="projects" />,
           },
           {
             path: ":projectId",
@@ -110,18 +114,39 @@ const createRouter = () => createBrowserRouter([
         ],
       },
       {
-        path: "projects",
-        element: <Navigate to="/workspace" replace />,
+        path: "tasks",
+        element: <WorkspaceLayout basePath="/tasks" section="tasks" />,
+        errorElement: <RouteErrorElement />,
+        children: [
+          {
+            index: true,
+            element: <WorkspaceEmpty basePath="/tasks" emptyLabel="tasks" />,
+          },
+          {
+            path: ":projectId",
+            element: <ProjectOverview />,
+            errorElement: <RouteErrorElement />,
+          },
+          {
+            path: ":projectId/:tab",
+            element: <ProjectOverview />,
+            errorElement: <RouteErrorElement />,
+          },
+        ],
+      },
+      {
+        path: "workspace",
+        element: <LegacyWorkspaceRedirect />,
         errorElement: <RouteErrorElement />
       },
       {
-        path: "projects/:projectId",
-        element: <ProjectsRedirect />,
+        path: "workspace/:projectId",
+        element: <LegacyWorkspaceRedirect />,
         errorElement: <RouteErrorElement />
       },
       {
-        path: "projects/:projectId/:tab",
-        element: <ProjectsRedirect />,
+        path: "workspace/:projectId/:tab",
+        element: <LegacyWorkspaceRedirect />,
         errorElement: <RouteErrorElement />
       },
       {

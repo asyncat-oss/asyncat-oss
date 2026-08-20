@@ -126,7 +126,7 @@ export default function WorkbenchSection() {
 
   return (
     <div className="space-y-5">
-      <SectionCard icon={AppWindow} title="Layout" description="Choose where work tools open. Resize either dock directly in the workspace; Asyncat remembers its size.">
+      <SectionCard icon={AppWindow} title="Layout" description="Choose where Work tools open. Resize either dock directly in the app; Asyncat remembers its size.">
         <ChoiceRow
           icon={prefs.terminalPosition === 'bottom' ? PanelBottom : PanelRight}
           label="Terminal position"
@@ -150,7 +150,7 @@ export default function WorkbenchSection() {
           { value: 'auto', label: 'Auto' }, { value: 'pwsh', label: 'PS 7' }, { value: 'powershell', label: 'PS 5' }, { value: 'cmd', label: 'CMD' }, { value: 'zsh', label: 'zsh' }, { value: 'bash', label: 'bash' },
         ]} />
         <ChoiceRow icon={FolderOpen} label="Starting folder" value={prefs.terminalStartDirectory} onChange={(value) => setPreference('terminalStartDirectory', value)} options={[
-          { value: 'working', label: 'Current working folder', description: 'Match the workspace shown in the composer' },
+          { value: 'working', label: 'Current Project folder', description: 'Match the Project shown in the composer' },
           { value: 'home', label: 'Home folder', description: 'Start from your operating-system home' },
         ]} />
         <ChoiceRow icon={Wrench} label="Font size" value={String(prefs.terminalFontSize)} onChange={(value) => setPreference('terminalFontSize', Number(value))} compact options={[11, 12, 13, 14, 15, 16].map((size) => ({ value: String(size), label: `${size}` }))} />

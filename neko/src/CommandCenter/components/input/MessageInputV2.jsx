@@ -121,8 +121,9 @@ function safeAttachmentName(name = "attachment") {
 
 function labelForWorkingContext(context, root) {
   if (context?.relativePath && context.relativePath !== ".") return basename(context.relativePath);
+  if (root?.label) return root.label;
   if (root?.path) return formatRootLabel(root.path);
-  return "Projects";
+  return "Folder";
 }
 
 function relativeToContext(entryPath, contextPath = ".") {
@@ -529,8 +530,8 @@ export const MessageInputV2 = ({
   const [fileSearchResults, setFileSearchResults] = useState([]);
   const [fileSearchLoading, setFileSearchLoading] = useState(false);
   const [fileSearchLoaded, setFileSearchLoaded] = useState(false);
-  const [fileRoot, setFileRoot] = useState(null);
   const [fileRoots, setFileRoots] = useState([]);
+  const [fileRootsLoaded, setFileRootsLoaded] = useState(false);
   const [contextModalOpen, setContextModalOpen] = useState(false);
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
@@ -585,19 +586,8 @@ export const MessageInputV2 = ({
     [agentProfiles, value],
   );
   const activeRoot = useMemo(() => {
-    const rootId = workingContext?.rootId || "workspace";
-    if (rootId === "_abs" && workingContext?.workingDir) {
-      // Synthesize a root from the absolute path chosen via native picker
-      const absPath = workingContext.workingDir;
-      return {
-        id: "_abs",
-        label: absPath.split("/").filter(Boolean).pop() || absPath,
-        kind: "dir",
-        path: absPath,
-      };
-    }
-    return fileRoots.find(root => root.id === rootId) || fileRoot || fileRoots[0] || null;
-  }, [fileRoot, fileRoots, workingContext?.rootId, workingContext?.workingDir]);
+    return fileRoots.find(root => root.id === workingContext?.rootId) || null;
+  }, [fileRoots, workingContext?.rootId]);
   const activeWorkingContext = useMemo(() => {
     if (!isWorkExperience || !activeRoot) return null;
     const relativePath = workingContext?.relativePath || ".";
@@ -606,20 +596,22 @@ export const MessageInputV2 = ({
       rootLabel: activeRoot.label,
       rootKind: activeRoot.kind,
       rootPath: activeRoot.path,
+      projectId: activeRoot.projectId,
+      projectName: activeRoot.projectName,
+      projectEmoji: activeRoot.projectEmoji,
       relativePath,
       workingDir: workingContext?.workingDir || absoluteFromRoot(activeRoot.path, relativePath),
     };
-  }, [activeRoot, isWorkExperience, workingContext?.relativePath, workingContext?.workingDir]);
+  }, [activeRoot, isWorkExperience, workingContext?.relativePath, workingContext?.rootId, workingContext?.workingDir]);
 
-  // The composer, agent, code tools, and terminal must share the same effective
-  // directory. Previously the composer displayed this derived default without
-  // lifting it to the command-center context, so terminals silently opened in
-  // the Electron process directory instead of the folder shown to the user.
+  // A removed or unavailable Project folder is cleared only after roots finish
+  // loading. Crucially, a null context remains null; it is never replaced with
+  // the first or most recently used Project.
   useEffect(() => {
-    if (!workingContext && activeWorkingContext && onWorkingContextChange) {
-      onWorkingContextChange(activeWorkingContext);
+    if (isWorkExperience && fileRootsLoaded && workingContext?.rootId && !activeRoot && onWorkingContextChange) {
+      onWorkingContextChange(null);
     }
-  }, [activeWorkingContext, onWorkingContextChange, workingContext]);
+  }, [activeRoot, fileRootsLoaded, isWorkExperience, onWorkingContextChange, workingContext?.rootId]);
   const activeContextLabel = labelForWorkingContext(activeWorkingContext, activeRoot);
   const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {
@@ -695,8 +687,9 @@ export const MessageInputV2 = ({
   useEffect(() => {
     if (!isWorkExperience || !externalFileAttachment?.path) return;
     setFileAttachments(prev => {
-      const rootId = externalFileAttachment.rootId || activeWorkingContext?.rootId || "workspace";
-      if (prev.some(file => file.path === externalFileAttachment.path && (file.rootId || "workspace") === rootId)) return prev;
+      const rootId = externalFileAttachment.rootId || activeWorkingContext?.rootId;
+      if (!rootId) return prev;
+      if (prev.some(file => file.path === externalFileAttachment.path && file.rootId === rootId)) return prev;
       return [...prev, {
         rootId,
         path: externalFileAttachment.path,
@@ -734,20 +727,23 @@ export const MessageInputV2 = ({
   useEffect(() => {
     if (!isWorkExperience) {
       setFileRoots([]);
-      setFileRoot(null);
+      setFileRootsLoaded(false);
       return undefined;
     }
     let cancelled = false;
+    setFileRootsLoaded(false);
     filesApi
       .getRoots()
       .then((res) => {
         if (cancelled) return;
-        const workspaceRoot = (res.roots || []).find(root => root.id === "workspace") || res.roots?.[0] || null;
-        setFileRoots(res.roots || []);
-        setFileRoot(workspaceRoot);
+        const roots = (res.roots || []).filter(root => root.kind === 'project');
+        setFileRoots(roots);
       })
       .catch(() => {
-        if (!cancelled) setFileRoot(null);
+        if (!cancelled) setFileRoots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFileRootsLoaded(true);
       });
 
     return () => {
@@ -768,7 +764,8 @@ export const MessageInputV2 = ({
         setFileSearchLoading(true);
         const query = fileTrigger.query;
         const { dirPath, filter } = splitFileQuery(query);
-        const rootId = activeWorkingContext?.rootId || "workspace";
+        const rootId = activeWorkingContext?.rootId;
+        if (!rootId) return;
         const basePath = activeWorkingContext?.relativePath || ".";
         let res;
         if (!query || query.includes("/")) {
@@ -864,7 +861,8 @@ export const MessageInputV2 = ({
     }
 
     // Keep @mention inline in text — positional context preserved
-    const rootId = activeWorkingContext?.rootId || "workspace";
+    const rootId = activeWorkingContext?.rootId;
+    if (!rootId) return;
     const displayPath = relativeToContext(file.path, activeWorkingContext?.relativePath || ".");
     const token = `@${displayPath}`;
     const nextValue = `${value.slice(0, fileTrigger.start)}${token} ${value.slice(fileTrigger.end)}`;
@@ -884,8 +882,8 @@ export const MessageInputV2 = ({
     });
   }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileTrigger, value]);
 
-  const removeFileAttachment = useCallback((path, rootId = "workspace") => {
-    setFileAttachments(prev => prev.filter(f => !(f.path === path && (f.rootId || "workspace") === rootId)));
+  const removeFileAttachment = useCallback((path, rootId = null) => {
+    setFileAttachments(prev => prev.filter(f => !(f.path === path && f.rootId === rootId)));
   }, []);
 
   const handlePickedFiles = useCallback(async (event) => {
@@ -893,7 +891,8 @@ export const MessageInputV2 = ({
     event.target.value = "";
     if (!picked.length || disabled) return;
 
-    const rootId = activeWorkingContext?.rootId || "workspace";
+    const rootId = activeWorkingContext?.rootId;
+    if (!rootId) return;
     const uploadDir = ".asyncat/attachments";
     setUploadingAttachment(true);
     setError(null);
@@ -917,10 +916,10 @@ export const MessageInputV2 = ({
       }
 
       setFileAttachments(prev => {
-        const seen = new Set(prev.map(file => `${file.rootId || "workspace"}:${file.path}`));
+        const seen = new Set(prev.map(file => `${file.rootId || "none"}:${file.path}`));
         const next = [...prev];
         for (const file of uploaded) {
-          const key = `${file.rootId || "workspace"}:${file.path}`;
+          const key = `${file.rootId || "none"}:${file.path}`;
           if (!seen.has(key)) next.push(file);
         }
         return next;
@@ -951,7 +950,7 @@ export const MessageInputV2 = ({
         while ((mentionMatch = mentionRegex.exec(textToSend)) !== null) {
           const token = `@${mentionMatch[1].replace(/[.,;:!?]+$/, "")}`;
           const meta = inlineMentions.get(token);
-          const key = `${meta?.rootId || "workspace"}:${meta?.path}`;
+          const key = `${meta?.rootId || "none"}:${meta?.path}`;
           if (meta && !seenPaths.has(key)) {
             seenPaths.add(key);
             resolvedInline.push({ ...meta, inline: true });
@@ -1203,35 +1202,25 @@ export const MessageInputV2 = ({
   }, []);
 
   const selectWorkingContext = useCallback((rootId, relativePath = ".") => {
-    if (rootId === "_abs") {
-      // Absolute path picked via native dialog — not mapped to any configured root
-      const absPath = relativePath;
-      const folderName = absPath.split('/').filter(Boolean).pop() || absPath;
-      const nextContext = {
-        rootId: "_abs",
-        rootLabel: folderName,
-        rootKind: "dir",
-        rootPath: absPath,
-        relativePath: ".",
-        workingDir: absPath,
-      };
-      const currentKey = `${activeWorkingContext?.rootId || ""}:${activeWorkingContext?.relativePath || "."}`;
-      const nextKey = `_abs:${absPath}`;
-      if (hasMessages && currentKey !== nextKey) {
-        setPendingContextSwitch(nextContext);
+    if (rootId === 'none' || !rootId) {
+      if (hasMessages && activeWorkingContext) {
+        setPendingContextSwitch({ noProject: true });
         return;
       }
-      onWorkingContextChange(nextContext);
+      onWorkingContextChange?.(null);
       setContextModalOpen(false);
       return;
     }
-    const root = fileRoots.find(item => item.id === rootId) || activeRoot;
+    const root = fileRoots.find(item => item.id === rootId);
     if (!root || !onWorkingContextChange) return;
     const nextContext = {
       rootId: root.id,
       rootLabel: root.label,
       rootKind: root.kind,
       rootPath: root.path,
+      projectId: root.projectId,
+      projectName: root.projectName,
+      projectEmoji: root.projectEmoji,
       relativePath: relativePath || ".",
       workingDir: absoluteFromRoot(root.path, relativePath || "."),
     };
@@ -1243,23 +1232,15 @@ export const MessageInputV2 = ({
     }
     onWorkingContextChange(nextContext);
     setContextModalOpen(false);
-  }, [activeRoot, activeWorkingContext?.relativePath, activeWorkingContext?.rootId, fileRoots, hasMessages, onWorkingContextChange]);
+  }, [activeWorkingContext, fileRoots, hasMessages, onWorkingContextChange]);
 
   const openWorkingContextMenu = useCallback(async () => {
-    if (window?.electronAPI?.openDirectory) {
-      const result = await window.electronAPI.openDirectory({
-        defaultPath: activeWorkingContext?.workingDir || undefined,
-      });
-      if (result.canceled || !result.filePaths?.[0]) return;
-      selectWorkingContext('_abs', result.filePaths[0]);
-      return;
-    }
     setContextModalOpen(true);
-  }, [activeWorkingContext?.workingDir, selectWorkingContext]);
+  }, []);
 
   const confirmContextSwitch = useCallback(() => {
     if (!pendingContextSwitch) return;
-    onWorkingContextChange(pendingContextSwitch);
+    onWorkingContextChange(pendingContextSwitch.noProject ? null : pendingContextSwitch);
     setPendingContextSwitch(null);
     setContextModalOpen(false);
   }, [pendingContextSwitch, onWorkingContextChange]);
@@ -1556,10 +1537,10 @@ export const MessageInputV2 = ({
                 <div className="mt-2 flex flex-wrap gap-2">
                   {fileAttachments.map(file => (
                     <AttachmentChip
-                      key={`${file.rootId || "workspace"}:${file.path}`}
+                      key={`${file.rootId || "none"}:${file.path}`}
                       file={file}
                       capabilities={multimodalCapabilities}
-                      onRemove={() => removeFileAttachment(file.path, file.rootId || "workspace")}
+                      onRemove={() => removeFileAttachment(file.path, file.rootId || null)}
                       onPreview={setLightbox}
                     />
                   ))}
@@ -1858,24 +1839,35 @@ export const MessageInputV2 = ({
 
               {isWorkExperience && (activeWorkingContext || onWorkingContextChange) && (
                 <div className="-mx-4 -mb-3 mt-3 flex flex-wrap items-center gap-2 rounded-b-[1.45rem] border-t border-gray-100 bg-gray-50/80 px-4 py-2.5 select-none dark:border-gray-800 dark:bg-gray-800/45 midnight:border-slate-800 midnight:bg-slate-800/45">
-            {/* Workspace & Folder Combined Button */}
+            {/* Project and working-folder selector */}
             {activeWorkingContext && (
               <button
                 type="button"
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
-                title={`Workspace Root: ${activeWorkingContext.rootPath} | Working Folder: ${activeWorkingContext.relativePath}`}
+                title={`This chat can access: ${activeWorkingContext.workingDir}`}
                 className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-all hover:border-gray-300 hover:text-gray-900 hover:shadow dark:border-gray-700/80 dark:bg-gray-900/75 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-100 midnight:border-slate-700/80 midnight:bg-slate-900/75 midnight:text-slate-400 midnight:hover:border-slate-600 midnight:hover:text-slate-100 disabled:opacity-60"
               >
                 {(() => {
                   const RootIcon = rootIcon(activeRoot?.kind);
                   return <RootIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />;
                 })()}
-                <span className="truncate">{activeWorkingContext.rootLabel || "Projects"}</span>
+                <span className="truncate">{activeWorkingContext.projectEmoji || '📁'} {activeWorkingContext.projectName || "Project"}</span>
                 <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">/</span>
                 <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
                 <span className="truncate">{activeContextLabel}</span>
                 <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            )}
+            {!activeWorkingContext && (
+              <button
+                type="button"
+                onClick={openWorkingContextMenu}
+                disabled={disabled || !onWorkingContextChange}
+                title="No Project selected; local files are unavailable to this chat"
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700/80 dark:bg-gray-900/75 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              >
+                <ShieldOff className="h-3.5 w-3.5" /> No project
               </button>
             )}
 
@@ -1999,18 +1991,19 @@ export const MessageInputV2 = ({
         onClose={() => setContextModalOpen(false)}
         onSelect={selectWorkingContext}
         fileRoots={fileRoots}
-        initialRootId={activeWorkingContext?.rootId || "workspace"}
+        initialRootId={activeWorkingContext?.rootId || "none"}
         initialRelativePath={activeWorkingContext?.relativePath || "."}
         activeWorkingDir={activeWorkingContext?.workingDir || ""}
+        onManageProjects={() => { setContextModalOpen(false); navigate('/projects'); }}
       />
 
       <ConfirmModal
         isOpen={!!pendingContextSwitch}
         onClose={cancelContextSwitch}
         onConfirm={confirmContextSwitch}
-        title="Switch working folder?"
-        message="Future file search, Git, shell tools, and edits will use the new folder. Earlier messages and edits stay as history."
-        confirmLabel="Switch folder"
+        title="Change this chat's Project?"
+        message="Future messages will use the new Project scope. Earlier messages and edits remain in this chat's history."
+        confirmLabel="Change Project"
         cancelLabel="Keep current"
       />
     </div>

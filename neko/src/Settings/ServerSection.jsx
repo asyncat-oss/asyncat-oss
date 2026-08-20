@@ -126,12 +126,6 @@ const ServerSection = () => {
 
   const editableConfig = [
     {
-      key: "ASYNCAT_WORKSPACE_ROOT",
-      label: "Agent file workspace root",
-      placeholder: runtime.workspaceRoot || "/path/to/project",
-      help: "Controls what @ file search and default agent tools can see. Applies immediately.",
-    },
-    {
       key: "COMFYUI_BASE_URL",
       label: "ComfyUI base URL",
       placeholder: "http://127.0.0.1:8188",
@@ -167,28 +161,21 @@ const ServerSection = () => {
         </div>
       )}
 
-      {/* Agent Workspace Section */}
+      {/* Service endpoints */}
       <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
         <div className="flex items-center gap-2 mb-4">
           <Server size={18} className="text-gray-500 dark:text-gray-400" />
           <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
-            Agent Workspace
+            Service endpoints
           </h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Set the filesystem root used by @ file search and default agent tool
-          runs.
+          Configure optional local services. Project folder access is managed from each Project.
         </p>
 
         <div className="space-y-4">
           {editableConfig.map(({ key, label, placeholder, help }) => {
-            const currentValue =
-              key === "ASYNCAT_WORKSPACE_ROOT"
-                ? runtime.workspaceRoot || config[key] || "(auto-detected)"
-                : effectiveConfig[key] || config[key] || "(not set)";
-            const canBrowse =
-              key === "ASYNCAT_WORKSPACE_ROOT" &&
-              window?.electronAPI?.openDirectory;
+            const currentValue = effectiveConfig[key] || config[key] || "(not set)";
             return (
               <div key={key}>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1.5">
@@ -207,30 +194,6 @@ const ServerSection = () => {
                     placeholder={effectiveConfig[key] || config[key] || placeholder}
                     className={inputCls}
                   />
-                  {canBrowse && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const result = await window.electronAPI.openDirectory({
-                          defaultPath:
-                            editValues[key] ||
-                            runtime.workspaceRoot ||
-                            undefined,
-                          title: "Select workspace root",
-                          buttonLabel: "Use as Workspace Root",
-                        });
-                        if (!result.canceled && result.filePaths?.[0]) {
-                          setEditValues((prev) => ({
-                            ...prev,
-                            [key]: result.filePaths[0],
-                          }));
-                        }
-                      }}
-                      className="shrink-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-100 transition-colors whitespace-nowrap"
-                    >
-                      Browse…
-                    </button>
-                  )}
                 </div>
                 <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
                   Current: {currentValue}

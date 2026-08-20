@@ -256,6 +256,7 @@ export class AgentRuntime {
    * @param {boolean} opts.supportsNativeTools - Whether provider accepts OpenAI tool definitions
    * @param {string} opts.userId
    * @param {string} opts.workspaceId
+   * @param {string} [opts.projectId] - Project selected by this conversation
    * @param {string} opts.workingDir - Working directory for file/shell tools
    * @param {number} [opts.maxRounds] - Max ReAct iterations
    * @param {(event: AgentEvent) => void} [opts.onEvent] - Event callback for streaming
@@ -268,6 +269,7 @@ export class AgentRuntime {
     this.supportsNativeTools = opts.supportsNativeTools ?? !this.isLocal;
     this.userId = opts.userId;
     this.workspaceId = opts.workspaceId;
+    this.projectId = opts.projectId || null;
     this.workingDir = opts.workingDir || process.cwd();
     this.workspaceRoot = opts.workspaceRoot || opts.rootPath || this.workingDir;
     this.maxRounds = opts.maxRounds || MAX_ROUNDS_DEFAULT;
@@ -534,6 +536,7 @@ export class AgentRuntime {
     const toolContext = {
       userId: this.userId,
       workspaceId: this.workspaceId,
+      projectId: this.projectId,
       profileId: this.agentProfileId,
       workingDir: this.workingDir,
       workspaceRoot: this.workspaceRoot,

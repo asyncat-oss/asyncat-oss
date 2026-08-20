@@ -9,7 +9,6 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
-import WelcomePage from '../WelcomePage.jsx';
 
 const ConnectionNotice = () => {
   const network = useNetworkStatus({ pollMs: 6000 });
@@ -87,13 +86,7 @@ const AppLayout = () => {
   // Check if user has any workspaces
   const hasWorkspaces = workspaces && workspaces.length > 0;
   
-  // Check if we should show CreateWorkspaceModal (only when successfully determined no workspaces)
-  const shouldShowCreateWorkspace = !workspacesLoading && !workspacesError && !hasWorkspaces;
-  
-  // Handle workspace creation
-  const handleWorkspaceCreated = useCallback(() => {
-    refreshWorkspaces();
-  }, [refreshWorkspaces]);
+  const projectStorageUnavailable = !workspacesLoading && !workspacesError && !hasWorkspaces;
 
   const refreshProjects = useCallback(() => {
     invalidateProjectsCache();
@@ -186,7 +179,7 @@ const AppLayout = () => {
     if (!project) {
       setSelectedProject(null);
       sessionStorage.removeItem('projectId');
-      navigate('/workspace');
+      navigate('/projects');
       return;
     }
     
@@ -195,11 +188,11 @@ const AppLayout = () => {
       // Update state immediately with full project data including metadata
       setSelectedProject(project);
       sessionStorage.setItem('projectId', project.id);
-      navigate(`/workspace/${project.id}`);
+      navigate(`/projects/${project.id}`);
     } else {
       // If we just get an ID, navigate first and let the effect handle loading
       const projectId = project;
-      navigate(`/workspace/${projectId}`);
+      navigate(`/projects/${projectId}`);
     }
   }, [navigate]);
 
@@ -247,7 +240,7 @@ const AppLayout = () => {
           <path d="M9 20H23" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
         </svg>
         <div className="mt-4 text-sm font-semibold tracking-[-0.01em]">Asyncat</div>
-        <div className="mt-5 h-px w-10 overflow-hidden bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" role="status" aria-label="Loading workspace">
+        <div className="mt-5 h-px w-10 overflow-hidden bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" role="status" aria-label="Loading projects">
           <div className="h-full w-[45%] bg-gray-900 motion-safe:animate-[loading-line_1.35s_ease-in-out_infinite] dark:bg-gray-100 midnight:bg-slate-100" />
         </div>
       </div>
@@ -265,12 +258,12 @@ const AppLayout = () => {
         <div className="text-center max-w-md mx-auto px-4">
           <div className="text-red-500 dark:text-red-400 midnight:text-red-400 text-6xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-300 mb-2">
-            {isNetworkError ? 'Connection Error' : 'Workspace Error'}
+             {isNetworkError ? 'Connection Error' : 'Project Error'}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 mb-6 text-sm leading-relaxed">
             {isNetworkError
               ? 'Unable to reach the local Asyncat service. Try again or restart the app.'
-              : 'Asyncat could not load your local workspaces. This might be a temporary issue.'
+               : 'Asyncat could not load your local Projects. This might be a temporary issue.'
             }
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -292,13 +285,18 @@ const AppLayout = () => {
     );
   }
 
-  // If user has no workspaces, show only the WelcomePage
-  if (shouldShowCreateWorkspace) {
+  // The ownership namespace is initialized by the local backend. It is not a
+  // user-facing setup step and should never require a workspace wizard.
+  if (projectStorageUnavailable) {
     return (
-      <WelcomePage
-        localUser={localUser}
-        onTeamCreated={handleWorkspaceCreated}
-      />
+      <div className="flex min-h-screen items-center justify-center bg-white px-5 text-center dark:bg-gray-900 midnight:bg-slate-950">
+        <div className="max-w-sm">
+          <ServerCrash className="mx-auto h-9 w-9 text-gray-300 dark:text-gray-700" />
+          <h2 className="mt-4 text-base font-semibold text-gray-900 dark:text-gray-100">Project storage is not ready</h2>
+          <p className="mt-1.5 text-sm leading-6 text-gray-500 dark:text-gray-400">Restart the local service or try again. Your existing data has not been changed.</p>
+          <button type="button" onClick={refreshWorkspaces} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white dark:bg-gray-100 dark:text-gray-900"><RotateCw className="h-4 w-4" /> Try again</button>
+        </div>
+      </div>
     );
   }
 

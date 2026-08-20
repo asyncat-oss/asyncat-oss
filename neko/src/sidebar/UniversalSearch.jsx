@@ -65,7 +65,8 @@ const COMMANDS = [
   { id: 'cmd-agents',    label: 'Go to Agents',         to: '/agent/profiles', icon: BrainCircuit },
   { id: 'cmd-models',    label: 'Go to Models',         to: '/models',       icon: Cpu },
   { id: 'cmd-tools',     label: 'Go to Tools & Skills', to: '/tools',        icon: Wrench },
-  { id: 'cmd-tasks',     label: 'Go to Tasks',          to: '/workspace',    icon: SquareCheck },
+  { id: 'cmd-projects',  label: 'Go to Projects',       to: '/projects',     icon: SquareCheck },
+  { id: 'cmd-tasks',     label: 'Go to Tasks',          to: '/tasks',        icon: SquareCheck },
   { id: 'cmd-settings',  label: 'Go to Settings',       to: '/settings',     icon: Settings },
 ];
 
@@ -372,13 +373,14 @@ const UniversalSearch = ({ isOpen, onClose }) => {
         return;
       }
       if (item._type === 'project') {
-        navigate(item._tab ? `/projects/${item.id}/${item._tab}` : `/projects/${item.id}`);
+        const isTaskView = ['kanban', 'list'].includes(item._tab);
+        navigate(isTaskView ? `/tasks/${item.id}/${item._tab}` : `/projects/${item.id}`);
       } else if (item._type === 'conversation') {
         navigate(`/conversations/${item.id}`);
       } else if (item._type === 'note') {
         navigate(item.projectId ? `/projects/${item.projectId}/notes/${item.id}` : `/notes/${item.id}`);
       } else if (item._type === 'card') {
-        navigate(item.projectId ? `/projects/${item.projectId}` : '/');
+        navigate(item.projectId ? `/tasks/${item.projectId}/list` : '/tasks');
       }
       onClose();
     },

@@ -63,6 +63,22 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Local folders explicitly granted to a project. The path itself never becomes
+-- a global workspace root: file and agent APIs resolve the opaque folder id and
+-- keep every operation contained beneath the saved canonical path.
+CREATE TABLE IF NOT EXISTS project_folders (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  path        TEXT NOT NULL,
+  path_key    TEXT NOT NULL,
+  is_primary  INTEGER NOT NULL DEFAULT 0,
+  position    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(project_id, path_key)
+);
+
 -- ─── Notes ────────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS notes (
@@ -182,6 +198,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 
 CREATE INDEX IF NOT EXISTS idx_projects_team_id         ON projects(team_id);
 CREATE INDEX IF NOT EXISTS idx_projects_owner_id        ON projects(owner_id);
+CREATE INDEX IF NOT EXISTS idx_project_folders_project  ON project_folders(project_id, position, created_at);
 CREATE INDEX IF NOT EXISTS idx_notes_createdby          ON notes(createdby);
 CREATE INDEX IF NOT EXISTS idx_Columns_projectId        ON Columns(projectId);
 CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);

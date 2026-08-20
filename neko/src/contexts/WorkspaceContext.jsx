@@ -155,7 +155,8 @@ export const WorkspaceProvider = ({ children }) => {
     return currentWorkspace?.access_type === 'workspace';
   }, [currentWorkspace]);
 
-  // Get workspace projects — cached in memory for CACHE_TTL ms
+  // Projects are the user-facing scope. The internal workspace remains only for
+  // backwards-compatible ownership of conversations and memory.
   const getWorkspaceProjects = useCallback(async () => {
     if (!currentWorkspace) return [];
 
@@ -167,18 +168,10 @@ export const WorkspaceProvider = ({ children }) => {
 
     try {
       let data = [];
-      if (currentWorkspace.access_type === 'workspace') {
-        const response = await apiClient.request(`${API_URL}/api/projects/teams/${currentWorkspace.id}/projects`);
-        if (response.ok) {
-          const json = await response.json();
-          data = json.data || [];
-        }
-      } else {
-        const response = await apiClient.request(`${API_URL}/api/projects`);
-        if (response.ok) {
-          const json = await response.json();
-          data = (json.data || []).filter(p => p.team_id === currentWorkspace.id);
-        }
+      const response = await apiClient.request(`${API_URL}/api/projects`);
+      if (response.ok) {
+        const json = await response.json();
+        data = json.data || [];
       }
 
       projectsCache.current[cacheKey] = { data, timestamp: Date.now() };

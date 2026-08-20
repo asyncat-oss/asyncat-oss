@@ -32,6 +32,7 @@ import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall } from '../../agent/tools/memoryTools.js';
 import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embeddings/embeddingService.js';
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
+import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
@@ -49,6 +50,25 @@ const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
 const cancelledTaskRuns = new Set();
 const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
+const NO_PROJECT_TOOL_CATEGORIES = new Set([
+  'interaction',
+  'planning',
+  'search',
+  'browser',
+  'integrations',
+  'memory',
+  'notes',
+]);
+
+function noProjectToolNames() {
+  const names = toolRegistry
+    .all()
+    .filter(tool => NO_PROJECT_TOOL_CATEGORIES.has(tool.category))
+    .map(tool => tool.name);
+  // AgentRuntime treats an empty list as "no restriction", so retain a hard
+  // minimal allow-list even during an unusual partial-initialization state.
+  return names.length ? names : ['todo_write', 'list_plan', 'ask_user'];
+}
 
 function normalizeConversationHistory(history = []) {
   return (Array.isArray(history) ? history : [])
@@ -64,9 +84,12 @@ function defaultAgentWorkingDir() {
   return getWorkspaceRoot();
 }
 
-function resolveAgentWorkingContext({ workingContext = null, workingDir = null, profile = null } = {}) {
+function resolveAgentWorkingContext({ workingContext = null, workingDir = null, profile = null, userId = null } = {}) {
   if (workingContext && typeof workingContext === 'object') {
-    return resolveWorkingDirectoryContext(workingContext);
+    return resolveWorkingDirectoryContext(workingContext, {
+      userId,
+      projectId: workingContext.projectId || null,
+    });
   }
 
   const resolvedWorkingDir = workingDir || profile?.working_dir || defaultAgentWorkingDir();
@@ -432,7 +455,7 @@ function resolveAgentMentions(rawMentions = [], userId) {
   return profiles;
 }
 
-function resolveFileAttachments(fileAttachments = [], workingContext = null) {
+function resolveFileAttachments(fileAttachments = [], workingContext = null, userId = null) {
   if (!Array.isArray(fileAttachments)) return [];
   const results = [];
   for (const attachment of fileAttachments.slice(0, 10)) {
@@ -459,11 +482,22 @@ function resolveFileAttachments(fileAttachments = [], workingContext = null) {
       });
       continue;
     }
+    // A no-Project Work chat may use prompt-only uploads, but it must never
+    // resolve an arbitrary path through the legacy global workspace root.
+    if (!workingContext?.rootId) continue;
     const rootId = typeof attachment === 'object' && attachment?.rootId
       ? attachment.rootId
-      : workingContext?.rootId || 'workspace';
+      : workingContext.rootId;
+    if (workingContext?.rootId && rootId !== workingContext.rootId) {
+      continue;
+    }
     try {
-      const entry = loadEntry({ rootId, relativePath: filePath });
+      const entry = loadEntry({
+        rootId,
+        relativePath: filePath,
+        userId,
+        projectId: workingContext?.projectId || null,
+      });
       if (entry.success && entry.type === 'file') {
         const absolutePath = entry.root?.path
           ? path.resolve(entry.root.path, filePath)
@@ -1533,7 +1567,7 @@ router.put('/soul', withWorkspaceContext, (req, res) => {
 
 function gitWorkingDir(req) {
   if (req.body?.workingContext && typeof req.body.workingContext === 'object') {
-    return resolveAgentWorkingContext({ workingContext: req.body.workingContext }).workingDir;
+    return resolveAgentWorkingContext({ workingContext: req.body.workingContext, userId: req.user?.id }).workingDir;
   }
   return req.body?.path || req.query?.path || defaultAgentWorkingDir();
 }
@@ -1820,6 +1854,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       assistantMessageId = null,
       clientTimestamp = null,
       clientTimezone = null,
+      experienceMode = null,
     } = req.body;
     const resolvedAgentMode = agentMode === 'design'
       ? 'design'
@@ -1831,7 +1866,6 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     if (!baseGoal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
     }
-
     let profile = null;
     if (profileId) {
       profile = getProfile(profileId, req.user.id);
@@ -1864,12 +1898,26 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       heartbeatInterval = null;
     });
 
-    const resolvedWorkingContext = resolveAgentWorkingContext({ workingContext, workingDir, profile });
+    const hasProjectContext = Boolean(workingContext && typeof workingContext === 'object' && workingContext.rootId);
+    const resolvedWorkingContext = resolveAgentWorkingContext({
+      workingContext: hasProjectContext ? workingContext : null,
+      // A client-supplied or profile directory is never accepted as an
+      // implicit filesystem grant. Without a Project, local-file tools are
+      // removed from the agent entirely.
+      workingDir: hasProjectContext ? workingDir : null,
+      profile: hasProjectContext ? profile : null,
+      userId: req.user.id,
+    });
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
-    const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext);
+    const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext, req.user.id);
     const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
     // Capabilities go into the system prompt via AgentRuntime — NOT prepended to the user's goal.
-    const capabilitiesSection = formatMultimodalCapabilityPrompt(multimodalCapabilities);
+    const capabilitiesSection = [
+      formatMultimodalCapabilityPrompt(multimodalCapabilities),
+      !hasProjectContext
+        ? 'Project scope: No Project is selected for this conversation. Local files, code, shell, Git, artifacts, scheduled work, and workspace tools are unavailable. Ask the user to select a Project before attempting local-file work.'
+        : '',
+    ].filter(Boolean).join('\n\n');
     const goal = injectFileAttachments(baseGoal, resolvedFiles);
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
     const resolvedAutoApprove = resolvedAgentMode === 'action'
@@ -1896,6 +1944,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       supportsNativeTools,
       userId: req.user.id,
       workspaceId: req.workspaceId,
+      projectId: resolvedWorkingContext.projectId || null,
       workingDir: resolvedWorkingDir,
       workspaceRoot: resolvedWorkingContext.rootPath || resolvedWorkingDir,
       maxRounds: resolvedMaxRounds,
@@ -1907,6 +1956,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       providerInfo,
       reasoningEffort,
       agentMode: resolvedAgentMode,
+      allowedTools: hasProjectContext ? null : noProjectToolNames(),
       enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : null,
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,

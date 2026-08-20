@@ -1,13 +1,15 @@
 import { useEffect, useRef } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useCommandCenter } from './context/CommandCenterContextEnhanced';
 import CommandCenterV2EnhancedOriginal from "./CommandCenterV2Enhanced.jsx";
 
 const CommandCenterV2Enhanced = () => {
   const { conversationId, sessionId } = useParams();
   const location = useLocation();
-  const { loadConversation, currentConversationId } = useCommandCenter();
+  const navigate = useNavigate();
+  const { loadConversation, currentConversationId, handleNewConversation } = useCommandCenter();
   const loadedRouteConversationRef = useRef(null);
+  const handledProjectStartRef = useRef(null);
 
   const isAgentRoute = location.pathname.startsWith('/agents');
   const initialMode = isAgentRoute ? 'agent' : 'chat';
@@ -33,6 +35,18 @@ const CommandCenterV2Enhanced = () => {
     loadedRouteConversationRef.current = conversationId;
     loadConversation(conversationId);
   }, [conversationId, currentConversationId, loadConversation]);
+
+  useEffect(() => {
+    const startProjectChat = location.state?.startProjectChat;
+    if (conversationId || !startProjectChat) return;
+    const requestKey = `${startProjectChat.workingContext?.rootId || 'none'}:${location.key}`;
+    if (handledProjectStartRef.current === requestKey) return;
+    handledProjectStartRef.current = requestKey;
+
+    handleNewConversation(startProjectChat).finally(() => {
+      navigate(location.pathname, { replace: true, state: null });
+    });
+  }, [conversationId, handleNewConversation, location.key, location.pathname, location.state, navigate]);
 
   return (
     <CommandCenterV2EnhancedOriginal

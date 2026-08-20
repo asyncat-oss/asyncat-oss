@@ -224,7 +224,6 @@ function cleanupDeadTables() {
     DROP TABLE IF EXISTS event_attendees;
     DROP TABLE IF EXISTS Events;
     DROP TABLE IF EXISTS project_folder_items;
-    DROP TABLE IF EXISTS project_folders;
     DROP TABLE IF EXISTS project_members;
     DROP TABLE IF EXISTS note_versions;
     DROP TABLE IF EXISTS note_operations;
