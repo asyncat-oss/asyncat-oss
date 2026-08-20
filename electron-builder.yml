@@ -84,7 +84,10 @@ nsis:
 
 # ─── Linux ────────────────────────────────────────────────────────────────────
 linux:
-  artifactName: "${productName}-${version}-linux-${arch}.${ext}"
+  # electron-builder expands ${arch} differently per Linux target
+  # (x86_64 for AppImage, amd64 for deb). Published Linux builds are x64-only,
+  # so keep one canonical filename that the updater can select reliably.
+  artifactName: "${productName}-${version}-linux-x64.${ext}"
   target:
     - AppImage
     - deb

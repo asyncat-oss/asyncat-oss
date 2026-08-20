@@ -1,6 +1,6 @@
 {
   "name": "den",
-  "version": "0.8.0-beta.1",
+  "version": "0.8.0-beta.2",
   "description": "Asyncat backend — merged monolith for self-hosted and open-source deployment",
   "type": "module",
   "main": "src/index.js",
