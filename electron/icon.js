@@ -8,8 +8,8 @@
 import { app, nativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { ICONS, NEKO_ASSETS, USER_DATA, IS_MAC } from './constants.js';
-import { getMainWindow } from './window.js';
+import { ICONS, NEKO_ASSETS, USER_DATA, IS_MAC, IS_WIN } from './constants.js';
+import { applyWindowsTaskbarIdentity, getMainWindow } from './window.js';
 import { setTrayImage } from './tray.js';
 
 const CONFIG_PATH = path.join(USER_DATA, 'app-icon.json');
@@ -95,7 +95,14 @@ export function applyAppIcon(cfg = readConfig()) {
 
   // Window icon — shown on Windows/Linux; a no-op on macOS.
   const win = getMainWindow();
-  if (win && !IS_MAC) win.setIcon(img);
+  if (win && IS_WIN) {
+    // Windows must keep the live icon and AppUserModelID metadata together.
+    // Reapplying only a saved PNG here can make the shell fall back to the
+    // Electron executable after startup.
+    applyWindowsTaskbarIdentity(win);
+  } else if (win && !IS_MAC) {
+    win.setIcon(img);
+  }
 
   // Tray wants a small variant on macOS to match the menu bar.
   setTrayImage(IS_MAC ? img.resize({ width: 18, height: 18 }) : img);

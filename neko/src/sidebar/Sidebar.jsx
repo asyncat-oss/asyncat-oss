@@ -296,9 +296,15 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   }, []);
 
   useEffect(() => {
+    // Project conversations already have a stable home in the Projects tree.
+    // Keep this list for genuinely unscoped chats so the same conversation is
+    // never presented twice in the sidebar.
+    const unscopedConversations = conversationCatalog.filter(
+      (conversation) => !conversationProjectId(conversation),
+    );
     const filtered = recentMode === "all"
-      ? conversationCatalog
-      : conversationCatalog.filter((conversation) => {
+      ? unscopedConversations
+      : unscopedConversations.filter((conversation) => {
           const isWork = conversation.mode === "build" || conversation.mode === "work";
           return recentMode === "work" ? isWork : !isWork;
         });
