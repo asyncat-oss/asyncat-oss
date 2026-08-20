@@ -2824,11 +2824,15 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
   );
 }
 
-function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction }) {
+function AgentWorkDrawer({ workEvents, isRunning, startedAt, completedAt, onPermissionDecision, onRetryTool, onAskUserAnswer, onRetryGoal, onRunWithAction }) {
   const hasPendingPermission = workEvents.some(ev => ev.type === 'permission_request' && !ev.data?.resolved);
   const hasPendingQuestion = workEvents.some(ev => ev.type === 'ask_user' && !ev.data?.answered && !ev.data?._inferred_answered);
   const hasBlocker = hasPendingPermission || hasPendingQuestion;
   const hasError = workEvents.some(ev => ev.type === 'error' || ev.type === 'stop_reason');
+  const liveElapsed = useElapsedTime(isRunning ? startedAt : null);
+  const elapsed = isRunning
+    ? liveElapsed
+    : (startedAt && completedAt && completedAt > startedAt ? completedAt - startedAt : 0);
 
   const [open, setOpen] = useState(isRunning || hasBlocker || hasError);
 
@@ -2856,13 +2860,14 @@ function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryT
           ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />
           : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />}
         {isRunning ? (
-          <span className="flex-shrink-0 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+          <span className="flex-shrink-0 flex items-center gap-1.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gray-400 dark:bg-gray-500" />
-            Working…
+            Working for {formatElapsed(elapsed)}
           </span>
-        ) : summary ? (
-          <span className="flex-shrink-0 text-xs text-gray-500 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300 truncate max-w-[82%]">
-            {summary}
+        ) : elapsed > 0 || summary ? (
+          <span className="min-w-0 flex-1 truncate text-xs tabular-nums text-gray-500 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300">
+            {elapsed > 0 ? `Worked for ${formatElapsed(elapsed)}` : summary}
+            {elapsed > 0 && summary ? <span className="text-gray-300 dark:text-gray-600"> · {summary}</span> : null}
           </span>
         ) : null}
       </button>
@@ -2992,6 +2997,8 @@ export default function AgentRunFeed({
             <AgentWorkDrawer
               workEvents={drawerEvents}
               isRunning={segIsRunning}
+              startedAt={segStartMs}
+              completedAt={segEndMs}
               onPermissionDecision={onPermissionDecision}
               onRetryTool={onRetryTool}
               onAskUserAnswer={onAskUserAnswer}
@@ -3021,7 +3028,7 @@ export default function AgentRunFeed({
       })}
 
       {isRunning && <StreamingPreview text={streamingText} reasoningText={streamingReasoning} />}
-      {isRunning && !streamingText && !streamingReasoning && <RunningIndicator runStartedAt={runStartedAt} />}
+      {isRunning && !streamingText && !streamingReasoning && !segments.some((segment) => !segment.divider && segment.workEvents?.length > 0) && <RunningIndicator runStartedAt={runStartedAt} />}
       {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} sessionId={sessionId} session={session} onViewArtifactInPanel={onViewArtifactInPanel} />}
     </div>
   );

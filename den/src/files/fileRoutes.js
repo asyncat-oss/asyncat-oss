@@ -14,6 +14,7 @@ import {
   loadEntry,
   moveEntry,
   publicRoots,
+  resolveExplorerPath,
   searchEntries,
   writeFile,
 } from './fileExplorerService.js';
@@ -92,6 +93,41 @@ router.get('/preview', withWorkspaceContext, (req, res) => {
     }));
   } catch (err) {
     sendRouteError(res, err);
+  }
+});
+
+// Serve a static site from one attached Project folder. Keeping the root ID in
+// the URL path lets relative CSS, JS, image, and link URLs resolve naturally,
+// while resolveExplorerPath enforces the same containment and symlink rules as
+// every other file operation.
+router.get('/site/:rootId/*', withWorkspaceContext, (req, res) => {
+  try {
+    const rootId = req.params.rootId;
+    if (!String(rootId || '').startsWith('project:')) {
+      return res.status(403).json({
+        success: false,
+        error: 'Local previews require a folder attached to a Project',
+        code: 'PROJECT_FOLDER_REQUIRED',
+      });
+    }
+
+    let relativePath = req.params[0] || 'index.html';
+    let resolved = resolveExplorerPath(rootId, relativePath, projectAccess(req));
+    if (fs.existsSync(resolved.absolutePath) && fs.statSync(resolved.absolutePath).isDirectory()) {
+      relativePath = path.posix.join(relativePath.replace(/\\/g, '/'), 'index.html');
+      resolved = resolveExplorerPath(rootId, relativePath, projectAccess(req));
+    }
+    if (!fs.existsSync(resolved.absolutePath) || !fs.statSync(resolved.absolutePath).isFile()) {
+      return res.status(404).send('Local preview file not found');
+    }
+
+    const isHtml = /\.html?$/i.test(resolved.absolutePath);
+    res.setHeader('Cache-Control', isHtml ? 'no-store' : 'private, max-age=60');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    return res.sendFile(resolved.absolutePath);
+  } catch (err) {
+    return sendRouteError(res, err);
   }
 });
 

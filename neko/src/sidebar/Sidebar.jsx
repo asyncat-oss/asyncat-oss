@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -8,9 +8,12 @@ import {
   Cpu,
   GraduationCap,
   History,
+  Folder,
+  FolderOpen,
   FolderKanban,
   KanbanSquare,
   Check,
+  ChevronRight,
   ListFilter,
   Loader2,
   PanelLeftClose,
@@ -26,6 +29,8 @@ import {
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
 import { chatApi } from "../CommandCenter/api/chatApi.js";
 import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
+import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
+import eventBus from "../utils/eventBus.js";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import UniversalSearch from "./UniversalSearch";
 
@@ -85,7 +90,23 @@ SidebarNavItem.propTypes = {
   collapsed: PropTypes.bool,
 };
 
-const RecentConversationItem = memo(({ conversation, active, running, onOpen }) => {
+function conversationProjectId(conversation) {
+  const workingContext = conversation?.metadata?.workingContext || conversation?.workingContext;
+  if (workingContext?.projectId) return String(workingContext.projectId);
+  let projectIds = conversation?.project_ids;
+  if (typeof projectIds === "string") {
+    try { projectIds = JSON.parse(projectIds); } catch { projectIds = []; }
+  }
+  return Array.isArray(projectIds) && projectIds[0] ? String(projectIds[0]) : null;
+}
+
+function conversationUpdatedAt(conversation) {
+  return new Date(
+    conversation?.last_message_at || conversation?.updated_at || conversation?.created_at || 0,
+  ).getTime() || 0;
+}
+
+const RecentConversationItem = memo(({ conversation, active, running, onOpen, nested = false }) => {
   const isWork = conversation.mode === "build" || conversation.mode === "work";
   const modeLabel = isWork ? "Work" : "Chat";
 
@@ -95,7 +116,7 @@ const RecentConversationItem = memo(({ conversation, active, running, onOpen }) 
       onClick={() => onOpen(conversation.id)}
       title={`${conversation.title || "Untitled conversation"} · ${modeLabel}`}
       aria-current={active ? "page" : undefined}
-      className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-gray-400/40 ${
+      className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg pr-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-gray-400/40 ${nested ? "pl-7" : "pl-2.5"} ${
         active
           ? "bg-gray-100 text-gray-950 dark:bg-white/[0.07] dark:text-gray-100 midnight:bg-white/[0.06] midnight:text-slate-100"
           : "text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
@@ -128,6 +149,87 @@ RecentConversationItem.propTypes = {
   active: PropTypes.bool,
   running: PropTypes.bool,
   onOpen: PropTypes.func.isRequired,
+  nested: PropTypes.bool,
+};
+
+const ProjectConversationGroup = memo(({
+  project,
+  conversations,
+  expanded,
+  active,
+  activeConversationId,
+  activeConversationIds,
+  onToggle,
+  onOpenProject,
+  onOpenConversation,
+}) => {
+  const ProjectIcon = expanded ? FolderOpen : Folder;
+
+  return (
+    <div>
+      <div className={`group flex h-8 items-center rounded-lg transition-colors ${active ? "bg-gray-100 dark:bg-white/[0.07] midnight:bg-white/[0.06]" : "hover:bg-gray-100 dark:hover:bg-white/[0.05] midnight:hover:bg-white/[0.05]"}`}>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-400/40"
+          aria-expanded={expanded}
+          title={project.name}
+        >
+          <ChevronRight className={`h-3 w-3 shrink-0 text-gray-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          <ProjectIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
+          <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-medium text-gray-950 dark:text-gray-100 midnight:text-slate-100" : "font-normal text-gray-700 dark:text-gray-300 midnight:text-slate-300"}`}>
+            {project.name || "Untitled project"}
+          </span>
+          {conversations.length > 0 ? (
+            <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-600 midnight:text-slate-600">{conversations.length}</span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={onOpenProject}
+          className="mr-1 flex h-6 shrink-0 items-center rounded px-1.5 text-[10px] font-medium text-gray-400 opacity-0 transition-[opacity,color,background-color] hover:bg-white hover:text-gray-700 group-hover:opacity-100 focus-visible:opacity-100 dark:hover:bg-white/[0.07] dark:hover:text-gray-200"
+          title={`Open ${project.name || "project"}`}
+        >
+          Open
+        </button>
+      </div>
+      {expanded ? (
+        <div className="mt-px space-y-px">
+          {conversations.length > 0 ? conversations.map((conversation) => (
+            <RecentConversationItem
+              key={conversation.id}
+              conversation={conversation}
+              active={conversation.id === activeConversationId}
+              running={activeConversationIds.has(conversation.id)}
+              onOpen={onOpenConversation}
+              nested
+            />
+          )) : (
+            <button
+              type="button"
+              onClick={onOpenProject}
+              className="flex h-8 w-full items-center pl-7 pr-2.5 text-left text-[12px] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:text-slate-300"
+            >
+              No chats yet · Open project
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
+ProjectConversationGroup.displayName = "ProjectConversationGroup";
+ProjectConversationGroup.propTypes = {
+  project: PropTypes.shape({ id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired, name: PropTypes.string }).isRequired,
+  conversations: PropTypes.arrayOf(PropTypes.object).isRequired,
+  expanded: PropTypes.bool,
+  active: PropTypes.bool,
+  activeConversationId: PropTypes.string,
+  activeConversationIds: PropTypes.instanceOf(Set).isRequired,
+  onToggle: PropTypes.func.isRequired,
+  onOpenProject: PropTypes.func.isRequired,
+  onOpenConversation: PropTypes.func.isRequired,
 };
 
 const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => {
@@ -138,6 +240,10 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     () => sessionStorage.getItem("asyncatUpdateAvailable") === "true",
   );
   const [recentConversations, setRecentConversations] = useState([]);
+  const [conversationCatalog, setConversationCatalog] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [expandedProjectIds, setExpandedProjectIds] = useState(() => new Set());
   const [recentMode, setRecentMode] = useState("all");
   const [recentLoading, setRecentLoading] = useState(true);
   const [recentError, setRecentError] = useState(false);
@@ -145,6 +251,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const recentFilterRef = useRef(null);
   const recentRequestRef = useRef(0);
   const { sidebarState, setSidebarState, navItemsVisibility } = useUiPreferences();
+  const { getWorkspaceProjects, bustProjectsCache, currentWorkspace } = useWorkspace();
   const {
     currentConversationId,
     hasActiveRuns,
@@ -171,19 +278,14 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     setRecentError(false);
     try {
       const result = await chatApi.getConversationHistory({
-        limit: 16,
-        mode: recentMode,
+        limit: 80,
+        mode: "all",
         archived: false,
       });
       if (requestId !== recentRequestRef.current) return;
       const conversations = [...(result?.conversations || [])]
-        .sort((a, b) => {
-          const bTime = new Date(b.last_message_at || b.updated_at || b.created_at || 0).getTime();
-          const aTime = new Date(a.last_message_at || a.updated_at || a.created_at || 0).getTime();
-          return bTime - aTime;
-        })
-        .slice(0, 7);
-      setRecentConversations(conversations);
+        .sort((a, b) => conversationUpdatedAt(b) - conversationUpdatedAt(a));
+      setConversationCatalog(conversations);
     } catch (error) {
       if (requestId !== recentRequestRef.current) return;
       console.error("Failed to load recent conversations:", error);
@@ -191,7 +293,43 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     } finally {
       if (requestId === recentRequestRef.current) setRecentLoading(false);
     }
-  }, [recentMode]);
+  }, []);
+
+  useEffect(() => {
+    const filtered = recentMode === "all"
+      ? conversationCatalog
+      : conversationCatalog.filter((conversation) => {
+          const isWork = conversation.mode === "build" || conversation.mode === "work";
+          return recentMode === "work" ? isWork : !isWork;
+        });
+    setRecentConversations(filtered.slice(0, 7));
+  }, [conversationCatalog, recentMode]);
+
+  const loadProjects = useCallback(async () => {
+    if (!currentWorkspace) {
+      setProjects([]);
+      setProjectsLoading(false);
+      return;
+    }
+    setProjectsLoading(true);
+    try {
+      const data = await getWorkspaceProjects();
+      setProjects([...(data || [])]
+        .filter((project) => !project.is_archived)
+        .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)));
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, [currentWorkspace, getWorkspaceProjects]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  useEffect(() => eventBus.on("projectsUpdated", () => {
+    bustProjectsCache();
+    loadProjects();
+  }), [bustProjectsCache, loadProjects]);
 
   useEffect(() => {
     loadRecentConversations();
@@ -289,6 +427,35 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnSettings = basePage === "settings";
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
   const activeRecentConversationId = routeConversationId;
+  const routeProjectId = location.pathname.match(/^\/(?:projects|tasks)\/([^/]+)/)?.[1] || null;
+  const activeConversationProjectId = useMemo(() => (
+    conversationProjectId(conversationCatalog.find((conversation) => conversation.id === routeConversationId))
+  ), [conversationCatalog, routeConversationId]);
+  const activeProjectId = routeProjectId || activeConversationProjectId;
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    setExpandedProjectIds((current) => {
+      if (current.has(String(activeProjectId))) return current;
+      const next = new Set(current);
+      next.add(String(activeProjectId));
+      return next;
+    });
+  }, [activeProjectId]);
+
+  const projectGroups = useMemo(() => {
+    const conversationsByProject = new Map();
+    conversationCatalog.forEach((conversation) => {
+      const projectId = conversationProjectId(conversation);
+      if (!projectId) return;
+      if (!conversationsByProject.has(projectId)) conversationsByProject.set(projectId, []);
+      conversationsByProject.get(projectId).push(conversation);
+    });
+    return projects.map((project) => ({
+      project,
+      conversations: conversationsByProject.get(String(project.id)) || [],
+    }));
+  }, [conversationCatalog, projects]);
 
   const workItems = [
     { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: <FolderKanban className={iconClass} /> },
@@ -383,6 +550,63 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
 
         <nav className="flex-1 overflow-y-auto px-3 py-2">
           {!collapsed ? (
+            <section className="relative mb-5 hidden sm:block" aria-label="Projects and their conversations">
+              <div className="flex items-center justify-between px-2.5 pb-1.5">
+                <button
+                  type="button"
+                  onClick={() => navigate("/projects")}
+                  className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:text-slate-300"
+                  title="Manage projects"
+                >
+                  Projects
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/projects")}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-600 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
+                  title="View all projects"
+                >
+                  View all
+                </button>
+              </div>
+              <div className="space-y-px">
+                {projectsLoading && projectGroups.length === 0 ? (
+                  <div className="px-2.5 py-2 text-xs text-gray-400 dark:text-gray-600 midnight:text-slate-600">Loading projects…</div>
+                ) : projectGroups.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/projects")}
+                    className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
+                  >
+                    Create your first project
+                  </button>
+                ) : projectGroups.map(({ project, conversations }) => {
+                  const projectId = String(project.id);
+                  return (
+                    <ProjectConversationGroup
+                      key={projectId}
+                      project={project}
+                      conversations={conversations}
+                      expanded={expandedProjectIds.has(projectId)}
+                      active={String(activeProjectId || "") === projectId}
+                      activeConversationId={activeRecentConversationId}
+                      activeConversationIds={activeConversationIds}
+                      onToggle={() => setExpandedProjectIds((current) => {
+                        const next = new Set(current);
+                        if (next.has(projectId)) next.delete(projectId);
+                        else next.add(projectId);
+                        return next;
+                      })}
+                      onOpenProject={() => navigate(`/projects/${project.id}`)}
+                      onOpenConversation={(conversationId) => navigate(`/conversations/${conversationId}`)}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {!collapsed ? (
             <section className="relative mb-5 hidden sm:block" aria-label="Recent conversations">
               <div className="flex items-center justify-between px-2.5 pb-1.5">
                 <button
@@ -391,7 +615,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                   className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:text-slate-300"
                   title="View all conversations"
                 >
-                  Recent
+                  Recent chats
                 </button>
                 <div ref={recentFilterRef} className="relative">
                   <button
@@ -460,7 +684,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
           ) : null}
 
           {!collapsed ? <div className="hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Work</div> : null}
-          <div className="space-y-0.5">{renderItems(workItems)}</div>
+          <div className="space-y-0.5">{renderItems(collapsed ? workItems : workItems.filter((item) => item.key !== "projects"))}</div>
 
           {!collapsed ? <div className="mt-5 hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Configure</div> : null}
           <div className="space-y-0.5">{renderItems(buildItems)}</div>

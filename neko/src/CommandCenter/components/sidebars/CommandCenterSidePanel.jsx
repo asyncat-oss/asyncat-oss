@@ -131,9 +131,45 @@ const SEARCH_ENGINES = {
   bing: (query) => `https://www.bing.com/search?q=${encodeURIComponent(query)}`,
 };
 
-const BROWSER_API = `${import.meta.env.VITE_MAIN_URL || 'http://127.0.0.1:8716'}/api/browser`;
+const MAIN_API = import.meta.env.VITE_MAIN_URL || 'http://127.0.0.1:8716';
+const BROWSER_API = `${MAIN_API}/api/browser`;
+const FILE_SITE_API = `${MAIN_API}/api/files/site`;
 
-function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, agentControlEnabled = true }) {
+function normalizedLocalPath(value = '') {
+  let normalized = String(value || '').replace(/\\/g, '/').replace(/\/{2,}/g, '/');
+  if (/^\/[a-zA-Z]:\//.test(normalized)) normalized = normalized.slice(1);
+  return normalized.replace(/\/$/, '');
+}
+
+function projectPreviewUrl(fileUrl, workingContext) {
+  if (!/^file:\/\//i.test(fileUrl || '')) return null;
+  if (!workingContext?.rootId?.startsWith?.('project:') || !workingContext?.rootPath) {
+    return { error: 'Choose a Project folder before opening a local file.' };
+  }
+
+  try {
+    const parsed = new URL(fileUrl);
+    const rootPath = normalizedLocalPath(workingContext.rootPath);
+    const filePath = normalizedLocalPath(decodeURIComponent(parsed.pathname));
+    const caseInsensitive = /^[a-zA-Z]:\//.test(rootPath);
+    const comparableRoot = caseInsensitive ? rootPath.toLowerCase() : rootPath;
+    const comparableFile = caseInsensitive ? filePath.toLowerCase() : filePath;
+    if (comparableFile !== comparableRoot && !comparableFile.startsWith(`${comparableRoot}/`)) {
+      return { error: 'That file is outside the folder attached to this Project.' };
+    }
+
+    const relativePath = filePath.slice(rootPath.length).replace(/^\/+/, '') || 'index.html';
+    const encodedPath = relativePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    return {
+      url: `${FILE_SITE_API}/${encodeURIComponent(workingContext.rootId)}/${encodedPath}${parsed.search}${parsed.hash}`,
+      sourceUrl: fileUrl,
+    };
+  } catch {
+    return { error: 'The local file URL is not valid.' };
+  }
+}
+
+function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, agentControlEnabled = true, workingContext = null }) {
   const { workbenchPreferences } = useUiPreferences();
   const [incognitoMode, setIncognitoMode] = useState(workbenchPreferences.browserProfile !== 'persistent');
   const incognitoPartition = useRef(`asyncat-web-incognito-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`).current;
@@ -147,11 +183,14 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
   const tabSeq = useRef(2); // first tab = 't-1'; new tabs count up from 2
 
   const [tabs, setTabs] = useState(() => {
+    const initialLocal = projectPreviewUrl(initialUrl, workingContext);
+    const initialTarget = initialLocal?.url || (/^file:\/\//i.test(initialUrl || '') ? '' : (initialUrl || ''));
+    const initialError = initialLocal?.error ? { title: 'Local preview unavailable', message: initialLocal.error } : null;
     if (incognitoMode || !workbenchPreferences.browserRestoreTabs) {
       return [{
-        id: 't-1', url: initialUrl || '', inputUrl: initialUrl || '',
-        title: initialUrl ? 'Loading…' : 'New Tab',
-        key: 0, loading: Boolean(initialUrl), crashed: false, error: null,
+        id: 't-1', url: initialTarget, inputUrl: initialUrl || '', sourceUrl: initialLocal?.sourceUrl || null,
+        title: initialTarget ? 'Loading…' : 'New Tab',
+        key: 0, loading: Boolean(initialTarget), crashed: false, error: initialError,
       }];
     }
     try {
@@ -168,9 +207,9 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
       }
     } catch { /* ignore invalid session state */ }
     return [{
-      id: 't-1', url: initialUrl || '', inputUrl: initialUrl || '',
-      title: initialUrl ? 'Loading…' : 'New Tab',
-      key: 0, loading: Boolean(initialUrl), crashed: false, error: null,
+      id: 't-1', url: initialTarget, inputUrl: initialUrl || '', sourceUrl: initialLocal?.sourceUrl || null,
+      title: initialTarget ? 'Loading…' : 'New Tab',
+      key: 0, loading: Boolean(initialTarget), crashed: false, error: initialError,
     }];
   });
 
@@ -274,9 +313,20 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
     const trimmed = rawUrl.trim();
     if (!trimmed) return;
     let full;
+    let sourceUrl = null;
     if (/^https?:\/\//i.test(trimmed)) {
       // Already has a recognised protocol — use as-is
       full = trimmed;
+    } else if (/^file:\/\//i.test(trimmed)) {
+      const local = projectPreviewUrl(trimmed, workingContext);
+      if (local?.error || !local?.url) {
+        setTabs(prev => prev.map(t => t.id === id
+          ? { ...t, url: '', inputUrl: trimmed, sourceUrl: null, loading: false, error: { title: 'Local preview unavailable', message: local?.error || 'The local file could not be opened.' }, crashed: false, title: 'Local file' }
+          : t));
+        return;
+      }
+      full = local.url;
+      sourceUrl = local.sourceUrl;
     } else if (
       /^localhost(:\d+)?(\/|$)/i.test(trimmed) ||            // localhost[:port]
       /^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(trimmed) || // IPv4
@@ -289,9 +339,9 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
       full = buildSearchUrl(trimmed);
     }
     setTabs(prev => prev.map(t => t.id === id
-      ? { ...t, url: full, inputUrl: full, key: t.key + 1, loading: true, error: null, crashed: false, title: 'Loading…' }
+      ? { ...t, url: full, inputUrl: sourceUrl || full, sourceUrl, key: t.key + 1, loading: true, error: null, crashed: false, title: 'Loading…' }
       : t));
-  }, [workbenchPreferences.browserSearchEngine]);
+  }, [workbenchPreferences.browserSearchEngine, workingContext]);
 
   const reloadTab = useCallback((id) =>
     setTabs(prev => prev.map(t => t.id === id
@@ -480,7 +530,7 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
 
   const recordHistory = useCallback((page) => {
     const url = page?.url || '';
-    if (!historyEnabled || !/^https?:\/\//i.test(url)) return;
+    if (!historyEnabled || !/^https?:\/\//i.test(url) || url.startsWith(FILE_SITE_API)) return;
     const now = Date.now();
     if (lastHistoryEntry.current.url === url && now - lastHistoryEntry.current.at < 30000) return;
     lastHistoryEntry.current = { url, at: now };
@@ -492,15 +542,18 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
   }, [historyEnabled]);
 
   const handlePageLoaded = useCallback((tabId, page) => {
-    const patch = { loading: false };
-    if (page?.url && !page.url.startsWith('about:')) {
-      patch.url = page.url;
-      patch.inputUrl = page.url;
-    }
-    if (page?.title) patch.title = page.title;
-    updateTab(tabId, patch);
+    setTabs(previous => previous.map(tab => {
+      if (tab.id !== tabId) return tab;
+      const patch = { loading: false };
+      if (page?.url && !page.url.startsWith('about:')) {
+        patch.url = page.url;
+        patch.inputUrl = tab.sourceUrl || page.url;
+      }
+      if (page?.title) patch.title = page.title;
+      return { ...tab, ...patch };
+    }));
     recordHistory(page);
-  }, [recordHistory, updateTab]);
+  }, [recordHistory]);
 
   useEffect(() => {
     const unsubscribeOpen = window.electronAPI?.onBrowserOpenTab?.((url) => {
@@ -1023,6 +1076,12 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
         {!activeTab?.url && (
           <div className="flex h-full flex-col items-center justify-center gap-5 overflow-y-auto px-6 py-8">
             <Globe className="h-8 w-8 text-gray-300 dark:text-gray-600" />
+            {activeTab?.error?.message ? (
+              <div className="w-full max-w-sm rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2.5 text-center dark:border-amber-900/50 dark:bg-amber-950/20">
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-300">{activeTab.error.title || 'Can\'t open this address'}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-amber-700/80 dark:text-amber-400/80">{activeTab.error.message}</p>
+              </div>
+            ) : null}
             <form
               className="w-full max-w-sm"
               onSubmit={e => { e.preventDefault(); const v = startQuery.trim(); if (v) { navigateTab(activeTabId, v); setStartQuery(''); } }}
@@ -1101,7 +1160,11 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
               onLoadStop={page => handlePageLoaded(tab.id, page)}
               onCrash={() => updateTab(tab.id, { crashed: true, loading: false })}
               onLoadError={(code, desc) => updateTab(tab.id, { error: { code, description: desc }, loading: false })}
-              onNavigate={newUrl => { if (newUrl && !newUrl.startsWith('about:')) updateTab(tab.id, { url: newUrl, inputUrl: newUrl, error: null }); }}
+              onNavigate={newUrl => {
+                if (!newUrl || newUrl.startsWith('about:')) return;
+                const staysInLocalPreview = tab.sourceUrl && newUrl.startsWith(FILE_SITE_API);
+                updateTab(tab.id, { url: newUrl, inputUrl: staysInLocalPreview ? tab.sourceUrl : newUrl, sourceUrl: staysInLocalPreview ? tab.sourceUrl : null, error: null });
+              }}
               onTitle={title => { if (title) updateTab(tab.id, { title }); }}
               onNavStateChange={state => updateTabNavState(tab.id, state)}
               onFullscreenChange={setFullscreen}
@@ -1362,6 +1425,7 @@ export default function CommandCenterSidePanel({
             navigationKey={previewNavigationKey}
             browserExecutorRef={browserExecutorRef}
             agentControlEnabled={experienceMode === 'work'}
+            workingContext={workingContext}
           />
         )}
         {currentTab === 'artifacts' && (

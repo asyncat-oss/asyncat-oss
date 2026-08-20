@@ -30,6 +30,12 @@ function argsFingerprint(args) {
   }
 }
 
+function timestampMs(value) {
+  if (Number.isFinite(value)) return value;
+  const parsed = value ? Date.parse(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function inferHistoricalPermissionDecision(events, permissionIndex) {
   const permissionEvent = events[permissionIndex];
   const tool = permissionEvent?.data?.tool || permissionEvent?.data?.toolName;
@@ -50,7 +56,10 @@ function inferHistoricalPermissionDecision(events, permissionIndex) {
 }
 
 function asHistoricalPermissionEvent(event, decision) {
-  const { requestId, expiresInMs, resolving, ...restData } = event.data || {};
+  const restData = { ...(event.data || {}) };
+  delete restData.requestId;
+  delete restData.expiresInMs;
+  delete restData.resolving;
   return {
     ...event,
     data: {
@@ -72,7 +81,11 @@ function buildAgentEventsFromSession(session, auditRows = []) {
 
   if (!rounds.length) {
     const events = [];
-    if (session?.goal) events.push({ type: 'user_goal', data: { goal: session.goal } });
+    if (session?.goal) events.push({
+      type: 'user_goal',
+      data: { goal: session.goal },
+      arrivedAt: timestampMs(session?.created_at || session?.createdAt),
+    });
     toolRows.forEach(tc => {
       events.push({
         type: 'tool_start',
@@ -87,18 +100,27 @@ function buildAgentEventsFromSession(session, auditRows = []) {
           workingDir: tc.workingDir,
         },
         result: tc.result,
+        arrivedAt: timestampMs(tc.timestamp),
       });
     });
     const finalAnswer = session?.scratchpad?.finalAnswer;
     if (finalAnswer) {
-      events.push({ type: 'answer', data: { answer: finalAnswer, round: session?.totalRounds } });
+      events.push({
+        type: 'answer',
+        data: { answer: finalAnswer, round: session?.totalRounds },
+        arrivedAt: timestampMs(session?.completed_at || session?.completedAt || session?.updated_at || session?.updatedAt),
+      });
     }
     return events;
   }
 
   const events = [];
   rounds.forEach((round, idx) => {
-    events.push({ type: 'user_goal', data: { goal: round.goal, timestamp: round.timestamp } });
+    events.push({
+      type: 'user_goal',
+      data: { goal: round.goal, timestamp: round.timestamp },
+      arrivedAt: timestampMs(round.timestamp),
+    });
 
     const hasRange = Number.isFinite(round.startRound) && Number.isFinite(round.endRound);
     const scopedTools = hasRange
@@ -123,6 +145,7 @@ function buildAgentEventsFromSession(session, auditRows = []) {
           events.push({
             type: 'thinking',
             data: { thought: entry.item.thought, round: entry.item.round },
+            arrivedAt: timestampMs(entry.timestamp),
           });
           return;
         }
@@ -141,12 +164,17 @@ function buildAgentEventsFromSession(session, auditRows = []) {
             workingDir: tc.workingDir,
           },
           result: tc.result,
+          arrivedAt: timestampMs(tc.timestamp),
         });
       });
 
     if (round.answer) {
       const displayRound = hasRange ? Math.max(1, round.endRound - round.startRound) : idx + 1;
-      events.push({ type: 'answer', data: { answer: round.answer, round: displayRound } });
+      events.push({
+        type: 'answer',
+        data: { answer: round.answer, round: displayRound },
+        arrivedAt: timestampMs(round.completedAt || round.completed_at || round.answerTimestamp || round.timestamp),
+      });
     }
   });
 
@@ -172,6 +200,7 @@ function buildEventsFromMessages(messages = []) {
     if (msg.type === 'user') {
       events.push({
         type: 'user_goal',
+        arrivedAt: timestampMs(msg.timestamp),
         data: {
           goal: msg.content,
           timestamp: msg.timestamp,
@@ -199,6 +228,7 @@ function buildEventsFromMessages(messages = []) {
       }
       events.push({
         type: msg.isError ? 'error' : 'answer',
+        arrivedAt: timestampMs(msg.timestamp),
         data: msg.isError
           ? { message: msg.content }
           : {
