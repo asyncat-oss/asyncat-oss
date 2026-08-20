@@ -2,7 +2,7 @@
 
 **A local-first AI agent desktop app.** 217 tools. 51 skills. Self-improving. Desktop automation. Fully offline.
 
-> **v0.8.0-beta.2** · MIT · [Install](#quick-start) · [Website](https://asyncat.com)
+> **v0.8.0-beta.3** · MIT · [Install](#quick-start) · [Website](https://asyncat.com)
 
 ![asyncat home screen](neko/public/image.png)
 
