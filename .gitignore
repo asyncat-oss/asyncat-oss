@@ -16,6 +16,8 @@ dist/
 den/dist/
 neko/dist/
 build/
+!build/
+!build/installer.nsh
 release/
 
 # Logs

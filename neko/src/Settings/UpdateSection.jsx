@@ -3,9 +3,11 @@ import {
   ArrowUpCircle,
   CheckCircle2,
   ExternalLink,
+  FolderOpen,
   Loader2,
   Package,
   RefreshCw,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import { updateApi } from './settingApi';
@@ -35,6 +37,8 @@ const UpdateSection = () => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [error, setError] = useState(null);
   const [platform, setPlatform] = useState(null);
+  const [maintenanceError, setMaintenanceError] = useState(null);
+  const [uninstalling, setUninstalling] = useState(false);
 
   useEffect(() => {
     updateApi.getStatus()
@@ -97,6 +101,20 @@ const UpdateSection = () => {
 
   const openReleaseNotes = () => {
     window.electronAPI?.openReleasesPage(updateInfo?.releaseUrl || RELEASES_URL);
+  };
+
+  const handleOpenUserData = async () => {
+    setMaintenanceError(null);
+    const result = await window.electronAPI?.openUserDataFolder();
+    if (result && !result.success) setMaintenanceError(result.error || 'Could not open the Asyncat data folder.');
+  };
+
+  const handleUninstall = async () => {
+    setMaintenanceError(null);
+    setUninstalling(true);
+    const result = await window.electronAPI?.uninstallApp();
+    if (result && !result.success) setMaintenanceError(result.error || 'Could not launch the Asyncat uninstaller.');
+    if (!result?.launched) setUninstalling(false);
   };
 
   return (
@@ -231,6 +249,49 @@ const UpdateSection = () => {
           </div>
         )}
       </div>
+
+      {isPackaged && (
+        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <FolderOpen size={18} className="text-gray-500 dark:text-gray-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
+              Installation &amp; local data
+            </h3>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 max-w-2xl">
+            Asyncat keeps conversations, settings, browser data, logs, and local runtime files in your OS user-data folder.
+            Uninstalling can preserve that folder for a later reinstall or remove it for a clean uninstall. Attached
+            Project folders stored outside this location are not removed.
+          </p>
+          <div className="mt-4 flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={handleOpenUserData}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 midnight:bg-slate-800 midnight:hover:bg-slate-700 text-gray-700 dark:text-gray-200 midnight:text-slate-200 transition-colors"
+            >
+              <FolderOpen size={14} />
+              Open data folder
+            </button>
+            {platform === 'win32' && (
+              <button
+                type="button"
+                disabled={uninstalling}
+                onClick={handleUninstall}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/70 dark:text-red-400 dark:hover:bg-red-950/30 transition-colors"
+              >
+                {uninstalling ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {uninstalling ? 'Opening uninstaller…' : 'Uninstall Asyncat'}
+              </button>
+            )}
+          </div>
+          {maintenanceError && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
+              <XCircle size={14} />
+              <span>{maintenanceError}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

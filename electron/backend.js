@@ -20,6 +20,49 @@ import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV } from './constant
 let backendProcess = null;
 let isShuttingDown = false;
 let cachedNodeBinary = null;
+let recentBackendOutput = '';
+
+const MAX_RECENT_BACKEND_OUTPUT = 64 * 1024;
+
+function backendProcessLogPath() {
+  return path.join(DEN_CWD, 'logs', 'backend-process.log');
+}
+
+function recordBackendOutput(source, data) {
+  const text = String(data || '');
+  if (!text) return;
+
+  recentBackendOutput = `${recentBackendOutput}${text}`.slice(-MAX_RECENT_BACKEND_OUTPUT);
+  try {
+    const logPath = backendProcessLogPath();
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] [${source}] ${text}`);
+  } catch (error) {
+    console.warn('[Asyncat] Could not write backend process log:', error.message);
+  }
+}
+
+function recentBackendFailure() {
+  const lines = recentBackendOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const preferred = [...lines].reverse().find((line) => (
+    /(?:error|exception|failed|cannot|missing|eaddrinuse|patherror)/i.test(line)
+  ));
+  return String(preferred || lines.at(-1) || '').slice(0, 600);
+}
+
+function enrichStartupError(error) {
+  const message = error?.message || String(error);
+  const detail = recentBackendFailure();
+  const logPath = backendProcessLogPath();
+  return new Error([
+    message,
+    detail && !message.includes(detail) ? detail : null,
+    `Diagnostic log: ${logPath}`,
+  ].filter(Boolean).join('\n'));
+}
 
 const OBSOLETE_LOCAL_LOGIN_KEYS = new Set([
   'LOCAL_EMAIL',
@@ -142,6 +185,8 @@ export function startBackend() {
     if (backendProcess) { resolve(); return; }
 
     isShuttingDown = false;
+    recentBackendOutput = '';
+    let startupComplete = false;
 
     // Ensure the data directory exists — db/client.js, storage services, and
     // MCP config all default to cwd/data/ via path.resolve('data', ...).
@@ -180,29 +225,34 @@ export function startBackend() {
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    const spawnedProcess = backendProcess;
+    recordBackendOutput('desktop', `Starting ${cachedNodeBinary} ${DEN_ENTRY}\n`);
 
-    backendProcess.stdout?.on('data', (data) => {
+    spawnedProcess.stdout?.on('data', (data) => {
+      recordBackendOutput('stdout', data);
       if (IS_DEV) process.stdout.write(`[den] ${data}`);
     });
-    backendProcess.stderr?.on('data', (data) => {
+    spawnedProcess.stderr?.on('data', (data) => {
+      recordBackendOutput('stderr', data);
       if (IS_DEV) process.stderr.write(`[den:err] ${data}`);
     });
 
-    backendProcess.on('error', (err) => {
+    spawnedProcess.on('error', (err) => {
+      recordBackendOutput('process', `Backend process error: ${err.message}\n`);
       console.error('[Asyncat] Backend process error:', err.message);
       backendProcess = null;
-      reject(err);
     });
 
-    backendProcess.on('exit', (code, signal) => {
+    spawnedProcess.on('exit', (code, signal) => {
       const prev = backendProcess;
       backendProcess = null;
 
       if (isShuttingDown) return;
 
+      recordBackendOutput('process', `Backend exited (code=${code}, signal=${signal})\n`);
       console.warn(`[Asyncat] Backend exited (code=${code}, signal=${signal})`);
 
-      if (prev && !isShuttingDown) {
+      if (prev && startupComplete && !isShuttingDown) {
         console.log('[Asyncat] Auto-restarting backend in 2s...');
         setTimeout(() => {
           if (!isShuttingDown) startBackend().catch(() => {});
@@ -210,11 +260,24 @@ export function startBackend() {
       }
     });
 
-    waitForHealth(30_000)
-      .then(resolve)
+    const startupFailure = new Promise((_, rejectStartup) => {
+      spawnedProcess.once('error', (error) => rejectStartup(error));
+      spawnedProcess.once('exit', (code, signal) => {
+        rejectStartup(new Error(
+          `Backend exited before becoming healthy (code=${code}, signal=${signal || 'none'}).`,
+        ));
+      });
+    });
+
+    Promise.race([waitForHealth(30_000), startupFailure])
+      .then(() => {
+        startupComplete = true;
+        resolve();
+      })
       .catch((err) => {
-        console.error('[Asyncat] Backend failed to become healthy:', err.message);
-        reject(err);
+        const enriched = enrichStartupError(err);
+        console.error('[Asyncat] Backend failed to become healthy:', enriched.message);
+        reject(enriched);
       });
   });
 }

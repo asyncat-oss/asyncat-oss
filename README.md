@@ -2,7 +2,7 @@
 
 **A local-first AI agent desktop app.** 217 tools. 51 skills. Self-improving. Desktop automation. Fully offline.
 
-> **v0.8.0-beta.3** · MIT · [Install](#quick-start) · [Website](https://asyncat.com)
+> **v0.8.0-beta.4** · MIT · [Install](#quick-start) · [Website](https://asyncat.com)
 
 ![asyncat home screen](neko/public/image.png)
 
@@ -143,6 +143,10 @@ npm run electron:dev
 Asyncat checks published GitHub releases after launch. A dot appears on Settings when a newer version exists. Open **Settings → About**, click **Download installer**, quit Asyncat, and run the installer over the existing installation. The updater selects the asset for the current OS and CPU; settings and local data remain in the OS user-data directory.
 
 Beta builds use assisted installation because they are unsigned. The app will not silently replace itself.
+
+### Uninstalling on Windows
+
+Open **Settings → About → Uninstall Asyncat**, use the **Uninstall Asyncat** shortcut in the Start menu, or open **Windows Settings → Apps → Installed apps → Asyncat → Uninstall**. During an interactive uninstall, choose whether to keep local conversations and settings for a later reinstall or remove Asyncat's local data for a clean uninstall. Attached Project folders stored outside Asyncat's local data folder are not removed.
 
 ---
 

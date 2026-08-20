@@ -7,7 +7,7 @@
 // 4. Manages the full app lifecycle
 //
 import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, session, webContents } from 'electron';
-import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, NEKO_DIST, FRONTEND_PORT } from './constants.js';
+import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
@@ -106,6 +106,40 @@ function setupIPC() {
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.on('app:is-packaged', (event) => { event.returnValue = app.isPackaged; });
+
+  ipcMain.handle('app:open-user-data', async () => {
+    fs.mkdirSync(USER_DATA, { recursive: true });
+    const error = await shell.openPath(USER_DATA);
+    return error ? { success: false, error } : { success: true };
+  });
+
+  ipcMain.handle('app:uninstall', async () => {
+    if (!app.isPackaged || !IS_WIN) {
+      return { success: false, error: 'The built-in uninstaller is only available in packaged Windows builds.' };
+    }
+
+    const uninstaller = path.join(path.dirname(process.execPath), 'Uninstall Asyncat.exe');
+    if (!fs.existsSync(uninstaller)) {
+      return { success: false, error: 'Asyncat uninstaller was not found. Use Windows Settings → Apps → Installed apps.' };
+    }
+
+    const choice = await dialog.showMessageBox(getMainWindow(), {
+      type: 'warning',
+      title: 'Uninstall Asyncat',
+      message: 'Uninstall Asyncat from this computer?',
+      detail: 'The uninstaller will let you keep your local data for a later reinstall or remove it completely.',
+      buttons: ['Cancel', 'Uninstall'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (choice.response !== 1) return { success: true, canceled: true };
+
+    const error = await shell.openPath(uninstaller);
+    if (error) return { success: false, error };
+    setTimeout(() => quitApp(), 750);
+    return { success: true, launched: true };
+  });
 
   ipcMain.handle('dialog:openDirectory', async (_event, opts = {}) => {
     const win = getMainWindow();
@@ -641,17 +675,29 @@ async function bootApp() {
   // 1. Create the window immediately (shows loading screen)
   const win = createWindow();
   showLoadingScreen();
+  let backendError = null;
 
   // 2. Start the backend
   try {
     await startBackend();
     console.log('[Asyncat] Backend is healthy ✓');
   } catch (err) {
+    backendError = err;
     console.error('[Asyncat] Failed to start backend:', err.message);
-    dialog.showErrorBox(
-      'Backend Start Failed',
-      `Asyncat couldn't start the backend server.\n\n${err.message}\n\nTry restarting the app or check the logs.`
-    );
+    const choice = await dialog.showMessageBox(win, {
+      type: 'error',
+      title: 'Backend Start Failed',
+      message: "Asyncat couldn't start the backend server.",
+      detail: `${err.message}\n\nYou can continue to the app, but backend features will be unavailable.`,
+      buttons: ['Continue', 'Open diagnostic logs'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (choice.response === 1) {
+      fs.mkdirSync(path.join(USER_DATA, 'logs'), { recursive: true });
+      await shell.openPath(path.join(USER_DATA, 'logs'));
+    }
   }
 
   // 3. Start the frontend server if no dev server is running on the frontend port
@@ -667,9 +713,13 @@ async function bootApp() {
   const frontendHost = viteRunning ? 'localhost' : '127.0.0.1';
   win.loadURL(`http://${frontendHost}:${FRONTEND_PORT}`);
 
-  // 5. Notify the renderer that backend is ready
+  // 5. Notify the renderer of the actual backend result
   win.webContents.once('did-finish-load', () => {
-    win.webContents.send('backend:ready');
+    if (backendError) {
+      win.webContents.send('backend:error', backendError.message);
+    } else {
+      win.webContents.send('backend:ready');
+    }
   });
 
   refreshTray();

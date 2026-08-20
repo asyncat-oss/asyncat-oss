@@ -93,14 +93,17 @@ router.get('/logs/read', (req, res) => {
   }
 });
 
-router.get('/:container/*', (req, res) => {
-  const { container } = req.params;
+// A RegExp route works in both Express 4 and Express 5. String wildcards use
+// incompatible path-to-regexp syntaxes between those releases and can crash
+// the entire backend while routes are being registered.
+router.get(/^\/([^/]+)\/(.+)$/, (req, res) => {
+  const container = req.params[0];
 
   if (!ALLOWED_CONTAINERS.includes(container)) {
     return res.status(403).json({ success: false, error: 'Container not allowed' });
   }
 
-  const relativePath = req.params[0];
+  const relativePath = req.params[1];
   const sanitizedRelPath = sanitizePath(relativePath);
 
   const filePath = path.join(STORAGE_ROOT, container, sanitizedRelPath);

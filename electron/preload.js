@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── App Info ─────────────────────────────────────────────────────────
   getAppVersion:  () => ipcRenderer.invoke('app:version'),
   getPlatform:    () => ipcRenderer.invoke('app:platform'),
+  openUserDataFolder: () => ipcRenderer.invoke('app:open-user-data'),
+  uninstallApp:   () => ipcRenderer.invoke('app:uninstall'),
   isElectron:     true,
   isPackaged:     ipcRenderer.sendSync('app:is-packaged'),
 

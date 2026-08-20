@@ -3401,7 +3401,8 @@ router.use((error, req, res, next) => {
   });
 });
 
-router.use('*', (req, res) => {
+// Omitting the path makes this a catch-all in both Express 4 and Express 5.
+router.use((req, res) => {
   res.status(404).json({ success: false, error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 

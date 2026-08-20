@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 import {
   existsSync,
+  mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
 } from 'fs';
 import path from 'path';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
+import http from 'http';
+import net from 'net';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -48,6 +54,10 @@ function findSensitiveRuntimeFiles(denDirectory) {
   return matches;
 }
 
+function packageJsonPath(baseDirectory, packageName) {
+  return path.join(baseDirectory, 'node_modules', ...packageName.split('/'), 'package.json');
+}
+
 function verifyRuntime(appDirectory, expectedArch) {
   const resourceDirectory = path.dirname(appDirectory);
   const nodeName = process.platform === 'win32' ? 'node.exe' : 'node';
@@ -59,6 +69,12 @@ function verifyRuntime(appDirectory, expectedArch) {
   const dependencies = Object.keys(denPackage.dependencies || {});
   if (dependencies.length === 0) fail('den/package.json declares no runtime dependencies.');
 
+  const expectedVersions = Object.fromEntries(dependencies.map((name) => {
+    const sourcePackagePath = packageJsonPath(ROOT, name);
+    if (!existsSync(sourcePackagePath)) fail(`Source dependency is not installed: ${name}`);
+    return [name, JSON.parse(readFileSync(sourcePackagePath, 'utf8')).version];
+  }));
+
   const probe = `
     const fs = require('fs');
     const path = require('path');
@@ -68,9 +84,14 @@ function verifyRuntime(appDirectory, expectedArch) {
     if (expected && process.arch !== expected) {
       throw new Error('bundled Node architecture is ' + process.arch + ', expected ' + expected);
     }
+    const expectedVersions = ${JSON.stringify(expectedVersions)};
     for (const name of ${JSON.stringify(dependencies)}) {
       const packagePath = path.join(${JSON.stringify(appDirectory)}, 'node_modules', ...name.split('/'), 'package.json');
       if (!fs.existsSync(packagePath)) throw new Error('missing backend dependency: ' + name);
+      const actualVersion = JSON.parse(fs.readFileSync(packagePath, 'utf8')).version;
+      if (actualVersion !== expectedVersions[name]) {
+        throw new Error('wrong backend dependency version: ' + name + '@' + actualVersion + ', expected ' + expectedVersions[name]);
+      }
     }
     req('better-sqlite3');
     req('canvas');
@@ -85,6 +106,120 @@ function verifyRuntime(appDirectory, expectedArch) {
     fail(`Packaged runtime probe failed:\n${result.stdout || ''}${result.stderr || ''}`);
   }
   process.stdout.write(result.stdout);
+}
+
+function getAvailablePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : null;
+      server.close((error) => {
+        if (error) reject(error);
+        else if (!port) reject(new Error('Could not allocate a backend verification port.'));
+        else resolve(port);
+      });
+    });
+  });
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForHealth(port, timeoutMs = 45_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const healthy = await new Promise((resolve) => {
+      const request = http.get(`http://127.0.0.1:${port}/health`, (response) => {
+        response.resume();
+        resolve(response.statusCode === 200);
+      });
+      request.setTimeout(1_000, () => request.destroy());
+      request.once('error', () => resolve(false));
+    });
+    if (healthy) return;
+    await delay(300);
+  }
+  throw new Error(`Backend health check timed out after ${timeoutMs}ms.`);
+}
+
+async function stopProcess(child) {
+  if (!child || child.exitCode !== null) return;
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  try { child.kill('SIGTERM'); } catch {}
+  await Promise.race([exited, delay(5_000)]);
+  if (child.exitCode === null) {
+    try { child.kill('SIGKILL'); } catch {}
+    await Promise.race([exited, delay(2_000)]);
+  }
+}
+
+async function verifyBackendStartup(appDirectory) {
+  const resourceDirectory = path.dirname(appDirectory);
+  const nodeName = process.platform === 'win32' ? 'node.exe' : 'node';
+  const nodePath = path.join(resourceDirectory, 'node-bin', nodeName);
+  const entryPath = path.join(appDirectory, 'den', 'src', 'index.js');
+  const tempRoot = path.resolve(os.tmpdir());
+  const testDirectory = mkdtempSync(path.join(tempRoot, 'asyncat-package-verify-'));
+  const dataDirectory = path.join(testDirectory, 'data');
+  const logDirectory = path.join(testDirectory, 'logs');
+  mkdirSync(dataDirectory, { recursive: true });
+  mkdirSync(logDirectory, { recursive: true });
+
+  let child;
+  let output = '';
+  try {
+    const port = await getAvailablePort();
+    child = spawn(nodePath, [entryPath], {
+      cwd: testDirectory,
+      env: {
+        ...process.env,
+        PORT: String(port),
+        NODE_ENV: 'production',
+        FRONTEND_URL: 'http://127.0.0.1:8717',
+        PUBLIC_URL: `http://127.0.0.1:${port}`,
+        DB_PATH: path.join(dataDirectory, 'asyncat.db'),
+        STORAGE_PATH: path.join(dataDirectory, 'uploads'),
+        MODELS_PATH: path.join(dataDirectory, 'models'),
+        ASYNCAT_LOG_DIR: logDirectory,
+        ASYNCAT_ENV_PATH: path.join(testDirectory, '.env'),
+        ASYNCAT_DATA_PATH: dataDirectory,
+        ASYNCAT_DESKTOP: '1',
+        ELECTRON_RUN_AS_NODE: undefined,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const appendOutput = (data) => {
+      output = `${output}${String(data || '')}`.slice(-64 * 1024);
+    };
+    child.stdout?.on('data', appendOutput);
+    child.stderr?.on('data', appendOutput);
+
+    const exitedEarly = new Promise((_, reject) => {
+      child.once('error', reject);
+      child.once('exit', (code, signal) => {
+        reject(new Error(`Backend exited before becoming healthy (code=${code}, signal=${signal || 'none'}).`));
+      });
+    });
+    await Promise.race([waitForHealth(port), exitedEarly]);
+    console.log(`backend-health-ok 127.0.0.1:${port}`);
+  } catch (error) {
+    const details = output.trim();
+    fail(`Packaged backend startup probe failed:\n${error.message}${details ? `\n${details}` : ''}`);
+  } finally {
+    await stopProcess(child);
+    const resolvedTestDirectory = path.resolve(testDirectory);
+    if (
+      path.dirname(resolvedTestDirectory) !== tempRoot
+      || !path.basename(resolvedTestDirectory).startsWith('asyncat-package-verify-')
+    ) {
+      fail(`Refusing to clean unexpected verification directory: ${resolvedTestDirectory}`);
+    }
+    rmSync(resolvedTestDirectory, { recursive: true, force: true });
+  }
 }
 
 function verifyElectronNativeModule(appDirectory, expectedArch) {
@@ -121,7 +256,7 @@ function verifyElectronNativeModule(appDirectory, expectedArch) {
   process.stdout.write(result.stdout);
 }
 
-export function verifyPackage({ releaseDirectory = path.join(ROOT, 'release'), appDirectory, expectedArch = process.arch } = {}) {
+export async function verifyPackage({ releaseDirectory = path.join(ROOT, 'release'), appDirectory, expectedArch = process.arch } = {}) {
   const apps = appDirectory ? [path.resolve(appDirectory)] : findPackagedApps(path.resolve(releaseDirectory));
   if (apps.length !== 1) fail(`Expected exactly one unpacked app, found ${apps.length}: ${apps.join(', ')}`);
 
@@ -145,6 +280,7 @@ export function verifyPackage({ releaseDirectory = path.join(ROOT, 'release'), a
 
   verifyRuntime(packagedApp, expectedArch);
   verifyElectronNativeModule(packagedApp, expectedArch);
+  await verifyBackendStartup(packagedApp);
   const size = statSync(packagedApp).isDirectory() ? 'directory' : 'file';
   console.log(`[release] Verified ${size}: ${packagedApp}`);
   return packagedApp;
@@ -157,7 +293,7 @@ function option(name) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    verifyPackage({
+    await verifyPackage({
       releaseDirectory: option('release-dir') || undefined,
       appDirectory: option('app-dir') || undefined,
       expectedArch: option('arch') || process.arch,

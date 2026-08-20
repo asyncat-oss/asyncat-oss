@@ -77,10 +77,15 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
   installerIcon: icon.ico
   uninstallerIcon: icon.ico
   deleteAppDataOnUninstall: false
-  menuCategory: true
+  uninstallDisplayName: Asyncat
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Asyncat
+  menuCategory: Asyncat
 
 # ─── Linux ────────────────────────────────────────────────────────────────────
 linux:
