@@ -2481,7 +2481,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   };
   const modeSwitcher = (
     <div
-      className="inline-flex h-11 items-center rounded-full bg-gray-100 p-1 shadow-inner dark:bg-black/30 midnight:bg-black/30"
+      className="inline-flex items-center gap-6 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800"
       role="tablist"
       aria-label="Conversation mode"
     >
@@ -2500,13 +2500,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             title={description}
             onClick={() => handleExperienceModeChange(mode)}
             disabled={agentRunning}
-            className={`h-9 min-w-24 rounded-full px-6 text-sm font-semibold capitalize transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`relative flex h-9 items-center gap-2 px-0.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               active
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white midnight:bg-slate-700 midnight:text-white'
-                : 'text-gray-500 hover:text-gray-800 dark:text-gray-500 dark:hover:text-gray-200 midnight:text-slate-500 midnight:hover:text-slate-200'
+                ? 'text-gray-950 dark:text-white midnight:text-slate-100'
+                : 'text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 midnight:text-slate-500 midnight:hover:text-slate-200'
             }`}
           >
-            {mode}
+            <span className={`h-1.5 w-1.5 rounded-[2px] transition-colors ${active ? 'bg-indigo-500 dark:bg-indigo-300' : 'bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700'}`} aria-hidden="true" />
+            <span className="capitalize">{mode}</span>
+            <span
+              className={`absolute inset-x-0 -bottom-px h-px transition-opacity ${active ? 'bg-indigo-500 opacity-100 dark:bg-indigo-300' : 'opacity-0'}`}
+              aria-hidden="true"
+            />
           </button>
         );
       })}
@@ -2516,29 +2521,30 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const targetExperienceMode = experienceMode === 'chat' ? 'work' : 'chat';
   const currentModeLabel = experienceMode === 'chat' ? 'Chat' : 'Work';
   const targetModeLabel = targetExperienceMode === 'chat' ? 'Chat' : 'Work';
-  const CurrentModeIcon = experienceMode === 'chat' ? MessageSquare : Bot;
+  const CurrentModeIcon = experienceMode === 'chat' ? MessageSquare : Code2;
   const lockedModeControl = (
-    <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1 shadow-sm dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+    <div className="inline-flex shrink-0 items-center gap-2.5">
       <span
-        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-gray-100 px-3 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200 midnight:bg-slate-800 midnight:text-slate-200"
+        className="inline-flex h-8 items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400"
         title={`${currentModeLabel} is fixed for this conversation`}
       >
         <CurrentModeIcon className="h-3.5 w-3.5" />
         {currentModeLabel}
-        <Lock className="h-3 w-3 text-gray-400" />
+        <Lock className="h-3 w-3 text-gray-300 dark:text-gray-600" />
       </span>
       {currentConversationId && !isGhostMode && (
         <button
           type="button"
           onClick={() => handleContinueInExperienceMode(targetExperienceMode)}
           disabled={agentRunning || Boolean(continuingMode)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-indigo-600 transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40 midnight:text-indigo-300 midnight:hover:bg-indigo-950/40"
+          className="inline-flex h-8 items-center gap-1 text-xs font-medium text-gray-400 transition-colors hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-500 dark:hover:text-indigo-300 midnight:text-slate-500 midnight:hover:text-indigo-300"
           title={`Create a new ${targetModeLabel} conversation with this transcript`}
         >
           {continuingMode === targetExperienceMode
             ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
             : <ArrowRight className="h-3.5 w-3.5" />}
-          Continue in {targetModeLabel}
+          <span className="hidden sm:inline">Continue in {targetModeLabel}</span>
+          <span className="sm:hidden">{targetModeLabel}</span>
         </button>
       )}
     </div>
@@ -2563,9 +2569,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const welcomeScreenJSX =
     !hasConversationContent ? (
       <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2">
-          {modeSwitcher}
-        </div>
         <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
           {!isGhostMode && experienceMode === 'work' && workingContext?.workingDir && (
             <button
@@ -2679,6 +2682,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               </div>
             )}
 
+            <div className="flex px-4 sm:px-6">
+              {modeSwitcher}
+            </div>
+
             <MessageInputV2
               key={`welcome-input-${currentConversationId || 'draft'}`}
               onSubmit={handleAgentRun}
@@ -2746,16 +2753,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             <div className="shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950">
               <div className={`mx-auto px-3 sm:px-4 md:px-6 ${shouldRenderSidePanel ? 'max-w-[min(100vw,96rem)]' : 'max-w-5xl'}`}>
 
-                <div className="flex justify-center pt-2 xl:hidden">
-                  {lockedModeControl}
-                </div>
-
                 {/* ── Row 1: Title + conversation-level actions ──────────────── */}
-                <div className="relative flex min-w-0 items-center gap-2 py-2">
-                  <div className="absolute left-1/2 top-1/2 z-20 hidden -translate-x-1/2 -translate-y-1/2 xl:block">
-                    {lockedModeControl}
-                  </div>
-                  <div className="hidden h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700 sm:block" />
+                <div className="flex min-w-0 items-center gap-2 py-2">
+                  {lockedModeControl}
+                  <div className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" />
 
                   {/* Title */}
                   <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
