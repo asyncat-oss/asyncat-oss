@@ -7,7 +7,7 @@
 // 4. Manages the full app lifecycle
 //
 import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, session, webContents } from 'electron';
-import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, APP_ID, BACKEND_URL, NEKO_DIST, FRONTEND_PORT } from './constants.js';
+import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, NEKO_DIST, FRONTEND_PORT } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
@@ -55,7 +55,7 @@ if (!gotLock) {
 
 app.setName(APP_NAME);
 if (IS_WIN) {
-  app.setAppUserModelId(APP_ID);
+  app.setAppUserModelId(WINDOWS_APP_ID);
 }
 
 // macOS: keep app running when all windows closed (tray icon stays)
@@ -142,7 +142,8 @@ function setupIPC() {
 
   ipcMain.on('notify', (_e, { title, body }) => {
     if (Notification.isSupported()) {
-      new Notification({ title, body }).show();
+      const icon = nativeImage.createFromPath(ICONS.window);
+      new Notification({ title, body, ...(icon.isEmpty() ? {} : { icon }) }).show();
     }
   });
 

@@ -1,8 +1,8 @@
 // electron/window.js — Window creation & management
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, nativeImage, shell } from 'electron';
 import {
   NEKO_INDEX, PRELOAD_PATH,
-  ICONS, IS_DEV, IS_MAC, APP_NAME, FRONTEND_PORT,
+  ICONS, IS_MAC, APP_NAME, FRONTEND_PORT, OPEN_DEVTOOLS,
 } from './constants.js';
 
 let mainWindow = null;
@@ -17,13 +17,19 @@ export function createWindow() {
     return mainWindow;
   }
 
+  const windowIcon = nativeImage.createFromPath(ICONS.window);
+  if (windowIcon.isEmpty()) {
+    console.warn('[Asyncat] Window icon could not be loaded:', ICONS.window);
+  }
+
   mainWindow = new BrowserWindow({
     width:  1400,
     height: 900,
     minWidth:  800,
     minHeight: 600,
     title: APP_NAME,
-    icon: ICONS.png,
+    // Windows renders taskbar icons most reliably from a multi-resolution ICO.
+    icon: windowIcon.isEmpty() ? undefined : windowIcon,
     show: false, // show after ready-to-show to avoid white flash
 
     // macOS-specific
@@ -50,8 +56,8 @@ export function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
 
-    if (IS_DEV) {
-      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    if (OPEN_DEVTOOLS) {
+      mainWindow.webContents.openDevTools({ mode: 'right' });
     }
   });
 
@@ -63,6 +69,10 @@ export function createWindow() {
     } catch { /* deny malformed and privileged URLs */ }
     return { action: 'deny' };
   });
+
+  // Reassert the icon after native window creation; this avoids the Electron
+  // executable icon winning the first Windows taskbar paint in source runs.
+  if (!IS_MAC && !windowIcon.isEmpty()) mainWindow.setIcon(windowIcon);
 
   // ─── Handle navigation to external URLs ─────────────────────────────
   mainWindow.webContents.on('will-navigate', (event, url) => {

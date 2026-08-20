@@ -44,9 +44,13 @@ export const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 
 /** Icon paths */
 export const ICONS = {
-  png:  path.join(NEKO_ASSETS, 'app-icon-512.png'),
-  tray: path.join(NEKO_ASSETS, 'app-tray.png'),
-  logo: path.join(NEKO_ASSETS, 'app-icon-512.png'),
+  png:    path.join(NEKO_ASSETS, 'app-icon-512.png'),
+  ico:    path.join(NEKO_ASSETS, 'icon.ico'),
+  window: process.platform === 'win32'
+    ? path.join(NEKO_ASSETS, 'icon.ico')
+    : path.join(NEKO_ASSETS, 'app-icon-512.png'),
+  tray:   path.join(NEKO_ASSETS, 'app-tray.png'),
+  logo:   path.join(NEKO_ASSETS, 'app-icon-512.png'),
 };
 
 // ─── Ports ────────────────────────────────────────────────────────────────────
@@ -65,3 +69,9 @@ export const IS_DEV      = !app.isPackaged;
 export const IS_MAC      = process.platform === 'darwin';
 export const IS_WIN      = process.platform === 'win32';
 export const IS_LINUX    = process.platform === 'linux';
+
+/** Keep source runs separate from an installed build in the Windows taskbar. */
+export const WINDOWS_APP_ID = IS_WIN && IS_DEV ? `${APP_ID}.dev` : APP_ID;
+
+/** Developer Tools stay opt-in so development launches remain uncluttered. */
+export const OPEN_DEVTOOLS = IS_DEV && process.argv.includes('--open-devtools');

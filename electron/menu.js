@@ -131,7 +131,7 @@ export function buildAppMenu({ onNewChat, onSettings, onRestartBackend } = {}) {
         },
         {
           label: 'Report an Issue',
-          click: () => shell.openExternal('https://github.com/asyncat/asyncat-oss/issues'),
+          click: () => shell.openExternal('https://github.com/asyncat-oss/asyncat-oss/issues'),
         },
       ],
     },

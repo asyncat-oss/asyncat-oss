@@ -90,9 +90,12 @@ npm install
 
 # Launch dev server + Electron app
 npm run electron:dev
+
+# Same launch with docked Developer Tools opened automatically
+npm run electron:dev:tools
 ```
 
-In dev mode Electron loads the frontend from the Vite dev server (`localhost:8717`), so you get hot module replacement.
+In dev mode Electron loads the frontend from the Vite dev server (`localhost:8717`), so you get hot module replacement. Developer Tools are also available at any time from **View → Toggle Developer Tools**.
 
 #### 3. Build & Package Distributables
 

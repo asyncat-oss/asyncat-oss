@@ -26,6 +26,7 @@
     "build": "npm run build -w neko",
     "icons:generate": "node scripts/generate-icons.cjs",
     "electron:dev": "concurrently --kill-others --names den,neko,electron \"npm run dev:backend\" \"npm run dev:frontend\" \"electron .\"",
+    "electron:dev:tools": "concurrently --kill-others --names den,neko,electron \"npm run dev:backend\" \"npm run dev:frontend\" \"electron . --open-devtools\"",
     "electron:start": "npm run build -w neko && npx electron .",
     "electron:build": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --config electron-builder.yml",
     "electron:build:mac": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --mac --config electron-builder.yml",

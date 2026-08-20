@@ -75,14 +75,15 @@ function writeConfig(cfg) {
 
 function presetPath(key) {
   const preset = ICON_PRESETS.find(p => p.key === key);
-  return preset ? path.join(NEKO_ASSETS, preset.file) : ICONS.png;
+  if (!preset || preset.key === 'default') return ICONS.window;
+  return path.join(NEKO_ASSETS, preset.file);
 }
 
 /** Resolve the active icon source path from the saved config. */
 function resolveIconPath(cfg = readConfig()) {
   if (cfg.type === 'custom' && fs.existsSync(CUSTOM_PATH)) return CUSTOM_PATH;
   if (cfg.type === 'preset') return presetPath(cfg.key);
-  return ICONS.png;
+  return ICONS.window;
 }
 
 /** Apply the configured icon to the Dock (mac), the window, and the tray. */
