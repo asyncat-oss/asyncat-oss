@@ -1,17 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Image, Link2, ExternalLink } from 'lucide-react';
-
-const isElectron = Boolean(window?.electronAPI);
-
-function openUrl(url) {
-  if (isElectron) {
-    window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url } }));
-  } else {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-}
+import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
+import { openWebLink } from '../../../utils/openWebLink.js';
 
 export default function ChatSourcesMediaSidebar({ catalog }) {
+  const { workbenchPreferences } = useUiPreferences();
   const [tab, setTab] = useState(catalog.imageCount > 0 ? 'images' : 'sources');
   const hasImages = catalog.imageCount > 0;
   const hasSources = catalog.sourceCount > 0;
@@ -67,7 +60,7 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
               <button
                 type="button"
                 key={`${img.image || img.thumbnail || img.url}-${i}`}
-                onClick={() => openUrl(img.url || img.image)}
+                onClick={() => openWebLink(img.url || img.image, workbenchPreferences.browserOpenLinks)}
                 className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700 text-left"
                 title={img.title}
               >
@@ -96,7 +89,7 @@ export default function ChatSourcesMediaSidebar({ catalog }) {
               <button
                 type="button"
                 key={`${source.url}-${i}`}
-                onClick={() => openUrl(source.url)}
+                onClick={() => openWebLink(source.url, workbenchPreferences.browserOpenLinks)}
                 className="block w-full text-left rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:border-blue-700 midnight:hover:bg-blue-950/20"
               >
                 <div className="flex min-w-0 items-start gap-2">

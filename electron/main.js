@@ -463,6 +463,13 @@ function setupDesktopIPC() {
   // Open a file/folder with the default OS app
   ipcMain.handle('shell:open', (_event, filePath) => shell.openPath(filePath));
 
+  // Open a validated web URL in the default OS browser.
+  ipcMain.handle('shell:openExternal', async (_event, url) => {
+    if (!isAllowedBrowserUrl(url, { allowBlank: false })) return false;
+    await shell.openExternal(url);
+    return true;
+  });
+
   // Reveal a file in Finder / Explorer
   ipcMain.handle('shell:showInFolder', (_event, filePath) => {
     shell.showItemInFolder(filePath);

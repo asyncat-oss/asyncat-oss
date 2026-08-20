@@ -1448,7 +1448,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         if (event.type === 'preview_url') {
           const url = event.data?.url;
           if (url) {
-            setManualPreviewUrl(url);
+            setManualPreviewRequest({
+              url,
+              id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+            });
             setShowActivitySidebar(true);
             setSidePanelTab('preview');
             try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* storage may be unavailable */ }
@@ -2218,13 +2221,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return null;
   }, [persistedAgentEvents]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [manualPreviewUrl, setManualPreviewUrl] = useState(null);
+  const [manualPreviewRequest, setManualPreviewRequest] = useState(null);
 
   useEffect(() => {
     const handler = (e) => {
       const url = e.detail?.url;
       if (!url) return;
-      setManualPreviewUrl(url);
+      setManualPreviewRequest({
+        url,
+        id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      });
       setShowActivitySidebar(true);
       setSidePanelTab('preview');
       try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* storage may be unavailable */ }
@@ -2233,7 +2239,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     return () => window.removeEventListener('asyncat-open-preview', handler);
   }, []);
 
-  const effectivePreviewUrl = manualPreviewUrl || detectedPreviewUrl;
+  const effectivePreviewUrl = manualPreviewRequest?.url || detectedPreviewUrl;
+  const previewNavigationKey = manualPreviewRequest?.id || detectedPreviewUrl;
 
   // Auto-open preview tab when agent first detects a localhost URL
   const prevDetectedUrlRef = useRef(null);
@@ -3269,6 +3276,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
+              previewNavigationKey={previewNavigationKey}
               artifacts={conversationArtifacts}
               onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}
@@ -3336,6 +3344,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               highlights={conversationHighlights}
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
+              previewNavigationKey={previewNavigationKey}
               artifacts={conversationArtifacts}
               onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}

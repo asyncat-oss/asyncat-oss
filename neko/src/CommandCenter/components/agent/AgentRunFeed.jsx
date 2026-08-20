@@ -15,6 +15,8 @@ import { extractReasoningFromText, normalizeReasoningForDisplay } from '../../ut
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import { fileIconMeta } from '../../../files/fileUtils.js';
 import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.jsx';
+import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
+import { openWebLink } from '../../../utils/openWebLink.js';
 
 // ── Inline @mention rendering ─────────────────────────────────────────────────
 function renderGoalWithMentions(goal = "", fileAttachments = []) {
@@ -1258,6 +1260,7 @@ function AskUserEvent({ data, onAnswer }) {
 
 function SourceChip({ source }) {
   const [open, setOpen] = useState(false);
+  const { workbenchPreferences } = useUiPreferences();
   const domain = (() => {
     try { return new URL(source.url).hostname.replace('www.', ''); } catch { return source.url; }
   })();
@@ -1303,13 +1306,9 @@ function SourceChip({ source }) {
             <div className="flex gap-2 px-5 pb-5">
               <button onClick={() => setOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors">Close</button>
               <button onClick={() => {
-                if (window?.electronAPI) {
-                  window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url: source.url } }));
-                } else {
-                  window.open(source.url, '_blank', 'noopener,noreferrer');
-                }
+                openWebLink(source.url, workbenchPreferences.browserOpenLinks);
                 setOpen(false);
-              }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5">{window?.electronAPI ? 'Open in Preview' : 'Open ↗'}</button>
+              }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5">{workbenchPreferences.browserOpenLinks === 'system' ? 'Open in browser' : 'Open in Asyncat'}</button>
             </div>
           </div>
         </div>
@@ -1319,6 +1318,7 @@ function SourceChip({ source }) {
 }
 
 function SourcesPanel({ searchEvent }) {
+  const { workbenchPreferences } = useUiPreferences();
   if (!searchEvent) return null;
   const { sources = [], images = [] } = searchEvent;
   if (sources.length === 0 && images.length === 0) return null;
@@ -1338,11 +1338,7 @@ function SourcesPanel({ searchEvent }) {
                 key={img.image || img.thumbnail || img.url || i}
                 onClick={() => {
                   const url = img.url || img.image;
-                  if (window?.electronAPI) {
-                    window.dispatchEvent(new CustomEvent('asyncat-open-preview', { detail: { url } }));
-                  } else {
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                  }
+                  openWebLink(url, workbenchPreferences.browserOpenLinks);
                 }}
                 className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-700 midnight:border-slate-700 midnight:bg-slate-800 midnight:hover:border-blue-700"
                 title={img.title}

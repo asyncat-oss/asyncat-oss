@@ -165,9 +165,9 @@ export default function WorkbenchSection() {
         <ChoiceRow icon={Search} label="Search engine" value={prefs.browserSearchEngine} onChange={(value) => setPreference('browserSearchEngine', value)} compact options={[
           { value: 'brave', label: 'Brave' }, { value: 'google', label: 'Google' }, { value: 'duckduckgo', label: 'DuckDuckGo' }, { value: 'bing', label: 'Bing' },
         ]} />
-        <ChoiceRow icon={ExternalLink} label="Links opened by pages" value={prefs.browserOpenLinks} onChange={(value) => setPreference('browserOpenLinks', value)} options={[
-          { value: 'internal', label: 'Open in Asyncat', description: 'Create a new embedded-browser tab' },
-          { value: 'system', label: 'Open in system browser', description: 'Hand links to your default browser' },
+        <ChoiceRow icon={ExternalLink} label="Where web links open" description="Applies to links in chats, source cards, and pages inside the embedded browser." value={prefs.browserOpenLinks} onChange={(value) => setPreference('browserOpenLinks', value)} options={[
+          { value: 'internal', label: 'Asyncat browser', description: 'Open links in the built-in browser panel' },
+          { value: 'system', label: 'System browser', description: 'Use your operating system’s default browser' },
         ]} />
         <ToggleRow icon={RotateCcw} label="Restore browser tabs" description="Available in Standard mode. Incognito tabs are always discarded." checked={prefs.browserRestoreTabs} onChange={(value) => setPreference('browserRestoreTabs', value)} />
         <ToggleRow icon={History} label="Save browsing history" description="Standard-mode page titles and URLs are stored locally. Incognito overrides this setting." checked={prefs.browserHistoryEnabled} onChange={(value) => setPreference('browserHistoryEnabled', value)} />

@@ -7,6 +7,7 @@ import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import ArtifactCard from '../renderers/ArtifactRenderer';
 import CodePanel from './CodePanel';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
+import { openWebLink } from '../../../utils/openWebLink.js';
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
@@ -132,7 +133,7 @@ const SEARCH_ENGINES = {
 
 const BROWSER_API = `${import.meta.env.VITE_MAIN_URL || 'http://127.0.0.1:8716'}/api/browser`;
 
-function PreviewPanel({ initialUrl, browserExecutorRef, agentControlEnabled = true }) {
+function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, agentControlEnabled = true }) {
   const { workbenchPreferences } = useUiPreferences();
   const [incognitoMode, setIncognitoMode] = useState(workbenchPreferences.browserProfile !== 'persistent');
   const incognitoPartition = useRef(`asyncat-web-incognito-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`).current;
@@ -391,12 +392,14 @@ function PreviewPanel({ initialUrl, browserExecutorRef, agentControlEnabled = tr
   }, [find.open, activeTabId]);
 
   // ── Sync when agent calls preview_navigate ────────────────────────────────
-  const prevInitialUrl = useRef(initialUrl || null);
+  const prevInitialRequest = useRef({ url: initialUrl || null, key: navigationKey });
   useEffect(() => {
-    if (!initialUrl || initialUrl === prevInitialUrl.current) return;
-    prevInitialUrl.current = initialUrl;
+    if (!initialUrl) return;
+    const previous = prevInitialRequest.current;
+    if (initialUrl === previous.url && navigationKey === previous.key) return;
+    prevInitialRequest.current = { url: initialUrl, key: navigationKey };
     navigateTab(activeTabIdRef.current, initialUrl);
-  }, [initialUrl, navigateTab]);
+  }, [initialUrl, navigationKey, navigateTab]);
 
   // ── Persist tab URLs to sessionStorage (survives refresh) ────────────────
   useEffect(() => {
@@ -908,7 +911,7 @@ function PreviewPanel({ initialUrl, browserExecutorRef, agentControlEnabled = tr
               const ItemIcon = item.icon;
               return <button key={item.label} type="button" onClick={() => { item.action(); setMoreOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"><ItemIcon className="h-3.5 w-3.5" />{item.label}</button>;
             })}
-            {activeTab?.url && <a href={activeTab.url} target="_blank" rel="noopener noreferrer" onClick={() => setMoreOpen(false)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"><ExternalLink className="h-3.5 w-3.5" />Open in system browser</a>}
+            {activeTab?.url && <button type="button" onClick={() => { openWebLink(activeTab.url, 'system'); setMoreOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"><ExternalLink className="h-3.5 w-3.5" />Open in system browser</button>}
             {workbenchPreferences.browserDeveloperTools && isElectron && activeTab?.url && <button type="button" onClick={() => { tabRefs.current[activeTabId]?.current?.openDevTools(); setMoreOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"><Bug className="h-3.5 w-3.5" />Developer tools</button>}
           </div>
         )}
@@ -1283,6 +1286,7 @@ export default function CommandCenterSidePanel({
   highlights = null,
   onOpenSavedMessage,
   previewUrl = null,
+  previewNavigationKey = null,
   artifacts = [],
   onSelectArtifact,
   selectedArtifact = null,
@@ -1355,6 +1359,7 @@ export default function CommandCenterSidePanel({
         {currentTab === 'preview' && (
           <PreviewPanel
             initialUrl={previewUrl}
+            navigationKey={previewNavigationKey}
             browserExecutorRef={browserExecutorRef}
             agentControlEnabled={experienceMode === 'work'}
           />

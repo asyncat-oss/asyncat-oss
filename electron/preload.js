@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Shell ────────────────────────────────────────────────────────────
   shellOpen:        (filePath) => ipcRenderer.invoke('shell:open', filePath),
   shellShowInFolder:(filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
+  openExternalUrl:  (url) => ipcRenderer.invoke('shell:openExternal', url),
 
   // ─── Clipboard ────────────────────────────────────────────────────────
   clipboardRead:    () => ipcRenderer.invoke('clipboard:read'),

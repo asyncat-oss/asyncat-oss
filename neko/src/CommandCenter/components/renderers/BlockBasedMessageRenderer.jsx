@@ -2,6 +2,8 @@
 import { useMemo, useState, useCallback, memo, useEffect, useRef } from 'react';
 import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2, FolderOpen } from 'lucide-react';
 import { fileIconMeta } from '../../../files/fileUtils.js';
+import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
+import { openWebLink } from '../../../utils/openWebLink.js';
 import { tokenTracker } from '../stats/LocalModelStats';
 
 import katex from 'katex';
@@ -152,34 +154,59 @@ const splitMath = (text) => {
 // ─── Safe inline link component ─────────────────────────────────────────────
 
 const InlineLinkModal = ({ href, onClose }) => {
+  const { workbenchPreferences } = useUiPreferences();
   const getDomain = (url) => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } };
   const domain = getDomain(href);
-  const handleOpen = () => { window.open(href, '_blank', 'noopener,noreferrer'); onClose(); };
+  const opensInternally = workbenchPreferences.browserOpenLinks !== 'system';
+  const handleOpen = () => {
+    openWebLink(href, workbenchPreferences.browserOpenLinks);
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm bg-white dark:bg-gray-900 midnight:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 overflow-hidden">
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
-              <span className="text-amber-600 dark:text-amber-400 text-sm">⚠</span>
+      <div className="absolute inset-0 bg-gray-950/45 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-gray-200/90 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
+        <div className="border-b border-gray-100 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 px-5 py-5 dark:border-gray-800 dark:from-blue-950/25 dark:via-gray-900 dark:to-indigo-950/20 midnight:border-slate-800 midnight:from-blue-950/25 midnight:via-slate-900 midnight:to-indigo-950/20">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-800">
+              <img
+                src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
+                alt=""
+                className="h-6 w-6 rounded object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <Globe2 className="hidden h-5 w-5 text-gray-400" />
             </div>
-            <span className="font-semibold text-gray-900 dark:text-white midnight:text-slate-100 text-sm">External link</span>
-          </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 transition-colors text-lg leading-none">×</button>
-        </div>
-        <div className="mx-5 mb-4 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 midnight:bg-slate-800 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700">
-          <div className="flex items-center gap-2 min-w-0">
-            <img src={`https://icons.duckduckgo.com/ip3/${domain}.ico`} alt="" className="w-4 h-4 rounded flex-shrink-0 object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
-            <span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 truncate font-mono select-all">{href}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Open this link?</p>
+              <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{domain}</p>
+            </div>
+            <button type="button" onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl leading-none text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200" aria-label="Close link dialog">×</button>
           </div>
         </div>
-        <p className="px-5 pb-4 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 leading-relaxed">
-          This link was generated by AI and <span className="font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">may not be accurate</span>. Verify the URL before proceeding.
-        </p>
-        <div className="flex gap-2 px-5 pb-5">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors">Cancel</button>
-          <button onClick={handleOpen} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5">Open ↗</button>
+        <div className="px-5 py-4">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/80 midnight:border-slate-700 midnight:bg-slate-800/80">
+            <span className="block truncate font-mono text-[11px] text-gray-600 selection:bg-blue-100 dark:text-gray-300 midnight:text-slate-300" title={href}>{href}</span>
+          </div>
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-blue-50/70 px-3 py-2.5 text-xs leading-5 text-blue-700 dark:bg-blue-950/25 dark:text-blue-300 midnight:bg-blue-950/25 midnight:text-blue-300">
+            {opensInternally ? <Globe2 className="mt-0.5 h-3.5 w-3.5 shrink-0" /> : <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+            <span>
+              {opensInternally ? 'This will open in Asyncat’s built-in browser panel.' : 'This will open in your system’s default browser.'}
+              {' '}You can change this in Settings → Workbench.
+            </span>
+          </div>
+          <p className="mt-3 text-[11px] leading-5 text-gray-400 dark:text-gray-500 midnight:text-slate-500">AI-provided links may be inaccurate. Check the address before continuing.</p>
+        </div>
+        <div className="flex gap-2 border-t border-gray-100 px-5 py-4 dark:border-gray-800 midnight:border-slate-800">
+          <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 midnight:bg-slate-800 midnight:text-slate-300 midnight:hover:bg-slate-700">Cancel</button>
+          <button type="button" onClick={handleOpen} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-900">
+            {opensInternally ? <Globe2 className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+            {opensInternally ? 'Open in Asyncat' : 'Open in browser'}
+          </button>
         </div>
       </div>
     </div>
@@ -307,14 +334,17 @@ const isLikelyImageUrl = (url = '') => /\.(png|jpe?g|webp|gif|avif)(?:[?#].*)?$/
 
 const parseWebLinkItem = (text = '') => {
   const markdownLink = text.match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/);
-  const rawUrl = markdownLink?.[2] || text.match(/https?:\/\/[^\s<>"')\]]+/)?.[0];
+  const plainLink = markdownLink ? null : text.match(/https?:\/\/[^\s<>"')\]]+/);
+  const rawUrl = markdownLink?.[2] || plainLink?.[0];
   if (!rawUrl) return null;
 
-  const beforeUrl = text.slice(0, text.indexOf(rawUrl));
-  const afterUrl = text.slice(text.indexOf(rawUrl) + rawUrl.length);
+  const matchStart = markdownLink?.index ?? plainLink?.index ?? text.indexOf(rawUrl);
+  const matchLength = markdownLink?.[0]?.length ?? rawUrl.length;
+  const beforeUrl = text.slice(0, matchStart);
+  const afterUrl = text.slice(matchStart + matchLength);
   const beforeParts = beforeUrl.split(/\s+[—-]\s+/).map(part => part.trim()).filter(Boolean);
   const titleSource = markdownLink?.[1] || beforeParts[0] || beforeUrl;
-  const descriptionSource = afterUrl.replace(/^[\s—-]+/, '') || beforeParts.slice(1).join(' — ');
+  const descriptionSource = afterUrl.replace(/^[\s)—–—:|,-]+/, '') || beforeParts.slice(1).join(' — ');
   const title = cleanMarkdownLabel(titleSource) || getUrlDomain(rawUrl);
   const description = cleanMarkdownLabel(descriptionSource);
 
@@ -329,13 +359,15 @@ const parseWebLinkItem = (text = '') => {
 
 const WebsiteCard = ({ item, number }) => {
   const [open, setOpen] = useState(false);
+  const { workbenchPreferences } = useUiPreferences();
+  const opensInternally = workbenchPreferences.browserOpenLinks !== 'system';
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group flex min-w-0 items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20 midnight:border-slate-700 midnight:bg-slate-900 midnight:hover:bg-slate-800"
+        className="group relative flex min-h-[92px] min-w-0 items-start gap-3.5 overflow-hidden rounded-xl border border-gray-200/90 bg-gradient-to-br from-white to-gray-50/60 p-3.5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:from-blue-50/80 hover:to-white hover:shadow-[0_8px_20px_rgba(37,99,235,0.10)] focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-gray-700 dark:from-gray-900 dark:to-gray-900/70 dark:hover:border-blue-700 dark:hover:from-blue-950/25 dark:hover:to-gray-900 dark:focus:ring-blue-900/60 midnight:border-slate-700 midnight:from-slate-900 midnight:to-slate-900/70 midnight:hover:border-blue-700 midnight:hover:from-blue-950/25 midnight:hover:to-slate-900"
         title={item.url}
       >
         {item.isImage ? (
@@ -343,15 +375,15 @@ const WebsiteCard = ({ item, number }) => {
             src={item.url}
             alt=""
             loading="lazy"
-            className="h-14 w-16 flex-shrink-0 rounded-md border border-gray-200 object-cover dark:border-gray-700"
+            className="h-14 w-16 flex-shrink-0 rounded-lg border border-gray-200 object-cover shadow-sm dark:border-gray-700"
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
         ) : (
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-800">
+          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200/80 bg-white shadow-sm transition-transform duration-200 group-hover:scale-105 dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-800">
             <img
               src={`https://icons.duckduckgo.com/ip3/${item.domain}.ico`}
               alt=""
-              className="h-5 w-5 rounded object-contain"
+              className="h-6 w-6 rounded object-contain"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
                 e.currentTarget.nextElementSibling?.classList.remove('hidden');
@@ -362,15 +394,17 @@ const WebsiteCard = ({ item, number }) => {
         )}
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
-            {number && <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">{number}</span>}
-            <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{item.title}</span>
+            {number && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 px-1 text-[10px] font-bold text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">{number}</span>}
+            <span className="truncate text-sm font-semibold tracking-[-0.01em] text-gray-950 dark:text-gray-100 midnight:text-slate-100">{item.title}</span>
           </span>
           {item.description && (
-            <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{item.description}</span>
+            <span className="mt-1 line-clamp-2 text-xs leading-4 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{item.description}</span>
           )}
-          <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 midnight:text-blue-300">
+          <span className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-blue-600 dark:text-blue-400 midnight:text-blue-300">
             <span className="truncate">{item.domain}</span>
-            <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-55 transition-opacity group-hover:opacity-100" />
+            <span className="text-gray-300 dark:text-gray-600 midnight:text-slate-600">·</span>
+            <span className="shrink-0 text-gray-400 transition-colors group-hover:text-blue-600 dark:text-gray-500 dark:group-hover:text-blue-400 midnight:text-slate-500">{opensInternally ? 'Asyncat browser' : 'System browser'}</span>
+            <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-45 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
           </span>
         </span>
       </button>
