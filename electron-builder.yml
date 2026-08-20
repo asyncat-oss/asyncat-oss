@@ -69,9 +69,14 @@ dmg:
 # ─── Windows ──────────────────────────────────────────────────────────────────
 win:
   artifactName: "${productName}-${version}-windows-${arch}.${ext}"
+  # Resource editing is handled by our Windows-only afterPack hook. This avoids
+  # extracting unused macOS symlinks from electron-builder's legacy tool bundle.
+  signAndEditExecutable: false
   target:
     - nsis
   icon: icon.ico
+
+afterPack: scripts/after-pack.cjs
 
 nsis:
   oneClick: false

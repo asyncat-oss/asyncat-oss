@@ -2,7 +2,7 @@
 import { BrowserWindow, nativeImage, shell } from 'electron';
 import {
   NEKO_INDEX, PRELOAD_PATH,
-  ICONS, IS_MAC, IS_WIN, APP_NAME, WINDOWS_APP_ID, FRONTEND_PORT, OPEN_DEVTOOLS,
+  ICONS, IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, FRONTEND_PORT, OPEN_DEVTOOLS, ROOT,
 } from './constants.js';
 
 let mainWindow = null;
@@ -11,14 +11,18 @@ let mainWindow = null;
 function applyWindowsTaskbarIdentity(win, windowIcon) {
   if (!IS_WIN || win.isDestroyed()) return;
 
-  // Use the decoded PNG for the live window and the ICO path for Windows
-  // shell/taskbar metadata.
+  // Keep the live window and its Windows relaunch metadata on the same ICO.
   if (windowIcon && !windowIcon.isEmpty()) win.setIcon(windowIcon);
-  win.setAppDetails({
+  const details = {
     appId: WINDOWS_APP_ID,
     appIconPath: ICONS.ico,
     appIconIndex: 0,
-  });
+  };
+  if (IS_DEV) {
+    details.relaunchCommand = `"${process.execPath}" "${ROOT}"`;
+    details.relaunchDisplayName = `${APP_NAME} (Development)`;
+  }
+  win.setAppDetails(details);
 }
 
 /**

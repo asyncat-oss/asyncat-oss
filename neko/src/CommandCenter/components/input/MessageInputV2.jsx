@@ -271,14 +271,14 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
     return (
       <div className="bg-transparent">
         <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
-          <div className="overflow-hidden rounded-[1.35rem] border border-blue-200/80 bg-white shadow-sm dark:border-blue-900/60 dark:bg-gray-900 midnight:border-blue-900/60 midnight:bg-slate-900">
+          <div className="overflow-hidden rounded-[1.35rem] border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-900">
             <div className="flex items-start gap-3 px-4 pt-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center text-gray-500 dark:text-gray-400">
                 <MessageCircle className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Agent question</span>
+                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">Agent question</span>
                   <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{statusText}</span>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100 midnight:text-slate-100">{data.question}</p>
@@ -309,7 +309,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                   }}
                   disabled={resolving}
                   placeholder={data.default ? `Default: ${data.default}` : "Type your answer..."}
-                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-blue-800 dark:focus:ring-blue-950 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-400 focus:ring-2 focus:ring-gray-100 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
                   autoFocus
                 />
                 {data.default && (
@@ -326,7 +326,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                   type="button"
                   onClick={() => submit()}
                   disabled={resolving || (!answer.trim() && !data.default)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700 disabled:bg-gray-300 disabled:text-white dark:disabled:bg-gray-700"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-800 disabled:bg-gray-300 disabled:text-white dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
                   title="Send answer"
                 >
                   {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -1365,7 +1365,7 @@ export const MessageInputV2 = ({
             <div
               className={`bg-white px-4 border transition-all dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()} ${
                 isWorkExperience
-                  ? "rounded-[1.5rem] pb-3 pt-3.5 shadow-[0_12px_40px_rgba(15,23,42,0.07)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.2)] midnight:shadow-[0_12px_40px_rgba(0,0,0,0.24)]"
+                  ? "rounded-[1.4rem] pb-3 pt-3.5 shadow-[0_10px_32px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_32px_rgba(0,0,0,0.18)] midnight:shadow-[0_10px_32px_rgba(0,0,0,0.2)]"
                   : "rounded-[1.5rem] pb-2.5 pt-3.5 shadow-[0_10px_35px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_35px_rgba(0,0,0,0.16)] midnight:shadow-[0_10px_35px_rgba(0,0,0,0.2)]"
               }`}
             >
@@ -1632,7 +1632,7 @@ export const MessageInputV2 = ({
                                 onClick={() => onReasoningEffortChange(option.value)}
                                 className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                                   option.value === reasoningEffort
-                                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 midnight:bg-indigo-900/20 midnight:text-indigo-300"
+                                    ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
                                     : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
                                 }`}
                               >
@@ -1663,7 +1663,7 @@ export const MessageInputV2 = ({
                                   onClick={() => toggleIntegrationPack(pack)}
                                   className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
                                     isEnabled
-                                      ? "text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400"
+                                      ? "text-gray-900 dark:text-gray-100 midnight:text-slate-100"
                                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                                   }`}
                                 >
@@ -1671,7 +1671,7 @@ export const MessageInputV2 = ({
                                   <span className="flex-1 font-medium">{pack.label}</span>
                                   <span className={`h-3 w-3 shrink-0 rounded-full border ${
                                     isEnabled
-                                      ? "border-indigo-500 bg-indigo-500 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_0_0_2px_rgba(17,24,39,0.95)] midnight:shadow-[inset_0_0_0_2px_rgba(15,23,42,0.95)]"
+                                      ? "border-gray-900 bg-gray-900 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9)] dark:border-gray-100 dark:bg-gray-100 dark:shadow-[inset_0_0_0_2px_rgba(17,24,39,0.95)] midnight:border-slate-100 midnight:bg-slate-100 midnight:shadow-[inset_0_0_0_2px_rgba(15,23,42,0.95)]"
                                       : "border-gray-300 dark:border-gray-600 midnight:border-slate-600"
                                   }`} />
                                 </button>
@@ -1825,7 +1825,7 @@ export const MessageInputV2 = ({
                       disabled={!canSubmit}
                       className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
                         canSubmit
-                          ? "bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 active:scale-95 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-gray-200 midnight:bg-slate-800 midnight:hover:bg-slate-700 midnight:text-slate-400 midnight:hover:text-slate-200"
+                          ? "bg-gray-900 text-white hover:bg-gray-800 active:scale-95 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-white"
                           : "bg-gray-50 text-gray-300 dark:bg-gray-800/50 dark:text-gray-600 midnight:bg-slate-800/50 midnight:text-slate-600 cursor-not-allowed"
                       }`}
                       title={localModelSendBlockReason || (canSubmit ? "Send" : "Type a message")}
@@ -1838,7 +1838,7 @@ export const MessageInputV2 = ({
             </div>
 
               {isWorkExperience && (activeWorkingContext || onWorkingContextChange) && (
-                <div className="-mx-4 -mb-3 mt-3 flex flex-wrap items-center gap-2 rounded-b-[1.45rem] border-t border-gray-100 bg-gray-50/80 px-4 py-2.5 select-none dark:border-gray-800 dark:bg-gray-800/45 midnight:border-slate-800 midnight:bg-slate-800/45">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 select-none">
             {/* Project and working-folder selector */}
             {activeWorkingContext && (
               <button
@@ -1846,7 +1846,7 @@ export const MessageInputV2 = ({
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
                 title={`This chat can access: ${activeWorkingContext.workingDir}`}
-                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-all hover:border-gray-300 hover:text-gray-900 hover:shadow dark:border-gray-700/80 dark:bg-gray-900/75 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-100 midnight:border-slate-700/80 midnight:bg-slate-900/75 midnight:text-slate-400 midnight:hover:border-slate-600 midnight:hover:text-slate-100 disabled:opacity-60"
+                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100 disabled:opacity-60"
               >
                 {(() => {
                   const RootIcon = rootIcon(activeRoot?.kind);
@@ -1865,7 +1865,7 @@ export const MessageInputV2 = ({
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
                 title="No Project selected; local files are unavailable to this chat"
-                className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700/80 dark:bg-gray-900/75 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
               >
                 <ShieldOff className="h-3.5 w-3.5" /> No project
               </button>
@@ -1878,21 +1878,21 @@ export const MessageInputV2 = ({
                   type="button"
                   onClick={() => setModeMenuOpen(open => !open)}
                   disabled={disabled}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-all hover:border-gray-300 hover:text-gray-900 hover:shadow dark:border-gray-700/80 dark:bg-gray-900/75 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-100 midnight:border-slate-700/80 midnight:bg-slate-900/75 midnight:text-slate-400 midnight:hover:border-slate-600 midnight:hover:text-slate-100 disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100 disabled:opacity-60"
                 >
                   {!isActionMode ? (
                     <>
-                      <ClipboardPen className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
+                      <ClipboardPen className="h-3.5 w-3.5 shrink-0" />
                       <span>Plan</span>
                     </>
                   ) : autoApprove ? (
                     <>
-                      <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
+                      <Zap className="h-3.5 w-3.5 shrink-0" />
                       <span>Yolo</span>
                     </>
                   ) : (
                     <>
-                      <Wrench className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-400" />
+                      <Wrench className="h-3.5 w-3.5 shrink-0" />
                       <span>Action</span>
                     </>
                   )}
@@ -1910,7 +1910,7 @@ export const MessageInputV2 = ({
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
                         !isActionMode
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-900/20 midnight:text-emerald-300"
+                          ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
                           : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
                     >
@@ -1932,7 +1932,7 @@ export const MessageInputV2 = ({
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
                         isActionMode && !autoApprove
-                          ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 midnight:bg-blue-900/20 midnight:text-blue-300"
+                          ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
                           : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                       }`}
                     >
@@ -1955,7 +1955,7 @@ export const MessageInputV2 = ({
                         }}
                         className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
                           isActionMode && autoApprove
-                            ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-900/20 midnight:text-amber-300"
+                            ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
                             : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         }`}
                       >

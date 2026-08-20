@@ -115,8 +115,10 @@ const TOOL_META = {
   optimize_memory:   { icon: Brain,       label: 'Optimize memory' },
   create_task:       { icon: LayoutList,  label: 'Create task' },
   list_tasks:        { icon: List,        label: 'List tasks' },
+  todo_write:        { icon: LayoutList,  label: 'Update plan' },
   create_note:       { icon: FileText,    label: 'Create note' },
   list_notes:        { icon: FileText,    label: 'List notes' },
+  app_open:          { icon: ExternalLink,label: 'Open app' },
   notification_status:{ icon: Bell,        label: 'Notification status' },
   notify_channel:    { icon: Bell,        label: 'Notify channel' },
   local_rag_index:   { icon: BookMarked,  label: 'Index local context' },
@@ -192,6 +194,18 @@ function getToolIntent(data) {
   const args = data?.args || {};
   const { label } = getToolMeta(data?.tool);
 
+  if (data?.tool === 'todo_write' && Array.isArray(args.todos)) {
+    const complete = args.todos.filter(item => item?.status === 'completed').length;
+    const active = args.todos.find(item => item?.status === 'in_progress');
+    return {
+      label,
+      value: active?.activeForm || active?.content || `${complete}/${args.todos.length} tasks complete`,
+      kind: 'plan',
+    };
+  }
+  if (typeof args.app === 'string' && args.app.trim()) {
+    return { label, value: args.app.trim(), kind: 'path' };
+  }
   if (typeof args.command === 'string' && args.command.trim()) {
     return { label: 'Run this command', value: args.command.trim(), kind: 'command' };
   }
@@ -261,28 +275,6 @@ function useElapsedTime(startMs) {
     return () => clearInterval(id);
   }, [startMs]);
   return elapsed;
-}
-
-function ModeBadge({ toolsEnabled, agentMode }) {
-  const mode = agentMode || (typeof toolsEnabled === 'boolean' ? (toolsEnabled ? 'action' : 'plan') : null);
-  if (!mode) return null;
-  if (mode === 'design') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-1.5 py-0.5 text-[10px] font-medium text-fuchsia-600 dark:bg-fuchsia-950/30 dark:text-fuchsia-300">
-        Design
-      </span>
-    );
-  }
-  const isActionMode = mode === 'action';
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-      isActionMode
-        ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300'
-        : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
-    }`}>
-      {isActionMode ? 'Action' : 'Plan'}
-    </span>
-  );
 }
 
 // ── Individual event components ───────────────────────────────────────────────
@@ -453,13 +445,13 @@ function ThinkingEvent({ data }) {
     <FeedFrame className="mb-2">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="flex items-center gap-1.5 py-1 rounded-md hover:text-gray-500 dark:hover:text-gray-400 midnight:hover:text-slate-400 transition-colors text-left"
+        className="flex items-center gap-1.5 rounded-md py-1 text-left transition-colors hover:text-gray-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300 dark:hover:text-gray-400 dark:focus-visible:ring-gray-700 midnight:hover:text-slate-400"
       >
         {expanded
           ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500 midnight:text-slate-500 flex-shrink-0" />
           : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 midnight:text-slate-500 flex-shrink-0" />}
-        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500 tracking-wide select-none">
-          Reasoning · {words} words
+        <span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 select-none">
+          Reasoning{expanded && words > 0 ? ` · ${words} words` : ''}
         </span>
       </button>
       {expanded && (
@@ -504,8 +496,10 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             className={`flex w-full items-center gap-2 text-left ${isError ? 'cursor-pointer' : 'cursor-default'}`}
           >
             <Icon className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
-            <span className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">{label}</span>
-            <span className={`ml-auto flex-shrink-0 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
+            <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{label}</span>
+            {status.label !== 'Done' && (
+              <span className={`ml-auto flex-shrink-0 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
+            )}
             {isError && (
               expanded
                 ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 midnight:text-slate-500" />
@@ -981,28 +975,20 @@ function CompactPermissionEvent({ data, onDecision }) {
     : isDenied || expired
       ? 'text-red-600 dark:text-red-400'
       : 'text-gray-500 dark:text-gray-400';
-  const decisionDot = isAllowed
-    ? 'bg-emerald-500'
-    : isDenied || expired
-      ? 'bg-red-500'
-      : 'bg-gray-400';
-
-  if (historical) {
+  if (showDecision || historical) {
     return (
-      <div className="rounded-lg border border-gray-200/80 bg-white/70 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/35 midnight:border-slate-800 midnight:bg-slate-900/35">
+      <div className="group rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 midnight:hover:bg-slate-900/50">
         <div className="flex items-start gap-2.5">
-          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${isDenied ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400' : 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400'}`}>
+          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center ${isDenied ? 'text-red-500' : 'text-emerald-500'}`}>
             {isDenied ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className={`text-xs font-medium ${decisionTone}`}>{decisionLabel}</span>
-              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800/80 dark:text-gray-400">
-                <Icon className="h-3 w-3" />
-                {label}
-              </span>
-              <span className="truncate text-xs text-gray-500 dark:text-gray-400">{intent.value}</span>
+              <Icon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+              <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300">{label}</span>
+              <span className={`ml-auto text-[10px] font-medium ${decisionTone}`}>{decisionLabel}</span>
             </div>
+            <p className="mt-0.5 truncate pl-5 text-[11px] text-gray-400 dark:text-gray-500">{intent.value}</p>
             {(data?.diff || data?.workingDir) && (
               <button
                 type="button"
@@ -1079,15 +1065,6 @@ function CompactPermissionEvent({ data, onDecision }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2.5">
-        {showDecision ? (
-          <span className={`flex items-center gap-1.5 text-xs font-medium ${decisionTone}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${decisionDot}`} />
-            {decisionLabel}
-            {decision === 'allow_always' && <span className="text-[10px] opacity-70">(always)</span>}
-            {decision === 'allow_session' && <span className="text-[10px] opacity-70">(this run)</span>}
-          </span>
-        ) : (
-          <>
             <button
               onClick={() => onDecision?.(data?.requestId, 'deny')}
               disabled={data?.resolving || expired}
@@ -1119,48 +1096,24 @@ function CompactPermissionEvent({ data, onDecision }) {
               <ShieldOff className="h-3 w-3" />
               Always allow
             </button>
-          </>
-        )}
       </div>
     </div>
   );
 }
 
 function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
-  const hasPendingPermission = events.some(ev => ev.type === 'permission_request' && !ev.data?.resolved);
-  const [expanded, setExpanded] = useState(hasPendingPermission);
-  const toolCount = events.filter(ev => ev.type === 'tool_start').length;
-  const permissionCount = events.filter(ev => ev.type === 'permission_request').length;
-  const failedCount = events.filter(ev => ev.type === 'tool_start' && (ev.result?.error || ev.result?.success === false)).length;
-  const runningCount = events.filter(ev => ev.type === 'tool_start' && ev.result === undefined).length;
-
-  useEffect(() => {
-    if (hasPendingPermission) setExpanded(true);
-  }, [hasPendingPermission]);
-
-  const summary = [
-    toolCount ? `${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}` : null,
-    permissionCount ? `${permissionCount} ${permissionCount === 1 ? 'approval' : 'approvals'}` : null,
-    runningCount ? `${runningCount} running` : null,
-    failedCount ? `${failedCount} failed` : null,
-  ].filter(Boolean).join(' · ');
+  const visibleEvents = events.filter(ev => {
+    if (ev.type !== 'permission_request') return true;
+    const decision = ev.data?.decision;
+    const allowed = ev.data?.resolved && ['allow', 'allow_session', 'allow_always', 'session_approved', 'auto_approved', 'local_auto'].includes(decision);
+    if (!allowed) return true;
+    return !events.some(other => other.type === 'tool_start' && other.data?.tool === ev.data?.tool);
+  });
 
   return (
-    <FeedFrame className="mb-2">
-      <div className="overflow-hidden">
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className="flex w-full items-center gap-1.5 py-1 rounded-md text-left transition-colors hover:text-gray-500 dark:hover:text-gray-400"
-        >
-          {expanded ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" /> : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />}
-          <Terminal className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 tracking-wide select-none">
-            Tools {summary && `· ${summary}`}
-          </span>
-        </button>
-        {expanded && (
-          <div className="mt-1 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
-            {events.map((ev, i) => {
+    <FeedFrame className="mb-1">
+      <div className="ml-1 space-y-0.5 border-l border-gray-100 pl-2 dark:border-gray-800 midnight:border-slate-800">
+        {visibleEvents.map((ev, i) => {
               if (ev.type === 'permission_request') {
                 return <CompactPermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
               }
@@ -1178,9 +1131,7 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
                 );
               }
               return null;
-            })}
-          </div>
-        )}
+        })}
       </div>
     </FeedFrame>
   );
@@ -1202,9 +1153,9 @@ function AskUserEvent({ data, onAnswer }) {
 
   return (
     <FeedFrame className="mb-4">
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-900">
         <div className="px-4 py-3.5 flex items-start gap-3">
-          <div className="flex-shrink-0 w-7 h-7 rounded-full border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center text-gray-500 dark:text-gray-400">
             <MessageCircle className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0">
@@ -1447,12 +1398,8 @@ function AnswerEvent({
         }`}
       >
         <div className="max-w-4xl mx-auto">
-          {/* Badge row — only show when not a stopped run (stop banner owns the visual) */}
-          {!isStoppedRun && (
-            <div className="mb-2">
-              <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
-              {data?.bookmarked && <BookMarked className="ml-1 inline h-3.5 w-3.5 text-amber-500" />}
-            </div>
+          {!isStoppedRun && data?.bookmarked && (
+            <BookMarked className="mb-2 h-3.5 w-3.5 text-amber-500" />
           )}
 
           {/* Answer body — collapsed behind a disclosure when the run was stopped */}
@@ -2359,7 +2306,6 @@ function GeneratedMediaLibrary({ events }) {
 
 function buildRunStats(events = []) {
   let rounds = 0;
-  let toolCount = 0;
   let memoriesSaved = 0;
   let skillsLearned = 0;
   const toolsSeen = {};
@@ -2375,7 +2321,6 @@ function buildRunStats(events = []) {
       const tool = ev.data?.tool;
       if (!tool) continue;
       if (ev.result?.success === false) continue;
-      toolCount++;
       toolsSeen[tool] = (toolsSeen[tool] || 0) + 1;
       if (tool === 'save_memory' && ev.result?.success) memoriesSaved++;
     }
@@ -2383,7 +2328,7 @@ function buildRunStats(events = []) {
     if (ev.arrivedAt > completedAt) completedAt = ev.arrivedAt;
   }
 
-  return { rounds, toolCount, memoriesSaved, skillsLearned, toolsSeen, completedAt };
+  return { rounds, memoriesSaved, skillsLearned, toolsSeen, completedAt };
 }
 
 function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifactInPanel }) {
@@ -2395,8 +2340,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
 
   const hasAnswer = (events || []).some(ev => ev.type === 'answer');
-  const { rounds, toolCount, memoriesSaved, skillsLearned, toolsSeen, completedAt } = buildRunStats(events || []);
-  const hasToolActivity = toolCount > 0;
+  const { rounds, memoriesSaved, skillsLearned, toolsSeen, completedAt } = buildRunStats(events || []);
   const hasMemoryActivity = memoriesSaved > 0;
   const hasSkillActivity = skillsLearned > 0;
 
@@ -2426,6 +2370,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
     ),
     [events]
   );
+  const hasArtifacts = runArtifacts.length > 0;
 
   const refreshState = useCallback(() => {
     if (!sessionId) return;
@@ -2439,12 +2384,10 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   useEffect(() => { refreshState(); }, [refreshState]);
 
   if (!hasAnswer) return null;
-  if (!hasToolActivity && !hasMemoryActivity && !hasSkillActivity) return null;
+  if (!hasFiles && !hasCommands && !hasArtifacts && !hasMemoryActivity && !hasSkillActivity) return null;
 
   const elapsedMs = runStartedAt && completedAt > runStartedAt ? completedAt - runStartedAt : 0;
   const topTools = Object.entries(toolsSeen).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name, count]) => ({ name, count }));
-
-  const hasArtifacts = runArtifacts.length > 0;
 
   const handleRevert = async () => {
     if (!sessionId || !revert?.available) return;
@@ -2466,7 +2409,6 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   const summaryParts = [];
   if (hasArtifacts) summaryParts.push(`${runArtifacts.length} artifact${runArtifacts.length !== 1 ? 's' : ''}`);
   if (hasFiles) summaryParts.push(`${files.length} file${files.length !== 1 ? 's' : ''}`);
-  if (hasToolActivity) summaryParts.push(`${toolCount} tool${toolCount !== 1 ? 's' : ''}`);
   if (hasMemoryActivity) summaryParts.push(`${memoriesSaved} mem`);
   if (hasSkillActivity) summaryParts.push(`${skillsLearned} skill`);
   if (elapsedMs > 0) summaryParts.push(formatElapsed(elapsedMs));
@@ -2478,14 +2420,14 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className="flex w-full items-center gap-1.5 py-0.5 text-left group"
+        className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300 dark:focus-visible:ring-gray-700"
       >
         {expanded
           ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />
           : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />}
         <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500 dark:text-emerald-400" />
         <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors truncate">
-          Run complete{summaryLine ? ` · ${summaryLine}` : ''}
+          Changes{summaryLine ? ` · ${summaryLine}` : ''}
         </span>
         <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 ml-1" />
       </button>
@@ -2604,9 +2546,9 @@ function buildWorkSummary(workEvents) {
   const topLabels = uniqueTools.slice(0, 3).map(t => getToolMeta(t).label);
 
   const parts = [];
-  if (hasThinking) parts.push('Reasoned');
-  if (toolCount > 0) parts.push(`${toolCount} tool${toolCount !== 1 ? 's' : ''}`);
-  if (topLabels.length) parts.push(topLabels.join(', '));
+  if (toolCount > 0) parts.push(`${toolCount} action${toolCount !== 1 ? 's' : ''}`);
+  else if (hasThinking) parts.push('Reasoning');
+  if (topLabels.length && toolCount <= 3) parts.push(topLabels.join(', '));
   if (failedCount > 0) parts.push(`${failedCount} failed`);
   return parts.join(' · ') || null;
 }
@@ -2640,6 +2582,15 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
   workEvents.forEach((ev, i) => {
     if (ev.type === 'subagent_event') {
       return;
+    }
+    if (ev.type === 'permission_request') {
+      const decision = ev.data?.decision;
+      const isResolvedApproval = ev.data?.resolved
+        && ['allow', 'allow_session', 'allow_always', 'session_approved', 'auto_approved', 'local_auto'].includes(decision);
+      const hasMatchingExecution = workEvents.some(other => (
+        other.type === 'tool_start' && other.data?.tool === ev.data?.tool
+      ));
+      if (isResolvedApproval && hasMatchingExecution) return;
     }
     if (ev.type === 'permission_request' || ev.type === 'tool_start') {
       if (ev.type === 'tool_start' && (ev.data?.tool === 'delegate_task' || ev.data?.tool === 'delegate_to_profile')) {
@@ -2898,23 +2849,22 @@ function AgentWorkDrawer({ workEvents, isRunning, onPermissionDecision, onRetryT
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center gap-1.5 py-0.5 text-left group"
+        className="group flex w-full items-center gap-1.5 rounded-md py-0.5 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300 dark:focus-visible:ring-gray-700"
         aria-expanded={open}
       >
         {open
           ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />
           : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />}
         {isRunning ? (
-          <span className="flex-shrink-0 flex items-center gap-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
-            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          <span className="flex-shrink-0 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gray-400 dark:bg-gray-500" />
             Working…
           </span>
         ) : summary ? (
-          <span className="flex-shrink-0 text-[11px] font-medium text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors truncate max-w-[72%]">
+          <span className="flex-shrink-0 text-xs text-gray-500 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300 truncate max-w-[82%]">
             {summary}
           </span>
         ) : null}
-        <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
       </button>
       {open && (
         <div className="mt-1 space-y-0">

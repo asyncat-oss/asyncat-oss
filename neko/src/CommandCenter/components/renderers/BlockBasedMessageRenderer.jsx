@@ -593,7 +593,7 @@ export function headingId(text) {
 }
 
 export const BlockRenderer = ({ block, onTermClick }) => {
-  const baseStyles = "leading-relaxed text-gray-900 dark:text-gray-100 midnight:text-slate-100";
+  const baseStyles = "leading-7 text-gray-900 dark:text-gray-100 midnight:text-slate-100";
 
   const renderContent = (content, options) => {
     const parsed = parseInlineMarkdown(content, onTermClick, options);
@@ -603,21 +603,21 @@ export const BlockRenderer = ({ block, onTermClick }) => {
   switch (block.type) {
     case 'heading1':
       return (
-        <h1 id={headingId(block.content)} className={`text-3xl font-bold mb-5 mt-8 first:mt-0 ${baseStyles}`}>
+        <h1 id={headingId(block.content)} className={`mb-3 mt-7 text-2xl font-semibold tracking-tight first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h1>
       );
 
     case 'heading2':
       return (
-        <h2 id={headingId(block.content)} className={`text-2xl font-bold mb-4 mt-6 first:mt-0 ${baseStyles}`}>
+        <h2 id={headingId(block.content)} className={`mb-3 mt-6 text-xl font-semibold tracking-tight first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h2>
       );
 
     case 'heading3':
       return (
-        <h3 id={headingId(block.content)} className={`text-xl font-bold mb-3 mt-5 first:mt-0 ${baseStyles}`}>
+        <h3 id={headingId(block.content)} className={`mb-2 mt-5 text-base font-semibold first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h3>
       );
@@ -646,7 +646,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
         }
 
         return (
-          <ul className="mb-5 space-y-2.5 ml-2">
+          <ul className="mb-4 space-y-1.5">
             {items.map((item, i) => {
             // Block parser already stripped the bullet prefix before storing content.
             // Only strip real bullet chars (•, -) here — never *, which could be italic markdown.
@@ -654,8 +654,8 @@ export const BlockRenderer = ({ block, onTermClick }) => {
             const hasSubContent = text.includes('→') || text.match(/^\s+[-•]/);
 
             return (
-              <li key={i} className={`${baseStyles} pl-2 relative flex gap-3`}>
-                <span className="text-gray-600 dark:text-gray-400 midnight:text-slate-400 font-bold min-w-[0.5rem] mt-[0.15rem]">
+              <li key={i} className={`${baseStyles} relative flex gap-2.5`}>
+                <span className="mt-[0.15rem] min-w-[0.5rem] font-normal text-gray-400 dark:text-gray-500 midnight:text-slate-500">
                   •
                 </span>
                 <span className={`flex-1 ${hasSubContent ? 'space-y-1.5' : ''}`}>
@@ -717,10 +717,10 @@ export const BlockRenderer = ({ block, onTermClick }) => {
         }
 
         return (
-          <ol className="mb-6 space-y-3.5 ml-1">
+          <ol className="mb-4 space-y-2.5">
             {structuredItems.map((item, i) => (
               <li key={i} className="relative flex gap-3" style={{ listStyle: 'none' }}>
-                <span className="font-bold text-gray-700 dark:text-gray-300 midnight:text-slate-300 min-w-[1.75rem] text-base mt-0.5">
+                <span className="mt-0.5 min-w-[1.5rem] text-sm font-semibold text-gray-500 dark:text-gray-400 midnight:text-slate-400">
                   {item.number}.
                 </span>
                 <div className="flex-1 space-y-1.5">
@@ -765,7 +765,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
 
     case 'quote':
       return (
-        <blockquote className="border-l-2 border-gray-300 dark:border-gray-600 midnight:border-slate-600 pl-4 py-2 mb-6 italic">
+        <blockquote className="mb-4 border-l-2 border-gray-300 py-1 pl-4 italic dark:border-gray-600 midnight:border-slate-600">
           <div className={`${baseStyles} opacity-80`}>
             {renderContent(block.content)}
           </div>
@@ -806,7 +806,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       );
 
       return (
-        <div className="mb-6 max-w-full overflow-hidden rounded-xl border border-gray-200/80 dark:border-gray-700/60 midnight:border-slate-700/60">
+        <div className="mb-4 max-w-full overflow-hidden rounded-xl border border-gray-200/80 dark:border-gray-700/60 midnight:border-slate-700/60">
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse text-[13px]">
               <thead>
@@ -835,16 +835,13 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       );
 
     case 'divider':
-      return <hr className="my-8 border-t-2 border-gray-200 dark:border-gray-700 midnight:border-slate-600" />;
+      return <hr className="my-6 border-t border-gray-200 dark:border-gray-700 midnight:border-slate-700" />;
 
     case 'callout':
       return (
-        <div className="mb-6 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm overflow-hidden">
-          <div className="flex items-start gap-3 px-4 py-3.5">
-            <span className="mt-0.5 text-sm">ℹ️</span>
-            <div className={`${baseStyles} text-sm leading-relaxed`}>
+        <div className="mb-4 rounded-lg bg-gray-50 px-4 py-3 dark:bg-gray-900/60 midnight:bg-slate-900/60">
+          <div className={`${baseStyles} text-sm`}>
               {renderContent(block.content)}
-            </div>
           </div>
         </div>
       );
@@ -862,7 +859,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
     default:
       if (!block.content || !block.content.trim()) return null;
       return (
-        <p className={`mb-6 leading-7 ${baseStyles}`}>
+        <p className={`mb-4 ${baseStyles}`}>
           {renderContent(block.content)}
         </p>
       );
@@ -885,7 +882,7 @@ const MathBlock = ({ latex }) => {
   };
 
   return (
-    <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 overflow-hidden shadow-sm">
+    <div className="mb-4 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700">
         <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 midnight:text-slate-400 uppercase tracking-wide">
@@ -1002,7 +999,7 @@ const CodeBlock = ({ content, language = 'text' }) => {
   const { Icon, color } = fileIconMeta(language, 'file');
 
   return (
-    <div className="mb-6 rounded-xl bg-[#f6f8fa] dark:bg-[#0d1117] midnight:bg-[#0d1117]">
+    <div className="mb-4 rounded-xl bg-[#f6f8fa] dark:bg-[#0d1117] midnight:bg-[#0d1117]">
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <div className="flex items-center gap-1.5">
           <Icon className={`w-3.5 h-3.5 ${color} opacity-70`} />
@@ -2180,14 +2177,10 @@ const BlockBasedMessageRenderer = memo(({
     }
   }, [content]);
 
-  const colors = {
-    border: 'border-gray-200/50 dark:border-gray-700/50 midnight:border-slate-600/50'
-  };
-
   if (!content) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-0">
       {/* Streaming animation keyframes */}
       {isStreaming && (
         <style>{`
@@ -2217,12 +2210,12 @@ const BlockBasedMessageRenderer = memo(({
 
       {/* Action Bar - Placed at top for quick access */}
       {!isPublicView && (
-        <div className={`flex flex-wrap items-center justify-between gap-4 pt-5 mt-6 border-t ${colors.border}`}>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             {/* Copy button */}
             <button
               onClick={handleCopy}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-slate-300 hover:text-gray-900 dark:hover:text-gray-100 midnight:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-700 rounded-lg transition-colors"
+              className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
             >
               {copyStatus === 'copied' ? (
                 <>
@@ -2240,7 +2233,7 @@ const BlockBasedMessageRenderer = memo(({
             {onRegenerate && (
               <button
                 onClick={onRegenerate}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-slate-300 hover:text-gray-900 dark:hover:text-gray-100 midnight:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-700 rounded-lg transition-colors"
+                className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
               >
                 <RotateCcw className="w-4 h-4" />
                 Regenerate

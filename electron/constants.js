@@ -46,9 +46,9 @@ export const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 export const ICONS = {
   png:    path.join(NEKO_ASSETS, 'app-icon-512.png'),
   ico:    path.join(NEKO_ASSETS, 'icon.ico'),
-  // BrowserWindow/nativeImage reliably decodes PNG on every platform. Windows
-  // still uses the ICO below for shell/taskbar metadata.
-  window: path.join(NEKO_ASSETS, 'app-icon-512.png'),
+  // Use the multi-resolution ICO for every live Windows icon application. This
+  // also prevents the saved-icon bootstrap from replacing it with a PNG.
+  window: path.join(NEKO_ASSETS, process.platform === 'win32' ? 'icon.ico' : 'app-icon-512.png'),
   tray:   path.join(NEKO_ASSETS, 'app-tray.png'),
   logo:   path.join(NEKO_ASSETS, 'app-icon-512.png'),
 };
@@ -70,13 +70,8 @@ export const IS_MAC      = process.platform === 'darwin';
 export const IS_WIN      = process.platform === 'win32';
 export const IS_LINUX    = process.platform === 'linux';
 
-/**
- * Keep one stable Windows identity in development and packaged builds.
- * A development-only ID has no matching Start menu shortcut, so Windows can
- * fall back to the Electron executable's icon when it creates the taskbar
- * group.
- */
-export const WINDOWS_APP_ID = APP_ID;
+/** Keep source runs out of an installed shortcut's cached taskbar group. */
+export const WINDOWS_APP_ID = app.isPackaged ? APP_ID : `${APP_ID}.dev`;
 
 /** Developer Tools stay opt-in so development launches remain uncluttered. */
 export const OPEN_DEVTOOLS = IS_DEV && process.argv.includes('--open-devtools');

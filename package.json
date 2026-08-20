@@ -45,7 +45,8 @@
   "devDependencies": {
     "concurrently": "^9.2.1",
     "electron": "^42.2.0",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "electron-winstaller": "^5.4.0"
   },
   "dependencies": {
     "den": "0.8.0-beta.4",
