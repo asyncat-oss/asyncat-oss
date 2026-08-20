@@ -70,8 +70,13 @@ export const IS_MAC      = process.platform === 'darwin';
 export const IS_WIN      = process.platform === 'win32';
 export const IS_LINUX    = process.platform === 'linux';
 
-/** Keep source runs separate from an installed build in the Windows taskbar. */
-export const WINDOWS_APP_ID = IS_WIN && IS_DEV ? `${APP_ID}.dev` : APP_ID;
+/**
+ * Keep one stable Windows identity in development and packaged builds.
+ * A development-only ID has no matching Start menu shortcut, so Windows can
+ * fall back to the Electron executable's icon when it creates the taskbar
+ * group.
+ */
+export const WINDOWS_APP_ID = APP_ID;
 
 /** Developer Tools stay opt-in so development launches remain uncluttered. */
 export const OPEN_DEVTOOLS = IS_DEV && process.argv.includes('--open-devtools');

@@ -33,7 +33,9 @@ const pngTargets = [
 ];
 
 const linuxSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
-const icoSizes = [16, 24, 32, 48, 64, 128, 256];
+// Include Windows' 125% DPI variants (20 and 40 px) as well as the common
+// application sizes. Electron recommends these frames for crisp taskbar icons.
+const icoSizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
 const macIconsetTargets = [
   ['icon_16x16.png', 16],
   ['icon_16x16@2x.png', 32],

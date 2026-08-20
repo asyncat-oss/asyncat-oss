@@ -2,10 +2,24 @@
 import { BrowserWindow, nativeImage, shell } from 'electron';
 import {
   NEKO_INDEX, PRELOAD_PATH,
-  ICONS, IS_MAC, APP_NAME, FRONTEND_PORT, OPEN_DEVTOOLS,
+  ICONS, IS_MAC, IS_WIN, APP_NAME, WINDOWS_APP_ID, FRONTEND_PORT, OPEN_DEVTOOLS,
 } from './constants.js';
 
 let mainWindow = null;
+
+/** Apply the metadata Windows uses for the live taskbar button and relaunch icon. */
+function applyWindowsTaskbarIdentity(win) {
+  if (!IS_WIN || win.isDestroyed()) return;
+
+  // Passing the ICO path preserves all embedded DPI variants. setAppDetails
+  // prevents Windows from resolving the taskbar group back to electron.exe.
+  win.setIcon(ICONS.ico);
+  win.setAppDetails({
+    appId: WINDOWS_APP_ID,
+    appIconPath: ICONS.ico,
+    appIconIndex: 0,
+  });
+}
 
 /**
  * Create the main application window.
@@ -54,6 +68,7 @@ export function createWindow() {
 
   // ─── Show when ready ────────────────────────────────────────────────
   mainWindow.once('ready-to-show', () => {
+    applyWindowsTaskbarIdentity(mainWindow);
     mainWindow.show();
 
     if (OPEN_DEVTOOLS) {
@@ -72,7 +87,8 @@ export function createWindow() {
 
   // Reassert the icon after native window creation; this avoids the Electron
   // executable icon winning the first Windows taskbar paint in source runs.
-  if (!IS_MAC && !windowIcon.isEmpty()) mainWindow.setIcon(windowIcon);
+  if (IS_WIN) applyWindowsTaskbarIdentity(mainWindow);
+  else if (!IS_MAC && !windowIcon.isEmpty()) mainWindow.setIcon(windowIcon);
 
   // ─── Handle navigation to external URLs ─────────────────────────────
   mainWindow.webContents.on('will-navigate', (event, url) => {
