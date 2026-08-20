@@ -1384,7 +1384,7 @@ export const MessageInputV2 = ({
             <div
               className={`bg-white px-4 border transition-all dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()} ${
                 isWorkExperience
-                  ? "rounded-[1.35rem] pb-3 pt-4"
+                  ? "rounded-[1.5rem] pb-3 pt-3.5 shadow-[0_12px_40px_rgba(15,23,42,0.07)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.2)] midnight:shadow-[0_12px_40px_rgba(0,0,0,0.24)]"
                   : "rounded-[1.5rem] pb-2.5 pt-3.5 shadow-[0_10px_35px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_35px_rgba(0,0,0,0.16)] midnight:shadow-[0_10px_35px_rgba(0,0,0,0.2)]"
               }`}
             >
@@ -1857,7 +1857,7 @@ export const MessageInputV2 = ({
             </div>
 
               {isWorkExperience && (activeWorkingContext || onWorkingContextChange) && (
-                <div className="-mx-4 px-4 pt-2.5 pb-3 mt-2 -mb-3 bg-gray-50/80 dark:bg-gray-800/40 midnight:bg-slate-800/40 flex flex-wrap items-center gap-3 select-none">
+                <div className="-mx-4 -mb-3 mt-3 flex flex-wrap items-center gap-2 rounded-b-[1.45rem] border-t border-gray-100 bg-gray-50/80 px-4 py-2.5 select-none dark:border-gray-800 dark:bg-gray-800/45 midnight:border-slate-800 midnight:bg-slate-800/45">
             {/* Workspace & Folder Combined Button */}
             {activeWorkingContext && (
               <button
@@ -1865,16 +1865,16 @@ export const MessageInputV2 = ({
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
                 title={`Workspace Root: ${activeWorkingContext.rootPath} | Working Folder: ${activeWorkingContext.relativePath}`}
-                className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200"
+                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-all hover:border-gray-300 hover:text-gray-900 hover:shadow dark:border-gray-700/80 dark:bg-gray-900/75 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-100 midnight:border-slate-700/80 midnight:bg-slate-900/75 midnight:text-slate-400 midnight:hover:border-slate-600 midnight:hover:text-slate-100 disabled:opacity-60"
               >
                 {(() => {
                   const RootIcon = rootIcon(activeRoot?.kind);
                   return <RootIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />;
                 })()}
-                <span>{activeWorkingContext.rootLabel || "Projects"}</span>
+                <span className="truncate">{activeWorkingContext.rootLabel || "Projects"}</span>
                 <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">/</span>
                 <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                <span>{activeContextLabel}</span>
+                <span className="truncate">{activeContextLabel}</span>
                 <ChevronDown className="h-3 w-3 opacity-60" />
               </button>
             )}
@@ -1886,7 +1886,7 @@ export const MessageInputV2 = ({
                   type="button"
                   onClick={() => setModeMenuOpen(open => !open)}
                   disabled={disabled}
-                  className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors disabled:opacity-60 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-all hover:border-gray-300 hover:text-gray-900 hover:shadow dark:border-gray-700/80 dark:bg-gray-900/75 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-100 midnight:border-slate-700/80 midnight:bg-slate-900/75 midnight:text-slate-400 midnight:hover:border-slate-600 midnight:hover:text-slate-100 disabled:opacity-60"
                 >
                   {!isActionMode ? (
                     <>

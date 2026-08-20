@@ -245,6 +245,13 @@ function formatElapsed(ms) {
   return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
 }
 
+function formatTokenCount(value) {
+  const count = Number(value) || 0;
+  if (count < 1000) return count.toLocaleString();
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0).replace('.0', '')}k`;
+  return `${(count / 1_000_000).toFixed(count < 10_000_000 ? 1 : 0).replace('.0', '')}m`;
+}
+
 function useElapsedTime(startMs) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -321,9 +328,8 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
     >
       <div className="max-w-4xl mx-auto flex flex-col items-end">
         <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
-          {(data?.toolsEnabled !== undefined || data?.agentMode || data?.parentBranchId || data?.bookmarked) && (
+          {(data?.parentBranchId || data?.bookmarked) && (
             <div className="mb-1 flex justify-end gap-1.5 items-center">
-              <ModeBadge toolsEnabled={data?.toolsEnabled} agentMode={data?.agentMode} />
               {data?.parentBranchId && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 midnight:bg-slate-950/50 midnight:text-slate-400">
                   <GitBranch className="h-3 w-3" />
@@ -1384,7 +1390,7 @@ function AnswerEvent({
   onToggleMessageFlag,
   isRunning,
   highlighted = false,
-  tokensPerSecond = null,
+  usage = null,
   elapsedMs = null,
   isStoppedRun = false,
 }) {
@@ -1393,6 +1399,25 @@ function AnswerEvent({
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
   const variants = Array.isArray(data?.variants) ? data.variants : [];
   const activeVariantIndex = Number.isInteger(data?.activeVariantIndex) ? data.activeVariantIndex : Math.max(variants.length - 1, 0);
+  const totalTokens = usage?.cumulativeTotalTokens
+    || usage?.totalTokens
+    || usage?.lastTotalTokens
+    || 0;
+  const inputTokens = usage?.cumulativeInputTokens
+    || usage?.inputTokens
+    || usage?.lastInputTokens
+    || 0;
+  const outputTokens = usage?.cumulativeOutputTokens
+    || usage?.outputTokens
+    || usage?.lastOutputTokens
+    || 0;
+  const tokensPerSecond = Number(usage?.tokensPerSecond) || 0;
+  const hasPerformanceStats = totalTokens > 0 || tokensPerSecond > 0 || elapsedMs > 0;
+  const usageTitle = [
+    inputTokens > 0 ? `${inputTokens.toLocaleString()} input tokens` : null,
+    outputTokens > 0 ? `${outputTokens.toLocaleString()} output tokens` : null,
+    usage?.estimated ? 'Estimated usage' : usage ? 'Provider-reported usage' : null,
+  ].filter(Boolean).join(' · ');
 
   const displayAnswer = answer;
 
@@ -1472,10 +1497,18 @@ function AnswerEvent({
             <p className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-slate-700 mt-2">{data.round} rounds</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-            {(tokensPerSecond > 0 || elapsedMs > 0) && (
-              <span className="mr-1 flex items-center gap-1.5 text-[10px] tabular-nums text-gray-300 dark:text-gray-600 midnight:text-slate-600">
+            {hasPerformanceStats && (
+              <span
+                className="mr-1 inline-flex items-center gap-1.5 text-[10px] tabular-nums text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+                title={usageTitle || 'Response performance'}
+                aria-label={usageTitle || 'Response performance'}
+              >
+                {totalTokens > 0 && (
+                  <span>{usage?.estimated ? '~' : ''}{formatTokenCount(totalTokens)} tokens</span>
+                )}
+                {totalTokens > 0 && tokensPerSecond > 0 && <span className="opacity-35">·</span>}
                 {tokensPerSecond > 0 && <span>{tokensPerSecond} tok/s</span>}
-                {tokensPerSecond > 0 && elapsedMs > 0 && <span className="opacity-40">·</span>}
+                {(totalTokens > 0 || tokensPerSecond > 0) && elapsedMs > 0 && <span className="opacity-35">·</span>}
                 {elapsedMs > 0 && <span>{formatElapsed(elapsedMs)}</span>}
               </span>
             )}
@@ -2956,11 +2989,6 @@ export default function AgentRunFeed({
 
   const evList = events || [];
   const segments = buildEventSegments(evList);
-  const lastAnswerIdx = evList.reduce((acc, ev, i) => ev.type === 'answer' ? i : acc, -1);
-  const latestUsageTps = evList.reduceRight(
-    (acc, ev) => acc !== null ? acc : (ev.type === 'usage_update' && ev.data?.tokensPerSecond > 0 ? ev.data.tokensPerSecond : null),
-    null,
-  );
 
   return (
     <div className="space-y-0">
@@ -2973,9 +3001,9 @@ export default function AgentRunFeed({
 
         const isLastSeg = si === segments.length - 1;
         const segIsRunning = isLastSeg && isRunning;
-        const answerIdx = seg.answerEvent ? evList.indexOf(seg.answerEvent) : -1;
         const hasThinkingInSeg = seg.workEvents.some(ev => ev.type === 'thinking');
         const hasStopReason = seg.workEvents.some(ev => ev.type === 'stop_reason');
+        const segUsage = [...seg.workEvents].reverse().find(ev => ev.type === 'usage_update')?.data || null;
 
         // Per-segment elapsed time: from first event in segment → answer arrival
         const segStartMs = seg.goalEvent?.arrivedAt
@@ -3033,7 +3061,7 @@ export default function AgentRunFeed({
                 onToggleMessageFlag={onToggleMessageFlag}
                 isRunning={isRunning}
                 highlighted={Boolean(seg.answerEvent.data?.messageId && seg.answerEvent.data.messageId === highlightedMessageId)}
-                tokensPerSecond={!isRunning && answerIdx === lastAnswerIdx ? latestUsageTps : null}
+                usage={segUsage}
                 elapsedMs={!isRunning && segElapsedMs > 0 ? segElapsedMs : null}
                 isStoppedRun={hasStopReason}
               />

@@ -46,7 +46,6 @@ import {
   Loader2,
   MessageSquare,
   PanelRightOpen,
-  Image,
   GitBranch,
   BookMarked,
   FilePlus,
@@ -54,6 +53,7 @@ import {
   Sparkles,
   Globe,
   List,
+  Link2,
   Lock,
   SquareTerminal,
   FolderOpen,
@@ -3016,8 +3016,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         }`}
                         title="Show all sources and media"
                       >
-                        <Image className="h-3.5 w-3.5" />
-                        Media
+                        <Link2 className="h-3.5 w-3.5" />
+                        Sources
                         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {sourceCatalog.totalCount}
                         </span>

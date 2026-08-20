@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Activity, Code2, Image, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, Bug, Camera, Plus, Search, Sparkles, Lock, ShieldAlert, FileText, MoreHorizontal, Copy, Download, Volume2, VolumeX, Trash2, Ghost, Maximize2, Minimize2 } from 'lucide-react';
+import { Activity, Code2, Link2, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, Bug, Camera, Plus, Search, Sparkles, Lock, ShieldAlert, FileText, MoreHorizontal, Copy, Download, Volume2, VolumeX, Trash2, Ghost, Maximize2, Minimize2 } from 'lucide-react';
 import eventBus from '../../../utils/eventBus.js';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
@@ -12,7 +12,7 @@ import { openWebLink } from '../../../utils/openWebLink.js';
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
   code: { label: 'Code', icon: Code2 },
-  media: { label: 'Media', icon: Image },
+  media: { label: 'Sources & media', icon: Link2 },
   saved: { label: 'Saved', icon: BookMarked },
   preview: { label: 'Browser', icon: Globe },
   artifacts: { label: 'Artifacts', icon: FilePlus },
