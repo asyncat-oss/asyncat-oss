@@ -323,13 +323,13 @@ async function synthesizeWithCloudProvider(providerId, text, options = {}) {
 function activeProviderSnapshot(userId) {
   const active = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools, updated_at FROM ai_provider_config WHERE user_id = ?').get(userId);
   const localStatus = getLlamaStatus();
-  
+  const settings = parseSettings(active?.settings);
   const providerId = active?.provider_id || LLAMA_PROVIDER_ID;
   const model = providerId === LLAMA_PROVIDER_ID ? localStatus?.model : active?.model;
-  const capabilities = getModelCapabilities(providerId, model);
+  const capabilities = getModelCapabilities(providerId, model, settings.model_capabilities);
 
   return {
-    config: active ? { ...active, settings: parseSettings(active.settings), supports_tools: Boolean(active.supports_tools), capabilities } : { capabilities },
+    config: active ? { ...active, settings, supports_tools: Boolean(active.supports_tools), capabilities } : { capabilities },
     localStatus,
   };
 }
@@ -507,6 +507,8 @@ async function listProviderModels(row) {
       id: model.filename,
       name: model.name || model.filename,
       owned_by: 'local',
+      architecture: model.architecture || null,
+      capabilities: model.capabilities || getModelCapabilities(row.provider_id, model.filename, model),
     }));
   }
   if (row.provider_id === 'openai-codex' || row.provider_id === 'codex-cli') {
@@ -519,6 +521,7 @@ async function listProviderModels(row) {
       context_window_source: 'provider-preset',
       context_window_confidence: 'provider-default',
       supported_parameters: row.provider_id === 'openai-codex' ? ['reasoning'] : [],
+      capabilities: getModelCapabilities(row.provider_id, model.id, model),
     }));
   }
   const client = clientForProvider(row);
@@ -534,7 +537,7 @@ async function listProviderModels(row) {
       modelMetadata: model,
       preset,
     });
-    return {
+    const normalizedModel = {
       id: model.id,
       name: model.name || model.id,
       description: model.description || '',
@@ -549,6 +552,10 @@ async function listProviderModels(row) {
       knowledge_cutoff: model.knowledge_cutoff || null,
       created: model.created || null,
       per_request_limits: model.per_request_limits || null,
+    };
+    return {
+      ...normalizedModel,
+      capabilities: getModelCapabilities(row.provider_id, model.id, normalizedModel),
     };
   });
 }
@@ -701,9 +708,25 @@ router.get('/config', (req, res) => {
   try {
     const row = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
     if (row) {
-      res.json({ ...row, settings: parseSettings(row.settings), supports_tools: Boolean(row.supports_tools) });
+      const settings = parseSettings(row.settings);
+      res.json({
+        ...row,
+        settings,
+        supports_tools: Boolean(row.supports_tools),
+        capabilities: getModelCapabilities(row.provider_id, row.model, settings.model_capabilities),
+      });
     } else {
-      res.json({ profile_id: null, provider_type: 'local', provider_id: LLAMA_PROVIDER_ID, base_url: LLAMA_BASE_URL, model: '', settings: {}, supports_tools: false });
+      const localStatus = getLlamaStatus();
+      res.json({
+        profile_id: null,
+        provider_type: 'local',
+        provider_id: LLAMA_PROVIDER_ID,
+        base_url: LLAMA_BASE_URL,
+        model: localStatus?.model || '',
+        settings: {},
+        supports_tools: false,
+        capabilities: getModelCapabilities(LLAMA_PROVIDER_ID, localStatus?.model),
+      });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });

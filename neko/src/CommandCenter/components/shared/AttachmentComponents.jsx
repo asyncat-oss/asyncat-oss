@@ -25,8 +25,8 @@ export function attachmentBadge(file, capabilities = null) {
   if (capabilities) {
     if (kind === "image") {
       return capabilities?.vision?.ready
-        ? { label: "Vision ready", tone: "emerald" }
-        : { label: "Needs vision", tone: "amber" };
+        ? { label: "Image input ready", tone: "emerald" }
+        : { label: "Text-only model", tone: "amber" };
     }
     if (kind === "audio") {
       return capabilities?.stt?.ready

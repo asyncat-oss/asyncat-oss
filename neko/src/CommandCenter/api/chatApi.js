@@ -4,6 +4,15 @@ import apiClient from '../../services/apiClient.js';
 export const chatApi = {
 
   runStream: async function* (message, conversationHistory = [], signal = null, opts = {}) {
+    const lastImageTurn = Array.isArray(conversationHistory)
+      ? conversationHistory.findLastIndex(item => (
+          item?.role === 'user'
+          && item?.fileAttachments?.some(file => typeof file?.dataUrl === 'string' && file.dataUrl.startsWith('data:image/'))
+        ))
+      : -1;
+    const requestHistory = (Array.isArray(conversationHistory) ? conversationHistory : []).map((item, index) => (
+      index === lastImageTurn ? item : { ...item, fileAttachments: undefined }
+    ));
     const response = await apiClient.request(`${API_BASE_URL}/ai/chat/stream`, {
       method: 'POST',
       headers: {
@@ -12,8 +21,9 @@ export const chatApi = {
       signal,
       body: JSON.stringify({
         message,
-        conversationHistory,
+        conversationHistory: requestHistory,
         reasoningEffort: opts.reasoningEffort || 'auto',
+        fileAttachments: Array.isArray(opts.fileAttachments) ? opts.fileAttachments : [],
       }),
     });
 

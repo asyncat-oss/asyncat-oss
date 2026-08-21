@@ -11,6 +11,7 @@ import { promisify } from 'util';
 import os from 'os';
 import db from '../../../db/client.js';
 import { runtimeModelsPath } from '../../../config/runtimeConfig.js';
+import { getModelCapabilities } from './modelCapabilities.js';
 
 const execAsync = promisify(exec);
 
@@ -182,7 +183,7 @@ export function listModels() {
           metadataCache.set(filePath, { mtime: stat.mtimeMs, meta });
         }
 
-        return {
+        const modelInfo = {
           id: filename,
           name: filename.replace(/\.(gguf|bin)$/, ''),
           filename,
@@ -195,6 +196,10 @@ export function listModels() {
           parameterCount: meta['general.parameter_count'] ? formatBytes(meta['general.parameter_count']).replace(/B/g, '') + ' Params' : '',
           createdAt: stat.birthtime.toISOString(),
           modifiedAt: stat.mtime.toISOString(),
+        };
+        return {
+          ...modelInfo,
+          capabilities: getModelCapabilities('llamacpp-builtin', filename, modelInfo),
         };
       });
 
@@ -222,7 +227,7 @@ export function listModels() {
           metadataCache.set(modelPath, { mtime: stat.mtimeMs, meta });
         }
 
-        return {
+        const modelInfo = {
           id: entry.id,
           isExternal: true,
           name: entry.name,
@@ -234,6 +239,10 @@ export function listModels() {
           architecture: meta['general.architecture'] || 'unknown',
           createdAt: entry.created_at,
           modifiedAt: entry.created_at,
+        };
+        return {
+          ...modelInfo,
+          capabilities: getModelCapabilities('llamacpp-builtin', modelInfo.filename, modelInfo),
         };
       } catch (err) {
         return {
@@ -280,7 +289,7 @@ export function getModel(filename) {
   if (!fs.existsSync(filePath)) return null;
   const stat = fs.statSync(filePath);
   const meta = extractGgufMetadata(filePath) || {};
-  return {
+  const modelInfo = {
     id: filename,
     name: filename.replace(/\.(gguf|bin)$/, ''),
     filename,
@@ -293,6 +302,10 @@ export function getModel(filename) {
     parameterCount: meta['general.parameter_count'] ? formatBytes(meta['general.parameter_count']).replace(/B/g, '') + ' Params' : '',
     createdAt: stat.birthtime.toISOString(),
     modifiedAt: stat.mtime.toISOString(),
+  };
+  return {
+    ...modelInfo,
+    capabilities: getModelCapabilities('llamacpp-builtin', filename, modelInfo),
   };
 }
 

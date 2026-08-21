@@ -1,7 +1,7 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
+import { Bell, Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
 import eventBus from "../../../utils/eventBus.js";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
@@ -11,7 +11,7 @@ import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi, audioApi, aiProviderApi } from "../../../Settings/settingApi.js";
 import { profilesApi, filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
-import { AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
+import { attachmentKind, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
 
 const ToggleSwitch = ({ checked, onChange, disabled }) => {
   return (
@@ -542,6 +542,20 @@ export const MessageInputV2 = ({
 
   const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
+  const supportsImageInput = Boolean(
+    activeBrain.capabilities?.supportsImageInput
+      ?? multimodalCapabilities?.vision?.supportsImageInput
+      ?? multimodalCapabilities?.vision?.ready,
+  );
+  const effectiveMultimodalCapabilities = useMemo(() => ({
+    ...(multimodalCapabilities || {}),
+    vision: {
+      ...(multimodalCapabilities?.vision || {}),
+      ready: supportsImageInput,
+      supportsImageInput,
+      model: activeBrain.model || multimodalCapabilities?.vision?.model || null,
+    },
+  }), [activeBrain.model, multimodalCapabilities, supportsImageInput]);
   const { config: modelContextConfig } = useModelConfig();
   const textareaRef = useRef(null);
   const toolbarRef = useRef(null);
@@ -685,20 +699,32 @@ export const MessageInputV2 = ({
   }, []);
 
   useEffect(() => {
-    if (!isWorkExperience || !externalFileAttachment?.path) return;
+    if (!externalFileAttachment) return;
+    const isPromptOnly = Boolean(externalFileAttachment.promptOnly);
+    if (!isWorkExperience && !isPromptOnly) return;
+    const mime = externalFileAttachment.mime || externalFileAttachment.mimeType || '';
+    const ext = externalFileAttachment.ext || externalFileAttachment.name?.split('.').pop() || '';
+    if (attachmentKind({ ...externalFileAttachment, mime, ext }) === 'image' && !supportsImageInput) {
+      setError('The active model does not support image input. Choose an image-capable language model first.');
+      return;
+    }
+    const attachmentPath = externalFileAttachment.path
+      || `prompt://${externalFileAttachment.nonce || Date.now()}-${safeAttachmentName(externalFileAttachment.name || 'attachment')}`;
     setFileAttachments(prev => {
-      const rootId = externalFileAttachment.rootId || activeWorkingContext?.rootId;
+      const rootId = externalFileAttachment.rootId || activeWorkingContext?.rootId || (isPromptOnly ? 'none' : null);
       if (!rootId) return prev;
-      if (prev.some(file => file.path === externalFileAttachment.path && file.rootId === rootId)) return prev;
+      if (prev.some(file => file.path === attachmentPath && file.rootId === rootId)) return prev;
       return [...prev, {
+        ...externalFileAttachment,
         rootId,
-        path: externalFileAttachment.path,
-        name: externalFileAttachment.name || basename(externalFileAttachment.path),
-        ext: externalFileAttachment.ext || basename(externalFileAttachment.path).split('.').pop(),
+        path: attachmentPath,
+        name: externalFileAttachment.name || basename(attachmentPath),
+        ext,
+        mime,
       }];
     });
     requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [externalFileAttachment?.nonce, isWorkExperience]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeWorkingContext?.rootId, externalFileAttachment, isWorkExperience, supportsImageInput]);
 
   useEffect(() => {
     if (!isWorkExperience) {
@@ -892,16 +918,53 @@ export const MessageInputV2 = ({
     if (!picked.length || disabled) return;
 
     const rootId = activeWorkingContext?.rootId;
-    if (!rootId) return;
+    const selected = picked.slice(0, rootId ? 8 : 2);
+    const imageFiles = selected.filter(file => String(file.type || '').toLowerCase().startsWith('image/'));
+    const supportedImageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+    if (imageFiles.some(file => !supportedImageTypes.has(String(file.type || '').toLowerCase()))) {
+      setError('Image input supports PNG, JPEG, WebP, and GIF files.');
+      return;
+    }
+    if (!rootId && imageFiles.some(file => Number(file.size || 0) > 5_000_000)) {
+      setError('Each prompt image must be 5 MB or smaller.');
+      return;
+    }
+    if (imageFiles.length > 0 && !supportsImageInput) {
+      setError('The active model does not support image input. Choose an image-capable language model first.');
+      return;
+    }
+    if (!rootId && selected.some(file => !String(file.type || '').toLowerCase().startsWith('image/'))) {
+      setError('Select a Project to attach non-image files.');
+      return;
+    }
     const uploadDir = ".asyncat/attachments";
     setUploadingAttachment(true);
     setError(null);
 
     try {
       const uploaded = [];
-      for (const file of picked.slice(0, 8)) {
+      for (const file of selected) {
         const safeName = safeAttachmentName(file.name);
         const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!rootId) {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(reader.error || new Error('Could not read image'));
+            reader.readAsDataURL(file);
+          });
+          uploaded.push({
+            rootId: 'none',
+            path: `prompt://${stamp}-${safeName}`,
+            name: file.name,
+            ext: file.name.split('.').pop() || '',
+            mime: file.type || '',
+            size: file.size,
+            dataUrl,
+            promptOnly: true,
+          });
+          continue;
+        }
         const targetPath = joinRelativePath(uploadDir, `${stamp}-${safeName}`);
         await filesApi.upload(rootId, targetPath, file, { overwrite: true });
         uploaded.push({
@@ -930,7 +993,7 @@ export const MessageInputV2 = ({
     } finally {
       setUploadingAttachment(false);
     }
-  }, [activeWorkingContext?.relativePath, activeWorkingContext?.rootId, disabled]);
+  }, [activeWorkingContext?.rootId, disabled, supportsImageInput]);
 
   const handleSubmit = useCallback(
     async (e, overrideText = null) => {
@@ -938,6 +1001,10 @@ export const MessageInputV2 = ({
       const textToSend = overrideText || value;
       if (!textToSend?.trim() || disabled) return;
       if (localModelSendBlockReason) {
+        return;
+      }
+      if (!supportsImageInput && fileAttachments.some(file => attachmentKind(file) === 'image')) {
+        setError('The active model does not support image input. Remove the image or choose an image-capable model.');
         return;
       }
 
@@ -977,7 +1044,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, localModelSendBlockReason, onSubmit, detectedAgentMentions, fileAttachments, inlineMentions, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
+    [value, disabled, localModelSendBlockReason, supportsImageInput, onSubmit, detectedAgentMentions, fileAttachments, inlineMentions, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
   );
 
   const handleKeyDown = useCallback(
@@ -1539,7 +1606,7 @@ export const MessageInputV2 = ({
                     <AttachmentChip
                       key={`${file.rootId || "none"}:${file.path}`}
                       file={file}
-                      capabilities={multimodalCapabilities}
+                      capabilities={effectiveMultimodalCapabilities}
                       onRemove={() => removeFileAttachment(file.path, file.rootId || null)}
                       onPreview={setLightbox}
                     />
@@ -1562,19 +1629,23 @@ export const MessageInputV2 = ({
                   </button>
                   {openMenu === "plus" && (
                     <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenMenu(null);
-                          filePickerRef.current?.click();
-                        }}
-                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                      >
-                        <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
-                        <span className="flex-1 font-medium">Add photos & files</span>
-                      </button>
+                      {(isWorkExperience || supportsImageInput) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenMenu(null);
+                            filePickerRef.current?.click();
+                          }}
+                          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
+                        >
+                          <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+                          <span className="flex-1 font-medium">
+                            {isWorkExperience ? (supportsImageInput ? 'Add photos & files' : 'Add files') : 'Add photos'}
+                          </span>
+                        </button>
+                      )}
 
-                      {window?.electronAPI?.openFilesDialog && (
+                      {isWorkExperience && window?.electronAPI?.openFilesDialog && (
                         <button
                           type="button"
                           onClick={async () => {
@@ -1774,10 +1845,23 @@ export const MessageInputV2 = ({
                   ref={filePickerRef}
                   type="file"
                   multiple
+                  accept={!isWorkExperience ? 'image/png,image/jpeg,image/webp,image/gif' : undefined}
                   className="hidden"
                   onChange={handlePickedFiles}
                 />
-                
+
+                {supportsImageInput && (
+                  <button
+                    type="button"
+                    onClick={() => filePickerRef.current?.click()}
+                    disabled={disabled || uploadingAttachment}
+                    title={`Add an image for ${activeBrain.model || 'the active model'}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700 disabled:opacity-40 dark:text-blue-400 dark:hover:bg-blue-950/30 dark:hover:text-blue-300 midnight:text-blue-400 midnight:hover:bg-blue-950/30"
+                  >
+                    {uploadingAttachment ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  </button>
+                )}
+
                 {sttReady && (
                   <button
                     type="button"

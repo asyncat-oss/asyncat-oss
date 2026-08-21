@@ -7,19 +7,14 @@ import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 const ACTIVE_KEYS = {
   stt: 'ASYNCAT_STT_PROVIDER',
   tts: 'ASYNCAT_TTS_PROVIDER',
-  vision: 'ASYNCAT_VISION_PROVIDER',
   image: 'ASYNCAT_IMAGE_PROVIDER',
 };
 
 const CAPABILITY_LABELS = {
   stt: 'Speech-to-Text',
   tts: 'Text-to-Speech',
-  vision: 'Vision',
   image: 'Image Generation',
 };
-
-// Vision uses the active chat LLM's multimodal capability — not a separate routing system.
-const VISION_ROUTING_NOTE = 'Vision is handled by your active chat provider if it supports multimodal input (e.g. GPT-4o, Claude 3, Gemini, MiniMax-M2). To change the vision model, switch your chat provider above.';
 
 // implemented: which capabilities are actually wired in the backend.
 // Providers listed but not implemented will show a "Coming soon" badge and cannot be selected.
@@ -28,12 +23,11 @@ const PROVIDERS = [
     id: 'local',
     name: 'Local Runtime',
     secretKey: null,
-    capabilities: ['stt', 'tts', 'vision', 'image'],
-    implemented: { stt: true, tts: true, vision: true, image: true },
+    capabilities: ['stt', 'tts', 'image'],
+    implemented: { stt: true, tts: true, image: true },
     models: {
       stt: 'whisper.cpp',
       tts: 'Piper',
-      vision: 'Local multimodal assets (mmproj)',
       image: 'stable-diffusion.cpp / ComfyUI',
     },
     description: 'Runs on your machine with the assets and engines configured on this page.',
@@ -43,15 +37,14 @@ const PROVIDERS = [
     id: 'openai',
     name: 'OpenAI',
     secretKey: 'OPENAI_API_KEY',
-    capabilities: ['stt', 'tts', 'vision', 'image'],
-    implemented: { stt: true, tts: true, vision: false, image: true },
+    capabilities: ['stt', 'tts', 'image'],
+    implemented: { stt: true, tts: true, image: true },
     models: {
       stt: 'gpt-4o-transcribe',
       tts: 'gpt-4o-mini-tts',
-      vision: 'Routes through active LLM — set OpenAI as your chat provider',
       image: 'DALL-E 3',
     },
-    description: 'Best all-round cloud option: transcription, speech, and image generation (DALL-E 3). Vision works via active chat provider.',
+    description: 'Best all-round cloud option: transcription, speech, and image generation (DALL-E 3).',
     docsUrl: 'https://platform.openai.com/docs',
   },
   {
@@ -97,13 +90,12 @@ const PROVIDERS = [
     id: 'gemini',
     name: 'Gemini',
     secretKey: 'GEMINI_API_KEY',
-    capabilities: ['tts', 'vision'],
-    implemented: { tts: true, vision: false },
+    capabilities: ['tts'],
+    implemented: { tts: true },
     models: {
       tts: 'Gemini 2.5 Flash TTS (30 voices)',
-      vision: 'Routes through active LLM — set Gemini as your chat provider',
     },
-    description: 'Natural TTS with 30 expressive voices. Vision works via active Gemini chat provider.',
+    description: 'Natural TTS with 30 expressive voices.',
     docsUrl: 'https://ai.google.dev/gemini-api/docs',
   },
 ];
@@ -192,12 +184,6 @@ const CapabilityProvidersSection = ({ capability }) => {
           </button>
         }
       />
-
-      {capability === 'vision' && (
-        <p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 midnight:border-blue-900/40 midnight:bg-blue-950/30 midnight:text-blue-300">
-          {VISION_ROUTING_NOTE}
-        </p>
-      )}
 
       {(message || error) && (
         <p className={`mt-3 text-xs ${error ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>

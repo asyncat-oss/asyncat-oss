@@ -63,6 +63,7 @@ function safePublicProvider(row) {
     model: pub?.model || row.model || null,
     settings: pub?.settings || parseProviderJson(row.settings, {}),
     supportsTools: Boolean(pub?.supports_tools ?? row.supports_tools),
+    capabilities: pub?.capabilities || null,
     local: Boolean(pub?.local),
     managed: Boolean(pub?.managed),
   };
@@ -327,7 +328,6 @@ async function getImageStatus() {
     },
     catalog: {
       imageModels: visualModels.image?.length || 0,
-      visionModels: visualModels.vision?.length || 0,
     },
   };
 }

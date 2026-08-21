@@ -913,18 +913,34 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     // Electron exposes the real absolute path; browsers don't have .path
     const absPath = file.path || null;
     if (file.type.startsWith('image/')) {
+      if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(String(file.type || '').toLowerCase())) {
+        setError('Image input supports PNG, JPEG, WebP, and GIF files.');
+        return;
+      }
+      if (Number(file.size || 0) > 5_000_000) {
+        setError('Each prompt image must be 5 MB or smaller.');
+        return;
+      }
+      if (!multimodalCapabilities?.vision?.supportsImageInput && !multimodalCapabilities?.vision?.ready) {
+        setError('The active model does not support image input. Choose an image-capable language model first.');
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (ev) => {
         setExternalFileAttachment({
           name: file.name,
           type: 'image',
+          mime: file.type,
+          size: file.size,
           dataUrl: ev.target.result,
-          path: absPath,
+          path: absPath || `prompt://${Date.now()}-${file.name}`,
           nonce: Date.now(),
           promptOnly: true,
         });
       };
       reader.readAsDataURL(file);
+    } else if (experienceMode === 'chat') {
+      setError('Direct Chat accepts images only. Select Work and a Project to attach other file types.');
     } else if (file.size < 500_000 && (file.type.startsWith('text/') || file.name.match(/\.(md|txt|js|ts|jsx|tsx|py|json|yaml|yml|sh|css|html|xml|csv|log|conf|env|toml|rs|go|java|cpp|c|h)$/i))) {
       const reader = new FileReader();
       reader.onload = (ev) => {
@@ -932,7 +948,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           name: file.name,
           type: 'text',
           content: ev.target.result,
-          path: absPath,
+          path: absPath || `prompt://${Date.now()}-${file.name}`,
+          mime: file.type,
+          size: file.size,
           nonce: Date.now(),
           promptOnly: true,
         });
@@ -943,14 +961,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       setExternalFileAttachment({
         name: file.name,
         type: 'file',
-        path: absPath,
+        path: absPath || `prompt://${Date.now()}-${file.name}`,
         size: file.size,
-        mimeType: file.type,
+        mime: file.type,
         nonce: Date.now(),
         promptOnly: true,
       });
     }
-  }, []);
+  }, [experienceMode, multimodalCapabilities?.vision?.ready, multimodalCapabilities?.vision?.supportsImageInput, setError]);
 
   const conversationBranches = useMemo(() => {
     const storedBranches = Array.isArray(conversationMetadata?.branches)
@@ -1311,6 +1329,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       const eventStream = isDirectChat
         ? chatApi.runStream(submittedGoal, activeConversationHistory, controller.signal, {
             reasoningEffort: selectedReasoningEffort,
+            fileAttachments,
           })
         : agentApi.runStream(submittedGoal, activeConversationHistory, activeWorkingContext?.workingDir || null, 25, controller.signal, runOptions.continueSessionId !== undefined ? runOptions.continueSessionId : agentCurrentSessionId, {
         autoApprove: effectiveAgentMode === 'action' ? agentAutoApprove : false,

@@ -77,7 +77,7 @@ const ActiveBrainPanel = ({
 
   const dotColor = STATUS_DOT[serverStatus?.status] || STATUS_DOT.idle;
   const chatStatus = providerIsExternal ? 'ready' : serverStatus?.status || 'idle';
-  const visionCount = visualModels?.vision?.length || 0;
+  const supportsImageInput = Boolean(activeConfig?.capabilities?.supportsImageInput);
   const imageCount = visualModels?.image?.length || 0;
 
   return (
@@ -144,9 +144,9 @@ const ActiveBrainPanel = ({
           />
           <CapabilityStatus
             icon={Eye}
-            label="Vision"
-            status={visionCount ? 'ready' : 'idle'}
-            value={visionCount ? `${visionCount} asset${visionCount === 1 ? '' : 's'}` : 'No assets'}
+            label="Image input"
+            status={supportsImageInput ? 'ready' : 'idle'}
+            value={supportsImageInput ? 'Supported by LLM' : 'Text only'}
           />
           <CapabilityStatus
             icon={Image}

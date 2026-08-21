@@ -1,14 +1,10 @@
 import { getAiClientForUser } from '../ai/controllers/ai/clientFactory.js';
+import { getModelCapabilities } from '../ai/controllers/ai/modelCapabilities.js';
 import { listVisualModels } from '../ai/controllers/ai/visualModelManager.js';
 import { checkSdCpp } from '../ai/controllers/ai/sdCppManager.js';
 import { checkComfyUi } from '../ai/controllers/ai/comfyUiManager.js';
 import { getStatus as getWhisperStatus } from '../ai/controllers/ai/whisperServerManager.js';
 import { getStatus as getTtsStatus } from '../ai/controllers/ai/ttsServerManager.js';
-
-function modelLooksVisionCapable(providerId = '', model = '') {
-  const text = `${providerId} ${model}`.toLowerCase();
-  return /(gpt-4o|gpt-4\.1|gpt-5|o3|o4|gemini|claude-3|claude-4|vision|vl|llava|pixtral|qwen.*vl|qwen.*omni|grok)/i.test(text);
-}
 
 export async function getMultimodalCapabilities(userId = null) {
   let provider = null;
@@ -21,8 +17,8 @@ export async function getMultimodalCapabilities(userId = null) {
     provider = null;
   }
 
-  let visualModels = { vision: [], image: [] };
-  try { visualModels = listVisualModels(); } catch {}
+  let imageModels = [];
+  try { imageModels = listVisualModels().image || []; } catch {}
 
   const [simpleImage, comfyui] = await Promise.all([
     checkSdCpp().catch(err => ({ found: false, status: 'missing', error: err.message })),
@@ -31,7 +27,12 @@ export async function getMultimodalCapabilities(userId = null) {
 
   const whisper = getWhisperStatus();
   const tts = getTtsStatus();
-  const visionProviderReady = Boolean(provider && modelLooksVisionCapable(provider.providerId, provider.model));
+  const modelCapabilities = getModelCapabilities(
+    provider?.providerId,
+    provider?.model,
+    provider?.settings?.model_capabilities,
+  );
+  const visionProviderReady = Boolean(provider && modelCapabilities.supportsImageInput);
   const imageRuntime = comfyui.found ? 'comfyui' : simpleImage.found ? 'simple' : null;
 
   return {
@@ -40,10 +41,11 @@ export async function getMultimodalCapabilities(userId = null) {
       providerReady: visionProviderReady,
       providerId: provider?.providerId || null,
       model: provider?.model || null,
-      indexedAssets: visualModels.vision?.length || 0,
+      supportsImageInput: visionProviderReady,
+      inputModalities: modelCapabilities.inputModalities,
       note: visionProviderReady
-        ? 'Active AI provider appears to support image input.'
-        : 'Image inspection requires a vision-capable active AI provider.',
+        ? 'The active language model supports image input.'
+        : 'Choose a language model that supports image input to attach photos.',
     },
     stt: {
       ready: whisper.status === 'ready',
@@ -68,7 +70,7 @@ export async function getMultimodalCapabilities(userId = null) {
         status: comfyui.status,
         checkpoints: comfyui.checkpoints?.length || 0,
       },
-      indexedAssets: visualModels.image?.length || 0,
+      indexedAssets: imageModels.length,
     },
     pdf: {
       ready: true,

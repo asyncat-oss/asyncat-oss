@@ -209,7 +209,12 @@ const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, savin
                 Model
                 <input
                   value={form.model}
-                  onChange={(e) => update('model', e.target.value)}
+                  onChange={(e) => setForm(prev => {
+                    const nextSettings = { ...(prev.settings || {}) };
+                    delete nextSettings.model_capabilities;
+                    delete nextSettings.model_name;
+                    return { ...prev, model: e.target.value, settings: nextSettings };
+                  })}
                   className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
                   placeholder={selectedPreset?.model || 'model-id'}
                 />
@@ -423,6 +428,7 @@ const RemoteModelPickerModal = ({
                   const inputs = Array.isArray(arch.input_modalities) ? arch.input_modalities : [];
                   const outputs = Array.isArray(arch.output_modalities) ? arch.output_modalities : [];
                   const params = Array.isArray(model.supported_parameters) ? model.supported_parameters : [];
+                  const supportsImageInput = Boolean(model.capabilities?.supportsImageInput || inputs.includes('image'));
                   const promptPrice = fmtPrice(model.pricing?.prompt);
                   const completionPrice = fmtPrice(model.pricing?.completion);
 
@@ -450,6 +456,11 @@ const RemoteModelPickerModal = ({
                               {modalityIcon(mod)} {mod}
                             </span>
                           ))}
+                          {supportsImageInput && !inputs.includes('image') && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30">
+                              <Image className="w-3 h-3" /> image input
+                            </span>
+                          )}
                           {/* Parameter badges */}
                           {params.includes('tools') && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/30">
@@ -716,6 +727,7 @@ const ProvidersSection = ({
                             {modelDisplayName(profile, catalog)}
                           </span>
                           {profile.api_key_set && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">Key saved</span>}
+                          {profile.capabilities?.supportsImageInput && <Badge color="blue">Image input</Badge>}
                         </div>
                         <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 font-mono break-all line-clamp-1">
                           {profile.base_url}
@@ -887,6 +899,7 @@ const ProvidersSection = ({
               ...(modelPickerProfile.settings || {}),
               ...(model.context_window ? { context_window: model.context_window } : {}),
               ...(model.name && model.name !== modelId ? { model_name: model.name } : {}),
+              ...(model.capabilities ? { model_capabilities: model.capabilities } : {}),
             };
             await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
             setModelPickerProfile(prev => prev ? { ...prev, model: modelId, settings: nextSettings } : prev);
@@ -897,6 +910,7 @@ const ProvidersSection = ({
               ...(modelPickerProfile.settings || {}),
               ...(model.context_window ? { context_window: model.context_window } : {}),
               ...(model.name && model.name !== modelId ? { model_name: model.name } : {}),
+              ...(model.capabilities ? { model_capabilities: model.capabilities } : {}),
             };
             await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
             const nextProfile = { ...modelPickerProfile, model: modelId, settings: nextSettings };

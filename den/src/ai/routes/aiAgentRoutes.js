@@ -34,6 +34,7 @@ import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embedding
 import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
+import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
 import { branchGit, commitGit, discardGitFiles, getGitBranches, getGitCommit, getGitCommitMessageContext, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
@@ -77,6 +78,7 @@ function normalizeConversationHistory(history = []) {
       role: m.role,
       content: String(m.content || ''),
       timestamp: m.timestamp || m.createdAt || m.created_at || null,
+      fileAttachments: Array.isArray(m.fileAttachments) ? m.fileAttachments : [],
     }));
 }
 
@@ -758,6 +760,25 @@ async function runAgentTaskInBackground(runId) {
 // CONVERSATION ROUTES — /api/ai/*
 // ══════════════════════════════════════════════════════════════════════════════
 
+const SUPPORTED_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i;
+
+function attachedImageUrls(fileAttachments = []) {
+  if (!Array.isArray(fileAttachments)) return [];
+  return fileAttachments
+    .slice(0, 2)
+    .map(attachment => String(attachment?.dataUrl || ''))
+    .filter(dataUrl => dataUrl.length > 0 && dataUrl.length < 8_000_000 && SUPPORTED_IMAGE_DATA_URL.test(dataUrl));
+}
+
+function messageContentWithImages(text, fileAttachments = []) {
+  const imageUrls = attachedImageUrls(fileAttachments);
+  if (!imageUrls.length) return text;
+  return [
+    { type: 'text', text },
+    ...imageUrls.map(url => ({ type: 'image_url', image_url: { url } })),
+  ];
+}
+
 router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   const message = String(req.body?.message || '').trim();
   if (!message) {
@@ -765,9 +786,49 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   }
 
   const history = normalizeConversationHistory(req.body?.conversationHistory);
+  let resolvedClient;
+  try {
+    resolvedClient = getAiClientForUser(req.user.id);
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error.message || 'Could not load the active model' });
+  }
+  const { client: aiClient, model, providerInfo } = resolvedClient;
+  const modelCapabilities = getModelCapabilities(
+    providerInfo?.providerId,
+    model,
+    providerInfo?.settings?.model_capabilities,
+  );
+  const suppliedCurrentImages = (Array.isArray(req.body?.fileAttachments) ? req.body.fileAttachments : [])
+    .filter(attachment => (
+      String(attachment?.mime || attachment?.mimeType || '').toLowerCase().startsWith('image/')
+      || String(attachment?.dataUrl || '').startsWith('data:image/')
+    ));
+  const currentImageUrls = attachedImageUrls(req.body?.fileAttachments);
+  if (suppliedCurrentImages.length !== currentImageUrls.length) {
+    return res.status(400).json({
+      success: false,
+      error: 'Images must be PNG, JPEG, WebP, or GIF files under the attachment size limit.',
+    });
+  }
+  if (currentImageUrls.length > 0 && !modelCapabilities.supportsImageInput) {
+    return res.status(400).json({
+      success: false,
+      error: `The active model (${model || 'unknown'}) does not support image input. Choose an image-capable language model first.`,
+    });
+  }
   const messages = [
-    ...history.map(item => ({ role: item.role, content: item.content })),
-    { role: 'user', content: message },
+    ...history.map(item => ({
+      role: item.role,
+      content: item.role === 'user' && modelCapabilities.supportsImageInput
+        ? messageContentWithImages(item.content, item.fileAttachments)
+        : item.content,
+    })),
+    {
+      role: 'user',
+      content: modelCapabilities.supportsImageInput
+        ? messageContentWithImages(message, req.body?.fileAttachments)
+        : message,
+    },
   ];
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -783,7 +844,6 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
 
   let answer = '';
   try {
-    const { client: aiClient, model } = getAiClientForUser(req.user.id);
     const reasoningEffort = String(req.body?.reasoningEffort || '').trim();
     const stream = await aiClient.client.chat.completions.create({
       model,
@@ -1911,6 +1971,12 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
     const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext, req.user.id);
     const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
+    const initialImageUrls = multimodalCapabilities.vision?.ready
+      ? resolvedFiles
+          .filter(file => file.promptOnly && String(file.mime || '').startsWith('image/'))
+          .map(file => file.dataUrl)
+          .filter(Boolean)
+      : [];
     // Capabilities go into the system prompt via AgentRuntime — NOT prepended to the user's goal.
     const capabilitiesSection = [
       formatMultimodalCapabilityPrompt(multimodalCapabilities),
@@ -1960,6 +2026,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : null,
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,
+      initialImageUrls,
       clientTimestamp,
       clientTimezone,
       abortSignal: abortController.signal,

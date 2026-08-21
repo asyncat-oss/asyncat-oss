@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X,
-  Mic, Volume2, Eye, Image, MessageSquare, BarChart3
+  Mic, Volume2, Image, MessageSquare, BarChart3
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
@@ -128,7 +128,7 @@ const ModelsPage = () => {
     loaded: false,
   });
   const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
-  const [visualModels, setVisualModels] = useState({ vision: [], image: [] });
+  const [visualModels, setVisualModels] = useState({ image: [] });
   const [highlightedItem, setHighlightedItem] = useState(null);
   const [usageRange, setUsageRange] = useState('30d');
   const [modelUsage, setModelUsage] = useState(null);
@@ -159,11 +159,10 @@ const ModelsPage = () => {
     visualModelsApi.listModels()
       .then((modelsRes) => {
         setVisualModels({
-          vision: modelsRes.vision || [],
           image: modelsRes.image || [],
         });
       })
-      .catch(() => setVisualModels({ vision: [], image: [] }));
+      .catch(() => setVisualModels({ image: [] }));
   }, []);
 
   const refreshUsageData = useCallback(() => {
@@ -231,18 +230,6 @@ const ModelsPage = () => {
         isActive: false,
       });
     }
-    for (const m of visualModels.vision) {
-      const haystack = [m.name, m.filename, m.assetKind, 'vision multimodal projector mmproj'].filter(Boolean).join(' ').toLowerCase();
-      if (!haystack.includes(q)) continue;
-      matches.push({
-        type: 'vision',
-        category: 'vision',
-        id: m.id || m.filename,
-        name: m.name || m.filename,
-        detail: [m.assetKind, m.sizeFormatted].filter(Boolean).join(' · '),
-        isActive: false,
-      });
-    }
     for (const m of visualModels.image) {
       const haystack = [m.name, m.filename, m.assetKind, 'image generation diffusion stable flux sdxl'].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(q)) continue;
@@ -277,13 +264,12 @@ const ModelsPage = () => {
       });
     }
     return matches.slice(0, 12);
-  }, [audioModels.tts, audioModels.whisper, models, searchQuery, visualModels.image, visualModels.vision, providerProfiles, providerCatalog, status, serverStatus, providerConfig]);
+  }, [audioModels.tts, audioModels.whisper, models, searchQuery, visualModels.image, providerProfiles, providerCatalog, status, serverStatus, providerConfig]);
 
   const handleDownloadedSelect = (item) => {
     setHighlightedItem(item);
     if (item.type === 'model' || item.type === 'provider') setActiveTab('chat');
     if (item.type === 'whisper' || item.type === 'tts') setActiveTab('audio');
-    if (item.type === 'vision') setActiveTab('vision');
     if (item.type === 'image') setActiveTab('image');
     window.setTimeout(() => {
       const id = item.type === 'model'
@@ -326,7 +312,6 @@ const ModelsPage = () => {
   const tabItems = [
     { key: 'chat', label: 'LLM', icon: MessageSquare, meta: chatReady ? 'Active' : String(providerProfiles.length + models.length) },
     { key: 'audio', label: 'Audio', icon: Mic, meta: audioMeta },
-    { key: 'vision', label: 'Vision', icon: Eye, meta: visualModels.vision.length ? String(visualModels.vision.length) : null },
     { key: 'image', label: 'Image', icon: Image, meta: visualModels.image.length ? String(visualModels.image.length) : null },
     { key: 'usage', label: 'Usage', icon: BarChart3, meta: usageRequestCount ? String(usageRequestCount) : usageRange },
   ];
@@ -355,20 +340,6 @@ const ModelsPage = () => {
               <SpeechCompactBadge status={voiceState.ttsStatus} label="TTS" />
             </div>
           ),
-        };
-      case 'vision':
-        return {
-          icon: Eye,
-          title: 'Vision Models',
-          subtitle: AssetSubtitle({
-            count: visualModels.vision.length,
-            emptyLabel: 'No vision assets',
-            singularLabel: 'vision asset',
-            pluralLabel: 'vision assets',
-          }),
-          badge: visualModels.vision.length > 0
-            ? <Badge color="gray">{visualModels.vision.length} asset{visualModels.vision.length === 1 ? '' : 's'}</Badge>
-            : null,
         };
       case 'image':
         return {
@@ -625,22 +596,10 @@ const ModelsPage = () => {
               </div>
             )}
 
-            {activeTab === 'vision' && (
-              <div className="space-y-5">
-                <CapabilityProvidersSection capability="vision" />
-                <VisualModelsSection
-                  mode="vision"
-                  highlightedItem={highlightedItem}
-                  onModelsChange={setVisualModels}
-                />
-              </div>
-            )}
-
             {activeTab === 'image' && (
               <div className="space-y-5">
                 <CapabilityProvidersSection capability="image" />
                 <VisualModelsSection
-                  mode="image"
                   highlightedItem={highlightedItem}
                   onModelsChange={setVisualModels}
                 />

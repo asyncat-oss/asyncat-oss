@@ -5,7 +5,6 @@ import {
   Cloud,
   Cpu,
   Download,
-  Eye,
   File,
   FileArchive,
   Heart,
@@ -46,14 +45,6 @@ const TARGETS = {
     barColor: 'bg-emerald-500',
     subDir: 'audio/tts',
     extensions: ['.onnx', '.onnx.json'],
-  },
-  vision: {
-    label: 'Vision',
-    color: 'bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50 midnight:bg-sky-900/30 midnight:text-sky-300 midnight:hover:bg-sky-900/50',
-    accentBar: 'bg-sky-400',
-    barColor: 'bg-sky-500',
-    subDir: 'vision',
-    extensions: ['.gguf', '.bin', '.mmproj', '.safetensors', '.json'],
   },
   image: {
     label: 'Image',
@@ -102,15 +93,6 @@ const targetOptionsForFile = (filename, repoId = '') => {
     lowerName.endsWith('.onnx') ||
     lowerName.endsWith('.onnx.json')
   );
-  const isVisionLike = (
-    context.includes('vision') ||
-    context.includes('llava') ||
-    context.includes('bakllava') ||
-    context.includes('moondream') ||
-    context.includes('mmproj') ||
-    context.includes('clip') ||
-    context.includes('siglip')
-  );
   const isImageLike = (
     context.includes('stable-diffusion') ||
     context.includes('sdxl') ||
@@ -124,7 +106,7 @@ const targetOptionsForFile = (filename, repoId = '') => {
   );
   const options = [];
 
-  if ((lowerName.endsWith('.gguf') || lowerName.endsWith('.bin')) && !isWhisperLike && !isVisionLike && !isImageLike) {
+  if ((lowerName.endsWith('.gguf') || lowerName.endsWith('.bin')) && !isWhisperLike && !isImageLike) {
     options.push(['model', TARGETS.model]);
   }
   if ((lowerName.endsWith('.bin') || lowerName.endsWith('.gguf')) && isWhisperLike) {
@@ -132,9 +114,6 @@ const targetOptionsForFile = (filename, repoId = '') => {
   }
   if (isPiperLike && (lowerName.endsWith('.onnx') || lowerName.endsWith('.onnx.json'))) {
     options.push(['tts', TARGETS.tts]);
-  }
-  if (isVisionLike && ['.gguf', '.bin', '.mmproj', '.safetensors', '.json'].some(ext => lowerName.endsWith(ext))) {
-    options.push(['vision', TARGETS.vision]);
   }
   if (isImageLike && ['.safetensors', '.ckpt', '.gguf', '.onnx', '.pt', '.pth', '.bin', '.json'].some(ext => lowerName.endsWith(ext))) {
     options.push(['image', TARGETS.image]);
@@ -331,13 +310,6 @@ const TYPE_META = {
     iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
     badge: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
   },
-  vision: {
-    label: 'Vision',
-    icon: Eye,
-    dotColor: 'bg-sky-400',
-    iconBg: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400 midnight:bg-sky-900/30 midnight:text-sky-300',
-    badge: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400 midnight:bg-sky-900/30 midnight:text-sky-300',
-  },
   image: {
     label: 'Image',
     icon: ImageIcon,
@@ -360,7 +332,6 @@ const groupMatches = (matches) => {
   const order = [
     { key: 'model', label: 'Models' },
     { key: 'audio', label: 'Audio' },
-    { key: 'vision', label: 'Vision' },
     { key: 'image', label: 'Image' },
     { key: 'provider', label: 'Providers' },
   ];
@@ -389,7 +360,6 @@ const FILTER_CHIPS = [
   { key: 'all', label: 'All' },
   { key: 'model', label: 'Models' },
   { key: 'audio', label: 'Audio' },
-  { key: 'vision', label: 'Vision' },
   { key: 'image', label: 'Image' },
   { key: 'provider', label: 'Providers' },
   { key: 'hf', label: 'HuggingFace' },
@@ -400,7 +370,6 @@ const matchesFilter = (item, filter) => {
   if (filter === 'hf') return false; // HF results are separate
   if (filter === 'model') return item.category === 'model';
   if (filter === 'audio') return item.category === 'audio';
-  if (filter === 'vision') return item.category === 'vision';
   if (filter === 'image') return item.category === 'image';
   if (filter === 'provider') return item.category === 'provider';
   return true;
@@ -411,11 +380,6 @@ const matchesHFFilter = (model, filter) => {
   if (filter === 'model') {
     const tag = (model.pipeline_tag || '').toLowerCase();
     return ['text-generation', 'image-text-to-text', 'text2text-generation'].some(t => tag.includes(t));
-  }
-  if (filter === 'vision') {
-    const tag = (model.pipeline_tag || '').toLowerCase();
-    const tags = (model.tags || []).map(t => t.toLowerCase());
-    return tag.includes('vision') || tag.includes('image-to-text') || tags.some(t => t.includes('vision') || t.includes('llava') || t.includes('mmproj'));
   }
   if (filter === 'image') {
     const tag = (model.pipeline_tag || '').toLowerCase();
@@ -458,7 +422,7 @@ const ModelDownloadHub = ({
         window.dispatchEvent(new CustomEvent('asyncat-audio-models-updated'));
       }, 11000);
     }
-    if (targetKey === 'vision' || targetKey === 'image') {
+    if (targetKey === 'image') {
       onVisualRefresh?.();
       window.dispatchEvent(new CustomEvent('asyncat-visual-models-updated'));
       setTimeout(() => {
@@ -573,9 +537,7 @@ const ModelDownloadHub = ({
             ? 'tts'
             : String(dl.subDir || '').includes('audio/whisper')
               ? 'whisper'
-              : String(dl.subDir || '').includes('vision')
-                ? 'vision'
-                : String(dl.subDir || '').includes('image')
+              : String(dl.subDir || '').includes('image')
                   ? 'image'
                   : 'model';
           startTrackingDownload(dl.downloadId, filename, targetKey);
@@ -630,7 +592,7 @@ const ModelDownloadHub = ({
     <Panel className="p-5">
       <SectionHeader
         title="Download Models"
-        description="Search HuggingFace once, then save files as local LLM, voice, vision, or image generation assets."
+        description="Search HuggingFace once, then save files as local LLM, voice, or image generation assets. Multimodal LLMs stay in the normal model library."
         action={activeEntries.length > 0 ? <Badge color="amber">{activeEntries.length} downloading</Badge> : null}
       />
 

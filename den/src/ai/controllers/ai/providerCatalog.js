@@ -1,4 +1,5 @@
 import { resolveContextWindow } from './modelContextResolver.js';
+import { getModelCapabilities } from './modelCapabilities.js';
 
 const LLAMA_PORT = parseInt(process.env.LLAMA_SERVER_PORT ?? '8765', 10);
 
@@ -785,6 +786,7 @@ export function publicProvider(row) {
     api_key_set: Boolean(row.api_key),
     settings,
     supports_tools: providerSupportsTools(row),
+    capabilities: getModelCapabilities(effectiveProviderId, row.model, settings.model_capabilities),
     supports_model_list: Boolean(preset?.supportsModelList),
     context_window: resolvedContext.contextWindow,
     context_window_source: resolvedContext.source,

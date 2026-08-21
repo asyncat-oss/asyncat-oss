@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  Eye,
   FolderOpen,
   Image,
   Info,
@@ -16,15 +15,6 @@ import { visualModelsApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 
 const TYPE_META = {
-  vision: {
-    label: 'Vision',
-    title: 'Vision Models',
-    subtitle: 'Image understanding · multimodal projectors',
-    Icon: Eye,
-    empty: 'No vision assets found.',
-    hint: 'Use multimodal GGUFs and matching projector files such as mmproj. Place them in data/models/vision/ or add an external path.',
-    placeholder: 'Path to .gguf, .mmproj, .bin, .safetensors, or config file...',
-  },
   image: {
     label: 'Image',
     title: 'Image Generation',
@@ -41,7 +31,7 @@ const notifyVisualModelsUpdated = () => {
 };
 
 const VisualModelCard = ({ model, type, highlighted, onDelete }) => {
-  const meta = TYPE_META[type] || TYPE_META.vision;
+  const meta = TYPE_META[type] || TYPE_META.image;
   const Icon = model.isExternal ? FolderOpen : meta.Icon;
 
   return (
@@ -97,7 +87,7 @@ const VisualModelCard = ({ model, type, highlighted, onDelete }) => {
 };
 
 const AddPathForm = ({ type, onAdd }) => {
-  const meta = TYPE_META[type] || TYPE_META.vision;
+  const meta = TYPE_META[type] || TYPE_META.image;
   const [pathValue, setPathValue] = useState('');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
@@ -108,7 +98,7 @@ const AddPathForm = ({ type, onAdd }) => {
     setAdding(true);
     setError('');
     try {
-      const name = p.split(/[\\/]/).pop()?.replace(/(\.onnx\.json|\.(safetensors|ckpt|gguf|onnx|pt|pth|bin|json|mmproj))$/i, '') || meta.label;
+      const name = p.split(/[\\/]/).pop()?.replace(/(\.onnx\.json|\.(safetensors|ckpt|gguf|onnx|pt|pth|bin|json))$/i, '') || meta.label;
       await visualModelsApi.addCustomPath(name, p, type);
       setPathValue('');
       onAdd?.();
@@ -602,7 +592,7 @@ const ImageGenerationRuntimePanel = () => {
 };
 
 const VisualColumn = ({ type, models, loading, highlightedItem, onDelete, onReload }) => {
-  const meta = TYPE_META[type] || TYPE_META.vision;
+  const meta = TYPE_META[type] || TYPE_META.image;
   const Icon = meta.Icon;
 
   return (
@@ -651,8 +641,8 @@ const VisualColumn = ({ type, models, loading, highlightedItem, onDelete, onRelo
   );
 };
 
-const VisualModelsSection = ({ mode = 'all', highlightedItem = null, onModelsChange }) => {
-  const [models, setModels] = useState({ vision: [], image: [] });
+const VisualModelsSection = ({ highlightedItem = null, onModelsChange }) => {
+  const [models, setModels] = useState({ image: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -661,7 +651,6 @@ const VisualModelsSection = ({ mode = 'all', highlightedItem = null, onModelsCha
     try {
       const res = await visualModelsApi.listModels();
       const nextModels = {
-        vision: res.vision || [],
         image: res.image || [],
       };
       setModels(nextModels);
@@ -694,29 +683,13 @@ const VisualModelsSection = ({ mode = 'all', highlightedItem = null, onModelsCha
     }
   };
 
-  const showVision = mode === 'all' || mode === 'vision';
-  const showImage = mode === 'all' || mode === 'image';
-  const total = showVision && showImage
-    ? models.vision.length + models.image.length
-    : showVision
-      ? models.vision.length
-      : models.image.length;
-  const title = mode === 'vision'
-    ? 'Vision Models'
-    : mode === 'image'
-      ? 'Image Generation'
-      : 'Vision & Image Models';
-  const description = mode === 'vision'
-    ? 'Catalog image-understanding assets such as multimodal projectors and vision encoders.'
-    : mode === 'image'
-      ? 'Catalog diffusion assets and test local image generation engines.'
-      : 'Catalog assets for image understanding and local image generation workflows.';
+  const total = models.image.length;
 
   return (
     <div>
       <SectionHeader
-        title={title}
-        description={description}
+        title="Image Generation"
+        description="Catalog diffusion assets and test local image generation engines. Image understanding is a capability of the active language model."
         action={
           <div className="flex items-center gap-2">
             {total > 0 && <Badge color="gray">{total} Asset{total !== 1 ? 's' : ''}</Badge>}
@@ -728,12 +701,8 @@ const VisualModelsSection = ({ mode = 'all', highlightedItem = null, onModelsCha
         }
       />
 
-      {showImage && (
-        <>
-          <SimpleImageRuntimePanel />
-          <ImageGenerationRuntimePanel />
-        </>
-      )}
+      <SimpleImageRuntimePanel />
+      <ImageGenerationRuntimePanel />
 
       {error && (
         <div className="mt-3 flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -743,9 +712,8 @@ const VisualModelsSection = ({ mode = 'all', highlightedItem = null, onModelsCha
         </div>
       )}
 
-      <div className={`mt-5 grid grid-cols-1 gap-6 ${showVision && showImage ? 'lg:grid-cols-2' : ''}`}>
-        {showVision && <VisualColumn type="vision" models={models.vision} loading={loading} highlightedItem={highlightedItem} onDelete={handleDelete} onReload={loadData} />}
-        {showImage && <VisualColumn type="image" models={models.image} loading={loading} highlightedItem={highlightedItem} onDelete={handleDelete} onReload={loadData} />}
+      <div className="mt-5 grid grid-cols-1 gap-6">
+        <VisualColumn type="image" models={models.image} loading={loading} highlightedItem={highlightedItem} onDelete={handleDelete} onReload={loadData} />
       </div>
 
       <div className="mt-4 flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-900 midnight:bg-slate-900">
@@ -753,21 +721,13 @@ const VisualModelsSection = ({ mode = 'all', highlightedItem = null, onModelsCha
           <Info className="h-3 w-3 text-gray-400 dark:text-gray-500" />
         </div>
         <div className="space-y-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-          {showVision && (
-            <div>
-              <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Vision:</span>{' '}
-              Multimodal setups usually need a language model plus a matching projector or vision encoder. Keep those assets separate from image generation checkpoints.
-            </div>
-          )}
-          {showImage && (
-            <div>
-              <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Image generation:</span>{' '}
-              Use the Simple engine for stable-diffusion.cpp style one-model generation, or ComfyUI for advanced graph workflows.
-            </div>
-          )}
+          <div>
+            <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-gray-200">Image generation:</span>{' '}
+            Use the Simple engine for stable-diffusion.cpp style one-model generation, or ComfyUI for advanced graph workflows.
+          </div>
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-gray-400 midnight:text-gray-400" />
-            Search above for terms like <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">mmproj</code>, <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">llava</code>, <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">flux gguf</code>, or <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">sdxl safetensors</code>.
+            Search above for terms like <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">flux gguf</code> or <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] dark:bg-gray-800 midnight:bg-gray-800">sdxl safetensors</code>.
           </div>
         </div>
       </div>

@@ -296,6 +296,9 @@ export class AgentRuntime {
       : null;
     this.abortSignal = opts.abortSignal || null;
     this.capabilitiesSection = opts.capabilitiesSection || '';
+    this.initialImageUrls = Array.isArray(opts.initialImageUrls)
+      ? opts.initialImageUrls.filter(url => typeof url === 'string' && url.startsWith('data:image/')).slice(0, 8)
+      : [];
     this.clientTimestamp = opts.clientTimestamp || null;
     this.clientTimezone = opts.clientTimezone || process.env.TZ || null;
     this.usageContext = opts.usageContext || {};
@@ -526,10 +529,17 @@ export class AgentRuntime {
           ).join('\n')}\n</current_plan>\nContinue working on the plan below.`,
         }]
       : [];
+    const decoratedGoal = this._decorateMessageWithTimestamp(goal, this.clientTimestamp, { label: 'sent' });
+    const goalContent = this.initialImageUrls.length > 0
+      ? [
+          { type: 'text', text: decoratedGoal },
+          ...this.initialImageUrls.map(url => ({ type: 'image_url', image_url: { url } })),
+        ]
+      : decoratedGoal;
     const messages = [
       ...historyPrefix,
       ...planStateMsg,
-      { role: 'user', content: this._decorateMessageWithTimestamp(goal, this.clientTimestamp, { label: 'sent' }) },
+      { role: 'user', content: goalContent },
     ];
     const goalIndex = historyPrefix.length + planStateMsg.length; // position of the original goal user message
 

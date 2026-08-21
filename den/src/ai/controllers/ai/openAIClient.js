@@ -122,11 +122,24 @@ export class OpenAIClient {
       let content = '';
       
       if (Array.isArray(message.content)) {
-        // Anthropic-style content array
-        content = message.content
-          .filter(item => item.type === 'text')
-          .map(item => item.text)
-          .join('\n');
+        // Preserve multimodal blocks. Agent tools and direct image inspection
+        // use OpenAI-style image_url blocks, while a few adapters emit
+        // Anthropic-style base64 image blocks.
+        content = message.content.flatMap(item => {
+          if (item?.type === 'text' && typeof item.text === 'string') {
+            return [{ type: 'text', text: item.text }];
+          }
+          if (item?.type === 'image_url' && item.image_url?.url) {
+            return [{ type: 'image_url', image_url: item.image_url }];
+          }
+          if (item?.type === 'image' && item.source?.type === 'base64' && item.source?.data) {
+            return [{
+              type: 'image_url',
+              image_url: { url: `data:${item.source.media_type || 'image/png'};base64,${item.source.data}` },
+            }];
+          }
+          return [];
+        });
       } else if (typeof message.content === 'string') {
         // Plain string content
         content = message.content;

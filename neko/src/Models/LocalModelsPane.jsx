@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { RefreshCw, Play, Trash2, Box, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, File, FolderOpen } from 'lucide-react';
+import { RefreshCw, Play, Trash2, Box, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, File, FolderOpen, Image } from 'lucide-react';
 import { LocalModelLogo } from './modelLogos.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';
 import { localModelsApi, llamaServerApi, mlxApi } from '../Settings/settingApi.js';
@@ -87,6 +87,9 @@ const ModelCard = ({
               )}
               {m.architecture && (
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{m.architecture}</span>
+              )}
+              {m.capabilities?.supportsImageInput && (
+                <Badge color="blue"><Image className="mr-1 inline h-2.5 w-2.5" />Image input</Badge>
               )}
             </div>
           </div>
