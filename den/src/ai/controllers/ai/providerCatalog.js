@@ -27,7 +27,7 @@ export const PROVIDER_CATALOG = [
   },
   {
     id: MLX_PROVIDER_ID,
-    name: 'MLX (Apple Silicon)',
+    name: 'MLX LM',
     providerType: 'local',
     providerId: MLX_PROVIDER_ID,
     baseUrl: MLX_BASE_URL,
@@ -37,7 +37,7 @@ export const PROVIDER_CATALOG = [
     supportsModelList: false,
     local: true,
     managed: true,
-    description: 'Run HuggingFace MLX models natively on Apple Silicon via mlx_lm.server.',
+    description: 'Run Hugging Face MLX models locally on Apple Silicon or Linux via mlx_lm.server.',
   },
   {
     id: 'openai-codex',

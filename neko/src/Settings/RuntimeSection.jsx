@@ -17,10 +17,13 @@ const RuntimeSection = () => {
     loadingCatalog,
     switchingEngine,
     installingEngine,
+    removingEngine,
     switchError,
     switchSuccess,
     installError,
     installSuccess,
+    removeEngineError,
+    removeEngineSuccess,
     revertSelection,
     pythonInstallJob,
     pythonBuildError,
@@ -32,6 +35,7 @@ const RuntimeSection = () => {
     handleEngineSwitch,
     handleManagedInstall,
     handleBuildGpuRuntime,
+    handleRemoveManagedEngine,
     mlxStatus,
   } = useModelsPageController({ runtimeOnly: true });
 
@@ -83,7 +87,7 @@ const RuntimeSection = () => {
               Local Runtime
             </h3>
             <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-              Select the local chat engine, keep CPU/GPU builds installed side by side, and review runtime tools.
+              Install and update app-isolated engines, switch CPU/GPU builds, and remove managed runtimes cleanly.
             </p>
           </div>
         </div>
@@ -98,7 +102,7 @@ const RuntimeSection = () => {
         </button>
       </div>
 
-      <RuntimeSetupPanel onRuntimeInstalled={refreshRuntime} />
+      <RuntimeSetupPanel showChatEngine={false} onRuntimeInstalled={refreshRuntime} />
 
       <EngineRuntimeSection
         engineData={engineData}
@@ -109,10 +113,13 @@ const RuntimeSection = () => {
         loading={loadingEngines}
         switchingKey={switchingEngine}
         installingKey={installingEngine}
+        removingKey={removingEngine}
         switchError={switchError}
         switchSuccess={switchSuccess}
         installError={installError}
         installSuccess={installSuccess}
+        removeError={removeEngineError}
+        removeSuccess={removeEngineSuccess}
         revertSelection={revertSelection}
         retryModel={serverStatus?.model || null}
         pythonInstallJob={pythonInstallJob}
@@ -122,6 +129,7 @@ const RuntimeSection = () => {
         onSwitch={handleEngineSwitch}
         onInstall={handleManagedInstall}
         onBuildGpuRuntime={handleBuildGpuRuntime}
+        onRemoveManagedEngine={handleRemoveManagedEngine}
         onRefreshCatalog={refreshRuntimeCatalog}
         installReadiness={installReadiness}
       />

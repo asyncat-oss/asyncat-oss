@@ -1,22 +1,26 @@
-// mlxServerManager.js — MLX model lifecycle manager for Apple Silicon
+// mlxServerManager.js — MLX model lifecycle manager for Apple Silicon and Linux
 // Scans well-known HuggingFace and MLX directories for .safetensors model dirs,
 // and manages the mlx_lm.server process (OpenAI-compatible on port 8766).
 //
-// All exported functions are safe no-ops on non-Apple-Silicon platforms.
+// All exported functions are guarded on unsupported platforms.
 // State machine: idle → loading → ready (or error)
 
-import { spawn, exec } from 'child_process';
+import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import db from '../../../db/client.js';
+import { runtimeHome } from '../../../config/runtimeConfig.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // ── Platform guard ────────────────────────────────────────────────────────────
 export const IS_APPLE_SILICON =
   process.platform === 'darwin' && process.arch === 'arm64';
+export const IS_MLX_SUPPORTED = IS_APPLE_SILICON || (
+  process.platform === 'linux' && ['x64', 'arm64'].includes(process.arch)
+);
 
 const MLX_PORT = parseInt(process.env.MLX_SERVER_PORT ?? '8766', 10);
 const MLX_HOST = '127.0.0.1';
@@ -24,7 +28,7 @@ const LOAD_TIMEOUT_MS = 120_000; // 2 min — first MLX load can be slow
 const POLL_INTERVAL_MS = 800;
 
 function asyncatHome() {
-  return path.join(os.homedir(), '.asyncat');
+  return runtimeHome();
 }
 
 function mlxPythonPath() {
@@ -68,7 +72,7 @@ export function subscribe(fn) {
 }
 
 export function getStatus() {
-  return { ...serverState, available: IS_APPLE_SILICON };
+  return { ...serverState, available: IS_MLX_SUPPORTED, appleSilicon: IS_APPLE_SILICON };
 }
 
 // ── Scan logic ────────────────────────────────────────────────────────────────
@@ -227,7 +231,7 @@ const MLX_CACHE_TTL = 10000; // 10 seconds
  * List all locally detected MLX models across all scan directories.
  */
 export function listMlxModels() {
-  if (!IS_APPLE_SILICON) return [];
+  if (!IS_MLX_SUPPORTED) return [];
 
   const now = Date.now();
   if (cachedMlxModels && (now - lastMlxScan < MLX_CACHE_TTL)) {
@@ -374,14 +378,14 @@ let _mlxAvailableCache = null; // null = unchecked, true/false = result
 let _mlxPythonCommand = null;
 
 export async function isMlxAvailable() {
-  if (!IS_APPLE_SILICON) return false;
+  if (!IS_MLX_SUPPORTED) return false;
   // Cache success, but retry failures so a just-finished managed install is
   // detected without restarting the backend.
   if (_mlxAvailableCache === true) return true;
 
   for (const python of mlxPythonCandidates()) {
     try {
-      await execAsync(`"${python}" -c "import mlx_lm" 2>/dev/null`, { timeout: 5000 });
+      await execFileAsync(python, ['-c', 'import mlx_lm'], { timeout: 5000, windowsHide: true });
       _mlxAvailableCache = true;
       _mlxPythonCommand = python;
       return _mlxAvailableCache;
@@ -408,8 +412,8 @@ async function pollUntilReady(timeoutMs = LOAD_TIMEOUT_MS) {
 }
 
 export async function startServer(modelPath) {
-  if (!IS_APPLE_SILICON) {
-    throw new Error('MLX is only supported on Apple Silicon (macOS arm64).');
+  if (!IS_MLX_SUPPORTED) {
+    throw new Error('MLX LM is supported on Apple Silicon and Linux (CPU or NVIDIA CUDA).');
   }
 
   const mlxOk = await isMlxAvailable();
@@ -515,6 +519,8 @@ function formatBytes(bytes) {
 export function clearCache() {
   cachedMlxModels = null;
   lastMlxScan = 0;
+  _mlxAvailableCache = null;
+  _mlxPythonCommand = null;
 }
 
 export { MLX_PORT };

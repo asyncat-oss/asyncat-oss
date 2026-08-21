@@ -26,9 +26,12 @@ import {
   LLAMA_ENGINE_PROFILES,
   fetchLlamaReleases,
   buildReleaseCatalog,
-  installPythonVenvFallback,
   persistRuntimeConfigValue,
+  removeManagedLlamaEngine,
+  removeManagedLlamaPython,
+  writeManagedPythonEngineMetadata,
 } from '../../../lib/localEngine.js';
+import { runtimeHome } from '../../../config/runtimeConfig.js';
 
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
@@ -49,10 +52,7 @@ const MISSING_ENGINE_ERROR =
   'MISSING_ENGINE: Local engine missing. Install one in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
 
 function asyncatHome() {
-  if (IS_WIN) {
-    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
-  }
-  return path.join(os.homedir(), '.asyncat');
+  return runtimeHome();
 }
 
 function managedLlamaBinaryPath() {
@@ -190,8 +190,17 @@ function normalizeCandidatePath(candidatePath) {
 }
 
 function managedCapabilityHintFor(runtime, candidatePath) {
-  if (runtime !== 'binary') return null;
   const normalized = normalizeCandidatePath(candidatePath);
+  if (runtime === 'python') {
+    if (normalized !== normalizeCandidatePath(managedPythonBinaryPath())) return null;
+    const metadata = readManagedEngineMetadata(path.dirname(path.dirname(managedPythonBinaryPath())));
+    return metadata ? {
+      profile: metadata.profile || 'cpu_safe',
+      capabilityHint: metadata.capabilityHint || profileCapabilityHint(metadata.profile || 'cpu_safe'),
+      metadata,
+    } : null;
+  }
+  if (runtime !== 'binary') return null;
   const install = listManagedEngineInstalls()
     .find(item => normalizeCandidatePath(item.binary) === normalized);
   if (!install && normalized !== normalizeCandidatePath(managedLlamaBinaryPath())) return null;
@@ -1118,50 +1127,95 @@ async function installPythonEngine({ profile, retryModel, ctxSize, modelsDir, on
   const pythonCmd = await findPythonCmd();
   const capabilityHint = PYTHON_GPU_CAPABILITY[profile] || 'cpu_safe';
   const pythonVenvDir = path.join(asyncatHome(), 'llama.cpp', 'python');
+  const backupVenvDir = `${pythonVenvDir}.backup-${randomUUID()}`;
+  let movedExisting = false;
+  let preserveBackup = false;
 
-  onProgress?.({ phase: 'venv', message: 'Creating Python virtual environment…', percent: 5 });
-  await runCommandStreaming(pythonCmd, ['-m', 'venv', pythonVenvDir], {}, 120000);
+  try {
+    if (fs.existsSync(pythonVenvDir)) {
+      fs.renameSync(pythonVenvDir, backupVenvDir);
+      movedExisting = true;
+    }
+    onProgress?.({ phase: 'venv', message: 'Creating isolated Python environment…', percent: 5 });
+    await runCommandStreaming(pythonCmd, ['-m', 'venv', pythonVenvDir], {}, 120000);
 
-  const pythonBin = managedPythonBinaryPath();
+    const pythonBin = managedPythonBinaryPath();
 
-  onProgress?.({ phase: 'pip', message: 'Upgrading pip…', percent: 10 });
-  await runCommandStreaming(pythonBin, ['-m', 'pip', 'install', '--upgrade', 'pip'], {}, 120000);
+    onProgress?.({ phase: 'pip', message: 'Upgrading pip…', percent: 10 });
+    await runCommandStreaming(pythonBin, ['-m', 'pip', 'install', '--upgrade', 'pip'], {}, 120000);
 
-  // ninja + cmake must be pre-installed in the venv so llama-cpp-python's build
-  // backend can find them. Without this, pip's isolated build environment tries
-  // to download ninja and fails on restricted networks or older pip.
-  onProgress?.({ phase: 'build_tools', message: 'Installing build tools (ninja, cmake, scikit-build-core)…', percent: 20 });
-  await runCommandStreaming(
-    pythonBin,
-    ['-m', 'pip', 'install', 'ninja', 'cmake', 'scikit-build-core', 'wheel', 'setuptools'],
-    {}, 300000
-  );
+    // ninja + cmake must be pre-installed in the venv so llama-cpp-python's build
+    // backend can find them. Without this, pip's isolated build environment tries
+    // to download ninja and fails on restricted networks or older pip.
+    onProgress?.({ phase: 'build_tools', message: 'Installing build tools (ninja, cmake, scikit-build-core)…', percent: 20 });
+    await runCommandStreaming(
+      pythonBin,
+      ['-m', 'pip', 'install', '--upgrade', 'ninja', 'cmake', 'scikit-build-core', 'wheel', 'setuptools'],
+      {}, 300000
+    );
 
-  const cmakeArgs = { nvidia_gpu: '-DGGML_CUDA=on', apple_metal: '-DGGML_METAL=on', amd_rocm: '-DGGML_HIP=on', vulkan: '-DGGML_VULKAN=on', intel_sycl: '-DGGML_SYCL=on' }[profile] || '';
-  const env = { ...(cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env), ...cudaEnvOverrides };
-  const tag = profile === 'nvidia_gpu' ? 'CUDA' : profile === 'apple_metal' ? 'Metal' : profile === 'amd_rocm' ? 'ROCm' : profile === 'vulkan' ? 'Vulkan' : profile === 'intel_sycl' ? 'SYCL' : 'CPU';
+    const cmakeArgs = { nvidia_gpu: '-DGGML_CUDA=on', apple_metal: '-DGGML_METAL=on', amd_rocm: '-DGGML_HIP=on', vulkan: '-DGGML_VULKAN=on', intel_sycl: '-DGGML_SYCL=on' }[profile] || '';
+    const env = { ...(cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env), ...cudaEnvOverrides };
+    const tag = profile === 'nvidia_gpu' ? 'CUDA' : profile === 'apple_metal' ? 'Metal' : profile === 'amd_rocm' ? 'ROCm' : profile === 'vulkan' ? 'Vulkan' : profile === 'intel_sycl' ? 'SYCL' : 'CPU';
 
-  onProgress?.({ phase: 'compile', message: `Compiling llama-cpp-python with ${tag} support — takes 10–30 min…`, percent: 30 });
-  await runCommandStreaming(
-    pythonBin,
-    // --no-build-isolation reuses the ninja/cmake we just installed instead of
-    // trying to download them again inside an isolated build env
-    ['-m', 'pip', 'install', 'llama-cpp-python[server]', '--no-build-isolation'],
-    { env }, 3600000,
-    (line) => {
-      if (!NOISY_OUTPUT_RE.test(line)) {
-        onProgress?.({ phase: 'compile', message: line.slice(0, 140), percent: null });
+    onProgress?.({ phase: 'compile', message: `Compiling llama-cpp-python with ${tag} support — takes 10–30 min…`, percent: 30 });
+    await runCommandStreaming(
+      pythonBin,
+      // --no-build-isolation reuses the ninja/cmake we just installed instead of
+      // trying to download them again inside an isolated build env
+      ['-m', 'pip', 'install', '--upgrade', 'llama-cpp-python[server]', '--no-build-isolation'],
+      { env }, 3600000,
+      (line) => {
+        if (!NOISY_OUTPUT_RE.test(line)) {
+          onProgress?.({ phase: 'compile', message: line.slice(0, 140), percent: null });
+        }
+      }
+    );
+
+    onProgress?.({ phase: 'finalizing', message: 'Verifying installation…', percent: 95 });
+    await runCommandStreaming(pythonBin, ['-c', LLAMA_PYTHON_IMPORT_PROBE], {}, 30000);
+    const gpu = await detectGpuInfo();
+    const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
+    const updates = { LLAMA_BINARY_PATH: '', LLAMA_PYTHON_PATH: pythonBin, LLAMA_GPU_LAYERS: gpuLayers };
+    writeManagedPythonEngineMetadata({
+      profile,
+      capabilityHint,
+      version: 'latest',
+      installedAt: new Date().toISOString(),
+    });
+    persistEngineConfig(updates);
+
+    return { pythonPath: pythonBin, profile, capabilityHint, gpuLayers: parseInt(gpuLayers, 10) };
+  } catch (error) {
+    if (fs.existsSync(pythonVenvDir)) {
+      try {
+        fs.rmSync(pythonVenvDir, { recursive: true });
+      } catch (cleanupError) {
+        preserveBackup = movedExisting;
+        const recovery = movedExisting
+          ? ` The previous environment remains at ${backupVenvDir}.`
+          : '';
+        throw new Error(`${error.message} The incomplete environment could not be removed: ${cleanupError.message}.${recovery}`);
       }
     }
-  );
-
-  onProgress?.({ phase: 'finalizing', message: 'Finalizing installation…', percent: 95 });
-  const gpu = await detectGpuInfo();
-  const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
-  const updates = { LLAMA_BINARY_PATH: '', LLAMA_PYTHON_PATH: pythonBin, LLAMA_GPU_LAYERS: gpuLayers };
-  persistEngineConfig(updates);
-
-  return { pythonPath: pythonBin, profile, capabilityHint, gpuLayers: parseInt(gpuLayers, 10) };
+    if (movedExisting && fs.existsSync(backupVenvDir)) {
+      try {
+        fs.renameSync(backupVenvDir, pythonVenvDir);
+      } catch (restoreError) {
+        preserveBackup = true;
+        throw new Error(`${error.message} The previous environment remains at ${backupVenvDir} because rollback failed: ${restoreError.message}`);
+      }
+    }
+    throw error;
+  } finally {
+    if (!preserveBackup && fs.existsSync(backupVenvDir)) {
+      try {
+        fs.rmSync(backupVenvDir, { recursive: true });
+      } catch (cleanupError) {
+        console.warn(`[llamaServer] Could not remove the previous Python runtime backup at ${backupVenvDir}: ${cleanupError.message}`);
+      }
+    }
+  }
 }
 
 const pythonInstallJobs = new Map();
@@ -1187,6 +1241,7 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
   (async () => {
     update({ status: 'running', phase: 'preparing', message: 'Inspecting hardware…', startedAt: nowIso(), percent: 1 });
     try {
+      await stopServer();
       const result = await installPythonEngine({
         profile, retryModel, ctxSize, modelsDir,
         onProgress: (p) => update({
@@ -1221,6 +1276,29 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
 export function getPythonEngineInstallJob(jobId) {
   const job = pythonInstallJobs.get(jobId);
   return job ? { ...job } : null;
+}
+
+export async function removeManagedEngine(key) {
+  if (key !== 'python' && !LLAMA_ENGINE_PROFILES.includes(key)) {
+    throw new Error(`Unknown managed engine: ${key}`);
+  }
+  const installRunning = [...installJobs.values(), ...pythonInstallJobs.values()]
+    .some(job => job.status === 'queued' || job.status === 'running');
+  if (installRunning) throw new Error('Wait for the active engine install to finish before removing a runtime.');
+
+  const before = await getEngineAdvisor();
+  const removingCurrent = key === 'python'
+    ? before.current?.runtime === 'python' && before.current?.managed
+    : before.current?.runtime === 'binary' && before.current?.managedProfile === key;
+  if (removingCurrent) await stopServer();
+  const removal = key === 'python'
+    ? removeManagedLlamaPython()
+    : removeManagedLlamaEngine(key);
+  return {
+    removal,
+    advisor: await getEngineAdvisor(),
+    statusSnapshot: getStatus(),
+  };
 }
 
 // ── Singleton state ───────────────────────────────────────────────────────────

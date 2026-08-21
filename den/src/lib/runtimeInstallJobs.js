@@ -68,3 +68,9 @@ export function startRuntimeInstallJob(runtimeId) {
 export function getRuntimeInstallJob(id) {
   return publicJob(jobs.get(id));
 }
+
+export function isRuntimeInstallActive(runtimeId) {
+  const id = activeByRuntime.get(runtimeId);
+  const job = id ? jobs.get(id) : null;
+  return Boolean(job && (job.status === 'queued' || job.status === 'running'));
+}

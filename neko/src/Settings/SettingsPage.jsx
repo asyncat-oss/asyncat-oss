@@ -84,7 +84,7 @@ const SettingsPage = () => {
       id: 'runtime',
       group: 'System',
       label: 'Runtime',
-      description: 'Local inference engines and installation readiness.',
+      description: 'Managed local inference engines, updates, cleanup, and installation readiness.',
       icon: Cpu,
     },
     {

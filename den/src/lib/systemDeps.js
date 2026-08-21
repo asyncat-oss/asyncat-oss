@@ -2,6 +2,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
+import { runtimeHome } from '../config/runtimeConfig.js';
 
 const isWin = process.platform === 'win32';
 const isDesktopRuntime = process.env.ASYNCAT_DESKTOP === '1';
@@ -88,10 +89,7 @@ function pythonCandidates() {
 }
 
 function asyncatHome() {
-  if (isWin) {
-    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
-  }
-  return path.join(os.homedir(), '.asyncat');
+  return runtimeHome();
 }
 
 function existingFile(candidates) {
@@ -107,10 +105,11 @@ function existingFile(candidates) {
 
 function whisperServerCandidates() {
   const home = os.homedir();
+  const exe = isWin ? '.exe' : '';
   return [
     (process.env.WHISPER_BINARY_PATH || '').trim(),
-    path.join(asyncatHome(), 'whisper.cpp', 'whisper-server'),
-    path.join(asyncatHome(), 'whisper.cpp', 'main'),
+    path.join(asyncatHome(), 'whisper.cpp', `whisper-server${exe}`),
+    path.join(asyncatHome(), 'whisper.cpp', `main${exe}`),
     path.join(home, '.local', 'bin', 'whisper-server'),
     '/usr/local/bin/whisper-server',
     '/opt/homebrew/bin/whisper-server',
@@ -122,8 +121,10 @@ function whisperServerCandidates() {
 
 function piperCandidates() {
   const home = os.homedir();
+  const managedVenv = path.join(asyncatHome(), 'piper', 'python');
   return [
     (process.env.PIPER_BINARY_PATH || '').trim(),
+    path.join(managedVenv, isWin ? 'Scripts' : 'bin', isWin ? 'piper.exe' : 'piper'),
     path.join(asyncatHome(), 'piper', 'piper'),
     path.join(home, '.local', 'bin', 'piper'),
     '/usr/local/bin/piper',
@@ -264,12 +265,13 @@ function npmCheck() {
 }
 
 function mlxRuntimeCheck() {
-  const supported = process.platform === 'darwin' && process.arch === 'arm64';
+  const supported = (process.platform === 'darwin' && process.arch === 'arm64')
+    || (process.platform === 'linux' && ['x64', 'arm64'].includes(process.arch));
   if (!supported) {
     return {
       id: 'mlx-lm', found: false, ok: true, command: null, version: null,
-      required: false, supported: false, scope: 'apple-mlx',
-      reason: 'MLX is available only on Apple Silicon.',
+      required: false, supported: false, scope: 'mlx',
+      reason: 'MLX LM is supported on Apple Silicon and Linux (CPU or NVIDIA CUDA).',
     };
   }
   const candidates = [
@@ -283,14 +285,14 @@ function mlxRuntimeCheck() {
     if (probe.ok) {
       return {
         id: 'mlx-lm', found: true, ok: true, command, version: null,
-        required: false, supported: true, scope: 'apple-mlx',
-        reason: 'Runs MLX language models on Apple Silicon.',
+        required: false, supported: true, scope: 'mlx',
+        reason: 'Runs MLX language models on Apple Silicon or Linux.',
       };
     }
   }
   return {
     id: 'mlx-lm', found: false, ok: false, command: null, version: null,
-    required: false, supported: true, scope: 'apple-mlx',
+    required: false, supported: true, scope: 'mlx',
     reason: 'Installable as an isolated managed runtime from Asyncat.',
   };
 }
@@ -306,7 +308,7 @@ function pythonCheck() {
     minVersion: python.minVersion,
     required: false,
     scope: 'local-runtime',
-    reason: 'Needed only for managed Python venvs: llama-cpp-python fallback/GPU builds and MLX on Apple Silicon.',
+    reason: 'Needed only for isolated managed Python environments such as Piper, llama-cpp-python, and MLX LM.',
     details: {
       hasVenv: python.hasVenv,
       hasPip: python.hasPip,
@@ -376,12 +378,12 @@ export function inspectSystemDependencies() {
       scope: 'local-chat',
       reason: 'Optional if using Asyncat managed llama.cpp, llama-cpp-python, Ollama, LM Studio, or cloud providers.',
     }),
-    binaryCheck('whisper-server', ['whisper-server'], {
+    binaryCheck('whisper-server', isWin ? ['whisper-server.exe', 'whisper-server'] : ['whisper-server'], {
       paths: whisperServerCandidates(),
       scope: 'speech-to-text',
       reason: 'Local Whisper STT runtime.',
     }),
-    binaryCheck('piper', ['piper'], {
+    binaryCheck('piper', isWin ? ['piper.exe', 'piper'] : ['piper'], {
       paths: piperCandidates(),
       scope: 'text-to-speech',
       reason: 'Local Piper TTS runtime.',

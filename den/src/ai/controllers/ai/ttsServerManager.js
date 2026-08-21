@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { runtimeHome } from '../../../config/runtimeConfig.js';
 
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
@@ -66,6 +67,7 @@ const TTS_HOST = '127.0.0.1';
 // ── State ──────────────────────────────────────────────────────────────────────
 let state = { status: 'idle', model: null, modelPath: null, error: null, pid: null };
 let currentModelPath = null;
+let currentSampleRate = 22050;
 const subscribers = new Set();
 
 function notify() {
@@ -82,17 +84,16 @@ function setState(patch) {
 // ── Binary detection ───────────────────────────────────────────────────────────
 
 function asyncatHome() {
-  if (IS_WIN) {
-    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
-  }
-  return path.join(os.homedir(), '.asyncat');
+  return runtimeHome();
 }
 
 function piperBinaryCandidates() {
   const home = os.homedir();
+  const managedVenv = path.join(asyncatHome(), 'piper', 'python');
   const envPath = (process.env.PIPER_BINARY_PATH || '').trim();
   return [
     envPath,
+    path.join(managedVenv, IS_WIN ? 'Scripts' : 'bin', IS_WIN ? 'piper.exe' : 'piper'),
     path.join(asyncatHome(), 'piper', 'piper'),
     path.join(home, '.local', 'bin', 'piper'),
     '/usr/local/bin/piper',
@@ -155,11 +156,21 @@ export async function startTts(modelPath) {
 
   // Piper works in pipe mode (stdin text → stdout wav), no server needed.
   // We just validate the binary + model and mark as ready.
+  let sampleRate = 22050;
+  try {
+    const config = JSON.parse(fs.readFileSync(`${modelPath}.json`, 'utf8'));
+    const configuredRate = Number(config?.audio?.sample_rate || config?.audio?.sampleRate);
+    if (Number.isFinite(configuredRate) && configuredRate >= 8000 && configuredRate <= 192000) {
+      sampleRate = configuredRate;
+    }
+  } catch { /* retain the common Piper default for legacy voices */ }
   currentModelPath = modelPath;
+  currentSampleRate = sampleRate;
   setState({
     status: 'ready',
     model: path.basename(modelPath).replace(/\.onnx$/i, ''),
     modelPath,
+    sampleRate,
     error: null,
   });
 
@@ -168,7 +179,8 @@ export async function startTts(modelPath) {
 
 export async function stopTts() {
   currentModelPath = null;
-  setState({ status: 'idle', model: null, modelPath: null, error: null, pid: null });
+  currentSampleRate = 22050;
+  setState({ status: 'idle', model: null, modelPath: null, sampleRate: null, error: null, pid: null });
 }
 
 /**
@@ -188,6 +200,7 @@ export async function synthesize(text, options = {}) {
     throw new Error('Piper binary not found.');
   }
 
+  const sampleRate = currentSampleRate;
   return new Promise((resolve, reject) => {
     const args = [
       '--model', currentModelPath,
@@ -228,8 +241,7 @@ export async function synthesize(text, options = {}) {
       }
 
       // Wrap raw PCM in a WAV header
-      // Piper outputs 16-bit mono PCM at the model's sample rate (usually 22050)
-      const sampleRate = 22050;
+      // Piper outputs 16-bit mono PCM at the voice model's configured sample rate.
       const wav = createWavBuffer(rawPcm, sampleRate, 1, 16);
       resolve(wav);
     });

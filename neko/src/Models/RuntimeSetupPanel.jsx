@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
   Cpu, Mic, Volume2, Image as ImageIcon, Check, Loader2,
-  Download, Copy, AlertCircle, Terminal, RefreshCw,
+  Download, Copy, AlertCircle, Terminal, RefreshCw, ShieldCheck, Trash2,
 } from 'lucide-react';
 import { installApi } from '../CommandCenter/api/installApi.js';
 import { llamaServerApi, runtimeApi } from '../Settings/settingApi.js';
@@ -45,7 +45,7 @@ const OPTIONAL_ENGINES = [
   { runtime: 'whisper', icon: Mic,       label: 'Speech-to-Text',   detail: 'Whisper',                 checkId: 'whisper-server', needs: ['ffmpeg'] },
   { runtime: 'piper',   icon: Volume2,   label: 'Text-to-Speech',   detail: 'Piper (piper-tts, GPL-3.0-or-later)', checkId: 'piper' },
   { runtime: 'sd',      icon: ImageIcon, label: 'Image Generation', detail: 'stable-diffusion.cpp',    checkId: 'sd' },
-  { runtime: 'mlx',     icon: Cpu,       label: 'Apple MLX',        detail: 'mlx-lm',                   checkId: 'mlx-lm', appleOnly: true },
+  { runtime: 'mlx',     icon: Cpu,       label: 'MLX LM',           detail: 'Apple Silicon or Linux',   checkId: 'mlx-lm' },
 ];
 
 const StatusDot = ({ ok }) => (
@@ -64,11 +64,13 @@ const ProgressBar = ({ percent, message }) => (
 ProgressBar.propTypes = { percent: PropTypes.number, message: PropTypes.string };
 
 // ── One optional engine (Whisper / Piper / sd) with its own install lifecycle ──
-const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
+const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) => {
   const [installing, setInstalling] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [job, setJob] = useState(null);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const cleanup = useRef(null);
   const mounted = useRef(true);
 
@@ -77,7 +79,8 @@ const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
     return () => { mounted.current = false; cleanup.current?.(); };
   }, []);
 
-  const isReady = done || ready;
+  const isManaged = done || Boolean(managedRuntime?.managedInstalled);
+  const isReady = isManaged || ready || Boolean(managedRuntime?.detected);
   const Icon = engine.icon;
 
   const handleInstall = async () => {
@@ -94,7 +97,7 @@ const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
         async (j) => {
           if (!mounted.current) return;
           setJob(j); setInstalling(false); setDone(true); cleanup.current = null;
-          onInstalled?.();
+          await onChanged?.();
         },
         (j) => {
           if (!mounted.current) return;
@@ -107,6 +110,26 @@ const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
     }
   };
 
+  const handleRemove = async () => {
+    if (!confirmRemove) {
+      setConfirmRemove(true);
+      return;
+    }
+    setRemoving(true);
+    setError('');
+    try {
+      await runtimeApi.remove(engine.runtime);
+      setDone(false);
+      setConfirmRemove(false);
+      setJob(null);
+      await onChanged?.();
+    } catch (err) {
+      setError(err.message || 'Could not remove the managed runtime.');
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   return (
     <div className="rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-800/30 midnight:border-slate-800 midnight:bg-slate-900/40">
       <div className="flex items-center justify-between gap-3">
@@ -115,21 +138,33 @@ const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
           <span className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{engine.label}</span>
           <span className="truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{engine.detail}</span>
         </div>
-        {isReady ? (
-          <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-            <Check className="h-3 w-3" /> Ready
-          </span>
-        ) : (
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          {isReady && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <Check className="h-3 w-3" /> {isManaged ? 'Managed' : 'External'}
+            </span>
+          )}
           <button
             type="button"
             onClick={handleInstall}
-            disabled={installing}
+            disabled={installing || removing}
             className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-200"
           >
             {installing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-            {installing ? 'Installing…' : 'Install'}
+            {installing ? 'Installing…' : (isManaged ? 'Update' : (isReady ? 'Install managed' : 'Install'))}
           </button>
-        )}
+          {isManaged && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={installing || removing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/20"
+            >
+              {removing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              {removing ? 'Removing…' : (confirmRemove ? 'Confirm' : 'Remove')}
+            </button>
+          )}
+        </div>
       </div>
 
       {isReady && ffmpegMissing && (
@@ -151,13 +186,16 @@ const EngineRow = ({ engine, ready, ffmpegMissing, onInstalled }) => {
 EngineRow.propTypes = {
   engine: PropTypes.object.isRequired,
   ready: PropTypes.bool,
+  managedRuntime: PropTypes.object,
   ffmpegMissing: PropTypes.bool,
-  onInstalled: PropTypes.func,
+  onChanged: PropTypes.func,
 };
 
-const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled }) => {
+const RuntimeSetupPanel = ({ compact = false, showChatEngine = true, onReadyChange, onRuntimeInstalled }) => {
   const [readiness, setReadiness] = useState(null);
   const [engines, setEngines] = useState(null);
+  const [managedRuntimes, setManagedRuntimes] = useState([]);
+  const [runtimeRoot, setRuntimeRoot] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -176,14 +214,19 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled 
   const load = useCallback(async () => {
     setLoadError('');
     try {
-      const [readinessRes, enginesRes] = await Promise.allSettled([
+      const [readinessRes, enginesRes, runtimesRes] = await Promise.allSettled([
         installApi.getReadiness(),
         llamaServerApi.getEngines(),
+        runtimeApi.list(),
       ]);
       if (!mounted.current) return;
       if (readinessRes.status === 'fulfilled') setReadiness(readinessRes.value);
       else setLoadError(readinessRes.reason?.message || 'Could not read machine readiness.');
       if (enginesRes.status === 'fulfilled' && enginesRes.value?.success) setEngines(enginesRes.value);
+      if (runtimesRes.status === 'fulfilled' && runtimesRes.value?.success) {
+        setManagedRuntimes(runtimesRes.value.runtimes || []);
+        setRuntimeRoot(runtimesRes.value.root || runtimesRes.value.runtimes?.[0]?.managedRoot || '');
+      }
     } finally {
       if (mounted.current) setLoading(false);
     }
@@ -236,9 +279,8 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled 
   const checkById = (id) => (readiness?.checks || []).find(c => c.id === id) || null;
   const ffmpegMissing = !checkById('ffmpeg')?.ok;
   const installCommands = (readiness?.commands || []).filter(c => c.kind === 'packages' || c.kind === 'compiler' || c.kind === 'node');
-  const visibleOptionalEngines = OPTIONAL_ENGINES.filter(engine => (
-    !engine.appleOnly || (readiness?.platform === 'darwin' && readiness?.arch === 'arm64')
-  ));
+  const runtimeById = new Map(managedRuntimes.map(runtime => [runtime.id, runtime]));
+  const visibleOptionalEngines = OPTIONAL_ENGINES.filter(engine => runtimeById.get(engine.runtime)?.supported !== false);
 
   const cardCls = 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-900/60';
   const llamaPct = installJob?.percent ?? installJob?.progress?.percent ?? (installing ? 2 : 0);
@@ -257,7 +299,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled 
   return (
     <div className="space-y-4 text-left">
       {/* ── Local chat engine (llama.cpp) ─────────────────────────────────── */}
-      <div className={cardCls}>
+      {showChatEngine && <div className={cardCls}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:border-slate-700 midnight:bg-slate-800">
@@ -301,13 +343,18 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled 
             </p>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── Optional engines (Whisper / Piper / sd) ───────────────────────── */}
       <div className={cardCls}>
-        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Optional local engines</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Optional local engines</p>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+            <ShieldCheck className="h-3.5 w-3.5" /> App-isolated
+          </span>
+        </div>
         <p className="mt-0.5 mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-          Install voice, image, and Apple MLX engines for this machine. Asyncat uses a prebuilt build or an isolated managed Python environment, depending on the runtime.
+          Install voice, image, and MLX engines without modifying global Python packages. Updates are staged and verified before replacing the previous managed copy.
         </p>
         <div className="space-y-2">
           {visibleOptionalEngines.map((engine) => (
@@ -315,8 +362,9 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled 
               key={engine.runtime}
               engine={engine}
               ready={Boolean(checkById(engine.checkId)?.ok)}
+              managedRuntime={runtimeById.get(engine.runtime)}
               ffmpegMissing={engine.runtime === 'whisper' && ffmpegMissing}
-              onInstalled={async () => {
+              onChanged={async () => {
                 await load();
                 await onRuntimeInstalled?.();
               }}
@@ -349,6 +397,12 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled 
             ))}
           </div>
         )}
+
+        {!compact && runtimeRoot && (
+          <p className="mt-3 break-all font-mono text-[10px] leading-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+            Managed runtime root: {runtimeRoot}
+          </p>
+        )}
       </div>
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
@@ -376,6 +430,7 @@ const RuntimeSetupPanel = ({ compact = false, onReadyChange, onRuntimeInstalled 
 
 RuntimeSetupPanel.propTypes = {
   compact: PropTypes.bool,
+  showChatEngine: PropTypes.bool,
   onReadyChange: PropTypes.func,
   onRuntimeInstalled: PropTypes.func,
 };

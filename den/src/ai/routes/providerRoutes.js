@@ -32,6 +32,7 @@ import {
   getEngineInstallJob,
   startPythonEngineInstallJob,
   getPythonEngineInstallJob,
+  removeManagedEngine,
   subscribe as llamaSubscribe,
 } from '../controllers/ai/llamaServerManager.js';
 import {
@@ -57,7 +58,7 @@ import {
   startServer as startMlxServer,
   stopServer as stopMlxServer,
   getStatus as getMlxStatus,
-  IS_APPLE_SILICON,
+  IS_MLX_SUPPORTED,
   clearCache as clearMlxCache,
 } from '../controllers/ai/mlxServerManager.js';
 import {
@@ -100,8 +101,8 @@ import {
   synthesize as ttsSynthesize,
 } from '../controllers/ai/ttsServerManager.js';
 import db from '../../db/client.js';
-import { listManagedRuntimes } from '../../lib/localEngine.js';
-import { startRuntimeInstallJob, getRuntimeInstallJob } from '../../lib/runtimeInstallJobs.js';
+import { asyncatHome, listManagedRuntimes, removeManagedRuntime } from '../../lib/localEngine.js';
+import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive } from '../../lib/runtimeInstallJobs.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
@@ -1070,7 +1071,7 @@ router.post('/local-models/start', async (req, res) => {
       } catch {}
     }
 
-    if (type === 'mlx' && IS_APPLE_SILICON) {
+    if (type === 'mlx' && IS_MLX_SUPPORTED) {
       await stopServer(); // stop llama.cpp
       const result = await startMlxServer(modelPath);
       try {
@@ -2022,6 +2023,18 @@ router.post('/server/engines/select', async (req, res) => {
   }
 });
 
+// DELETE /server/engines/managed/:key — remove one Asyncat-owned llama runtime.
+router.delete('/server/engines/managed/:key', async (req, res) => {
+  try {
+    const result = await removeManagedEngine(String(req.params.key || '').trim());
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const status = /Unknown managed|Unknown managed llama/i.test(err.message) ? 404
+      : /active engine install|finish before removing/i.test(err.message) ? 409 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
 // ── POST /server/engines/install-jobs — start background managed install ─────
 router.post('/server/engines/install-jobs', async (req, res) => {
   try {
@@ -2075,19 +2088,46 @@ router.get('/server/engines/python-install-jobs/:id', (req, res) => {
 });
 
 // ── Managed runtimes (Piper / Whisper / stable-diffusion.cpp) ─────────────────
+async function stopManagedRuntime(runtimeId) {
+  if (runtimeId === 'whisper') await stopWhisper();
+  else if (runtimeId === 'piper') await stopTts();
+  else if (runtimeId === 'mlx') {
+    await stopMlxServer();
+    clearMlxCache();
+  }
+}
+
 // GET /runtimes — list installable managed runtimes.
 router.get('/runtimes', (_req, res) => {
-  res.json({ success: true, runtimes: listManagedRuntimes() });
+  res.json({ success: true, root: asyncatHome(), runtimes: listManagedRuntimes() });
 });
 
 // POST /runtimes/:id/install-jobs — download + install a prebuilt runtime binary.
-router.post('/runtimes/:id/install-jobs', (req, res) => {
+router.post('/runtimes/:id/install-jobs', async (req, res) => {
   try {
-    const job = startRuntimeInstallJob(req.params.id);
+    const runtimeId = String(req.params.id || '').trim();
+    await stopManagedRuntime(runtimeId);
+    const job = startRuntimeInstallJob(runtimeId);
     res.status(202).json({ success: true, job });
   } catch (err) {
     const status = /already running/i.test(err.message) ? 409
       : /Unknown runtime/i.test(err.message) ? 404 : 500;
+    res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /runtimes/:id — remove only the Asyncat-owned copy of a runtime.
+router.delete('/runtimes/:id', async (req, res) => {
+  try {
+    const runtimeId = String(req.params.id || '').trim();
+    if (isRuntimeInstallActive(runtimeId)) {
+      return res.status(409).json({ success: false, error: `Wait for the ${runtimeId} install to finish before removing it.` });
+    }
+    await stopManagedRuntime(runtimeId);
+    const removal = removeManagedRuntime(runtimeId);
+    res.json({ success: true, removal, runtimes: listManagedRuntimes() });
+  } catch (err) {
+    const status = /Unknown runtime/i.test(err.message) ? 404 : 500;
     res.status(status).json({ success: false, error: err.message });
   }
 });
@@ -2214,14 +2254,14 @@ router.post('/server/stop', async (req, res) => {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MLX SERVER ROUTES — /api/ai/providers/mlx/*
-// Only meaningful on Apple Silicon; all routes return gracefully on other platforms.
+// Available on Apple Silicon and supported Linux systems; other platforms fail gracefully.
 // ══════════════════════════════════════════════════════════════════════════════
 
 // GET /mlx/status — current MLX server state + availability
 router.get('/mlx/status', async (req, res) => {
   try {
     const status = getMlxStatus();
-    const mlxAvailable = IS_APPLE_SILICON ? await isMlxAvailable() : false;
+    const mlxAvailable = IS_MLX_SUPPORTED ? await isMlxAvailable() : false;
     res.json({ success: true, ...status, mlxAvailable });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2246,8 +2286,8 @@ router.post('/mlx/start', async (req, res) => {
     if (!modelPath) {
       return res.status(400).json({ success: false, error: 'modelPath is required' });
     }
-    if (!IS_APPLE_SILICON) {
-      return res.status(400).json({ success: false, error: 'MLX is only supported on Apple Silicon (macOS arm64).' });
+    if (!IS_MLX_SUPPORTED) {
+      return res.status(400).json({ success: false, error: 'MLX LM is supported on Apple Silicon and Linux (CPU or NVIDIA CUDA).' });
     }
 
     // Return immediately — client polls /mlx/status for progress

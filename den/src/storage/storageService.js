@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import db from '../db/client.js';
 import { getModelsDir } from '../ai/controllers/ai/modelManager.js';
+import { runtimeHome } from '../config/runtimeConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -231,7 +232,7 @@ function getDatabaseSummary() {
 function getPathSummaries() {
   const modelsPath = getModelsDir();
   const uploadsPath = getStoragePath();
-  const asyncatHome = process.env.ASYNCAT_HOME || path.join(os.homedir(), '.asyncat');
+  const asyncatHome = runtimeHome();
 
   return [
     {
@@ -248,8 +249,8 @@ function getPathSummaries() {
     },
     {
       id: 'asyncat-home',
-      label: 'Asyncat home',
-      description: 'Local agent/runtime data under ASYNCAT_HOME.',
+      label: 'Managed runtime home',
+      description: 'Asyncat-owned inference engines and isolated Python environments.',
       ...directoryUsage(asyncatHome),
     },
   ];

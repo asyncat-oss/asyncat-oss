@@ -1,4 +1,4 @@
-// MlxModelsSection.jsx — MLX local model browser for Apple Silicon
+// MlxModelsSection.jsx — MLX local model browser for supported macOS/Linux systems
 // Scans ~/.cache/huggingface/hub/ and other common locations for MLX
 // .safetensors model directories and lets the user load them via mlx_lm.server.
 
@@ -123,16 +123,16 @@ const MlxModelsSection = ({ globalServerStatus, onMlxStatusChange, onMlxStopRequ
     }
   }, [globalServerStatus?.status, serverStatus?.status]);
 
-  // ── Not Apple Silicon — graceful empty state ───────────────────────────────
+  // ── Unsupported platform — graceful empty state ───────────────────────────
   if (!loading && serverStatus && !serverStatus.available) {
     return (
       <div className="rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-6 text-center shadow-sm">
         <Cpu className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-          MLX requires Apple Silicon
+          MLX is not supported on this system
         </p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-          This machine is not running macOS on arm64.
+          Asyncat supports MLX LM on Apple Silicon and Linux (CPU or NVIDIA CUDA).
         </p>
       </div>
     );

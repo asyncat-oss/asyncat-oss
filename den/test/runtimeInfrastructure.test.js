@@ -7,6 +7,7 @@ import {
   buildEffectiveRuntimeConfig,
   runtimeDataRoot,
   runtimeEnvFilePath,
+  runtimeHome,
   runtimeModelsPath,
 } from '../src/config/runtimeConfig.js';
 
@@ -20,6 +21,14 @@ test('packaged runtime paths honor explicit writable roots', () => {
   assert.equal(runtimeEnvFilePath(env, cwd), path.resolve(env.ASYNCAT_ENV_PATH));
   assert.equal(runtimeDataRoot(env, cwd), path.resolve(env.ASYNCAT_DATA_PATH));
   assert.equal(runtimeModelsPath(env, cwd), path.join(path.resolve(env.ASYNCAT_DATA_PATH), 'models'));
+});
+
+test('managed runtimes honor the Asyncat-owned home override', () => {
+  const cwd = path.resolve('runtime-root');
+  const configured = path.join(cwd, 'user-data', 'asyncat-home');
+
+  assert.equal(runtimeHome({ ASYNCAT_HOME: configured }, cwd), path.resolve(configured));
+  assert.equal(runtimeHome({ ASYNCAT_HOME: './isolated-home' }, cwd), path.join(cwd, 'isolated-home'));
 });
 
 test('effective runtime config resolves defaults and reports value sources', () => {

@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import {
   Check, ChevronDown, ChevronUp, Cpu, Download, HardDrive, RefreshCw,
-  RotateCcw, Settings2, TerminalSquare, TriangleAlert, Wrench, Zap,
+  RotateCcw, Settings2, TerminalSquare, Trash2, TriangleAlert, Wrench, Zap,
 } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
 
@@ -124,10 +124,13 @@ const EngineRuntimeSection = ({
   loading = false,
   switchingKey = null,
   installingKey = null,
+  removingKey = null,
   switchError = '',
   switchSuccess = '',
   installError = '',
   installSuccess = '',
+  removeError = '',
+  removeSuccess = '',
   revertSelection = null,
   retryModel = null,
   pythonInstallJob = null,
@@ -137,20 +140,22 @@ const EngineRuntimeSection = ({
   onSwitch,
   onInstall,
   onBuildGpuRuntime,
+  onRemoveManagedEngine,
   onRefreshCatalog,
   installReadiness = null,
 }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customRuntime, setCustomRuntime] = useState('binary');
   const [customPath, setCustomPath] = useState('');
+  const [confirmRemove, setConfirmRemove] = useState(null);
 
   const recommendation = engineData?.recommendation || null;
   const current = engineData?.current || null;
   const candidates = useMemo(() => engineData?.candidates || [], [engineData?.candidates]);
   const releases = useMemo(() => engineCatalog?.releases || [], [engineCatalog]);
   const canRetry = Boolean(retryModel);
-  const actionError = switchError || installError || pythonBuildError;
-  const actionSuccess = switchSuccess || installSuccess || pythonBuildSuccess;
+  const actionError = switchError || installError || pythonBuildError || removeError;
+  const actionSuccess = switchSuccess || installSuccess || pythonBuildSuccess || removeSuccess;
   const activeInstallJob = installJob || engineCatalog?.activeJob || null;
   const activeBuildJob = pythonInstallJob || null;
 
@@ -176,10 +181,11 @@ const EngineRuntimeSection = ({
   const installedManagedProfiles = useMemo(() => {
     const map = new Map();
     for (const candidate of [current, ...candidates].filter(Boolean)) {
+      if (candidate.runtime !== 'binary') continue;
       const profile = candidate.managedProfile || candidate.managedMetadata?.profile;
       if (candidate.managed && profile && !map.has(profile)) map.set(profile, candidate);
     }
-    if (current?.managed && current.capabilityHint && ![...map.values()].some(candidate => candidate.id === current.id)) {
+    if (current?.runtime === 'binary' && current.managed && current.capabilityHint && ![...map.values()].some(candidate => candidate.id === current.id)) {
       const fallbackProfile = {
         cpu_safe: 'cpu_safe',
         apple: 'apple_metal',
@@ -233,8 +239,11 @@ const EngineRuntimeSection = ({
 
   const selectableCandidates = candidates.length > 0 ? candidates : (current ? [current] : []);
   const currentKey = engineKey(current);
-  const mlxSupported = mlxStatus?.available ?? (engineData?.hardware?.platform === 'darwin'
-    && (engineData?.hardware?.arch === 'arm64' || engineData?.hardware?.gpu?.vendor === 'Apple'));
+  const mlxSupported = mlxStatus?.available ?? (
+    (engineData?.hardware?.platform === 'darwin' && engineData?.hardware?.arch === 'arm64')
+    || (engineData?.hardware?.platform === 'linux'
+      && ['x64', 'arm64'].includes(engineData?.hardware?.arch))
+  );
   const mlxReady = mlxSupported && mlxStatus?.mlxAvailable === true;
   const mlxLabel = !mlxSupported ? 'Not supported on this machine' : (mlxReady ? 'MLX runtime' : 'MLX runtime needs setup');
   const relevantToolIds = useMemo(() => {
@@ -268,6 +277,15 @@ const EngineRuntimeSection = ({
     const selected = selectableCandidates.find(candidate => engineKey(candidate) === event.target.value);
     if (!selected || selected.isCurrent) return;
     onSwitch?.({ runtime: selected.runtime, path: selected.path }, false);
+  };
+
+  const requestRemove = (key) => {
+    if (confirmRemove !== key) {
+      setConfirmRemove(key);
+      return;
+    }
+    setConfirmRemove(null);
+    onRemoveManagedEngine?.(key);
   };
 
   return (
@@ -335,7 +353,7 @@ const EngineRuntimeSection = ({
 
         <SettingRow
           label="MLX"
-          detail="Used by Apple Silicon MLX model folders."
+          detail="Used by MLX model folders on Apple Silicon or Linux."
           divider={false}
         >
           <div className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950 midnight:border-slate-700 midnight:bg-slate-950 sm:w-[360px]">
@@ -458,7 +476,7 @@ const EngineRuntimeSection = ({
                     Install
                   </button>
                 )}
-                {assetInfo && installed && !isCurrent && (
+                {assetInfo && installed && (
                   <button
                     type="button"
                     onClick={() => onInstall?.({
@@ -466,11 +484,22 @@ const EngineRuntimeSection = ({
                       releaseTag: assetInfo.release.tagName,
                       assetName: assetInfo.asset.name,
                     }, false)}
-                    disabled={Boolean(installingKey)}
+                    disabled={Boolean(installingKey) || Boolean(removingKey)}
                     className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    Reinstall
+                    {installedVersion && installedVersion !== assetInfo.release.tagName ? 'Update' : 'Reinstall'}
+                  </button>
+                )}
+                {installed && (
+                  <button
+                    type="button"
+                    onClick={() => requestRemove(row.profile)}
+                    disabled={Boolean(installingKey) || Boolean(switchingKey) || Boolean(removingKey)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/20"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {removingKey === row.profile ? 'Removing…' : (confirmRemove === row.profile ? 'Confirm remove' : 'Remove')}
                   </button>
                 )}
               </div>
@@ -568,6 +597,17 @@ const EngineRuntimeSection = ({
                       Retry model
                     </button>
                   )}
+                  {candidate.managed && candidate.runtime === 'python' && (
+                    <button
+                      type="button"
+                      onClick={() => requestRemove('python')}
+                      disabled={Boolean(switchingKey) || Boolean(installingKey) || Boolean(removingKey)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/20"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {removingKey === 'python' ? 'Removing…' : (confirmRemove === 'python' ? 'Confirm remove' : 'Remove')}
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -601,7 +641,7 @@ const EngineRuntimeSection = ({
             </span>
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">Advanced runtime tools</span>
-              <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">Custom paths, retry actions, and recovery.</span>
+              <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">External binary/Python paths, retry actions, and recovery.</span>
             </span>
           </span>
           {showAdvanced ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}

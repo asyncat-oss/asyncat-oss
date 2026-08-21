@@ -30,6 +30,9 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
   const [switchSuccess, setSwitchSuccess] = useState('');
   const [installError, setInstallError] = useState('');
   const [installSuccess, setInstallSuccess] = useState('');
+  const [removingEngine, setRemovingEngine] = useState(null);
+  const [removeEngineError, setRemoveEngineError] = useState('');
+  const [removeEngineSuccess, setRemoveEngineSuccess] = useState('');
   const [revertSelection, setRevertSelection] = useState(null);
   const [quickLoadPath, setQuickLoadPath] = useState('');
   const [pythonInstallJob, setPythonInstallJob] = useState(null);
@@ -72,6 +75,8 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     setSwitchSuccess('');
     setInstallError('');
     setInstallSuccess('');
+    setRemoveEngineError('');
+    setRemoveEngineSuccess('');
     setRevertSelection(null);
   };
 
@@ -232,6 +237,8 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
   const handleBuildGpuRuntime = async (profile, retryModelAfterBuild) => {
     setPythonBuildError('');
     setPythonBuildSuccess('');
+    setRemoveEngineError('');
+    setRemoveEngineSuccess('');
     try {
       const ctxSize = retryModelAfterBuild ? getRetryModelContext() : undefined;
       const res = await llamaServerApi.startPythonInstallJob({
@@ -532,6 +539,8 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     setSwitchSuccess('');
     setInstallError('');
     setInstallSuccess('');
+    setRemoveEngineError('');
+    setRemoveEngineSuccess('');
     try {
       const res = await llamaServerApi.selectEngine({
         runtime: selection.runtime,
@@ -575,6 +584,8 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     setInstallSuccess('');
     setSwitchError('');
     setSwitchSuccess('');
+    setRemoveEngineError('');
+    setRemoveEngineSuccess('');
     try {
       const res = await llamaServerApi.startInstallJob({
         profile,
@@ -590,6 +601,32 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     } catch (err) {
       setInstallError(err.message || 'Failed to install engine.');
       setInstallingEngine(null);
+    }
+  };
+
+  const handleRemoveManagedEngine = async (key) => {
+    setRemovingEngine(key);
+    setRemoveEngineError('');
+    setRemoveEngineSuccess('');
+    setSwitchError('');
+    setSwitchSuccess('');
+    setInstallError('');
+    setInstallSuccess('');
+    setPythonBuildError('');
+    setPythonBuildSuccess('');
+    try {
+      const res = await llamaServerApi.removeManagedEngine(key);
+      if (res.advisor) setEngineData(res.advisor);
+      if (res.statusSnapshot) setServerStatus(res.statusSnapshot);
+      await loadEngineCatalog(true);
+      await loadEngineData();
+      setRemoveEngineSuccess(key === 'python'
+        ? 'Managed llama-cpp-python environment removed.'
+        : `${INSTALL_PROFILE_LABELS[key] || key} removed.`);
+    } catch (err) {
+      setRemoveEngineError(err.message || 'Failed to remove the managed engine.');
+    } finally {
+      setRemovingEngine(null);
     }
   };
 
@@ -616,12 +653,15 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     deletingModel,
     switchingEngine,
     installingEngine,
+    removingEngine,
     switchError,
     setSwitchError,
     switchSuccess,
     setSwitchSuccess,
     installError,
     installSuccess,
+    removeEngineError,
+    removeEngineSuccess,
     revertSelection,
     quickLoadPath,
     setQuickLoadPath,
@@ -662,6 +702,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     handleAddPath,
     handleEngineSwitch,
     handleManagedInstall,
-    handleBuildGpuRuntime
+    handleBuildGpuRuntime,
+    handleRemoveManagedEngine
   };
 };

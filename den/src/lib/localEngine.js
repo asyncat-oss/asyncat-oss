@@ -3,8 +3,10 @@ import path from 'path';
 import os from 'os';
 import { execFileSync, execSync, spawn, spawnSync } from 'child_process';
 import { once } from 'events';
-import { ENV_FILE, ROOT, readEnv, setKey } from './env.js';
+import { randomUUID } from 'crypto';
+import { ENV_FILE, readEnv, setKey } from './env.js';
 import { setConfigValue } from '../config/appConfig.js';
+import { AUTO_DETECT, runtimeHome } from '../config/runtimeConfig.js';
 
 // Persist a runtime path. These used to be written to a source-tree .env; they now
 // live in the DB-backed app_config (hydrated into process.env at boot). We set
@@ -24,15 +26,13 @@ export const LLAMA_RELEASES_LIST_API = 'https://api.github.com/repos/ggml-org/ll
 export const LLAMA_RELEASES_URL = 'https://github.com/ggml-org/llama.cpp/releases';
 export const MISSING_ENGINE_MESSAGE = 'Local engine missing. Install one in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
 export const MANAGED_ENGINE_METADATA_FILE = 'asyncat-engine.json';
+export const MANAGED_RUNTIME_METADATA_FILE = 'asyncat-runtime.json';
 export const LLAMA_ENGINE_PROFILES = ['cpu_safe', 'nvidia_gpu', 'apple_metal', 'amd_rocm', 'vulkan', 'intel_sycl'];
 
 const isWin = process.platform === 'win32';
 
 export function asyncatHome() {
-  if (isWin) {
-    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
-  }
-  return path.join(os.homedir(), '.asyncat');
+  return runtimeHome();
 }
 
 export function managedEngineRootDir() {
@@ -65,6 +65,86 @@ export function managedPythonBinaryPath() {
   return path.join(managedPythonDir(), 'bin', 'python');
 }
 
+function pathIsInside(candidate, root) {
+  if (!candidate || !root) return false;
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function realPathOrResolved(candidate) {
+  try {
+    return fs.realpathSync(candidate);
+  } catch {
+    return path.resolve(candidate);
+  }
+}
+
+function assertManagedTarget(target) {
+  const home = path.resolve(asyncatHome());
+  const resolved = path.resolve(target);
+  if (resolved === home || !pathIsInside(resolved, home)) {
+    throw new Error(`Refusing to modify a path outside Asyncat home: ${resolved}`);
+  }
+  return resolved;
+}
+
+function removeManagedEntry(target) {
+  const resolved = assertManagedTarget(target);
+  if (!fs.existsSync(resolved)) return false;
+  const stat = fs.lstatSync(resolved);
+  if (stat.isSymbolicLink()) fs.unlinkSync(resolved);
+  else if (stat.isDirectory()) fs.rmSync(resolved, { recursive: true });
+  else fs.unlinkSync(resolved);
+  return true;
+}
+
+function swapManagedDirectory(stagingDir, targetDir) {
+  const staging = assertManagedTarget(stagingDir);
+  const target = assertManagedTarget(targetDir);
+  const backup = assertManagedTarget(`${target}.backup-${randomUUID()}`);
+  let movedExisting = false;
+  let preserveBackup = false;
+  try {
+    if (fs.existsSync(target)) {
+      fs.renameSync(target, backup);
+      movedExisting = true;
+    }
+    fs.renameSync(staging, target);
+  } catch (error) {
+    if (fs.existsSync(target)) {
+      try {
+        removeManagedEntry(target);
+      } catch (cleanupError) {
+        preserveBackup = movedExisting;
+        const recovery = movedExisting
+          ? ` The previous runtime remains at ${backup}.`
+          : '';
+        throw new Error(`${error.message} The incomplete replacement could not be removed: ${cleanupError.message}.${recovery}`);
+      }
+    }
+    if (movedExisting && fs.existsSync(backup)) {
+      try {
+        fs.renameSync(backup, target);
+      } catch (restoreError) {
+        preserveBackup = true;
+        throw new Error(`${error.message} The previous runtime remains at ${backup} because rollback failed: ${restoreError.message}`);
+      }
+    }
+    throw error;
+  } finally {
+    if (fs.existsSync(staging)) removeManagedEntry(staging);
+  }
+  if (!preserveBackup && fs.existsSync(backup)) {
+    try {
+      removeManagedEntry(backup);
+    } catch (cleanupError) {
+      // The verified replacement is already live. Keep the old backup if the OS
+      // has it locked instead of turning a successful update into data loss.
+      console.warn(`[runtime] Could not remove the previous runtime backup at ${backup}: ${cleanupError.message}`);
+    }
+  }
+}
+
 export function profileCapabilityHint(profile = 'cpu_safe') {
   if (profile === 'nvidia_gpu') return 'nvidia';
   if (profile === 'apple_metal') return 'apple';
@@ -86,6 +166,10 @@ export function readManagedEngineMetadata(root = managedEngineDir()) {
 
 function writeManagedEngineMetadata(metadata, root = managedEngineDir()) {
   fs.writeFileSync(managedEngineMetadataPath(root), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+}
+
+export function writeManagedPythonEngineMetadata(metadata) {
+  writeManagedEngineMetadata(metadata, managedPythonDir());
 }
 
 export function listManagedEngineInstalls() {
@@ -132,13 +216,64 @@ function pointCurrentManagedEngine(targetDir) {
       }
     }
   } catch {}
-  fs.rmSync(currentDir, { recursive: true, force: true });
+  if (fs.existsSync(currentDir)) removeManagedEntry(currentDir);
   fs.mkdirSync(path.dirname(currentDir), { recursive: true });
   try {
     fs.symlinkSync(targetDir, currentDir, isWin ? 'junction' : 'dir');
   } catch {
     fs.cpSync(targetDir, currentDir, { recursive: true });
   }
+}
+
+export function removeManagedLlamaEngine(profile) {
+  if (!LLAMA_ENGINE_PROFILES.includes(profile)) {
+    throw new Error(`Unknown managed llama.cpp profile: ${profile}`);
+  }
+  const targetDir = assertManagedTarget(managedEngineDir(profile));
+  const currentDir = assertManagedTarget(managedEngineDir());
+  const configuredPath = String(process.env.LLAMA_BINARY_PATH || '').trim();
+  const targetResolved = realPathOrResolved(targetDir);
+  const selectedWasRemoved = configuredPath
+    ? pathIsInside(realPathOrResolved(configuredPath), targetResolved)
+    : false;
+
+  let currentPointsToTarget = false;
+  if (fs.existsSync(currentDir)) {
+    currentPointsToTarget = realPathOrResolved(currentDir) === targetResolved
+      || readManagedEngineMetadata(currentDir)?.profile === profile;
+  }
+  if (currentPointsToTarget) removeManagedEntry(currentDir);
+  const removed = removeManagedEntry(targetDir);
+
+  const fallback = listManagedEngineInstalls()
+    .find(item => path.resolve(item.root) !== path.resolve(currentDir) && item.profile !== profile) || null;
+  if (fallback && !fs.existsSync(currentDir)) pointCurrentManagedEngine(fallback.root);
+  if (selectedWasRemoved) {
+    persistRuntimeConfigValue('LLAMA_BINARY_PATH', fallback?.binary || AUTO_DETECT);
+    if (!fallback) persistRuntimeConfigValue('LLAMA_GPU_LAYERS', '0');
+  }
+
+  return {
+    runtime: 'binary',
+    profile,
+    removed,
+    path: targetDir,
+    fallback: fallback?.binary || null,
+  };
+}
+
+export function removeManagedLlamaPython() {
+  const targetDir = assertManagedTarget(managedPythonDir());
+  const configuredPath = String(process.env.LLAMA_PYTHON_PATH || '').trim();
+  const selectedWasRemoved = configuredPath
+    ? pathIsInside(realPathOrResolved(configuredPath), realPathOrResolved(targetDir))
+    : false;
+  const removed = removeManagedEntry(targetDir);
+  if (selectedWasRemoved) {
+    persistRuntimeConfigValue('LLAMA_PYTHON_PATH', AUTO_DETECT);
+    persistRuntimeConfigValue('LLAMA_GPU_LAYERS', '0');
+  }
+  return { runtime: 'python', removed, path: targetDir };
 }
 
 export function commandExists(cmd) {
@@ -646,6 +781,10 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
   const archivePath = path.join(tmpRoot, asset.name);
   const extractDir = path.join(tmpRoot, 'extract');
   const targetDir = managedEngineDir(profile);
+  const stagingDir = assertManagedTarget(path.join(
+    path.dirname(targetDir),
+    `.${path.basename(targetDir)}.install-${randomUUID()}`,
+  ));
   try {
     onProgress?.({
       phase: 'downloading',
@@ -683,34 +822,44 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    fs.rmSync(targetDir, { recursive: true, force: true });
-    fs.mkdirSync(targetDir, { recursive: true });
-    fs.cpSync(extractDir, targetDir, { recursive: true });
-    ensureLinuxSonameLinks(targetDir);
-    ensureDarwinDylibLinks(targetDir);
+    fs.mkdirSync(path.dirname(stagingDir), { recursive: true });
+    fs.mkdirSync(stagingDir, { recursive: true });
+    fs.cpSync(extractDir, stagingDir, { recursive: true });
+    ensureLinuxSonameLinks(stagingDir);
+    ensureDarwinDylibLinks(stagingDir);
     // Windows CUDA builds need the cudart companion DLLs before they can run
     // (the verification step below launches the binary).
-    await installCudartCompanion(release, asset.name, targetDir, onProgress);
+    await installCudartCompanion(release, asset.name, stagingDir, onProgress);
 
-    const installed = managedLlamaBinaryPath(profile);
-    const copiedServer = findLlamaServerBinary(targetDir);
+    const stagedInstalled = path.join(stagingDir, isWin ? 'llama-server.exe' : 'llama-server');
+    let copiedServer = findLlamaServerBinary(stagingDir);
     if (!copiedServer) {
-      throw new Error(`Archive did not install ${isWin ? 'llama-server.exe' : 'llama-server'} into ${targetDir}.`);
+      throw new Error(`Archive did not stage ${isWin ? 'llama-server.exe' : 'llama-server'}.`);
     }
 
-    if (!isWin) {
+    if (isWin && path.resolve(copiedServer) !== path.resolve(stagedInstalled)) {
+      // Some Windows archives wrap the executable and its DLLs in a bin folder.
+      // Flatten that folder so the stable managed path remains predictable.
+      for (const entry of fs.readdirSync(path.dirname(copiedServer), { withFileTypes: true })) {
+        const source = path.join(path.dirname(copiedServer), entry.name);
+        const destination = path.join(stagingDir, entry.name);
+        if (path.resolve(source) === path.resolve(destination)) continue;
+        fs.cpSync(source, destination, { recursive: entry.isDirectory(), force: true });
+      }
+      copiedServer = stagedInstalled;
+    } else if (!isWin) {
       let realServer = copiedServer;
-      if (path.resolve(copiedServer) === path.resolve(installed)) {
-        realServer = path.join(targetDir, 'llama-server.real');
+      if (path.resolve(copiedServer) === path.resolve(stagedInstalled)) {
+        realServer = path.join(stagingDir, 'llama-server.real');
         fs.renameSync(copiedServer, realServer);
       }
-      installUnixLauncher(installed, realServer, targetDir);
+      installUnixLauncher(stagedInstalled, realServer, stagingDir);
     }
 
-    if (!fs.existsSync(installed)) {
-      throw new Error(`Archive did not install ${isWin ? 'llama-server.exe' : 'llama-server'} into ${targetDir}.`);
+    if (!fs.existsSync(stagedInstalled)) {
+      throw new Error(`Archive did not stage ${isWin ? 'llama-server.exe' : 'llama-server'} at its expected path.`);
     }
-    if (!isWin) fs.chmodSync(installed, 0o755);
+    if (!isWin) fs.chmodSync(stagedInstalled, 0o755);
     onProgress?.({
       phase: 'verifying',
       message: 'Verifying llama-server binary',
@@ -718,14 +867,13 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    const verification = verifyBinaryDetailed(installed);
+    const verification = verifyBinaryDetailed(stagedInstalled);
     if (!verification.ok) {
-      const detail = verification.detail || verifyBinaryError(installed);
-      fs.rmSync(targetDir, { recursive: true, force: true });
-      const err = new Error(`Installed ${installed}, but llama-server verification failed:\n${detail}`);
+      const detail = verification.detail || verifyBinaryError(stagedInstalled);
+      const err = new Error(`Downloaded ${stagedInstalled}, but llama-server verification failed:\n${detail}`);
       err.diagnostics = {
         type: 'llama-server-verification',
-        binary: installed,
+        binary: stagedInstalled,
         asset: asset.name,
         releaseTag: release.tag_name || release.name || 'latest',
         profile,
@@ -739,7 +887,9 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       asset: asset.name,
       version: release.tag_name || release.name || 'latest',
       installedAt: new Date().toISOString(),
-    }, targetDir);
+    }, stagingDir);
+    swapManagedDirectory(stagingDir, targetDir);
+    const installed = managedLlamaBinaryPath(profile);
     pointCurrentManagedEngine(targetDir);
     persistRuntimeConfigValue('LLAMA_BINARY_PATH', installed);
     onProgress?.({
@@ -751,6 +901,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     });
     return { binary: installed, asset: asset.name, version: release.tag_name || release.name || 'latest', profile };
   } finally {
+    if (fs.existsSync(stagingDir)) removeManagedEntry(stagingDir);
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 }
@@ -1035,7 +1186,6 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
         message: e.message,
         diagnostics: e.diagnostics || null,
       });
-      fs.rmSync(managedEngineDir(assetProfile), { recursive: true, force: true });
     }
   }
 
@@ -1047,54 +1197,6 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
     failures: diagnostics,
   };
   throw err;
-}
-
-export function writeLlamaBinaryEnv(binaryPath) {
-  persistRuntimeConfigValue('LLAMA_BINARY_PATH', binaryPath);
-}
-
-const PYTHON_GPU_CMAKE_ARGS = {
-  nvidia_gpu:  '-DGGML_CUDA=on',
-  apple_metal: '-DGGML_METAL=on',
-  amd_rocm:    '-DGGML_HIP=on',
-  vulkan:      '-DGGML_VULKAN=on',
-  intel_sycl:  '-DGGML_SYCL=on',
-};
-
-export function installPythonVenvFallback(pythonCmd, { profile = 'cpu_safe' } = {}) {
-  const cmakeArgs = PYTHON_GPU_CMAKE_ARGS[profile] || '';
-  let env = cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env;
-
-  // CUDA 12.6 only supports up to GCC 13. Fedora 40+ ships GCC 14/15.
-  // Auto-fix: use clang++ as host compiler if available, else allow unsupported compiler.
-  if (profile === 'nvidia_gpu') {
-    try {
-      const gccOut = execSync('gcc --version', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-      const gccMajor = parseInt((gccOut.match(/\b(\d+)\.\d+\.\d+/) || [])[1] || '0', 10);
-      if (gccMajor >= 14) {
-        let clangAvailable = false;
-        try { execSync('clang++ --version', { stdio: 'ignore' }); clangAvailable = true; } catch {}
-        env = clangAvailable
-          ? { ...env, CUDAHOSTCXX: 'clang++' }
-          : { ...env, CUDAFLAGS: ((env.CUDAFLAGS || '') + ' --allow-unsupported-compiler').trim() };
-      }
-    } catch {}
-  }
-
-  fs.mkdirSync(path.dirname(managedPythonDir()), { recursive: true });
-  execFileSync(pythonCmd, ['-m', 'venv', managedPythonDir()], { cwd: ROOT, stdio: 'ignore', timeout: 120000 });
-  const python = managedPythonBinaryPath();
-  execFileSync(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], { env, cwd: ROOT, stdio: 'ignore', timeout: 120000 });
-  if (cmakeArgs) {
-    // Pre-install build tools so --no-build-isolation can find them during compilation
-    execFileSync(python, ['-m', 'pip', 'install', 'ninja', 'cmake', 'scikit-build-core', 'wheel', 'setuptools'], { env, cwd: ROOT, stdio: 'ignore', timeout: 300000 });
-    // CUDA/Metal/ROCm compilation can take 10-30 min
-    execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]', '--no-build-isolation'], { env, cwd: ROOT, stdio: 'ignore', timeout: 3600000 });
-  } else {
-    execFileSync(python, ['-m', 'pip', 'install', 'llama-cpp-python[server]'], { env, cwd: ROOT, stdio: 'ignore', timeout: 3600000 });
-  }
-  persistRuntimeConfigValue('LLAMA_PYTHON_PATH', python);
-  return python;
 }
 
 // ─── Generic managed runtime installer ────────────────────────────────────────
@@ -1136,7 +1238,7 @@ export const MANAGED_RUNTIME_SPECS = {
   },
   mlx: {
     id: 'mlx',
-    label: 'MLX LM (Apple Silicon)',
+    label: 'MLX LM',
     installer: 'python',
     packageName: 'mlx-lm',
     importName: 'mlx_lm',
@@ -1144,14 +1246,98 @@ export const MANAGED_RUNTIME_SPECS = {
     dir: 'mlx',
     binaryNames: [],
     envKey: 'MLX_PYTHON_PATH',
-    platform: 'darwin-arm64',
+    platforms: ['darwin-arm64', 'linux-x64', 'linux-arm64'],
   },
 };
 
+function managedRuntimeRoot(spec) {
+  return path.join(asyncatHome(), spec.dir);
+}
+
+function runtimePlatformSupport(spec) {
+  if (!spec.platforms?.length) return { supported: true, reason: null };
+  const current = `${process.platform}-${process.arch}`;
+  if (spec.platforms.includes(current)) return { supported: true, reason: null };
+  return {
+    supported: false,
+    reason: spec.id === 'mlx'
+      ? 'MLX LM is supported on Apple Silicon and Linux (CPU or NVIDIA CUDA).'
+      : `${spec.label} is not supported on ${current}.`,
+  };
+}
+
+function managedRuntimeMetadataPath(spec) {
+  return path.join(managedRuntimeRoot(spec), MANAGED_RUNTIME_METADATA_FILE);
+}
+
+function readManagedRuntimeMetadata(spec) {
+  try {
+    return JSON.parse(fs.readFileSync(managedRuntimeMetadataPath(spec), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeManagedRuntimeMetadata(spec, metadata, root = managedRuntimeRoot(spec)) {
+  fs.writeFileSync(
+    path.join(root, MANAGED_RUNTIME_METADATA_FILE),
+    `${JSON.stringify(metadata, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+function managedRuntimeBinary(spec) {
+  const root = managedRuntimeRoot(spec);
+  if (spec.installer === 'python') {
+    const venvDir = managedRuntimePythonDir(spec);
+    return spec.id === 'piper' ? pythonConsoleScript(venvDir, 'piper') : pythonInVenv(venvDir);
+  }
+  return findBinaryByNames(root, spec.binaryNames);
+}
+
 export function listManagedRuntimes() {
-  return Object.values(MANAGED_RUNTIME_SPECS).map(({ id, label, envKey, license, projectUrl, platform }) => ({
-    id, label, envKey, license: license || null, projectUrl: projectUrl || null, platform: platform || null,
-  }));
+  return Object.values(MANAGED_RUNTIME_SPECS).map(spec => {
+    const support = runtimePlatformSupport(spec);
+    const root = managedRuntimeRoot(spec);
+    const binary = managedRuntimeBinary(spec);
+    const metadata = readManagedRuntimeMetadata(spec);
+    const configuredPath = String(process.env[spec.envKey] || '').trim();
+    const configuredExists = Boolean(configuredPath && configuredPath !== AUTO_DETECT && fs.existsSync(configuredPath));
+    const managedInstalled = Boolean(binary && fs.existsSync(binary));
+    return {
+      id: spec.id,
+      label: spec.label,
+      envKey: spec.envKey,
+      license: spec.license || null,
+      projectUrl: spec.projectUrl || null,
+      platforms: spec.platforms || null,
+      supported: support.supported,
+      unsupportedReason: support.reason,
+      managedInstalled,
+      detected: managedInstalled || configuredExists,
+      source: managedInstalled ? 'managed' : (configuredExists ? 'external' : 'missing'),
+      managedRoot: root,
+      managedPath: managedInstalled ? binary : null,
+      configuredPath: configuredExists ? configuredPath : null,
+      version: metadata?.version || null,
+      installedAt: metadata?.installedAt || null,
+      capability: metadata?.capability || null,
+      isolation: spec.installer === 'python' ? 'python-venv' : 'managed-binary',
+    };
+  });
+}
+
+export function removeManagedRuntime(runtimeId) {
+  const spec = MANAGED_RUNTIME_SPECS[runtimeId];
+  if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
+  const targetDir = assertManagedTarget(managedRuntimeRoot(spec));
+  const configuredPath = String(process.env[spec.envKey] || '').trim();
+  const configuredWasManaged = configuredPath
+    ? pathIsInside(realPathOrResolved(configuredPath), realPathOrResolved(targetDir))
+    : false;
+  const removed = removeManagedEntry(targetDir);
+  if (configuredWasManaged) persistRuntimeConfigValue(spec.envKey, AUTO_DETECT);
+  return { runtime: runtimeId, removed, path: targetDir };
 }
 
 // GPU tag patterns for the generic runtimes (Whisper / sd.cpp).
@@ -1336,54 +1522,121 @@ function runManagedCommand(command, args, { timeoutMs = 20 * 60 * 1000, onLine =
   });
 }
 
+function managedPythonPackages(spec) {
+  if (spec.id !== 'mlx' || process.platform !== 'linux') return [spec.packageName];
+  const mlxPackage = detectGpu()?.vendor === 'NVIDIA' ? 'mlx[cuda12]' : 'mlx[cpu]';
+  return [mlxPackage, spec.packageName];
+}
+
+function installedPythonPackageVersion(python, packageName) {
+  try {
+    return execFileSync(
+      python,
+      ['-c', `import importlib.metadata; print(importlib.metadata.version(${JSON.stringify(packageName)}))`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000, windowsHide: true },
+    ).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function installManagedPythonRuntime(spec, report) {
-  if (spec.platform === 'darwin-arm64' && (process.platform !== 'darwin' || process.arch !== 'arm64')) {
-    throw new Error(`${spec.label} is only supported on Apple Silicon (macOS arm64).`);
+  const support = runtimePlatformSupport(spec);
+  if (!support.supported) throw new Error(support.reason);
+
+  const systemPython = findPythonWithVenv();
+  if (!systemPython) {
+    throw new Error(`Python 3 with venv support is required to install ${spec.label}.`);
   }
 
+  const root = managedRuntimeRoot(spec);
   const venvDir = managedRuntimePythonDir(spec);
-  const python = pythonInVenv(venvDir);
-  if (!fs.existsSync(python)) {
-    const systemPython = findPythonWithVenv();
-    if (!systemPython) {
-      throw new Error(`Python 3 with venv support is required to install ${spec.label}.`);
+  const backupVenv = assertManagedTarget(`${venvDir}.backup-${randomUUID()}`);
+  fs.mkdirSync(root, { recursive: true });
+  let movedExisting = false;
+  let preserveBackup = false;
+  try {
+    if (fs.existsSync(venvDir)) {
+      fs.renameSync(venvDir, backupVenv);
+      movedExisting = true;
     }
-    fs.mkdirSync(path.dirname(venvDir), { recursive: true });
     report('preparing', `Creating an isolated Python environment for ${spec.label}`, 10);
     await runManagedCommand(systemPython, ['-m', 'venv', venvDir], { timeoutMs: 180000 });
-  }
+    const python = pythonInVenv(venvDir);
 
-  report('installing', `Updating the ${spec.label} environment`, 30);
-  await runManagedCommand(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
-    timeoutMs: 300000,
-  });
-  await runManagedCommand(python, ['-m', 'pip', 'install', '--upgrade', spec.packageName], {
-    timeoutMs: 30 * 60 * 1000,
-    onLine: line => {
-      if (/collecting|downloading|installing collected|successfully installed/i.test(line)) {
-        report('installing', line.slice(0, 160), 65);
+    report('installing', `Installing the latest ${spec.label} environment`, 30);
+    await runManagedCommand(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
+      timeoutMs: 300000,
+    });
+    await runManagedCommand(
+      python,
+      ['-m', 'pip', 'install', '--upgrade', ...managedPythonPackages(spec)],
+      {
+        timeoutMs: 30 * 60 * 1000,
+        onLine: line => {
+          if (/collecting|downloading|installing collected|successfully installed/i.test(line)) {
+            report('installing', line.slice(0, 160), 65);
+          }
+        },
+      },
+    );
+
+    report('verifying', `Verifying ${spec.label}`, 92);
+    await runManagedCommand(python, ['-c', `import ${spec.importName}`], { timeoutMs: 30000 });
+    const installed = spec.id === 'piper' ? pythonConsoleScript(venvDir, 'piper') : python;
+    if (!fs.existsSync(installed)) {
+      throw new Error(`${spec.label} installed, but its executable was not found at ${installed}.`);
+    }
+
+    const version = installedPythonPackageVersion(python, spec.packageName) || 'managed-python';
+    writeManagedRuntimeMetadata(spec, {
+      runtime: spec.id,
+      version,
+      installer: 'python-venv',
+      packages: managedPythonPackages(spec),
+      installedAt: new Date().toISOString(),
+    });
+    persistRuntimeConfigValue(spec.envKey, installed);
+    report('complete', `${spec.label} installed`, 100, { binary: installed, version });
+    return {
+      runtime: spec.id,
+      binary: installed,
+      envKey: spec.envKey,
+      version,
+      verified: true,
+      license: spec.license || null,
+      projectUrl: spec.projectUrl || null,
+    };
+  } catch (error) {
+    if (fs.existsSync(venvDir)) {
+      try {
+        removeManagedEntry(venvDir);
+      } catch (cleanupError) {
+        preserveBackup = movedExisting;
+        const recovery = movedExisting
+          ? ` The previous environment remains at ${backupVenv}.`
+          : '';
+        throw new Error(`${error.message} The incomplete environment could not be removed: ${cleanupError.message}.${recovery}`);
       }
-    },
-  });
-
-  report('verifying', `Verifying ${spec.label}`, 92);
-  await runManagedCommand(python, ['-c', `import ${spec.importName}`], { timeoutMs: 30000 });
-
-  const installed = spec.id === 'piper' ? pythonConsoleScript(venvDir, 'piper') : python;
-  if (!fs.existsSync(installed)) {
-    throw new Error(`${spec.label} installed, but its executable was not found at ${installed}.`);
+    }
+    if (movedExisting && fs.existsSync(backupVenv)) {
+      try {
+        fs.renameSync(backupVenv, venvDir);
+      } catch (restoreError) {
+        preserveBackup = true;
+        throw new Error(`${error.message} The previous environment remains at ${backupVenv} because rollback failed: ${restoreError.message}`);
+      }
+    }
+    throw error;
+  } finally {
+    if (!preserveBackup && fs.existsSync(backupVenv)) {
+      try {
+        removeManagedEntry(backupVenv);
+      } catch (cleanupError) {
+        console.warn(`[runtime] Could not remove the previous ${spec.label} backup at ${backupVenv}: ${cleanupError.message}`);
+      }
+    }
   }
-  persistRuntimeConfigValue(spec.envKey, installed);
-  report('complete', `${spec.label} installed`, 100, { binary: installed });
-  return {
-    runtime: spec.id,
-    binary: installed,
-    envKey: spec.envKey,
-    version: 'managed-python',
-    verified: true,
-    license: spec.license || null,
-    projectUrl: spec.projectUrl || null,
-  };
 }
 
 export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null } = {}) {
@@ -1434,7 +1687,8 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `asyncat-${spec.id}-`));
   const archivePath = path.join(tmpRoot, asset.name);
   const extractDir = path.join(tmpRoot, 'extract');
-  const targetDir = path.join(asyncatHome(), spec.dir);
+  const targetDir = managedRuntimeRoot(spec);
+  const stagingDir = assertManagedTarget(path.join(asyncatHome(), `.${spec.dir}.install-${randomUUID()}`));
 
   try {
     report('downloading', `Downloading ${asset.name}`, 5, { assetName: asset.name });
@@ -1453,36 +1707,50 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     }
 
     report('installing', 'Installing engine files', 88);
-    fs.rmSync(targetDir, { recursive: true, force: true });
-    fs.mkdirSync(targetDir, { recursive: true });
-    fs.cpSync(extractDir, targetDir, { recursive: true });
-    ensureLinuxSonameLinks(targetDir);
-    ensureDarwinDylibLinks(targetDir);
+    fs.mkdirSync(path.dirname(stagingDir), { recursive: true });
+    fs.mkdirSync(stagingDir, { recursive: true });
+    fs.cpSync(extractDir, stagingDir, { recursive: true });
+    ensureLinuxSonameLinks(stagingDir);
+    ensureDarwinDylibLinks(stagingDir);
     // Windows CUDA image/audio builds need the cudart companion DLLs too.
-    await installCudartCompanion(release, asset.name, targetDir, onProgress);
+    await installCudartCompanion(release, asset.name, stagingDir, onProgress);
 
-    let installed = findBinaryByNames(targetDir, spec.binaryNames);
-    if (!installed) throw new Error(`Could not locate the installed ${spec.label} binary in ${targetDir}.`);
+    let stagedInstalled = findBinaryByNames(stagingDir, spec.binaryNames);
+    if (!stagedInstalled) throw new Error(`Could not locate the installed ${spec.label} binary in the staged runtime.`);
 
     if (!isWin) {
       // Wrap with a launcher that exports bundled lib dirs so the binary can find
       // its .so/.dylib siblings regardless of the caller's working directory.
-      const realBinary = `${installed}.real`;
-      fs.renameSync(installed, realBinary);
-      installUnixLauncher(installed, realBinary, targetDir);
+      const realBinary = `${stagedInstalled}.real`;
+      fs.renameSync(stagedInstalled, realBinary);
+      installUnixLauncher(stagedInstalled, realBinary, stagingDir);
       fs.chmodSync(realBinary, 0o755);
-      fs.chmodSync(installed, 0o755);
+      fs.chmodSync(stagedInstalled, 0o755);
     }
 
     // Best-effort verification (these binaries don't all support --version cleanly).
     let verified = false;
-    try { verified = verifyBinaryDetailed(installed).ok; } catch { /* non-fatal */ }
+    try { verified = verifyBinaryDetailed(stagedInstalled).ok; } catch { /* non-fatal */ }
 
+    const version = release.tag_name || release.name || 'latest';
+    writeManagedRuntimeMetadata(spec, {
+      runtime: spec.id,
+      version,
+      asset: asset.name,
+      capability: targetCapability,
+      installer: 'managed-binary',
+      verified,
+      installedAt: new Date().toISOString(),
+    }, stagingDir);
+    const relativeBinary = path.relative(stagingDir, stagedInstalled);
+    swapManagedDirectory(stagingDir, targetDir);
+    const installed = path.join(targetDir, relativeBinary);
     persistRuntimeConfigValue(spec.envKey, installed);
     const variantLabel = runtimeCapabilityLabel(targetCapability);
     report('complete', `${spec.label} (${variantLabel}) installed`, 100, { binary: installed, verified, capability: targetCapability });
-    return { runtime: spec.id, binary: installed, envKey: spec.envKey, version: release.tag_name || 'latest', verified, capability: targetCapability };
+    return { runtime: spec.id, binary: installed, envKey: spec.envKey, version, verified, capability: targetCapability };
   } finally {
+    if (fs.existsSync(stagingDir)) removeManagedEntry(stagingDir);
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 }

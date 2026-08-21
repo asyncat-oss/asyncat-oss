@@ -8,7 +8,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { MODELS_DIR } from './modelManager.js';
 import { listVisualModels } from './visualModelManager.js';
-import { runtimeGeneratedImagesPath } from '../../../config/runtimeConfig.js';
+import { runtimeGeneratedImagesPath, runtimeHome } from '../../../config/runtimeConfig.js';
 
 const execFileAsync = promisify(execFile);
 const IS_WIN = process.platform === 'win32';
@@ -18,10 +18,7 @@ const GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
 fs.mkdirSync(GENERATED_DIR, { recursive: true });
 
 function asyncatHome() {
-  if (IS_WIN) {
-    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
-  }
-  return path.join(os.homedir(), '.asyncat');
+  return runtimeHome();
 }
 
 function binaryCandidates() {

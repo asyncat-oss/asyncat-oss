@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { runtimeHome } from '../../../config/runtimeConfig.js';
 
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
@@ -37,19 +38,17 @@ function setState(patch) {
 // ── Binary detection ───────────────────────────────────────────────────────────
 
 function asyncatHome() {
-  if (IS_WIN) {
-    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
-  }
-  return path.join(os.homedir(), '.asyncat');
+  return runtimeHome();
 }
 
 function whisperBinaryCandidates() {
   const home = os.homedir();
+  const exe = IS_WIN ? '.exe' : '';
   const envPath = (process.env.WHISPER_BINARY_PATH || '').trim();
   return [
     envPath,
-    path.join(asyncatHome(), 'whisper.cpp', 'whisper-server'),
-    path.join(asyncatHome(), 'whisper.cpp', 'main'),
+    path.join(asyncatHome(), 'whisper.cpp', `whisper-server${exe}`),
+    path.join(asyncatHome(), 'whisper.cpp', `main${exe}`),
     path.join(home, '.local', 'bin', 'whisper-server'),
     '/usr/local/bin/whisper-server',
     '/opt/homebrew/bin/whisper-server',

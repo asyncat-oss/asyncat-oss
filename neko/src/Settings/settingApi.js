@@ -437,6 +437,13 @@ export const llamaServerApi = {
     });
   },
 
+  // Remove one Asyncat-managed native profile or the managed Python runtime.
+  removeManagedEngine: async (key) => {
+    return apiCall(`${AI_API_BASE}/server/engines/managed/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Start a background managed install job.
   startInstallJob: async (payload) => {
     return apiCall(`${AI_API_BASE}/server/engines/install-jobs`, {
@@ -580,6 +587,13 @@ export const runtimeApi = {
   install: async (id) => {
     return apiCall(`${AI_API_BASE}/runtimes/${encodeURIComponent(id)}/install-jobs`, {
       method: 'POST',
+    });
+  },
+
+  // Remove only Asyncat's managed copy. External PATH/configured tools are untouched.
+  remove: async (id) => {
+    return apiCall(`${AI_API_BASE}/runtimes/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
   },
 

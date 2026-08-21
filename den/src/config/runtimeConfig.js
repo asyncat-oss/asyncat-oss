@@ -1,6 +1,16 @@
 import path from 'path';
+import os from 'os';
 
 const AUTO_DETECT = '(auto-detect)';
+
+export function runtimeHome(env = process.env, cwd = process.cwd()) {
+  const configured = String(env.ASYNCAT_HOME || '').trim();
+  if (configured) return path.resolve(cwd, configured);
+  if (process.platform === 'win32') {
+    return path.join(env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Asyncat');
+  }
+  return path.join(os.homedir(), '.asyncat');
+}
 
 export function runtimeEnvFilePath(env = process.env, cwd = process.cwd()) {
   const configured = String(env.ASYNCAT_ENV_PATH || '').trim();
