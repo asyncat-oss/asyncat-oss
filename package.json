@@ -1,7 +1,7 @@
 {
   "name": "asyncat-oss",
   "productName": "Asyncat",
-  "version": "0.8.0-beta.4",
+  "version": "0.8.0-beta.5",
   "description": "Asyncat — open-source AI-powered workspace for teams",
   "author": "Asyncat Contributors",
   "license": "MIT",
@@ -49,7 +49,7 @@
     "electron-winstaller": "^5.4.0"
   },
   "dependencies": {
-    "den": "0.8.0-beta.4",
+    "den": "0.8.0-beta.5",
     "express": "4.22.2",
     "express-rate-limit": "6.11.2",
     "node-pty": "^1.1.0"
