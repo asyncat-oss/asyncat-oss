@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import { ENV_FILE, readEnv, setKey } from './env.js';
 import { setConfigValue } from '../config/appConfig.js';
 import { AUTO_DETECT, runtimeHome } from '../config/runtimeConfig.js';
+import { cudaVersionFromReleaseAsset, isCudaRuntimeCompanionAsset } from './releaseAssetUtils.js';
 
 // Persist a runtime path. These used to be written to a source-tree .env; they now
 // live in the DB-backed app_config (hydrated into process.env at boot). We set
@@ -348,11 +349,20 @@ export function verifyBinary(binary) {
 }
 
 const DEFAULT_VERIFY_BINARY_TIMEOUT_MS = 30000;
+const DEFAULT_CUDA_VERIFY_BINARY_TIMEOUT_MS = 120000;
 const VERIFY_BINARY_TIMEOUT_MS = Math.max(
   5000,
   Number(process.env.ASYNCAT_LLAMA_VERIFY_TIMEOUT_MS || DEFAULT_VERIFY_BINARY_TIMEOUT_MS) || DEFAULT_VERIFY_BINARY_TIMEOUT_MS
 );
 const VERIFY_BINARY_OUTPUT_LIMIT = 4000;
+
+export function verificationTimeoutForAsset(assetName = '', env = process.env) {
+  const configured = Number(env.ASYNCAT_LLAMA_VERIFY_TIMEOUT_MS);
+  if (Number.isFinite(configured) && configured > 0) return Math.max(5000, configured);
+  return cudaVersionFromReleaseAsset(assetName)
+    ? DEFAULT_CUDA_VERIFY_BINARY_TIMEOUT_MS
+    : DEFAULT_VERIFY_BINARY_TIMEOUT_MS;
+}
 
 function stringifyExecOutput(value) {
   if (value == null) return '';
@@ -365,13 +375,17 @@ function truncateVerifyOutput(value) {
   return `${text.slice(0, VERIFY_BINARY_OUTPUT_LIMIT)}\n... truncated ${text.length - VERIFY_BINARY_OUTPUT_LIMIT} chars`;
 }
 
-function runVerifyProbe(binary, arg) {
+function runVerifyProbe(binary, arg, timeoutMs = VERIFY_BINARY_TIMEOUT_MS) {
   const command = `${binary} ${arg}`;
   const startedAt = Date.now();
   const result = spawnSync(binary, [arg], {
     encoding: 'utf8',
-    timeout: VERIFY_BINARY_TIMEOUT_MS,
+    timeout: timeoutMs,
     windowsHide: true,
+    cwd: path.dirname(path.resolve(binary)),
+    env: isWin
+      ? { ...process.env, PATH: `${path.dirname(path.resolve(binary))}${path.delimiter}${process.env.PATH || ''}` }
+      : process.env,
   });
   const timedOut = result.error?.code === 'ETIMEDOUT' || /timed out/i.test(result.error?.message || '');
   return {
@@ -381,7 +395,7 @@ function runVerifyProbe(binary, arg) {
     signal: result.signal || null,
     timedOut,
     durationMs: Date.now() - startedAt,
-    timeoutMs: VERIFY_BINARY_TIMEOUT_MS,
+    timeoutMs,
     stdout: truncateVerifyOutput(result.stdout),
     stderr: truncateVerifyOutput(result.stderr),
     error: result.error?.message || null,
@@ -403,8 +417,9 @@ function formatVerifyDetail(probes) {
   return probes.map(formatVerifyProbe).join('\n\n');
 }
 
-export function verifyBinaryDetailed(binary) {
-  const versionProbe = runVerifyProbe(binary, '--version');
+export function verifyBinaryDetailed(binary, options = {}) {
+  const timeoutMs = Math.max(5000, Number(options.timeoutMs) || VERIFY_BINARY_TIMEOUT_MS);
+  const versionProbe = runVerifyProbe(binary, '--version', timeoutMs);
   if (versionProbe.ok) {
     return {
       ok: true,
@@ -414,7 +429,19 @@ export function verifyBinaryDetailed(binary) {
     };
   }
 
-  const helpProbe = runVerifyProbe(binary, '--help');
+  // A timed-out process has already demonstrated that startup cannot complete
+  // within this window. Running --help initializes the same backends and merely
+  // doubles a slow or stuck verification attempt.
+  if (versionProbe.timedOut) {
+    return {
+      ok: false,
+      acceptedProbe: null,
+      probes: [versionProbe],
+      detail: formatVerifyDetail([versionProbe]),
+    };
+  }
+
+  const helpProbe = runVerifyProbe(binary, '--help', timeoutMs);
   const probes = [versionProbe, helpProbe];
   return {
     ok: helpProbe.ok,
@@ -605,6 +632,10 @@ function scoreLlamaReleaseAsset(asset, platform = process.platform, arch = proce
   const name = String(asset.name || '').toLowerCase();
   if (!asset.browser_download_url) return null;
   if (!/\.(zip|tar\.gz|tgz)$/.test(name)) return null;
+  // CUDA releases ship this dependency-only archive beside the actual engine.
+  // It must be merged after selecting a llama.cpp binary, never offered as the
+  // primary NVIDIA runtime itself.
+  if (isCudaRuntimeCompanionAsset(name)) return null;
   if (/sha256|checksums?|source|cmake|dev|devel|android|ios/.test(name)) return null;
 
   let score = 0;
@@ -647,7 +678,9 @@ function scoreLlamaReleaseAsset(asset, platform = process.platform, arch = proce
   if (profile === 'nvidia_gpu') {
     if (!hasCuda) return null;
     score += 40;
-    if (/cu12|cuda12|cublas/.test(name)) score += 10;
+    // CUDA 12 is the broadly compatible Windows package today. In particular,
+    // recognize current upstream names such as `cuda-12.4`, not only `cuda12`.
+    if (cudaVersionFromReleaseAsset(name)?.major === 12 || /cublas/.test(name)) score += 10;
     return score;
   }
 
@@ -700,6 +733,7 @@ export function buildReleaseCatalog(releases, platform = process.platform, arch 
   return (releases || []).map(release => {
     const assets = (release.assets || [])
       .filter(asset => /\.(zip|tar\.gz|tgz)$/i.test(String(asset.name || '')))
+      .filter(asset => !isCudaRuntimeCompanionAsset(asset.name))
       .filter(asset => !/sha256|checksums?|source|cmake|dev|devel|android|ios/i.test(String(asset.name || '').toLowerCase()))
       .map(asset => {
         const profileScores = Object.fromEntries(
@@ -744,22 +778,71 @@ export function buildReleaseCatalog(releases, platform = process.platform, arch 
 // Windows CUDA llama.cpp / stable-diffusion.cpp builds ship without the CUDA
 // runtime DLLs; the release publishes a companion `cudart-*.zip` that must be
 // extracted alongside the binary or it fails to launch with a missing-DLL error.
-// Returns true when a companion was merged into targetDir.
-async function installCudartCompanion(release, mainAssetName, targetDir, onProgress = null) {
-  if (!isWin) return false;
-  const lower = String(mainAssetName || '').toLowerCase();
-  if (!/cu(da)?\d|cublas/.test(lower)) return false;
+function findFilesRecursive(root, predicate) {
+  const matches = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.isFile() && predicate(entry.name, full)) matches.push(full);
+    }
+  }
+  return matches;
+}
 
-  const major = lower.match(/cu(?:da)?[ _-]?(\d+)/)?.[1] || null;
+export function inspectWindowsCudaRuntimeBundle(targetDir, assetName) {
+  const version = cudaVersionFromReleaseAsset(assetName);
+  if (!version) return { required: false, ok: true, version: null, requiredDlls: [], missingDlls: [] };
+
+  const requiredDlls = [
+    'ggml-cuda.dll',
+    `cudart64_${version.major}.dll`,
+    `cublas64_${version.major}.dll`,
+    `cublasLt64_${version.major}.dll`,
+  ];
+  let rootFiles = new Set();
+  try {
+    rootFiles = new Set(
+      fs.readdirSync(targetDir, { withFileTypes: true })
+        .filter(entry => entry.isFile())
+        .map(entry => entry.name.toLowerCase())
+    );
+  } catch {}
+  const missingDlls = requiredDlls.filter(name => !rootFiles.has(name.toLowerCase()));
+  return {
+    required: true,
+    ok: missingDlls.length === 0,
+    version: version.text,
+    requiredDlls,
+    missingDlls,
+  };
+}
+
+// Returns details about the companion merged into targetDir.
+async function installCudartCompanion(release, mainAssetName, targetDir, onProgress = null) {
+  if (!isWin) return { installed: false, reason: 'not-windows' };
+  const lower = String(mainAssetName || '').toLowerCase();
+  const requestedVersion = cudaVersionFromReleaseAsset(lower);
+  if (!requestedVersion && !/cublas/.test(lower)) return { installed: false, reason: 'not-cuda' };
+
+  const major = requestedVersion?.major || null;
   const wantsX64 = /(x64|x86_64|amd64)/.test(lower);
   const companion = (release.assets || []).find(asset => {
     const n = String(asset.name || '').toLowerCase();
     if (!n.startsWith('cudart') || !asset.browser_download_url) return false;
-    if (major && !new RegExp(`cu(?:da)?[ _-]?${major}`).test(n)) return false;
+    if (major && cudaVersionFromReleaseAsset(n)?.major !== major) return false;
     if (wantsX64 && !/(x64|x86_64|amd64)/.test(n)) return false;
     return true;
   });
-  if (!companion) return false;
+  if (!companion) return { installed: false, reason: 'companion-not-published' };
 
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-cudart-'));
   const archivePath = path.join(tmpRoot, companion.name);
@@ -768,9 +851,18 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
     onProgress?.({ phase: 'installing', message: `Downloading CUDA runtime (${companion.name})`, percent: 90 });
     await downloadFile(companion.browser_download_url, archivePath);
     extractArchive(archivePath, extractDir);
-    // Merge the runtime DLLs into the engine dir without clearing it.
-    fs.cpSync(extractDir, targetDir, { recursive: true });
-    return true;
+    // Upstream usually puts these DLLs at the archive root, but flatten them
+    // deliberately so a future wrapper directory cannot leave Windows showing
+    // a hidden missing-DLL dialog while the headless verification waits forever.
+    const runtimeDlls = findFilesRecursive(extractDir, name => name.toLowerCase().endsWith('.dll'));
+    if (runtimeDlls.length === 0) {
+      throw new Error(`CUDA runtime archive ${companion.name} did not contain any DLL files.`);
+    }
+    fs.mkdirSync(targetDir, { recursive: true });
+    for (const dll of runtimeDlls) {
+      fs.copyFileSync(dll, path.join(targetDir, path.basename(dll)));
+    }
+    return { installed: true, asset: companion.name, dlls: runtimeDlls.map(file => path.basename(file)) };
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
@@ -829,7 +921,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     ensureDarwinDylibLinks(stagingDir);
     // Windows CUDA builds need the cudart companion DLLs before they can run
     // (the verification step below launches the binary).
-    await installCudartCompanion(release, asset.name, stagingDir, onProgress);
+    const cudaCompanion = await installCudartCompanion(release, asset.name, stagingDir, onProgress);
 
     const stagedInstalled = path.join(stagingDir, isWin ? 'llama-server.exe' : 'llama-server');
     let copiedServer = findLlamaServerBinary(stagingDir);
@@ -859,18 +951,42 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     if (!fs.existsSync(stagedInstalled)) {
       throw new Error(`Archive did not stage ${isWin ? 'llama-server.exe' : 'llama-server'} at its expected path.`);
     }
+    const cudaBundle = isWin
+      ? inspectWindowsCudaRuntimeBundle(stagingDir, asset.name)
+      : { required: false, ok: true };
+    if (!cudaBundle.ok) {
+      const err = new Error(
+        `The CUDA runtime package is incomplete. Missing beside llama-server.exe: ${cudaBundle.missingDlls.join(', ')}.`
+      );
+      err.diagnostics = {
+        type: 'llama-cuda-runtime-incomplete',
+        binary: stagedInstalled,
+        asset: asset.name,
+        companion: cudaCompanion,
+        cudaBundle,
+      };
+      throw err;
+    }
     if (!isWin) fs.chmodSync(stagedInstalled, 0o755);
+    const verificationTimeoutMs = verificationTimeoutForAsset(asset.name);
     onProgress?.({
       phase: 'verifying',
-      message: 'Verifying llama-server binary',
+      message: cudaBundle.required
+        ? `Verifying llama-server and initializing CUDA (allow up to ${Math.ceil(verificationTimeoutMs / 1000)} seconds)`
+        : 'Verifying llama-server binary',
       percent: 93,
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    const verification = verifyBinaryDetailed(stagedInstalled);
+    const verification = await verifyBinaryDetailedAsync(stagedInstalled, {
+      timeoutMs: verificationTimeoutMs,
+    });
     if (!verification.ok) {
       const detail = verification.detail || verifyBinaryError(stagedInstalled);
-      const err = new Error(`Downloaded ${stagedInstalled}, but llama-server verification failed:\n${detail}`);
+      const timeoutHint = verification.probes?.some(probe => probe.timedOut)
+        ? '\nCUDA startup did not finish in the verification window. Antivirus scanning or a stalled GPU runtime can cause this; retry once, then use the Vulkan runtime or review the diagnostics.'
+        : '';
+      const err = new Error(`Downloaded ${stagedInstalled}, but llama-server verification failed:\n${detail}${timeoutHint}`);
       err.diagnostics = {
         type: 'llama-server-verification',
         binary: stagedInstalled,
@@ -904,6 +1020,102 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     if (fs.existsSync(stagingDir)) removeManagedEntry(stagingDir);
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
+}
+
+function runVerifyProbeAsync(binary, arg, timeoutMs) {
+  const command = `${binary} ${arg}`;
+  const startedAt = Date.now();
+  return new Promise(resolve => {
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let spawnError = null;
+    let settled = false;
+    let killFallback = null;
+    let timeout = null;
+
+    const finish = (status = null, signal = null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (killFallback) clearTimeout(killFallback);
+      resolve({
+        command,
+        ok: !spawnError && !timedOut && status === 0,
+        status: Number.isInteger(status) ? status : null,
+        signal: signal || null,
+        timedOut,
+        durationMs: Date.now() - startedAt,
+        timeoutMs,
+        stdout: truncateVerifyOutput(stdout),
+        stderr: truncateVerifyOutput(stderr),
+        error: spawnError?.message || (timedOut ? `Verification exceeded ${timeoutMs} ms` : null),
+      });
+    };
+
+    let child;
+    try {
+      child = spawn(binary, [arg], {
+        windowsHide: true,
+        cwd: path.dirname(path.resolve(binary)),
+        env: isWin
+          ? { ...process.env, PATH: `${path.dirname(path.resolve(binary))}${path.delimiter}${process.env.PATH || ''}` }
+          : process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      spawnError = error;
+      finish();
+      return;
+    }
+
+    child.stdout?.on('data', chunk => { stdout += stringifyExecOutput(chunk); });
+    child.stderr?.on('data', chunk => { stderr += stringifyExecOutput(chunk); });
+    child.once('error', error => {
+      spawnError = error;
+      finish();
+    });
+    child.once('close', (status, signal) => finish(status, signal));
+
+    timeout = setTimeout(() => {
+      timedOut = true;
+      try { child.kill('SIGTERM'); } catch {}
+      // Do not leave an install job hanging if Windows delays process teardown.
+      killFallback = setTimeout(() => finish(null, 'SIGTERM'), 5000);
+      killFallback.unref?.();
+    }, timeoutMs);
+    timeout.unref?.();
+  });
+}
+
+export async function verifyBinaryDetailedAsync(binary, options = {}) {
+  const timeoutMs = Math.max(5000, Number(options.timeoutMs) || VERIFY_BINARY_TIMEOUT_MS);
+  const versionProbe = await runVerifyProbeAsync(binary, '--version', timeoutMs);
+  if (versionProbe.ok) {
+    return {
+      ok: true,
+      acceptedProbe: '--version',
+      probes: [versionProbe],
+      detail: formatVerifyDetail([versionProbe]),
+    };
+  }
+  if (versionProbe.timedOut) {
+    return {
+      ok: false,
+      acceptedProbe: null,
+      probes: [versionProbe],
+      detail: formatVerifyDetail([versionProbe]),
+    };
+  }
+
+  const helpProbe = await runVerifyProbeAsync(binary, '--help', timeoutMs);
+  const probes = [versionProbe, helpProbe];
+  return {
+    ok: helpProbe.ok,
+    acceptedProbe: helpProbe.ok ? '--help' : null,
+    probes,
+    detail: formatVerifyDetail(probes),
+  };
 }
 
 export async function fetchLatestLlamaRelease() {
@@ -984,10 +1196,17 @@ function extractArchive(archivePath, destination) {
         '-NoProfile',
         '-ExecutionPolicy', 'Bypass',
         '-Command',
-        'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force',
-        archivePath,
-        destination,
-      ], { stdio: 'ignore', timeout: 120000 });
+        'Expand-Archive -LiteralPath $env:ASYNCAT_ARCHIVE_PATH -DestinationPath $env:ASYNCAT_ARCHIVE_DESTINATION -Force',
+      ], {
+        env: {
+          ...process.env,
+          ASYNCAT_ARCHIVE_PATH: archivePath,
+          ASYNCAT_ARCHIVE_DESTINATION: destination,
+        },
+        stdio: ['ignore', 'ignore', 'pipe'],
+        timeout: 120000,
+        windowsHide: true,
+      });
     } else if (commandExists('unzip')) {
       execFileSync('unzip', ['-q', archivePath, '-d', destination], { stdio: 'ignore', timeout: 120000 });
     } else {
@@ -1373,7 +1592,7 @@ function scoreRuntimeAsset(name, platform = process.platform, arch = process.arc
   const lower = String(name || '').toLowerCase();
   if (!/\.(zip|tar\.gz|tgz)$/.test(lower)) return null;
   if (/sha256|checksums?|\.sig$|source|\.asc$|debug/.test(lower)) return null;
-  if (/^cudart/.test(lower)) return null; // CUDA runtime companion, installed separately
+  if (isCudaRuntimeCompanionAsset(lower)) return null; // installed separately
 
   let score = 0;
   if (platform === 'win32') {
@@ -1730,7 +1949,11 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
 
     // Best-effort verification (these binaries don't all support --version cleanly).
     let verified = false;
-    try { verified = verifyBinaryDetailed(stagedInstalled).ok; } catch { /* non-fatal */ }
+    try {
+      verified = (await verifyBinaryDetailedAsync(stagedInstalled, {
+        timeoutMs: verificationTimeoutForAsset(asset.name),
+      })).ok;
+    } catch { /* non-fatal */ }
 
     const version = release.tag_name || release.name || 'latest';
     writeManagedRuntimeMetadata(spec, {
